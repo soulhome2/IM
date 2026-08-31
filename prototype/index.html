@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Axxon Incident Manager — рабочее место оператора</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <strong>Incident Manager</strong>
+          <span>Axxon Next · ITV</span>
+        </div>
+      </div>
+
+      <div class="topbar-cluster">
+        <label class="field-inline">
+          <span>Группировка</span>
+          <select id="groupMode" title="Тип группировки очереди">
+            <option value="region">По региону</option>
+            <option value="type">По типу события</option>
+            <option value="object">По типу объекта</option>
+            <option value="custom">Кастомная</option>
+          </select>
+        </label>
+        <label class="field-inline">
+          <span>Макет</span>
+          <select id="layoutMode" title="Состав и расположение панелей">
+            <option value="default">Операторский</option>
+            <option value="focus">Фокус на сценарии</option>
+            <option value="media">Видеостена</option>
+            <option value="compact">Только очередь</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="menu" id="linksMenu">
+          <button type="button" class="btn ghost" id="linksBtn" aria-expanded="false">Ссылки</button>
+          <div class="menu-pop" hidden>
+            <a href="#" data-link="Телефоны ответственных">Телефоны ответственных</a>
+            <a href="#" data-link="Регламент охраны ТЦ">Регламент охраны ТЦ</a>
+            <a href="#" data-link="Схема эвакуации «Мега»">Схема эвакуации «Мега»</a>
+            <a href="#" data-link="Контакты МЧС / полиция">Контакты МЧС / полиция</a>
+          </div>
+        </div>
+        <button type="button" class="btn ghost" id="hotkeysBtn">Клавиши</button>
+        <button type="button" class="btn ghost" id="breakBtn">Перерыв</button>
+        <div class="operator">
+          <div class="operator-meta">
+            <strong>Иванов А. С.</strong>
+            <span>Оператор · смена 08:00–20:00</span>
+          </div>
+          <span class="duty" id="dutyBadge">На смене</span>
+        </div>
+        <time class="clock" id="clock">14:32:11</time>
+      </div>
+    </header>
+
+    <div class="break-banner" id="breakBanner" hidden>
+      События удерживаются в очереди диспетчера. Статус смены: перерыв. Новые инциденты вам не назначаются.
+    </div>
+
+    <main class="workspace" id="workspace" data-layout="default">
+      <section class="panel" id="panelGroups" data-panel="groups">
+        <header class="panel-h">
+          <h2>Группы</h2>
+          <button type="button" class="icon-btn" data-collapse="panelGroups" title="Свернуть панель">−</button>
+        </header>
+        <div class="panel-b" id="groupsList"></div>
+      </section>
+
+      <section class="panel" id="panelEvents" data-panel="events">
+        <header class="panel-h">
+          <h2>События <em id="eventsCount">0</em></h2>
+          <div class="panel-h-actions">
+            <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
+            <button type="button" class="icon-btn" data-collapse="panelEvents" title="Свернуть панель">−</button>
+          </div>
+        </header>
+        <div class="panel-b events-body">
+          <div class="events-toolbar">
+            <input type="search" id="eventSearch" placeholder="Поиск по объекту, типу, ID…" />
+            <select id="eventFilter">
+              <option value="open">Открытые</option>
+              <option value="mine">Мои</option>
+              <option value="foreign">Чужие</option>
+              <option value="all">Все</option>
+            </select>
+          </div>
+          <div class="events-list" id="eventsList"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panelScenario" data-panel="scenario">
+        <header class="panel-h">
+          <h2>Обработка</h2>
+          <button type="button" class="icon-btn" data-collapse="panelScenario" title="Свернуть панель">−</button>
+        </header>
+        <div class="panel-b" id="scenarioRoot"></div>
+      </section>
+
+      <section class="panel media-stack" id="panelMedia" data-panel="media">
+        <div class="panel nested" id="panelVideo">
+          <header class="panel-h">
+            <h2>Видеомонитор</h2>
+            <div class="panel-h-actions">
+              <div class="seg" id="videoMode">
+                <button type="button" class="active" data-mode="archive">Архив</button>
+                <button type="button" data-mode="live">Online</button>
+              </div>
+            </div>
+          </header>
+          <div class="panel-b video-body">
+            <div class="video-grid" id="videoGrid"></div>
+            <div class="timeline" id="timeline">
+              <span id="tlTime">14:31:08</span>
+              <input type="range" id="tlScrub" min="0" max="100" value="72" />
+              <span>сейчас</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel nested" id="panelMap">
+          <header class="panel-h">
+            <h2>Карта</h2>
+            <span class="muted" id="mapCaption">Место сработки</span>
+          </header>
+          <div class="panel-b map-body" id="mapRoot"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusIncident">Очередь ожидает выбора события</span>
+      <span id="statusSteps"></span>
+      <span id="statusSla"></span>
+      <span id="statusQueue"></span>
+    </footer>
+  </div>
+
+  <div class="modal" id="modalEscalate" hidden>
+    <div class="modal-card">
+      <h3>Эскалация события</h3>
+      <p class="muted">Событие и прогресс сценария будут переданы выбранному оператору.</p>
+      <label class="field">
+        <span>Кому</span>
+        <select id="escalateTarget">
+          <option value="Петрова М. · старший смены">Петрова М. · старший смены</option>
+          <option value="Сидоров К. · оператор">Сидоров К. · оператор</option>
+          <option value="Дежурный ЦОД">Дежурный ЦОД</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Причина</span>
+        <textarea id="escalateReason" rows="3" placeholder="Почему требуется эскалация"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close="modalEscalate">Отмена</button>
+        <button type="button" class="btn primary" id="escalateConfirm">Передать</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalHotkeys" hidden>
+    <div class="modal-card">
+      <h3>Горячие клавиши</h3>
+      <table class="keys">
+        <tr><td><kbd>N</kbd></td><td>Взять следующее новое событие</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Закрыть инцидент (если сценарий заполнен)</td></tr>
+        <tr><td><kbd>E</kbd></td><td>Эскалация</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Перехватить чужое событие</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Обработать выделенные как одно</td></tr>
+        <tr><td><kbd>B</kbd></td><td>Перерыв / возврат на смену</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Переключить камеру</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
+      </table>
+      <p class="muted">Набор можно будет задавать «под себя» в настройках оператора.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalHotkeys">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>
