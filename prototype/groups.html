@@ -1,0 +1,4381 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Управление группами и устройствами</title>
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f1f5f9;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 100%;
+      background: #ffffff;
+    }
+
+    /* ===== TOP BAR ===== */
+    .top-bar {
+      background: #ffffff;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .search-wrapper {
+      flex: 1;
+      max-width: 320px;
+      position: relative;
+    }
+
+    .search-wrapper > .material-symbols-outlined {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 20px;
+      color: #94a3b8;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 32px 8px 40px;
+      border: 2px solid #f1f5f9;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #1e293b;
+      background: #f8fafc;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: #1976d2;
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+    }
+
+    .search-input::placeholder {
+      color: #94a3b8;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 18px;
+      display: none;
+      background: none;
+      border: none;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.15s ease;
+    }
+
+    .search-clear.visible {
+      display: flex;
+    }
+
+    .search-clear:hover {
+      color: #475569;
+      background: #e2e8f0;
+    }
+
+    .btn-add {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      background: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn-add:hover {
+      background: #1565c0;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(25, 118, 210, 0.3);
+    }
+
+    .btn-add:active {
+      transform: translateY(0);
+    }
+
+    .btn-add .material-symbols-outlined {
+      font-size: 22px;
+      color: inherit;
+      font-variation-settings: 'FILL' 0, 'wght' 600, 'GRAD' 200, 'opsz' 24;
+    }
+
+    /* ===== TOOLBAR ===== */
+    .toolbar {
+      background: #ffffff;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+
+
+
+
+
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: transparent;
+      color: #475569;
+    }
+
+    .btn:hover {
+      background: #f1f5f9;
+    }
+
+    .btn .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+
+
+    /* ===== MAIN CONTENT ===== */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ===== ЛЕВАЯ ПАНЕЛЬ ===== */
+    .tree-panel {
+      width: 380px;
+      min-width: 200px;
+      max-width: 70%;
+      background: #fafbfc;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .tree-status-bar {
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #64748b;
+      background: #f8fafc;
+      border-top: 1px solid #f1f5f9;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tree-status-bar .sep {
+      color: #cbd5e1;
+    }
+
+    .tree-wrapper {
+      flex: 1;
+      padding: 8px 12px 16px 12px;
+      overflow-y: auto;
+    }
+
+    .tree-wrapper::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .tree-wrapper::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .tree-wrapper::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 10px;
+    }
+
+    .tree-wrapper::-webkit-scrollbar-thumb:hover {
+      background: #cbd5e1;
+    }
+
+    /* ===== СПЛИТТЕР ===== */
+    .splitter {
+      width: 6px;
+      background: #e2e8f0;
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .splitter:hover,
+    .splitter.active {
+      background: #1976d2;
+    }
+
+    .splitter::after {
+      content: '';
+      width: 2px;
+      height: 30px;
+      background: #94a3b8;
+      border-radius: 2px;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+
+    .splitter:hover::after,
+    .splitter.active::after {
+      opacity: 1;
+      background: white;
+    }
+
+    /* ===== ПРАВАЯ ПАНЕЛЬ ===== */
+    .detail-panel {
+      flex: 1;
+      background: #ffffff;
+      padding: 32px 40px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      min-width: 200px;
+    }
+
+    .detail-panel::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .detail-panel::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .detail-panel::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 10px;
+    }
+
+    /* ===== КАРТОЧКА ===== */
+    .detail-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #94a3b8;
+      gap: 12px;
+    }
+
+    .detail-empty .material-symbols-outlined {
+      font-size: 64px;
+      color: #e2e8f0;
+    }
+
+    .detail-empty .title {
+      font-size: 18px;
+      font-weight: 500;
+      color: #475569;
+    }
+
+    .detail-empty .sub {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .detail-card {
+      display: none;
+      flex-direction: column;
+      gap: 24px;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .detail-card.visible {
+      display: flex;
+    }
+
+    /* Заголовок карточки */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+
+    /* Карточка группы: значок на одной строке с названием, описание под названием */
+    .detail-card .detail-header {
+      align-items: flex-start;
+    }
+
+    .detail-header .icon-wrapper {
+      width: 48px;
+      height: 48px;
+      background: #e3f2fd;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .detail-header .icon-wrapper .material-symbols-outlined {
+      font-size: 28px;
+      color: #1976d2;
+    }
+
+    .detail-header-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .detail-header-info .label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .detail-header-info .name-input {
+      font-size: 24px;
+      font-weight: 600;
+      color: #0f172a;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      padding: 4px 10px;
+      margin: 0 -10px;
+      background: transparent;
+      width: 100%;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .detail-header-info .name-input:hover {
+      border-color: #e2e8f0;
+      background: #f8fafc;
+    }
+
+    .detail-header-info .name-input:focus {
+      border-color: #1976d2;
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.08);
+    }
+
+    .detail-header-info .name-input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Статистика */
+    .detail-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      padding: 16px 0;
+    }
+
+    .stat-item {
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-item .material-symbols-outlined {
+      font-size: 24px;
+      color: #64748b;
+    }
+
+    .stat-item .stat-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-item .stat-info .value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .stat-item .stat-info .label {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    /* Список устройств */
+    .detail-devices {
+      margin-top: 4px;
+    }
+
+    .detail-devices .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .detail-devices .section-title .count {
+      font-weight: 400;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+
+    .detail-devices .section-title > .material-symbols-outlined {
+      font-size: 18px;
+      color: #64748b;
+    }
+
+    .detail-devices .section-title .section-action {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: 16px;
+      color: #94a3b8;
+      transition: all 0.2s ease;
+    }
+
+    .detail-devices .section-title .section-action:hover {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #1976d2;
+    }
+
+    .device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .device-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #f1f5f9;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+
+    .device-item:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+
+    .device-item .material-symbols-outlined {
+      font-size: 20px;
+      color: #1976d2;
+    }
+
+    .device-item .name {
+      font-size: 14px;
+      color: #1e293b;
+    }
+
+    .device-item .status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .device-item .status .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+    }
+
+    .device-item .device-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e1;
+      opacity: 0;
+      transition: all 0.15s;
+    }
+
+    .device-item:hover .device-remove {
+      opacity: 1;
+    }
+
+    .device-item .device-remove:hover {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .device-item .device-remove .material-symbols-outlined {
+      font-size: 18px;
+      color: inherit;
+    }
+
+    .device-empty {
+      color: #94a3b8;
+      font-size: 14px;
+      padding: 20px 0;
+      text-align: center;
+    }
+
+    /* ===== КАРТОЧКА УСТРОЙСТВА ===== */
+    .device-detail {
+      display: none;
+      flex-direction: column;
+      gap: 24px;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .device-detail.visible {
+      display: flex;
+    }
+
+    .device-detail .detail-header-info .name-input:disabled {
+      opacity: 1;
+      cursor: default;
+    }
+
+    .device-info {
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .device-info .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .device-info .row:last-child {
+      border-bottom: none;
+    }
+
+    .device-info .row .label {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+
+    .device-info .row .value {
+      color: #1e293b;
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .device-info .row .value .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    /* Устройство без связи — общий модификатор для списка группы и карточки */
+    .device-item .status .dot.offline,
+    .device-info .row .value .dot.offline {
+      background: #ef4444;
+    }
+
+    .device-item .status.offline,
+    .device-info .row .value.offline {
+      color: #b91c1c;
+    }
+
+    .device-groups-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .device-groups-list .group-tag {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 4px 12px;
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .device-groups-list .group-tag:hover {
+      background: #1976d2;
+      color: white;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
+    }
+
+    .device-group-path .group-unlink {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px;
+      margin-left: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e1;
+      opacity: 0;
+      transition: all 0.15s;
+    }
+
+    .device-group-path:hover .group-unlink {
+      opacity: 1;
+    }
+
+    .device-group-path .group-unlink:hover {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .device-group-path .group-unlink .material-symbols-outlined {
+      font-size: 16px;
+      color: inherit;
+    }
+
+    /* ===== ДЕРЕВО ===== */
+    .tree {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 14px;
+      color: #1e293b;
+    }
+
+    .tree ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+
+    .tree-node {
+      position: relative;
+      padding: 2px 0 2px 8px;
+      border-radius: 10px;
+      transition: background 0.1s;
+    }
+
+    .tree-node.hidden {
+      display: none;
+    }
+
+    .tree-node.active > .node-content {
+      background: #e3f2fd;
+    }
+
+    .tree-node.active > .node-content .node-text {
+      font-weight: 500;
+      color: #1976d2;
+    }
+
+    .tree-node.active-device > .node-content {
+      background: #e3f2fd;
+    }
+
+    .tree-node.active-device > .node-content .node-text {
+      font-weight: 500;
+      color: #1976d2;
+    }
+
+    .node-content {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px 6px 6px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.12s;
+      position: relative;
+    }
+
+    .node-content:hover {
+      background: #f1f5f9;
+    }
+
+    .node-content:hover .node-actions {
+      opacity: 1;
+    }
+
+    /* ===== КОНТЕКСТНОЕ МЕНЮ ===== */
+    .node-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      margin-left: auto;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .node-actions .btn-more {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      transition: all 0.15s;
+    }
+
+    .node-actions .btn-more:hover {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .node-actions .btn-more .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+    /* ===== ВЫПАДАЮЩЕЕ МЕНЮ ===== */
+    .node-dropdown {
+      position: fixed;
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+      min-width: 220px;
+      padding: 6px;
+      opacity: 0;
+      transform: scale(0.95);
+      pointer-events: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 9999;
+      border: 1px solid #f1f5f9;
+      visibility: hidden;
+    }
+
+    .node-dropdown.open {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: all;
+      visibility: visible;
+    }
+
+    .node-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+      color: #1e293b;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      width: 100%;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .node-dropdown-item:hover {
+      background: #f8fafc;
+    }
+
+    .node-dropdown-item .material-symbols-outlined {
+      font-size: 20px;
+      color: #64748b;
+    }
+
+    .node-dropdown-item .sub {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 400;
+      margin-left: auto;
+    }
+
+    .node-dropdown-divider {
+      height: 1px;
+      background: #f1f5f9;
+      margin: 4px 8px;
+    }
+
+    .node-dropdown-item.danger {
+      color: #dc2626;
+    }
+
+    .node-dropdown-item.danger .material-symbols-outlined {
+      color: #dc2626;
+    }
+
+    .node-dropdown-item.danger:hover {
+      background: #fef2f2;
+    }
+
+    /* ===== ИКОНКА РАСКРЫТИЯ ===== */
+    .toggle-icon {
+      font-size: 20px;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .toggle-icon:hover {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .tree-node.open > .node-content .toggle-icon {
+      transform: rotate(90deg);
+    }
+
+    .tree-node:not(.has-children) .toggle-icon {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .tree-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #f8fafc;
+      border-bottom: 1px solid #f1f5f9;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .tree-toolbar .master-checkbox,
+    .modal-toolbar .master-checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+      padding: 2px 4px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .tree-toolbar .master-checkbox:hover,
+    .modal-toolbar .master-checkbox:hover {
+      background: #e3f2fd;
+    }
+
+    .tree-toolbar .checkbox-custom,
+    .modal-toolbar .checkbox-custom {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #cbd5e1;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      transition: all 0.15s ease;
+    }
+
+    .tree-toolbar .master-checkbox.selected .checkbox-custom,
+    .modal-toolbar .master-checkbox.selected .checkbox-custom {
+      background: #1976d2;
+      border-color: #1976d2;
+    }
+
+    .tree-toolbar .master-checkbox.partial .checkbox-custom,
+    .modal-toolbar .master-checkbox.partial .checkbox-custom {
+      background: #64b5f6;
+      border-color: #64b5f6;
+    }
+
+    .tree-toolbar .master-checkbox.selected .checkbox-custom .material-symbols-outlined,
+    .tree-toolbar .master-checkbox.partial .checkbox-custom .material-symbols-outlined,
+    .modal-toolbar .master-checkbox.selected .checkbox-custom .material-symbols-outlined,
+    .modal-toolbar .master-checkbox.partial .checkbox-custom .material-symbols-outlined {
+      opacity: 1;
+      transform: scale(1);
+      color: white;
+      font-size: 14px;
+    }
+
+    .tree-toolbar .master-checkbox .checkbox-custom .material-symbols-outlined,
+    .modal-toolbar .master-checkbox .checkbox-custom .material-symbols-outlined {
+      opacity: 0;
+      transform: scale(0.6);
+      transition: all 0.15s ease;
+      color: white;
+      font-size: 14px;
+    }
+
+    .tree-toolbar .master-label,
+    .modal-toolbar .master-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1e293b;
+    }
+
+    .tree-toolbar .selection-count,
+    .modal-toolbar .selection-count {
+      background: #e3f2fd;
+      color: #1976d2;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 50px;
+      display: none;
+    }
+
+    .tree-toolbar .selection-count.visible,
+    .modal-toolbar .selection-count.visible {
+      display: inline-block;
+    }
+
+    .tree-toolbar .toolbar-actions {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .tree-toolbar .btn-delete-wrapper {
+      display: inline-flex;
+      align-items: center;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      max-width: 0;
+      opacity: 0;
+      transform: scale(0.8);
+      visibility: hidden;
+    }
+
+    .tree-toolbar .btn-delete-wrapper.visible {
+      max-width: 60px;
+      opacity: 1;
+      transform: scale(1);
+      visibility: visible;
+    }
+
+    .tree-toolbar .btn-danger {
+      background: #fee2e2;
+      color: #dc2626;
+      padding: 6px 10px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    .tree-toolbar .btn-danger:hover {
+      background: #fecaca;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+    }
+
+    .tree-toolbar .btn-danger .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    .node-content .checkbox-custom {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #cbd5e1;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .node-content .checkbox-custom .material-symbols-outlined {
+      font-size: 14px;
+      color: white;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: all 0.15s ease;
+    }
+
+    .tree-node.selected > .node-content .checkbox-custom {
+      background: #1976d2;
+      border-color: #1976d2;
+    }
+
+    .tree-node.selected > .node-content .checkbox-custom .material-symbols-outlined {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .tree-node.partial > .node-content .checkbox-custom {
+      background: #64b5f6;
+      border-color: #64b5f6;
+    }
+
+    .tree-node.partial > .node-content .checkbox-custom .material-symbols-outlined {
+      opacity: 1;
+      transform: scale(1);
+      font-variation-settings: 'FILL' 1;
+    }
+
+    .node-content:hover .checkbox-custom {
+      border-color: #64b5f6;
+    }
+
+    .tree-node > ul {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                  opacity 0.2s ease;
+      padding-left: 28px;
+    }
+
+    .tree-node.open > ul {
+      max-height: 2000px;
+      opacity: 1;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      font-size: 20px;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    .node-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 4px;
+    }
+
+    .badge {
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 10px;
+      border-radius: 50px;
+      flex-shrink: 0;
+    }
+
+    .tree-node .node-text {
+      font-weight: 400;
+    }
+
+    .tree-node.level-0 > .node-content .node-text {
+      font-weight: 600;
+    }
+
+    .tree-node.level-1 > .node-content .node-text {
+      font-weight: 500;
+    }
+
+    /* ===== АНИМАЦИЯ УДАЛЕНИЯ ===== */
+    .tree-node.removing {
+      animation: slideOut 0.3s ease forwards;
+    }
+
+    @keyframes slideOut {
+      0% {
+        opacity: 1;
+        transform: translateX(0);
+        max-height: 50px;
+      }
+      100% {
+        opacity: 0;
+        transform: translateX(-20px);
+        max-height: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+    }
+
+    /* ===== ПУСТОЕ СОСТОЯНИЕ ===== */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #94a3b8;
+      gap: 12px;
+      padding: 40px 20px;
+    }
+
+    .empty-state .material-symbols-outlined {
+      font-size: 48px;
+      color: #cbd5e1;
+    }
+
+    .empty-state .title {
+      font-size: 16px;
+      font-weight: 500;
+      color: #475569;
+    }
+
+    .empty-state .sub {
+      font-size: 14px;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    .search-empty {
+      display: none;
+      height: auto;
+      padding: 32px 20px;
+    }
+
+    .search-empty.visible {
+      display: flex;
+    }
+
+    /* ===== ТОСТЫ ===== */
+    #toastStack {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      background: #334159;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      /* Имя группы бывает до 60 символов — без ограничения такое сообщение
+         уезжает за край узкого экрана вместе с кнопкой «Отменить» */
+      max-width: calc(100vw - 48px);
+      overflow-wrap: anywhere;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      /* Скрытый тост не должен ловить клики: иначе невидимая кнопка «Отменить»
+         остаётся активной и срабатывает по случайному клику в угол экрана */
+      pointer-events: none;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .toast-action {
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      color: #90caf9;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      /* Сжиматься должно сообщение, а не кнопка */
+      flex-shrink: 0;
+    }
+
+    /* ===== АДАПТИВ ===== */
+    @media (max-width: 820px) {
+      .tree-panel {
+        width: 300px;
+        min-width: 180px;
+      }
+      .detail-panel {
+        padding: 20px 24px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .top-bar {
+        padding: 12px 16px;
+        gap: 10px;
+      }
+      .search-wrapper {
+        max-width: 100%;
+        flex: 1 1 100%;
+        order: 2;
+      }
+      .btn-add {
+        order: 1;
+        font-size: 13px;
+      }
+      .toolbar {
+        padding: 10px 16px;
+      }
+      
+      .main-content {
+        flex-direction: column;
+      }
+      .tree-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: unset;
+        height: 45vh;
+        border-right: none;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .splitter {
+        width: 100%;
+        height: 6px;
+        cursor: row-resize;
+        flex-shrink: 0;
+      }
+      .splitter::after {
+        width: 30px;
+        height: 2px;
+      }
+      .detail-panel {
+        height: 55vh;
+        padding: 16px 20px;
+      }
+      .tree-node > ul {
+        padding-left: 16px;
+      }
+      .node-actions {
+        opacity: 1;
+      }
+      .device-item .device-remove,
+      .device-group-path .group-unlink {
+        opacity: 1;
+      }
+      .detail-header-info .name-input {
+        font-size: 20px;
+      }
+      .detail-stats {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    /* ===== ПОИСК И ДОБАВЛЕНИЕ В ЛЕВОЙ ПАНЕЛИ ===== */
+    .tree-search-row {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      background: #ffffff;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .tree-search-row .search-wrapper {
+      flex: 1;
+      max-width: none;
+    }
+
+    .tree-search-row .btn-add {
+      padding: 8px 12px;
+      flex-shrink: 0;
+    }
+
+    /* ===== ОПИСАНИЕ ГРУППЫ (под названием) ===== */
+    .desc-input {
+      font-size: 14px;
+      font-weight: 400;
+      color: #64748b;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      padding: 4px 10px;
+      margin: 4px -10px 0;
+      background: transparent;
+      width: 100%;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .desc-input:hover {
+      border-color: #e2e8f0;
+      background: #f8fafc;
+    }
+
+    .desc-input:focus {
+      border-color: #1976d2;
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.08);
+    }
+
+    .desc-input {
+      resize: vertical;
+      min-height: 110px;
+    }
+
+    /* ===== ССЫЛКА НА РОДИТЕЛЬСКУЮ ГРУППУ ===== */
+    .parent-link-row {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      background: #f8fafc;
+      font-size: 14px;
+    }
+
+    .parent-link-row .material-symbols-outlined {
+      font-size: 24px;
+      color: #64748b;
+    }
+
+    .parent-link {
+      color: #1976d2;
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .parent-link:hover {
+      text-decoration: underline;
+    }
+
+    /* ===== ПОИСК УСТРОЙСТВ В КАРТОЧКЕ ГРУППЫ ===== */
+    .device-search-wrapper {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .device-search-wrapper > .material-symbols-outlined {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      color: #94a3b8;
+    }
+
+    .device-search-input {
+      width: 100%;
+      padding: 7px 40px 7px 38px;
+      border: 2px solid #f1f5f9;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #1e293b;
+      background: #f8fafc;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .device-search-input:focus {
+      border-color: #1976d2;
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.08);
+    }
+
+    .device-search-input::placeholder {
+      color: #94a3b8;
+    }
+
+    .device-sort {
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .device-sort:hover {
+      background: #e2e8f0;
+      color: #1976d2;
+    }
+
+    .device-sort.active {
+      color: #1976d2;
+    }
+
+    .device-sort .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+    /* ===== НАВИГАЦИЯ ПО ГРУППАМ В КАРТОЧКЕ УСТРОЙСТВА ===== */
+    .device-groups-list {
+      flex-direction: column;
+    }
+
+    .device-group-path {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 2px 0;
+    }
+
+    .path-sep {
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 600;
+      user-select: none;
+    }
+
+    /* ===== МОДАЛЬНОЕ ОКНО ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(2px);
+      padding: 16px;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal {
+      background: #ffffff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 640px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+      overflow: hidden;
+      animation: modalIn 0.18s ease;
+    }
+
+    .modal.modal-fixed {
+      height: 72vh;
+      min-height: 460px;
+      max-height: none;
+    }
+
+    @keyframes modalIn {
+      from { transform: translateY(12px) scale(0.98); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      word-break: break-word;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .modal-close:hover {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .modal-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 60px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 14px 20px;
+      border-top: 1px solid #f1f5f9;
+      background: #fbfdff;
+      flex-shrink: 0;
+    }
+
+    .modal-name-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 2px solid #f1f5f9;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #1e293b;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .modal-name-input:focus {
+      border-color: #1976d2;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+    }
+
+    .modal-hint {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 10px;
+    }
+
+    .modal-search-wrapper + .modal-hint {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    .modal-btn {
+      padding: 9px 18px;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .modal-btn-primary {
+      background: #1976d2;
+      color: #ffffff;
+    }
+
+    .modal-btn-primary:hover {
+      background: #1565c0;
+    }
+
+    .modal-btn-ghost {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .modal-btn-ghost:hover {
+      background: #e2e8f0;
+    }
+
+    .modal-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .modal-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid #f1f5f9;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .modal-option:hover {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .modal-option input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #1976d2;
+      flex-shrink: 0;
+    }
+
+    .modal-option .opt-icon {
+      color: #64748b;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .modal-option .opt-name {
+      font-size: 14px;
+      color: #1e293b;
+      flex: 1;
+      word-break: break-word;
+    }
+
+    .modal-option .opt-sub {
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: right;
+    }
+
+    .modal-option.is-checked {
+      border-color: #bfdbfe;
+      background: #f4f9ff;
+    }
+
+    .modal-option.disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background: #f8fafc;
+    }
+
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      background: #f8fafc;
+      border: 1px solid #f1f5f9;
+      border-radius: 10px;
+    }
+
+    .modal-filter {
+      display: inline-flex;
+      gap: 2px;
+      margin-left: auto;
+      padding: 2px;
+      background: #eef2f7;
+      border-radius: 8px;
+    }
+
+    .modal-filter-btn {
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      color: #64748b;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+
+    .modal-filter-btn:hover {
+      color: #1976d2;
+    }
+
+    .modal-filter-btn.active {
+      background: #ffffff;
+      color: #1976d2;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+
+    .modal-option.disabled:hover {
+      border-color: #f1f5f9;
+    }
+
+    .modal-empty {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 14px;
+      padding: 24px 0;
+    }
+
+    .modal-search {
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 9px 12px;
+      border: 2px solid #f1f5f9;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #1e293b;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .modal-search:focus {
+      border-color: #1976d2;
+      box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+    }
+
+    .modal-search::placeholder {
+      color: #94a3b8;
+    }
+
+    .modal-search-wrapper {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .modal-search-wrapper > .material-symbols-outlined {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 20px;
+      color: #94a3b8;
+    }
+
+    .modal-search-wrapper .modal-search {
+      margin-bottom: 0;
+      padding-left: 36px;
+      padding-right: 40px;
+    }
+
+    .modal-sort {
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .modal-sort:hover {
+      background: #e2e8f0;
+      color: #1976d2;
+    }
+
+    .modal-sort .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+    /* ===== ХЛЕБНЫЙ ПУТЬ В КАРТОЧКЕ ГРУППЫ ===== */
+    .group-breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin: 4px 2px 14px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .crumb-link {
+      color: #1976d2;
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .crumb-link:hover {
+      text-decoration: underline;
+    }
+
+    .crumb-current {
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .crumb-sep {
+      color: #cbd5e1;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  
+  <!-- ===== MAIN CONTENT ===== -->
+  <div class="main-content">
+    
+    <!-- ЛЕВАЯ ПАНЕЛЬ: ДЕРЕВО -->
+    <div class="tree-panel" id="treePanel">
+      <div class="tree-search-row">
+        <div class="search-wrapper">
+          <span class="material-symbols-outlined">search</span>
+          <input type="text" class="search-input" id="searchInput" placeholder="Поиск в группах..." />
+          <button class="search-clear" id="searchClear" title="Очистить поиск" aria-label="Очистить поиск">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <button class="btn-add" id="addButton">
+          <span class="material-symbols-outlined">add</span>
+          <span class="btn-text">Добавить</span>
+        </button>
+      </div>
+      <div class="tree-toolbar">
+        <div class="master-checkbox" id="masterCheckbox">
+          <span class="checkbox-custom">
+            <span class="material-symbols-outlined">check</span>
+          </span>
+          <span class="master-label">Выбрать всё</span>
+        </div>
+        <span class="selection-count" id="selectionCount">Выбрано: 0</span>
+        <div class="toolbar-actions">
+          <div class="btn-delete-wrapper" id="deleteWrapper">
+            <button class="btn btn-danger" id="deleteSelectedBtn" title="Удалить выбранные группы со всем содержимым" aria-label="Удалить выбранные группы со всем содержимым">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="tree-wrapper">
+        <ul class="tree" id="treeContainer" role="tree">
+          <!-- Данные загружаются через JS -->
+        </ul>
+        <div class="empty-state search-empty" id="treeSearchEmpty">
+          <span class="material-symbols-outlined">search_off</span>
+          <div class="title">Ничего не найдено</div>
+          <div class="sub">Измените запрос или очистите поиск</div>
+        </div>
+      </div>
+      <div class="tree-status-bar">
+        <span id="statusGroups">0 групп</span>
+        <span class="sep">·</span>
+        <span id="statusDevices">0 устройств</span>
+      </div>
+    </div>
+
+    <!-- СПЛИТТЕР -->
+    <div class="splitter" id="splitter"></div>
+
+    <!-- ПРАВАЯ ПАНЕЛЬ: КАРТОЧКА -->
+    <div class="detail-panel" id="detailPanel">
+      <!-- Пустое состояние -->
+      <div class="detail-empty" id="detailEmpty">
+        <span class="material-symbols-outlined">folder_open</span>
+        <div class="title">Ничего не выбрано</div>
+        <div class="sub">Выберите группу или устройство в дереве слева</div>
+      </div>
+
+      <!-- Карточка группы -->
+      <div class="detail-card" id="detailCard">
+        <div class="detail-header">
+          <div class="icon-wrapper">
+            <span class="material-symbols-outlined">folder</span>
+          </div>
+          <div class="detail-header-info">
+            <input type="text" class="name-input" id="groupNameInput" placeholder="Название группы" maxlength="60" />
+            <textarea class="desc-input" id="groupDescInput" placeholder="Описание группы" rows="5"></textarea>
+          </div>
+        </div>
+
+        <div class="group-breadcrumb" id="groupBreadcrumb"></div>
+
+        <div class="detail-stats">
+          <div class="stat-item" title="Подгруппы с учётом вложенных">
+            <span class="material-symbols-outlined">folder</span>
+            <div class="stat-info">
+              <span class="value" id="statSubgroups">0</span>
+              <span class="label">Подгрупп</span>
+            </div>
+          </div>
+          <div class="stat-item" title="Устройства, привязанные к самой группе, без учёта подгрупп">
+            <span class="material-symbols-outlined">videocam</span>
+            <div class="stat-info">
+              <span class="value" id="statDevices">0</span>
+              <span class="label">Устройств в группе</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-devices">
+          <div class="section-title">
+            <span class="material-symbols-outlined">videocam</span>
+            Устройства
+            <span class="count" id="deviceCount">(0)</span>
+            <button class="section-action" id="groupAddDeviceBtn" title="Управлять устройствами группы (привязать/отвязать)" aria-label="Управлять устройствами группы">
+              <span class="material-symbols-outlined">add</span>
+            </button>
+          </div>
+          <div class="device-search-wrapper">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" class="device-search-input" id="deviceSearchInput" placeholder="Поиск устройств..." />
+            <button class="device-sort" id="deviceSortBtn" title="Сортировать по названию">
+              <span class="material-symbols-outlined" id="deviceSortIcon">arrow_upward</span>
+            </button>
+          </div>
+          <div class="device-list" id="deviceList">
+            <!-- Загружается через JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Карточка устройства -->
+      <div class="device-detail" id="deviceDetail">
+        <div class="detail-header">
+          <div class="icon-wrapper">
+            <span class="material-symbols-outlined" id="deviceCardIcon">videocam</span>
+          </div>
+          <div class="detail-header-info">
+            <div class="label">Устройство</div>
+            <input type="text" class="name-input" id="deviceNameInput" disabled />
+          </div>
+        </div>
+
+        <div class="device-info">
+          <div class="row">
+            <span class="label">Статус</span>
+            <span class="value" id="deviceStatusValue"><span class="dot"></span> Онлайн</span>
+          </div>
+          <div class="row">
+            <span class="label">Тип</span>
+            <span class="value" id="deviceTypeValue">Камера видеонаблюдения</span>
+          </div>
+          <div class="row">
+            <span class="label" id="deviceGroupsLabel">Группы</span>
+            <div class="value">
+              <div class="device-groups-list" id="deviceGroupsList">
+                <!-- Загружается через JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Модальное окно -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">Заголовок</span>
+        <button class="modal-close" id="modalClose" title="Закрыть">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer" id="modalFooter"></div>
+    </div>
+  </div>
+
+<script>
+  (function() {
+    'use strict';
+
+    // ===== ДАННЫЕ =====
+    const DEVICE_TYPES = {
+      'camera': { icon: 'videocam', label: 'Камера видеонаблюдения' },
+      'fire-detector': { icon: 'local_fire_department', label: 'Пожарный извещатель' },
+      'panic-button': { icon: 'crisis_alert', label: 'Тревожная кнопка' }
+    };
+
+    function deviceTypeInfo(type) {
+      return DEVICE_TYPES[type] || DEVICE_TYPES['camera'];
+    }
+
+    // Бейдж в дереве показывает прямых потомков, чтобы совпадать с составом карточки группы
+    const BADGE_TITLE = 'Подгрупп / устройств непосредственно в группе, без вложенных';
+
+    function badgeText(nodeData) {
+      const children = nodeData.children || [];
+      const groups = children.filter(c => !c.isDevice).length;
+      return `${groups}/${children.length - groups}`;
+    }
+
+    const deviceRegistry = {};
+
+    // Реестр отвечает только на вопрос «в каких группах состоит устройство».
+    // Имя и тип сюда не дублируются — они всегда берутся из DEVICE_CATALOG.
+    function registerDevice(deviceId, groupId) {
+      if (!deviceRegistry[deviceId]) {
+        deviceRegistry[deviceId] = { groups: [] };
+      }
+      if (!deviceRegistry[deviceId].groups.includes(groupId)) {
+        deviceRegistry[deviceId].groups.push(groupId);
+      }
+    }
+
+    // ===== ТОПОЛОГИЯ =====
+    // Каталог — единственное место, где задаются имя и тип устройства.
+    // Группы ниже ссылаются на устройства только по id.
+    const DEVICE_CATALOG = {
+      'device-1': { name: 'Главный вход', type: 'camera' },
+      'device-2': { name: 'Стойка ресепшн', type: 'camera' },
+      'device-3': { name: 'Конференц-зал — сцена', type: 'camera' },
+      'device-4': { name: 'Конференц-зал — общий план', type: 'camera' },
+      'device-5': { name: 'Опенспейс разработки', type: 'camera' },
+      'device-6': { name: 'Маркетинг — рабочая зона', type: 'camera' },
+      'device-7': { name: 'Переговорная «Невада»', type: 'camera' },
+      'device-8': { name: 'Ворота погрузки А', type: 'camera' },
+      'device-9': { name: 'Стеллажи А1–А8', type: 'camera' },
+      'device-10': { name: 'Зона приёмки товара', type: 'camera' },
+      'device-11': { name: 'Разгрузочная рампа', type: 'camera' },
+      'device-12': { name: 'Центральный проход', type: 'camera' },
+      'device-13': { name: 'Холодильная камера', type: 'camera' },
+      'device-14': { name: 'Пост погрузчика', type: 'camera' },
+      'device-15': { name: 'Испытательный стенд', type: 'camera' },
+      'device-16': { name: 'Вход в чистую зону', type: 'camera' },
+      'device-17': { name: 'Лабораторные столы', type: 'camera' },
+      'device-18': { name: 'Серверная стойка', type: 'camera' },
+      'device-19': { name: 'Вытяжной шкаф', type: 'camera' },
+      'device-20': { name: 'Коридор корпуса Б', type: 'camera' },
+      'device-21': { name: 'Переговорная «Юпитер»', type: 'camera' },
+      'device-22': { name: 'Офисная кухня', type: 'camera' },
+      'device-23': { name: 'Торговый зал', type: 'camera' },
+      'device-24': { name: 'Кассовая зона', type: 'camera' },
+      'device-25': { name: 'Коридор примерочных', type: 'camera' },
+      'device-26': { name: 'Витрина у входа', type: 'camera' },
+      'device-27': { name: 'Зал ресторана', type: 'camera' },
+      'device-28': { name: 'Кухня ресторана', type: 'camera' },
+      'device-29': { name: 'Фойе и бар', type: 'camera' },
+      'device-30': { name: 'Кинозал №3', type: 'camera' },
+      'device-31': { name: 'Зона ожидания — общий план', type: 'camera' },
+      'device-32': { name: 'Гардероб', type: 'camera' },
+      'device-33': { name: 'Обзор поста охраны', type: 'camera' },
+      'fire-1': { name: 'Датчик дыма 1', type: 'fire-detector' },
+      'fire-2': { name: 'Датчик дыма 2', type: 'fire-detector' },
+      'fire-3': { name: 'Датчик дыма 3', type: 'fire-detector' },
+      'fire-4': { name: 'Датчик дыма 4', type: 'fire-detector' },
+      'fire-5': { name: 'Датчик дыма 5', type: 'fire-detector' },
+      'fire-6': { name: 'Датчик дыма — зона ожидания', type: 'fire-detector' },
+      'panic-1': { name: 'Тревожная кнопка — пост охраны', type: 'panic-button' },
+      'panic-2': { name: 'Тревожная кнопка — ресепшн', type: 'panic-button' }
+    };
+
+    // Имена групп вводит пользователь, поэтому любое имя, попадающее в innerHTML,
+    // проходит через эту функцию. Другого способа экранирования в коде быть не должно.
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function devicesOfType(type) {
+      return Object.keys(DEVICE_CATALOG).filter(id => DEVICE_CATALOG[id].type === type);
+    }
+
+    // Состояние оборудования держим отдельно от каталога: каталог отвечает на вопрос
+    // «что это за устройство», а не «что с ним сейчас происходит».
+    const DEVICES_IN_REPAIR = ['device-9', 'device-19', 'device-25', 'fire-3'];
+
+    function workingOfType(type) {
+      return devicesOfType(type).filter(id => !DEVICES_IN_REPAIR.includes(id));
+    }
+
+    function inRepairOfType(type) {
+      return devicesOfType(type).filter(id => DEVICES_IN_REPAIR.includes(id));
+    }
+
+    // Заглушка на время демо: связь устройства с сервером здесь выводится из списка
+    // ремонта. В боевой версии статус придёт из бэкенда отдельным полем и не будет
+    // зависеть от того, в каких группах состоит устройство.
+    function deviceStatus(deviceId) {
+      return DEVICES_IN_REPAIR.includes(deviceId)
+        ? { label: 'Оффлайн', tone: 'offline' }
+        : { label: 'Онлайн', tone: 'online' };
+    }
+
+    // Имя и тип устройства всегда берутся из каталога — узлы дерева хранят только id.
+    // Запасная ветка нужна для состояния, сохранённого предыдущими версиями.
+    function deviceInfo(node) {
+      const id = typeof node === 'string' ? node : node.id;
+      const spec = DEVICE_CATALOG[id];
+      if (spec) return { id, name: spec.name, deviceType: spec.type };
+      const stored = typeof node === 'object' ? node : null;
+      return {
+        id,
+        name: (stored && stored.name) || id,
+        deviceType: (stored && stored.deviceType) || 'camera'
+      };
+    }
+
+    const TOPOLOGY = [
+      {
+        id: 'group-1', name: 'Главный офис',
+        children: [
+          {
+            id: 'group-2', name: '1-й этаж',
+            children: [
+              {
+                id: 'group-3', name: 'Приемная',
+                devices: ['device-1', 'device-2', 'fire-1'],
+                children: [
+                  { id: 'group-28', name: 'Зона ожидания', devices: ['device-31', 'device-32', 'fire-6'] },
+                  { id: 'group-29', name: 'Пост охраны', devices: ['device-33', 'panic-1', 'panic-2'] }
+                ]
+              },
+              // device-1 намеренно входит и в «Приемную», и сюда
+              { id: 'group-4', name: 'Конференц-зал', devices: ['device-3', 'device-4', 'fire-2', 'device-1'] }
+            ]
+          },
+          {
+            id: 'group-5', name: '2-й этаж',
+            children: [
+              { id: 'group-6', name: 'Отдел разработки', devices: ['device-5'] },
+              { id: 'group-7', name: 'Отдел маркетинга', devices: ['device-6', 'device-7'] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'group-8', name: 'Складской комплекс',
+        children: [
+          {
+            id: 'group-9', name: 'Этаж А',
+            children: [
+              { id: 'group-10', name: 'Склад №1', devices: ['device-8', 'device-9', 'device-10', 'fire-3'] },
+              // device-8 намеренно входит и в «Склад №1», и сюда
+              { id: 'group-11', name: 'Склад №2', devices: ['device-11', 'device-12', 'device-8'] }
+            ]
+          },
+          {
+            id: 'group-12', name: 'Этаж Б',
+            children: [
+              { id: 'group-13', name: 'Склад №3', devices: ['device-13', 'device-14'] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'group-14', name: 'Технопарк',
+        children: [
+          {
+            id: 'group-15', name: 'Корпус А',
+            children: [
+              { id: 'group-16', name: 'Лаборатория 1', devices: ['device-15', 'device-16', 'fire-4'] },
+              { id: 'group-17', name: 'Лаборатория 2', devices: ['device-17', 'device-18', 'device-19'] }
+            ]
+          },
+          {
+            id: 'group-18', name: 'Корпус Б',
+            children: [
+              // device-15 намеренно входит и в «Лабораторию 1», и сюда
+              { id: 'group-19', name: 'Офис 1', devices: ['device-20', 'device-15'] },
+              { id: 'group-20', name: 'Офис 2', devices: ['device-21', 'device-22'] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'group-21', name: 'Торговый центр',
+        children: [
+          {
+            id: 'group-22', name: '1-й этаж',
+            children: [
+              { id: 'group-23', name: 'Магазин 1', devices: ['device-23', 'device-24', 'fire-5'] },
+              { id: 'group-24', name: 'Магазин 2', devices: ['device-25', 'device-26'] }
+            ]
+          },
+          {
+            id: 'group-25', name: '2-й этаж',
+            children: [
+              { id: 'group-26', name: 'Ресторан', devices: ['device-27', 'device-28'] },
+              { id: 'group-27', name: 'Кинотеатр', devices: ['device-29', 'device-30'] }
+            ]
+          }
+        ]
+      },
+      // ===== СКВОЗНЫЕ ПОДБОРКИ =====
+      // Обычные группы, собранные не по месту, а по назначению: устройство входит
+      // и сюда, и в свою группу по расположению. Состав задаётся вручную,
+      // функции по типу и состоянию — только удобный способ заполнить его при старте.
+      {
+        id: 'group-all-cameras',
+        name: 'Все камеры',
+        description: 'Сквозная подборка камер видеонаблюдения со всех объектов, разделённая по состоянию оборудования.',
+        children: [
+          {
+            id: 'group-cameras-working',
+            name: 'Рабочие',
+            description: 'Камеры в штатной работе.',
+            devices: workingOfType('camera')
+          },
+          {
+            id: 'group-cameras-repair',
+            name: 'В ремонте',
+            description: 'Камеры, временно выведенные из эксплуатации.',
+            devices: inRepairOfType('camera')
+          }
+        ]
+      },
+      {
+        id: 'group-fire-detectors',
+        name: 'Пожарные датчики',
+        description: 'Сквозная подборка пожарных датчиков со всех объектов, разделённая по состоянию оборудования.',
+        children: [
+          {
+            id: 'group-fire-working',
+            name: 'Рабочие',
+            description: 'Датчики в штатной работе.',
+            devices: workingOfType('fire-detector')
+          },
+          {
+            id: 'group-fire-repair',
+            name: 'В ремонте',
+            description: 'Датчики, временно выведенные из эксплуатации.',
+            devices: inRepairOfType('fire-detector')
+          }
+        ]
+      }
+    ];
+
+    // Разворачивает декларацию в рабочую структуру дерева.
+    // Подгруппы идут перед прямыми устройствами группы — тот же порядок,
+    // который renderTree() затем поддерживает при любых правках.
+    function buildTree(nodes) {
+      return nodes.map(node => {
+        const group = { id: node.id, name: node.name };
+        if (node.description) group.description = node.description;
+        group.children = node.children ? buildTree(node.children) : [];
+        (node.devices || []).forEach(deviceId => {
+          if (!DEVICE_CATALOG[deviceId]) throw new Error(`Устройство ${deviceId} отсутствует в DEVICE_CATALOG`);
+          group.children.push({ id: deviceId, isDevice: true });
+        });
+        return group;
+      });
+    }
+
+    let treeData = buildTree(TOPOLOGY);
+
+    let openDropdown = null;
+    let activeDropdownBtn = null;
+    let selectedGroupId = null;
+    let selectedDeviceId = null;
+
+    // ===== DOM =====
+    const treeContainer = document.getElementById('treeContainer');
+    const treeSearchEmpty = document.getElementById('treeSearchEmpty');
+    const treePanel = document.getElementById('treePanel');
+    const splitter = document.getElementById('splitter');
+    const detailEmpty = document.getElementById('detailEmpty');
+    const detailCard = document.getElementById('detailCard');
+    const deviceDetail = document.getElementById('deviceDetail');
+    const groupNameInput = document.getElementById('groupNameInput');
+    const groupDescInput = document.getElementById('groupDescInput');
+    const deviceNameInput = document.getElementById('deviceNameInput');
+    const statSubgroups = document.getElementById('statSubgroups');
+    const statDevices = document.getElementById('statDevices');
+    const deviceList = document.getElementById('deviceList');
+    const deviceCount = document.getElementById('deviceCount');
+    const deviceGroupsList = document.getElementById('deviceGroupsList');
+    const statusGroups = document.getElementById('statusGroups');
+    const statusDevices = document.getElementById('statusDevices');
+    const groupBreadcrumb = document.getElementById('groupBreadcrumb');
+    const masterCheckbox = document.getElementById('masterCheckbox');
+    const selectionCount = document.getElementById('selectionCount');
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const deleteWrapper = document.getElementById('deleteWrapper');
+    const searchInput = document.getElementById('searchInput');
+    const searchClear = document.getElementById('searchClear');
+    const addButton = document.getElementById('addButton');
+    const deviceSearchInput = document.getElementById('deviceSearchInput');
+    const deviceSortBtn = document.getElementById('deviceSortBtn');
+    const deviceSortIcon = document.getElementById('deviceSortIcon');
+
+    let currentGroupDevices = [];
+    let deviceSortDir = 'asc';
+
+    function updateDeviceSortButton() {
+      if (!deviceSortBtn) return;
+      const asc = deviceSortDir === 'asc';
+      deviceSortIcon.textContent = asc ? 'arrow_upward' : 'arrow_downward';
+      deviceSortBtn.classList.toggle('active', !asc);
+      deviceSortBtn.title = asc ? 'Сортировать по названию (А-Я)' : 'Сортировать по названию (Я-А)';
+    }
+
+    function renderDeviceList(devices, query) {
+      const q = (query || '').toLowerCase().trim();
+      const items = devices.map(d => deviceInfo(d));
+      let filtered = q ? items.filter(d => d.name.toLowerCase().includes(q)) : items;
+      filtered.sort((a, b) => {
+        const cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        return deviceSortDir === 'asc' ? cmp : -cmp;
+      });
+      if (filtered.length === 0) {
+        deviceList.innerHTML = `<div class="device-empty">${q ? 'Ничего не найдено' : 'Нет устройств в этой группе'}</div>`;
+      } else {
+        deviceList.innerHTML = filtered.map(d => {
+          const icon = deviceTypeInfo(d.deviceType).icon;
+          const status = deviceStatus(d.id);
+          return `
+          <div class="device-item" data-device-id="${d.id}">
+            <span class="material-symbols-outlined">${icon}</span>
+            <span class="name">${escapeHtml(d.name)}</span>
+            <span class="status ${status.tone}">
+              <span class="dot ${status.tone}"></span>
+              ${escapeHtml(status.label)}
+            </span>
+            <button class="device-remove" data-device-id="${d.id}" title="Убрать из группы">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    // ===== TOAST УВЕДОМЛЕНИЯ =====
+    const TOAST_MS = 2500;
+    const TOAST_UNDO_MS = 6000;
+    const TOAST_BULK_UNDO_MS = 12000;
+    const TOAST_MAX = 3;
+    const TOAST_FADE_MS = 200;
+
+    function getToastStack() {
+      let stack = document.getElementById('toastStack');
+      if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'toastStack';
+        document.body.appendChild(stack);
+      }
+      return stack;
+    }
+
+    // Тост убирается из DOM целиком: спрятать его одной прозрачностью недостаточно,
+    // кнопка продолжала бы принимать клики
+    function hideToast(toast) {
+      if (toast.dataset.closing) return;
+      toast.dataset.closing = '1';
+      clearTimeout(Number(toast.dataset.timer));
+      toast.classList.remove('visible');
+      setTimeout(() => toast.remove(), TOAST_FADE_MS);
+    }
+
+    // Каждое сообщение живёт в своём тосте, а не в одном общем: иначе серия удалений
+    // затирала бы кнопку «Отменить» предыдущего и делала его необратимым
+    function showToast(message, actionLabel, actionFn, durationMs) {
+      const stack = getToastStack();
+
+      const live = Array.from(stack.children).filter(t => !t.dataset.closing);
+      live.slice(0, Math.max(0, live.length - TOAST_MAX + 1)).forEach(hideToast);
+
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+
+      const text = document.createElement('span');
+      text.textContent = message;
+      toast.appendChild(text);
+
+      if (actionLabel && actionFn) {
+        const btn = document.createElement('button');
+        btn.className = 'toast-action';
+        btn.textContent = actionLabel;
+        btn.addEventListener('click', function() {
+          // Повторный клик не должен выполнить действие дважды
+          if (toast.dataset.closing) return;
+          hideToast(toast);
+          actionFn();
+        });
+        toast.appendChild(btn);
+      }
+
+      stack.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('visible'));
+
+      const delay = durationMs || (actionLabel ? TOAST_UNDO_MS : TOAST_MS);
+      toast.dataset.timer = String(setTimeout(() => hideToast(toast), delay));
+    }
+
+    // ===== СПЛИТТЕР =====
+    // На узких экранах панели складываются в столбец, и разделитель тянет
+    // не ширину, а высоту: ось берём из раскладки, а не из типа устройства
+    let isResizing = false;
+    let wasStacked = false;
+
+    const mainContent = document.querySelector('.main-content');
+
+    function isStackedLayout() {
+      return getComputedStyle(mainContent).flexDirection === 'column';
+    }
+
+    function resizePanel(clientX, clientY) {
+      const rect = mainContent.getBoundingClientRect();
+
+      if (isStackedLayout()) {
+        const height = clientY - rect.top - splitter.offsetHeight / 2;
+        if (height >= 120 && height <= rect.height * 0.8) {
+          treePanel.style.height = height + 'px';
+        }
+      } else {
+        const width = clientX - rect.left - splitter.offsetWidth / 2;
+        if (width >= 200 && width <= rect.width * 0.7) {
+          treePanel.style.width = width + 'px';
+        }
+      }
+    }
+
+    function startResize() {
+      isResizing = true;
+      splitter.classList.add('active');
+      document.body.style.cursor = isStackedLayout() ? 'row-resize' : 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    function stopResize() {
+      if (!isResizing) return;
+      isResizing = false;
+      splitter.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    // Размер, заданный перетаскиванием, после смены раскладки относится
+    // к другой оси, поэтому при перевороте его надо отпустить
+    function resetPanelSize() {
+      treePanel.style.width = '';
+      treePanel.style.height = '';
+    }
+
+    function initSplitter() {
+      wasStacked = isStackedLayout();
+
+      splitter.addEventListener('mousedown', function(e) {
+        startResize();
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (isResizing) resizePanel(e.clientX, e.clientY);
+      });
+
+      document.addEventListener('mouseup', stopResize);
+
+      splitter.addEventListener('touchstart', function(e) {
+        startResize();
+        e.preventDefault();
+      });
+
+      // passive: false — иначе страница прокручивается под пальцем во время перетаскивания
+      document.addEventListener('touchmove', function(e) {
+        if (!isResizing) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        resizePanel(touch.clientX, touch.clientY);
+      }, { passive: false });
+
+      document.addEventListener('touchend', stopResize);
+      document.addEventListener('touchcancel', stopResize);
+    }
+
+    // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+
+    function getAllNodes() {
+      return treeContainer.querySelectorAll('.tree-node');
+    }
+
+
+
+
+    function getNodeLevel(node) {
+      let level = 0;
+      let parent = node.parentElement?.closest('.tree-node');
+      while (parent) {
+        level++;
+        parent = parent.parentElement?.closest('.tree-node');
+      }
+      return level;
+    }
+
+    function findNodeData(data, id) {
+      for (const item of data) {
+        if (item.id === id) return item;
+        if (item.children) {
+          const found = findNodeData(item.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function findParentData(data, id) {
+      for (const item of data) {
+        if (item.children) {
+          if (item.children.some(c => c.id === id)) return item;
+          const found = findParentData(item.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function refreshTreeMeta() {
+      document.querySelectorAll('.tree-node').forEach(node => {
+        if (node.dataset.type === 'device') return;
+
+        const data = findNodeData(treeData, node.dataset.id);
+        if (!data) return;
+
+        const content = node.querySelector(':scope > .node-content');
+        if (content) content.title = groupDescription(data);
+
+        const badge = content?.querySelector(':scope > .badge');
+        if (!badge) return;
+        if (!data.children || data.children.length === 0) {
+          badge.remove();
+          return;
+        }
+        badge.textContent = badgeText(data);
+        badge.title = BADGE_TITLE;
+      });
+    }
+
+    // Подсказка узла — это описание группы. После правки имени или описания
+    // её надо обновить сразу, не дожидаясь перерисовки дерева.
+    function refreshNodeTooltip(groupId) {
+      const data = findNodeData(treeData, groupId);
+      if (!data) return;
+      document.querySelectorAll(`.tree-node[data-id="${groupId}"]`).forEach(node => {
+        const content = node.querySelector(':scope > .node-content');
+        if (content) content.title = groupDescription(data);
+      });
+    }
+
+    function countSubgroupsDeep(data) {
+      let count = 0;
+      for (const item of data) {
+        if (item.isDevice) continue;
+        count++;
+        if (item.children) count += countSubgroupsDeep(item.children);
+      }
+      return count;
+    }
+
+    // Устройства, привязанные непосредственно к группе, без учёта подгрупп
+    function getDirectDevices(nodeData) {
+      return (nodeData.children || []).filter(c => c.isDevice);
+    }
+
+    function getAllDevices(data) {
+      const devices = [];
+      for (const item of data) {
+        if (item.isDevice) {
+          devices.push(item);
+        }
+        if (item.children) {
+          devices.push(...getAllDevices(item.children));
+        }
+      }
+      return devices;
+    }
+
+    function getDeviceGroups(deviceId) {
+      return deviceRegistry[deviceId]?.groups || [];
+    }
+
+    // Каждая группа, куда входит устройство, показывается отдельной записью —
+    // включая родительскую и дочернюю группы одной ветки.
+    function sortGroupsByPath(groupIds) {
+      return Array.from(new Set(groupIds))
+        .map(gid => ({ gid, path: getGroupPath(treeData, gid) }))
+        .filter(p => p.path)
+        .map(p => ({ gid: p.gid, key: p.path.join(' › ') }))
+        .sort((a, b) => a.key.localeCompare(b.key, 'ru'))
+        .map(p => p.gid);
+    }
+
+    function getGroupPath(data, groupId, path = []) {
+      for (const item of data) {
+        if (item.id === groupId) {
+          return [...path, item.name];
+        }
+        if (item.children) {
+          const result = getGroupPath(item.children, groupId, [...path, item.name]);
+          if (result) return result;
+        }
+      }
+      return null;
+    }
+
+    function getGroupPathWithIds(data, groupId, path = []) {
+      for (const item of data) {
+        if (item.id === groupId) {
+          return [...path, { id: item.id, name: item.name }];
+        }
+        if (item.children) {
+          const result = getGroupPathWithIds(item.children, groupId, [...path, { id: item.id, name: item.name }]);
+          if (result) return result;
+        }
+      }
+      return null;
+    }
+
+    function updateUI() {
+      updateSelectionCount();
+      updateGroupCount();
+    }
+
+    // Устройство может стоять в дереве несколькими копиями, поэтому считаем уникальные id
+    function updateGroupCount() {
+      let groups = 0;
+      const deviceIds = new Set();
+      getAllNodes().forEach(node => {
+        if (node.dataset.type === 'device') deviceIds.add(node.dataset.id);
+        else groups++;
+      });
+      const devices = deviceIds.size;
+      statusGroups.textContent = `${groups} ${pluralRu(groups, 'группа', 'группы', 'групп')}`;
+      statusDevices.textContent = `${devices} ${pluralRu(devices, 'устройство', 'устройства', 'устройств')}`;
+    }
+
+    // ===== ВЫДЕЛЕНИЕ ГРУПП =====
+
+    // Выделение относится только к группам: устройства не участвуют ни в отметке,
+    // ни в подсчёте состояния родителя
+    function isGroupNode(node) {
+      return node.dataset.type !== 'device';
+    }
+
+    function isNodeVisible(node) {
+      return !node.classList.contains('hidden');
+    }
+
+    function getGroupNodes(visibleOnly) {
+      return Array.from(getAllNodes())
+        .filter(isGroupNode)
+        .filter(node => !visibleOnly || isNodeVisible(node));
+    }
+
+    function getSelectedGroupNodes() {
+      return Array.from(treeContainer.querySelectorAll('.tree-node.selected')).filter(isGroupNode);
+    }
+
+    function getAllDescendants(node) {
+      return Array.from(node.querySelectorAll('.tree-node')).filter(isGroupNode).filter(isNodeVisible);
+    }
+
+    function updateCheckboxState(node) {
+      const checkbox = node.querySelector(':scope > .node-content .checkbox-custom');
+      if (!checkbox) return;
+
+      const icon = checkbox.querySelector('.material-symbols-outlined');
+
+      if (node.classList.contains('selected')) {
+        checkbox.style.background = '#1976d2';
+        checkbox.style.borderColor = '#1976d2';
+        if (icon) {
+          icon.textContent = 'check';
+          icon.style.opacity = '1';
+          icon.style.transform = 'scale(1)';
+        }
+      } else if (node.classList.contains('partial')) {
+        checkbox.style.background = '#64b5f6';
+        checkbox.style.borderColor = '#64b5f6';
+        if (icon) {
+          icon.textContent = 'remove';
+          icon.style.opacity = '1';
+          icon.style.transform = 'scale(1)';
+        }
+      } else {
+        checkbox.style.background = 'white';
+        checkbox.style.borderColor = '#cbd5e1';
+        if (icon) {
+          icon.textContent = 'check';
+          icon.style.opacity = '0';
+          icon.style.transform = 'scale(0.6)';
+        }
+      }
+    }
+
+    // Состояние группы выводится из её видимых подгрупп: скрытые поиском строки
+    // не участвуют в выделении, поэтому не должны влиять и на «частично выбрано».
+    // Возвращает false, если считать не по чему.
+    function computeParentState(parent) {
+      const children = Array.from(parent.querySelector(':scope > ul')?.children || [])
+        .filter(isGroupNode)
+        .filter(isNodeVisible);
+      if (children.length === 0) return false;
+
+      const selectedChildren = children.filter(child => child.classList.contains('selected'));
+      const partialChildren = children.filter(child => child.classList.contains('partial'));
+
+      if (selectedChildren.length === children.length) {
+        parent.classList.add('selected');
+        parent.classList.remove('partial');
+      } else if (selectedChildren.length > 0 || partialChildren.length > 0) {
+        parent.classList.remove('selected');
+        parent.classList.add('partial');
+      } else {
+        parent.classList.remove('selected', 'partial');
+      }
+
+      updateCheckboxState(parent);
+      return true;
+    }
+
+    function updateParentState(node) {
+      const parent = node.parentElement?.closest('.tree-node');
+      if (!parent) return;
+      if (!computeParentState(parent)) return;
+      updateParentState(parent);
+    }
+
+    // Полный пересчёт снизу вверх — после массовой отметки и после смены фильтра,
+    // когда набор видимых строк изменился
+    function refreshParentStates() {
+      getGroupNodes(false)
+        .sort((a, b) => getNodeLevel(b) - getNodeLevel(a))
+        .forEach(computeParentState);
+    }
+
+    function refreshAllCheckboxes() {
+      getAllNodes().forEach(node => updateCheckboxState(node));
+    }
+
+    // Мастер-чекбокс отражает видимые строки (как в диалогах привязки),
+    // счётчик рядом показывает общее число выбранных
+    function updateMasterCheckbox() {
+      const total = getGroupNodes(true).length;
+      const selected = getSelectedGroupNodes().filter(isNodeVisible).length;
+
+      masterCheckbox.classList.toggle('selected', selected > 0 && selected === total);
+      masterCheckbox.classList.toggle('partial', selected > 0 && selected < total);
+
+      const icon = masterCheckbox.querySelector('.checkbox-custom .material-symbols-outlined');
+      icon.textContent = masterCheckbox.classList.contains('partial') ? 'remove' : 'check';
+
+      const label = masterCheckbox.querySelector('.master-label');
+      if (label) label.textContent = selected > 0 ? 'Снять выделение' : 'Выбрать всё';
+    }
+
+    function updateSelectionCount() {
+      const selected = getSelectedGroupNodes();
+      const count = selected.length;
+
+      if (count > 0) {
+        selectionCount.textContent = `Выбрано: ${count}`;
+        selectionCount.classList.add('visible');
+      } else {
+        selectionCount.classList.remove('visible');
+      }
+
+      if (count > 0) {
+        deleteWrapper.classList.add('visible');
+      } else {
+        deleteWrapper.classList.remove('visible');
+      }
+
+      updateMasterCheckbox();
+    }
+
+    function toggleNode(node, select, recursive = true) {
+      if (select) {
+        node.classList.add('selected');
+        node.classList.remove('partial');
+      } else {
+        node.classList.remove('selected', 'partial');
+      }
+
+      updateCheckboxState(node);
+
+      if (recursive) {
+        const descendants = getAllDescendants(node);
+        descendants.forEach(desc => {
+          if (select) {
+            desc.classList.add('selected');
+            desc.classList.remove('partial');
+          } else {
+            desc.classList.remove('selected', 'partial');
+          }
+          updateCheckboxState(desc);
+        });
+      }
+
+      updateParentState(node);
+      updateSelectionCount();
+    }
+
+    function selectAll(select) {
+      getGroupNodes(true).forEach(node => {
+        if (select) {
+          node.classList.add('selected');
+          node.classList.remove('partial');
+        } else {
+          node.classList.remove('selected', 'partial');
+        }
+        updateCheckboxState(node);
+      });
+      refreshParentStates();
+      updateSelectionCount();
+    }
+
+    // ===== ОТОБРАЖЕНИЕ КАРТОЧКИ =====
+    // Автотекст показывается только пока описание ни разу не задавали.
+    // Стёртое вручную описание остаётся пустым и к автотексту не возвращается,
+    // поэтому здесь важно отличать отсутствующее поле от пустой строки.
+    function groupDescription(nodeData) {
+      return nodeData.description === undefined
+        ? generateGroupDescription(nodeData)
+        : nodeData.description;
+    }
+
+    // Состав группы намеренно не описывается: счётчики уже есть в карточке и в
+    // бейдже, а текст, который меняется сам, пользователь править не станет.
+    function generateGroupDescription(nodeData) {
+      const name = nodeData.name || 'Группа';
+      return `${name} — группа устройств видеонаблюдения и безопасности.`;
+    }
+
+    function pluralRu(n, one, few, many) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod10 === 1 && mod100 !== 11) return one;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+      return many;
+    }
+
+
+
+    // Хлебный путь навигации
+    function renderBreadcrumb(groupId, nodeData) {
+      if (!groupBreadcrumb) return;
+      const path = getGroupPathWithIds(treeData, groupId) || [{ id: groupId, name: nodeData.name }];
+      groupBreadcrumb.innerHTML = path.map((seg, idx) => {
+        const name = escapeHtml(seg.name);
+        const isLast = idx === path.length - 1;
+        return isLast
+          ? `<span class="crumb-current">${name}</span>`
+          : `<a href="#" class="crumb-link" data-group-id="${seg.id}">${name}</a><span class="crumb-sep">›</span>`;
+      }).join('');
+    }
+
+    function showGroupDetails(groupId) {
+      const node = document.querySelector(`.tree-node[data-id="${groupId}"]`);
+      if (!node) {
+        showEmpty();
+        return;
+      }
+
+      const nodeData = findNodeData(treeData, groupId);
+      if (!nodeData || nodeData.isDevice) {
+        showEmpty();
+        return;
+      }
+
+      selectedGroupId = groupId;
+      selectedDeviceId = null;
+      
+      detailEmpty.style.display = 'none';
+      detailCard.classList.add('visible');
+      deviceDetail.classList.remove('visible');
+
+      groupNameInput.value = nodeData.name;
+      groupNameInput.disabled = false;
+      groupDescInput.value = groupDescription(nodeData);
+
+      renderBreadcrumb(groupId, nodeData);
+
+      const subgroups = nodeData.children ? countSubgroupsDeep(nodeData.children) : 0;
+      const devices = getDirectDevices(nodeData);
+
+      statSubgroups.textContent = subgroups;
+      statDevices.textContent = devices.length;
+
+      deviceCount.textContent = `(${devices.length})`;
+      currentGroupDevices = devices;
+      if (deviceSearchInput) deviceSearchInput.value = '';
+      renderDeviceList(devices, '');
+
+      document.querySelectorAll('.tree-node').forEach(n => {
+        n.classList.remove('active', 'active-device');
+      });
+      node.classList.add('active');
+    }
+
+    function showDeviceDetails(deviceId) {
+      const deviceData = findNodeData(treeData, deviceId);
+      if (!deviceData || !deviceData.isDevice) {
+        showEmpty();
+        return;
+      }
+
+      selectedDeviceId = deviceId;
+      selectedGroupId = null;
+      
+      detailEmpty.style.display = 'none';
+      detailCard.classList.remove('visible');
+      deviceDetail.classList.add('visible');
+
+      const info = deviceInfo(deviceData);
+      deviceNameInput.value = info.name;
+
+      const typeInfo = deviceTypeInfo(info.deviceType);
+
+      const deviceCardIcon = document.getElementById('deviceCardIcon');
+      if (deviceCardIcon) {
+        deviceCardIcon.textContent = typeInfo.icon;
+      }
+
+      const deviceTypeValue = document.getElementById('deviceTypeValue');
+      if (deviceTypeValue) {
+        deviceTypeValue.textContent = typeInfo.label;
+      }
+
+      const status = deviceStatus(deviceId);
+      const deviceStatusValue = document.getElementById('deviceStatusValue');
+      if (deviceStatusValue) {
+        deviceStatusValue.className = `value ${status.tone}`;
+        deviceStatusValue.innerHTML = `<span class="dot ${status.tone}"></span> ${escapeHtml(status.label)}`;
+      }
+
+      const groupIds = sortGroupsByPath(getDeviceGroups(deviceId));
+      let groupsHtml = '';
+      if (groupIds.length === 0) {
+        groupsHtml = '<span style="color:#94a3b8;">Не входит ни в одну группу</span>';
+      } else {
+        groupsHtml = groupIds.map(gid => {
+          const path = getGroupPathWithIds(treeData, gid);
+          if (!path) return '';
+          const crumbs = path.map((seg, idx) => {
+            const sep = idx < path.length - 1 ? '<span class="path-sep">›</span>' : '';
+            return `<span class="group-tag" data-group-id="${seg.id}">${escapeHtml(seg.name)}</span>${sep}`;
+          }).join('');
+          return `<div class="device-group-path">${crumbs}<button class="group-unlink" data-group-id="${gid}" title="Отвязать от группы"><span class="material-symbols-outlined">close</span></button></div>`;
+        }).join('');
+      }
+      deviceGroupsList.innerHTML = groupsHtml;
+
+      const deviceGroupsLabel = document.getElementById('deviceGroupsLabel');
+      if (deviceGroupsLabel) {
+        deviceGroupsLabel.textContent = groupIds.length > 0 ? `Группы (${groupIds.length})` : 'Группы';
+      }
+
+      deviceGroupsList.querySelectorAll('.group-tag').forEach(tag => {
+        tag.addEventListener('click', function() {
+          const gid = this.dataset.groupId;
+          const node = document.querySelector(`.tree-node[data-id="${gid}"]`);
+          if (node) {
+            selectedGroupId = gid;
+            selectedDeviceId = null;
+            showGroupDetails(gid);
+            document.querySelectorAll('.tree-node').forEach(n => {
+              n.classList.remove('active', 'active-device');
+            });
+            node.classList.add('active');
+            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+      });
+
+      deviceGroupsList.querySelectorAll('.group-unlink').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const gid = this.dataset.groupId;
+          const removed = unlinkDeviceFromGroup(deviceId, gid);
+          if (!removed) return;
+
+          showDeviceDetails(deviceId);
+          showToast(
+            `«${removed.deviceName}» отвязано от «${removed.groupName}»`,
+            'Отменить',
+            () => restoreDeviceToGroup(deviceId, gid, removed)
+          );
+        });
+      });
+
+      // Устройство может стоять в дереве несколькими копиями — подсвечиваем все,
+      // иначе клик по любой из них уводил бы выделение на первую
+      document.querySelectorAll('.tree-node').forEach(n => {
+        n.classList.remove('active', 'active-device');
+      });
+      document.querySelectorAll(`.tree-node[data-id="${deviceId}"]`).forEach(n => {
+        n.classList.add('active-device');
+      });
+    }
+
+    function showEmpty() {
+      detailEmpty.style.display = 'flex';
+      detailCard.classList.remove('visible');
+      deviceDetail.classList.remove('visible');
+      selectedGroupId = null;
+      selectedDeviceId = null;
+      document.querySelectorAll('.tree-node').forEach(n => {
+        n.classList.remove('active', 'active-device');
+      });
+    }
+
+    // ===== РЕНДЕРИНГ ДЕРЕВА =====
+
+    // Сначала подгруппы, потом устройства. Внутри каждой части порядок исходный.
+    function orderedChildren(data) {
+      const groups = data.filter(item => !item.isDevice);
+      const devices = data.filter(item => item.isDevice);
+      return groups.concat(devices);
+    }
+
+    function renderTree(data, parentUl, level = 0) {
+      // Порядок показа задаётся здесь, а не порядком вставки: новая подгруппа
+      // дописывается в конец children, но показать её нужно всё равно до устройств
+      orderedChildren(data).forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'tree-node has-children';
+        li.dataset.id = item.id;
+        li.dataset.type = item.isDevice ? 'device' : 'group';
+        li.setAttribute('role', 'treeitem');
+        li.setAttribute('aria-expanded', 'false');
+        li.classList.add(`level-${level}`);
+
+        const content = document.createElement('div');
+        content.className = 'node-content';
+        
+        const info = item.isDevice ? deviceInfo(item) : null;
+        const iconName = info ? deviceTypeInfo(info.deviceType).icon : 'folder';
+        const iconClass = item.isDevice ? 'icon-device' : 'icon-group';
+        
+        const childCount = item.children ? item.children.length : 0;
+        
+        content.innerHTML = `
+          <span class="toggle-icon material-symbols-outlined">chevron_right</span>
+          ${!item.isDevice ? `<span class="checkbox-custom" data-checkbox><span class="material-symbols-outlined">check</span></span>` : ''}
+          <span class="material-symbols-outlined ${iconClass}">${iconName}</span>
+          <span class="node-text">${escapeHtml(info ? info.name : item.name)}</span>
+          ${childCount > 0 ? `<span class="badge" title="${BADGE_TITLE}">${badgeText(item)}</span>` : ''}
+          <span class="node-actions">
+            <button class="btn-more" data-dropdown="${item.id}" title="Действия" aria-label="Действия">
+              <span class="material-symbols-outlined">more_vert</span>
+            </button>
+          </span>
+        `;
+
+        if (!item.isDevice) {
+          content.title = groupDescription(item);
+        }
+
+        li.appendChild(content);
+        li.dataset.hasMenu = 'true';
+
+        if (item.children && item.children.length > 0) {
+          const ul = document.createElement('ul');
+          ul.setAttribute('role', 'group');
+          li.appendChild(ul);
+          renderTree(item.children, ul, level + 1);
+        } else {
+          li.classList.remove('has-children');
+        }
+
+        parentUl.appendChild(li);
+      });
+    }
+
+    // ===== СОЗДАНИЕ МЕНЮ =====
+
+    function createDropdown(nodeId) {
+      const existing = document.querySelector(`.node-dropdown[data-node-id="${nodeId}"]`);
+      if (existing) return existing;
+
+      const node = getContextNode(nodeId);
+      const isDevice = node?.dataset.type === 'device';
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'node-dropdown';
+      dropdown.dataset.nodeId = nodeId;
+      dropdown.innerHTML = isDevice ? `
+        <button class="node-dropdown-item" data-action="link-groups">
+          <span class="material-symbols-outlined">folder_copy</span>
+          Управлять группами
+        </button>
+      ` : `
+        <button class="node-dropdown-item" data-action="add-subgroup">
+          <span class="material-symbols-outlined">create_new_folder</span>
+          Добавить подгруппу
+          <span class="sub">вложенную</span>
+        </button>
+        <button class="node-dropdown-item" data-action="add-device">
+          <span class="material-symbols-outlined">devices</span>
+          Управлять устройствами
+        </button>
+        <div class="node-dropdown-divider"></div>
+        <button class="node-dropdown-item danger" data-action="delete-group">
+          <span class="material-symbols-outlined">delete</span>
+          Удалить группу
+          <span class="sub">со всем содержимым</span>
+        </button>
+      `;
+      document.body.appendChild(dropdown);
+      return dropdown;
+    }
+
+    // ===== УМНОЕ ПОЗИЦИОНИРОВАНИЕ МЕНЮ =====
+
+    function positionDropdown(dropdown, anchorElement) {
+      const rect = anchorElement.getBoundingClientRect();
+      const dropdownWidth = 240;
+      const dropdownHeight = dropdown.scrollHeight > 0 ? dropdown.scrollHeight : 200;
+      const padding = 8;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let top, left;
+
+      const spaceBelow = viewportHeight - rect.bottom - padding;
+      const spaceAbove = rect.top - padding;
+
+      if (spaceBelow >= dropdownHeight) {
+        top = rect.bottom + padding;
+        dropdown.classList.add('open-from-bottom');
+        dropdown.classList.remove('open-from-top');
+      } else if (spaceAbove >= dropdownHeight) {
+        top = rect.top - dropdownHeight - padding;
+        dropdown.classList.add('open-from-top');
+        dropdown.classList.remove('open-from-bottom');
+      } else {
+        top = rect.bottom + padding;
+        dropdown.style.maxHeight = Math.max(spaceBelow - padding, 100) + 'px';
+        dropdown.style.overflowY = 'auto';
+        dropdown.classList.add('open-from-bottom');
+        dropdown.classList.remove('open-from-top');
+      }
+
+      const spaceRight = viewportWidth - rect.right - padding;
+      const spaceLeft = rect.left - padding;
+
+      if (spaceRight >= dropdownWidth) {
+        left = rect.right - rect.width / 2;
+      } else if (spaceLeft >= dropdownWidth) {
+        left = rect.left + rect.width / 2 - dropdownWidth;
+      } else {
+        left = Math.min(viewportWidth - dropdownWidth - padding, rect.right - dropdownWidth);
+        left = Math.max(padding, left);
+      }
+
+      if (left + dropdownWidth > viewportWidth - padding) {
+        left = viewportWidth - dropdownWidth - padding;
+      }
+      if (left < padding) {
+        left = padding;
+      }
+
+      dropdown.style.top = top + 'px';
+      dropdown.style.left = left + 'px';
+      dropdown.style.maxHeight = '';
+      dropdown.style.overflowY = '';
+    }
+
+    // ===== ОБНОВЛЕНИЕ ДЕРЕВА =====
+
+    function rebuildTree() {
+      document.querySelectorAll('.node-dropdown').forEach(d => d.remove());
+      openDropdown = null;
+      activeDropdownBtn = null;
+
+      treeContainer.innerHTML = '';
+      if (treeData.length === 0) {
+        treeContainer.innerHTML = `
+          <div class="empty-state">
+            <span class="material-symbols-outlined">folder_open</span>
+            <div class="title">Нет групп</div>
+            <div class="sub">Нажмите «Добавить» чтобы создать первую</div>
+          </div>
+        `;
+        treeSearchEmpty.classList.remove('visible');
+        updateGroupCount();
+        showEmpty();
+        return;
+      }
+      renderTree(treeData, treeContainer, 0);
+      refreshAllCheckboxes();
+      updateUI();
+      document.querySelectorAll('.tree-node.level-0').forEach(node => {
+        node.classList.add('open');
+        node.setAttribute('aria-expanded', 'true');
+      });
+
+      // Перерисовка сбрасывает скрытые строки, а строка поиска остаётся заполненной
+      if (searchInput.value) {
+        filterTree(searchInput.value);
+        refreshParentStates();
+      }
+
+      if (selectedGroupId) {
+        const node = document.querySelector(`.tree-node[data-id="${selectedGroupId}"]`);
+        if (node) {
+          showGroupDetails(selectedGroupId);
+        } else {
+          selectedGroupId = null;
+          showEmpty();
+        }
+      } else if (selectedDeviceId) {
+        const node = document.querySelector(`.tree-node[data-id="${selectedDeviceId}"]`);
+        if (node) {
+          showDeviceDetails(selectedDeviceId);
+        } else {
+          selectedDeviceId = null;
+          showEmpty();
+        }
+      }
+    }
+
+    // Перестройка с сохранением раскрытых веток. Карточку выбранного узла
+    // восстанавливает сам rebuildTree()
+    function rebuildTreeKeepingOpen(alsoOpenIds) {
+      const openIds = Array.from(document.querySelectorAll('.tree-node.open')).map(n => n.dataset.id);
+      rebuildTree();
+      openIds.concat(alsoOpenIds || []).forEach(id => {
+        document.querySelectorAll(`.tree-node[data-id="${id}"]`).forEach(n => {
+          n.classList.add('open');
+          n.setAttribute('aria-expanded', 'true');
+        });
+      });
+    }
+
+    // ===== ПОИСК =====
+
+    function filterTree(query) {
+      const nodes = getAllNodes();
+      const lowerQuery = query.toLowerCase().trim();
+      
+      if (!lowerQuery) {
+        nodes.forEach(node => {
+          node.classList.remove('hidden');
+          let parent = node.parentElement?.closest('.tree-node');
+          while (parent) {
+            parent.classList.remove('hidden');
+            parent = parent.parentElement?.closest('.tree-node');
+          }
+        });
+        searchClear.classList.remove('visible');
+        treeSearchEmpty.classList.remove('visible');
+        return;
+      }
+
+      searchClear.classList.add('visible');
+      
+      nodes.forEach(node => node.classList.add('hidden'));
+      
+      nodes.forEach(node => {
+        const text = node.querySelector('.node-text')?.textContent?.toLowerCase() || '';
+        if (text.includes(lowerQuery)) {
+          node.classList.remove('hidden');
+          let parent = node.parentElement?.closest('.tree-node');
+          while (parent) {
+            parent.classList.remove('hidden');
+            parent = parent.parentElement?.closest('.tree-node');
+          }
+          let expand = node.parentElement?.closest('.tree-node');
+          while (expand) {
+            expand.classList.add('open');
+            expand.setAttribute('aria-expanded', 'true');
+            expand = expand.parentElement?.closest('.tree-node');
+          }
+        }
+      });
+
+      // Пустое дерево показывает собственное состояние, второе сообщение поверх не нужно
+      const hasVisible = Array.from(nodes).some(isNodeVisible);
+      treeSearchEmpty.classList.toggle('visible', nodes.length > 0 && !hasVisible);
+    }
+
+    // ===== КОНТЕКСТНЫЕ ДЕЙСТВИЯ =====
+
+    function getContextNode(nodeId) {
+      return document.querySelector(`.tree-node[data-id="${nodeId}"]`);
+    }
+
+    // ===== МОДАЛЬНОЕ ОКНО =====
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+    const modalClose = document.getElementById('modalClose');
+
+    function openModal(title, bodyHtml, footerHtml, className) {
+      modalTitle.textContent = title;
+      modalBody.innerHTML = bodyHtml;
+      modalFooter.innerHTML = footerHtml || '';
+      const modalEl = modalOverlay.querySelector('.modal');
+      if (modalEl) {
+        modalEl.className = className ? 'modal ' + className : 'modal';
+      }
+      modalOverlay.classList.add('visible');
+    }
+
+    function closeModal() {
+      modalOverlay.classList.remove('visible');
+      const modalEl = modalOverlay.querySelector('.modal');
+      if (modalEl) modalEl.className = 'modal';
+      modalBody.innerHTML = '';
+      modalFooter.innerHTML = '';
+    }
+
+    // ===== ПАНЕЛЬ УПРАВЛЕНИЯ В ДИАЛОГАХ ПРИВЯЗКИ =====
+
+    function pickerToolbarHtml(prefix) {
+      return `<div class="modal-toolbar">
+        <div class="master-checkbox" id="${prefix}Master" title="Выбрать всё / снять выделение по видимым строкам">
+          <span class="checkbox-custom">
+            <span class="material-symbols-outlined">check</span>
+          </span>
+          <span class="master-label">Выбрать всё</span>
+        </div>
+        <span class="selection-count" id="${prefix}Count">Выбрано: 0</span>
+        <div class="modal-filter" id="${prefix}Filter">
+          <button type="button" class="modal-filter-btn active" data-mode="all">Все</button>
+          <button type="button" class="modal-filter-btn" data-mode="linked">Привязанные</button>
+          <button type="button" class="modal-filter-btn" data-mode="unlinked">Не привязанные</button>
+        </div>
+      </div>`;
+    }
+
+    // Связывает список чекбоксов с поиском, фильтром по привязке и «Выбрать всё».
+    // Фильтр по привязке пересчитывается только при смене режима или поиске,
+    // чтобы строки не исчезали из-под курсора при переключении галочек.
+    function setupPicker(prefix, list, searchInput) {
+      const master = document.getElementById(prefix + 'Master');
+      const counter = document.getElementById(prefix + 'Count');
+      const filterBar = document.getElementById(prefix + 'Filter');
+      if (!list || !master || !counter || !filterBar) return;
+
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'modal-empty';
+      emptyEl.textContent = 'Ничего не найдено';
+      emptyEl.style.display = 'none';
+      list.parentNode.insertBefore(emptyEl, list.nextSibling);
+
+      let mode = 'all';
+
+      const options = () => Array.from(list.querySelectorAll('.modal-option'));
+      const isChecked = opt => opt.querySelector('input[type="checkbox"]').checked;
+      const isVisible = opt => opt.style.display !== 'none';
+
+      function applyFilters() {
+        const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const opts = options();
+        opts.forEach(opt => {
+          const okQuery = !q || (opt.textContent || '').toLowerCase().includes(q);
+          const okMode = mode === 'all' || (mode === 'linked') === isChecked(opt);
+          opt.style.display = okQuery && okMode ? '' : 'none';
+        });
+        emptyEl.style.display = opts.some(isVisible) ? 'none' : '';
+        syncToolbar();
+      }
+
+      function syncToolbar() {
+        const opts = options();
+        opts.forEach(opt => {
+          const checked = isChecked(opt);
+          opt.classList.toggle('is-checked', checked);
+          const sub = opt.querySelector('.opt-sub');
+          if (sub && opt.dataset.subOn !== undefined) {
+            sub.textContent = checked ? opt.dataset.subOn : opt.dataset.subOff;
+          }
+        });
+
+        const visible = opts.filter(isVisible);
+        const visibleChecked = visible.filter(isChecked).length;
+        const totalChecked = opts.filter(isChecked).length;
+
+        master.classList.toggle('selected', visible.length > 0 && visibleChecked === visible.length);
+        master.classList.toggle('partial', visibleChecked > 0 && visibleChecked < visible.length);
+
+        const icon = master.querySelector('.checkbox-custom .material-symbols-outlined');
+        if (icon) icon.textContent = master.classList.contains('partial') ? 'remove' : 'check';
+
+        const label = master.querySelector('.master-label');
+        if (label) label.textContent = visibleChecked > 0 ? 'Снять выделение' : 'Выбрать всё';
+
+        counter.textContent = `Выбрано: ${totalChecked}`;
+        counter.classList.toggle('visible', totalChecked > 0);
+      }
+
+      master.addEventListener('click', function() {
+        const visible = options().filter(isVisible);
+        const select = !visible.some(isChecked);
+        visible.forEach(opt => { opt.querySelector('input[type="checkbox"]').checked = select; });
+        syncToolbar();
+      });
+
+      filterBar.addEventListener('click', function(e) {
+        const btn = e.target.closest('.modal-filter-btn');
+        if (!btn) return;
+        mode = btn.dataset.mode;
+        filterBar.querySelectorAll('.modal-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+        applyFilters();
+      });
+
+      list.addEventListener('change', function(e) {
+        if (e.target.matches('input[type="checkbox"]')) syncToolbar();
+      });
+
+      if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+      applyFilters();
+    }
+
+    // Полный список устройств: постоянный каталог плюс всё, что нашлось в дереве.
+    // Устройство остаётся здесь, даже если снято со всех групп, поэтому его можно вернуть.
+    function getDevicesCatalog() {
+      const map = {};
+      Object.keys(DEVICE_CATALOG).forEach(id => {
+        map[id] = { id, name: DEVICE_CATALOG[id].name, deviceType: DEVICE_CATALOG[id].type, groups: [] };
+      });
+      // Устройства из сохранённого состояния, которых нет в каталоге
+      getAllDevices(treeData).forEach(d => {
+        if (!map[d.id]) {
+          const info = deviceInfo(d);
+          map[d.id] = { id: d.id, name: info.name, deviceType: info.deviceType, groups: [] };
+        }
+      });
+      Object.keys(deviceRegistry).forEach(id => {
+        if (map[id]) map[id].groups = deviceRegistry[id].groups.slice();
+      });
+      return Object.values(map);
+    }
+
+    // Счётчик только растёт и живёт отдельно от дерева. Считать максимум по
+    // treeData нельзя: группа, ожидающая отмены удаления, оттуда уже вынута,
+    // и её номер достался бы новой группе — а после отмены в дереве оказались бы
+    // два узла с одинаковым id.
+    let groupIdSeq = 0;
+
+    function seedGroupIdSeq(data) {
+      for (const item of data) {
+        const match = /^group-(\d+)$/.exec(item.id);
+        if (match) groupIdSeq = Math.max(groupIdSeq, Number(match[1]));
+        if (item.children) seedGroupIdSeq(item.children);
+      }
+    }
+
+    function nextGroupId() {
+      return `group-${++groupIdSeq}`;
+    }
+
+    // ===== ПЕРСИСТЕНТНОСТЬ =====
+    // Точка подключения бэкенда: saveState() вызывается из каждой мутации дерева,
+    // loadState() — один раз при старте. Пока PERSIST выключен, состояние живёт
+    // только в памяти вкладки и обновление страницы возвращает исходную топологию.
+    const PERSIST = false;
+    const STORAGE_KEY = 'tree-groups-v2';
+
+    function saveState() {
+      if (!PERSIST) return;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(treeData));
+      } catch (e) { /* ignore */ }
+    }
+
+    function loadState() {
+      if (!PERSIST) {
+        // Снимок мог остаться от сессий, когда сохранение было включено
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+        return null;
+      }
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function rebuildDeviceRegistry() {
+      for (const k of Object.keys(deviceRegistry)) delete deviceRegistry[k];
+      // Регистрируем устройство только в его непосредственной родительской группе,
+      // а не во всех группах-предках.
+      (function walk(data, parentGroupId) {
+        for (const item of data) {
+          if (item.isDevice) {
+            if (!deviceRegistry[item.id]) deviceRegistry[item.id] = { groups: [] };
+            if (parentGroupId && !deviceRegistry[item.id].groups.includes(parentGroupId)) {
+              deviceRegistry[item.id].groups.push(parentGroupId);
+            }
+          } else {
+            walk((item.children || []), item.id);
+          }
+        }
+      })(treeData, null);
+    }
+
+    function addNewGroup(name, parentId) {
+      const group = { id: nextGroupId(), name, children: [] };
+      if (parentId) {
+        const parent = findNodeData(treeData, parentId);
+        if (!parent) return;
+        parent.children = parent.children || [];
+        parent.children.push(group);
+      } else {
+        treeData.push(group);
+      }
+      rebuildTree();
+      const path = [group.id];
+      let cur = findParentData(treeData, group.id);
+      while (cur) {
+        path.push(cur.id);
+        cur = findParentData(treeData, cur.id);
+      }
+      path.forEach(id => {
+        document.querySelectorAll(`.tree-node[data-id="${id}"]`).forEach(n => {
+          n.classList.add('open');
+          n.setAttribute('aria-expanded', 'true');
+        });
+      });
+      showGroupDetails(group.id);
+      saveState();
+      showToast(`Группа «${name}» создана`);
+    }
+
+    function openCreateGroupModal(parentId) {
+      const parentName = parentId ? (findNodeData(treeData, parentId)?.name || '') : null;
+      openModal(
+        parentName ? `Новая подгруппа в «${parentName}»` : 'Новая группа',
+        '<input type="text" class="modal-name-input" id="modalGroupName" placeholder="Название группы" maxlength="60" />' +
+        `<div class="modal-hint">${parentName ? 'Будет создана вложенная подгруппа.' : 'Будет создана корневая группа.'}</div>`,
+        '<button class="modal-btn modal-btn-ghost" data-modal-cancel>Отмена</button>' +
+        '<button class="modal-btn modal-btn-primary" id="modalGroupConfirm">Создать</button>'
+      );
+      const input = document.getElementById('modalGroupName');
+      function confirmCreate() {
+        const name = input.value.trim();
+        if (!name) { input.focus(); return; }
+        closeModal();
+        addNewGroup(name, parentId);
+      }
+      if (input) {
+        input.focus();
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') confirmCreate();
+        });
+      }
+      const confirmBtn = document.getElementById('modalGroupConfirm');
+      if (confirmBtn) confirmBtn.addEventListener('click', confirmCreate);
+    }
+
+    function addSubgroup(nodeId) {
+      closeAllDropdowns();
+      openCreateGroupModal(nodeId);
+    }
+
+    function addRootGroup() {
+      openCreateGroupModal(null);
+    }
+
+    // Привязка выбранных внешних устройств в группу
+    function syncGroupDevices(groupId, targetIds) {
+      const groupData = findNodeData(treeData, groupId);
+      if (!groupData) return;
+      groupData.children = groupData.children || [];
+      const target = new Set(targetIds);
+
+      // Отвязать снятые (убрать из прямых устройств группы)
+      for (let i = groupData.children.length - 1; i >= 0; i--) {
+        const c = groupData.children[i];
+        if (c.isDevice && !target.has(c.id)) {
+          unlinkDeviceFromGroup(c.id, groupId);
+        }
+      }
+
+      // Привязать добавленные
+      targetIds.forEach(id => {
+        if (groupData.children.some(c => c.id === id)) return;
+        groupData.children.push({ id, isDevice: true });
+        registerDevice(id, groupId);
+      });
+
+      rebuildTreeKeepingOpen([groupId]);
+      showGroupDetails(groupId);
+      saveState();
+      showToast('Состав группы обновлён');
+    }
+
+    function openAddDevicesModal(groupId) {
+      const groupData = findNodeData(treeData, groupId);
+      if (!groupData) return;
+      const catalog = getDevicesCatalog();
+      const existing = new Set(
+        groupData.children ? groupData.children.filter(c => c.isDevice).map(c => c.id) : []
+      );
+      if (catalog.length === 0) {
+        showToast('Каталог устройств пуст');
+        return;
+      }
+      const rows = catalog.map(d => {
+        const info = deviceTypeInfo(d.deviceType);
+        const checked = existing.has(d.id);
+        return `<label class="modal-option" data-sub-on="в группе" data-sub-off="${info.label}">
+          <input type="checkbox" value="${d.id}" ${checked ? 'checked' : ''} />
+          <span class="material-symbols-outlined opt-icon">${info.icon}</span>
+          <span class="opt-name">${escapeHtml(d.name)}</span>
+          <span class="opt-sub">${checked ? 'в группе' : info.label}</span>
+        </label>`;
+      }).join('');
+      openModal(
+        `Состав группы «${groupData.name}»`,
+        `<div class="modal-search-wrapper">
+          <span class="material-symbols-outlined">search</span>
+          <input type="text" class="modal-search" id="deviceFilter" placeholder="Поиск устройств..." />
+          <button class="modal-sort" id="deviceSort2" title="Сортировать по названию">
+            <span class="material-symbols-outlined">arrow_upward</span>
+          </button>
+        </div>` +
+        `<div class="modal-hint">Отметьте устройства, входящие в группу. Снятие галочки отвязывает устройство от группы.</div>` +
+        pickerToolbarHtml('devicePick') +
+        `<div class="modal-list" id="devicePickList">${rows}</div>`,
+        '<button class="modal-btn modal-btn-ghost" data-modal-cancel>Отмена</button>' +
+        '<button class="modal-btn modal-btn-primary" id="devicePickConfirm">Сохранить</button>',
+        'modal-fixed'
+      );
+      const filterInput = document.getElementById('deviceFilter');
+      const pickList = document.getElementById('devicePickList');
+      const sortBtn = document.getElementById('deviceSort2');
+      let sortDir = 'asc';
+      function applySort() {
+        const opts = Array.from(pickList.querySelectorAll('.modal-option'));
+        opts.sort((a, b) => {
+          const na = a.querySelector('.opt-name').textContent;
+          const nb = b.querySelector('.opt-name').textContent;
+          const r = na.localeCompare(nb, 'ru');
+          return sortDir === 'asc' ? r : -r;
+        });
+        opts.forEach(o => pickList.appendChild(o));
+        if (sortBtn) {
+          const ic = sortBtn.querySelector('.material-symbols-outlined');
+          if (ic) ic.textContent = sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward';
+        }
+      }
+      if (sortBtn) {
+        sortBtn.addEventListener('click', function() {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          applySort();
+        });
+      }
+      // Показать список сразу отсортированным при открытии
+      applySort();
+      setupPicker('devicePick', pickList, filterInput);
+      const confirmBtn = document.getElementById('devicePickConfirm');
+      if (confirmBtn) confirmBtn.addEventListener('click', function() {
+        const ids = Array.from(document.querySelectorAll('#devicePickList input[type="checkbox"]:checked'))
+          .map(ck => ck.value);
+        closeModal();
+        syncGroupDevices(groupId, ids);
+      });
+    }
+
+    function addDevice(nodeId) {
+      closeAllDropdowns();
+      openAddDevicesModal(nodeId);
+    }
+
+    // Устройство: синхронизация членства в группах
+    function syncDeviceGroups(deviceId, targetGroupIds) {
+      const current = new Set(getDeviceGroups(deviceId));
+      const target = new Set(targetGroupIds);
+
+      // Добавить в отмеченные группы
+      targetGroupIds.forEach(gid => {
+        if (current.has(gid)) return;
+        const groupData = findNodeData(treeData, gid);
+        if (!groupData) return;
+        groupData.children = groupData.children || [];
+        if (!groupData.children.some(c => c.id === deviceId)) {
+          groupData.children.push({ id: deviceId, isDevice: true });
+        }
+        registerDevice(deviceId, gid);
+      });
+
+      // Убрать из снятых групп
+      getDeviceGroups(deviceId).slice().forEach(gid => {
+        if (target.has(gid)) return;
+        unlinkDeviceFromGroup(deviceId, gid);
+      });
+
+      rebuildTreeKeepingOpen();
+      saveState();
+      showToast('Членство в группах обновлено');
+    }
+
+    function linkDeviceToGroups(nodeId) {
+      closeAllDropdowns();
+      const deviceData = findNodeData(treeData, nodeId);
+      if (!deviceData || !deviceData.isDevice) return;
+      const current = new Set(getDeviceGroups(nodeId));
+      const allGroups = [];
+      (function collectGroups(data, path) {
+        for (const item of data) {
+          if (!item.isDevice) {
+            const full = path.concat(item.name);
+            allGroups.push({ id: item.id, name: item.name, path: full });
+            if (item.children) collectGroups(item.children, full);
+          }
+        }
+      })(treeData, []);
+      const rows = allGroups.map(g => {
+        const checked = current.has(g.id);
+        return `<label class="modal-option">
+          <input type="checkbox" value="${g.id}" ${checked ? 'checked' : ''} />
+          <span class="material-symbols-outlined opt-icon">folder</span>
+          <span class="opt-name">${escapeHtml(g.name)}</span>
+          <span class="opt-sub">${escapeHtml(g.path.join(' › '))}</span>
+        </label>`;
+      }).join('');
+      openModal(
+        `Группы для «${deviceInfo(deviceData).name}»`,
+        `<div class="modal-search-wrapper">
+          <span class="material-symbols-outlined">search</span>
+          <input type="text" class="modal-search" id="groupFilter" placeholder="Поиск групп..." />
+          <button class="modal-sort" id="groupSort2" title="Сортировать по названию">
+            <span class="material-symbols-outlined">arrow_upward</span>
+          </button>
+        </div>` +
+        `<div class="modal-hint">Отметьте группы, в которые должно входить устройство. Снятие галочки отвязывает устройство от группы.</div>` +
+        pickerToolbarHtml('groupPick') +
+        `<div class="modal-list" id="groupPickList">${rows}</div>`,
+        '<button class="modal-btn modal-btn-ghost" data-modal-cancel>Отмена</button>' +
+        '<button class="modal-btn modal-btn-primary" id="linkConfirm">Сохранить</button>',
+        'modal-fixed'
+      );
+      const filterInput = document.getElementById('groupFilter');
+      const pickList = document.getElementById('groupPickList');
+      const sortBtn = document.getElementById('groupSort2');
+      let sortDir = 'asc';
+      function applySort() {
+        const opts = Array.from(pickList.querySelectorAll('.modal-option'));
+        opts.sort((a, b) => {
+          const na = a.querySelector('.opt-name').textContent;
+          const nb = b.querySelector('.opt-name').textContent;
+          const r = na.localeCompare(nb, 'ru');
+          return sortDir === 'asc' ? r : -r;
+        });
+        opts.forEach(o => pickList.appendChild(o));
+        if (sortBtn) {
+          const ic = sortBtn.querySelector('.material-symbols-outlined');
+          if (ic) ic.textContent = sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward';
+        }
+      }
+      if (sortBtn) {
+        sortBtn.addEventListener('click', function() {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          applySort();
+        });
+      }
+      // Показать список сразу отсортированным при открытии
+      applySort();
+      setupPicker('groupPick', pickList, filterInput);
+      const confirmBtn = document.getElementById('linkConfirm');
+      if (confirmBtn) confirmBtn.addEventListener('click', function() {
+        const ids = Array.from(document.querySelectorAll('#groupPickList input[type="checkbox"]:checked'))
+          .map(ck => ck.value);
+        closeModal();
+        syncDeviceGroups(nodeId, ids);
+      });
+    }
+
+    // ===== ПОЗИЦИЯ ПРИ ОТМЕНЕ =====
+    // Общее для групп и устройств: и те и другие лежат в одном массиве children,
+    // и вернуть их нужно туда, откуда взяли.
+
+    // Опорный порядок соседей, снятый до серии удалений. Одновременно может
+    // висеть несколько отмен, и сработать они могут вразнобой — позиция,
+    // записанная в момент удаления, к этому времени описывает уже другой массив
+    const pendingOrder = new Map();
+
+    function siblingOrder(key, siblings) {
+      const stored = pendingOrder.get(key);
+      // Все прежние соседи на месте — значит незакрытых удалений нет
+      // и запомненный порядок устарел
+      if (!stored || stored.every(id => siblings.some(c => c.id === id))) {
+        pendingOrder.set(key, siblings.map(c => c.id));
+      }
+      return pendingOrder.get(key);
+    }
+
+    // Возвращаем сразу за ближайшим соседом сверху, который уже на месте:
+    // те, что между ними, либо вернутся позже, либо удалены насовсем
+    function restoreIndex(siblings, snap) {
+      const pos = snap.order.indexOf(snap.nodeData.id);
+      for (let i = pos - 1; i >= 0; i--) {
+        const at = siblings.findIndex(c => c.id === snap.order[i]);
+        if (at !== -1) return at + 1;
+      }
+      // Узла, добавленного уже после снятия опорного порядка, в нём нет
+      return pos === -1 ? siblings.length : 0;
+    }
+
+    // index === -1 означает привязку, которая есть только в реестре, без узла в дереве
+    function unlinkDeviceFromGroup(deviceId, groupId) {
+      const groupData = findNodeData(treeData, groupId);
+      if (!groupData) return null;
+
+      const registry = deviceRegistry[deviceId];
+      const inRegistry = registry ? registry.groups.includes(groupId) : false;
+      const children = groupData.children || [];
+      const index = children.findIndex(c => c.id === deviceId);
+
+      if (index === -1 && !inRegistry) return null;
+
+      let deviceData = null;
+      let order = null;
+      if (index !== -1) {
+        order = siblingOrder(groupId, children);
+        [deviceData] = children.splice(index, 1);
+
+        const groupNode = document.querySelector(`.tree-node[data-id="${groupId}"]`);
+        const deviceNode = groupNode?.querySelector(`:scope > ul > .tree-node[data-id="${deviceId}"]`);
+        if (deviceNode) deviceNode.remove();
+        if (groupNode && children.length === 0) {
+          groupNode.classList.remove('has-children', 'open');
+          groupNode.setAttribute('aria-expanded', 'false');
+        }
+      } else {
+        deviceData = findNodeData(treeData, deviceId) || { id: deviceId, isDevice: true };
+      }
+
+      if (registry) {
+        registry.groups = registry.groups.filter(g => g !== groupId);
+      }
+
+      refreshTreeMeta();
+      updateUI();
+
+      saveState();
+      return { deviceData, deviceName: deviceInfo(deviceData).name, groupName: groupData.name, index, order };
+    }
+
+    function restoreDeviceToGroup(deviceId, groupId, removed) {
+      const groupData = findNodeData(treeData, groupId);
+      if (!groupData) return;
+
+      groupData.children = groupData.children || [];
+      // Пока висел тост, устройство могли вернуть в группу вручную — второй раз
+      // вставлять его нельзя, иначе в группе окажутся две одинаковые записи
+      const alreadyThere = groupData.children.some(c => c.id === deviceId);
+      if (removed.index !== -1 && !alreadyThere) {
+        const snap = { nodeData: removed.deviceData, order: removed.order };
+        groupData.children.splice(restoreIndex(groupData.children, snap), 0, removed.deviceData);
+      }
+      registerDevice(deviceId, groupId);
+
+      rebuildTreeKeepingOpen();
+      saveState();
+    }
+
+    function removeDeviceFromGroup(deviceId) {
+      if (!selectedGroupId) return;
+
+      const groupData = findNodeData(treeData, selectedGroupId);
+      if (!groupData) return;
+
+      const removed = unlinkDeviceFromGroup(deviceId, selectedGroupId);
+      if (!removed) return;
+
+      if (selectedDeviceId === deviceId) selectedDeviceId = null;
+
+      const query = deviceSearchInput ? deviceSearchInput.value : '';
+      showGroupDetails(selectedGroupId);
+      if (query && deviceSearchInput) {
+        deviceSearchInput.value = query;
+        renderDeviceList(currentGroupDevices, query);
+      }
+
+      showToast(
+        `«${removed.deviceName}» убрано из «${removed.groupName}»`,
+        'Отменить',
+        () => restoreDeviceToGroup(deviceId, groupData.id, removed)
+      );
+    }
+
+    // ===== УДАЛЕНИЕ ГРУПП С ОТМЕНОЙ =====
+
+    // Снимок для отмены: поддерево целиком плюс место, откуда оно вынуто.
+    // Копия не нужна — после splice на объект больше никто не ссылается.
+    // parentId === null означает корень дерева.
+    function detachGroup(nodeId) {
+      const parentData = findParentData(treeData, nodeId);
+      const siblings = parentData ? parentData.children : treeData;
+      const index = siblings.findIndex(c => c.id === nodeId);
+      if (index === -1) return null;
+      const parentId = parentData ? parentData.id : null;
+      const order = siblingOrder(parentId || '__root__', siblings);
+      const [nodeData] = siblings.splice(index, 1);
+      return { nodeData, parentId, order };
+    }
+
+    function restoreGroups(snapshots) {
+      cancelPendingRemovals();
+
+      const lost = [];
+      snapshots.forEach(snap => {
+        const parentData = snap.parentId ? findNodeData(treeData, snap.parentId) : null;
+        if (snap.parentId && !parentData) {
+          lost.push(snap.nodeData.name);
+          return;
+        }
+        const siblings = parentData ? (parentData.children = parentData.children || []) : treeData;
+        siblings.splice(restoreIndex(siblings, snap), 0, snap.nodeData);
+      });
+
+      const restored = snapshots.filter(s => findNodeData(treeData, s.nodeData.id));
+      if (restored.length === 1) {
+        selectedGroupId = restored[0].nodeData.id;
+        selectedDeviceId = null;
+      }
+
+      rebuildDeviceRegistry();
+      rebuildTreeKeepingOpen();
+      saveState();
+
+      if (lost.length > 0) {
+        showToast(`Не удалось вернуть «${lost.join('», «')}»: родительская группа тоже удалена`);
+      }
+    }
+
+    // Выбранный элемент мог уехать внутри удалённого поддерева
+    function refreshSelectionAfterDelete() {
+      if (selectedGroupId) {
+        if (findNodeData(treeData, selectedGroupId)) showGroupDetails(selectedGroupId);
+        else showEmpty();
+      } else if (selectedDeviceId) {
+        if (findNodeData(treeData, selectedDeviceId)) showDeviceDetails(selectedDeviceId);
+        else showEmpty();
+      }
+    }
+
+    // Узлы исчезают с анимацией, поэтому DOM чистится с задержкой.
+    // Отмена перестраивает дерево целиком, и отложенную чистку нужно снять.
+    let pendingRemovals = [];
+
+    function scheduleNodeRemoval(node, startDelay, done) {
+      const start = setTimeout(() => {
+        pendingRemovals = pendingRemovals.filter(t => t !== start);
+        node.classList.add('removing');
+        const fade = setTimeout(() => {
+          pendingRemovals = pendingRemovals.filter(t => t !== fade);
+          node.remove();
+          if (done) done();
+        }, 300);
+        pendingRemovals.push(fade);
+      }, startDelay);
+      pendingRemovals.push(start);
+    }
+
+    function cancelPendingRemovals() {
+      pendingRemovals.forEach(clearTimeout);
+      pendingRemovals = [];
+    }
+
+    function deleteGroup(nodeId) {
+      const node = getContextNode(nodeId);
+      if (!node) return;
+
+      const snapshot = detachGroup(nodeId);
+      if (!snapshot) return;
+
+      rebuildDeviceRegistry();
+      refreshSelectionAfterDelete();
+
+      scheduleNodeRemoval(node, 0, () => {
+        refreshTreeMeta();
+        updateUI();
+        if (treeData.length === 0) {
+          rebuildTree();
+        }
+      });
+
+      closeAllDropdowns();
+      saveState();
+
+      showToast(
+        `Группа «${snapshot.nodeData.name}» удалена`,
+        'Отменить',
+        () => restoreGroups([snapshot])
+      );
+    }
+
+    function closeAllDropdowns() {
+      document.querySelectorAll('.node-dropdown').forEach(d => d.classList.remove('open'));
+      if (activeDropdownBtn) {
+        activeDropdownBtn.style.background = '';
+        activeDropdownBtn = null;
+      }
+      openDropdown = null;
+    }
+
+    // ===== ОБРАБОТЧИКИ =====
+
+    groupNameInput.addEventListener('change', function() {
+      if (!selectedGroupId) return;
+      const newName = this.value.trim() || 'Без названия';
+      this.value = newName;
+      
+      const nodeData = findNodeData(treeData, selectedGroupId);
+      if (nodeData) {
+        nodeData.name = newName;
+        const node = document.querySelector(`.tree-node[data-id="${selectedGroupId}"]`);
+        if (node) {
+          const textEl = node.querySelector('.node-text');
+          if (textEl) textEl.textContent = newName;
+        }
+        // Имя входит в автотекст описания и в хлебный путь, поэтому вслед за ним
+        // устаревают и подсказка узла, и сама карточка
+        refreshNodeTooltip(selectedGroupId);
+        groupDescInput.value = groupDescription(nodeData);
+        renderBreadcrumb(selectedGroupId, nodeData);
+        saveState();
+      }
+    });
+
+    groupNameInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        this.blur();
+      }
+    });
+
+    groupDescInput.addEventListener('change', function() {
+      if (!selectedGroupId) return;
+      const nodeData = findNodeData(treeData, selectedGroupId);
+      if (nodeData) {
+        // Пустая строка — это тоже заданное описание, а не «вернуть автотекст»
+        nodeData.description = this.value.trim();
+        refreshNodeTooltip(selectedGroupId);
+        saveState();
+      }
+    });
+
+    searchInput.addEventListener('input', function() {
+      filterTree(this.value);
+      refreshParentStates();
+      updateSelectionCount();
+    });
+
+    searchClear.addEventListener('click', function() {
+      searchInput.value = '';
+      filterTree('');
+      refreshParentStates();
+      updateSelectionCount();
+      searchInput.focus();
+    });
+
+    if (deviceSearchInput) {
+      deviceSearchInput.addEventListener('input', function() {
+        renderDeviceList(currentGroupDevices, this.value);
+      });
+    }
+
+    if (deviceSortBtn) {
+      deviceSortBtn.addEventListener('click', function() {
+        deviceSortDir = deviceSortDir === 'asc' ? 'desc' : 'asc';
+        updateDeviceSortButton();
+        renderDeviceList(currentGroupDevices, deviceSearchInput ? deviceSearchInput.value : '');
+      });
+    }
+
+    addButton.addEventListener('click', function() {
+      addRootGroup();
+    });
+
+    const groupAddDeviceBtn = document.getElementById('groupAddDeviceBtn');
+    if (groupAddDeviceBtn) {
+      groupAddDeviceBtn.addEventListener('click', function() {
+        if (!selectedGroupId) {
+          showToast('Сначала выберите группу');
+          return;
+        }
+        openAddDevicesModal(selectedGroupId);
+      });
+    }
+
+    // ===== МОДАЛЬНОЕ ОКНО: закрытие =====
+    if (modalClose) {
+      modalClose.addEventListener('click', closeModal);
+    }
+    modalOverlay.addEventListener('click', function(e) {
+      if (e.target === modalOverlay) closeModal();
+    });
+    document.addEventListener('click', function(e) {
+      if (e.target.closest('[data-modal-cancel]')) closeModal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && modalOverlay.classList.contains('visible')) {
+        closeModal();
+      }
+    });
+
+    if (groupBreadcrumb) {
+      groupBreadcrumb.addEventListener('click', function(e) {
+        const link = e.target.closest('.crumb-link');
+        if (!link) return;
+        e.preventDefault();
+        showGroupDetails(link.dataset.groupId);
+      });
+    }
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.btn-more');
+      if (!btn) return;
+
+      e.stopPropagation();
+      const nodeId = btn.dataset.dropdown;
+      const node = getContextNode(nodeId);
+      if (!node) return;
+
+      closeAllDropdowns();
+
+      const dropdown = createDropdown(nodeId);
+      positionDropdown(dropdown, btn);
+      
+      dropdown.classList.add('open');
+      openDropdown = dropdown;
+      activeDropdownBtn = btn;
+      btn.style.background = '#e2e8f0';
+    });
+
+    document.addEventListener('click', function(e) {
+      const item = e.target.closest('.node-dropdown-item');
+      if (!item) return;
+
+      e.stopPropagation();
+      const dropdown = item.closest('.node-dropdown');
+      if (!dropdown) return;
+
+      const nodeId = dropdown.dataset.nodeId;
+      const action = item.dataset.action;
+
+      if (action === 'add-subgroup') addSubgroup(nodeId);
+      else if (action === 'add-device') addDevice(nodeId);
+      else if (action === 'link-groups') linkDeviceToGroups(nodeId);
+      else if (action === 'delete-group') deleteGroup(nodeId);
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.node-dropdown') && !e.target.closest('.btn-more')) {
+        closeAllDropdowns();
+      }
+    });
+
+    document.addEventListener('scroll', function() {
+      closeAllDropdowns();
+    }, true);
+
+    window.addEventListener('resize', function() {
+      closeAllDropdowns();
+      const stacked = isStackedLayout();
+      if (stacked !== wasStacked) {
+        wasStacked = stacked;
+        resetPanelSize();
+      }
+    });
+
+    treeContainer.addEventListener('click', function(e) {
+      if (e.target.closest('.btn-more')) return;
+      if (e.target.closest('.node-dropdown-item')) return;
+
+      const node = e.target.closest('.tree-node');
+      if (!node) return;
+
+      if (e.target.closest('.toggle-icon')) {
+        node.classList.toggle('open');
+        node.setAttribute('aria-expanded', node.classList.contains('open') ? 'true' : 'false');
+        return;
+      }
+
+      if (e.target.closest('.checkbox-custom')) {
+        e.preventDefault();
+        const nodeId = node.dataset.id;
+        const nodeData = findNodeData(treeData, nodeId);
+        if (nodeData && !nodeData.isDevice) {
+          const isSelected = node.classList.contains('selected');
+          toggleNode(node, !isSelected, true);
+        }
+        return;
+      }
+
+      if (e.target.closest('.node-text') || e.target.closest('.node-content')) {
+        e.preventDefault();
+        
+        const nodeId = node.dataset.id;
+        const nodeData = findNodeData(treeData, nodeId);
+        
+        if (nodeData) {
+          if (nodeData.isDevice) {
+            selectedDeviceId = nodeId;
+            selectedGroupId = null;
+            showDeviceDetails(nodeId);
+          } else {
+            selectedGroupId = nodeId;
+            selectedDeviceId = null;
+            showGroupDetails(nodeId);
+          }
+        }
+      }
+    });
+
+    deviceList.addEventListener('click', function(e) {
+      const removeBtn = e.target.closest('.device-remove');
+      if (removeBtn) {
+        e.stopPropagation();
+        removeDeviceFromGroup(removeBtn.dataset.deviceId);
+        return;
+      }
+
+      const item = e.target.closest('.device-item');
+      if (!item) return;
+      const deviceId = item.dataset.deviceId;
+      if (deviceId) {
+        selectedDeviceId = deviceId;
+        selectedGroupId = null;
+        showDeviceDetails(deviceId);
+      }
+    });
+
+    // ===== ОБРАБОТЧИКИ ПАНЕЛИ ИНСТРУМЕНТОВ =====
+
+    masterCheckbox.addEventListener('click', function() {
+      const hasSelection = this.classList.contains('selected') || this.classList.contains('partial');
+      selectAll(!hasSelection);
+    });
+
+    deleteBtn.addEventListener('click', function() {
+      const selected = getSelectedGroupNodes();
+      if (selected.length === 0) return;
+
+      // Если выбраны и группа, и её подгруппа, снимок нужен только с верхней:
+      // вложенная уедет вместе с поддеревом и вернётся вместе с ним же
+      const ids = selected.map(node => node.dataset.id);
+      const topLevel = selected.filter(node => {
+        let parent = node.parentElement?.closest('.tree-node');
+        while (parent) {
+          if (ids.includes(parent.dataset.id)) return false;
+          parent = parent.parentElement?.closest('.tree-node');
+        }
+        return true;
+      });
+
+      const snapshots = [];
+      topLevel.forEach(node => {
+        const snap = detachGroup(node.dataset.id);
+        if (snap) snapshots.push(snap);
+      });
+
+      rebuildDeviceRegistry();
+      refreshSelectionAfterDelete();
+      saveState();
+
+      selected.forEach((node, index) => {
+        scheduleNodeRemoval(node, index * 50, () => {
+          if (index === selected.length - 1) {
+            refreshTreeMeta();
+            updateUI();
+            if (treeData.length === 0) {
+              rebuildTree();
+            }
+          }
+        });
+      });
+
+      setTimeout(() => updateUI(), 100);
+
+      // Разом уходит произвольно много, поэтому окно отмены здесь длиннее обычного
+      const count = snapshots.length;
+      showToast(
+        `Удалено ${count} ${pluralRu(count, 'группа', 'группы', 'групп')} со всем содержимым`,
+        'Отменить',
+        () => restoreGroups(snapshots),
+        TOAST_BULK_UNDO_MS
+      );
+    });
+
+    // ===== ЗАПУСК =====
+
+    initSplitter();
+
+    const savedState = loadState();
+    if (savedState && Array.isArray(savedState)) {
+      treeData = savedState;
+    }
+    // Реестр всегда производный от дерева — и от стартовой топологии, и от сохранённого состояния
+    rebuildDeviceRegistry();
+    seedGroupIdSeq(treeData);
+
+    rebuildTree();
+
+    console.log('✅ Управление группами и устройствами со сплиттером');
+    console.log('↔️ Перетаскивайте границу между панелями мышью');
+    console.log('🏢 4 здания, 33 камеры');
+    console.log('📊 Устройства могут входить в несколько групп');
+  })();
+</script>
+
+</body>
+</html>

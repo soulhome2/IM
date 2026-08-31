@@ -80,16 +80,241 @@
     },
   };
 
+  const DEVICE_TYPES = {
+    camera: { icon: "videocam", label: "Камера видеонаблюдения" },
+    "fire-detector": { icon: "local_fire_department", label: "Пожарный извещатель" },
+    "panic-button": { icon: "crisis_alert", label: "Тревожная кнопка" },
+  };
+
+  const DEVICE_CATALOG = {
+    "device-1": { name: "Главный вход", type: "camera" },
+    "device-2": { name: "Стойка ресепшн", type: "camera" },
+    "device-3": { name: "Конференц-зал — сцена", type: "camera" },
+    "device-4": { name: "Конференц-зал — общий план", type: "camera" },
+    "device-5": { name: "Опенспейс разработки", type: "camera" },
+    "device-6": { name: "Маркетинг — рабочая зона", type: "camera" },
+    "device-7": { name: "Переговорная «Невада»", type: "camera" },
+    "device-8": { name: "Ворота погрузки А", type: "camera" },
+    "device-9": { name: "Стеллажи А1–А8", type: "camera" },
+    "device-10": { name: "Зона приёмки товара", type: "camera" },
+    "device-11": { name: "Разгрузочная рампа", type: "camera" },
+    "device-12": { name: "Центральный проход", type: "camera" },
+    "device-13": { name: "Холодильная камера", type: "camera" },
+    "device-14": { name: "Пост погрузчика", type: "camera" },
+    "device-15": { name: "Испытательный стенд", type: "camera" },
+    "device-16": { name: "Вход в чистую зону", type: "camera" },
+    "device-17": { name: "Лабораторные столы", type: "camera" },
+    "device-18": { name: "Серверная стойка", type: "camera" },
+    "device-19": { name: "Вытяжной шкаф", type: "camera" },
+    "device-20": { name: "Коридор корпуса Б", type: "camera" },
+    "device-21": { name: "Переговорная «Юпитер»", type: "camera" },
+    "device-22": { name: "Офисная кухня", type: "camera" },
+    "device-23": { name: "Торговый зал", type: "camera" },
+    "device-24": { name: "Кассовая зона", type: "camera" },
+    "device-25": { name: "Коридор примерочных", type: "camera" },
+    "device-26": { name: "Витрина у входа", type: "camera" },
+    "device-27": { name: "Зал ресторана", type: "camera" },
+    "device-28": { name: "Кухня ресторана", type: "camera" },
+    "device-29": { name: "Фойе и бар", type: "camera" },
+    "device-30": { name: "Кинозал №3", type: "camera" },
+    "device-31": { name: "Зона ожидания — общий план", type: "camera" },
+    "device-32": { name: "Гардероб", type: "camera" },
+    "device-33": { name: "Обзор поста охраны", type: "camera" },
+    "fire-1": { name: "Датчик дыма 1", type: "fire-detector" },
+    "fire-2": { name: "Датчик дыма 2", type: "fire-detector" },
+    "fire-3": { name: "Датчик дыма 3", type: "fire-detector" },
+    "fire-4": { name: "Датчик дыма 4", type: "fire-detector" },
+    "fire-5": { name: "Датчик дыма 5", type: "fire-detector" },
+    "fire-6": { name: "Датчик дыма — зона ожидания", type: "fire-detector" },
+    "panic-1": { name: "Тревожная кнопка — пост охраны", type: "panic-button" },
+    "panic-2": { name: "Тревожная кнопка — ресепшн", type: "panic-button" },
+  };
+
+  const DEVICES_IN_REPAIR = ["device-9", "device-19", "device-25", "fire-3"];
+
+  function devicesOfType(type) {
+    return Object.keys(DEVICE_CATALOG).filter((id) => DEVICE_CATALOG[id].type === type);
+  }
+  function workingOfType(type) {
+    return devicesOfType(type).filter((id) => !DEVICES_IN_REPAIR.includes(id));
+  }
+  function inRepairOfType(type) {
+    return devicesOfType(type).filter((id) => DEVICES_IN_REPAIR.includes(id));
+  }
+
+  const TOPOLOGY = [
+    {
+      id: "group-1",
+      name: "Главный офис",
+      children: [
+        {
+          id: "group-2",
+          name: "1-й этаж",
+          children: [
+            {
+              id: "group-3",
+              name: "Приемная",
+              devices: ["device-1", "device-2", "fire-1"],
+              children: [
+                { id: "group-28", name: "Зона ожидания", devices: ["device-31", "device-32", "fire-6"] },
+                { id: "group-29", name: "Пост охраны", devices: ["device-33", "panic-1", "panic-2"] },
+              ],
+            },
+            { id: "group-4", name: "Конференц-зал", devices: ["device-3", "device-4", "fire-2", "device-1"] },
+          ],
+        },
+        {
+          id: "group-5",
+          name: "2-й этаж",
+          children: [
+            { id: "group-6", name: "Отдел разработки", devices: ["device-5"] },
+            { id: "group-7", name: "Отдел маркетинга", devices: ["device-6", "device-7"] },
+          ],
+        },
+      ],
+    },
+    {
+      id: "group-8",
+      name: "Складской комплекс",
+      children: [
+        {
+          id: "group-9",
+          name: "Этаж А",
+          children: [
+            { id: "group-10", name: "Склад №1", devices: ["device-8", "device-9", "device-10", "fire-3"] },
+            { id: "group-11", name: "Склад №2", devices: ["device-11", "device-12", "device-8"] },
+          ],
+        },
+        {
+          id: "group-12",
+          name: "Этаж Б",
+          children: [{ id: "group-13", name: "Склад №3", devices: ["device-13", "device-14"] }],
+        },
+      ],
+    },
+    {
+      id: "group-14",
+      name: "Технопарк",
+      children: [
+        {
+          id: "group-15",
+          name: "Корпус А",
+          children: [
+            { id: "group-16", name: "Лаборатория 1", devices: ["device-15", "device-16", "fire-4"] },
+            { id: "group-17", name: "Лаборатория 2", devices: ["device-17", "device-18", "device-19"] },
+          ],
+        },
+        {
+          id: "group-18",
+          name: "Корпус Б",
+          children: [
+            { id: "group-19", name: "Офис 1", devices: ["device-20", "device-15"] },
+            { id: "group-20", name: "Офис 2", devices: ["device-21", "device-22"] },
+          ],
+        },
+      ],
+    },
+    {
+      id: "group-21",
+      name: "Торговый центр",
+      children: [
+        {
+          id: "group-22",
+          name: "1-й этаж",
+          children: [
+            { id: "group-23", name: "Магазин 1", devices: ["device-23", "device-24", "fire-5"] },
+            { id: "group-24", name: "Магазин 2", devices: ["device-25", "device-26"] },
+          ],
+        },
+        {
+          id: "group-25",
+          name: "2-й этаж",
+          children: [
+            { id: "group-26", name: "Ресторан", devices: ["device-27", "device-28"] },
+            { id: "group-27", name: "Кинотеатр", devices: ["device-29", "device-30"] },
+          ],
+        },
+      ],
+    },
+    {
+      id: "group-all-cameras",
+      name: "Все камеры",
+      description: "Сквозная подборка камер видеонаблюдения со всех объектов, разделённая по состоянию оборудования.",
+      children: [
+        {
+          id: "group-cameras-working",
+          name: "Рабочие",
+          description: "Камеры в штатной работе.",
+          devices: workingOfType("camera"),
+        },
+        {
+          id: "group-cameras-repair",
+          name: "В ремонте",
+          description: "Камеры, временно выведенные из эксплуатации.",
+          devices: inRepairOfType("camera"),
+        },
+      ],
+    },
+    {
+      id: "group-fire-detectors",
+      name: "Пожарные датчики",
+      description: "Сквозная подборка пожарных датчиков со всех объектов, разделённая по состоянию оборудования.",
+      children: [
+        {
+          id: "group-fire-working",
+          name: "Рабочие",
+          description: "Датчики в штатной работе.",
+          devices: workingOfType("fire-detector"),
+        },
+        {
+          id: "group-fire-repair",
+          name: "В ремонте",
+          description: "Датчики, временно выведенные из эксплуатации.",
+          devices: inRepairOfType("fire-detector"),
+        },
+      ],
+    },
+  ];
+
+  function buildTree(nodes) {
+    return nodes.map((node) => {
+      const group = { id: node.id, name: node.name };
+      if (node.description) group.description = node.description;
+      group.children = node.children ? buildTree(node.children) : [];
+      (node.devices || []).forEach((deviceId) => {
+        group.children.push({ id: deviceId, isDevice: true });
+      });
+      return group;
+    });
+  }
+
+  const TREE = buildTree(TOPOLOGY);
+
+  function camScene(id) {
+    const name = (DEVICE_CATALOG[id] && DEVICE_CATALOG[id].name) || "";
+    if (/дыма|пожар/i.test(name)) return "fire";
+    if (/ворот|вход|рамп/i.test(name)) return "gate";
+    if (/стеллаж|приёмк|погруз/i.test(name)) return "park";
+    return "hall";
+  }
+
+  function cameraOf(id, x, y) {
+    const spec = DEVICE_CATALOG[id];
+    return { id, name: spec ? spec.name : id, scene: camScene(id), x, y };
+  }
+
   const CAMERAS = {
-    mega_atrium: { id: "mega_atrium", name: "ТЦ Мега · атриум", scene: "fire", x: 210, y: 118 },
-    mega_l2: { id: "mega_l2", name: "ТЦ Мега · 2 этаж галерея", scene: "hall", x: 318, y: 92 },
-    mega_entry: { id: "mega_entry", name: "ТЦ Мега · главный вход", scene: "gate", x: 92, y: 150 },
-    mega_park: { id: "mega_park", name: "ТЦ Мега · паркинг B2", scene: "park", x: 70, y: 210 },
-    wh_gate: { id: "wh_gate", name: "Склад-14 · КПП", scene: "gate", x: 140, y: 80 },
-    wh_yard: { id: "wh_yard", name: "Склад-14 · двор", scene: "hall", x: 220, y: 140 },
-    wh_aisle: { id: "wh_aisle", name: "Склад-14 · ряд C", scene: "hall", x: 300, y: 110 },
-    park_r3: { id: "park_r3", name: "Паркинг Юг · ряд 3", scene: "park", x: 180, y: 160 },
-    office_hall: { id: "office_hall", name: "БЦ Лидер · холл 4", scene: "hall", x: 200, y: 120 },
+    "device-1": cameraOf("device-1", 92, 150),
+    "device-8": cameraOf("device-8", 140, 80),
+    "device-9": cameraOf("device-9", 220, 140),
+    "device-10": cameraOf("device-10", 300, 110),
+    "device-11": cameraOf("device-11", 180, 160),
+    "device-18": cameraOf("device-18", 200, 120),
+    "device-23": cameraOf("device-23", 210, 118),
+    "device-24": cameraOf("device-24", 318, 92),
+    "device-25": cameraOf("device-25", 180, 160),
+    "device-26": cameraOf("device-26", 70, 210),
+    "device-33": cameraOf("device-33", 92, 150),
   };
 
   const EVENTS = [
@@ -98,35 +323,38 @@
       time: "14:31:08",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "ТЦ «Мега»",
+      object: "Торговый центр",
       objectType: "Торговый центр",
-      location: "2 этаж, атриум",
-      region: "Центр",
+      location: "Магазин 1, торговый зал",
+      region: "Торговый центр",
       priority: "critical",
       status: "new",
       operator: null,
       slaSec: 240,
-      cameras: ["mega_atrium", "mega_l2", "mega_entry", "mega_park"],
+      deviceIds: ["fire-5", "device-23", "device-24"],
+      media: "both",
+      cameras: ["device-23", "device-24", "device-26"],
       pin: { x: 210, y: 118 },
       answers: {},
       launched: [],
       log: [{ t: "14:31:08", who: "Диспетчер", text: "Событие поставлено в очередь" }],
-      customGroup: "mega-cluster",
     },
     {
       id: "INC-1846",
       time: "14:28:41",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Склад-14",
+      object: "Складской комплекс",
       objectType: "Склад",
-      location: "КПП, калитка 2",
-      region: "Север",
+      location: "Склад №1, ворота погрузки А",
+      region: "Складской комплекс",
       priority: "high",
       status: "foreign",
       operator: "Петрова М.",
       slaSec: 420,
-      cameras: ["wh_gate", "wh_yard", "wh_aisle"],
+      deviceIds: ["device-8", "device-9", "device-10"],
+      media: "video",
+      cameras: ["device-8", "device-10", "device-11"],
       pin: { x: 140, y: 80 },
       answers: { visual: true, verdict: "Недостаточно данных" },
       launched: [],
@@ -134,110 +362,107 @@
         { t: "14:28:41", who: "Диспетчер", text: "Событие поставлено в очередь" },
         { t: "14:29:02", who: "Петрова М.", text: "Взято в работу · шаг 2/5" },
       ],
-      customGroup: "north-perim",
     },
     {
       id: "INC-1845",
       time: "14:22:17",
       typeId: "sabotage",
       type: "Саботаж камеры",
-      object: "Паркинг Юг",
-      objectType: "Паркинг",
-      location: "Ряд 3, камера P-12",
-      region: "Юг",
+      object: "Торговый центр",
+      objectType: "Торговый центр",
+      location: "Магазин 2, коридор примерочных",
+      region: "Торговый центр",
       priority: "medium",
       status: "new",
       operator: null,
       slaSec: 900,
-      cameras: ["park_r3"],
+      deviceIds: ["device-25"],
+      media: "video",
+      cameras: ["device-25", "device-26"],
       pin: { x: 180, y: 160 },
       answers: {},
       launched: [],
-      log: [{ t: "14:22:17", who: "Диспетчер", text: "Потеря видеопотока P-12" }],
-      customGroup: "south-park",
+      log: [{ t: "14:22:17", who: "Диспетчер", text: "Потеря видеопотока «Коридор примерочных»" }],
     },
     {
       id: "INC-1844",
       time: "14:19:03",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "ТЦ «Мега»",
+      object: "Торговый центр",
       objectType: "Торговый центр",
-      location: "Главный вход",
-      region: "Центр",
+      location: "1-й этаж, витрина у входа",
+      region: "Торговый центр",
       priority: "medium",
       status: "new",
       operator: null,
       slaSec: 600,
-      cameras: ["mega_entry", "mega_atrium"],
+      deviceIds: ["device-26", "device-23"],
+      media: "both",
+      cameras: ["device-26", "device-23"],
       pin: { x: 92, y: 150 },
       answers: {},
       launched: [],
       log: [{ t: "14:19:03", who: "Диспетчер", text: "Детектор скопления" }],
-      customGroup: "mega-cluster",
     },
     {
       id: "INC-1843",
       time: "14:11:55",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "БЦ «Лидер»",
+      object: "Главный офис",
       objectType: "Офис",
-      location: "4 этаж, серверная",
-      region: "Центр",
+      location: "Приемная, пост охраны",
+      region: "Главный офис",
       priority: "high",
       status: "escalated",
       operator: "Дежурный ЦОД",
       slaSec: 180,
-      cameras: ["office_hall"],
-      pin: { x: 200, y: 120 },
+      deviceIds: ["panic-1", "device-33"],
+      media: "map",
+      cameras: [],
+      pin: { x: 92, y: 150 },
       answers: { visual: true, verdict: "Реальное проникновение" },
       launched: ["Включить сирену"],
       log: [
         { t: "14:12:20", who: "Сидоров К.", text: "Эскалация в ЦОД: нет доступа к объекту" },
       ],
-      customGroup: "center-office",
     },
     {
       id: "INC-1842",
       time: "14:06:12",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Склад-14",
+      object: "Складской комплекс",
       objectType: "Склад",
-      location: "Ряд C, датчик ДП-4",
-      region: "Север",
+      location: "Склад №1, датчик дыма 3",
+      region: "Складской комплекс",
       priority: "high",
       status: "new",
       operator: null,
       slaSec: 300,
-      cameras: ["wh_aisle", "wh_yard"],
+      deviceIds: ["fire-3", "device-8", "device-10"],
+      media: "map",
+      cameras: [],
       pin: { x: 300, y: 110 },
       answers: {},
       launched: [],
       log: [{ t: "14:06:12", who: "Диспетчер", text: "Сработка пожарного датчика" }],
-      customGroup: "north-perim",
     },
-  ];
-
-  const CUSTOM_GROUPS = [
-    { id: "mega-cluster", name: "ТЦ Мега как единый объект", hint: "Атриум + вход + паркинг" },
-    { id: "north-perim", name: "Северный периметр", hint: "Склад-14 и КПП" },
-    { id: "south-park", name: "Южные паркинги", hint: "Список объектов оператора" },
-    { id: "center-office", name: "Офисы Центра", hint: "БЦ Лидер и соседние" },
   ];
 
   const state = {
     events: EVENTS,
-    groupMode: "region",
     groupId: "all",
+    openGroups: new Set(TREE.map((n) => n.id)),
+    groupQuery: "",
     filter: "open",
     search: "",
     selectedId: "INC-1847",
     checked: new Set(),
     onBreak: false,
     videoMode: "archive",
-    activeCam: "mega_atrium",
+    activeCam: "device-23",
     layout: "default",
   };
 
@@ -245,6 +470,16 @@
 
   function nowStamp() {
     return new Date().toLocaleTimeString("ru-RU", { hour12: false });
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("im-theme", theme);
+    } catch (err) {
+      /* ignore */
+    }
+    [...$("themeMode").children].forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
   }
 
   function toast(text) {
@@ -288,32 +523,96 @@
     return { text: "Новое", cls: "new" };
   }
 
-  function groups() {
-    const open = state.events.filter((e) => e.status !== "closed");
-    const buckets = new Map();
-    const add = (id, name, ev, hint) => {
-      if (!buckets.has(id)) buckets.set(id, { id, name, hint, items: [] });
-      buckets.get(id).items.push(ev);
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function deviceInfo(node) {
+    const id = typeof node === "string" ? node : node.id;
+    const spec = DEVICE_CATALOG[id];
+    return {
+      id,
+      name: spec ? spec.name : id,
+      deviceType: spec ? spec.type : "camera",
     };
+  }
 
-    if (state.groupMode === "region") {
-      open.forEach((e) => add(e.region, e.region, e));
-    } else if (state.groupMode === "type") {
-      open.forEach((e) => add(e.typeId, e.type, e));
-    } else if (state.groupMode === "object") {
-      open.forEach((e) => add(e.objectType, e.objectType, e));
-    } else {
-      CUSTOM_GROUPS.forEach((g) => {
-        open.filter((e) => e.customGroup === g.id).forEach((e) => add(g.id, g.name, e, g.hint));
-      });
+  function orderedChildren(data) {
+    const groups = data.filter((item) => !item.isDevice);
+    const devices = data.filter((item) => item.isDevice);
+    return groups.concat(devices);
+  }
+
+  function findNode(nodes, id) {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findNode(node.children, id);
+        if (found) return found;
+      }
     }
+    return null;
+  }
 
-    return [{ id: "all", name: "Все открытые", items: open }, ...buckets.values()];
+  function collectDeviceIds(node) {
+    if (!node) return [];
+    if (node.isDevice) return [node.id];
+    const ids = [];
+    (node.children || []).forEach((child) => {
+      ids.push(...collectDeviceIds(child));
+    });
+    return [...new Set(ids)];
+  }
+
+  function deviceHasOpenIncident(id) {
+    return state.events.some((e) => e.status !== "closed" && (e.deviceIds || []).includes(id));
+  }
+
+  function visibleChildren(nodes) {
+    return orderedChildren(nodes || []).filter((item) => !item.isDevice || deviceHasOpenIncident(item.id));
+  }
+
+  function badgeText(node) {
+    const children = node.children || [];
+    const groups = children.filter((c) => !c.isDevice).length;
+    const devices = children.filter((c) => c.isDevice && deviceHasOpenIncident(c.id)).length;
+    return `${groups}/${devices}`;
+  }
+
+  function eventsForDevices(deviceIds) {
+    const set = new Set(deviceIds);
+    return state.events.filter((e) => (e.deviceIds || []).some((id) => set.has(id)));
+  }
+
+  function eventsInNode(node) {
+    return eventsForDevices(collectDeviceIds(node));
+  }
+
+  function nodeLabel(node) {
+    if (!node) return "";
+    if (node.isDevice) return deviceInfo(node).name;
+    return node.name;
+  }
+
+  function nodeMatchesQuery(node, q) {
+    if (!q) return true;
+    if (node.isDevice && !deviceHasOpenIncident(node.id)) return false;
+    if (nodeLabel(node).toLowerCase().includes(q)) return true;
+    return visibleChildren(node.children).some((child) => nodeMatchesQuery(child, q));
   }
 
   function visibleEvents() {
-    const g = groups().find((x) => x.id === state.groupId) || groups()[0];
-    return g.items.filter((e) => {
+    let list = state.events;
+    if (state.groupId !== "all") {
+      const node = findNode(TREE, state.groupId);
+      const ids = node ? collectDeviceIds(node) : [state.groupId];
+      list = eventsForDevices(ids);
+    }
+    return list.filter((e) => {
       if (state.filter === "open" && e.status === "closed") return false;
       if (state.filter === "mine" && e.status !== "mine") return false;
       if (state.filter === "foreign" && e.status !== "foreign" && e.status !== "escalated") return false;
@@ -326,21 +625,59 @@
     });
   }
 
-  function renderGroups() {
-    const root = $("groupsList");
-    root.innerHTML = groups()
-      .map((g) => {
-        const crit = g.items.filter((e) => e.priority === "critical" && e.status !== "closed").length;
-        const countCls = crit ? "crit" : g.items.length ? "warn" : "";
+  function renderTreeHtml(nodes, level) {
+    const q = state.groupQuery.trim().toLowerCase();
+    return visibleChildren(nodes)
+      .map((item) => {
+        const kids = item.isDevice ? [] : visibleChildren(item.children);
+        const hasKids = kids.length > 0;
+        const info = item.isDevice ? deviceInfo(item) : null;
+        const icon = info ? DEVICE_TYPES[info.deviceType].icon : "folder";
+        const name = info ? info.name : item.name;
+        const evs = item.isDevice ? eventsForDevices([item.id]) : eventsInNode(item);
+        const openCount = evs.filter((e) => e.status !== "closed").length;
+        const crit = evs.some((e) => e.priority === "critical" && e.status !== "closed");
+        const hidden = q && !nodeMatchesQuery(item, q);
+        const forceOpen = Boolean(q && hasKids && nodeMatchesQuery(item, q));
+        const open = forceOpen || state.openGroups.has(item.id);
+        const title = item.description || name;
         return `
-          <button type="button" class="group-item ${state.groupId === g.id ? "active" : ""}" data-group="${g.id}">
-            <span class="name">${g.name}</span>
-            <span class="count ${countCls}">${g.items.length}</span>
-          </button>
-          ${g.hint && state.groupId === g.id ? `<div class="group-sub">${g.hint}</div>` : ""}
-        `;
+          <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
+            state.groupId === item.id ? "active" : ""
+          } ${item.isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
+              data-id="${item.id}" data-type="${item.isDevice ? "device" : "group"}" role="treeitem">
+            <div class="node-content" title="${escapeHtml(title)}">
+              <span class="toggle-icon material-symbols-outlined">chevron_right</span>
+              <span class="material-symbols-outlined">${icon}</span>
+              <span class="node-text">${escapeHtml(name)}</span>
+              ${!item.isDevice && hasKids ? `<span class="tree-badge">${badgeText(item)}</span>` : ""}
+              ${openCount ? `<span class="tree-ev ${crit ? "crit" : ""}">${openCount}</span>` : ""}
+            </div>
+            ${hasKids ? `<ul role="group">${renderTreeHtml(item.children, level + 1)}</ul>` : ""}
+          </li>`;
       })
       .join("");
+  }
+
+  function renderGroups() {
+    const open = state.events.filter((e) => e.status !== "closed");
+    const crit = open.some((e) => e.priority === "critical");
+    $("groupsList").innerHTML = `
+      <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group">
+        <div class="node-content">
+          <span class="toggle-icon material-symbols-outlined"></span>
+          <span class="material-symbols-outlined">folder_open</span>
+          <span class="node-text">Все события</span>
+          <span class="tree-ev ${crit ? "crit" : ""}">${open.length}</span>
+        </div>
+      </li>
+      ${renderTreeHtml(TREE, 0)}
+    `;
+    const q = state.groupQuery.trim();
+    const visible = [...$("groupsList").querySelectorAll(".tree-node")].filter(
+      (n) => n.dataset.id !== "all" && !n.classList.contains("hidden")
+    );
+    $("groupsEmpty").hidden = !q || visible.length > 0;
   }
 
   function renderEvents() {
@@ -462,13 +799,21 @@
     }</span></div>${step.type === "checkbox" ? "" : ""}${control}</div>`;
   }
 
+  function applyMediaLayout(ev) {
+    $("panelMedia").dataset.media = ev && ev.media ? ev.media : "both";
+  }
+
   function renderVideo() {
     const ev = selected();
-    const cams = ev ? ev.cameras : ["mega_atrium"];
-    if (!cams.includes(state.activeCam)) state.activeCam = cams[0];
+    const cams = ev && ev.cameras ? ev.cameras : [];
+    if (cams.length && !cams.includes(state.activeCam)) state.activeCam = cams[0];
+    if (!cams.length) {
+      $("videoGrid").innerHTML = `<div class="empty">Нет связанных камер</div>`;
+      return;
+    }
     $("videoGrid").innerHTML = cams
       .map((id) => {
-        const cam = CAMERAS[id];
+        const cam = CAMERAS[id] || cameraOf(id, 200, 120);
         const tag = state.videoMode === "live" ? "LIVE" : "АРХИВ";
         return `
           <div class="cam ${state.activeCam === id ? "active" : ""}" data-cam="${id}">
@@ -498,21 +843,21 @@
     const pin = ev ? ev.pin : { x: 210, y: 118 };
     $("mapRoot").innerHTML = `
       <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="План места инцидента">
-        <rect x="24" y="24" width="352" height="212" fill="#1b2026" stroke="#3a4049"/>
-        <rect x="40" y="40" width="90" height="70" fill="#222830" stroke="#3a4049"/>
-        <rect x="140" y="40" width="140" height="90" fill="#262c34" stroke="#3a4049"/>
-        <rect x="290" y="40" width="70" height="70" fill="#222830" stroke="#3a4049"/>
-        <rect x="40" y="150" width="200" height="70" fill="#222830" stroke="#3a4049"/>
-        <rect x="250" y="150" width="110" height="70" fill="#262c34" stroke="#3a4049"/>
-        <text x="50" y="58" fill="#8d949e" font-size="10">вход</text>
-        <text x="150" y="58" fill="#8d949e" font-size="10">атриум / зона события</text>
-        <text x="50" y="166" fill="#8d949e" font-size="10">паркинг / двор</text>
+        <rect x="24" y="24" width="352" height="212" fill="var(--map-floor)" stroke="var(--stroke-2)"/>
+        <rect x="40" y="40" width="90" height="70" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="140" y="40" width="140" height="90" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <rect x="290" y="40" width="70" height="70" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="40" y="150" width="200" height="70" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="250" y="150" width="110" height="70" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <text x="50" y="58" fill="var(--map-label)" font-size="10">вход</text>
+        <text x="150" y="58" fill="var(--map-label)" font-size="10">атриум / зона события</text>
+        <text x="50" y="166" fill="var(--map-label)" font-size="10">паркинг / двор</text>
         <circle class="map-pin" cx="${pin.x}" cy="${pin.y}" r="7">
           <animate attributeName="r" values="6;9;6" dur="1.6s" repeatCount="indefinite"/>
         </circle>
         ${cams
           .map((id) => {
-            const c = CAMERAS[id];
+            const c = CAMERAS[id] || cameraOf(id, 200, 120);
             return `<rect class="cam-dot ${state.activeCam === id ? "active" : ""}" data-cam="${id}" x="${c.x - 4}" y="${
               c.y - 4
             }" width="8" height="8"/>`;
@@ -553,6 +898,7 @@
     renderGroups();
     renderEvents();
     renderScenario();
+    applyMediaLayout(selected());
     renderVideo();
     renderMap();
     renderStatus();
@@ -597,10 +943,10 @@
   }
 
   function bind() {
-    $("groupMode").addEventListener("change", (e) => {
-      state.groupMode = e.target.value;
-      state.groupId = "all";
-      renderAll();
+    $("themeMode").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-theme]");
+      if (!btn) return;
+      applyTheme(btn.dataset.theme);
     });
     $("layoutMode").addEventListener("change", (e) => {
       state.layout = e.target.value;
@@ -614,10 +960,29 @@
       state.search = e.target.value;
       renderEvents();
     });
+    $("groupSearch").addEventListener("input", (e) => {
+      state.groupQuery = e.target.value;
+      renderGroups();
+    });
     $("groupsList").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-group]");
-      if (!btn) return;
-      state.groupId = btn.dataset.group;
+      const toggle = e.target.closest(".toggle-icon");
+      const node = e.target.closest(".tree-node");
+      if (!node) return;
+      const id = node.dataset.id;
+      if (toggle && node.classList.contains("has-children")) {
+        e.stopPropagation();
+        if (state.openGroups.has(id)) state.openGroups.delete(id);
+        else state.openGroups.add(id);
+        node.classList.toggle("open");
+        return;
+      }
+      if (!e.target.closest(".node-content")) return;
+      state.groupId = id;
+      const list = visibleEvents();
+      if (list.length && !list.some((ev) => ev.id === state.selectedId)) {
+        state.selectedId = list[0].id;
+        if (list[0].cameras && list[0].cameras[0]) state.activeCam = list[0].cameras[0];
+      }
       renderAll();
     });
     $("eventsList").addEventListener("click", (e) => {
@@ -634,7 +999,7 @@
       if (!row) return;
       state.selectedId = row.dataset.id;
       const ev = selected();
-      if (ev) state.activeCam = ev.cameras[0];
+      if (ev && ev.cameras && ev.cameras[0]) state.activeCam = ev.cameras[0];
       renderAll();
     });
     $("scenarioRoot").addEventListener("change", (e) => {
@@ -790,7 +1155,7 @@
     if (["1", "2", "3", "4"].includes(e.key)) {
       const ev = selected();
       if (!ev) return;
-      const cam = ev.cameras[Number(e.key) - 1];
+      const cam = ev.cameras && ev.cameras[Number(e.key) - 1];
       if (cam) {
         state.activeCam = cam;
         renderVideo();
@@ -815,6 +1180,13 @@
     }
   }, 1000);
 
+  let savedTheme = "light";
+  try {
+    savedTheme = localStorage.getItem("im-theme") || "light";
+  } catch (err) {
+    savedTheme = "light";
+  }
+  applyTheme(savedTheme);
   bind();
   renderAll();
 })();

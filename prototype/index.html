@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Axxon Incident Manager — рабочее место оператора</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz@14..32&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -19,15 +21,6 @@
 
       <div class="topbar-cluster">
         <label class="field-inline">
-          <span>Группировка</span>
-          <select id="groupMode" title="Тип группировки очереди">
-            <option value="region">По региону</option>
-            <option value="type">По типу события</option>
-            <option value="object">По типу объекта</option>
-            <option value="custom">Кастомная</option>
-          </select>
-        </label>
-        <label class="field-inline">
           <span>Макет</span>
           <select id="layoutMode" title="Состав и расположение панелей">
             <option value="default">Операторский</option>
@@ -35,6 +28,13 @@
             <option value="media">Видеостена</option>
             <option value="compact">Только очередь</option>
           </select>
+        </label>
+        <label class="field-inline">
+          <span>Схема</span>
+          <div class="seg" id="themeMode" title="Цветовая схема">
+            <button type="button" class="active" data-theme="dark">Тёмная</button>
+            <button type="button" data-theme="light">Светлая</button>
+          </div>
         </label>
       </div>
 
@@ -71,7 +71,18 @@
           <h2>Группы</h2>
           <button type="button" class="icon-btn" data-collapse="panelGroups" title="Свернуть панель">−</button>
         </header>
-        <div class="panel-b" id="groupsList"></div>
+        <div class="panel-b groups-body">
+          <div class="groups-search">
+            <div class="search-wrapper">
+              <span class="material-symbols-outlined">search</span>
+              <input type="search" class="search-input" id="groupSearch" placeholder="Поиск в группах..." />
+            </div>
+          </div>
+          <div class="groups-scroll">
+            <ul class="tree" id="groupsList" role="tree"></ul>
+            <div class="empty" id="groupsEmpty" hidden>Ничего не найдено</div>
+          </div>
+        </div>
       </section>
 
       <section class="panel" id="panelEvents" data-panel="events">
@@ -79,13 +90,15 @@
           <h2>События <em id="eventsCount">0</em></h2>
           <div class="panel-h-actions">
             <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
-            <button type="button" class="icon-btn" data-collapse="panelEvents" title="Свернуть панель">−</button>
           </div>
         </header>
         <div class="panel-b events-body">
           <div class="events-toolbar">
-            <input type="search" id="eventSearch" placeholder="Поиск по объекту, типу, ID…" />
-            <select id="eventFilter">
+            <div class="search-wrapper">
+              <span class="material-symbols-outlined">search</span>
+              <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по объекту, типу, ID..." />
+            </div>
+            <select id="eventFilter" class="search-input">
               <option value="open">Открытые</option>
               <option value="mine">Мои</option>
               <option value="foreign">Чужие</option>
@@ -99,7 +112,6 @@
       <section class="panel" id="panelScenario" data-panel="scenario">
         <header class="panel-h">
           <h2>Обработка</h2>
-          <button type="button" class="icon-btn" data-collapse="panelScenario" title="Свернуть панель">−</button>
         </header>
         <div class="panel-b" id="scenarioRoot"></div>
       </section>
