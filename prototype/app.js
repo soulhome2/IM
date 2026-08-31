@@ -494,25 +494,65 @@
     return state.events.find((e) => e.id === state.selectedId) || null;
   }
 
+  function scenarioSteps(ev) {
+    return SCENARIOS[ev.typeId].steps;
+  }
+
+  function stepShort(step) {
+    if (step.type === "checkbox") return "Подтверждение";
+    return step.label;
+  }
+
+  function stepAnswerText(ev, step) {
+    if (step.type === "checkbox") return ev.answers[step.id] ? "Да" : "";
+    if (step.type === "macros") return ev.launched.length ? `${ev.launched.length} макрос` : "";
+    return ev.answers[step.id] || "";
+  }
+
+  function isStepValid(ev, step) {
+    if (!step.required) return true;
+    if (step.type === "checkbox") return ev.answers[step.id] === true;
+    if (step.type === "macros") return true;
+    return Boolean(ev.answers[step.id]);
+  }
+
   function scenarioDone(ev) {
-    const sc = SCENARIOS[ev.typeId];
-    return sc.steps
-      .filter((s) => s.required)
-      .every((s) => {
-        const v = ev.answers[s.id];
-        return s.type === "checkbox" ? v === true : Boolean(v);
-      });
+    return scenarioSteps(ev).every((s) => isStepValid(ev, s));
+  }
+
+  function firstOpenStep(ev) {
+    const steps = scenarioSteps(ev);
+    const blocked = steps.findIndex((s) => s.required && !isStepValid(ev, s));
+    if (blocked !== -1) return blocked;
+    const empty = steps.findIndex((s) => !stepAnswerText(ev, s));
+    return empty === -1 ? steps.length - 1 : empty;
+  }
+
+  function canOpenStep(ev, index) {
+    const steps = scenarioSteps(ev);
+    if (index < 0 || index >= steps.length) return false;
+    return steps.slice(0, index).every((s) => isStepValid(ev, s));
+  }
+
+  function ensureCursor(ev) {
+    if (typeof ev.stepIndex !== "number") ev.stepIndex = firstOpenStep(ev);
+    const last = scenarioSteps(ev).length - 1;
+    if (ev.stepIndex < 0) ev.stepIndex = 0;
+    if (ev.stepIndex > last) ev.stepIndex = last;
+    if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
+  }
+
+  function goToStep(ev, index) {
+    if (!canOpenStep(ev, index)) return;
+    ev.stepIndex = index;
+    renderScenario();
+    renderStatus();
   }
 
   function stepProgress(ev) {
-    const sc = SCENARIOS[ev.typeId];
-    const filled = sc.steps.filter((s) => {
-      const v = ev.answers[s.id];
-      if (s.type === "macros") return ev.launched.length > 0;
-      if (s.type === "checkbox") return v === true;
-      return Boolean(v);
-    }).length;
-    return { filled, total: sc.steps.length };
+    const steps = scenarioSteps(ev);
+    const filled = steps.filter((s) => Boolean(stepAnswerText(ev, s))).length;
+    return { filled, total: steps.length };
   }
 
   function statusLabel(ev) {
@@ -714,89 +754,152 @@
       root.innerHTML = `<div class="empty">Выберите событие в очереди</div>`;
       return;
     }
-    const sc = SCENARIOS[ev.typeId];
+    const steps = scenarioSteps(ev);
     const prog = stepProgress(ev);
-    const canClose = scenarioDone(ev) && ev.status === "mine" && !state.onBreak;
     const mine = ev.status === "mine";
     const foreign = ev.status === "foreign" || ev.status === "escalated";
+    const editable = mine && !state.onBreak;
+
+    if (ev.status === "new" || ev.status === "closed") {
+      root.innerHTML = `
+        ${renderIncidentHead(ev, prog)}
+        <div class="scenario-preview">
+          <p>Сценарий «${escapeHtml(SCENARIOS[ev.typeId].title)}» · ${steps.length} шагов</p>
+          ${
+            ev.status === "new"
+              ? `<button type="button" class="btn primary" id="takeBtn" ${state.onBreak ? "disabled" : ""}>Взять в работу</button>`
+              : `<p class="muted">Инцидент закрыт</p>`
+          }
+        </div>
+      `;
+      return;
+    }
+
+    ensureCursor(ev);
+    const i = ev.stepIndex;
+    const step = steps[i];
+    const last = i === steps.length - 1;
+    const canNext = isStepValid(ev, step);
+    const canClose = scenarioDone(ev) && editable;
+    const incomplete = steps.findIndex((s) => s.required && !isStepValid(ev, s));
 
     root.innerHTML = `
+      ${renderIncidentHead(ev, prog)}
+      <nav class="crumbs" aria-label="Шаги сценария">
+        ${steps
+          .map((s, idx) => {
+            const open = canOpenStep(ev, idx);
+            const current = idx === i;
+            const done = Boolean(stepAnswerText(ev, s));
+            const answer = stepAnswerText(ev, s);
+            return `
+              <button type="button" class="crumb ${current ? "current" : ""} ${done ? "done" : ""} ${
+                open ? "" : "locked"
+              }" data-crumb="${idx}" ${open ? "" : "disabled"} title="${escapeHtml(s.label)}">
+                <span class="crumb-n">${idx + 1}</span>
+                <span class="crumb-body">
+                  <span class="crumb-name">${escapeHtml(stepShort(s))}</span>
+                  ${answer && !current ? `<span class="crumb-ans">${escapeHtml(answer)}</span>` : ""}
+                </span>
+              </button>
+              ${idx < steps.length - 1 ? `<span class="crumb-sep" aria-hidden="true"></span>` : ""}
+            `;
+          })
+          .join("")}
+      </nav>
+      <div class="step-card">
+        <div class="step-h">
+          <strong>${escapeHtml(step.label)}</strong>
+          <span>${i + 1} из ${steps.length}${step.required ? "" : " · необязательно"}</span>
+        </div>
+        ${renderStepControl(step, ev, editable)}
+      </div>
+      <div class="scenario-actions">
+        <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>Назад</button>
+        <div class="scenario-actions-end">
+          ${mine ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>` : ""}
+          ${
+            foreign
+              ? `<button type="button" class="btn danger" id="takeoverBtn" ${state.onBreak ? "disabled" : ""}>Перехватить</button>`
+              : ""
+          }
+          ${
+            editable && last && canClose
+              ? `<button type="button" class="btn primary" id="closeBtn">Закрыть инцидент</button>`
+              : editable
+                ? `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${
+                    last ? "К незаполненным" : "Далее"
+                  }</button>`
+                : ""
+          }
+        </div>
+      </div>
+      ${
+        last && editable && !canClose && incomplete !== -1
+          ? `<p class="step-hint">Сначала шаг ${incomplete + 1}: ${escapeHtml(stepShort(steps[incomplete]))}</p>`
+          : ""
+      }
+    `;
+  }
+
+  function renderIncidentHead(ev, prog) {
+    return `
       <div class="incident-head">
         <div class="incident-kicker">
           <span>${ev.id}</span>
           <span class="sla ${ev.slaSec < 120 ? "late" : ""}">SLA ${fmtSla(ev.slaSec)}</span>
         </div>
-        <h3>${ev.type}</h3>
-        <div class="incident-meta">${ev.object} · ${ev.location} · ${ev.region}</div>
+        <h3>${escapeHtml(ev.type)}</h3>
+        <div class="incident-meta">${escapeHtml(ev.object)} · ${escapeHtml(ev.location)}</div>
         <div class="progress"><i style="width:${Math.round((prog.filled / prog.total) * 100)}%"></i></div>
-      </div>
-      <form class="scenario-form" id="scenarioForm">
-        ${sc.steps
-          .map((step, i) => renderStep(step, i, ev, mine && !state.onBreak))
-          .join("")}
-      </form>
-      <div class="scenario-actions">
-        ${
-          ev.status === "new"
-            ? `<button type="button" class="btn primary" id="takeBtn" ${state.onBreak ? "disabled" : ""}>Взять в работу</button>`
-            : ""
-        }
-        ${
-          foreign
-            ? `<button type="button" class="btn danger" id="takeoverBtn" ${state.onBreak ? "disabled" : ""}>Перехватить</button>`
-            : ""
-        }
-        ${
-          mine
-            ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>
-               <button type="button" class="btn ok" id="closeBtn" ${canClose ? "" : "disabled"}>Закрыть инцидент</button>`
-            : ""
-        }
-      </div>
-      <div class="log">
-        <h4>Ход обработки</h4>
-        <ul>${ev.log.map((l) => `<li><b>${l.t}</b> · ${l.who} — ${l.text}</li>`).join("")}</ul>
       </div>
     `;
   }
 
-  function renderStep(step, index, ev, enabled) {
-    const n = String(index + 1).padStart(2, "0");
+  function renderStepControl(step, ev, enabled) {
     const dis = enabled ? "" : "disabled";
-    let control = "";
     if (step.type === "checkbox") {
-      control = `<div class="checks"><label><input type="checkbox" data-ans="${step.id}" ${ev.answers[step.id] ? "checked" : ""} ${dis} /> ${step.label}</label></div>`;
-    } else if (step.type === "radio") {
-      control = `<div class="radios">${step.options
+      const on = ev.answers[step.id] === true;
+      return `
+        <button type="button" class="confirm-btn ${on ? "on" : ""}" data-confirm="${step.id}" ${dis}>
+          <span class="material-symbols-outlined">${on ? "check_circle" : "radio_button_unchecked"}</span>
+          ${on ? "Подтверждено" : "Подтвердить"}
+        </button>
+      `;
+    }
+    if (step.type === "radio") {
+      return `<div class="radios">${step.options
         .map(
           (o) =>
-            `<label><input type="radio" name="${step.id}" data-ans="${step.id}" value="${o}" ${
+            `<label class="${ev.answers[step.id] === o ? "picked" : ""}"><input type="radio" name="${
+              step.id
+            }" data-ans="${step.id}" value="${escapeHtml(o)}" ${
               ev.answers[step.id] === o ? "checked" : ""
-            } ${dis} /> ${o}</label>`
+            } ${dis} /> ${escapeHtml(o)}</label>`
         )
         .join("")}</div>`;
-    } else if (step.type === "combo") {
-      control = `<select data-ans="${step.id}" ${dis}><option value="">Выберите…</option>${step.options
-        .map((o) => `<option ${ev.answers[step.id] === o ? "selected" : ""}>${o}</option>`)
+    }
+    if (step.type === "combo") {
+      return `<select data-ans="${step.id}" ${dis}><option value="">Выберите…</option>${step.options
+        .map((o) => `<option ${ev.answers[step.id] === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
         .join("")}</select>`;
-    } else if (step.type === "edit") {
-      control = `<textarea rows="2" data-ans="${step.id}" placeholder="${step.placeholder || ""}" ${dis}>${
-        ev.answers[step.id] || ""
-      }</textarea>`;
-    } else if (step.type === "macros") {
-      control = `<div class="macro-row">${step.buttons
+    }
+    if (step.type === "edit") {
+      return `<textarea rows="4" data-ans="${step.id}" placeholder="${escapeHtml(
+        step.placeholder || "Можно пропустить"
+      )}" ${dis}>${escapeHtml(ev.answers[step.id] || "")}</textarea>`;
+    }
+    if (step.type === "macros") {
+      return `<div class="macro-row">${step.buttons
         .map((b) => {
           const on = ev.launched.includes(b);
-          return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${b}" ${dis}>${
-            on ? "Запущено: " : ""
-          }${b}</button>`;
+          return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${escapeHtml(b)}" ${dis}>${
+            on ? "Запущено · " : ""
+          }${escapeHtml(b)}</button>`;
         })
         .join("")}</div>`;
     }
-    const title = step.type === "checkbox" ? "Шаг сценария" : step.label;
-    return `<div class="step"><div class="step-h"><strong>${title}</strong><span>${n}${
-      step.required ? " · обяз." : ""
-    }</span></div>${step.type === "checkbox" ? "" : ""}${control}</div>`;
+    return "";
   }
 
   function applyMediaLayout(ev) {
@@ -884,7 +987,10 @@
         : ev.status === "foreign"
           ? `${ev.id} у оператора ${ev.operator}`
           : `${ev.id} · ${statusLabel(ev).text}`;
-    $("statusSteps").textContent = `Сценарий ${prog.filled}/${prog.total}`;
+    $("statusSteps").textContent =
+      typeof ev.stepIndex === "number" && ev.status === "mine"
+        ? `Шаг ${ev.stepIndex + 1} из ${prog.total}`
+        : `Сценарий ${prog.filled}/${prog.total}`;
     $("statusSla").textContent = `Осталось SLA ${fmtSla(ev.slaSec)}`;
   }
 
@@ -916,6 +1022,7 @@
     const prev = ev.operator;
     ev.status = "mine";
     ev.operator = ME;
+    ev.stepIndex = firstOpenStep(ev);
     ev.log.push({
       t: nowStamp(),
       who: ME,
@@ -1008,13 +1115,40 @@
       const el = e.target.closest("[data-ans]");
       if (!el) return;
       ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
-      ev.log.push({ t: nowStamp(), who: ME, text: `Шаг «${el.dataset.ans}» обновлён` });
+      if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
       renderScenario();
       renderStatus();
     });
     $("scenarioRoot").addEventListener("click", (e) => {
       const ev = selected();
       if (!ev) return;
+      const crumb = e.target.closest("[data-crumb]");
+      if (crumb && !crumb.disabled) {
+        goToStep(ev, Number(crumb.dataset.crumb));
+        return;
+      }
+      if (e.target.id === "stepBack") {
+        goToStep(ev, ev.stepIndex - 1);
+        return;
+      }
+      if (e.target.id === "stepNext") {
+        const steps = scenarioSteps(ev);
+        if (ev.stepIndex < steps.length - 1 && isStepValid(ev, steps[ev.stepIndex])) {
+          goToStep(ev, ev.stepIndex + 1);
+        } else {
+          goToStep(ev, firstOpenStep(ev));
+        }
+        return;
+      }
+      const confirm = e.target.closest("[data-confirm]");
+      if (confirm && ev.status === "mine" && !state.onBreak) {
+        const id = confirm.dataset.confirm;
+        ev.answers[id] = ev.answers[id] !== true;
+        if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
+        renderScenario();
+        renderStatus();
+        return;
+      }
       if (e.target.id === "takeBtn") takeEvent(ev, "take");
       if (e.target.id === "takeoverBtn") takeEvent(ev, "takeover");
       if (e.target.id === "closeBtn") closeEvent(ev);
@@ -1023,7 +1157,6 @@
       if (macro && ev.status === "mine" && !state.onBreak) {
         const name = macro.dataset.macro;
         if (!ev.launched.includes(name)) ev.launched.push(name);
-        ev.log.push({ t: nowStamp(), who: ME, text: `Запущен макрос «${name}»` });
         toast(`Макрос: ${name}`);
         renderScenario();
       }
@@ -1180,11 +1313,11 @@
     }
   }, 1000);
 
-  let savedTheme = "light";
+  let savedTheme = "dark";
   try {
-    savedTheme = localStorage.getItem("im-theme") || "light";
+    savedTheme = localStorage.getItem("im-theme") || "dark";
   } catch (err) {
-    savedTheme = "light";
+    savedTheme = "dark";
   }
   applyTheme(savedTheme);
   bind();
