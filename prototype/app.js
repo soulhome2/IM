@@ -373,16 +373,22 @@
       location: "Магазин 2, коридор примерочных",
       region: "Торговый центр",
       priority: "medium",
-      status: "new",
-      operator: null,
+      status: "mine",
+      operator: "Иванов А. С.",
+      paused: true,
+      stepIndex: 1,
       slaSec: 900,
       deviceIds: ["device-25"],
       media: "video",
       cameras: ["device-25", "device-26"],
       pin: { x: 180, y: 160 },
-      answers: {},
+      answers: { lost: true },
       launched: [],
-      log: [{ t: "14:22:17", who: "Диспетчер", text: "Потеря видеопотока «Коридор примерочных»" }],
+      log: [
+        { t: "14:22:17", who: "Диспетчер", text: "Потеря видеопотока «Коридор примерочных»" },
+        { t: "14:23:05", who: "Иванов А. С.", text: "Взято в работу" },
+        { t: "14:24:40", who: "Иванов А. С.", text: "Обработка приостановлена на шаге 2" },
+      ],
     },
     {
       id: "INC-1844",
@@ -453,6 +459,8 @@
 
   const state = {
     events: EVENTS,
+    mode: "queue",
+    groupsOn: true,
     groupId: "all",
     openGroups: new Set(TREE.map((n) => n.id)),
     groupQuery: "",
@@ -463,7 +471,13 @@
     onBreak: false,
     videoMode: "archive",
     activeCam: "device-23",
-    layout: "default",
+  };
+
+  const ACTIONS = {
+    take: { label: "Взять", style: "primary", hint: "Взять инцидент в работу" },
+    resume: { label: "Возобновить", style: "primary", hint: "Продолжить приостановленную обработку" },
+    open: { label: "Открыть", style: "outline", hint: "Посмотреть ход обработки другого оператора" },
+    view: { label: "Просмотр", style: "outline", hint: "Открыть карточку закрытого инцидента" },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -556,11 +570,20 @@
   }
 
   function statusLabel(ev) {
-    if (ev.status === "mine") return { text: "Моё", cls: "mine" };
+    if (ev.status === "mine") {
+      return ev.paused ? { text: "Приостановлен", cls: "pause" } : { text: "В работе", cls: "mine" };
+    }
     if (ev.status === "foreign") return { text: ev.operator, cls: "foreign" };
     if (ev.status === "escalated") return { text: "Эскалация", cls: "esc" };
     if (ev.status === "closed") return { text: "Закрыто", cls: "ok" };
     return { text: "Новое", cls: "new" };
+  }
+
+  function actionKind(ev) {
+    if (ev.status === "closed") return "view";
+    if (ev.status === "mine") return "resume";
+    if (ev.status === "foreign" || ev.status === "escalated") return "open";
+    return "take";
   }
 
   function escapeHtml(value) {
@@ -734,31 +757,67 @@
     $("eventsList").innerHTML = list
       .map((e) => {
         const st = statusLabel(e);
+        const kind = actionKind(e);
+        const act = ACTIONS[kind];
+        const prog = stepProgress(e);
+        const blocked = state.onBreak && (kind === "take" || kind === "resume");
         return `
           <article class="event ${state.selectedId === e.id ? "selected" : ""}" data-id="${e.id}">
-            <input class="pick" type="checkbox" data-check="${e.id}" ${state.checked.has(e.id) ? "checked" : ""} />
+            <input class="pick" type="checkbox" data-check="${e.id}" aria-label="Выбрать ${e.id}" ${
+              state.checked.has(e.id) ? "checked" : ""
+            } />
             <div class="event-pri ${e.priority}"></div>
             <div class="event-main">
               <div class="event-title">
-                <strong>${e.type}</strong>
+                <strong>${escapeHtml(e.type)}</strong>
                 <time>${e.time}</time>
               </div>
-              <div class="event-sub">${e.id} · ${e.object} · ${e.location}</div>
+              <div class="event-sub">${e.id} · ${escapeHtml(e.object)} · ${escapeHtml(e.location)}</div>
+              <div class="event-foot">
+                <span class="badge ${st.cls}">${escapeHtml(st.text)}</span>
+                ${
+                  e.status === "closed"
+                    ? ""
+                    : `<span class="event-sla ${e.slaSec < 120 ? "late" : ""}" data-sla="${e.id}">SLA ${fmtSla(
+                        e.slaSec
+                      )}</span>`
+                }
+                ${prog.filled ? `<span class="event-prog">Сценарий ${prog.filled}/${prog.total}</span>` : ""}
+              </div>
             </div>
-            <div class="event-side">
-              <span class="badge ${st.cls}">${st.text}</span>
-            </div>
+            <button type="button" class="btn ${act.style} event-act" data-act="${e.id}" title="${act.hint}" ${
+              blocked ? "disabled" : ""
+            }>${act.label}</button>
           </article>
         `;
       })
       .join("") || `<div class="empty">Нет событий в текущем фильтре</div>`;
   }
 
+  function renderWorkHeader(ev) {
+    $("workTitle").textContent = ev ? `${ev.id} · ${ev.type}` : "Обработка";
+  }
+
+  function workNote(ev) {
+    if (ev.status === "foreign" || ev.status === "escalated") {
+      return `<div class="work-note">Инцидент обрабатывает ${escapeHtml(
+        ev.operator
+      )}. Просмотр без изменений — при необходимости перехватите.</div>`;
+    }
+    if (ev.status === "closed") {
+      return `<div class="work-note ok">Инцидент закрыт. Карточка доступна только для просмотра.</div>`;
+    }
+    if (ev.status === "mine" && state.onBreak) {
+      return `<div class="work-note">Вы на перерыве — изменения по сценарию недоступны.</div>`;
+    }
+    return "";
+  }
+
   function renderScenario() {
     const ev = selected();
     const root = $("scenarioRoot");
     if (!ev) {
-      root.innerHTML = `<div class="empty">Выберите событие в очереди</div>`;
+      root.innerHTML = `<div class="empty">Инцидент не выбран</div>`;
       return;
     }
     const steps = scenarioSteps(ev);
@@ -766,21 +825,6 @@
     const mine = ev.status === "mine";
     const foreign = ev.status === "foreign" || ev.status === "escalated";
     const editable = mine && !state.onBreak;
-
-    if (ev.status === "new" || ev.status === "closed") {
-      root.innerHTML = `
-        ${renderIncidentHead(ev, prog)}
-        <div class="scenario-preview">
-          <p>Сценарий «${escapeHtml(SCENARIOS[ev.typeId].title)}» · ${steps.length} шагов</p>
-          ${
-            ev.status === "new"
-              ? `<button type="button" class="btn primary" id="takeBtn" ${state.onBreak ? "disabled" : ""}>Взять в работу</button>`
-              : `<p class="muted">Инцидент закрыт</p>`
-          }
-        </div>
-      `;
-      return;
-    }
 
     ensureCursor(ev);
     const i = ev.stepIndex;
@@ -791,66 +835,72 @@
     const incomplete = steps.findIndex((s) => s.required && !isStepValid(ev, s));
 
     root.innerHTML = `
-      ${renderIncidentHead(ev, prog)}
-      <nav class="crumbs" aria-label="Шаги сценария">
-        ${steps
-          .map((s, idx) => {
-            const open = canOpenStep(ev, idx);
-            const current = idx === i;
-            const done = Boolean(stepAnswerText(ev, s));
-            const answer = stepAnswerText(ev, s);
-            return `
-              <button type="button" class="crumb ${current ? "current" : ""} ${done ? "done" : ""} ${
-                open ? "" : "locked"
-              }" data-crumb="${idx}" ${open ? "" : "disabled"} title="${escapeHtml(s.label)}">
-                <span class="crumb-n">${idx + 1}</span>
-                <span class="crumb-body">
-                  <span class="crumb-name">${escapeHtml(stepShort(s))}</span>
-                  ${answer && !current ? `<span class="crumb-ans">${escapeHtml(answer)}</span>` : ""}
-                </span>
-              </button>
-            `;
-          })
-          .join("")}
-      </nav>
-      <div class="step-card">
-        <div class="step-h">
-          <strong>${escapeHtml(step.label)}</strong>
-          <span>${i + 1} из ${steps.length}${step.required ? "" : " · необязательно"}</span>
+      <div class="work-doc">
+        ${renderIncidentHead(ev, prog)}
+        ${workNote(ev)}
+        <nav class="crumbs" aria-label="Шаги сценария">
+          ${steps
+            .map((s, idx) => {
+              const open = canOpenStep(ev, idx);
+              const current = idx === i;
+              const answer = stepAnswerText(ev, s);
+              return `
+                <button type="button" class="crumb ${current ? "current" : ""} ${answer ? "done" : ""} ${
+                  open ? "" : "locked"
+                }" data-crumb="${idx}" ${open ? "" : "disabled"} title="${escapeHtml(s.label)}">
+                  <span class="crumb-n">${idx + 1}</span>
+                  <span class="crumb-body">
+                    <span class="crumb-name">${escapeHtml(stepShort(s))}</span>
+                    ${answer && !current ? `<span class="crumb-ans">${escapeHtml(answer)}</span>` : ""}
+                  </span>
+                </button>
+              `;
+            })
+            .join("")}
+        </nav>
+        <div class="step-card">
+          <div class="step-h">
+            <strong>${escapeHtml(step.label)}</strong>
+            <span>${i + 1} из ${steps.length}${step.required ? "" : " · необязательно"}</span>
+          </div>
+          ${renderStepControl(step, ev, editable)}
         </div>
-        ${renderStepControl(step, ev, editable)}
-      </div>
-      <div class="scenario-actions">
-        <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>Назад</button>
-        <div class="scenario-actions-end">
-          ${mine ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>` : ""}
-          ${
-            foreign
-              ? `<button type="button" class="btn danger" id="takeoverBtn" ${state.onBreak ? "disabled" : ""}>Перехватить</button>`
-              : ""
-          }
-          ${
-            editable && last && canClose
-              ? `<button type="button" class="btn primary" id="closeBtn">Закрыть инцидент</button>`
-              : editable
-                ? `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${
-                    last ? "К незаполненным" : "Далее"
-                  }</button>`
+        <div class="scenario-actions">
+          <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>Назад</button>
+          <div class="scenario-actions-end">
+            ${mine ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>` : ""}
+            ${
+              foreign
+                ? `<button type="button" class="btn danger" id="takeoverBtn" ${
+                    state.onBreak ? "disabled" : ""
+                  }>Перехватить</button>`
                 : ""
-          }
+            }
+            ${
+              editable
+                ? last && canClose
+                  ? `<button type="button" class="btn primary" id="closeBtn">Закрыть инцидент</button>`
+                  : `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${
+                      last ? "К незаполненным" : "Далее"
+                    }</button>`
+                : !last && canOpenStep(ev, i + 1)
+                  ? `<button type="button" class="btn outline" id="stepNext">Далее</button>`
+                  : ""
+            }
+          </div>
         </div>
+        ${
+          last && editable && !canClose && incomplete !== -1
+            ? `<p class="step-hint">Сначала шаг ${incomplete + 1}: ${escapeHtml(stepShort(steps[incomplete]))}</p>`
+            : ""
+        }
+        ${renderLog(ev)}
       </div>
-      ${
-        last && editable && !canClose && incomplete !== -1
-          ? `<p class="step-hint">Сначала шаг ${incomplete + 1}: ${escapeHtml(stepShort(steps[incomplete]))}</p>`
-          : ""
-      }
-      ${renderLog(ev)}
     `;
   }
 
   function renderLog(ev) {
-    const items = ev.log.slice(-3);
+    const items = ev.log.slice(-4);
     if (!items.length) return "";
     return `
       <div class="log">
@@ -931,36 +981,75 @@
   function renderVideo() {
     const ev = selected();
     const cams = ev && ev.cameras ? ev.cameras : [];
-    if (cams.length && !cams.includes(state.activeCam)) state.activeCam = cams[0];
     if (!cams.length) {
-      $("videoGrid").innerHTML = `<div class="empty">Нет связанных камер</div>`;
+      $("videoStage").innerHTML = `<div class="empty">К инциденту не привязаны камеры</div>`;
+      $("camStrip").hidden = true;
       $("timeline").hidden = true;
       return;
     }
-    $("timeline").hidden = false;
-    $("videoGrid").innerHTML = cams
-      .map((id) => {
-        const cam = CAMERAS[id] || cameraOf(id, 200, 120);
-        const tag = state.videoMode === "live" ? "LIVE" : "АРХИВ";
-        return `
-          <div class="cam ${state.activeCam === id ? "active" : ""}" data-cam="${id}">
-            <div class="scene scene-${cam.scene}">
-              <div class="glow"></div><div class="figure"></div><div class="path"></div>
-              <div class="slot"></div><div class="bar"></div>
-            </div>
-            <div class="cam-hud">
-              <div>
-                <div class="mode-tag ${state.videoMode}">${tag}</div>
-                <b>${cam.name}</b>
-              </div>
-              <span>${state.videoMode === "live" ? nowStamp() : ev ? ev.time : "--:--:--"}</span>
-            </div>
+    if (!cams.includes(state.activeCam)) state.activeCam = cams[0];
+    const idx = cams.indexOf(state.activeCam);
+    const cam = CAMERAS[state.activeCam] || cameraOf(state.activeCam, 200, 120);
+    const live = state.videoMode === "live";
+    const many = cams.length > 1;
+
+    $("videoStage").innerHTML = `
+      <div class="cam active" data-cam="${state.activeCam}">
+        <div class="scene scene-${cam.scene}">
+          <div class="glow"></div><div class="figure"></div><div class="path"></div>
+          <div class="slot"></div><div class="bar"></div>
+        </div>
+        <div class="cam-hud">
+          <div>
+            <div class="mode-tag ${state.videoMode}">${live ? "LIVE" : "АРХИВ"}</div>
+            <b>${escapeHtml(cam.name)}</b>
           </div>
-        `;
-      })
-      .join("");
-    $("tlTime").textContent = ev ? ev.time : nowStamp();
-    $("timeline").style.opacity = state.videoMode === "live" ? "0.35" : "1";
+          <span>${live ? nowStamp() : ev.time}</span>
+        </div>
+      </div>
+      ${
+        many
+          ? `
+        <button type="button" class="cam-nav prev" data-cam-step="-1" title="Предыдущая камера (←)" aria-label="Предыдущая камера">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <button type="button" class="cam-nav next" data-cam-step="1" title="Следующая камера (→)" aria-label="Следующая камера">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>`
+          : ""
+      }
+    `;
+
+    $("camStrip").hidden = !many;
+    if (many) {
+      $("camStrip").innerHTML = `
+        <div class="cam-ticks">
+          ${cams
+            .map((id, i) => {
+              const c = CAMERAS[id] || cameraOf(id, 200, 120);
+              return `<button type="button" class="cam-tick ${
+                i === idx ? "active" : ""
+              }" data-cam="${id}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
+            })
+            .join("")}
+        </div>
+        <span class="cam-counter">${idx + 1} / ${cams.length}</span>
+      `;
+    }
+
+    $("timeline").hidden = false;
+    $("tlTime").textContent = live ? nowStamp() : ev.time;
+    $("timeline").style.opacity = live ? "0.35" : "1";
+  }
+
+  function stepCamera(delta) {
+    const ev = selected();
+    const cams = ev && ev.cameras ? ev.cameras : [];
+    if (cams.length < 2) return;
+    const i = cams.indexOf(state.activeCam);
+    state.activeCam = cams[(Math.max(0, i) + delta + cams.length) % cams.length];
+    renderVideo();
+    renderMap();
   }
 
   function renderMap() {
@@ -1006,16 +1095,18 @@
     }
     const prog = stepProgress(ev);
     $("statusIncident").textContent =
-      ev.status === "mine"
-        ? `Обрабатываю ${ev.id}`
-        : ev.status === "foreign"
-          ? `${ev.id} у оператора ${ev.operator}`
-          : `${ev.id} · ${statusLabel(ev).text}`;
+      state.mode === "work"
+        ? `Обработка ${ev.id}`
+        : ev.status === "mine"
+          ? `${ev.id} · ${ev.paused ? "приостановлен" : "в работе"}`
+          : ev.status === "foreign"
+            ? `${ev.id} у оператора ${ev.operator}`
+            : `${ev.id} · ${statusLabel(ev).text}`;
     $("statusSteps").textContent =
-      typeof ev.stepIndex === "number" && ev.status === "mine"
+      state.mode === "work" && typeof ev.stepIndex === "number"
         ? `Шаг ${ev.stepIndex + 1} из ${prog.total}`
         : `Сценарий ${prog.filled}/${prog.total}`;
-    $("statusSla").textContent = `Осталось SLA ${fmtSla(ev.slaSec)}`;
+    $("statusSla").textContent = ev.status === "closed" ? "" : `Осталось SLA ${fmtSla(ev.slaSec)}`;
   }
 
   function fmtSla(sec) {
@@ -1025,9 +1116,17 @@
   }
 
   function renderAll() {
+    const ws = $("workspace");
+    ws.dataset.mode = state.mode;
+    ws.dataset.groups = state.groupsOn ? "on" : "off";
+    $("toggleGroups").classList.toggle("on", state.groupsOn);
     renderGroups();
-    renderEvents();
-    renderScenario();
+    if (state.mode === "queue") {
+      renderEvents();
+    } else {
+      renderWorkHeader(selected());
+      renderScenario();
+    }
     applyMediaLayout(selected());
     renderVideo();
     renderMap();
@@ -1038,24 +1137,67 @@
     $("breakBtn").textContent = state.onBreak ? "На смену" : "Перерыв";
   }
 
-  function takeEvent(ev, mode) {
+  function focusCameras(ev) {
+    if (ev && ev.cameras && ev.cameras.length && !ev.cameras.includes(state.activeCam)) {
+      state.activeCam = ev.cameras[0];
+    }
+  }
+
+  function openWork(ev) {
+    if (!ev) return;
+    const kind = actionKind(ev);
+    if ((kind === "take" || kind === "resume") && state.onBreak) {
+      toast("На перерыве события не назначаются");
+      return;
+    }
+    state.selectedId = ev.id;
+    focusCameras(ev);
+    if (kind === "take") {
+      ev.status = "mine";
+      ev.operator = ME;
+      ev.paused = false;
+      ev.stepIndex = firstOpenStep(ev);
+      ev.log.push({ t: nowStamp(), who: ME, text: "Взято в работу" });
+      toast(`${ev.id} в работе`);
+    } else if (kind === "resume") {
+      ev.paused = false;
+      ensureCursor(ev);
+      ev.log.push({ t: nowStamp(), who: ME, text: `Обработка возобновлена на шаге ${ev.stepIndex + 1}` });
+    }
+    state.mode = "work";
+    renderAll();
+  }
+
+  function backToQueue() {
+    const ev = selected();
+    if (ev && ev.status === "mine" && !ev.paused) {
+      ev.paused = true;
+      ensureCursor(ev);
+      ev.log.push({ t: nowStamp(), who: ME, text: `Обработка приостановлена на шаге ${ev.stepIndex + 1}` });
+      toast(`${ev.id} приостановлен — возобновите из очереди`);
+    }
+    state.mode = "queue";
+    renderAll();
+  }
+
+  function takeover(ev) {
     if (state.onBreak) {
       toast("На перерыве события не назначаются");
       return;
     }
     const prev = ev.operator;
+    const prog = stepProgress(ev);
     ev.status = "mine";
     ev.operator = ME;
-    ev.stepIndex = firstOpenStep(ev);
+    ev.paused = false;
+    ensureCursor(ev);
     ev.log.push({
       t: nowStamp(),
       who: ME,
-      text:
-        mode === "takeover"
-          ? `Перехват у ${prev}. Прогресс сценария сохранён (${stepProgress(ev).filled}/${stepProgress(ev).total})`
-          : "Взято в работу",
+      text: `Перехват у ${prev}. Прогресс сценария сохранён (${prog.filled}/${prog.total})`,
     });
-    toast(mode === "takeover" ? `Перехвачен ${ev.id}` : `${ev.id} в работе`);
+    toast(`Перехвачен ${ev.id}`);
+    state.mode = "work";
     renderAll();
   }
 
@@ -1065,11 +1207,16 @@
       return;
     }
     ev.status = "closed";
+    ev.paused = false;
     ev.log.push({ t: nowStamp(), who: ME, text: "Инцидент закрыт. Результат уйдёт в AxxonData" });
     toast(`${ev.id} закрыт`);
     const next = state.events.find((e) => e.status === "new");
-    state.selectedId = next ? next.id : ev.id;
+    if (next) {
+      state.selectedId = next.id;
+      focusCameras(next);
+    }
     state.checked.delete(ev.id);
+    state.mode = "queue";
     renderAll();
   }
 
@@ -1079,10 +1226,12 @@
       if (!btn) return;
       applyTheme(btn.dataset.theme);
     });
-    $("layoutMode").addEventListener("change", (e) => {
-      state.layout = e.target.value;
-      $("workspace").dataset.layout = state.layout;
+    $("toggleGroups").addEventListener("click", () => {
+      state.groupsOn = !state.groupsOn;
+      $("workspace").dataset.groups = state.groupsOn ? "on" : "off";
+      $("toggleGroups").classList.toggle("on", state.groupsOn);
     });
+    $("backToQueue").addEventListener("click", () => backToQueue());
     $("eventFilter").addEventListener("change", (e) => {
       state.filter = e.target.value;
       renderEvents();
@@ -1119,19 +1268,26 @@
     $("eventsList").addEventListener("click", (e) => {
       const check = e.target.closest("[data-check]");
       if (check) {
-        e.stopPropagation();
         const id = check.dataset.check;
         if (state.checked.has(id)) state.checked.delete(id);
         else state.checked.add(id);
         renderEvents();
         return;
       }
+      const act = e.target.closest("[data-act]");
+      if (act) {
+        openWork(state.events.find((x) => x.id === act.dataset.act));
+        return;
+      }
       const row = e.target.closest("[data-id]");
-      if (!row) return;
+      if (!row || row.dataset.id === state.selectedId) return;
       state.selectedId = row.dataset.id;
-      const ev = selected();
-      if (ev && ev.cameras && ev.cameras[0]) state.activeCam = ev.cameras[0];
-      renderAll();
+      focusCameras(selected());
+      renderEvents();
+      applyMediaLayout(selected());
+      renderVideo();
+      renderMap();
+      renderStatus();
     });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
@@ -1151,13 +1307,13 @@
         goToStep(ev, Number(crumb.dataset.crumb));
         return;
       }
-      if (e.target.id === "stepBack") {
+      if (e.target.closest("#stepBack")) {
         goToStep(ev, ev.stepIndex - 1);
         return;
       }
-      if (e.target.id === "stepNext") {
+      if (e.target.closest("#stepNext")) {
         const steps = scenarioSteps(ev);
-        if (ev.stepIndex < steps.length - 1 && isStepValid(ev, steps[ev.stepIndex])) {
+        if (ev.stepIndex < steps.length - 1 && canOpenStep(ev, ev.stepIndex + 1)) {
           goToStep(ev, ev.stepIndex + 1);
         } else {
           goToStep(ev, firstOpenStep(ev));
@@ -1173,10 +1329,12 @@
         renderStatus();
         return;
       }
-      if (e.target.id === "takeBtn") takeEvent(ev, "take");
-      if (e.target.id === "takeoverBtn") takeEvent(ev, "takeover");
-      if (e.target.id === "closeBtn") closeEvent(ev);
-      if (e.target.id === "escalateBtn") $("modalEscalate").hidden = false;
+      if (e.target.closest("#takeoverBtn")) return takeover(ev);
+      if (e.target.closest("#closeBtn")) return closeEvent(ev);
+      if (e.target.closest("#escalateBtn")) {
+        $("modalEscalate").hidden = false;
+        return;
+      }
       const macro = e.target.closest("[data-macro]");
       if (macro && ev.status === "mine" && !state.onBreak) {
         const name = macro.dataset.macro;
@@ -1186,7 +1344,11 @@
       }
     });
     $("groupProcessBtn").addEventListener("click", () => groupProcess());
-    $("videoGrid").addEventListener("click", (e) => {
+    $("videoStage").addEventListener("click", (e) => {
+      const nav = e.target.closest("[data-cam-step]");
+      if (nav) stepCamera(Number(nav.dataset.camStep));
+    });
+    $("camStrip").addEventListener("click", (e) => {
       const cam = e.target.closest("[data-cam]");
       if (!cam) return;
       state.activeCam = cam.dataset.cam;
@@ -1247,8 +1409,11 @@
         who: ME,
         text: `Эскалация → ${ev.operator}. ${$("escalateReason").value || "Причина не указана"}`,
       });
+      ev.paused = false;
       $("modalEscalate").hidden = true;
-      toast(`Эскалация ${ev.id}`);
+      $("escalateReason").value = "";
+      toast(`Эскалация ${ev.id} → ${ev.operator}`);
+      state.mode = "queue";
       renderAll();
     });
     $("groupsCollapseAll").addEventListener("click", () => {
@@ -1268,6 +1433,7 @@
       const ev = state.events.find((e) => e.id === id);
       ev.status = "mine";
       ev.operator = ME;
+      ev.paused = false;
       ev.answers = { ...first.answers };
       ev.log.push({
         t: nowStamp(),
@@ -1276,12 +1442,25 @@
       });
     });
     state.selectedId = first.id;
+    focusCameras(first);
     toast(`Группа из ${ids.length} событий в одной карточке`);
+    state.mode = "work";
     renderAll();
   }
 
   function onKey(e) {
     if (e.target.matches("input, textarea, select")) return;
+    if (e.key === "ArrowLeft") return stepCamera(-1);
+    if (e.key === "ArrowRight") return stepCamera(1);
+    if (e.key === "Escape") {
+      const openModal = document.querySelector(".modal:not([hidden])");
+      if (openModal) {
+        openModal.hidden = true;
+        return;
+      }
+      if (state.mode === "work") backToQueue();
+      return;
+    }
     const key = e.key.toLowerCase();
     if (key === "?" || (e.shiftKey && e.key === "/")) {
       $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
@@ -1289,28 +1468,24 @@
     if (key === "b") $("breakBtn").click();
     if (key === "e") {
       const ev = selected();
-      if (ev && ev.status === "mine") $("modalEscalate").hidden = false;
+      if (ev && ev.status === "mine" && state.mode === "work") $("modalEscalate").hidden = false;
     }
     if (key === "n") {
       const next = state.events.find((x) => x.status === "new");
-      if (next) {
-        state.selectedId = next.id;
-        takeEvent(next, "take");
-      }
+      if (next) openWork(next);
     }
     if (key === "t") {
       const ev = selected();
-      if (ev && (ev.status === "foreign" || ev.status === "escalated")) takeEvent(ev, "takeover");
+      if (ev && (ev.status === "foreign" || ev.status === "escalated")) takeover(ev);
     }
     if (key === "g") groupProcess();
     if (e.key === "Enter") {
       const ev = selected();
-      if (ev && ev.status === "mine") closeEvent(ev);
+      if (ev && ev.status === "mine" && state.mode === "work") closeEvent(ev);
     }
     if (["1", "2", "3", "4"].includes(e.key)) {
       const ev = selected();
-      if (!ev) return;
-      const cam = ev.cameras && ev.cameras[Number(e.key) - 1];
+      const cam = ev && ev.cameras && ev.cameras[Number(e.key) - 1];
       if (cam) {
         state.activeCam = cam;
         renderVideo();
@@ -1324,9 +1499,15 @@
     state.events.forEach((e) => {
       if (e.status !== "closed") e.slaSec -= 1;
     });
+    document.querySelectorAll("[data-sla]").forEach((el) => {
+      const e = state.events.find((x) => x.id === el.dataset.sla);
+      if (!e) return;
+      el.textContent = `SLA ${fmtSla(e.slaSec)}`;
+      el.classList.toggle("late", e.slaSec < 120);
+    });
     const ev = selected();
     if (ev && ev.status !== "closed") {
-      const sla = document.querySelector(".sla");
+      const sla = $("scenarioRoot").querySelector(".sla");
       if (sla) {
         sla.textContent = `SLA ${fmtSla(ev.slaSec)}`;
         sla.classList.toggle("late", ev.slaSec < 120);

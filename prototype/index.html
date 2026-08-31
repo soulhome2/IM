@@ -20,15 +20,9 @@
       </div>
 
       <div class="topbar-cluster">
-        <label class="field-inline">
-          <span>Макет</span>
-          <select id="layoutMode" title="Состав и расположение панелей">
-            <option value="default">Операторский</option>
-            <option value="focus">Фокус на сценарии</option>
-            <option value="media">Видеостена</option>
-            <option value="compact">Только очередь</option>
-          </select>
-        </label>
+        <button type="button" class="icon-btn" id="toggleGroups" title="Показать или скрыть панель групп">
+          <span class="material-symbols-outlined">dock_to_right</span>
+        </button>
         <div class="field-inline">
           <span>Схема</span>
           <div class="seg" id="themeMode" title="Цветовая схема">
@@ -65,7 +59,7 @@
       События удерживаются в очереди диспетчера. Статус смены: перерыв. Новые инциденты вам не назначаются.
     </div>
 
-    <main class="workspace" id="workspace" data-layout="default">
+    <main class="workspace" id="workspace" data-mode="queue" data-groups="on">
       <section class="panel" id="panelGroups" data-panel="groups">
         <header class="panel-h">
           <h2>Группы</h2>
@@ -89,36 +83,41 @@
         </div>
       </section>
 
-      <section class="panel" id="panelEvents" data-panel="events">
-        <header class="panel-h">
-          <h2>События <em id="eventsCount">0</em></h2>
-          <div class="panel-h-actions">
-            <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
-          </div>
-        </header>
-        <div class="panel-b events-body">
-          <div class="events-toolbar">
-            <div class="search-wrapper">
-              <span class="material-symbols-outlined">search</span>
-              <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по объекту, типу, ID..." />
+      <div class="stage" id="stage">
+        <section class="panel" id="panelEvents" data-panel="events">
+          <header class="panel-h">
+            <h2>Очередь <em id="eventsCount">0</em></h2>
+            <div class="panel-h-actions">
+              <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
             </div>
-            <select id="eventFilter" class="search-input">
-              <option value="open">Открытые</option>
-              <option value="mine">Мои</option>
-              <option value="foreign">Чужие</option>
-              <option value="all">Все</option>
-            </select>
+          </header>
+          <div class="panel-b events-body">
+            <div class="events-toolbar">
+              <div class="search-wrapper">
+                <span class="material-symbols-outlined">search</span>
+                <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по объекту, типу, ID..." />
+              </div>
+              <select id="eventFilter" class="search-input">
+                <option value="open">Открытые</option>
+                <option value="mine">Мои</option>
+                <option value="foreign">Чужие</option>
+                <option value="all">Все</option>
+              </select>
+            </div>
+            <div class="events-list" id="eventsList"></div>
           </div>
-          <div class="events-list" id="eventsList"></div>
-        </div>
-      </section>
+        </section>
 
-      <section class="panel" id="panelScenario" data-panel="scenario">
-        <header class="panel-h">
-          <h2>Обработка</h2>
-        </header>
-        <div class="panel-b" id="scenarioRoot"></div>
-      </section>
+        <section class="panel" id="panelScenario" data-panel="scenario">
+          <header class="panel-h work-h">
+            <button type="button" class="btn ghost" id="backToQueue" title="Приостановить и вернуться к очереди (Esc)">
+              <span class="material-symbols-outlined">arrow_back</span>К очереди
+            </button>
+            <h2 id="workTitle">Обработка</h2>
+          </header>
+          <div class="panel-b" id="scenarioRoot"></div>
+        </section>
+      </div>
 
       <section class="panel media-stack" id="panelMedia" data-panel="media">
         <div class="panel nested" id="panelVideo">
@@ -132,7 +131,8 @@
             </div>
           </header>
           <div class="panel-b video-body">
-            <div class="video-grid" id="videoGrid"></div>
+            <div class="cam-stage" id="videoStage"></div>
+            <div class="cam-strip" id="camStrip" hidden></div>
             <div class="timeline" id="timeline">
               <span id="tlTime">14:31:08</span>
               <input type="range" id="tlScrub" min="0" max="100" value="72" />
@@ -186,12 +186,14 @@
       <h3>Горячие клавиши</h3>
       <table class="keys">
         <tr><td><kbd>N</kbd></td><td>Взять следующее новое событие</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Приостановить и вернуться к очереди</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>Закрыть инцидент (если сценарий заполнен)</td></tr>
         <tr><td><kbd>E</kbd></td><td>Эскалация</td></tr>
         <tr><td><kbd>T</kbd></td><td>Перехватить чужое событие</td></tr>
         <tr><td><kbd>G</kbd></td><td>Обработать выделенные как одно</td></tr>
         <tr><td><kbd>B</kbd></td><td>Перерыв / возврат на смену</td></tr>
-        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Переключить камеру</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Карусель камер</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Камера по номеру</td></tr>
         <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
       </table>
       <p class="muted">Набор можно будет задавать «под себя» в настройках оператора.</p>
