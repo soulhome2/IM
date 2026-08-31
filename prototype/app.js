@@ -700,6 +700,13 @@
   }
 
   function renderGroups() {
+    const collapseBtn = $("groupsCollapseAll");
+    const expanded = state.openGroups.size > 0;
+    collapseBtn.querySelector(".material-symbols-outlined").textContent = expanded
+      ? "unfold_less"
+      : "unfold_more";
+    collapseBtn.title = expanded ? "Свернуть все группы" : "Развернуть все группы";
+
     const open = state.events.filter((e) => e.status !== "closed");
     const crit = open.some((e) => e.priority === "critical");
     $("groupsList").innerHTML = `
@@ -802,7 +809,6 @@
                   ${answer && !current ? `<span class="crumb-ans">${escapeHtml(answer)}</span>` : ""}
                 </span>
               </button>
-              ${idx < steps.length - 1 ? `<span class="crumb-sep" aria-hidden="true"></span>` : ""}
             `;
           })
           .join("")}
@@ -839,6 +845,22 @@
           ? `<p class="step-hint">Сначала шаг ${incomplete + 1}: ${escapeHtml(stepShort(steps[incomplete]))}</p>`
           : ""
       }
+      ${renderLog(ev)}
+    `;
+  }
+
+  function renderLog(ev) {
+    const items = ev.log.slice(-3);
+    if (!items.length) return "";
+    return `
+      <div class="log">
+        <h4>Журнал</h4>
+        <ul>
+          ${items
+            .map((l) => `<li><b>${escapeHtml(l.t)}</b> · ${escapeHtml(l.who)} — ${escapeHtml(l.text)}</li>`)
+            .join("")}
+        </ul>
+      </div>
     `;
   }
 
@@ -912,8 +934,10 @@
     if (cams.length && !cams.includes(state.activeCam)) state.activeCam = cams[0];
     if (!cams.length) {
       $("videoGrid").innerHTML = `<div class="empty">Нет связанных камер</div>`;
+      $("timeline").hidden = true;
       return;
     }
+    $("timeline").hidden = false;
     $("videoGrid").innerHTML = cams
       .map((id) => {
         const cam = CAMERAS[id] || cameraOf(id, 200, 120);
@@ -1080,7 +1104,7 @@
         e.stopPropagation();
         if (state.openGroups.has(id)) state.openGroups.delete(id);
         else state.openGroups.add(id);
-        node.classList.toggle("open");
+        renderGroups();
         return;
       }
       if (!e.target.closest(".node-content")) return;
@@ -1227,12 +1251,10 @@
       toast(`Эскалация ${ev.id}`);
       renderAll();
     });
-    document.querySelectorAll("[data-collapse]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const panel = $(btn.dataset.collapse);
-        panel.classList.toggle("collapsed");
-        btn.textContent = panel.classList.contains("collapsed") ? "+" : "−";
-      });
+    $("groupsCollapseAll").addEventListener("click", () => {
+      if (state.openGroups.size) state.openGroups.clear();
+      else TREE.forEach((n) => state.openGroups.add(n.id));
+      renderGroups();
     });
     document.addEventListener("keydown", onKey);
   }

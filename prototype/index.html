@@ -29,13 +29,13 @@
             <option value="compact">Только очередь</option>
           </select>
         </label>
-        <label class="field-inline">
+        <div class="field-inline">
           <span>Схема</span>
           <div class="seg" id="themeMode" title="Цветовая схема">
             <button type="button" data-theme="dark" class="active">Тёмная</button>
             <button type="button" data-theme="light">Светлая</button>
           </div>
-        </label>
+        </div>
       </div>
 
       <div class="topbar-actions">
@@ -69,7 +69,11 @@
       <section class="panel" id="panelGroups" data-panel="groups">
         <header class="panel-h">
           <h2>Группы</h2>
-          <button type="button" class="icon-btn" data-collapse="panelGroups" title="Свернуть панель">−</button>
+          <div class="panel-h-actions">
+            <button type="button" class="icon-btn" id="groupsCollapseAll" title="Свернуть все группы">
+              <span class="material-symbols-outlined">unfold_less</span>
+            </button>
+          </div>
         </header>
         <div class="panel-b groups-body">
           <div class="groups-search">
