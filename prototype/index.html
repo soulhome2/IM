@@ -20,37 +20,74 @@
       </div>
 
       <div class="topbar-cluster">
-        <button type="button" class="icon-btn" id="toggleGroups" title="Показать или скрыть панель групп">
-          <span class="material-symbols-outlined">dock_to_right</span>
+        <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
+          <span class="material-symbols-outlined">left_panel_close</span>
         </button>
-        <div class="field-inline">
-          <span>Схема</span>
-          <div class="seg" id="themeMode" title="Цветовая схема">
-            <button type="button" data-theme="dark" class="active">Тёмная</button>
-            <button type="button" data-theme="light">Светлая</button>
-          </div>
-        </div>
+        <button type="button" class="icon-btn" id="toggleMedia" aria-pressed="true">
+          <span class="material-symbols-outlined">right_panel_close</span>
+        </button>
       </div>
 
       <div class="topbar-actions">
-        <div class="menu" id="linksMenu">
-          <button type="button" class="btn ghost" id="linksBtn" aria-expanded="false">Ссылки</button>
-          <div class="menu-pop" hidden>
-            <a href="#" data-link="Телефоны ответственных">Телефоны ответственных</a>
-            <a href="#" data-link="Регламент охраны ТЦ">Регламент охраны ТЦ</a>
-            <a href="#" data-link="Схема эвакуации «Мега»">Схема эвакуации «Мега»</a>
-            <a href="#" data-link="Контакты МЧС / полиция">Контакты МЧС / полиция</a>
+        <button type="button" class="icon-btn theme-btn" id="themeToggle" title="Тёмная тема" aria-label="Тёмная тема">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+              <path d="M12 1.4v2.4M12 20.2v2.4M1.4 12h2.4M20.2 12h2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M19.6 4.4l-1.7 1.7M6.1 17.9l-1.7 1.7"/>
+            </g>
+            <circle cx="12" cy="12" r="5.7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 6.3a5.7 5.7 0 0 0 0 11.4z" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <div class="menu" id="helpMenu">
+          <button type="button" class="icon-btn" id="helpBtn" aria-haspopup="menu" aria-expanded="false" title="Справка и полезные ссылки">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+          <div class="menu-pop" role="menu" hidden>
+            <button type="button" class="menu-item" id="hotkeysBtn" role="menuitem">
+              <span class="material-symbols-outlined">keyboard</span>
+              Горячие клавиши
+              <kbd>?</kbd>
+            </button>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Регламенты и контакты</div>
+            <button type="button" class="menu-item" role="menuitem" data-doc="modalContacts">
+              <span class="material-symbols-outlined">contact_phone</span>
+              Телефоны ответственных
+            </button>
+            <button type="button" class="menu-item" role="menuitem" data-doc="modalRegulation">
+              <span class="material-symbols-outlined">description</span>
+              Регламент охраны ТЦ
+            </button>
+            <button type="button" class="menu-item" role="menuitem" data-doc="modalEvacuation">
+              <span class="material-symbols-outlined">map</span>
+              Схема эвакуации «Мега»
+            </button>
+            <button type="button" class="menu-item" role="menuitem" data-doc="modalEmergency">
+              <span class="material-symbols-outlined">local_police</span>
+              Контакты МЧС и полиции
+            </button>
           </div>
         </div>
-        <button type="button" class="btn ghost" id="hotkeysBtn">Клавиши</button>
-        <button type="button" class="btn ghost" id="breakBtn">Перерыв</button>
-        <div class="operator">
-          <div class="operator-meta">
-            <strong>Иванов А. С.</strong>
-            <span>Оператор · смена 08:00–20:00</span>
+
+        <div class="menu" id="userMenu">
+          <button type="button" class="user-btn" id="userBtn" aria-haspopup="menu" aria-expanded="false">
+            <span class="operator-meta">
+              <strong>Иванов А. С.</strong>
+              <span>Оператор · смена 08:00–20:00</span>
+            </span>
+            <span class="duty" id="dutyBadge">На смене</span>
+            <span class="material-symbols-outlined chevron">expand_more</span>
+          </button>
+          <div class="menu-pop wide" role="menu" hidden>
+            <button type="button" class="menu-item" id="breakBtn" role="menuitem">
+              <span class="material-symbols-outlined">coffee</span>
+              <span id="breakBtnLabel">Уйти на перерыв</span>
+              <kbd>B</kbd>
+            </button>
           </div>
-          <span class="duty" id="dutyBadge">На смене</span>
         </div>
+
         <time class="clock" id="clock">14:32:11</time>
       </div>
     </header>
@@ -59,13 +96,17 @@
       События удерживаются в очереди диспетчера. Статус смены: перерыв. Новые инциденты вам не назначаются.
     </div>
 
-    <main class="workspace" id="workspace" data-mode="queue" data-groups="on">
+    <main class="workspace" id="workspace" data-mode="queue" data-groups="on" data-mediapanel="on" data-view="queue">
+      <div class="groups-scrim" id="groupsScrim"></div>
       <section class="panel" id="panelGroups" data-panel="groups">
         <header class="panel-h">
           <h2>Группы</h2>
           <div class="panel-h-actions">
             <button type="button" class="icon-btn" id="groupsCollapseAll" title="Свернуть все группы">
               <span class="material-symbols-outlined">unfold_less</span>
+            </button>
+            <button type="button" class="icon-btn drawer-close" id="groupsClose" title="Закрыть панель групп" aria-label="Закрыть панель групп">
+              <span class="material-symbols-outlined">close</span>
             </button>
           </div>
         </header>
@@ -82,6 +123,16 @@
           </div>
         </div>
       </section>
+
+      <div
+        class="splitter col"
+        id="splitGroups"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        aria-label="Ширина панели групп"
+        title="Потяните, чтобы изменить ширину. Двойной щелчок — вернуть по умолчанию"
+      ></div>
 
       <div class="stage" id="stage">
         <section class="panel" id="panelEvents" data-panel="events">
@@ -105,6 +156,7 @@
               </select>
             </div>
             <div class="events-list" id="eventsList"></div>
+            <nav class="events-pager" id="eventsPager" aria-label="Страницы очереди" hidden></nav>
           </div>
         </section>
 
@@ -119,6 +171,16 @@
         </section>
       </div>
 
+      <div
+        class="splitter col"
+        id="splitMedia"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        aria-label="Ширина видеомонитора и карты"
+        title="Потяните, чтобы изменить ширину. Двойной щелчок — вернуть по умолчанию"
+      ></div>
+
       <section class="panel media-stack" id="panelMedia" data-panel="media">
         <div class="panel nested" id="panelVideo">
           <header class="panel-h">
@@ -128,22 +190,34 @@
                 <button type="button" class="active" data-mode="archive">Архив</button>
                 <button type="button" data-mode="live">Online</button>
               </div>
+              <button type="button" class="icon-btn" id="videoFull" aria-pressed="false">
+                <span class="material-symbols-outlined">open_in_full</span>
+              </button>
             </div>
           </header>
           <div class="panel-b video-body">
             <div class="cam-stage" id="videoStage"></div>
             <div class="cam-strip" id="camStrip" hidden></div>
-            <div class="timeline" id="timeline">
-              <span id="tlTime">14:31:08</span>
-              <input type="range" id="tlScrub" min="0" max="100" value="72" />
-              <span>сейчас</span>
-            </div>
           </div>
         </div>
+        <div
+          class="splitter row"
+          id="splitVideo"
+          role="separator"
+          tabindex="0"
+          aria-orientation="horizontal"
+          aria-label="Высота видеомонитора"
+          title="Потяните, чтобы изменить высоту. Двойной щелчок — вернуть по умолчанию"
+        ></div>
         <div class="panel nested" id="panelMap">
           <header class="panel-h">
             <h2>Карта</h2>
-            <span class="muted" id="mapCaption">Место сработки</span>
+            <div class="panel-h-actions grow">
+              <span class="muted" id="mapCaption">Место сработки</span>
+              <button type="button" class="icon-btn" id="mapFull" aria-pressed="false">
+                <span class="material-symbols-outlined">open_in_full</span>
+              </button>
+            </div>
           </header>
           <div class="panel-b map-body" id="mapRoot"></div>
         </div>
@@ -156,11 +230,27 @@
       <span id="statusSla"></span>
       <span id="statusQueue"></span>
     </footer>
+
+    <nav class="mobile-nav" id="mobileNav" aria-label="Разделы">
+      <button type="button" data-view="queue" class="active" aria-current="page">
+        <span class="material-symbols-outlined">list_alt</span>
+        Очередь
+        <span class="nav-count" id="navQueueCount">0</span>
+      </button>
+      <button type="button" data-view="card">
+        <span class="material-symbols-outlined">assignment</span>
+        Карточка
+      </button>
+      <button type="button" data-view="media">
+        <span class="material-symbols-outlined">videocam</span>
+        Видео и карта
+      </button>
+    </nav>
   </div>
 
   <div class="modal" id="modalEscalate" hidden>
-    <div class="modal-card">
-      <h3>Эскалация события</h3>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalEscalateTitle">
+      <h3 id="modalEscalateTitle">Эскалация события</h3>
       <p class="muted">Событие и прогресс сценария будут переданы выбранному оператору.</p>
       <label class="field">
         <span>Кому</span>
@@ -182,8 +272,8 @@
   </div>
 
   <div class="modal" id="modalHotkeys" hidden>
-    <div class="modal-card">
-      <h3>Горячие клавиши</h3>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalHotkeysTitle">
+      <h3 id="modalHotkeysTitle">Горячие клавиши</h3>
       <table class="keys">
         <tr><td><kbd>N</kbd></td><td>Взять следующее новое событие</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Приостановить и вернуться к очереди</td></tr>
@@ -203,7 +293,180 @@
     </div>
   </div>
 
-  <div class="toast-stack" id="toasts"></div>
+  <div class="modal" id="modalContacts" hidden>
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="modalContactsTitle">
+      <h3 id="modalContactsTitle">Телефоны ответственных</h3>
+      <p class="muted">Пример справочника объекта. Реальный список подтягивается из карточки объекта.</p>
+      <table class="doc-table">
+        <thead>
+          <tr><th>Роль</th><th>ФИО</th><th>Телефон</th><th>Доступность</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Старший смены охраны</td><td>Петрова М. В.</td><td><b>+7 495 120-45-01</b></td><td>Круглосуточно</td></tr>
+          <tr><td>Начальник службы безопасности</td><td>Кузнецов Д. А.</td><td><b>+7 916 480-11-27</b></td><td>08:00–20:00</td></tr>
+          <tr><td>Инженер по охране труда</td><td>Соколова Е. И.</td><td><b>+7 495 120-45-14</b></td><td>09:00–18:00, будни</td></tr>
+          <tr><td>Дежурный электрик</td><td>Гаврилов П. С.</td><td><b>+7 495 120-45-22</b></td><td>Круглосуточно</td></tr>
+          <tr><td>Сервис видеонаблюдения</td><td>ITV · техподдержка</td><td><b>+7 800 555-08-08</b></td><td>Круглосуточно, SLA 4 ч</td></tr>
+          <tr><td>Управляющий ТЦ</td><td>Литвинова О. Н.</td><td><b>+7 903 771-60-40</b></td><td>Только критические</td></tr>
+        </tbody>
+      </table>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalContacts">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalRegulation" hidden>
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="modalRegulationTitle">
+      <h3 id="modalRegulationTitle">Регламент охраны ТЦ</h3>
+      <p class="muted">Выдержка из документа СБ-04/2025 «Действия оператора при тревожных событиях».</p>
+
+      <div class="doc">
+        <h4>1. Пожарная тревога</h4>
+        <ol>
+          <li>Подтвердить сработку по ближайшим камерам в течение <b>60 секунд</b>.</li>
+          <li>При подтверждении — запустить макрос «Оповещение по объекту» и разблокировать эвакуационные выходы.</li>
+          <li>Сообщить старшему смены, при открытом пламени или задымлении — вызвать пожарную охрану по <b>101</b>.</li>
+          <li>Зафиксировать в карточке номер наряда и время прибытия расчёта.</li>
+        </ol>
+
+        <h4>2. Проникновение и саботаж</h4>
+        <ol>
+          <li>Проверить зону по видео и архиву за 2 минуты до события.</li>
+          <li>При подтверждении нарушителя — направить ближайший наряд, вести сопровождение по камерам.</li>
+          <li>Потеря видеопотока более 5 минут оформляется заявкой в сервис.</li>
+        </ol>
+
+        <h4>3. Охрана труда и контроль доступа</h4>
+        <ol>
+          <li>Нарушение СИЗ фиксируется скриншотом и передаётся инженеру по охране труда.</li>
+          <li>Превышение уровня алкоголя на точке прохода: турникет блокируется, сотрудник передаётся старшему смены и медпункту.</li>
+          <li>Повторный тест допускается один раз, результат вносится в комментарий инцидента.</li>
+        </ol>
+
+        <h4>4. Сроки обработки</h4>
+        <ul>
+          <li>Критический приоритет — реакция до <b>4 минут</b>.</li>
+          <li>Высокий — до <b>7 минут</b>, средний — до <b>15 минут</b>.</li>
+          <li>Просроченный SLA автоматически эскалируется старшему смены.</li>
+        </ul>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalRegulation">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalEvacuation" hidden>
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="modalEvacuationTitle">
+      <h3 id="modalEvacuationTitle">Схема эвакуации «Мега» · 1-й этаж</h3>
+      <p class="muted">Пример плана эвакуации, привязанного к объекту инцидента.</p>
+
+      <div class="doc-figure">
+        <svg viewBox="0 0 640 372" role="img" aria-label="План эвакуации первого этажа">
+          <rect width="640" height="372" fill="#f8fafc"/>
+          <rect x="24" y="24" width="592" height="292" fill="#ffffff" stroke="#334155" stroke-width="3"/>
+
+          <g fill="#eef2f7" stroke="#94a3b8" stroke-width="2">
+            <rect x="44" y="44" width="180" height="104"/>
+            <rect x="244" y="44" width="160" height="104"/>
+            <rect x="424" y="44" width="172" height="104"/>
+            <rect x="44" y="212" width="150" height="84"/>
+            <rect x="214" y="212" width="190" height="84"/>
+            <rect x="424" y="212" width="172" height="84"/>
+          </g>
+
+          <rect x="44" y="160" width="552" height="40" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+
+          <g fill="#475569" font-size="12" font-family="Inter, sans-serif">
+            <text x="56" y="64">Магазин 1</text>
+            <text x="256" y="64">Магазин 2</text>
+            <text x="436" y="64">Фуд-корт</text>
+            <text x="56" y="232">Входная группа</text>
+            <text x="226" y="232">Атриум</text>
+            <text x="436" y="232">Кинотеатр</text>
+          </g>
+
+          <g stroke="#16a34a" stroke-width="6" fill="none" marker-end="url(#evacArrow)">
+            <path d="M140 148 L140 180 L70 180"/>
+            <path d="M324 148 L324 180 L560 180"/>
+            <path d="M300 212 L300 180"/>
+            <path d="M500 212 L500 180 L560 180"/>
+          </g>
+          <defs>
+            <marker id="evacArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/>
+            </marker>
+          </defs>
+
+          <g fill="#16a34a">
+            <rect x="19" y="164" width="32" height="32" rx="3"/>
+            <rect x="589" y="164" width="32" height="32" rx="3"/>
+            <rect x="284" y="310" width="72" height="12" rx="3"/>
+          </g>
+          <g fill="#16a34a" font-size="11" font-weight="600" font-family="Inter, sans-serif">
+            <text x="284" y="338">Запасной выход</text>
+          </g>
+
+          <g fill="#dc2626">
+            <rect x="212" y="166" width="12" height="28" rx="3"/>
+            <rect x="418" y="166" width="12" height="28" rx="3"/>
+            <rect x="120" y="256" width="12" height="28" rx="3"/>
+          </g>
+
+          <g>
+            <circle cx="248" cy="264" r="14" fill="#1976d2" opacity=".18"/>
+            <circle cx="248" cy="264" r="7" fill="#1976d2"/>
+            <text x="266" y="268" fill="#1976d2" font-size="12" font-weight="600" font-family="Inter, sans-serif">Пост оператора</text>
+          </g>
+
+          <g>
+            <circle cx="42" cy="344" r="15" fill="#16a34a"/>
+            <text x="34" y="349" fill="#ffffff" font-size="12" font-weight="700" font-family="Inter, sans-serif">СП</text>
+            <text x="66" y="349" fill="#475569" font-size="12" font-family="Inter, sans-serif">Сборный пункт — парковка П2, 60 м от южного выхода</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="doc-legend">
+        <span><i class="sw green"></i>Путь эвакуации и выход</span>
+        <span><i class="sw red"></i>Огнетушитель</span>
+        <span><i class="sw blue"></i>Пост оператора</span>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalEvacuation">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalEmergency" hidden>
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="modalEmergencyTitle">
+      <h3 id="modalEmergencyTitle">Контакты МЧС и полиции</h3>
+      <p class="muted">Единые и территориальные номера экстренных служб для объектов смены.</p>
+      <table class="doc-table">
+        <thead>
+          <tr><th>Служба</th><th>Номер</th><th>Когда вызываем</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Единый номер экстренных служб</td><td><b>112</b></td><td>Любая угроза жизни и здоровью</td></tr>
+          <tr><td>Пожарная охрана и МЧС</td><td><b>101</b></td><td>Открытое пламя, задымление, эвакуация</td></tr>
+          <tr><td>Полиция</td><td><b>102</b></td><td>Проникновение, разбой, агрессия посетителей</td></tr>
+          <tr><td>Скорая помощь</td><td><b>103</b></td><td>Травма, потеря сознания, отравление</td></tr>
+          <tr><td>Аварийная газовая служба</td><td><b>104</b></td><td>Запах газа в зоне фуд-корта</td></tr>
+          <tr><td>ОВД «Северное» · дежурная часть</td><td><b>+7 495 601-22-18</b></td><td>Передача задержанного, оформление</td></tr>
+          <tr><td>Росгвардия · пульт ПЦО</td><td><b>+7 495 601-30-90</b></td><td>Тревожная кнопка, группа быстрого реагирования</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">После вызова обязательно зафиксируйте номер наряда и время прибытия в карточке инцидента.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalEmergency">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>
 </html>
