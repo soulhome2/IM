@@ -814,6 +814,17 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .event-sla { font-size: 12px; font-weight: 500; color: var(--warn); }
 .event-sla.late { color: var(--crit); }
 .event-prog { font-size: 12px; font-weight: 500; color: var(--faint); }
+.event-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.event-esc {
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+}
 .event-act {
   border: 2px solid transparent;
   min-width: 116px;
@@ -1656,7 +1667,9 @@ kbd {
   .pick { grid-area: 1 / 1; width: 22px; height: 22px; margin: 0; }
   .event-pri { grid-area: 1 / 2 / span 2 / 3; }
   .event-main { grid-area: 1 / 3; }
-  .event-act { grid-area: 2 / 3; justify-self: stretch; min-width: 0; }
+  .event-acts { grid-area: 2 / 3; justify-self: stretch; min-width: 0; }
+  .event-act { min-width: 0; flex: 1; }
+  .event-esc { flex: 0 0 auto; }
 
   .crumbs { padding: 6px var(--card-x) 10px; }
   .crumb:not(.current) { display: none; }

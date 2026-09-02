@@ -1512,6 +1512,17 @@
     },
   ];
 
+  // Настройки диспетчера (в продукте задаются на сервере / в карточке фильтра).
+  const SETTINGS = {
+    autoEscalate: {
+      enabled: true,
+      // Статусы, при которых срабатывает автоэскалация по истечении SLA.
+      statuses: ["new", "mine"],
+      target: "Петрова М. · старший смены",
+      reason: "Автоэскалация: превышен норматив реакции (SLA)",
+    },
+  };
+
   const state = {
     events: EVENTS,
     mode: "queue",
@@ -1532,6 +1543,7 @@
     videoMode: "archive",
     activeCam: "device-23",
     full: null,
+    escalateId: null,
   };
 
   const ACTIONS = {
@@ -1662,6 +1674,52 @@
     if (ev.status === "mine") return "resume";
     if (ev.status === "foreign" || ev.status === "escalated") return "open";
     return "take";
+  }
+
+  // Ручная эскалация доступна до взятия (новое) и из своей карточки (в работе / приостановлен).
+  function canManualEscalate(ev) {
+    return Boolean(ev) && (ev.status === "new" || ev.status === "mine");
+  }
+
+  function canAutoEscalate(ev) {
+    if (!SETTINGS.autoEscalate.enabled || !ev || ev.autoEscalated) return false;
+    if (ev.status === "closed" || ev.status === "escalated") return false;
+    return SETTINGS.autoEscalate.statuses.includes(ev.status) && ev.slaSec <= 0;
+  }
+
+  function openEscalateModal(ev) {
+    if (!canManualEscalate(ev)) return;
+    state.selectedId = ev.id;
+    state.escalateId = ev.id;
+    $("escalateReason").value = "";
+    $("modalEscalate").hidden = false;
+  }
+
+  function escalateEvent(ev, opts) {
+    if (!ev || ev.status === "closed" || ev.status === "escalated") return false;
+    const target = opts.target || SETTINGS.autoEscalate.target;
+    const reason = opts.reason || "";
+    const auto = Boolean(opts.auto);
+    if (auto) {
+      if (!SETTINGS.autoEscalate.enabled || ev.autoEscalated) return false;
+      if (!SETTINGS.autoEscalate.statuses.includes(ev.status) || ev.slaSec > 0) return false;
+      ev.autoEscalated = true;
+    } else if (!canManualEscalate(ev)) {
+      return false;
+    }
+    const prev = ev.status;
+    ev.status = "escalated";
+    ev.operator = target;
+    ev.paused = false;
+    ev.log.push({
+      t: nowStamp(),
+      who: auto ? "Диспетчер" : ME,
+      text: auto
+        ? `Автоэскалация → ${target}. ${reason || SETTINGS.autoEscalate.reason}`
+        : `Эскалация → ${target}${prev === "new" ? " (до взятия)" : ""}. ${reason || "Причина не указана"}`,
+    });
+    toast(auto ? `Автоэскалация ${ev.id} → ${target}` : `Эскалация ${ev.id} → ${target}`);
+    return true;
   }
 
   function escapeHtml(value) {
@@ -1933,6 +1991,7 @@
         const act = ACTIONS[kind];
         const prog = stepProgress(e);
         const blocked = state.onBreak && (kind === "take" || kind === "resume");
+        const canEsc = canManualEscalate(e);
         return `
           <article class="event ${state.selectedId === e.id ? "selected" : ""}" data-id="${e.id}">
             <input class="pick" type="checkbox" data-check="${e.id}" aria-label="Выбрать ${e.id}" ${
@@ -1957,9 +2016,16 @@
                 ${prog.filled ? `<span class="event-prog">Сценарий ${prog.filled}/${prog.total}</span>` : ""}
               </div>
             </div>
-            <button type="button" class="btn ${act.style} event-act" data-act="${e.id}" title="${act.hint}" ${
-              blocked ? "disabled" : ""
-            }>${act.label}</button>
+            <div class="event-acts">
+              ${
+                canEsc && e.status === "new"
+                  ? `<button type="button" class="btn ghost event-esc" data-escalate="${e.id}" title="Эскалировать без взятия в работу">Эскал.</button>`
+                  : ""
+              }
+              <button type="button" class="btn ${act.style} event-act" data-act="${e.id}" title="${act.hint}" ${
+                blocked ? "disabled" : ""
+              }>${act.label}</button>
+            </div>
           </article>
         `;
       })
@@ -2051,7 +2117,7 @@
           <div class="scenario-actions">
             <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>Назад</button>
             <div class="scenario-actions-end">
-              ${mine ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>` : ""}
+              ${mine || ev.status === "new" ? `<button type="button" class="btn ghost" id="escalateBtn">Эскалация</button>` : ""}
               ${
                 foreign
                   ? `<button type="button" class="btn danger" id="takeoverBtn" ${
@@ -2726,6 +2792,11 @@
         openWork(state.events.find((x) => x.id === act.dataset.act));
         return;
       }
+      const esc = e.target.closest("[data-escalate]");
+      if (esc) {
+        openEscalateModal(state.events.find((x) => x.id === esc.dataset.escalate));
+        return;
+      }
       const row = e.target.closest("[data-id]");
       if (!row || row.dataset.id === state.selectedId) return;
       state.selectedId = row.dataset.id;
@@ -2788,7 +2859,7 @@
       if (e.target.closest("#takeoverBtn")) return takeover(ev);
       if (e.target.closest("#closeBtn")) return closeEvent(ev);
       if (e.target.closest("#escalateBtn")) {
-        $("modalEscalate").hidden = false;
+        openEscalateModal(ev);
         return;
       }
       const macro = e.target.closest("[data-macro]");
@@ -2861,19 +2932,17 @@
       });
     });
     $("escalateConfirm").addEventListener("click", () => {
-      const ev = selected();
-      if (!ev || ev.status !== "mine") return;
-      ev.status = "escalated";
-      ev.operator = $("escalateTarget").value;
-      ev.log.push({
-        t: nowStamp(),
-        who: ME,
-        text: `Эскалация → ${ev.operator}. ${$("escalateReason").value || "Причина не указана"}`,
+      const id = state.escalateId || state.selectedId;
+      const ev = state.events.find((e) => e.id === id);
+      if (!ev || !canManualEscalate(ev)) return;
+      const ok = escalateEvent(ev, {
+        target: $("escalateTarget").value,
+        reason: $("escalateReason").value,
       });
-      ev.paused = false;
       $("modalEscalate").hidden = true;
       $("escalateReason").value = "";
-      toast(`Эскалация ${ev.id} → ${ev.operator}`);
+      state.escalateId = null;
+      if (!ok) return;
       state.mode = "queue";
       renderAll();
     });
@@ -2943,7 +3012,7 @@
     if (key === "b") $("breakBtn").click();
     if (key === "e") {
       const ev = selected();
-      if (ev && ev.status === "mine" && state.mode === "work") $("modalEscalate").hidden = false;
+      if (canManualEscalate(ev)) openEscalateModal(ev);
     }
     if (key === "n") {
       const next = state.events.find((x) => x.status === "new");
@@ -2973,9 +3042,19 @@
     const stamp = nowStamp();
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
+    let escalated = false;
     state.events.forEach((e) => {
-      if (e.status !== "closed") e.slaSec -= 1;
+      if (e.status === "closed") return;
+      e.slaSec -= 1;
+      if (canAutoEscalate(e) && escalateEvent(e, { auto: true, reason: SETTINGS.autoEscalate.reason })) {
+        escalated = true;
+        if (state.mode === "work" && state.selectedId === e.id) state.mode = "queue";
+      }
     });
+    if (escalated) {
+      renderAll();
+      return;
+    }
     document.querySelectorAll("[data-sla]").forEach((el) => {
       const e = state.events.find((x) => x.id === el.dataset.sla);
       if (!e) return;
