@@ -15,6 +15,7 @@
   --accent-hover: #1565c0;
   --accent-dim: #e3f2fd;
   --accent-ring: rgba(25, 118, 210, 0.1);
+  --accent-pulse: rgba(25, 118, 210, 0.3);
   --on-accent: #ffffff;
   --crit: #dc2626;
   --warn: #d97706;
@@ -24,6 +25,9 @@
   --danger-bg: #fee2e2;
   --danger-border: #fecaca;
   --danger-text: #dc2626;
+  --esc-bg: #c76a3d;
+  --esc-hover: #ad5830;
+  --esc-text: #ffffff;
   --ok-bg: #dcfce7;
   --ok-border: #bbf7d0;
   --ok-text: #15803d;
@@ -78,6 +82,7 @@
   --accent-hover: #64b5f6;
   --accent-dim: rgba(25, 118, 210, 0.28);
   --accent-ring: rgba(66, 165, 245, 0.16);
+  --accent-pulse: rgba(66, 165, 245, 0.36);
   --on-accent: #0f172a;
   --crit: #f87171;
   --warn: #fbbf24;
@@ -87,6 +92,9 @@
   --danger-bg: rgba(220, 38, 38, 0.18);
   --danger-border: rgba(248, 113, 113, 0.4);
   --danger-text: #fca5a5;
+  --esc-bg: #dd9a68;
+  --esc-hover: #eaad7f;
+  --esc-text: #3a2411;
   --ok-bg: rgba(22, 163, 74, 0.18);
   --ok-border: rgba(74, 222, 128, 0.35);
   --ok-text: #86efac;
@@ -397,6 +405,9 @@ select.search-input,
 .btn.primary:hover { background: var(--accent-hover); }
 .btn.danger { background: var(--danger-bg); color: var(--danger-text); }
 .btn.danger:hover { background: var(--danger-border); }
+/* Эскалация — важный шаг с передачей ответственности, поэтому отдельный цвет. */
+.btn.warn { background: var(--esc-bg); color: var(--esc-text); }
+.btn.warn:hover:not(:disabled) { background: var(--esc-hover); }
 .btn.ok { background: var(--ok-bg); color: var(--ok-text); }
 .btn.outline { border: 2px solid var(--stroke-2); background: transparent; color: var(--text); }
 .btn.outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: transparent; }
@@ -817,18 +828,28 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .event-acts {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
+.event-act,
 .event-esc {
-  min-width: 0;
-  padding: 7px 10px;
-  font-size: 13px;
-}
-.event-act {
   border: 2px solid transparent;
-  min-width: 116px;
+  min-width: 122px;
   padding: 7px 14px;
+}
+
+/* Само время норматива мягко мигает, когда до нарушения остаётся меньше двух минут. */
+.sla-t { font-weight: 600; font-variant-numeric: tabular-nums; }
+.event-sla.late .sla-t,
+.sla.late .sla-t { animation: sla-blink 1.5s ease-in-out infinite; }
+@keyframes sla-blink {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.28; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .event-sla.late .sla-t,
+  .sla.late .sla-t { animation: none; }
 }
 .badge {
   font-size: 11px;
@@ -990,6 +1011,23 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   color: var(--on-accent);
 }
 .crumb.current .crumb-n { box-shadow: 0 0 0 4px var(--accent-ring); }
+/* Шаг, на котором сейчас работает оператор, «дышит», чтобы не терялся взгляд. */
+.crumbs.live .crumb.current .crumb-n { animation: step-pulse 2.6s ease-in-out infinite; }
+.crumbs.live .crumb.current .crumb-name { animation: step-pulse-text 2.6s ease-in-out infinite; }
+@keyframes step-pulse {
+  0%,
+  100% { box-shadow: 0 0 0 3px var(--accent-ring); }
+  50% { box-shadow: 0 0 0 9px var(--accent-pulse); }
+}
+@keyframes step-pulse-text {
+  0%,
+  100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crumbs.live .crumb.current .crumb-n,
+  .crumbs.live .crumb.current .crumb-name { animation: none; }
+}
 .crumb.nav:hover .crumb-n { border-color: var(--accent); }
 .crumb.nav:hover .crumb-name { color: var(--accent); }
 .crumb-body { min-width: 0; display: grid; padding-right: 12px; }
@@ -1362,6 +1400,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   font-size: 14px;
   font-weight: 500;
   text-align: left;
+  white-space: nowrap;
   border-radius: var(--radius-sm);
 }
 .menu-pop a:hover,
@@ -1374,6 +1413,32 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   font-size: 12px;
   font-weight: 500;
   color: var(--faint);
+}
+.menu-field {
+  display: grid;
+  gap: 6px;
+  padding: 2px 14px 8px;
+}
+.menu-field span {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+.menu-field select {
+  width: 100%;
+  padding: 8px 36px 8px 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.menu-field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+.menu-hint {
+  margin: 0;
+  padding: 0 14px 8px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .modal {
   position: fixed;
@@ -1395,6 +1460,12 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .modal-card h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
 .field { display: grid; gap: 6px; margin: 12px 0; }
 .field span { color: var(--faint); font-size: 12px; font-weight: 500; }
+.field-hint {
+  margin: -6px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .keys { width: 100%; border-collapse: collapse; margin: 12px 0; }
 .keys td { padding: 8px 0; border-bottom: 1px solid var(--stroke); font-size: 14px; }
@@ -1668,8 +1739,8 @@ kbd {
   .event-pri { grid-area: 1 / 2 / span 2 / 3; }
   .event-main { grid-area: 1 / 3; }
   .event-acts { grid-area: 2 / 3; justify-self: stretch; min-width: 0; }
-  .event-act { min-width: 0; flex: 1; }
-  .event-esc { flex: 0 0 auto; }
+  .event-act,
+  .event-esc { min-width: 0; flex: 1; }
 
   .crumbs { padding: 6px var(--card-x) 10px; }
   .crumb:not(.current) { display: none; }
