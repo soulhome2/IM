@@ -1,6 +1,39 @@
 (() => {
   const ME = "Иванов А. С.";
 
+  /* ===== Языки =====
+     Тексты состояний и переходов — переводимые лейблы, а не идентификаторы:
+     переименование состояния не должно быть миграцией данных (§14.6).
+     Ключ словаря — русская строка, значение — перевод. */
+
+  const LANGS = [
+    { id: "ru", label: "Русский", short: "RU", locale: "ru-RU" },
+    { id: "en", label: "English", short: "EN", locale: "en-GB" },
+    { id: "es", label: "Español", short: "ES", locale: "es-ES" },
+  ];
+
+  const DICT = {};
+  LANGS.forEach(({ id }) => {
+    if (id === "ru") return;
+    DICT[id] = Object.assign(
+      {},
+      (window.IM_DICT_DATA || {})[id],
+      (window.IM_DICT_HTML || {})[id],
+      (window.IM_DICT_UI || {})[id]
+    );
+  });
+
+  let LANG = "ru";
+
+  function t(ru, vars) {
+    const table = DICT[LANG];
+    let out = (table && table[ru]) || ru;
+    if (vars) out = out.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
+    return out;
+  }
+
+  const te = (ru, vars) => escapeHtml(t(ru, vars));
+
   const SCENARIOS = {
     fire: {
       title: "Пожарная тревога",
@@ -991,6 +1024,27 @@
       log: [{ t: "14:31:08", who: "Диспетчер", text: "Событие поставлено в очередь" }],
     },
     {
+      // Парный к INC-1847 однотипный инцидент: на нём проверяется «Обработать как одно» (§11)
+      id: "INC-1851",
+      time: "14:30:51",
+      typeId: "fire",
+      type: "Пожарная тревога",
+      object: "Торговый центр",
+      objectType: "Торговый центр",
+      location: "Магазин 2, коридор примерочных",
+      region: "Торговый центр",
+      priority: "critical",
+      status: "new",
+      operator: null,
+      slaSec: 240,
+      deviceIds: ["fire-5", "device-26"],
+      media: "both",
+      cameras: ["device-26", "device-23"],
+      answers: {},
+      launched: [],
+      log: [{ t: "14:30:51", who: "Диспетчер", text: "Событие поставлено в очередь" }],
+    },
+    {
       id: "INC-1850",
       time: "14:30:12",
       typeId: "glass",
@@ -1520,7 +1574,10 @@
   ];
 
   // Адресаты эскалации: в продукте — пользователи и роли из системы прав доступа.
+  /* ===== Операторы и дежурные группы (§8.1) ===== */
+
   const OPERATORS = [
+    { id: "me", name: ME, role: "оператор", duty: "на смене", self: true },
     { id: "petrova", name: "Петрова М.", role: "старший смены", duty: "на смене" },
     { id: "sidorov", name: "Сидоров К.", role: "оператор", duty: "на смене" },
     { id: "noc", name: "Дежурный ЦОД", role: "круглосуточный пост", duty: "на смене" },
@@ -1528,52 +1585,136 @@
     { id: "kuznetsov", name: "Кузнецов И. П.", role: "инженер ТСО", duty: "по вызову" },
   ];
 
-  const findOperator = (id) => OPERATORS.find((o) => o.id === id) || OPERATORS[0];
-  const operatorLabel = (id) => {
-    const op = findOperator(id);
-    return `${op.name} · ${op.role}`;
-  };
-
-  // Настройки диспетчера (в продукте задаются на сервере / в карточке фильтра).
-  const SETTINGS = {
-    autoEscalate: {
-      enabled: true,
-      // Статусы, при которых срабатывает автоэскалация по истечении SLA.
-      statuses: ["new", "mine"],
-      // Адресат по умолчанию: он же подставляется в форму ручной эскалации.
-      // Оператор меняет его в своём меню — см. state.escalateTo.
-      target: "petrova",
-      reason: "Автоэскалация: превышен норматив реакции (SLA)",
+  // Инцидент можно адресовать дежурной группе: владельцем становится человек,
+  // который первым нажал «Принять».
+  const GROUPS = [
+    {
+      id: "grp-leads",
+      name: "Дежурная группа старших",
+      role: "группа",
+      duty: "на смене",
+      group: true,
+      members: ["petrova", "me"],
     },
+  ];
+
+  const ACTORS = OPERATORS.concat(GROUPS, [
+    { id: "dispatcher", name: "Диспетчер", role: "система", system: true },
+    { id: "system", name: "Система", role: "система", system: true },
+  ]);
+
+  const findActor = (id) => ACTORS.find((o) => o.id === id) || null;
+  const actorRaw = (id) => {
+    const actor = findActor(id);
+    return actor ? actor.name : "Не назначен";
+  };
+  const actorName = (id) => t(actorRaw(id));
+  const actorLabel = (id) => {
+    const actor = findActor(id);
+    if (!actor) return t("Не назначен");
+    return `${t(actor.name)} · ${t(actor.role)}`;
   };
 
-  // Эмуляция работы коллег: они разбирают события из общей очереди и двигают
-  // свои сценарии. Нужна, чтобы в прототипе было видно поведение чужих инцидентов.
+  /* ===== Состояния (§2.1) ===== */
+
+  const STATES = {
+    new: { category: "pending", cls: "new", label: "Новое" },
+    pending_acceptance: { category: "pending", cls: "esc", label: "Ожидает принятия" },
+    in_progress: { category: "active", cls: "mine", label: "В работе" },
+    on_hold: { category: "pending", cls: "pause", label: "Отложен" },
+    closed: { category: "done", cls: "ok", label: "Закрыто" },
+    canceled: { category: "done", cls: "cancel", label: "Отменено" },
+  };
+
+  const HOLD_REASONS = [
+    { id: "third_party", label: "Ожидание третьей стороны", maxMin: 30 },
+    { id: "patrol", label: "Выезд наряда", maxMin: 45 },
+    { id: "no_data", label: "Нет данных, вернуться позже", maxMin: 60 },
+    { id: "break", label: "Перерыв оператора", maxMin: 30, system: true },
+    { id: "no_link", label: "Нет связи с оператором", maxMin: 20, system: true },
+  ];
+
+  const CANCEL_REASONS = [
+    { id: "false_alarm", label: "Ложная тревога" },
+    { id: "duplicate", label: "Дубликат" },
+    { id: "drill", label: "Плановая проверка" },
+    { id: "impossible", label: "Прервано: обработка невозможна" },
+  ];
+
+  // rawLabel отдаёт русский источник для журнала, holdLabel/cancelLabel — перевод для экрана
+  const rawLabel = (list, id) => {
+    const item = list.find((r) => r.id === id);
+    return item ? item.label : "Причина не указана";
+  };
+  const holdLabel = (id) => t(rawLabel(HOLD_REASONS, id));
+  const cancelLabel = (id) => t(rawLabel(CANCEL_REASONS, id));
+  const rawHold = (id) => rawLabel(HOLD_REASONS, id);
+  const rawCancel = (id) => rawLabel(CANCEL_REASONS, id);
+
+  /* ===== Нормативы (§4) ===== */
+
+  // Норматив реакции приходит из данных события (ev.slaSec), норматив закрытия — от приоритета.
+  const RESOLUTION_SEC = { critical: 600, high: 900, medium: 1500, low: 1800 };
+  const resolutionSec = (ev) => RESOLUTION_SEC[ev.priority] || 900;
+
+  /* ===== Автоэскалация (§9). Настройки — под правом incident:schema:admin ===== */
+
+  const AUTO = {
+    enabled: true,
+    trigger: "reaction",
+    fromStates: ["new", "pending_acceptance"],
+    levels: [
+      { level: 1, target: "petrova", reactionSec: 120 },
+      { level: 2, target: "noc", reactionSec: 90 },
+    ],
+    maxLevel: 2,
+    onResolutionOverdue: "alert",
+    reason: "Автоэскалация: превышен норматив реакции",
+  };
+
+  /* ===== Лимиты (§10.2, §11) ===== */
+
+  const LIMITS = { maxActive: 1, maxOnHold: 5, maxBulk: 10, reopenWindowMin: 60 };
+
+  /* ===== Права: ресурс:действие:область (§5) ===== */
+
+  const PERMISSIONS = {
+    "incident:claim": true,
+    "incident:hold": true,
+    "incident:release": true,
+    "incident:close": true,
+    "incident:cancel": true,
+    "incident:reopen": true,
+    "incident:escalate:own": true,
+    "incident:escalate:any": true,
+    "incident:reassign": true,
+    "incident:read:any": true,
+    "incident:bulk": true,
+    "incident:run_action": true,
+    "incident:schema:admin": false,
+    "agent:set_not_ready": true,
+  };
+
+  const can = (key) => PERMISSIONS[key] === true;
+
+  // Эмуляция работы коллег: они разбирают события из общей очереди, двигают
+  // сценарии, теряют связь и передают инцидент оператору.
   const SIM = {
     enabled: true,
-    colleagues: ["Сидоров К.", "Петрова М.", "Гусев Р. А."],
+    colleagues: ["sidorov", "petrova", "gusev"],
     firstTakeSec: 12,
     takeEverySec: 24,
     stepEverySec: 11,
+    handoffSec: 46,
+    dropSec: 88,
     maxTaken: 3,
     taken: 0,
     takeTick: 0,
     stepTick: 0,
-  };
-
-  // Права оператора: в продукте приходят из системы прав доступа для текущей роли.
-  // Если право снято, соответствующее действие не показывается или заблокировано.
-  const PERMISSIONS = {
-    take: true,
-    pause: true,
-    close: true,
-    escalate: true,
-    escalateForeign: true,
-    takeover: true,
-    viewForeign: true,
-    groupProcess: true,
-    runMacros: true,
-    break: true,
+    handoffTick: 0,
+    dropTick: 0,
+    handoffDone: false,
+    dropDone: false,
   };
 
   const state = {
@@ -1593,26 +1734,23 @@
     selectedId: "INC-1847",
     checked: new Set(),
     onBreak: false,
+    agentState: "ready",
     videoMode: "archive",
     activeCam: "device-23",
     full: null,
-    escalateId: null,
-    escalateTo: SETTINGS.autoEscalate.target,
+    // Предвыбор адресата в форме эскалации — личная настройка оператора,
+    // на автоэскалацию не влияет (§8.2).
+    escalateTo: "petrova",
+    dialog: null,
   };
 
-  const defaultTarget = () => operatorLabel(state.escalateTo);
-
-  const ACTIONS = {
-    take: { label: "Взять", style: "primary", hint: "Взять инцидент в работу" },
-    resume: { label: "Возобновить", style: "primary", hint: "Продолжить приостановленную обработку" },
-    open: { label: "Открыть", style: "outline", hint: "Посмотреть ход обработки другого оператора" },
-    view: { label: "Просмотр", style: "outline", hint: "Открыть карточку закрытого инцидента" },
-  };
+  const defaultTarget = () => actorLabel(state.escalateTo);
 
   const $ = (id) => document.getElementById(id);
 
   function nowStamp() {
-    return new Date().toLocaleTimeString("ru-RU", { hour12: false });
+    const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+    return new Date().toLocaleTimeString(locale, { hour12: false });
   }
 
   const narrowQuery = window.matchMedia("(max-width: 900px)");
@@ -1626,11 +1764,77 @@
     } catch (err) {
       /* ignore */
     }
-    const label = theme === "light" ? "Светлая тема" : "Тёмная тема";
+    const label = t(theme === "light" ? "Светлая тема" : "Тёмная тема");
     const btn = $("themeToggle");
     btn.title = label;
     btn.setAttribute("aria-label", label);
     btn.setAttribute("aria-pressed", String(theme === "light"));
+  }
+
+  /* ===== Статичные тексты разметки =====
+     Русский текст в index.html — он же ключ словаря. Оригиналы снимаются один
+     раз до первой отрисовки, поэтому переключать язык можно сколько угодно. */
+
+  const STATIC = { text: [], attr: [], html: [] };
+  const I18N_ATTRS = ["title", "placeholder", "aria-label"];
+  const CYRILLIC = /[\u0400-\u04FF]/;
+
+  function collectStatic() {
+    document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+      STATIC.html.push({ el, ru: el.innerHTML.trim() });
+    });
+    document.querySelectorAll("*").forEach((el) => {
+      I18N_ATTRS.forEach((attr) => {
+        const value = el.getAttribute(attr);
+        if (value && CYRILLIC.test(value)) STATIC.attr.push({ el, attr, ru: value.trim() });
+      });
+    });
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!CYRILLIC.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+        for (let p = node.parentElement; p; p = p.parentElement) {
+          // Названия языков в переключателе всегда на своём языке
+          if (p.hasAttribute("data-i18n-html") || p.hasAttribute("data-i18n-skip")) {
+            return NodeFilter.FILTER_REJECT;
+          }
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const raw = node.nodeValue;
+      STATIC.text.push({
+        node,
+        ru: raw.trim(),
+        pre: raw.match(/^\s*/)[0],
+        post: raw.match(/\s*$/)[0],
+      });
+    }
+    STATIC.title = document.title;
+  }
+
+  function applyStatic() {
+    STATIC.html.forEach((item) => (item.el.innerHTML = t(item.ru)));
+    STATIC.attr.forEach((item) => item.el.setAttribute(item.attr, t(item.ru)));
+    STATIC.text.forEach((item) => (item.node.nodeValue = item.pre + t(item.ru) + item.post));
+    document.title = t(STATIC.title);
+  }
+
+  function applyLang(id) {
+    LANG = LANGS.some((l) => l.id === id) ? id : "ru";
+    document.documentElement.lang = LANG;
+    try {
+      localStorage.setItem("im-lang", LANG);
+    } catch (err) {
+      /* приватный режим: язык живёт до перезагрузки */
+    }
+    const select = $("langSelect");
+    if (select.value !== LANG) select.value = LANG;
+    select.title = t("Язык интерфейса");
+    applyStatic();
+    applyTheme(state.themeMode);
+    renderEscalateDefault();
+    renderAll();
   }
 
   function showModal(id) {
@@ -1652,6 +1856,17 @@
 
   function selected() {
     return state.events.find((e) => e.id === state.selectedId) || null;
+  }
+
+  // Если выбранное событие спрятал фильтр, поиск или другая группа, выделение
+  // переходит на первое видимое: иначе видеомонитор и карта показывают чужую зону.
+  function syncSelection() {
+    if (state.mode === "work") return;
+    const list = visibleEvents();
+    if (list.some((e) => e.id === state.selectedId)) return;
+    const next = list[0] || null;
+    state.selectedId = next ? next.id : null;
+    if (next) focusCameras(next);
   }
 
   function scenarioSteps(ev) {
@@ -1715,118 +1930,842 @@
     return { filled, total: steps.length };
   }
 
-  function statusLabel(ev) {
-    if (ev.status === "mine") {
-      return ev.paused ? { text: "Приостановлен", cls: "pause" } : { text: "В работе", cls: "mine" };
+  /* ===== Слой представления: моё, чужое, бейджи (§2.4) ===== */
+
+  const isDone = (ev) => Boolean(ev) && STATES[ev.state].category === "done";
+  const isMine = (ev) => Boolean(ev) && ev.owner === "me";
+
+  function isTarget(ev) {
+    if (!ev || !ev.owner) return false;
+    if (ev.owner === "me") return true;
+    const group = GROUPS.find((g) => g.id === ev.owner);
+    return Boolean(group && group.members.includes("me"));
+  }
+
+  // Инциденты одной группы считаются одной единицей: иначе групповая обработка
+  // упиралась бы в лимит активных (§10.2, §11).
+  function myUnits(stateId, skipId) {
+    return new Set(
+      state.events
+        .filter((e) => e.state === stateId && isMine(e) && e.id !== skipId)
+        .map((e) => e.groupId || e.id)
+    );
+  }
+
+  // В журнал пишутся русские шаблон и подстановки: перевод делается при отрисовке,
+  // иначе запись навсегда осталась бы на языке, включённом в момент записи.
+  function log(ev, whoId, ru, vars) {
+    ev.log.push({ t: nowStamp(), whoId, k: ru, v: vars || null });
+  }
+  const logWho = (entry) => (entry.whoId ? actorName(entry.whoId) : t(entry.who || ""));
+  // Значение подстановки: число, русская строка или вложенная пара [шаблон, подстановки]
+  function logVar(value) {
+    if (Array.isArray(value)) return t(value[0], logVars(value[1]));
+    return typeof value === "string" ? t(value) : value;
+  }
+  function logVars(vars) {
+    const out = {};
+    Object.entries(vars || {}).forEach(([key, value]) => (out[key] = logVar(value)));
+    return out;
+  }
+  function logText(entry) {
+    if (!entry.k) return t(entry.text || "");
+    return t(entry.k, logVars(entry.v));
+  }
+
+  /* ===== Таймеры (§4): дедлайны — метки времени, отсчёт рисует клиент ===== */
+
+  const stopReaction = (ev) => {
+    ev.reactionDueAt = null;
+  };
+  const startReaction = (ev, sec) => {
+    ev.reactionDueAt = Date.now() + (sec || ev.slaSec || 300) * 1000;
+  };
+  const startResolution = (ev) => {
+    ev.resolutionDueAt = Date.now() + resolutionSec(ev) * 1000;
+    ev.resolutionLeftMs = null;
+  };
+  const stopResolution = (ev) => {
+    ev.resolutionDueAt = null;
+    ev.resolutionLeftMs = null;
+  };
+  const pauseResolution = (ev) => {
+    ev.resolutionLeftMs = ev.resolutionDueAt
+      ? Math.max(0, ev.resolutionDueAt - Date.now())
+      : resolutionSec(ev) * 1000;
+    ev.resolutionDueAt = null;
+  };
+  const resumeResolution = (ev) => {
+    const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : resolutionSec(ev) * 1000;
+    ev.resolutionDueAt = Date.now() + left;
+    ev.resolutionLeftMs = null;
+  };
+
+  function timerView(ev) {
+    if (!ev || isDone(ev)) return null;
+    if (ev.reactionDueAt) {
+      return { kind: "reaction", label: "Реакция", leftMs: ev.reactionDueAt - Date.now(), running: true };
     }
-    if (ev.status === "foreign") return { text: ev.operator, cls: "foreign" };
-    if (ev.status === "escalated") return { text: "Эскалация", cls: "esc" };
-    if (ev.status === "closed") return { text: "Закрыто", cls: "ok" };
-    return { text: "Новое", cls: "new" };
+    if (ev.resolutionDueAt) {
+      return { kind: "resolution", label: "Закрытие", leftMs: ev.resolutionDueAt - Date.now(), running: true };
+    }
+    if (ev.resolutionLeftMs != null) {
+      return { kind: "resolution", label: "Закрытие", leftMs: ev.resolutionLeftMs, running: false };
+    }
+    return null;
   }
 
-  function actionKind(ev) {
-    if (ev.status === "closed") return "view";
-    if (ev.status === "mine") return "resume";
-    if (ev.status === "foreign" || ev.status === "escalated") return "open";
-    return "take";
+  function badgeView(ev) {
+    const meta = STATES[ev.state];
+    if (ev.state === "new") return { text: t("Новое"), cls: "new" };
+    if (ev.state === "pending_acceptance") {
+      return isTarget(ev)
+        ? { text: t("Вам на принятие"), cls: "inbox" }
+        : { text: t("Ожидает принятия · {who}", { who: actorName(ev.owner) }), cls: "esc" };
+    }
+    if (ev.state === "in_progress") {
+      return isMine(ev) ? { text: t("В работе"), cls: "mine" } : { text: actorName(ev.owner), cls: "foreign" };
+    }
+    if (ev.state === "on_hold") {
+      return isMine(ev)
+        ? { text: t("Отложен · {why}", { why: holdLabel(ev.holdReason) }), cls: "pause" }
+        : { text: t("Отложен · {who}", { who: actorName(ev.owner) }), cls: "pause" };
+    }
+    if (ev.state === "canceled") {
+      return { text: t("Отменено · {why}", { why: cancelLabel(ev.cancelReason) }), cls: "cancel" };
+    }
+    return { text: t(meta.label), cls: meta.cls };
   }
 
-  const isForeign = (ev) => Boolean(ev) && (ev.status === "foreign" || ev.status === "escalated");
+  /* ===== Приведение демонстрационных данных к модели v2 ===== */
 
-  // Ручная эскалация: своё и новое — по праву «Эскалировать», чужое и уже
-  // эскалированное — только по отдельному праву «Эскалировать чужие».
-  function canManualEscalate(ev) {
-    if (!ev || ev.status === "closed") return false;
-    if (isForeign(ev)) return PERMISSIONS.escalateForeign;
-    return PERMISSIONS.escalate;
+  function migrateEvents(list) {
+    const byName = {};
+    OPERATORS.forEach((op) => (byName[op.name] = op.id));
+    const now = Date.now();
+    list.forEach((ev) => {
+      const legacy = ev.status;
+      const owner = ev.operator ? byName[ev.operator] || null : null;
+      ev.owner = owner;
+      ev.escalationLevel = 0;
+      ev.holdReason = null;
+      ev.cancelReason = null;
+      ev.slaBreached = false;
+      ev.groupId = null;
+      ev.holdSince = null;
+      ev.closedAt = null;
+      ev.reactionDueAt = null;
+      ev.resolutionDueAt = null;
+      ev.resolutionLeftMs = null;
+      if (legacy === "new") {
+        ev.state = "new";
+        ev.owner = null;
+        startReaction(ev);
+      } else if (legacy === "mine") {
+        ev.owner = "me";
+        if (ev.paused) {
+          ev.state = "on_hold";
+          ev.holdReason = ev.holdReason || "third_party";
+          ev.holdSince = now - 4 * 60000;
+          ev.resolutionLeftMs = (ev.slaSec || 600) * 1000;
+        } else {
+          ev.state = "in_progress";
+          startResolution(ev);
+        }
+      } else if (legacy === "foreign") {
+        ev.state = "in_progress";
+        startResolution(ev);
+      } else if (legacy === "escalated") {
+        ev.state = "pending_acceptance";
+        ev.escalationLevel = 1;
+        startReaction(ev);
+      } else {
+        ev.state = "closed";
+        ev.closedAt = now - 3 * 3600000;
+      }
+      delete ev.status;
+      delete ev.operator;
+      delete ev.paused;
+    });
+
+    // Демонстрационные ситуации, которых не было в первой версии модели.
+    const pick = (id) => list.find((e) => e.id === id);
+    const inbox = pick("INC-1836");
+    if (inbox) {
+      inbox.owner = "grp-leads";
+      inbox.escalationLevel = 1;
+      startReaction(inbox, 150);
+      log(inbox, "sidorov", "Эскалация → {who}. {why}", {
+        who: "Дежурная группа старших",
+        why: "Нужен допуск в зону",
+      });
+    }
+    const canceled = pick("INC-1826");
+    if (canceled) {
+      canceled.state = "canceled";
+      canceled.cancelReason = "false_alarm";
+      canceled.closedAt = Date.now() - 25 * 60000;
+      log(canceled, "sidorov", "Отменён: {why}", { why: "Ложная тревога" });
+    }
+    const fresh = pick("INC-1837");
+    if (fresh) fresh.closedAt = Date.now() - 12 * 60000;
   }
 
-  function canTakeover(ev) {
-    return isForeign(ev) && PERMISSIONS.takeover;
+  /* ===== Переходы (§6) ===== */
+
+  // Мягкие условия оставляют кнопку видимой и блокируют её с подсказкой (§10.2).
+  // Условия принадлежности прячут кнопку: действие не относится к этой ситуации.
+  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign"];
+
+  const GUARDS = {
+    owner: (ev) => (isMine(ev) ? null : t("Вы не владелец инцидента")),
+    notOwner: (ev) => (isMine(ev) ? t("Инцидент уже ваш") : null),
+    target: (ev) => (isTarget(ev) ? null : t("Эскалация адресована другому")),
+    activeLimit: (ev) => {
+      const units = myUnits("in_progress", ev.id);
+      if (units.size < LIMITS.maxActive) return null;
+      return t("Лимит активных ({n}). Сначала закройте или отложите {id}", {
+        n: LIMITS.maxActive,
+        id: [...units][0],
+      });
+    },
+    holdLimit: () =>
+      myUnits("on_hold").size < LIMITS.maxOnHold
+        ? null
+        : t("Больше {n} отложенных держать нельзя", { n: LIMITS.maxOnHold }),
+    closingSteps: (ev) => (scenarioDone(ev) ? null : t("Заполните обязательные шаги закрытия")),
+    reopenWindow: (ev) => {
+      const min = Math.round((Date.now() - (ev.closedAt || 0)) / 60000);
+      return min <= LIMITS.reopenWindowMin
+        ? null
+        : t("Срок переоткрытия истёк: {n} мин", { n: LIMITS.reopenWindowMin });
+    },
+    readForeign: (ev) =>
+      isMine(ev) || ev.closedBy === "me" || can("incident:read:any")
+        ? null
+        : t("Нет права открывать чужие карточки"),
+  };
+
+  const TRANSITIONS = {
+    claim: {
+      label: "Взять",
+      hint: "Взять инцидент в работу",
+      style: "primary",
+      from: ["new"],
+      to: "in_progress",
+      perm: "incident:claim",
+      guards: ["activeLimit"],
+      run(ev) {
+        ev.owner = "me";
+        stopReaction(ev);
+        startResolution(ev);
+        ev.stepIndex = firstOpenStep(ev);
+        log(ev, "me", "Взято в работу");
+        toast(t("{id} в работе", { id: ev.id }));
+        return "card";
+      },
+    },
+    accept: {
+      label: "Принять",
+      hint: "Принять адресованную вам эскалацию",
+      style: "primary",
+      from: ["pending_acceptance"],
+      to: "in_progress",
+      perm: "incident:claim",
+      guards: ["target", "activeLimit"],
+      run(ev) {
+        ev.owner = "me";
+        stopReaction(ev);
+        startResolution(ev);
+        ensureCursor(ev);
+        log(ev, "me", "Эскалация принята, прогресс сценария сохранён");
+        toast(t("{id} принят в работу", { id: ev.id }));
+        return "card";
+      },
+    },
+    reject: {
+      label: "Отклонить",
+      hint: "Вернуть эскалацию в общую очередь",
+      style: "outline",
+      from: ["pending_acceptance"],
+      to: "new",
+      perm: "incident:release",
+      guards: ["target"],
+      dialog: "reject",
+      run(ev, payload) {
+        ev.owner = null;
+        startReaction(ev);
+        log(ev, "me", "Эскалация отклонена: {why}", { why: payload.reason });
+        toast(t("{id} возвращён в очередь", { id: ev.id }));
+        return "queue";
+      },
+    },
+    hold: {
+      label: "Отложить",
+      hint: "Отложить с указанием причины",
+      style: "outline",
+      from: ["in_progress"],
+      to: "on_hold",
+      perm: "incident:hold",
+      guards: ["owner", "holdLimit"],
+      dialog: "hold",
+      hotkey: "H",
+      run(ev, payload) {
+        ev.holdReason = payload.choice;
+        ev.holdSince = Date.now();
+        pauseResolution(ev);
+        ensureCursor(ev);
+        log(ev, "me", "Отложен на шаге {n}: {why}", {
+          n: ev.stepIndex + 1,
+          why: rawHold(payload.choice),
+        });
+        toast(t("{id} отложен", { id: ev.id }));
+        return "queue";
+      },
+    },
+    resume: {
+      label: "Возобновить",
+      hint: "Продолжить обработку с того же остатка норматива",
+      style: "primary",
+      from: ["on_hold"],
+      to: "in_progress",
+      perm: "incident:claim",
+      guards: ["owner", "activeLimit"],
+      hotkey: "R",
+      run(ev) {
+        ev.holdReason = null;
+        ev.holdSince = null;
+        resumeResolution(ev);
+        ensureCursor(ev);
+        log(ev, "me", "Обработка возобновлена на шаге {n}", { n: ev.stepIndex + 1 });
+        return "card";
+      },
+    },
+    release: {
+      label: "Вернуть в очередь",
+      hint: "Снять с себя и вернуть инцидент в общую очередь",
+      style: "outline",
+      from: ["in_progress", "on_hold"],
+      to: "new",
+      perm: "incident:release",
+      guards: ["owner"],
+      dialog: "release",
+      run(ev, payload) {
+        ev.owner = null;
+        ev.holdReason = null;
+        ev.holdSince = null;
+        stopResolution(ev);
+        startReaction(ev);
+        log(ev, "me", "Возвращён в очередь: {why}", { why: payload.reason });
+        toast(t("{id} возвращён в очередь", { id: ev.id }));
+        return "queue";
+      },
+    },
+    escalate: {
+      label: "Эскалация",
+      hint: "Передать инцидент другому адресату",
+      style: "warn",
+      from: ["new", "pending_acceptance", "in_progress", "on_hold"],
+      to: "pending_acceptance",
+      perm: "incident:escalate:own",
+      guards: ["ownOrFree"],
+      dialog: "escalate",
+      hotkey: "E",
+      run(ev, payload) {
+        applyEscalation(ev, payload.choice, payload.reason, "me");
+        toast(t("Эскалация {id} → {who}", { id: ev.id, who: actorName(payload.choice) }));
+        return "queue";
+      },
+    },
+    redirect: {
+      label: "Перенаправить",
+      hint: "Перенаправить чужой инцидент другому адресату без перехвата",
+      style: "warn",
+      from: ["pending_acceptance", "in_progress", "on_hold"],
+      to: "pending_acceptance",
+      perm: "incident:escalate:any",
+      guards: ["notOwner"],
+      dialog: "redirect",
+      run(ev, payload) {
+        const prev = ev.owner;
+        applyEscalation(ev, payload.choice, payload.reason, "me");
+        log(ev, "system", "Прежний владелец {who} уведомлён, его карточка переведена в просмотр", {
+          who: actorRaw(prev),
+        });
+        toast(t("{id} перенаправлен → {who}", { id: ev.id, who: actorName(payload.choice) }));
+        return "queue";
+      },
+    },
+    takeover: {
+      label: "Перехватить",
+      hint: "Забрать инцидент у работающего оператора",
+      style: "danger",
+      from: ["pending_acceptance", "in_progress", "on_hold"],
+      to: "in_progress",
+      perm: "incident:reassign",
+      guards: ["notOwner", "activeLimit"],
+      dialog: "takeover",
+      hotkey: "T",
+      // Перехват доступен только из карточки: сначала нужно увидеть, что уже сделано (§7).
+      surface: "card",
+      run(ev) {
+        const prev = ev.owner;
+        const prog = stepProgress(ev);
+        ev.owner = "me";
+        ev.holdReason = null;
+        stopReaction(ev);
+        if (!ev.resolutionDueAt) resumeResolution(ev);
+        ensureCursor(ev);
+        log(ev, "me", "Перехват у {who}. Прогресс сценария сохранён ({a}/{b})", {
+          who: actorRaw(prev),
+          a: prog.filled,
+          b: prog.total,
+        });
+        toast(t("Перехвачен {id}", { id: ev.id }));
+        return "card";
+      },
+    },
+    close: {
+      label: "Закрыть инцидент",
+      hint: "Записать результат и закрыть",
+      style: "primary",
+      from: ["in_progress"],
+      to: "closed",
+      perm: "incident:close",
+      guards: ["owner", "closingSteps"],
+      dialog: "close",
+      run(ev, payload) {
+        ev.closedBy = "me";
+        ev.closedAt = Date.now();
+        stopReaction(ev);
+        stopResolution(ev);
+        if (payload.reason) ev.answers.result = payload.reason;
+        log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
+        toast(t("{id} закрыт", { id: ev.id }));
+        return "queue";
+      },
+    },
+    cancel: {
+      label: "Отменить",
+      hint: "Обработка невозможна, ложная тревога или дубликат",
+      style: "danger",
+      from: ["in_progress"],
+      to: "canceled",
+      perm: "incident:cancel",
+      guards: ["owner"],
+      dialog: "cancel",
+      run(ev, payload) {
+        ev.cancelReason = payload.choice;
+        ev.closedBy = "me";
+        ev.closedAt = Date.now();
+        stopReaction(ev);
+        stopResolution(ev);
+        log(ev, "me", "Отменён: {why}. {note}", {
+          why: rawCancel(payload.choice),
+          note: payload.reason,
+        });
+        toast(t("{id} отменён", { id: ev.id }));
+        return "queue";
+      },
+    },
+    reopen: {
+      label: "Переоткрыть",
+      hint: "Вернуть завершённый инцидент в работу",
+      style: "outline",
+      from: ["closed", "canceled"],
+      to: "in_progress",
+      perm: "incident:reopen",
+      guards: ["reopenWindow", "activeLimit"],
+      dialog: "reopen",
+      run(ev, payload, from) {
+        const was = from === "canceled" ? "отмены" : "закрытия";
+        ev.owner = "me";
+        ev.cancelReason = null;
+        ev.slaBreached = false;
+        startResolution(ev);
+        ensureCursor(ev);
+        log(ev, "me", "Переоткрыт после {was}: {why}", { was, why: payload.reason });
+        toast(t("{id} переоткрыт", { id: ev.id }));
+        return "card";
+      },
+    },
+  };
+
+  // Действия без смены состояния (§6.3)
+  const NAV_ACTIONS = {
+    continueOwn: { label: "Продолжить", hint: "Вернуться к своей карточке", style: "primary" },
+    viewForeign: {
+      label: "Открыть",
+      hint: "Просмотр без изменений",
+      style: "outline",
+      guards: ["readForeign"],
+    },
+    viewDone: { label: "Просмотр", hint: "Открыть карточку завершённого инцидента", style: "outline", guards: ["readForeign"] },
+  };
+
+  function applyEscalation(ev, targetId, reason, byId) {
+    ev.state = "pending_acceptance";
+    ev.owner = targetId;
+    ev.escalationLevel += 1;
+    ev.holdReason = null;
+    ev.holdSince = null;
+    stopResolution(ev);
+    startReaction(ev, ev.escalationLevel > 0 ? 150 : ev.slaSec);
+    log(ev, byId, "Эскалация → {who} (уровень {lvl}). {why}", {
+      who: actorRaw(targetId),
+      lvl: ev.escalationLevel,
+      why: reason || "Причина не указана",
+    });
   }
 
-  function canAutoEscalate(ev) {
-    if (!SETTINGS.autoEscalate.enabled || !ev || ev.autoEscalated) return false;
-    if (ev.status === "closed" || ev.status === "escalated") return false;
-    return SETTINGS.autoEscalate.statuses.includes(ev.status) && ev.slaSec <= 0;
+  // Своё, ничьё или адресованное мне — по праву escalate:own; чужое — по escalate:any.
+  GUARDS.ownOrFree = (ev) =>
+    ev.state === "new" || isMine(ev) || isTarget(ev) ? null : t("Инцидент занят другим оператором");
+
+  function availability(id, ev) {
+    const tr = TRANSITIONS[id] || NAV_ACTIONS[id];
+    if (!tr || !ev) return { hidden: true };
+    if (TRANSITIONS[id] && !tr.from.includes(ev.state)) return { hidden: true };
+    if (tr.perm && !can(tr.perm)) return { hidden: true, why: t("Нет права: {p}", { p: tr.perm }) };
+    for (const name of tr.guards || []) {
+      const why = GUARDS[name](ev);
+      if (why) return { hidden: OWNERSHIP_GUARDS.includes(name), why, disabled: true };
+    }
+    // На перерыве доступен только просмотр — одно правило вместо пометок у переходов (§10.1)
+    if (state.onBreak && TRANSITIONS[id]) {
+      return { disabled: true, why: t("На перерыве доступен только просмотр") };
+    }
+    return { ok: true };
   }
 
-  function openEscalateModal(ev) {
-    if (!canManualEscalate(ev)) {
-      if (ev && isForeign(ev)) toast("Нет права эскалировать чужой инцидент");
+  function actionView(id, ev) {
+    const tr = TRANSITIONS[id] || NAV_ACTIONS[id];
+    const state_ = availability(id, ev);
+    return {
+      id,
+      label: t(tr.label),
+      hint: state_.why || t(tr.hint || tr.label),
+      style: tr.style || "outline",
+      hidden: Boolean(state_.hidden),
+      disabled: Boolean(state_.disabled),
+      nav: Boolean(NAV_ACTIONS[id]),
+    };
+  }
+
+  // Набор кнопок повторяет таблицу §7: кнопка есть, если переход доступен.
+  function queueActions(ev) {
+    const mine = isMine(ev);
+    const ids = [];
+    if (ev.state === "new") ids.push("claim", "escalate");
+    else if (ev.state === "pending_acceptance")
+      isTarget(ev) ? ids.push("accept", "reject", "escalate") : ids.push("viewForeign", "redirect");
+    else if (ev.state === "in_progress")
+      mine ? ids.push("continueOwn", "escalate") : ids.push("viewForeign", "redirect");
+    else if (ev.state === "on_hold")
+      mine ? ids.push("resume", "escalate") : ids.push("viewForeign", "redirect");
+    else ids.push("viewDone", "reopen");
+    return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+  }
+
+  function cardActions(ev) {
+    const mine = isMine(ev);
+    const ids = [];
+    if (mine && ev.state === "in_progress") ids.push("hold", "escalate", "release", "cancel");
+    else if (mine && ev.state === "on_hold") ids.push("resume", "escalate", "release");
+    else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "escalate");
+    else if (!mine && !isDone(ev)) ids.push("takeover", "redirect");
+    else if (isDone(ev)) ids.push("reopen");
+    return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+  }
+
+  const canDo = (id, ev) => Boolean(availability(id, ev).ok);
+
+  /* ===== Выполнение перехода ===== */
+
+  function runTransition(id, ev, payload) {
+    const tr = TRANSITIONS[id];
+    if (!tr || !ev) return false;
+    const check = availability(id, ev);
+    if (!check.ok) {
+      if (check.why) toast(check.why);
+      return false;
+    }
+    state.selectedId = ev.id;
+    const from = ev.state;
+    ev.state = tr.to;
+    const nav = tr.run(ev, payload || {}, from) || null;
+    if (nav === "card") {
+      focusCameras(ev);
+      state.mode = "work";
+      state.mobileView = "card";
+    } else if (nav === "queue") {
+      state.mode = "queue";
+      state.page = pageOfEvent(ev.id);
+      state.checked.delete(ev.id);
+      // Закрытый или отменённый инцидент уходит из фильтра «Открытые», и выделение
+      // нужно передать соседу, иначе видеомонитор остаётся на завершённом.
+      syncSelection();
+    }
+    renderAll();
+    return true;
+  }
+
+  /* ===== Формы переходов: одно окно на все действия ===== */
+
+  const TARGET_LIST = () => OPERATORS.filter((op) => !op.self).concat(GROUPS);
+
+  const DIALOGS = {
+    escalate: {
+      title: "Эскалация инцидента",
+      note: (ev) =>
+        ev.state === "new"
+          ? t("Инцидент передаётся без взятия в работу. Уровень станет {lvl}.", { lvl: ev.escalationLevel + 1 })
+          : t("Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {lvl}.", {
+              lvl: ev.escalationLevel + 1,
+            }),
+      select: "targets",
+      text: { label: "Причина", required: true, ph: "Почему требуется эскалация" },
+      confirm: "Передать",
+      style: "warn",
+    },
+    redirect: {
+      title: "Перенаправление инцидента",
+      note: (ev) =>
+        t("Инцидент занят: {who}. Перенаправление другому адресату без перехвата.", {
+          who: actorName(ev.owner),
+        }),
+      select: "targets",
+      text: { label: "Причина", required: true, ph: "Почему требуется перенаправление" },
+      confirm: "Перенаправить",
+      style: "warn",
+    },
+    hold: {
+      title: "Отложить инцидент",
+      note: () => t("Норматив закрытия приостанавливается и продолжится при возобновлении."),
+      select: "hold",
+      text: { label: "Комментарий", required: false, ph: "Чего ждём" },
+      confirm: "Отложить",
+      style: "primary",
+    },
+    release: {
+      title: "Вернуть в очередь",
+      note: () => t("Инцидент станет ничьим, норматив реакции запустится заново. Прогресс сценария сохранится."),
+      text: { label: "Причина", required: true, ph: "Почему возвращаете" },
+      confirm: "Вернуть",
+      style: "primary",
+    },
+    reject: {
+      title: "Отклонить эскалацию",
+      note: () => t("Инцидент вернётся в общую очередь, уровень эскалации сохранится."),
+      text: { label: "Причина", required: true, ph: "Почему не принимаете" },
+      confirm: "Отклонить",
+      style: "primary",
+    },
+    cancel: {
+      title: "Отменить инцидент",
+      note: () => t("Отменённый инцидент не считается обработанным в отчётности."),
+      select: "cancel",
+      text: { label: "Комментарий", required: true, ph: "Что выяснено" },
+      confirm: "Отменить инцидент",
+      style: "danger",
+    },
+    close: {
+      title: "Закрытие инцидента",
+      note: (ev) => {
+        const prog = stepProgress(ev);
+        return t("Сценарий заполнен: {a} из {b}. Результат уйдёт в AxxonData.", { a: prog.filled, b: prog.total });
+      },
+      text: { label: "Результат", required: false, ph: "Итог обработки для отчёта" },
+      confirm: "Закрыть инцидент",
+      style: "primary",
+    },
+    reopen: {
+      title: "Переоткрыть инцидент",
+      note: (ev) =>
+        t("Завершён {n} мин назад. Норматив закрытия запустится заново.", {
+          n: Math.max(1, Math.round((Date.now() - (ev.closedAt || Date.now())) / 60000)),
+        }),
+      text: { label: "Основание", required: true, ph: "Почему требуется вернуть в работу" },
+      confirm: "Переоткрыть",
+      style: "primary",
+    },
+    takeover: {
+      title: "Перехватить инцидент",
+      note: (ev) => {
+        const prog = stepProgress(ev);
+        return t("Инцидент занят: {who}. Прогресс сценария {a}/{b} сохранится, его карточка закроется.", {
+          who: actorName(ev.owner),
+          a: prog.filled,
+          b: prog.total,
+        });
+      },
+      confirm: "Перехватить",
+      style: "danger",
+    },
+  };
+
+  function selectOptions(kind, ev) {
+    if (kind === "targets") {
+      // Себя в списке нет всегда, владельца — при перенаправлении (§8.1)
+      return TARGET_LIST()
+        .filter((op) => op.id !== ev.owner)
+        .map((op) => {
+          const parts = [actorLabel(op.id)];
+          if (op.duty !== "на смене") parts.push(t(op.duty));
+          if (op.id === state.escalateTo) parts.push(t("предвыбор"));
+          return { id: op.id, label: parts.join(" · ") };
+        });
+    }
+    const list = kind === "hold" ? HOLD_REASONS : CANCEL_REASONS;
+    return list.filter((r) => !r.system).map((r) => ({ id: r.id, label: t(r.label) }));
+  }
+
+  function openDialog(id, ev) {
+    const tr = TRANSITIONS[id];
+    const cfg = DIALOGS[id];
+    if (!tr || !cfg || !ev) return;
+    const check = availability(id, ev);
+    if (!check.ok) {
+      if (check.why) toast(check.why);
       return;
     }
     state.selectedId = ev.id;
-    state.escalateId = ev.id;
-    $("escalateReason").value = "";
-    $("escalateNote").textContent = isForeign(ev)
-      ? `Инцидент занят: ${ev.operator}. Перенаправление другому адресату без перехвата.`
-      : ev.status === "new"
-        ? "Инцидент передаётся без взятия в работу."
-        : "Обработка прерывается, прогресс сценария передаётся адресату.";
-    renderEscalateTargets(ev);
-    $("modalEscalate").hidden = false;
-    $("escalateTarget").focus();
+    state.dialog = { id, eventId: ev.id };
+    const opts = cfg.select ? selectOptions(cfg.select, ev) : [];
+
+    $("dialogTitle").textContent = t(cfg.title);
+    $("dialogNote").textContent = cfg.note ? cfg.note(ev) : "";
+    $("dialogNote").hidden = !cfg.note;
+
+    const selectField = $("dialogSelectField");
+    selectField.hidden = !cfg.select;
+    if (cfg.select) {
+      $("dialogSelectLabel").textContent =
+        cfg.select === "targets" ? t("Кому передать") : cfg.select === "hold" ? t("Причина удержания") : t("Причина отмены");
+      $("dialogSelect").innerHTML = opts
+        .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`)
+        .join("");
+      const preselect = cfg.select === "targets" ? state.escalateTo : opts[0].id;
+      $("dialogSelect").value = opts.some((o) => o.id === preselect) ? preselect : opts[0].id;
+    }
+
+    const textField = $("dialogTextField");
+    textField.hidden = !cfg.text;
+    if (cfg.text) {
+      $("dialogTextLabel").textContent = t(cfg.text.label) + (cfg.text.required ? " *" : "");
+      const area = $("dialogText");
+      area.value = "";
+      area.placeholder = t(cfg.text.ph || "");
+    }
+
+    $("dialogHint").textContent =
+      cfg.select === "targets" ? t("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() }) : "";
+    $("dialogHint").hidden = cfg.select !== "targets";
+
+    const confirm = $("dialogConfirm");
+    confirm.textContent = t(cfg.confirm);
+    confirm.className = `btn ${cfg.style || "primary"}`;
+    $("modalDialog").hidden = false;
+    (cfg.select ? $("dialogSelect") : cfg.text ? $("dialogText") : confirm).focus();
   }
 
-  // Список адресатов: текущий владелец инцидента исключён, по умолчанию выбран
-  // адресат из меню оператора (он же используется автоэскалацией).
-  function renderEscalateTargets(ev) {
-    const select = $("escalateTarget");
-    const busy = isForeign(ev) ? ev.operator : "";
-    const options = OPERATORS.filter((op) => !busy || !busy.startsWith(op.name));
-    select.innerHTML = options
-      .map((op) => {
-        const parts = [operatorLabel(op.id)];
-        if (op.duty !== "на смене") parts.push(op.duty);
-        if (op.id === state.escalateTo) parts.push("по умолчанию");
-        return `<option value="${escapeHtml(op.id)}">${escapeHtml(parts.join(" · "))}</option>`;
-      })
-      .join("");
-    select.value = options.some((op) => op.id === state.escalateTo) ? state.escalateTo : options[0].id;
-    $("escalateDefaultHint").textContent = `По умолчанию — ${defaultTarget()}. Изменить в меню оператора.`;
+  function submitDialog() {
+    const open = state.dialog;
+    if (!open) return;
+    const ev = state.events.find((e) => e.id === open.eventId);
+    const cfg = DIALOGS[open.id];
+    if (!ev || !cfg) return;
+    const reason = cfg.text ? $("dialogText").value.trim() : "";
+    if (cfg.text && cfg.text.required && !reason) {
+      toast(t("Укажите причину — поле обязательно"));
+      $("dialogText").focus();
+      return;
+    }
+    const payload = { choice: cfg.select ? $("dialogSelect").value : null, reason };
+    closeDialog();
+    runTransition(open.id, ev, payload);
+  }
+
+  function closeDialog() {
+    state.dialog = null;
+    $("modalDialog").hidden = true;
+  }
+
+  // Переход либо спрашивает подробности в форме, либо выполняется сразу.
+  function trigger(id, ev) {
+    if (!ev) return;
+    if (NAV_ACTIONS[id]) return openCard(id, ev);
+    const check = availability(id, ev);
+    if (!check.ok) {
+      toast(
+        check.why ||
+          t("Действие «{name}» недоступно в текущем состоянии", { name: t((TRANSITIONS[id] || {}).label || id) })
+      );
+      return;
+    }
+    if (DIALOGS[id]) return openDialog(id, ev);
+    runTransition(id, ev);
+  }
+
+  /* ===== Автоматические переходы (§6.2, §9) ===== */
+
+  function autoEscalate(ev) {
+    if (!AUTO.enabled || AUTO.trigger !== "reaction") return false;
+    if (!AUTO.fromStates.includes(ev.state)) return false;
+    if (!ev.reactionDueAt || ev.reactionDueAt > Date.now()) return false;
+    if (ev.escalationLevel >= AUTO.maxLevel) {
+      if (ev.slaBreached) return false;
+      ev.slaBreached = true;
+      stopReaction(ev);
+      log(ev, "dispatcher", "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному");
+      return true;
+    }
+    const level = AUTO.levels[ev.escalationLevel] || AUTO.levels[AUTO.levels.length - 1];
+    ev.state = "pending_acceptance";
+    ev.owner = level.target;
+    ev.escalationLevel += 1;
+    ev.holdReason = null;
+    stopResolution(ev);
+    startReaction(ev, level.reactionSec);
+    log(ev, "dispatcher", "Автоэскалация → {who} (уровень {lvl}). {why}", {
+      who: actorRaw(level.target),
+      lvl: ev.escalationLevel,
+      why: AUTO.reason,
+    });
+    toast(t("Автоэскалация {id} → {who}", { id: ev.id, who: actorName(level.target) }));
+    // Если карточка была открыта, она переводится в режим просмотра (§9.3)
+    if (state.mode === "work" && state.selectedId === ev.id) state.mode = "queue";
+    return true;
+  }
+
+  function checkResolution(ev) {
+    if (ev.state !== "in_progress" || ev.slaBreached) return false;
+    if (!ev.resolutionDueAt || ev.resolutionDueAt > Date.now()) return false;
+    ev.slaBreached = true;
+    log(ev, "dispatcher", "Норматив закрытия нарушен, алерт старшему смены");
+    return true;
+  }
+
+  function checkHold(ev) {
+    if (ev.state !== "on_hold" || ev.slaBreached || !ev.holdSince) return false;
+    const reason = HOLD_REASONS.find((r) => r.id === ev.holdReason);
+    if (!reason || Date.now() - ev.holdSince < reason.maxMin * 60000) return false;
+    ev.slaBreached = true;
+    log(ev, "dispatcher", "Предельный срок удержания «{why}» истёк, алерт ответственному", {
+      why: rawHold(ev.holdReason),
+    });
+    return true;
   }
 
   function renderEscalateDefault() {
     const select = $("escalateDefault");
-    select.innerHTML = OPERATORS.map(
-      (op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(operatorLabel(op.id))}</option>`
-    ).join("");
+    select.innerHTML = TARGET_LIST()
+      .map((op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(actorLabel(op.id))}</option>`)
+      .join("");
     select.value = state.escalateTo;
-  }
-
-  function escalateEvent(ev, opts) {
-    if (!ev || ev.status === "closed") return false;
-    const target = opts.target || defaultTarget();
-    const reason = opts.reason || "";
-    const auto = Boolean(opts.auto);
-    if (auto) {
-      if (!canAutoEscalate(ev)) return false;
-      ev.autoEscalated = true;
-    } else if (!canManualEscalate(ev)) {
-      return false;
-    }
-    const prevStatus = ev.status;
-    const prevOperator = ev.operator;
-    ev.status = "escalated";
-    ev.operator = target;
-    ev.paused = false;
-    ev.log.push({
-      t: nowStamp(),
-      who: auto ? "Диспетчер" : ME,
-      text: auto
-        ? `Автоэскалация → ${target}. ${reason || SETTINGS.autoEscalate.reason}`
-        : `Эскалация → ${target}${escalateFrom(prevStatus, prevOperator)}. ${reason || "Причина не указана"}`,
-    });
-    toast(auto ? `Автоэскалация ${ev.id} → ${target}` : `Эскалация ${ev.id} → ${target}`);
-    return true;
-  }
-
-  function escalateFrom(status, operator) {
-    if (status === "new") return " (до взятия)";
-    if (status === "foreign" || status === "escalated") return ` (перенаправление от ${operator})`;
-    return "";
+    $("autoLevels").textContent = AUTO.levels
+      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.target) }))
+      .join(", ");
   }
 
   function escapeHtml(value) {
@@ -1893,7 +2832,7 @@
   }
 
   function deviceHasOpenIncident(id) {
-    return state.events.some((e) => e.status !== "closed" && (e.deviceIds || []).includes(id));
+    return state.events.some((e) => !isDone(e) && (e.deviceIds || []).includes(id));
   }
 
   function visibleChildren(nodes) {
@@ -1918,8 +2857,7 @@
 
   function nodeLabel(node) {
     if (!node) return "";
-    if (node.isDevice) return deviceInfo(node).name;
-    return node.name;
+    return t(node.isDevice ? deviceInfo(node).name : node.name);
   }
 
   function nodeMatchesQuery(node, q) {
@@ -1937,12 +2875,17 @@
       list = eventsForDevices(ids);
     }
     return list.filter((e) => {
-      if (state.filter === "open" && e.status === "closed") return false;
-      if (state.filter === "mine" && e.status !== "mine") return false;
-      if (state.filter === "foreign" && e.status !== "foreign" && e.status !== "escalated") return false;
+      if (state.filter === "open" && isDone(e)) return false;
+      if (state.filter === "mine" && !isMine(e)) return false;
+      if (state.filter === "inbox" && !(e.state === "pending_acceptance" && isTarget(e))) return false;
+      // «Чужие» — то, что закреплено за другими: адресованное мне живёт в своём фильтре
+      if (state.filter === "foreign" && (isTarget(e) || isDone(e) || e.state === "new")) return false;
+      if (state.filter === "done" && !isDone(e)) return false;
       if (state.search) {
         const q = state.search.toLowerCase();
-        const blob = `${e.id} ${e.type} ${e.object} ${e.location}`.toLowerCase();
+        const blob = `${e.id} ${t(e.type)} ${t(e.object)} ${t(e.location)} ${e.type} ${e.object} ${
+          e.location
+        }`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
@@ -1957,14 +2900,14 @@
         const hasKids = kids.length > 0;
         const info = item.isDevice ? deviceInfo(item) : null;
         const icon = info ? DEVICE_TYPES[info.deviceType].icon : "folder";
-        const name = info ? info.name : item.name;
+        const name = t(info ? info.name : item.name);
         const evs = item.isDevice ? eventsForDevices([item.id]) : eventsInNode(item);
-        const openCount = evs.filter((e) => e.status !== "closed").length;
-        const crit = evs.some((e) => e.priority === "critical" && e.status !== "closed");
+        const openCount = evs.filter((e) => !isDone(e)).length;
+        const crit = evs.some((e) => e.priority === "critical" && !isDone(e));
         const hidden = q && !nodeMatchesQuery(item, q);
         const forceOpen = Boolean(q && hasKids && nodeMatchesQuery(item, q));
         const open = forceOpen || state.openGroups.has(item.id);
-        const title = item.description || name;
+        const title = t(item.description || (info ? info.name : item.name));
         const traced = trace.ids.has(item.id) ? (item.id === trace.leaf ? "trace trace-leaf" : "trace") : "";
         return `
           <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
@@ -2006,16 +2949,16 @@
     collapseBtn.querySelector(".material-symbols-outlined").textContent = expanded
       ? "unfold_less"
       : "unfold_more";
-    collapseBtn.title = expanded ? "Свернуть все группы" : "Развернуть все группы";
+    collapseBtn.title = t(expanded ? "Свернуть все группы" : "Развернуть все группы");
 
-    const open = state.events.filter((e) => e.status !== "closed");
+    const open = state.events.filter((e) => !isDone(e));
     const crit = open.some((e) => e.priority === "critical");
     $("groupsList").innerHTML = `
       <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group">
         <div class="node-content">
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
-          <span class="node-text">Все события</span>
+          <span class="node-text">${te("Все события")}</span>
           <span class="tree-ev ${crit ? "crit" : ""}">${open.length}</span>
         </div>
       </li>
@@ -2065,27 +3008,58 @@
       </button>`;
     pager.hidden = false;
     pager.innerHTML = `
-      <span class="pager-info">${start + 1}–${start + shown} из ${total}</span>
+      <span class="pager-info">${te("{a}–{b} из {n}", { a: start + 1, b: start + shown, n: total })}</span>
       <div class="pager-nav">
-        ${step(state.page - 1, "chevron_left", "Предыдущая страница", state.page === 1)}
+        ${step(state.page - 1, "chevron_left", t("Предыдущая страница"), state.page === 1)}
         ${pageSequence(state.page, pages)
           .map((p) =>
             p === "gap"
               ? `<span class="pager-gap" aria-hidden="true">…</span>`
               : `<button type="button" class="pager-btn ${p === state.page ? "current" : ""}" data-page="${p}" ${
                   p === state.page ? 'aria-current="page"' : ""
-                } aria-label="Страница ${p}">${p}</button>`
+                } aria-label="${te("Страница {p}", { p })}">${p}</button>`
           )
           .join("")}
-        ${step(state.page + 1, "chevron_right", "Следующая страница", state.page === pages)}
+        ${step(state.page + 1, "chevron_right", t("Следующая страница"), state.page === pages)}
       </div>
     `;
+  }
+
+  // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
+  function timerChip(ev, extra) {
+    const view = timerView(ev);
+    if (!view) {
+      return ev.slaBreached ? `<span class="event-sla late breached">${te("Норматив нарушен")}</span>` : "";
+    }
+    const late = view.running && view.leftMs < 120000;
+    const cls = [extra || "event-sla", late ? "late" : "", view.running ? "" : "held", ev.slaBreached ? "breached" : ""]
+      .filter(Boolean)
+      .join(" ");
+    const hint = view.running
+      ? t(view.kind === "reaction" ? "Время до нарушения норматива реакции" : "Время до нарушения норматива закрытия")
+      : t("Норматив закрытия приостановлен на время удержания");
+    return `<span class="${cls}" data-timer="${ev.id}" title="${escapeHtml(hint)}">${te(view.label)} <b class="sla-t">${fmtSla(
+      view.leftMs
+    )}</b>${view.running ? "" : ' <span class="material-symbols-outlined">pause</span>'}</span>`;
+  }
+
+  // Групповая обработка: только новые, только один тип события, не больше max_bulk (§11)
+  function bulkEligible(ev) {
+    if (ev.state !== "new") return false;
+    if (!can("incident:bulk") || !can("incident:claim")) return false;
+    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+    if (!picked.length || state.checked.has(ev.id)) return true;
+    return picked[0].typeId === ev.typeId && picked.length < LIMITS.maxBulk;
   }
 
   function renderEvents() {
     const list = visibleEvents();
     $("eventsCount").textContent = String(list.length);
-    $("groupProcessBtn").disabled = state.checked.size < 2 || state.onBreak;
+    const bulkBtn = $("groupProcessBtn");
+    bulkBtn.disabled = state.checked.size < 2 || state.onBreak || !can("incident:bulk");
+    bulkBtn.title = state.checked.size
+      ? t("Выбрано {n} из {max}", { n: state.checked.size, max: LIMITS.maxBulk })
+      : t("Отметьте от 2 до {max} новых событий одного типа", { max: LIMITS.maxBulk });
     const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     state.page = Math.min(Math.max(1, state.page), pages);
     const start = (state.page - 1) * PAGE_SIZE;
@@ -2093,80 +3067,102 @@
     renderPager(list.length, pages, start, pageItems.length);
     $("eventsList").innerHTML = pageItems
       .map((e) => {
-        const st = statusLabel(e);
-        const kind = actionKind(e);
-        const act = ACTIONS[kind];
+        const badge = badgeView(e);
         const prog = stepProgress(e);
-        const blocked = state.onBreak && (kind === "take" || kind === "resume");
-        const canEsc = canManualEscalate(e);
-        const escHint =
-          e.status === "new"
-            ? "Эскалировать без взятия в работу"
-            : e.status === "mine"
-              ? "Передать инцидент другому оператору"
-              : "Перенаправить чужой инцидент другому адресату";
+        const acts = queueActions(e);
+        const pickable = bulkEligible(e);
         return `
           <article class="event ${state.selectedId === e.id ? "selected" : ""}" data-id="${e.id}">
-            <input class="pick" type="checkbox" data-check="${e.id}" aria-label="Выбрать ${e.id}" ${
-              state.checked.has(e.id) ? "checked" : ""
-            } />
+            ${
+              e.state === "new"
+                ? `<input class="pick" type="checkbox" data-check="${e.id}" aria-label="${te("Выбрать {id}", {
+                    id: e.id,
+                  })}" ${state.checked.has(e.id) ? "checked" : ""} ${pickable ? "" : "disabled"} />`
+                : `<span class="pick-off" aria-hidden="true"></span>`
+            }
             <div class="event-pri ${e.priority}"></div>
             <div class="event-main">
               <div class="event-title">
-                <strong>${escapeHtml(e.type)}</strong>
+                <strong>${te(e.type)}</strong>
                 <time>${e.time}</time>
               </div>
-              <div class="event-sub">${e.id} · ${escapeHtml(e.object)} · ${escapeHtml(e.location)}</div>
+              <div class="event-sub">${e.id} · ${te(e.object)} · ${te(e.location)}</div>
               <div class="event-foot">
-                <span class="badge ${st.cls}">${escapeHtml(st.text)}</span>
+                <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
                 ${
-                  e.status === "closed"
-                    ? ""
-                    : `<span class="event-sla ${e.slaSec < 120 ? "late" : ""}" data-sla="${
-                        e.id
-                      }" title="Время до нарушения норматива реакции">Норматив <b class="sla-t">${fmtSla(
-                        e.slaSec
-                      )}</b></span>`
+                  e.escalationLevel
+                    ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", {
+                        lvl: e.escalationLevel,
+                      })}</span>`
+                    : ""
                 }
-                ${prog.filled ? `<span class="event-prog">Сценарий ${prog.filled}/${prog.total}</span>` : ""}
+                ${timerChip(e)}
+                ${
+                  e.groupId
+                    ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
+                        n: groupSize(e),
+                      })}">${te("группа")}</span>`
+                    : ""
+                }
+                ${prog.filled ? `<span class="event-prog">${te("Сценарий {a}/{b}", { a: prog.filled, b: prog.total })}</span>` : ""}
               </div>
             </div>
             <div class="event-acts">
-              ${
-                canEsc
-                  ? `<button type="button" class="btn warn event-esc" data-escalate="${e.id}" title="${escHint}">Эскалация</button>`
-                  : ""
-              }
-              <button type="button" class="btn ${act.style} event-act" data-act="${e.id}" title="${act.hint}" ${
-                blocked ? "disabled" : ""
-              }>${act.label}</button>
+              ${acts
+                .map(
+                  (a) =>
+                    `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${
+                      e.id
+                    }" title="${escapeHtml(a.hint)}" ${a.disabled ? "disabled" : ""}>${escapeHtml(a.label)}</button>`
+                )
+                .join("")}
             </div>
           </article>
         `;
       })
-      .join("") || `<div class="empty">Нет событий в текущем фильтре</div>`;
+      .join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
   }
 
   function renderWorkHeader(ev) {
-    $("workTitle").textContent = ev ? `${ev.id} · ${ev.type}` : "Обработка";
+    $("workTitle").textContent = ev ? `${ev.id} · ${t(ev.type)}` : t("Обработка");
   }
 
   function workNote(ev) {
-    if (ev.status === "foreign" || ev.status === "escalated") {
-      const rights = canTakeover(ev)
-        ? "при необходимости перехватите"
-        : canManualEscalate(ev)
-          ? "перехват недоступен по правам, можно перенаправить"
-          : "перехват и эскалация недоступны по правам";
-      return `<div class="work-note">Инцидент обрабатывает ${escapeHtml(
-        ev.operator
-      )}. Просмотр без изменений — ${rights}.</div>`;
+    if (isDone(ev)) {
+      const why =
+        ev.state === "canceled"
+          ? t("Инцидент отменён: {why}.", { why: cancelLabel(ev.cancelReason) })
+          : t("Инцидент закрыт.");
+      const more = canDo("reopen", ev)
+        ? t("Доступно переоткрытие.")
+        : t("Карточка доступна только для просмотра.");
+      return `<div class="work-note ok">${escapeHtml(`${why} ${more}`)}</div>`;
     }
-    if (ev.status === "closed") {
-      return `<div class="work-note ok">Инцидент закрыт. Карточка доступна только для просмотра.</div>`;
+    if (ev.state === "pending_acceptance" && isTarget(ev)) {
+      return `<div class="work-note inbox">${te(
+        "Инцидент адресован вам, уровень {lvl}. Примите его или отклоните с указанием причины.",
+        { lvl: ev.escalationLevel }
+      )}</div>`;
     }
-    if (ev.status === "mine" && state.onBreak) {
-      return `<div class="work-note">Вы на перерыве — изменения по сценарию недоступны.</div>`;
+    if (!isMine(ev)) {
+      const rights = canDo("takeover", ev)
+        ? t("при необходимости перехватите")
+        : canDo("redirect", ev)
+          ? t("перехват недоступен по правам, можно перенаправить")
+          : t("перехват и перенаправление недоступны по правам");
+      const holder =
+        ev.state === "pending_acceptance"
+          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(ev.owner) })
+          : t("Инцидент обрабатывает {who}.", { who: actorName(ev.owner) });
+      return `<div class="work-note">${escapeHtml(`${holder} ${t("Просмотр без изменений")} — ${rights}.`)}</div>`;
+    }
+    if (ev.state === "on_hold") {
+      return `<div class="work-note">${te("Инцидент отложен: {why}. Норматив закрытия приостановлен.", {
+        why: holdLabel(ev.holdReason),
+      })}</div>`;
+    }
+    if (state.onBreak) {
+      return `<div class="work-note">${te("Вы на перерыве — изменения по сценарию недоступны.")}</div>`;
     }
     return "";
   }
@@ -2180,9 +3176,8 @@
     }
     const steps = scenarioSteps(ev);
     const prog = stepProgress(ev);
-    const mine = ev.status === "mine";
-    const foreign = ev.status === "foreign" || ev.status === "escalated";
-    const editable = mine && !state.onBreak;
+    const editable = isMine(ev) && ev.state === "in_progress" && !state.onBreak;
+    const acts = cardActions(ev);
 
     ensureCursor(ev);
     const i = ev.stepIndex;
@@ -2197,7 +3192,7 @@
         <div class="work-top">
           ${renderIncidentHead(ev, prog)}
           ${workNote(ev)}
-          <ol class="crumbs ${editable ? "live" : ""}" aria-label="Шаги сценария">
+          <ol class="crumbs ${editable ? "live" : ""}" aria-label="${te("Шаги сценария")}">
           ${steps
             .map((s, idx) => {
               const open = canOpenStep(ev, idx);
@@ -2209,14 +3204,14 @@
                   open ? "" : "locked"
                 } ${nav ? "nav" : ""}" ${current ? 'aria-current="step"' : ""} ${
                   nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""
-                } title="${escapeHtml(s.label)}">
+                } title="${te(s.label)}">
                   <span class="crumb-track">
                     <span class="crumb-n">${idx + 1}</span>
                     <span class="crumb-line" aria-hidden="true"></span>
                   </span>
                   <span class="crumb-body">
-                    <span class="crumb-name">${escapeHtml(stepShort(s))}</span>
-                    ${answer && !current ? `<span class="crumb-ans">${escapeHtml(answer)}</span>` : ""}
+                    <span class="crumb-name">${te(stepShort(s))}</span>
+                    ${answer && !current ? `<span class="crumb-ans">${te(answer)}</span>` : ""}
                   </span>
                 </li>
               `;
@@ -2227,48 +3222,51 @@
         <div class="work-step">
           <div class="step-card">
             <div class="step-h">
-              <strong>${escapeHtml(step.label)}</strong>
-              <span>${i + 1} из ${steps.length}${step.required ? "" : " · необязательно"}</span>
+              <strong>${te(step.label)}</strong>
+              <span>${te("{i} из {n}", { i: i + 1, n: steps.length })}${
+                step.required ? "" : ` · ${te("необязательно")}`
+              }</span>
             </div>
             ${renderStepControl(step, ev, editable)}
           </div>
         </div>
         <div class="work-bottom">
+          ${
+            acts.length
+              ? `<div class="work-acts">${acts
+                  .map(
+                    (a) =>
+                      `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${
+                        ev.id
+                      }" title="${escapeHtml(a.hint)}" ${a.disabled ? "disabled" : ""}>${escapeHtml(a.label)}</button>`
+                  )
+                  .join("")}</div>`
+              : ""
+          }
           <div class="scenario-actions">
-            <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>Назад</button>
+            <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>${te("Назад")}</button>
             <div class="scenario-actions-end">
-              ${
-                canManualEscalate(ev)
-                  ? `<button type="button" class="btn warn" id="escalateBtn" title="${
-                      foreign
-                        ? "Перенаправить инцидент другому адресату без перехвата"
-                        : "Передать инцидент другому оператору"
-                    }">${foreign ? "Перенаправить" : "Эскалация"}</button>`
-                  : ""
-              }
-              ${
-                canTakeover(ev)
-                  ? `<button type="button" class="btn danger" id="takeoverBtn" ${
-                      state.onBreak ? "disabled" : ""
-                    }>Перехватить</button>`
-                  : ""
-              }
               ${
                 editable
                   ? last && canClose
-                    ? `<button type="button" class="btn primary" id="closeBtn">Закрыть инцидент</button>`
-                    : `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${
+                    ? `<button type="button" class="btn primary" data-do="close" data-ev="${ev.id}">${te(
+                        "Закрыть инцидент"
+                      )}</button>`
+                    : `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${te(
                         last ? "К незаполненным" : "Далее"
-                      }</button>`
+                      )}</button>`
                   : !last && canOpenStep(ev, i + 1)
-                    ? `<button type="button" class="btn outline" id="stepNext">Далее</button>`
+                    ? `<button type="button" class="btn outline" id="stepNext">${te("Далее")}</button>`
                     : ""
               }
             </div>
           </div>
           ${
             last && editable && !canClose && incomplete !== -1
-              ? `<p class="step-hint">Сначала шаг ${incomplete + 1}: ${escapeHtml(stepShort(steps[incomplete]))}</p>`
+              ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", {
+                  n: incomplete + 1,
+                  name: t(stepShort(steps[incomplete])),
+                })}</p>`
               : ""
           }
           ${renderLog(ev)}
@@ -2282,27 +3280,46 @@
     if (!items.length) return "";
     return `
       <div class="log">
-        <h4>Журнал</h4>
+        <h4>${te("Журнал")}</h4>
         <ul>
           ${items
-            .map((l) => `<li><b>${escapeHtml(l.t)}</b> · ${escapeHtml(l.who)} — ${escapeHtml(l.text)}</li>`)
+            .map(
+              (l) =>
+                `<li><b>${escapeHtml(l.t)}</b> · ${escapeHtml(logWho(l))} — ${escapeHtml(logText(l))}</li>`
+            )
             .join("")}
         </ul>
       </div>
     `;
   }
 
+  // Сколько инцидентов закроется вместе с этим — оператору важно видеть это в карточке (§11)
+  const groupSize = (ev) => state.events.filter((e) => e.groupId && e.groupId === ev.groupId).length;
+  const groupChipText = (ev) => t("группа {n}", { n: groupSize(ev) });
+
   function renderIncidentHead(ev, prog) {
+    const badge = badgeView(ev);
     return `
       <div class="incident-head">
         <div class="incident-kicker">
           <span>${ev.id}</span>
-          <span class="sla ${
-            ev.slaSec < 120 ? "late" : ""
-          }" title="Время до нарушения норматива реакции">Норматив <b class="sla-t">${fmtSla(ev.slaSec)}</b></span>
+          <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
+          ${
+            ev.escalationLevel
+              ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>`
+              : ""
+          }
+          ${timerChip(ev, "sla")}
+          ${
+            ev.groupId
+              ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
+                  n: groupSize(ev),
+                })}">${escapeHtml(groupChipText(ev))}</span>`
+              : ""
+          }
         </div>
-        <h3>${escapeHtml(ev.type)}</h3>
-        <div class="incident-meta">${escapeHtml(ev.object)} · ${escapeHtml(ev.location)}</div>
+        <h3>${te(ev.type)}</h3>
+        <div class="incident-meta">${te(ev.object)} · ${te(ev.location)}</div>
         <div class="progress"><i style="width:${Math.round((prog.filled / prog.total) * 100)}%"></i></div>
       </div>
     `;
@@ -2315,7 +3332,7 @@
       return `
         <button type="button" class="confirm-btn ${on ? "on" : ""}" data-confirm="${step.id}" ${dis}>
           <span class="material-symbols-outlined">${on ? "check_circle" : "radio_button_unchecked"}</span>
-          ${on ? "Подтверждено" : "Подтвердить"}
+          ${te(on ? "Подтверждено" : "Подтвердить")}
         </button>
       `;
     }
@@ -2327,17 +3344,19 @@
               step.id
             }" data-ans="${step.id}" value="${escapeHtml(o)}" ${
               ev.answers[step.id] === o ? "checked" : ""
-            } ${dis} /> ${escapeHtml(o)}</label>`
+            } ${dis} /> ${te(o)}</label>`
         )
         .join("")}</div>`;
     }
     if (step.type === "combo") {
-      return `<select data-ans="${step.id}" ${dis}><option value="">Выберите…</option>${step.options
-        .map((o) => `<option ${ev.answers[step.id] === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+      return `<select data-ans="${step.id}" ${dis}><option value="">${te("Выберите…")}</option>${step.options
+        .map(
+          (o) => `<option value="${escapeHtml(o)}" ${ev.answers[step.id] === o ? "selected" : ""}>${te(o)}</option>`
+        )
         .join("")}</select>`;
     }
     if (step.type === "edit") {
-      return `<textarea rows="4" data-ans="${step.id}" placeholder="${escapeHtml(
+      return `<textarea rows="4" data-ans="${step.id}" placeholder="${te(
         step.placeholder || "Можно пропустить"
       )}" ${dis}>${escapeHtml(ev.answers[step.id] || "")}</textarea>`;
     }
@@ -2346,8 +3365,8 @@
         .map((b) => {
           const on = ev.launched.includes(b);
           return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${escapeHtml(b)}" ${dis}>${
-            on ? "Запущено · " : ""
-          }${escapeHtml(b)}</button>`;
+            on ? `${te("Запущено")} · ` : ""
+          }${te(b)}</button>`;
         })
         .join("")}</div>`;
     }
@@ -2380,11 +3399,20 @@
     renderTopbar();
   }
 
+  // Подписи внутри готовых SVG-сцен и планов переводятся по тексту узла <text>
+  function trSvg(svg) {
+    if (LANG === "ru") return svg;
+    return svg.replace(/(<text\b[^>]*>)([^<]+)(<\/text>)/g, (m, open, body, close) => {
+      const label = body.trim();
+      return open + escapeHtml(t(label)) + close;
+    });
+  }
+
   function renderVideo() {
     const ev = selected();
     const cams = ev && ev.cameras ? ev.cameras : [];
     if (!cams.length) {
-      $("videoStage").innerHTML = `<div class="empty">К инциденту не привязаны камеры</div>`;
+      $("videoStage").innerHTML = `<div class="empty">${te("К инциденту не привязаны камеры")}</div>`;
       $("camStrip").hidden = true;
       return;
     }
@@ -2397,12 +3425,12 @@
     $("videoStage").innerHTML = `
       <div class="cam" data-cam="${state.activeCam}">
         <svg class="cam-scene" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          ${SCENES[cam.scene] || SCENES.hall}
+          ${trSvg(SCENES[cam.scene] || SCENES.hall)}
         </svg>
         <div class="cam-hud">
           <div>
-            <div class="mode-tag ${state.videoMode}">${live ? "LIVE" : "АРХИВ"}</div>
-            <b>${escapeHtml(cam.name)}</b>
+            <div class="mode-tag ${state.videoMode}">${live ? "LIVE" : te("АРХИВ")}</div>
+            <b>${te(cam.name)}</b>
           </div>
           <span>${live ? nowStamp() : ev.time}</span>
         </div>
@@ -2410,10 +3438,14 @@
       ${
         many
           ? `
-        <button type="button" class="cam-nav prev" data-cam-step="-1" title="Предыдущая камера (←)" aria-label="Предыдущая камера">
+        <button type="button" class="cam-nav prev" data-cam-step="-1" title="${te(
+          "Предыдущая камера (←)"
+        )}" aria-label="${te("Предыдущая камера")}">
           <span class="material-symbols-outlined">chevron_left</span>
         </button>
-        <button type="button" class="cam-nav next" data-cam-step="1" title="Следующая камера (→)" aria-label="Следующая камера">
+        <button type="button" class="cam-nav next" data-cam-step="1" title="${te(
+          "Следующая камера (→)"
+        )}" aria-label="${te("Следующая камера")}">
           <span class="material-symbols-outlined">chevron_right</span>
         </button>`
           : ""
@@ -2429,7 +3461,7 @@
               const c = devView(id);
               return `<button type="button" class="cam-tick ${
                 i === idx ? "active" : ""
-              }" data-cam="${id}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
+              }" data-cam="${id}" title="${te(c.name)}" aria-label="${te(c.name)}"></button>`;
             })
             .join("")}
         </div>
@@ -2458,7 +3490,7 @@
     const clickable = dev.type === "camera" ? ` data-cam="${id}"` : "";
     return `
       <g class="${cls}"${clickable} transform="translate(${pos.x},${pos.y})">
-        <title>${escapeHtml(dev.typeLabel)}: ${escapeHtml(dev.name)}${opts.source ? " — источник события" : ""}</title>
+        <title>${te(dev.typeLabel)}: ${te(dev.name)}${opts.source ? ` — ${te("источник события")}` : ""}</title>
         ${
           opts.source
             ? `<circle class="dev-halo" r="12">
@@ -2476,14 +3508,14 @@
   function renderMap() {
     const ev = selected();
     if (!ev) {
-      $("mapCaption").textContent = "Место сработки";
-      $("mapRoot").innerHTML = `<div class="empty">Инцидент не выбран</div>`;
+      $("mapCaption").textContent = t("Место сработки");
+      $("mapRoot").innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
       return;
     }
     const planId = eventPlan(ev);
     const plan = PLANS[planId] || PLANS.mall;
     const source = eventSource(ev);
-    $("mapCaption").textContent = plan.title;
+    $("mapCaption").textContent = t(plan.title);
 
     const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter(
       (id) => DEVICE_POS[id] && DEVICE_POS[id].plan === planId
@@ -2498,48 +3530,64 @@
     const camCount = (ev.cameras || []).length;
 
     $("mapRoot").innerHTML = `
-      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="План: ${escapeHtml(plan.title)}">
-        ${plan.svg}
+      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="${te("План: {name}", {
+        name: t(plan.title),
+      })}">
+        ${trSvg(plan.svg)}
         ${markers}
       </svg>
       <div class="map-legend">
         <span class="map-legend-src">${
-          srcDev ? `${escapeHtml(srcDev.typeLabel)}: ${escapeHtml(srcDev.name)}` : "Источник не указан"
+          srcDev ? `${te(srcDev.typeLabel)}: ${te(srcDev.name)}` : te("Источник не указан")
         }</span>
-        <span class="map-legend-cams">${camCount ? `Камер в зоне: ${camCount}` : "Камеры не привязаны"}</span>
+        <span class="map-legend-cams">${
+          camCount ? te("Камер в зоне: {n}", { n: camCount }) : te("Камеры не привязаны")
+        }</span>
       </div>
     `;
   }
 
   function renderStatus() {
     const ev = selected();
-    const open = state.events.filter((e) => e.status !== "closed").length;
-    $("statusQueue").textContent = `В очереди: ${open}`;
+    const open = state.events.filter((e) => !isDone(e)).length;
+    const mine = myUnits("in_progress").size;
+    const held = myUnits("on_hold").size;
+    $("statusQueue").textContent = t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", {
+      n: open,
+      a: mine,
+      max: LIMITS.maxActive,
+      h: held,
+    });
     if (!ev) {
-      $("statusIncident").textContent = "Очередь ожидает выбора события";
+      $("statusIncident").textContent = t("Очередь ожидает выбора события");
       $("statusSteps").textContent = "";
       $("statusSla").textContent = "";
       return;
     }
     const prog = stepProgress(ev);
+    const badge = badgeView(ev);
     $("statusIncident").textContent =
       state.mode === "work"
-        ? `Обработка ${ev.id}`
-        : ev.status === "mine"
-          ? `${ev.id} · ${ev.paused ? "приостановлен" : "в работе"}`
-          : ev.status === "foreign"
-            ? `${ev.id} у оператора ${ev.operator}`
-            : `${ev.id} · ${statusLabel(ev).text}`;
+        ? t("Карточка {id} · {badge}", { id: ev.id, badge: badge.text })
+        : `${ev.id} · ${badge.text}`;
     $("statusSteps").textContent =
       state.mode === "work" && typeof ev.stepIndex === "number"
-        ? `Шаг ${ev.stepIndex + 1} из ${prog.total}`
-        : `Сценарий ${prog.filled}/${prog.total}`;
-    $("statusSla").textContent = ev.status === "closed" ? "" : `Осталось по нормативу ${fmtSla(ev.slaSec)}`;
+        ? t("Шаг {i} из {n}", { i: ev.stepIndex + 1, n: prog.total })
+        : t("Сценарий {a}/{b}", { a: prog.filled, b: prog.total });
+    $("statusSla").textContent = statusTimerText(ev);
   }
 
-  function fmtSla(sec) {
-    const m = Math.floor(Math.max(0, sec) / 60);
-    const s = Math.max(0, sec) % 60;
+  function statusTimerText(ev) {
+    const view = timerView(ev);
+    if (!view) return ev.slaBreached ? t("Норматив нарушен") : "";
+    if (!view.running) return t("{label} приостановлен: {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
+    return t("{label}: осталось {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
+  }
+
+  function fmtSla(ms) {
+    const total = Math.floor(Math.max(0, ms) / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
     return `${m}:${String(s).padStart(2, "0")}`;
   }
 
@@ -2579,11 +3627,11 @@
       state.groupsOn,
       "left_panel_close",
       "left_panel_open",
-      "Скрыть панель групп",
-      "Показать панель групп"
+      t("Скрыть панель групп"),
+      t("Показать панель групп")
     );
     groupsBtn.disabled = groupsLocked;
-    if (groupsLocked) groupsBtn.title = "Панель групп скрыта на время обработки инцидента";
+    if (groupsLocked) groupsBtn.title = t("Панель групп скрыта на время обработки инцидента");
     [...$("mobileNav").children].forEach((b) => {
       const on = b.dataset.view === state.mobileView;
       b.classList.toggle("active", on);
@@ -2591,14 +3639,14 @@
       else b.removeAttribute("aria-current");
       if (b.dataset.view === "card") b.disabled = state.mode !== "work";
     });
-    $("navQueueCount").textContent = String(state.events.filter((e) => e.status !== "closed").length);
+    $("navQueueCount").textContent = String(state.events.filter((e) => !isDone(e)).length);
     syncToggle(
       $("toggleMedia"),
       state.mediaOn,
       "right_panel_close",
       "right_panel_open",
-      "Скрыть видеомонитор и карту",
-      "Показать видеомонитор и карту"
+      t("Скрыть видеомонитор и карту"),
+      t("Показать видеомонитор и карту")
     );
     const mode = mediaMode();
     syncToggle(
@@ -2606,22 +3654,24 @@
       state.full === "video",
       "close_fullscreen",
       "open_in_full",
-      "Свернуть видеомонитор (Esc)",
-      "Развернуть видеомонитор на всю рабочую область"
+      t("Свернуть видеомонитор (Esc)"),
+      t("Развернуть видеомонитор на всю рабочую область")
     );
     syncToggle(
       $("mapFull"),
       state.full === "map",
       "close_fullscreen",
       "open_in_full",
-      "Свернуть карту (Esc)",
-      "Развернуть карту на всю рабочую область"
+      t("Свернуть карту (Esc)"),
+      t("Развернуть карту на всю рабочую область")
     );
     $("videoFull").disabled = mode === "map";
     $("mapFull").disabled = mode === "video";
-    $("dutyBadge").textContent = state.onBreak ? "Перерыв" : "На смене";
+    // Состояние оператора — отдельная машина состояний (§12.1)
+    const agent = state.onBreak ? t("Перерыв") : myUnits("in_progress").size ? t("Занят") : t("На смене");
+    $("dutyBadge").textContent = agent;
     $("dutyBadge").classList.toggle("off", state.onBreak);
-    $("breakBtnLabel").textContent = state.onBreak ? "Вернуться на смену" : "Уйти на перерыв";
+    $("breakBtnLabel").textContent = t(state.onBreak ? "Вернуться на смену" : "Уйти на перерыв");
   }
 
   // При переходе к другому инциденту показываем камеру, ближайшую к источнику события.
@@ -2633,103 +3683,56 @@
     }
   }
 
-  function openWork(ev) {
+  // Навигация без смены состояния (§6.3)
+  function openCard(navId, ev) {
     if (!ev) return;
-    const kind = actionKind(ev);
-    if ((kind === "take" || kind === "resume") && state.onBreak) {
-      toast("На перерыве события не назначаются");
-      return;
-    }
-    if (kind === "take" && !PERMISSIONS.take) {
-      toast("Нет права брать инциденты в работу");
-      return;
-    }
-    if (kind === "open" && !PERMISSIONS.viewForeign) {
-      toast("Нет права просматривать чужие инциденты");
+    const check = availability(navId, ev);
+    if (!check.ok) {
+      if (check.why) toast(check.why);
       return;
     }
     state.selectedId = ev.id;
     focusCameras(ev);
-    if (kind === "take") {
-      ev.status = "mine";
-      ev.operator = ME;
-      ev.paused = false;
-      ev.stepIndex = firstOpenStep(ev);
-      ev.log.push({ t: nowStamp(), who: ME, text: "Взято в работу" });
-      toast(`${ev.id} в работе`);
-    } else if (kind === "resume") {
-      ev.paused = false;
-      ensureCursor(ev);
-      ev.log.push({ t: nowStamp(), who: ME, text: `Обработка возобновлена на шаге ${ev.stepIndex + 1}` });
-    }
+    ensureCursor(ev);
     state.mode = "work";
     state.mobileView = "card";
     renderAll();
   }
 
+  // «К очереди» ничего не меняет: инцидент остаётся в работе и виден
+  // в очереди с кнопкой «Продолжить». Отложить — отдельное действие с причиной.
   function backToQueue() {
-    const ev = selected();
-    if (ev && ev.status === "mine" && !ev.paused) {
-      if (!PERMISSIONS.pause) {
-        toast("Нет права приостанавливать — завершите или эскалируйте инцидент");
-        return;
-      }
-      ev.paused = true;
-      ensureCursor(ev);
-      ev.log.push({ t: nowStamp(), who: ME, text: `Обработка приостановлена на шаге ${ev.stepIndex + 1}` });
-      toast(`${ev.id} приостановлен — возобновите из очереди`);
-    }
     state.mode = "queue";
     state.page = pageOfEvent(state.selectedId);
+    syncSelection();
     renderAll();
   }
 
-  function takeover(ev) {
-    if (!canTakeover(ev)) {
-      toast("Нет права перехватывать чужие инциденты");
+  /* ===== Состояние оператора (§12.2) ===== */
+
+  function toggleBreak() {
+    if (!can("agent:set_not_ready")) {
+      toast(t("Нет права уходить на перерыв"));
       return;
     }
+    state.onBreak = !state.onBreak;
+    state.agentState = state.onBreak ? "not_ready" : "ready";
     if (state.onBreak) {
-      toast("На перерыве события не назначаются");
-      return;
+      // Активный инцидент откладывается системой: право incident:hold не требуется
+      state.events
+        .filter((e) => e.state === "in_progress" && isMine(e))
+        .forEach((e) => {
+          e.state = "on_hold";
+          e.holdReason = "break";
+          e.holdSince = Date.now();
+          pauseResolution(e);
+          log(e, "system", "Отложен системой: {why}", { why: rawHold("break") });
+        });
+      if (state.mode === "work") state.mode = "queue";
+      toast(t("Перерыв. Новые события не назначаются"));
+    } else {
+      toast(t("Вы снова на смене"));
     }
-    const prev = ev.operator;
-    const prog = stepProgress(ev);
-    ev.status = "mine";
-    ev.operator = ME;
-    ev.paused = false;
-    ensureCursor(ev);
-    ev.log.push({
-      t: nowStamp(),
-      who: ME,
-      text: `Перехват у ${prev}. Прогресс сценария сохранён (${prog.filled}/${prog.total})`,
-    });
-    toast(`Перехвачен ${ev.id}`);
-    state.mode = "work";
-    state.mobileView = "card";
-    renderAll();
-  }
-
-  function closeEvent(ev) {
-    if (!PERMISSIONS.close) {
-      toast("Нет права закрывать инциденты");
-      return;
-    }
-    if (!scenarioDone(ev)) {
-      toast("Сначала заполните обязательные шаги сценария");
-      return;
-    }
-    ev.status = "closed";
-    ev.paused = false;
-    ev.log.push({ t: nowStamp(), who: ME, text: "Инцидент закрыт. Результат уйдёт в AxxonData" });
-    toast(`${ev.id} закрыт`);
-    const next = state.events.find((e) => e.status === "new");
-    if (next) {
-      state.selectedId = next.id;
-      focusCameras(next);
-    }
-    state.checked.delete(ev.id);
-    state.mode = "queue";
     renderAll();
   }
 
@@ -2859,6 +3862,7 @@
     $("themeToggle").addEventListener("click", () => {
       applyTheme(state.themeMode === "light" ? "dark" : "light");
     });
+    $("langSelect").addEventListener("change", (e) => applyLang(e.target.value));
     $("toggleGroups").addEventListener("click", () => {
       state.groupsOn = !state.groupsOn;
       applyLayoutState();
@@ -2876,12 +3880,14 @@
     $("eventFilter").addEventListener("change", (e) => {
       state.filter = e.target.value;
       state.page = 1;
-      renderEvents();
+      syncSelection();
+      renderAll();
     });
     $("eventSearch").addEventListener("input", (e) => {
       state.search = e.target.value;
       state.page = 1;
-      renderEvents();
+      syncSelection();
+      renderAll();
     });
     $("mobileNav").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-view]");
@@ -2919,11 +3925,7 @@
       state.groupId = id;
       state.page = 1;
       if (narrowQuery.matches) state.groupsOn = false;
-      const list = visibleEvents();
-      if (list.length && !list.some((ev) => ev.id === state.selectedId)) {
-        state.selectedId = list[0].id;
-        if (list[0].cameras && list[0].cameras[0]) state.activeCam = list[0].cameras[0];
-      }
+      syncSelection();
       renderAll();
     });
     $("eventsList").addEventListener("click", (e) => {
@@ -2935,14 +3937,9 @@
         renderEvents();
         return;
       }
-      const act = e.target.closest("[data-act]");
+      const act = e.target.closest("[data-do]");
       if (act) {
-        openWork(state.events.find((x) => x.id === act.dataset.act));
-        return;
-      }
-      const esc = e.target.closest("[data-escalate]");
-      if (esc) {
-        openEscalateModal(state.events.find((x) => x.id === esc.dataset.escalate));
+        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev));
         return;
       }
       const row = e.target.closest("[data-id]");
@@ -2958,7 +3955,7 @@
     });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
-      if (!ev || ev.status !== "mine") return;
+      if (!ev || !isMine(ev) || ev.state !== "in_progress" || state.onBreak) return;
       const el = e.target.closest("[data-ans]");
       if (!el) return;
       ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
@@ -2977,6 +3974,12 @@
     $("scenarioRoot").addEventListener("click", (e) => {
       const ev = selected();
       if (!ev) return;
+      const act = e.target.closest("[data-do]");
+      if (act) {
+        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev));
+        return;
+      }
+      const editable = isMine(ev) && ev.state === "in_progress" && !state.onBreak;
       const crumb = e.target.closest("[data-crumb]");
       if (crumb) {
         goToStep(ev, Number(crumb.dataset.crumb));
@@ -2996,7 +3999,7 @@
         return;
       }
       const confirm = e.target.closest("[data-confirm]");
-      if (confirm && ev.status === "mine" && !state.onBreak) {
+      if (confirm && editable) {
         const id = confirm.dataset.confirm;
         ev.answers[id] = ev.answers[id] !== true;
         if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
@@ -3004,21 +4007,15 @@
         renderStatus();
         return;
       }
-      if (e.target.closest("#takeoverBtn")) return takeover(ev);
-      if (e.target.closest("#closeBtn")) return closeEvent(ev);
-      if (e.target.closest("#escalateBtn")) {
-        openEscalateModal(ev);
-        return;
-      }
       const macro = e.target.closest("[data-macro]");
-      if (macro && !PERMISSIONS.runMacros) {
-        toast("Нет права запускать макросы");
+      if (macro && !can("incident:run_action")) {
+        toast(t("Нет права запускать макросы"));
         return;
       }
-      if (macro && ev.status === "mine" && !state.onBreak) {
+      if (macro && editable) {
         const name = macro.dataset.macro;
         if (!ev.launched.includes(name)) ev.launched.push(name);
-        toast(`Макрос: ${name}`);
+        toast(t("Макрос: {name}", { name: t(name) }));
         renderScenario();
       }
     });
@@ -3049,15 +4046,8 @@
       renderVideo();
     });
     $("breakBtn").addEventListener("click", () => {
-      if (!PERMISSIONS.break) {
-        closeMenus();
-        toast("Нет права уходить на перерыв");
-        return;
-      }
-      state.onBreak = !state.onBreak;
       closeMenus();
-      toast(state.onBreak ? "Перерыв. Новые события не назначаются" : "Вы снова на смене");
-      renderAll();
+      toggleBreak();
     });
     $("hotkeysBtn").addEventListener("click", () => {
       closeMenus();
@@ -3085,28 +4075,15 @@
     });
     $("escalateDefault").addEventListener("change", (e) => {
       state.escalateTo = e.target.value;
-      toast(`Адресат по умолчанию: ${defaultTarget()}`);
+      toast(t("Предвыбор адресата: {who}", { who: defaultTarget() }));
     });
     document.querySelectorAll("[data-close]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        $(btn.dataset.close).hidden = true;
+        if (btn.dataset.close === "modalDialog") closeDialog();
+        else $(btn.dataset.close).hidden = true;
       });
     });
-    $("escalateConfirm").addEventListener("click", () => {
-      const id = state.escalateId || state.selectedId;
-      const ev = state.events.find((e) => e.id === id);
-      if (!ev || !canManualEscalate(ev)) return;
-      const ok = escalateEvent(ev, {
-        target: operatorLabel($("escalateTarget").value),
-        reason: $("escalateReason").value,
-      });
-      $("modalEscalate").hidden = true;
-      $("escalateReason").value = "";
-      state.escalateId = null;
-      if (!ok) return;
-      state.mode = "queue";
-      renderAll();
-    });
+    $("dialogConfirm").addEventListener("click", submitDialog);
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
       else TREE.forEach((n) => state.openGroups.add(n.id));
@@ -3115,30 +4092,53 @@
     document.addEventListener("keydown", onKey);
   }
 
+  // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый
+  // инцидент сохраняет собственное состояние и собственные таймеры.
   function groupProcess() {
     if (state.checked.size < 2) return;
-    if (state.onBreak) return;
-    if (!PERMISSIONS.groupProcess || !PERMISSIONS.take) {
-      toast("Нет права на групповую обработку");
+    if (state.onBreak) {
+      toast(t("На перерыве доступен только просмотр"));
       return;
     }
-    const ids = [...state.checked];
-    const first = state.events.find((e) => e.id === ids[0]);
-    ids.forEach((id) => {
-      const ev = state.events.find((e) => e.id === id);
-      ev.status = "mine";
-      ev.operator = ME;
-      ev.paused = false;
-      ev.answers = { ...first.answers };
-      ev.log.push({
-        t: nowStamp(),
-        who: ME,
-        text: `Групповая обработка вместе с ${ids.filter((x) => x !== id).join(", ")}`,
+    if (!can("incident:bulk") || !can("incident:claim")) {
+      toast(t("Нет права на групповую обработку"));
+      return;
+    }
+    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+    if (picked.some((e) => e.state !== "new")) {
+      toast(t("В группу берутся только новые события"));
+      return;
+    }
+    if (picked.some((e) => e.typeId !== picked[0].typeId)) {
+      toast(t("В группе должен быть один тип события"));
+      return;
+    }
+    if (picked.length > LIMITS.maxBulk) {
+      toast(t("Не больше {max} событий в группе", { max: LIMITS.maxBulk }));
+      return;
+    }
+    const groupId = `GRP-${Date.now().toString().slice(-4)}`;
+    const first = picked[0];
+    picked.forEach((ev) => {
+      ev.state = "in_progress";
+      ev.owner = "me";
+      ev.groupId = groupId;
+      ev.answers = first.answers;
+      stopReaction(ev);
+      startResolution(ev);
+      log(ev, "me", "Групповая обработка {grp} вместе с {ids}", {
+        grp: groupId,
+        ids: picked
+          .filter((x) => x.id !== ev.id)
+          .map((x) => x.id)
+          .join(", "),
       });
     });
     state.selectedId = first.id;
+    state.checked.clear();
     focusCameras(first);
-    toast(`Группа из ${ids.length} событий в одной карточке`);
+    ensureCursor(first);
+    toast(t("Группа из {n} событий в одной карточке", { n: picked.length }));
     state.mode = "work";
     state.mobileView = "card";
     renderAll();
@@ -3151,28 +4151,32 @@
     "Наряд на месте, инцидент локализован",
   ];
 
+  const foreignActive = () =>
+    state.events.filter((e) => e.state === "in_progress" && e.owner && !isMine(e) && !e.groupId);
+
   // Коллега забирает одно из новых событий, видимых в очереди.
   function simTakeEvent() {
     const pool = visibleEvents()
       .slice(0, PAGE_SIZE)
-      .filter((e) => e.status === "new" && e.id !== state.selectedId && !state.checked.has(e.id));
+      .filter((e) => e.state === "new" && e.id !== state.selectedId && !state.checked.has(e.id));
     // В верхней части очереди всегда оставляем новое событие, чтобы оператору было что взять.
     if (pool.length < 2) return null;
     const ev = pool[pool.length - 1];
     const who = SIM.colleagues[SIM.taken % SIM.colleagues.length];
-    ev.status = "foreign";
-    ev.operator = who;
-    ev.paused = false;
+    ev.state = "in_progress";
+    ev.owner = who;
     ev.stepIndex = 0;
-    ev.log.push({ t: nowStamp(), who, text: "Взято в работу" });
+    stopReaction(ev);
+    startResolution(ev);
+    log(ev, who, "Взято в работу");
     SIM.taken += 1;
-    toast(`${ev.id} взял в работу ${who}`);
+    toast(t("{id} взял в работу {who}", { id: ev.id, who: actorName(who) }));
     return ev.id;
   }
 
   // Чужой сценарий продвигается на один шаг: меняются прогресс и журнал.
   function simAdvanceEvent() {
-    const pool = state.events.filter((e) => e.status === "foreign" && !scenarioDone(e));
+    const pool = foreignActive().filter((e) => !scenarioDone(e));
     if (!pool.length) return null;
     const ev = pool[Math.floor(Math.random() * pool.length)];
     const steps = scenarioSteps(ev);
@@ -3185,7 +4189,7 @@
       done = "подтверждено";
     } else if (step.type === "macros") {
       ev.launched.push(step.buttons[0]);
-      done = `запущен макрос «${step.buttons[0]}»`;
+      done = ["запущен макрос «{name}»", { name: step.buttons[0] }];
     } else if (step.options) {
       ev.answers[step.id] = step.options[Math.floor(Math.random() * step.options.length)];
       done = ev.answers[step.id];
@@ -3194,11 +4198,37 @@
       done = ev.answers[step.id];
     }
     ev.stepIndex = Math.min(idx + 1, steps.length - 1);
-    ev.log.push({
-      t: nowStamp(),
-      who: ev.operator,
-      text: `Шаг ${idx + 1}/${steps.length} · ${stepShort(step)}: ${done}`,
+    log(ev, ev.owner, "Шаг {i}/{n} · {name}: {done}", {
+      i: idx + 1,
+      n: steps.length,
+      name: stepShort(step),
+      done,
     });
+    return ev.id;
+  }
+
+  // Коллега передаёт свой инцидент оператору: появляется «Вам на принятие».
+  function simHandoff() {
+    const pool = foreignActive().filter((e) => e.escalationLevel < AUTO.maxLevel);
+    if (!pool.length) return null;
+    const ev = pool[0];
+    const from = ev.owner;
+    applyEscalation(ev, "me", "Нужен оператор с доступом к архиву объекта", from);
+    toast(t("{who} эскалировал {id} на вас", { who: actorName(from), id: ev.id }));
+    return ev.id;
+  }
+
+  // Отвал оператора (§12.3): сессия не отвечает, инцидент откладывается системой.
+  function simDrop() {
+    const pool = foreignActive();
+    if (!pool.length) return null;
+    const ev = pool[pool.length - 1];
+    ev.state = "on_hold";
+    ev.holdReason = "no_link";
+    ev.holdSince = Date.now();
+    pauseResolution(ev);
+    log(ev, "system", "Отложен системой: {why}. Алерт старшему смены", { why: rawHold("no_link") });
+    toast(t("Нет связи с {who} — {id} отложен системой", { who: actorName(ev.owner), id: ev.id }));
     return ev.id;
   }
 
@@ -3217,6 +4247,18 @@
       const id = simAdvanceEvent();
       if (id) ids.push(id);
     }
+    SIM.handoffTick += 1;
+    if (!SIM.handoffDone && SIM.handoffTick >= SIM.handoffSec) {
+      SIM.handoffDone = true;
+      const id = simHandoff();
+      if (id) ids.push(id);
+    }
+    SIM.dropTick += 1;
+    if (!SIM.dropDone && SIM.dropTick >= SIM.dropSec) {
+      SIM.dropDone = true;
+      const id = simDrop();
+      if (id) ids.push(id);
+    }
     return ids;
   }
 
@@ -3228,13 +4270,15 @@
       showModal("modalRegulation");
       return;
     }
-    if (e.target.matches("input, textarea, select")) return;
-    if (e.key === "ArrowLeft") return stepCamera(-1);
-    if (e.key === "ArrowRight") return stepCamera(1);
+    // Esc разбирается по приоритету: форма → полный экран → панель групп → карточка (§13.1)
     if (e.key === "Escape") {
       const openMenu = closeMenus();
       if (openMenu) {
         openMenu.querySelector("[aria-haspopup]").focus();
+        return;
+      }
+      if (state.dialog) {
+        closeDialog();
         return;
       }
       const openModal = document.querySelector(".modal:not([hidden])");
@@ -3253,28 +4297,30 @@
       if (state.mode === "work") backToQueue();
       return;
     }
+    // В полях ввода работают только F1 и Esc (§13.3)
+    const target = e.target;
+    if (target instanceof Element && target.matches("input, textarea, select")) return;
+    if (state.dialog) return;
+    if (e.key === "ArrowLeft") return stepCamera(-1);
+    if (e.key === "ArrowRight") return stepCamera(1);
     const key = e.key.toLowerCase();
+    const ev = selected();
     if (key === "?" || (e.shiftKey && e.key === "/")) {
       $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
     }
     if (key === "b") $("breakBtn").click();
-    if (key === "e") {
-      const ev = selected();
-      if (canManualEscalate(ev)) openEscalateModal(ev);
-    }
+    if (key === "e") trigger(ev && !canDo("escalate", ev) && canDo("redirect", ev) ? "redirect" : "escalate", ev);
+    if (key === "a") trigger("accept", ev);
+    if (key === "r") trigger("resume", ev);
+    if (key === "h") trigger("hold", ev);
+    if (key === "t") trigger("takeover", ev);
     if (key === "n") {
-      const next = state.events.find((x) => x.status === "new");
-      if (next) openWork(next);
-    }
-    if (key === "t") {
-      const ev = selected();
-      if (isForeign(ev)) takeover(ev);
+      const next = state.events.find((x) => x.state === "new");
+      if (next) trigger("claim", next);
     }
     if (key === "g") groupProcess();
-    if (e.key === "Enter") {
-      const ev = selected();
-      if (ev && ev.status === "mine" && state.mode === "work") closeEvent(ev);
-    }
+    // Enter только открывает форму закрытия: подтверждение — отдельным нажатием (§13.2)
+    if (e.key === "Enter" && state.mode === "work") trigger("close", ev);
     if (["1", "2", "3", "4"].includes(e.key)) {
       const ev = selected();
       const cam = ev && ev.cameras && ev.cameras[Number(e.key) - 1];
@@ -3286,59 +4332,54 @@
     }
   }
 
+  // Планировщик: в продукте дедлайны ведёт сервер, здесь — тот же разбор по метке времени
   setInterval(() => {
     const stamp = nowStamp();
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
-    let escalated = false;
+    let changed = false;
     state.events.forEach((e) => {
-      if (e.status === "closed") return;
-      e.slaSec -= 1;
-      if (canAutoEscalate(e) && escalateEvent(e, { auto: true, reason: SETTINGS.autoEscalate.reason })) {
-        escalated = true;
-        if (state.mode === "work" && state.selectedId === e.id) state.mode = "queue";
-      }
+      if (isDone(e)) return;
+      if (autoEscalate(e)) changed = true;
+      if (checkResolution(e)) changed = true;
+      if (checkHold(e)) changed = true;
     });
-    if (escalated) {
+    if (changed) {
       renderAll();
       return;
     }
     const simIds = simulateColleagues();
     if (simIds.length) {
-      renderEvents();
-      renderStatus();
-      if (simIds.includes(state.selectedId)) renderScenario();
+      renderAll();
+      return;
     }
-    document.querySelectorAll("[data-sla]").forEach((el) => {
-      const e = state.events.find((x) => x.id === el.dataset.sla);
-      if (!e) return;
-      el.querySelector(".sla-t").textContent = fmtSla(e.slaSec);
-      el.classList.toggle("late", e.slaSec < 120);
+    document.querySelectorAll("[data-timer]").forEach((el) => {
+      const e = state.events.find((x) => x.id === el.dataset.timer);
+      const view = e && timerView(e);
+      if (!view) return;
+      el.querySelector(".sla-t").textContent = fmtSla(view.leftMs);
+      el.classList.toggle("late", view.running && view.leftMs < 120000);
     });
     const ev = selected();
-    if (ev && ev.status !== "closed") {
-      const sla = $("scenarioRoot").querySelector(".sla");
-      if (sla) {
-        sla.querySelector(".sla-t").textContent = fmtSla(ev.slaSec);
-        sla.classList.toggle("late", ev.slaSec < 120);
-      }
-      $("statusSla").textContent = `Осталось по нормативу ${fmtSla(ev.slaSec)}`;
-    }
+    if (ev) $("statusSla").textContent = statusTimerText(ev);
   }, 1000);
 
   let savedTheme = "dark";
+  let savedLang = "ru";
   try {
     savedTheme = localStorage.getItem("im-theme") || "dark";
+    savedLang = localStorage.getItem("im-lang") || "ru";
   } catch (err) {
     savedTheme = "dark";
   }
-  applyTheme(savedTheme);
   if (narrowQuery.matches) state.groupsOn = false;
   narrowQuery.addEventListener("change", (e) => {
     state.groupsOn = !e.matches;
     renderAll();
   });
+  migrateEvents(EVENTS);
+  collectStatic();
   bind();
-  renderEscalateDefault();
-  renderAll();
+  applyTheme(savedTheme);
+  applyLang(savedLang);
 })();

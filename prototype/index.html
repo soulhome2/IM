@@ -29,6 +29,15 @@
       </div>
 
       <div class="topbar-actions">
+        <label class="lang" for="langSelect">
+          <span class="material-symbols-outlined" aria-hidden="true">language</span>
+          <select id="langSelect" data-i18n-skip aria-label="Язык интерфейса" title="Язык интерфейса">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+
         <button type="button" class="icon-btn theme-btn" id="themeToggle" title="Тёмная тема" aria-label="Тёмная тема">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
             <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
@@ -88,14 +97,15 @@
               <kbd>B</kbd>
             </button>
             <div class="menu-sep"></div>
-            <div class="menu-label">Эскалация по умолчанию</div>
+            <div class="menu-label">Предвыбор адресата эскалации</div>
             <label class="menu-field">
               <span>Кому передавать</span>
               <select id="escalateDefault"></select>
             </label>
             <p class="menu-hint">
-              Подставляется в форму ручной эскалации и используется при автоэскалации по истечении норматива.
+              Личная настройка: подставляется в форму ручной эскалации. На автоэскалацию не влияет.
             </p>
+            <p class="menu-hint" data-i18n-html>Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.</p>
           </div>
         </div>
 
@@ -161,8 +171,10 @@
               </div>
               <select id="eventFilter" class="search-input">
                 <option value="open">Открытые</option>
+                <option value="inbox">Мне на принятие</option>
                 <option value="mine">Мои</option>
                 <option value="foreign">Чужие</option>
+                <option value="done">Завершённые</option>
                 <option value="all">Все</option>
               </select>
             </div>
@@ -173,7 +185,7 @@
 
         <section class="panel" id="panelScenario" data-panel="scenario">
           <header class="panel-h work-h">
-            <button type="button" class="btn ghost" id="backToQueue" title="Приостановить и вернуться к очереди (Esc)">
+            <button type="button" class="btn ghost" id="backToQueue" title="Вернуться к очереди, инцидент остаётся за вами (Esc)">
               <span class="material-symbols-outlined">arrow_back</span>К очереди
             </button>
             <h2 id="workTitle">Обработка</h2>
@@ -259,22 +271,23 @@
     </nav>
   </div>
 
-  <div class="modal" id="modalEscalate" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalEscalateTitle">
-      <h3 id="modalEscalateTitle">Эскалация события</h3>
-      <p class="muted" id="escalateNote">Инцидент передаётся без взятия в работу.</p>
-      <label class="field">
-        <span>Кому передать</span>
-        <select id="escalateTarget"></select>
+  <!-- Одна форма на все переходы, требующие подробностей: причина, адресат, результат -->
+  <div class="modal" id="modalDialog" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <h3 id="dialogTitle"></h3>
+      <p class="muted" id="dialogNote" hidden></p>
+      <label class="field" id="dialogSelectField" hidden>
+        <span id="dialogSelectLabel"></span>
+        <select id="dialogSelect"></select>
       </label>
-      <p class="field-hint" id="escalateDefaultHint"></p>
-      <label class="field">
-        <span>Причина</span>
-        <textarea id="escalateReason" rows="3" placeholder="Почему требуется эскалация"></textarea>
+      <p class="field-hint" id="dialogHint" hidden></p>
+      <label class="field" id="dialogTextField" hidden>
+        <span id="dialogTextLabel"></span>
+        <textarea id="dialogText" rows="3"></textarea>
       </label>
       <div class="modal-actions">
-        <button type="button" class="btn ghost" data-close="modalEscalate">Отмена</button>
-        <button type="button" class="btn primary" id="escalateConfirm">Передать</button>
+        <button type="button" class="btn ghost" data-close="modalDialog">Отмена</button>
+        <button type="button" class="btn primary" id="dialogConfirm"></button>
       </div>
     </div>
   </div>
@@ -283,19 +296,22 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalHotkeysTitle">
       <h3 id="modalHotkeysTitle">Горячие клавиши</h3>
       <table class="keys">
-        <tr><td><kbd>N</kbd></td><td>Взять следующее новое событие</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Приостановить и вернуться к очереди</td></tr>
-        <tr><td><kbd>Enter</kbd></td><td>Закрыть инцидент (если сценарий заполнен)</td></tr>
-        <tr><td><kbd>E</kbd></td><td>Эскалация (новое, своё; чужое — по правам)</td></tr>
-        <tr><td><kbd>T</kbd></td><td>Перехватить чужое событие (по правам)</td></tr>
+        <tr><td><kbd>N</kbd></td><td>Взять следующее новое</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Принять адресованную эскалацию</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Возобновить свой отложенный</td></tr>
+        <tr><td><kbd>H</kbd></td><td>Отложить с указанием причины</td></tr>
+        <tr><td><kbd>E</kbd></td><td>Эскалация или перенаправление выбранного</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Перехватить (по праву, из карточки)</td></tr>
         <tr><td><kbd>G</kbd></td><td>Обработать выделенные как одно</td></tr>
         <tr><td><kbd>B</kbd></td><td>Перерыв / возврат на смену</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Открыть форму закрытия инцидента</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Форма → полный экран → панель групп → возврат к очереди</td></tr>
         <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Карусель камер</td></tr>
         <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Камера по номеру</td></tr>
         <tr><td><kbd>F1</kbd></td><td>Регламент обработки инцидента — из любого места</td></tr>
         <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
       </table>
-      <p class="muted">Набор можно будет задавать «под себя» в настройках оператора.</p>
+      <p class="muted">В полях ввода работают только F1 и Esc. Набор можно будет задавать «под себя» в настройках оператора.</p>
       <div class="modal-actions">
         <button type="button" class="btn primary" data-close="modalHotkeys">Закрыть</button>
       </div>
@@ -333,9 +349,9 @@
       <div class="doc">
         <h4>1. Пожарная тревога</h4>
         <ol>
-          <li>Подтвердить сработку по ближайшим камерам в течение <b>60 секунд</b>.</li>
+          <li data-i18n-html>Подтвердить сработку по ближайшим камерам в течение <b>60 секунд</b>.</li>
           <li>При подтверждении — запустить макрос «Оповещение по объекту» и разблокировать эвакуационные выходы.</li>
-          <li>Сообщить старшему смены, при открытом пламени или задымлении — вызвать пожарную охрану по <b>101</b>.</li>
+          <li data-i18n-html>Сообщить старшему смены, при открытом пламени или задымлении — вызвать пожарную охрану по <b>101</b>.</li>
           <li>Зафиксировать в карточке номер наряда и время прибытия расчёта.</li>
         </ol>
 
@@ -355,8 +371,8 @@
 
         <h4>4. Сроки обработки</h4>
         <ul>
-          <li>Критический приоритет — реакция до <b>4 минут</b>.</li>
-          <li>Высокий — до <b>7 минут</b>, средний — до <b>15 минут</b>.</li>
+          <li data-i18n-html>Критический приоритет — реакция до <b>4 минут</b>.</li>
+          <li data-i18n-html>Высокий — до <b>7 минут</b>, средний — до <b>15 минут</b>.</li>
           <li>Просроченный SLA автоматически эскалируется старшему смены.</li>
         </ul>
       </div>
@@ -476,6 +492,9 @@
   </div>
 
   <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
+  <script src="i18n-data.js"></script>
+  <script src="i18n-html.js"></script>
+  <script src="i18n-ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
