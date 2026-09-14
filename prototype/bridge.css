@@ -1,0 +1,243 @@
+/* ONE PSIM bridge for this Incident Manager prototype.
+ * Loaded AFTER styles.css. Re-points the prototype's own variables at the local
+ * copy of the generated vocabulary (../theme/one-psim.css). Markup, JS and layout
+ * stay untouched — only colour, font, radius, focus and control-state ladders.
+ *
+ * Procedure: docs/RESTYLE-RULES.md in the neighbouring ONE.PSIM.PrototypeKit clone.
+ */
+@import url("../theme/one-psim.css");
+
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  --font: var(--one-font-ui);
+  --mono: var(--one-font-mono);
+
+  /* surfaces */
+  --bg: var(--one-canvas);
+  --panel: var(--one-surface);
+  --panel-2: var(--one-surface-muted);
+  --tree-bg: var(--one-surface);
+  --hover: var(--one-control-hover);
+  --input-bg: var(--one-editor-bg);
+  --input-text: var(--one-fg);
+  --overlay: var(--one-scrim);
+  --scroll: var(--one-surface-subtle);
+  --scroll-hover: var(--one-border);
+  --progress-track: var(--one-surface-subtle);
+
+  /* --stroke is used for every region boundary (topbar, panel headers, column
+     splitters, popups, statusbar); --stroke-2 is the control border.
+     Light keeps surface-subtle (D-024: DS AppBar separates by elevation). */
+  --stroke: var(--one-surface-subtle);
+  --stroke-2: var(--one-border);
+
+  /* text */
+  --text: var(--one-fg);
+  --muted: var(--one-fg-muted);
+  --faint: var(--one-fg-subtle);
+
+  /* accent */
+  --accent: var(--one-accent);
+  --accent-hover: var(--one-accent-hover);
+  --accent-dim: var(--one-accent-soft);
+  --accent-ring: var(--one-focus-halo);
+  --accent-pulse: var(--one-focus-halo);
+  --on-accent: var(--one-accent-on);
+
+  /* status */
+  --crit: var(--one-danger);
+  --warn: var(--one-warning);
+  --ok: var(--one-success-icon);
+  --info: var(--one-info);
+
+  --danger-bg: var(--one-danger-bg);
+  --danger-border: var(--one-danger-icon);
+  --danger-text: var(--one-danger-text);
+  --ok-bg: var(--one-success-bg);
+  --ok-border: var(--one-success-icon);
+  --ok-text: var(--one-success-text);
+  --duty-bg: var(--one-info-bg);
+  --duty-border: var(--one-info-icon);
+  --duty-text: var(--one-info-text);
+  --break-bg: var(--one-warning-bg);
+  --break-border: var(--one-warning-icon);
+  --break-text: var(--one-warning-text);
+
+  /* escalation / redirect: own-colour actions from the Figma palette (D-009, D-012) */
+  --esc-bg: var(--one-palette-burnt-orange);
+  --esc-hover: var(--one-palette-orange);
+  --esc-text: #ffffff;
+
+  /* badges */
+  --badge-mine: var(--one-info-icon);
+  --badge-mine-border: var(--one-info-icon);
+  --badge-esc: var(--one-danger-icon);
+  --badge-esc-border: var(--one-danger-icon);
+  --badge-new: var(--one-warning-icon);
+  --badge-new-border: var(--one-warning-icon);
+  /* .badge.foreign paints --badge-foreign-border as its background.
+     Palette tint pair by the MessageBar recipe (D-020): bg = hue at a low share
+     over surface, text = hue mixed at least half-way toward fg. */
+  --badge-foreign: color-mix(in srgb, var(--one-fg) 50%, var(--one-palette-grape));
+  --badge-foreign-border: color-mix(in srgb, var(--one-palette-lavender) 16%, var(--one-surface));
+
+  --radius: var(--one-radius-window);
+  --radius-sm: var(--one-radius-container);
+}
+
+[data-theme="dark"] {
+  --badge-foreign: color-mix(in srgb, var(--one-fg) 60%, var(--one-palette-lavender));
+  --badge-foreign-border: color-mix(in srgb, var(--one-palette-grape) 30%, var(--one-surface));
+  /* Dark region boundaries: --one-border, not surface-subtle (D-024). */
+  --stroke: var(--one-border);
+}
+
+/* Focus ring: 2px + offset; the prototype's 4px halo on fields is replaced, not stacked. */
+:focus-visible {
+  outline: 2px solid var(--one-focus-ring);
+  outline-offset: 2px;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.search-input:focus,
+.field-inline select:focus,
+.field select:focus,
+.field textarea:focus,
+.step-card input:not([type="checkbox"]):not([type="radio"]):focus,
+.step-card select:focus,
+.step-card textarea:focus {
+  border-color: var(--one-border-strong);
+  box-shadow: none;
+  outline: 2px solid var(--one-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---- Rules the variable layer cannot express -------------------------------- */
+
+/* Escalation is a red action; Redirect keeps the orange --esc-* mapping.
+   Both share `btn warn`, so the action id is the only hook (D-012). */
+.btn.warn[data-do="escalate"] { background: var(--one-palette-venetian-red); color: #ffffff; }
+.btn.warn[data-do="escalate"]:hover:not(:disabled) { background: var(--one-palette-red); }
+.btn.warn:hover:not(:disabled),
+.btn.warn:active:not(:disabled) { color: var(--esc-text); }
+.btn.warn:active:not(:disabled) { background: var(--esc-bg); }
+.btn.warn[data-do="escalate"]:hover:not(:disabled),
+.btn.warn[data-do="escalate"]:active:not(:disabled) { color: #ffffff; }
+.btn.warn[data-do="escalate"]:active:not(:disabled) { background: var(--one-palette-venetian-red); }
+
+/* Selection is shown by the background only (D-011). */
+.mobile-nav button.active { color: var(--text); }
+.tree-node.active > .node-content .node-text,
+.tree-node.active > .node-content .material-symbols-outlined,
+.tree-node.trace-leaf > .node-content .node-text,
+.tree-node.trace-leaf > .node-content .material-symbols-outlined { color: var(--text); }
+.tree-node.is-device.active > .node-content .node-text { color: var(--text); }
+
+/* Control borders are 1px in every state (D-014). */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea,
+.btn.outline,
+.crumb-n,
+.confirm-btn,
+.radios label,
+.checks label,
+.macro-row .btn { border-width: 1px; }
+
+/* ---- Button ladders, verbatim from §2.8 / oneTheme.ts MuiButton ------------ */
+
+/* primary */
+.btn.primary { background: var(--one-accent); color: var(--one-accent-on); border: 1px solid var(--one-accent); }
+.btn.primary:hover:not(:disabled) { background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on); }
+.btn.primary:active:not(:disabled) { background: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+
+/* outline — hover/pressed fill only; border and label unchanged */
+.btn.outline { background: transparent; color: var(--one-fg); border: 1px solid var(--one-border); }
+.btn.outline:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); border-color: var(--one-border); }
+.btn.outline:active:not(:disabled) { background: var(--one-control-pressed); border-color: var(--one-border); }
+
+/* subtle / ghost */
+.btn,
+.btn.ghost { color: var(--one-fg); }
+.btn:hover:not(:disabled),
+.btn.ghost:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
+.btn:active:not(:disabled),
+.btn.ghost:active:not(:disabled) { background: var(--one-control-pressed); }
+.icon-btn { color: var(--one-fg-muted); }
+.icon-btn:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
+.icon-btn:active:not(:disabled) { background: var(--one-control-pressed); }
+
+/* ToggleButton on-state (D-018): primary fill, not the Button selected ring. */
+.icon-btn.on,
+.icon-btn[aria-pressed="true"] { background: var(--one-accent); color: var(--one-accent-on); box-shadow: none; }
+.icon-btn.on:hover:not(:disabled),
+.icon-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--one-primary-hover); color: var(--one-accent-on); }
+.icon-btn.on:active:not(:disabled),
+.icon-btn[aria-pressed="true"]:active:not(:disabled) { background: var(--one-primary-pressed); color: var(--one-accent-on); }
+.icon-btn.on:disabled,
+.icon-btn[aria-pressed="true"]:disabled { background: var(--one-control-disabled); color: var(--one-fg-disabled); }
+
+/* Theme button is an action with a changing glyph, not an on/off toggle.
+   The prototype marks it aria-pressed only in Light. */
+.icon-btn.theme-btn[aria-pressed="true"] { background: transparent; color: var(--one-fg-muted); }
+.icon-btn.theme-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
+.icon-btn.theme-btn[aria-pressed="true"]:active:not(:disabled) { background: var(--one-control-pressed); color: var(--one-fg); }
+.theme-btn:hover .theme-icon { color: inherit; }
+
+/* Archive / Online segments = ToggleButton */
+.seg button { color: var(--one-fg); }
+.seg button:hover:not(.active) { background: var(--one-control-hover); color: var(--one-fg); }
+.seg button.active { background: var(--one-accent); color: var(--one-accent-on); }
+.seg button.active:hover { background: var(--one-primary-hover); }
+.seg button.active:active { background: var(--one-primary-pressed); }
+
+/* Queue cards carry buttons: half-strength hover (D-019, provisional). */
+.event:hover { background: color-mix(in srgb, var(--one-control-hover) 50%, var(--one-surface)); }
+
+/* disabled — tokens, not opacity */
+.btn:disabled,
+.icon-btn:disabled { opacity: 1; color: var(--one-fg-disabled); cursor: not-allowed; }
+.btn.primary:disabled { background: var(--one-control-disabled); border-color: var(--one-border); }
+.btn.outline:disabled { background: transparent; border-color: var(--one-border); }
+
+/* <select> = ComboBox; option ladder from MuiAutocomplete (D-017). */
+@supports (appearance: base-select) {
+  select option { color: var(--one-fg); font-weight: 400; }
+  select option:hover,
+  select option:focus { background: var(--one-control-hover); color: var(--one-fg); }
+  select option:checked,
+  select option:checked:focus { background: var(--one-accent); color: var(--one-accent-on); font-weight: 400; }
+  select option:checked:hover { background: var(--one-primary-hover); color: var(--one-accent-on); }
+  select option:disabled { color: var(--one-fg-disabled); }
+}
+
+/* Panel title = PanelTitle / heading-sm (D-021). */
+.panel-h h2 {
+  font: var(--one-type-heading-sm);
+  letter-spacing: var(--one-type-heading-sm-tracking);
+  text-transform: none;
+  color: var(--one-fg);
+}
+
+/* Dialog title = heading-md (D-021 / §2.2b). */
+.modal-card h3 {
+  font: var(--one-type-heading-md);
+  letter-spacing: var(--one-type-heading-md-tracking);
+  text-transform: none;
+  color: var(--one-fg);
+}
+
+/* App mark = ONE sign via mask on the existing span (D-023). Size is this
+   header's geometry: 32px next to the two-line brand text, under the 36px icon buttons. */
+.brand-mark {
+  width: calc(32px * 34.6406 / 40);
+  height: 32px;
+  color: var(--one-fg-subtle);
+  background: currentColor;
+  clip-path: none;
+  border-radius: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34.6406 40'%3E%3Cpath d='M34.6406 10V30L17.3203 40L0 30V10L17.3203 0L34.6406 10ZM3 11.7314V28.2676L17.3203 36.5361L31.6406 28.2676V11.7314L17.3203 3.46289L3 11.7314Z' fill='currentColor'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34.6406 40'%3E%3Cpath d='M34.6406 10V30L17.3203 40L0 30V10L17.3203 0L34.6406 10ZM3 11.7314V28.2676L17.3203 36.5361L31.6406 28.2676V11.7314L17.3203 3.46289L3 11.7314Z' fill='currentColor'/%3E%3C/svg%3E") center / contain no-repeat;
+}

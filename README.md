@@ -11,6 +11,7 @@
 | [prototype/index.html](prototype/index.html) | Рабочее место оператора: очередь инцидентов, карточка обработки по сценарию, видеомонитор и карта. Открывается двойным кликом, сборка и сервер не нужны |
 | [prototype/app.js](prototype/app.js) | Вся логика и демонстрационные данные: состояния инцидентов, сценарии обработки, права, эскалация, эмуляция работы коллег |
 | [prototype/styles.css](prototype/styles.css) | Оформление, светлая и тёмная темы, адаптивные раскладки |
+| [prototype/bridge.css](prototype/bridge.css) | Restyle в семью ONE PSIM: маппинг на [theme/one-psim.css](theme/one-psim.css), без правок разметки и JS. Как смотреть и что подтвердить — [prototype/README.md](prototype/README.md) |
 | [prototype/groups.html](prototype/groups.html) | Отдельный ранний прототип управления группами и устройствами. Из него взято дерево объектов для основного прототипа |
 
 ### Что показывает прототип
