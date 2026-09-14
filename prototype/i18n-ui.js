@@ -11,11 +11,13 @@ window.IM_DICT_UI = {
     "{id} закрыт": "{id} closed",
     "{id} отложен": "{id} put on hold",
     "{id} отменён": "{id} canceled",
+    "{id} передан → {who}": "{id} transferred → {who}",
     "{id} перенаправлен → {who}": "{id} redirected → {who}",
     "{id} переоткрыт": "{id} reopened",
     "{id} принят в работу": "{id} accepted",
     "{label} приостановлен: {time}": "{label} paused: {time}",
     "{label}: осталось {time}": "{label}: {time} left",
+    "{who} передал {id} вам": "{who} transferred {id} to you",
     "{who} эскалировал {id} на вас": "{who} escalated {id} to you",
     "Автоэскалация {id} → {who}": "Auto-escalation {id} → {who}",
     "Автоэскалация → {who} (уровень {lvl}). {why}": "Auto-escalation → {who} (level {lvl}). {why}",
@@ -30,6 +32,7 @@ window.IM_DICT_UI = {
     "Вернуть": "Return",
     "Вернуть в очередь": "Return to queue",
     "Вернуть завершённый инцидент в работу": "Bring a finished incident back into work",
+    "Вернуть передачу в общую очередь": "Send the handoff back to the common queue",
     "Вернуть эскалацию в общую очередь": "Send the escalation back to the common queue",
     "Вернуться к своей карточке": "Back to your card",
     "Вернуться на смену": "Back on shift",
@@ -77,6 +80,8 @@ window.IM_DICT_UI = {
     "Инцидент закрыт.": "The incident is closed.",
     "Инцидент закрыт. Результат уйдёт в AxxonData": "Incident closed. The outcome will be sent to AxxonData",
     "Инцидент занят другим оператором": "The incident is taken by another operator",
+    "Инцидент занят: {who}. Передача другому адресату без перехвата.":
+      "Taken by {who}. Transfer it to another recipient without taking it over.",
     "Инцидент занят: {who}. Перенаправление другому адресату без перехвата.":
       "Taken by {who}. Redirect it to another recipient without taking it over.",
     "Инцидент занят: {who}. Прогресс сценария {a}/{b} сохранится, его карточка закроется.":
@@ -167,7 +172,14 @@ window.IM_DICT_UI = {
     "Панель групп скрыта на время обработки инцидента":
       "The groups panel is hidden while an incident is being handled",
     "Передано бригадиру, акт №14-СБ": "Handed to the foreman, report #14-SB",
+    "Передать": "Transfer",
+    "Передать выбранный": "Transfer the selected one",
+    "Передать инцидент": "Transfer the incident",
     "Передать инцидент другому адресату": "Hand the incident to another recipient",
+    "Передано → {who} (уровень {lvl}). {why}": "Transferred → {who} (level {lvl}). {why}",
+    "Передача адресована другому": "The handoff is addressed to someone else",
+    "Передача отклонена: {why}": "Handoff rejected: {why}",
+    "Передача принята, прогресс сценария сохранён": "Handoff accepted, scenario progress kept",
     "Перенаправить": "Redirect",
     "Перенаправить чужой инцидент другому адресату без перехвата":
       "Redirect another operator’s incident without taking it over",
@@ -178,8 +190,12 @@ window.IM_DICT_UI = {
     "Перерыв": "Break",
     "Перерыв оператора": "Operator break",
     "Перерыв. Новые события не назначаются": "Break. New events are not assigned to you",
+    "перехват и передача недоступны по правам":
+      "take-over and transfer are not allowed by your permissions",
     "перехват и перенаправление недоступны по правам":
       "take-over and redirect are not allowed by your permissions",
+    "перехват недоступен по правам, можно передать":
+      "take-over is not allowed by your permissions, but you can transfer",
     "перехват недоступен по правам, можно перенаправить":
       "take-over is not allowed by your permissions, but you can redirect",
     "Перехват у {who}. Прогресс сценария сохранён ({a}/{b})":
@@ -199,6 +215,7 @@ window.IM_DICT_UI = {
     "Почему возвращаете": "Why you are returning it",
     "Почему не принимаете": "Why you are not accepting it",
     "Почему требуется вернуть в работу": "Why it must go back into work",
+    "Почему передаёте": "Why you are transferring it",
     "Почему требуется перенаправление": "Why a redirect is needed",
     "предвыбор": "preselected",
     "Предвыбор — {who}. Меняется в меню оператора.": "Preselected: {who}. Change it in the operator menu.",
@@ -213,6 +230,7 @@ window.IM_DICT_UI = {
     "Прервано: обработка невозможна": "Interrupted: handling impossible",
     "при необходимости перехватите": "take it over if needed",
     "Принять": "Accept",
+    "Принять адресованную вам передачу": "Accept the handoff addressed to you",
     "Принять адресованную вам эскалацию": "Accept the escalation addressed to you",
     "Причина не указана": "No reason given",
     "Причина отмены": "Cancellation reason",
@@ -270,12 +288,16 @@ window.IM_DICT_UI = {
     "Взять следующее новое": "Take the next new one",
     "Возобновить свой отложенный": "Resume your incident on hold",
     "Завершённые": "Finished",
+    "Личная настройка: подставляется в форму передачи. На автоэскалацию не влияет.":
+      "Personal setting: prefills the transfer form. It does not affect auto-escalation.",
     "Личная настройка: подставляется в форму ручной эскалации. На автоэскалацию не влияет.":
       "Personal setting: prefills the manual escalation form. It does not affect auto-escalation.",
     "Мне на принятие": "For me to accept",
     "Открыть форму закрытия инцидента": "Open the incident closing form",
     "Перехватить (по праву, из карточки)": "Take over (by permission, from the card)",
+    "Предвыбор адресата передачи": "Transfer recipient preselection",
     "Предвыбор адресата эскалации": "Escalation recipient preselection",
+    "Принять адресованную передачу": "Accept an addressed handoff",
     "Принять адресованную эскалацию": "Accept an addressed escalation",
     "Форма → полный экран → панель групп → возврат к очереди":
       "Form → full screen → groups panel → back to the queue",
@@ -291,11 +313,13 @@ window.IM_DICT_UI = {
     "{id} закрыт": "{id} cerrado",
     "{id} отложен": "{id} en espera",
     "{id} отменён": "{id} cancelado",
+    "{id} передан → {who}": "{id} transferido → {who}",
     "{id} перенаправлен → {who}": "{id} redirigido → {who}",
     "{id} переоткрыт": "{id} reabierto",
     "{id} принят в работу": "{id} aceptado",
     "{label} приостановлен: {time}": "{label} en pausa: {time}",
     "{label}: осталось {time}": "{label}: quedan {time}",
+    "{who} передал {id} вам": "{who} le ha transferido {id}",
     "{who} эскалировал {id} на вас": "{who} le ha escalado {id}",
     "Автоэскалация {id} → {who}": "Autoescalado {id} → {who}",
     "Автоэскалация → {who} (уровень {lvl}). {why}": "Autoescalado → {who} (nivel {lvl}). {why}",
@@ -311,6 +335,7 @@ window.IM_DICT_UI = {
     "Вернуть": "Devolver",
     "Вернуть в очередь": "Devolver a la cola",
     "Вернуть завершённый инцидент в работу": "Volver a tramitar un incidente finalizado",
+    "Вернуть передачу в общую очередь": "Devolver la transferencia a la cola común",
     "Вернуть эскалацию в общую очередь": "Devolver la escalada a la cola común",
     "Вернуться к своей карточке": "Volver a su ficha",
     "Вернуться на смену": "Volver al turno",
@@ -360,6 +385,8 @@ window.IM_DICT_UI = {
     "Инцидент закрыт. Результат уйдёт в AxxonData":
       "Incidente cerrado. El resultado se enviará a AxxonData",
     "Инцидент занят другим оператором": "El incidente lo tiene otro operador",
+    "Инцидент занят: {who}. Передача другому адресату без перехвата.":
+      "Lo tiene {who}. Transferirlo a otro destinatario sin apropiárselo.",
     "Инцидент занят: {who}. Перенаправление другому адресату без перехвата.":
       "Lo tiene {who}. Redirigirlo a otro destinatario sin apropiárselo.",
     "Инцидент занят: {who}. Прогресс сценария {a}/{b} сохранится, его карточка закроется.":
@@ -454,7 +481,14 @@ window.IM_DICT_UI = {
     "Панель групп скрыта на время обработки инцидента":
       "El panel de grupos se oculta durante la tramitación del incidente",
     "Передано бригадиру, акт №14-СБ": "Entregado al encargado, acta n.º 14-SB",
+    "Передать": "Transferir",
+    "Передать выбранный": "Transferir el seleccionado",
+    "Передать инцидент": "Transferir el incidente",
     "Передать инцидент другому адресату": "Transferir el incidente a otro destinatario",
+    "Передано → {who} (уровень {lvl}). {why}": "Transferido → {who} (nivel {lvl}). {why}",
+    "Передача адресована другому": "La transferencia está dirigida a otra persona",
+    "Передача отклонена: {why}": "Transferencia rechazada: {why}",
+    "Передача принята, прогресс сценария сохранён": "Transferencia aceptada, progreso conservado",
     "Перенаправить": "Redirigir",
     "Перенаправить чужой инцидент другому адресату без перехвата":
       "Redirigir el incidente de otro operador sin apropiárselo",
@@ -465,8 +499,12 @@ window.IM_DICT_UI = {
     "Перерыв": "Pausa",
     "Перерыв оператора": "Pausa del operador",
     "Перерыв. Новые события не назначаются": "Pausa. No se le asignan eventos nuevos",
+    "перехват и передача недоступны по правам":
+      "sus permisos no permiten apropiárselo ni transferirlo",
     "перехват и перенаправление недоступны по правам":
       "sus permisos no permiten apropiárselo ni redirigirlo",
+    "перехват недоступен по правам, можно передать":
+      "no puede apropiárselo, pero sí transferirlo",
     "перехват недоступен по правам, можно перенаправить":
       "no puede apropiárselo, pero sí redirigirlo",
     "Перехват у {who}. Прогресс сценария сохранён ({a}/{b})":
@@ -486,6 +524,7 @@ window.IM_DICT_UI = {
     "Почему возвращаете": "Por qué lo devuelve",
     "Почему не принимаете": "Por qué no lo acepta",
     "Почему требуется вернуть в работу": "Por qué debe volver a tramitarse",
+    "Почему передаёте": "Por qué lo transfiere",
     "Почему требуется перенаправление": "Por qué es necesaria la redirección",
     "предвыбор": "preseleccionado",
     "Предвыбор — {who}. Меняется в меню оператора.":
@@ -501,6 +540,7 @@ window.IM_DICT_UI = {
     "Прервано: обработка невозможна": "Interrumpido: tramitación imposible",
     "при необходимости перехватите": "apropíese si es necesario",
     "Принять": "Aceptar",
+    "Принять адресованную вам передачу": "Aceptar la transferencia dirigida a usted",
     "Принять адресованную вам эскалацию": "Aceptar la escalada dirigida a usted",
     "Причина не указана": "Sin motivo indicado",
     "Причина отмены": "Motivo de cancelación",
@@ -560,12 +600,16 @@ window.IM_DICT_UI = {
     "Взять следующее новое": "Tomar el siguiente nuevo",
     "Возобновить свой отложенный": "Reanudar su incidente en espera",
     "Завершённые": "Finalizados",
+    "Личная настройка: подставляется в форму передачи. На автоэскалацию не влияет.":
+      "Ajuste personal: rellena el formulario de transferencia. No afecta al autoescalado.",
     "Личная настройка: подставляется в форму ручной эскалации. На автоэскалацию не влияет.":
       "Ajuste personal: rellena el formulario de escalada manual. No afecta al autoescalado.",
     "Мне на принятие": "Para que yo acepte",
     "Открыть форму закрытия инцидента": "Abrir el formulario de cierre del incidente",
     "Перехватить (по праву, из карточки)": "Apropiarse (con permiso, desde la ficha)",
+    "Предвыбор адресата передачи": "Preselección del destinatario de transferencia",
     "Предвыбор адресата эскалации": "Preselección del destinatario de escalada",
+    "Принять адресованную передачу": "Aceptar una transferencia dirigida",
     "Принять адресованную эскалацию": "Aceptar una escalada dirigida",
     "Форма → полный экран → панель групп → возврат к очереди":
       "Formulario → pantalla completa → panel de grupos → volver a la cola",

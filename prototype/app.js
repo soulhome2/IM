@@ -1685,8 +1685,8 @@
     "incident:close": true,
     "incident:cancel": true,
     "incident:reopen": true,
-    "incident:escalate:own": true,
-    "incident:escalate:any": true,
+    "incident:transfer:own": true,
+    "incident:transfer:any": true,
     "incident:reassign": true,
     "incident:read:any": true,
     "incident:bulk": true,
@@ -1738,7 +1738,7 @@
     videoMode: "archive",
     activeCam: "device-23",
     full: null,
-    // Предвыбор адресата в форме эскалации — личная настройка оператора,
+    // Предвыбор адресата в форме передачи — личная настройка оператора,
     // на автоэскалацию не влияет (§8.2).
     escalateTo: "petrova",
     dialog: null,
@@ -2115,12 +2115,12 @@
 
   // Мягкие условия оставляют кнопку видимой и блокируют её с подсказкой (§10.2).
   // Условия принадлежности прячут кнопку: действие не относится к этой ситуации.
-  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign"];
+  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign", "canTransfer"];
 
   const GUARDS = {
     owner: (ev) => (isMine(ev) ? null : t("Вы не владелец инцидента")),
     notOwner: (ev) => (isMine(ev) ? t("Инцидент уже ваш") : null),
-    target: (ev) => (isTarget(ev) ? null : t("Эскалация адресована другому")),
+    target: (ev) => (isTarget(ev) ? null : t("Передача адресована другому")),
     activeLimit: (ev) => {
       const units = myUnits("in_progress", ev.id);
       if (units.size < LIMITS.maxActive) return null;
@@ -2167,7 +2167,7 @@
     },
     accept: {
       label: "Принять",
-      hint: "Принять адресованную вам эскалацию",
+      hint: "Принять адресованную вам передачу",
       style: "primary",
       from: ["pending_acceptance"],
       to: "in_progress",
@@ -2178,14 +2178,14 @@
         stopReaction(ev);
         startResolution(ev);
         ensureCursor(ev);
-        log(ev, "me", "Эскалация принята, прогресс сценария сохранён");
+        log(ev, "me", "Передача принята, прогресс сценария сохранён");
         toast(t("{id} принят в работу", { id: ev.id }));
         return "card";
       },
     },
     reject: {
       label: "Отклонить",
-      hint: "Вернуть эскалацию в общую очередь",
+      hint: "Вернуть передачу в общую очередь",
       style: "outline",
       from: ["pending_acceptance"],
       to: "new",
@@ -2195,7 +2195,7 @@
       run(ev, payload) {
         ev.owner = null;
         startReaction(ev);
-        log(ev, "me", "Эскалация отклонена: {why}", { why: payload.reason });
+        log(ev, "me", "Передача отклонена: {why}", { why: payload.reason });
         toast(t("{id} возвращён в очередь", { id: ev.id }));
         return "queue";
       },
@@ -2261,38 +2261,25 @@
         return "queue";
       },
     },
-    escalate: {
-      label: "Эскалация",
+    transfer: {
+      label: "Передать",
       hint: "Передать инцидент другому адресату",
       style: "warn",
       from: ["new", "pending_acceptance", "in_progress", "on_hold"],
       to: "pending_acceptance",
-      perm: "incident:escalate:own",
-      guards: ["ownOrFree"],
-      dialog: "escalate",
+      guards: ["canTransfer"],
+      dialog: "transfer",
       hotkey: "E",
       run(ev, payload) {
-        applyEscalation(ev, payload.choice, payload.reason, "me");
-        toast(t("Эскалация {id} → {who}", { id: ev.id, who: actorName(payload.choice) }));
-        return "queue";
-      },
-    },
-    redirect: {
-      label: "Перенаправить",
-      hint: "Перенаправить чужой инцидент другому адресату без перехвата",
-      style: "warn",
-      from: ["pending_acceptance", "in_progress", "on_hold"],
-      to: "pending_acceptance",
-      perm: "incident:escalate:any",
-      guards: ["notOwner"],
-      dialog: "redirect",
-      run(ev, payload) {
         const prev = ev.owner;
+        const foreign = prev && !isMine(ev) && !isTarget(ev);
         applyEscalation(ev, payload.choice, payload.reason, "me");
-        log(ev, "system", "Прежний владелец {who} уведомлён, его карточка переведена в просмотр", {
-          who: actorRaw(prev),
-        });
-        toast(t("{id} перенаправлен → {who}", { id: ev.id, who: actorName(payload.choice) }));
+        if (foreign) {
+          log(ev, "system", "Прежний владелец {who} уведомлён, его карточка переведена в просмотр", {
+            who: actorRaw(prev),
+          });
+        }
+        toast(t("{id} передан → {who}", { id: ev.id, who: actorName(payload.choice) }));
         return "queue";
       },
     },
@@ -2411,14 +2398,19 @@
     ev.holdSince = null;
     stopResolution(ev);
     startReaction(ev, ev.escalationLevel > 0 ? 150 : ev.slaSec);
-    log(ev, byId, "Эскалация → {who} (уровень {lvl}). {why}", {
+    log(ev, byId, "Передано → {who} (уровень {lvl}). {why}", {
       who: actorRaw(targetId),
       lvl: ev.escalationLevel,
       why: reason || "Причина не указана",
     });
   }
 
-  // Своё, ничьё или адресованное мне — по праву escalate:own; чужое — по escalate:any.
+  // Своё, ничьё или адресованное мне — transfer:own; чужое — transfer:any (§5 v3).
+  GUARDS.canTransfer = (ev) => {
+    const ownSide = ev.state === "new" || isMine(ev) || isTarget(ev);
+    if (ownSide) return can("incident:transfer:own") ? null : t("Нет права: {p}", { p: "incident:transfer:own" });
+    return can("incident:transfer:any") ? null : t("Нет права: {p}", { p: "incident:transfer:any" });
+  };
   GUARDS.ownOrFree = (ev) =>
     ev.state === "new" || isMine(ev) || isTarget(ev) ? null : t("Инцидент занят другим оператором");
 
@@ -2456,13 +2448,13 @@
   function queueActions(ev) {
     const mine = isMine(ev);
     const ids = [];
-    if (ev.state === "new") ids.push("claim", "escalate");
+    if (ev.state === "new") ids.push("claim", "transfer");
     else if (ev.state === "pending_acceptance")
-      isTarget(ev) ? ids.push("accept", "reject", "escalate") : ids.push("viewForeign", "redirect");
+      isTarget(ev) ? ids.push("accept", "reject", "transfer") : ids.push("viewForeign", "transfer");
     else if (ev.state === "in_progress")
-      mine ? ids.push("continueOwn", "escalate") : ids.push("viewForeign", "redirect");
+      mine ? ids.push("continueOwn", "transfer") : ids.push("viewForeign", "transfer");
     else if (ev.state === "on_hold")
-      mine ? ids.push("resume", "escalate") : ids.push("viewForeign", "redirect");
+      mine ? ids.push("resume", "transfer") : ids.push("viewForeign", "transfer");
     else ids.push("viewDone", "reopen");
     return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
   }
@@ -2470,10 +2462,10 @@
   function cardActions(ev) {
     const mine = isMine(ev);
     const ids = [];
-    if (mine && ev.state === "in_progress") ids.push("hold", "escalate", "release", "cancel");
-    else if (mine && ev.state === "on_hold") ids.push("resume", "escalate", "release");
-    else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "escalate");
-    else if (!mine && !isDone(ev)) ids.push("takeover", "redirect");
+    if (mine && ev.state === "in_progress") ids.push("hold", "transfer", "release", "cancel");
+    else if (mine && ev.state === "on_hold") ids.push("resume", "transfer", "release");
+    else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "transfer");
+    else if (!mine && !isDone(ev)) ids.push("takeover", "transfer");
     else if (isDone(ev)) ids.push("reopen");
     return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
   }
@@ -2515,28 +2507,20 @@
   const TARGET_LIST = () => OPERATORS.filter((op) => !op.self).concat(GROUPS);
 
   const DIALOGS = {
-    escalate: {
-      title: "Эскалация инцидента",
-      note: (ev) =>
-        ev.state === "new"
-          ? t("Инцидент передаётся без взятия в работу. Уровень станет {lvl}.", { lvl: ev.escalationLevel + 1 })
-          : t("Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {lvl}.", {
-              lvl: ev.escalationLevel + 1,
-            }),
+    transfer: {
+      title: "Передать инцидент",
+      note: (ev) => {
+        if (ev.state === "new")
+          return t("Инцидент передаётся без взятия в работу. Уровень станет {lvl}.", { lvl: ev.escalationLevel + 1 });
+        if (!isMine(ev) && !isTarget(ev))
+          return t("Инцидент занят: {who}. Передача другому адресату без перехвата.", { who: actorName(ev.owner) });
+        return t("Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {lvl}.", {
+          lvl: ev.escalationLevel + 1,
+        });
+      },
       select: "targets",
-      text: { label: "Причина", required: true, ph: "Почему требуется эскалация" },
+      text: { label: "Причина", required: true, ph: "Почему передаёте" },
       confirm: "Передать",
-      style: "warn",
-    },
-    redirect: {
-      title: "Перенаправление инцидента",
-      note: (ev) =>
-        t("Инцидент занят: {who}. Перенаправление другому адресату без перехвата.", {
-          who: actorName(ev.owner),
-        }),
-      select: "targets",
-      text: { label: "Причина", required: true, ph: "Почему требуется перенаправление" },
-      confirm: "Перенаправить",
       style: "warn",
     },
     hold: {
@@ -2606,7 +2590,7 @@
 
   function selectOptions(kind, ev) {
     if (kind === "targets") {
-      // Себя в списке нет всегда, владельца — при перенаправлении (§8.1)
+      // Себя в списке нет всегда, владельца — при передаче чужого (§8.1)
       return TARGET_LIST()
         .filter((op) => op.id !== ev.owner)
         .map((op) => {
@@ -3147,9 +3131,9 @@
     if (!isMine(ev)) {
       const rights = canDo("takeover", ev)
         ? t("при необходимости перехватите")
-        : canDo("redirect", ev)
-          ? t("перехват недоступен по правам, можно перенаправить")
-          : t("перехват и перенаправление недоступны по правам");
+        : canDo("transfer", ev)
+          ? t("перехват недоступен по правам, можно передать")
+          : t("перехват и передача недоступны по правам");
       const holder =
         ev.state === "pending_acceptance"
           ? t("Инцидент ожидает принятия: {who}.", { who: actorName(ev.owner) })
@@ -4214,7 +4198,7 @@
     const ev = pool[0];
     const from = ev.owner;
     applyEscalation(ev, "me", "Нужен оператор с доступом к архиву объекта", from);
-    toast(t("{who} эскалировал {id} на вас", { who: actorName(from), id: ev.id }));
+    toast(t("{who} передал {id} вам", { who: actorName(from), id: ev.id }));
     return ev.id;
   }
 
@@ -4309,7 +4293,7 @@
       $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
     }
     if (key === "b") $("breakBtn").click();
-    if (key === "e") trigger(ev && !canDo("escalate", ev) && canDo("redirect", ev) ? "redirect" : "escalate", ev);
+    if (key === "e") trigger("transfer", ev);
     if (key === "a") trigger("accept", ev);
     if (key === "r") trigger("resume", ev);
     if (key === "h") trigger("hold", ev);

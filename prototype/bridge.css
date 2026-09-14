@@ -64,7 +64,7 @@
   --break-border: var(--one-warning-icon);
   --break-text: var(--one-warning-text);
 
-  /* escalation / redirect: own-colour actions from the Figma palette (D-009, D-012) */
+  /* transfer: one warn accent for handing the incident off (v3; D-009) */
   --esc-bg: var(--one-palette-burnt-orange);
   --esc-hover: var(--one-palette-orange);
   --esc-text: #ffffff;
@@ -116,16 +116,10 @@ textarea:focus-visible,
 
 /* ---- Rules the variable layer cannot express -------------------------------- */
 
-/* Escalation is a red action; Redirect keeps the orange --esc-* mapping.
-   Both share `btn warn`, so the action id is the only hook (D-012). */
-.btn.warn[data-do="escalate"] { background: var(--one-palette-venetian-red); color: #ffffff; }
-.btn.warn[data-do="escalate"]:hover:not(:disabled) { background: var(--one-palette-red); }
+/* Transfer is one warn action. The old red-vs-orange split died with escalate/redirect (v3). */
 .btn.warn:hover:not(:disabled),
 .btn.warn:active:not(:disabled) { color: var(--esc-text); }
 .btn.warn:active:not(:disabled) { background: var(--esc-bg); }
-.btn.warn[data-do="escalate"]:hover:not(:disabled),
-.btn.warn[data-do="escalate"]:active:not(:disabled) { color: #ffffff; }
-.btn.warn[data-do="escalate"]:active:not(:disabled) { background: var(--one-palette-venetian-red); }
 
 /* Selection is shown by the background only (D-011). */
 .mobile-nav button.active { color: var(--text); }
