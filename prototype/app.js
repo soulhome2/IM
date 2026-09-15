@@ -2221,7 +2221,7 @@
         startResolution(ev);
         ensureCursor(ev);
         log(ev, "me", "Передача принята, прогресс сценария сохранён");
-        toast(t("{id} принят в работу", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} принят в работу", { id: ev.id }));
         return "card";
       },
     },
@@ -2238,7 +2238,7 @@
         ev.owner = null;
         startReaction(ev);
         log(ev, "me", "Передача отклонена: {why}", { why: payload.reason });
-        toast(t("{id} возвращён в очередь", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} возвращён в очередь", { id: ev.id }));
         return "queue";
       },
     },
@@ -2261,7 +2261,7 @@
           n: ev.stepIndex + 1,
           why: rawHold(payload.choice),
         });
-        toast(t("{id} отложен", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} отложен", { id: ev.id }));
         return "queue";
       },
     },
@@ -2299,7 +2299,8 @@
         stopResolution(ev);
         startReaction(ev);
         log(ev, "me", "Возвращён в очередь: {why}", { why: payload.reason });
-        toast(t("{id} возвращён в очередь", { id: ev.id }));
+        ev.groupId = null;
+        if (!(payload && payload.silent)) toast(t("{id} возвращён в очередь", { id: ev.id }));
         return "queue";
       },
     },
@@ -2321,7 +2322,7 @@
             who: actorRaw(prev),
           });
         }
-        toast(t("{id} передан → {who}", { id: ev.id, who: actorName(payload.choice) }));
+        if (!(payload && payload.silent)) toast(t("{id} передан → {who}", { id: ev.id, who: actorName(payload.choice) }));
         return "queue";
       },
     },
@@ -2368,9 +2369,9 @@
         ev.closedAt = Date.now();
         stopReaction(ev);
         stopResolution(ev);
-        if (payload.reason) ev.answers.result = payload.reason;
+        if (payload && payload.reason) ev.answers.result = payload.reason;
         log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
-        toast(t("{id} закрыт", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} закрыт", { id: ev.id }));
         return "queue";
       },
     },
@@ -2385,7 +2386,7 @@
       dialog: "closeUnprocessed",
       run(ev, payload) {
         skipCloseEvent(ev, payload);
-        if (!payload.silent) toast(t("{id} закрыт без обработки", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} закрыт без обработки", { id: ev.id }));
         return "queue";
       },
     },
@@ -2408,7 +2409,7 @@
           why: rawCancel(payload.choice),
           note: payload.reason,
         });
-        toast(t("{id} отменён", { id: ev.id }));
+        if (!(payload && payload.silent)) toast(t("{id} отменён", { id: ev.id }));
         return "queue";
       },
     },
@@ -2477,6 +2478,137 @@
     });
   }
 
+  function groupMates(ev) {
+    if (!ev) return [];
+    if (!ev.groupId) return [ev];
+    return state.events.filter((e) => e.groupId === ev.groupId);
+  }
+
+  function checkedEvents() {
+    return [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+  }
+
+  function sameTypeNew(list) {
+    return Boolean(list.length) && list.every((e) => e.state === "new" && e.typeId === list[0].typeId);
+  }
+
+  // Массово из очереди: Передать и Закрыть — на любой выборке, если действие
+  // доступно каждому; Взять — только на однотипных new (группа сценария).
+  function selectionAllows(id, list) {
+    if (!list || list.length < 2) return true;
+    if (id === "transfer") return list.every((e) => availability("transfer", e).ok);
+    if (id === "closeUnprocessed") return list.every((e) => availability("closeUnprocessed", e).ok);
+    if (id === "claim") return sameTypeNew(list) && list.every((e) => availability("claim", e).ok);
+    return false;
+  }
+
+  function actionTargets(id, ev) {
+    const picked = checkedEvents();
+    const inSel = ev && picked.some((e) => e.id === ev.id);
+    if (inSel && picked.length >= 2 && selectionAllows(id, picked)) {
+      return picked.filter((e) => availability(id, e).ok);
+    }
+    if (ev && ev.groupId) {
+      const mates = groupMates(ev).filter((e) => availability(id, e).ok);
+      if (mates.length >= 2) return mates;
+    }
+    return ev ? [ev] : [];
+  }
+
+  function bulkCopy(id, n) {
+    const table = {
+      transfer: {
+        title: t("Передать {n} инцидентов", { n }),
+        note: t("Будут переданы {n} событий одному адресату. Одна причина на всю выборку.", { n }),
+        confirm: t("Передать {n}", { n }),
+        toast: (p) => t("Передано: {n} → {who}", { n, who: actorName(p.choice) }),
+      },
+      closeUnprocessed: {
+        title: t("Закрыть без обработки: {n}", { n }),
+        note: t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", { n }),
+        confirm: t("Закрыть {n}", { n }),
+        toast: () => t("Закрыто без обработки: {n}", { n }),
+      },
+      close: {
+        title: t("Закрыть {n} инцидентов", { n }),
+        note: t("Закроются все {n} инцидентов группы.", { n }),
+        confirm: t("Закрыть {n}", { n }),
+        toast: () => t("Закрыто: {n}", { n }),
+      },
+      hold: {
+        title: t("Отложить {n} инцидентов", { n }),
+        note: t("Будут отложены {n} инцидентов группы. Одна причина на всех.", { n }),
+        confirm: t("Отложить {n}", { n }),
+        toast: () => t("Отложено: {n}", { n }),
+      },
+      release: {
+        title: t("Вернуть в очередь {n} инцидентов", { n }),
+        note: t("В очередь вернутся {n} инцидентов группы.", { n }),
+        confirm: t("Вернуть {n}", { n }),
+        toast: () => t("Возвращено в очередь: {n}", { n }),
+      },
+      reject: {
+        title: t("Отклонить {n} эскалаций", { n }),
+        note: t("В очередь вернутся {n} инцидентов. Одна причина на всех.", { n }),
+        confirm: t("Отклонить {n}", { n }),
+        toast: () => t("Отклонено: {n}", { n }),
+      },
+      cancel: {
+        title: t("Отменить {n} инцидентов", { n }),
+        note: t("Будут отменены {n} инцидентов группы.", { n }),
+        confirm: t("Отменить {n}", { n }),
+        toast: () => t("Отменено: {n}", { n }),
+      },
+    };
+    return table[id] || null;
+  }
+
+  function openBulkDialog(id, list) {
+    if (list.length < 2) return false;
+    openDialog(id, list[0]);
+    if (!state.dialog) return false;
+    state.dialog.bulkIds = list.map((e) => e.id);
+    const copy = bulkCopy(id, list.length);
+    if (copy) {
+      $("dialogTitle").textContent = copy.title;
+      $("dialogNote").textContent = copy.note;
+      $("dialogNote").hidden = false;
+      $("dialogConfirm").textContent = copy.confirm;
+    }
+    return true;
+  }
+
+  function runBulk(id, list, payload) {
+    const tr = TRANSITIONS[id];
+    if (!tr || !list.length) return false;
+    let nav = null;
+    const done = [];
+    list.forEach((item) => {
+      if (!availability(id, item).ok) return;
+      const from = item.state;
+      item.state = tr.to;
+      nav = tr.run(item, Object.assign({}, payload, { silent: true }), from) || nav;
+      done.push(item);
+    });
+    if (!done.length) return false;
+    state.checked.clear();
+    const copy = bulkCopy(id, done.length);
+    toast(copy && copy.toast ? copy.toast(payload || {}) : t("Обработано: {n}", { n: done.length }));
+    const focus = done[0];
+    state.selectedId = focus.id;
+    if (nav === "card") {
+      focusCameras(focus);
+      state.mode = "work";
+      state.mobileView = "card";
+    } else if (nav === "queue") {
+      state.mode = "queue";
+      state.page = pageOfEvent(focus.id);
+      syncSelection();
+    }
+    renderAll();
+    return true;
+  }
+
   // Своё, ничьё или адресованное мне — transfer:own; чужое — transfer:any (§5 v3).
   GUARDS.canTransfer = (ev) => {
     const ownSide = ev.state === "new" || isMine(ev) || isTarget(ev);
@@ -2524,11 +2656,15 @@
     else if (ev.state === "pending_acceptance")
       isTarget(ev) ? ids.push("accept", "reject", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer", "closeUnprocessed");
     else if (ev.state === "in_progress")
-      mine ? ids.push("continueOwn", "transfer") : ids.push("viewForeign", "transfer");
+      mine ? ids.push("continueOwn", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer");
     else if (ev.state === "on_hold")
-      mine ? ids.push("resume", "transfer") : ids.push("viewForeign", "transfer");
+      mine ? ids.push("resume", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer");
     else ids.push("viewDone", "reopen");
-    return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+    const views = ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+    const picked = checkedEvents();
+    if (picked.length < 2 || !state.checked.has(ev.id)) return views;
+    const why = t("Для этой выборки действие недоступно");
+    return views.map((a) => (selectionAllows(a.id, picked) ? a : { ...a, disabled: true, hint: why }));
   }
 
   function cardActions(ev) {
@@ -2560,6 +2696,8 @@
     const from = ev.state;
     ev.state = tr.to;
     const nav = tr.run(ev, payload || {}, from) || null;
+    if (state.checked.has(ev.id)) state.checked.clear();
+    else state.checked.delete(ev.id);
     if (nav === "card") {
       focusCameras(ev);
       state.mode = "work";
@@ -2567,7 +2705,6 @@
     } else if (nav === "queue") {
       state.mode = "queue";
       state.page = pageOfEvent(ev.id);
-      state.checked.delete(ev.id);
       // Закрытый или отменённый инцидент уходит из фильтра «Открытые», и выделение
       // нужно передать соседу, иначе видеомонитор остаётся на завершённом.
       syncSelection();
@@ -2631,7 +2768,9 @@
       title: "Закрытие инцидента",
       note: (ev) => {
         const prog = stepProgress(ev);
-        return t("Сценарий заполнен: {a} из {b}. Результат уйдёт в AxxonData.", { a: prog.filled, b: prog.total });
+        const n = groupMates(ev).length;
+        const base = t("Сценарий заполнен: {a} из {b}. Результат уйдёт в AxxonData.", { a: prog.filled, b: prog.total });
+        return n > 1 ? `${base} ${t("Закроются все {n} инцидентов группы.", { n })}` : base;
       },
       text: { label: "Результат", required: false, ph: "Итог обработки для отчёта" },
       confirm: "Закрыть инцидент",
@@ -2751,20 +2890,11 @@
     const payload = { choice: cfg.select ? $("dialogSelect").value : null, reason };
     const bulkIds = open.bulkIds;
     closeDialog();
-    if (open.id === "closeUnprocessed" && bulkIds && bulkIds.length > 1) {
-      let n = 0;
-      bulkIds.forEach((id) => {
-        const item = state.events.find((x) => x.id === id);
-        if (!item || !availability("closeUnprocessed", item).ok) return;
-        item.state = "closed";
-        skipCloseEvent(item, payload);
-        state.checked.delete(id);
-        n += 1;
-      });
-      toast(t("Закрыто без обработки: {n}", { n }));
-      state.mode = "queue";
-      syncSelection();
-      renderAll();
+    if (bulkIds && bulkIds.length > 1) {
+      const list = bulkIds
+        .map((id) => state.events.find((x) => x.id === id))
+        .filter((item) => item && availability(open.id, item).ok);
+      runBulk(open.id, list, payload);
       return;
     }
     runTransition(open.id, ev, payload);
@@ -2778,7 +2908,25 @@
   // Переход либо спрашивает подробности в форме, либо выполняется сразу.
   function trigger(id, ev) {
     if (!ev) return;
+    const picked = checkedEvents();
+    if (picked.length >= 2 && picked.some((e) => e.id === ev.id) && !selectionAllows(id, picked)) {
+      toast(t("Для этой выборки действие недоступно"));
+      return;
+    }
     if (NAV_ACTIONS[id]) return openCard(id, ev);
+    const targets = actionTargets(id, ev);
+    if (targets.length >= 2) {
+      if (id === "claim") {
+        groupProcess();
+        return;
+      }
+      if (DIALOGS[id]) {
+        openBulkDialog(id, targets);
+        return;
+      }
+      runBulk(id, targets, {});
+      return;
+    }
     const check = availability(id, ev);
     if (!check.ok) {
       toast(
@@ -3127,33 +3275,18 @@
     )}</b>${view.running ? "" : ' <span class="material-symbols-outlined">pause</span>'}</span>`;
   }
 
-  // Групповая обработка: только новые, только один тип события, не больше max_bulk (§11)
+  // Чекбокс на любом событии очереди; смешанные типы можно набирать вручную (§11)
   function bulkEligible(ev) {
-    if (ev.state !== "new") return false;
-    if (!can("incident:bulk") || !can("incident:claim")) return false;
-    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
-    if (!picked.length || state.checked.has(ev.id)) return true;
-    return picked[0].typeId === ev.typeId && picked.length < LIMITS.maxBulk;
+    if (state.checked.has(ev.id)) return true;
+    return state.checked.size < LIMITS.maxBulk;
   }
 
   function renderEvents() {
     const list = visibleEvents();
     $("eventsCount").textContent = String(list.length);
-    const bulkBtn = $("groupProcessBtn");
-    bulkBtn.disabled = state.checked.size < 2 || state.onBreak || !can("incident:bulk");
-    bulkBtn.title = state.checked.size
-      ? t("Выбрано {n} из {max}", { n: state.checked.size, max: LIMITS.maxBulk })
-      : t("Отметьте от 2 до {max} новых событий одного типа", { max: LIMITS.maxBulk });
-    const checkedEv = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
     $("clearSelectionBtn").disabled = state.checked.size === 0;
-    const closeSel = $("closeSelectedBtn");
-    const canSkipBulk =
-      can("incident:close:unprocessed") &&
-      !state.onBreak &&
-      checkedEv.length >= 2 &&
-      checkedEv.every((e) => availability("closeUnprocessed", e).ok);
-    closeSel.disabled = !canSkipBulk;
-    closeSel.hidden = !can("incident:close:unprocessed");
+    const selectable = list.filter((e) => !isDone(e));
+    $("selectAllBtn").disabled = selectable.length === 0;
     const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     state.page = Math.min(Math.max(1, state.page), pages);
     const start = (state.page - 1) * PAGE_SIZE;
@@ -3167,13 +3300,9 @@
         const pickable = bulkEligible(e);
         return `
           <article class="event ${state.selectedId === e.id ? "selected" : ""}" data-id="${e.id}">
-            ${
-              e.state === "new"
-                ? `<input class="pick" type="checkbox" data-check="${e.id}" aria-label="${te("Выбрать {id}", {
-                    id: e.id,
-                  })}" ${state.checked.has(e.id) ? "checked" : ""} ${pickable ? "" : "disabled"} />`
-                : `<span class="pick-off" aria-hidden="true"></span>`
-            }
+            <input class="pick" type="checkbox" data-check="${e.id}" aria-label="${te("Выбрать {id}", {
+              id: e.id,
+            })}" ${state.checked.has(e.id) ? "checked" : ""} ${pickable ? "" : "disabled"} />
             <div class="event-pri ${e.priority}"></div>
             <div class="event-main">
               <div class="event-title">
@@ -3218,10 +3347,25 @@
   }
 
   function renderWorkHeader(ev) {
-    $("workTitle").textContent = ev ? `${ev.id} · ${t(ev.type)}` : t("Обработка");
+    if (!ev) {
+      $("workTitle").textContent = t("Обработка");
+      return;
+    }
+    const n = groupMates(ev).length;
+    $("workTitle").textContent =
+      n > 1 ? `${ev.id} · ${t(ev.type)} · ${t("группа {n}", { n })}` : `${ev.id} · ${t(ev.type)}`;
   }
 
   function workNote(ev) {
+    const mates = groupMates(ev);
+    if (mates.length > 1 && isMine(ev) && ev.state === "in_progress") {
+      return `<div class="work-note">${escapeHtml(
+        t("В работе группа из {n}: {ids}. Один сценарий на всех.", {
+          n: mates.length,
+          ids: mates.map((e) => e.id).join(", "),
+        })
+      )}</div>`;
+    }
     if (isDone(ev)) {
       const why =
         ev.state === "canceled"
@@ -4027,7 +4171,10 @@
       if (check) {
         const id = check.dataset.check;
         if (state.checked.has(id)) state.checked.delete(id);
-        else state.checked.add(id);
+        else if (state.checked.size >= LIMITS.maxBulk) {
+          toast(t("Не больше {max} событий в выборке", { max: LIMITS.maxBulk }));
+          return;
+        } else state.checked.add(id);
         renderEvents();
         return;
       }
@@ -4119,13 +4266,12 @@
         renderScenario();
       }
     });
-    $("groupProcessBtn").addEventListener("click", () => groupProcess());
+    $("selectAllBtn").addEventListener("click", () => selectAllVisible());
     $("selectSimilarBtn").addEventListener("click", () => selectSimilar());
     $("clearSelectionBtn").addEventListener("click", () => {
       state.checked.clear();
       renderEvents();
     });
-    $("closeSelectedBtn").addEventListener("click", () => closeSelected());
     $("videoStage").addEventListener("click", (e) => {
       const nav = e.target.closest("[data-cam-step]");
       if (nav) stepCamera(Number(nav.dataset.camStep));
@@ -4198,12 +4344,29 @@
     document.addEventListener("keydown", onKey);
   }
 
+  function selectAllVisible() {
+    const candidates = visibleEvents().filter((e) => !isDone(e));
+    if (!candidates.length) {
+      toast(t("Нет событий для выборки"));
+      return;
+    }
+    const take = candidates.slice(0, LIMITS.maxBulk);
+    state.checked = new Set(take.map((e) => e.id));
+    state.selectedId = take[0].id;
+    toast(
+      take.length < candidates.length
+        ? t("Выбрано {n} из {max}", { n: take.length, max: LIMITS.maxBulk })
+        : t("Выбрано событий: {n}", { n: take.length })
+    );
+    renderEvents();
+  }
+
   function selectSimilar() {
-    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+    const picked = checkedEvents();
     let typeId = picked[0] && picked[0].typeId;
     if (!typeId) {
       const ev = selected();
-      if (ev && ev.state === "new") typeId = ev.typeId;
+      if (ev) typeId = ev.typeId;
     }
     if (!typeId) {
       const firstNew = visibleEvents().find((e) => e.state === "new");
@@ -4213,35 +4376,16 @@
       toast(t("Нет новых событий для выборки"));
       return;
     }
-    if (picked.some((e) => e.typeId !== typeId)) {
-      toast(t("В выборе уже разные типы событий"));
+    const candidates = visibleEvents().filter((e) => e.state === "new" && e.typeId === typeId);
+    if (!candidates.length) {
+      toast(t("Нет новых событий для выборки"));
       return;
     }
-    const candidates = visibleEvents().filter((e) => e.state === "new" && e.typeId === typeId);
     const take = candidates.slice(0, LIMITS.maxBulk);
     state.checked = new Set(take.map((e) => e.id));
+    state.selectedId = take[0].id;
     toast(t("Выбрано однотипных: {n}", { n: take.length }));
     renderEvents();
-  }
-
-  function closeSelected() {
-    if (state.onBreak) {
-      toast(t("На перерыве доступен только просмотр"));
-      return;
-    }
-    const list = [...state.checked]
-      .map((id) => state.events.find((e) => e.id === id))
-      .filter((e) => e && availability("closeUnprocessed", e).ok);
-    if (list.length < 2) {
-      toast(t("Отметьте от 2 до {max} новых событий одного типа", { max: LIMITS.maxBulk }));
-      return;
-    }
-    openDialog("closeUnprocessed", list[0]);
-    if (!state.dialog) return;
-    state.dialog.bulkIds = list.map((e) => e.id);
-    $("dialogNote").textContent = t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", {
-      n: list.length,
-    });
   }
 
   // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый
@@ -4254,6 +4398,11 @@
     }
     if (!can("incident:bulk") || !can("incident:claim")) {
       toast(t("Нет права на групповую обработку"));
+      return;
+    }
+    const limitWhy = GUARDS.activeLimit({ id: "__bulk__" });
+    if (limitWhy) {
+      toast(limitWhy);
       return;
     }
     const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
@@ -4457,6 +4606,20 @@
     if (e.key === "ArrowRight") return stepCamera(1);
     const key = e.key.toLowerCase();
     const ev = selected();
+    const chord = e.ctrlKey || e.metaKey;
+    if (chord && key === "a") {
+      e.preventDefault();
+      selectSimilar();
+      return;
+    }
+    if (chord && key === "d") {
+      e.preventDefault();
+      if (state.checked.size) {
+        state.checked.clear();
+        renderEvents();
+      }
+      return;
+    }
     if (key === "?" || (e.shiftKey && e.key === "/")) {
       $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
     }

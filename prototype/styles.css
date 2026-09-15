@@ -841,12 +841,9 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 
 .event {
   display: grid;
-  grid-template-columns: 18px 4px minmax(0, 1fr);
-  grid-template-areas:
-    "pick pri main"
-    "pick pri acts";
-  align-items: start;
-  gap: 8px 12px;
+  grid-template-columns: 18px 4px minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 12px;
   padding: 12px;
   border-radius: var(--radius);
   border: 1px solid var(--stroke-2);
@@ -862,11 +859,11 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   z-index: 1;
 }
 .event.selected { background: var(--accent-dim); }
-.event-pri { grid-area: pri; width: 4px; border-radius: 4px; align-self: stretch; }
+.event-pri { width: 4px; border-radius: 4px; align-self: stretch; }
 .event-pri.critical { background: var(--crit); }
 .event-pri.high { background: var(--warn); }
 .event-pri.medium { background: var(--info); }
-.event-main { grid-area: main; min-width: 0; display: grid; gap: 4px; }
+.event-main { min-width: 0; display: grid; gap: 4px; }
 .event-title { display: flex; justify-content: space-between; gap: 8px; }
 .event-title strong { font-size: 14px; font-weight: 600; }
 .event-title time { font-size: 12px; font-weight: 500; color: var(--faint); flex-shrink: 0; }
@@ -895,26 +892,22 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .chip.lvl { color: var(--esc-bg); border-color: var(--break-border); }
 .chip.grp { color: var(--badge-foreign); border-color: var(--badge-foreign-border); }
 
-/* Кнопки переходов — ряд снизу плашки, всегда видны (§7 v4) */
+/* Кнопки справа колонкой одной ширины: набор из 2–4 действий не растягивает их по-разному */
 .event-acts {
-  grid-area: acts;
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  min-width: 0;
-  padding-top: 4px;
-  border-top: 1px solid var(--stroke);
+  width: 132px;
+  flex-shrink: 0;
 }
 .event-act {
   border: 2px solid transparent;
+  width: 100%;
   min-width: 0;
-  flex: 1 1 7.5rem;
   padding: 6px 12px;
 }
-.pick { grid-area: pick; margin-top: 2px; }
-.pick-off { grid-area: pick; display: block; width: 18px; }
+.pick-off { display: block; width: 18px; }
 
 /* Само время норматива мягко мигает, когда до нарушения остаётся меньше двух минут. */
 .sla-t { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1837,9 +1830,18 @@ kbd {
   .events-select { justify-content: stretch; }
   .events-select .btn { flex: 1; }
 
-  .event { grid-template-columns: 24px 4px minmax(0, 1fr); gap: 10px; }
-  .pick { width: 22px; height: 22px; margin: 0; }
-  .event-act { flex: 1 1 calc(50% - 6px); }
+  .event {
+    grid-template-columns: 24px 4px minmax(0, 1fr);
+    grid-template-areas:
+      "pick pri main"
+      "pick pri acts";
+    gap: 10px;
+  }
+  .pick { grid-area: pick; width: 22px; height: 22px; margin: 0; }
+  .pick-off { grid-area: pick; }
+  .event-pri { grid-area: pri; }
+  .event-main { grid-area: main; }
+  .event-acts { grid-area: acts; width: auto; }
 
   .crumbs { padding: 6px var(--card-x) 10px; }
   .crumb:not(.current) { display: none; }

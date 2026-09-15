@@ -16,7 +16,7 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <div class="brand-text">
           <strong>Incident Manager</strong>
-          <span>Axxon Next · ITV</span>
+          <span>AxxonsSoft / ITV</span>
         </div>
       </div>
 
@@ -160,10 +160,6 @@
         <section class="panel" id="panelEvents" data-panel="events">
           <header class="panel-h">
             <h2>Очередь <em id="eventsCount">0</em></h2>
-            <div class="panel-h-actions">
-              <button type="button" class="btn small" id="closeSelectedBtn" disabled>Закрыть выбранные</button>
-              <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
-            </div>
           </header>
           <div class="panel-b events-body">
             <div class="events-toolbar">
@@ -179,12 +175,16 @@
                 <option value="done">Завершённые</option>
                 <option value="all">Все</option>
               </select>
-              <div class="events-select" role="group" aria-label="Выборка однотипных">
-                <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события">
+              <div class="events-select" role="group" aria-label="Выборка событий">
+                <button type="button" class="btn ghost small" id="selectAllBtn" title="Выбрать все видимые события">
+                  <span class="material-symbols-outlined">select_all</span>
+                  Выбрать все
+                </button>
+                <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события (Ctrl+A)">
                   <span class="material-symbols-outlined">library_add_check</span>
                   Однотипные
                 </button>
-                <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение" disabled>
+                <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение (Ctrl+D)" disabled>
                   <span class="material-symbols-outlined">deselect</span>
                   Снять
                 </button>
@@ -315,6 +315,8 @@
         <tr><td><kbd>E</kbd></td><td>Передать выбранный</td></tr>
         <tr><td><kbd>T</kbd></td><td>Перехватить (по праву, из карточки)</td></tr>
         <tr><td><kbd>G</kbd></td><td>Обработать выделенные как одно</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Выбрать однотипные</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Снять выделение</td></tr>
         <tr><td><kbd>B</kbd></td><td>Перерыв / возврат на смену</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>Открыть форму закрытия инцидента</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Форма → полный экран → панель групп → возврат к очереди</td></tr>
