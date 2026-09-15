@@ -1641,6 +1641,13 @@
     { id: "impossible", label: "Прервано: обработка невозможна" },
   ];
 
+  const SKIP_CLOSE_REASONS = [
+    { id: "power", label: "Отключение электричества на объекте" },
+    { id: "link", label: "Потеря связи с объектом" },
+    { id: "mass_fault", label: "Массовый сбой оборудования" },
+    { id: "known", label: "Известная неисправность, работы ведутся" },
+  ];
+
   // rawLabel отдаёт русский источник для журнала, holdLabel/cancelLabel — перевод для экрана
   const rawLabel = (list, id) => {
     const item = list.find((r) => r.id === id);
@@ -1648,8 +1655,10 @@
   };
   const holdLabel = (id) => t(rawLabel(HOLD_REASONS, id));
   const cancelLabel = (id) => t(rawLabel(CANCEL_REASONS, id));
+  const skipCloseLabel = (id) => t(rawLabel(SKIP_CLOSE_REASONS, id));
   const rawHold = (id) => rawLabel(HOLD_REASONS, id);
   const rawCancel = (id) => rawLabel(CANCEL_REASONS, id);
+  const rawSkipClose = (id) => rawLabel(SKIP_CLOSE_REASONS, id);
 
   /* ===== Нормативы (§4) ===== */
 
@@ -1683,6 +1692,7 @@
     "incident:hold": true,
     "incident:release": true,
     "incident:close": true,
+    "incident:close:unprocessed": true,
     "incident:cancel": true,
     "incident:reopen": true,
     "incident:transfer:own": true,
@@ -1924,6 +1934,30 @@
     renderStatus();
   }
 
+  function flushStepAnswer(ev) {
+    const root = $("scenarioRoot");
+    if (!root || !ev) return;
+    const el = root.querySelector("[data-ans]");
+    if (!el) return;
+    ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
+  }
+
+  function goNextStep(ev) {
+    flushStepAnswer(ev);
+    const steps = scenarioSteps(ev);
+    const next = ev.stepIndex + 1;
+    if (next < steps.length && canOpenStep(ev, next)) {
+      goToStep(ev, next);
+      return;
+    }
+    if (ev.stepIndex < steps.length - 1) {
+      renderScenario();
+      renderStatus();
+      return;
+    }
+    goToStep(ev, firstOpenStep(ev));
+  }
+
   function stepProgress(ev) {
     const steps = scenarioSteps(ev);
     const filled = steps.filter((s) => Boolean(stepAnswerText(ev, s))).length;
@@ -2115,7 +2149,7 @@
 
   // Мягкие условия оставляют кнопку видимой и блокируют её с подсказкой (§10.2).
   // Условия принадлежности прячут кнопку: действие не относится к этой ситуации.
-  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign", "canTransfer"];
+  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign", "canTransfer", "canSkipClose"];
 
   const GUARDS = {
     owner: (ev) => (isMine(ev) ? null : t("Вы не владелец инцидента")),
@@ -2134,6 +2168,14 @@
         ? null
         : t("Больше {n} отложенных держать нельзя", { n: LIMITS.maxOnHold }),
     closingSteps: (ev) => (scenarioDone(ev) ? null : t("Заполните обязательные шаги закрытия")),
+    canSkipClose: (ev) => {
+      if (!can("incident:close:unprocessed")) return t("Нет права: {p}", { p: "incident:close:unprocessed" });
+      if (ev.state === "in_progress" || ev.state === "on_hold") {
+        return isMine(ev) ? null : t("Вы не владелец инцидента");
+      }
+      if (ev.state === "new" || ev.state === "pending_acceptance") return null;
+      return t("Действие «{name}» недоступно в текущем состоянии", { name: t("Закрыть без обработки") });
+    },
     reopenWindow: (ev) => {
       const min = Math.round((Date.now() - (ev.closedAt || 0)) / 60000);
       return min <= LIMITS.reopenWindowMin
@@ -2332,6 +2374,21 @@
         return "queue";
       },
     },
+    closeUnprocessed: {
+      label: "Закрыть",
+      hint: "Закрыть без обработки по сценарию",
+      style: "outline",
+      from: ["new", "pending_acceptance", "in_progress", "on_hold"],
+      to: "closed",
+      perm: "incident:close:unprocessed",
+      guards: ["canSkipClose"],
+      dialog: "closeUnprocessed",
+      run(ev, payload) {
+        skipCloseEvent(ev, payload);
+        if (!payload.silent) toast(t("{id} закрыт без обработки", { id: ev.id }));
+        return "queue";
+      },
+    },
     cancel: {
       label: "Отменить",
       hint: "Обработка невозможна, ложная тревога или дубликат",
@@ -2405,6 +2462,21 @@
     });
   }
 
+  function skipCloseEvent(ev, payload) {
+    ev.owner = "me";
+    ev.closedBy = "me";
+    ev.closedAt = Date.now();
+    ev.closedUnprocessed = true;
+    ev.holdReason = null;
+    ev.holdSince = null;
+    stopReaction(ev);
+    stopResolution(ev);
+    log(ev, "me", "Закрыт без обработки: {why}. {note}", {
+      why: rawSkipClose(payload.choice),
+      note: payload.reason || "Причина не указана",
+    });
+  }
+
   // Своё, ничьё или адресованное мне — transfer:own; чужое — transfer:any (§5 v3).
   GUARDS.canTransfer = (ev) => {
     const ownSide = ev.state === "new" || isMine(ev) || isTarget(ev);
@@ -2448,9 +2520,9 @@
   function queueActions(ev) {
     const mine = isMine(ev);
     const ids = [];
-    if (ev.state === "new") ids.push("claim", "transfer");
+    if (ev.state === "new") ids.push("claim", "transfer", "closeUnprocessed");
     else if (ev.state === "pending_acceptance")
-      isTarget(ev) ? ids.push("accept", "reject", "transfer") : ids.push("viewForeign", "transfer");
+      isTarget(ev) ? ids.push("accept", "reject", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer", "closeUnprocessed");
     else if (ev.state === "in_progress")
       mine ? ids.push("continueOwn", "transfer") : ids.push("viewForeign", "transfer");
     else if (ev.state === "on_hold")
@@ -2462,8 +2534,10 @@
   function cardActions(ev) {
     const mine = isMine(ev);
     const ids = [];
-    if (mine && ev.state === "in_progress") ids.push("hold", "transfer", "release", "cancel");
-    else if (mine && ev.state === "on_hold") ids.push("resume", "transfer", "release");
+    if (mine && ev.state === "in_progress") {
+      ids.push("hold", "transfer", "release", "cancel");
+      if (!scenarioDone(ev)) ids.push("closeUnprocessed");
+    } else if (mine && ev.state === "on_hold") ids.push("resume", "transfer", "release", "closeUnprocessed");
     else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "transfer");
     else if (!mine && !isDone(ev)) ids.push("takeover", "transfer");
     else if (isDone(ev)) ids.push("reopen");
@@ -2563,6 +2637,15 @@
       confirm: "Закрыть инцидент",
       style: "primary",
     },
+    closeUnprocessed: {
+      title: "Закрыть без обработки",
+      note: () =>
+        t("Сценарий не заполняется. Для массовых сбоев, когда причина уже известна. Инцидент будет закрыт, не отменён."),
+      select: "skipClose",
+      text: { label: "Комментарий", required: true, ph: "Что произошло на объекте" },
+      confirm: "Закрыть",
+      style: "primary",
+    },
     reopen: {
       title: "Переоткрыть инцидент",
       note: (ev) =>
@@ -2600,7 +2683,7 @@
           return { id: op.id, label: parts.join(" · ") };
         });
     }
-    const list = kind === "hold" ? HOLD_REASONS : CANCEL_REASONS;
+    const list = kind === "hold" ? HOLD_REASONS : kind === "skipClose" ? SKIP_CLOSE_REASONS : CANCEL_REASONS;
     return list.filter((r) => !r.system).map((r) => ({ id: r.id, label: t(r.label) }));
   }
 
@@ -2625,7 +2708,7 @@
     selectField.hidden = !cfg.select;
     if (cfg.select) {
       $("dialogSelectLabel").textContent =
-        cfg.select === "targets" ? t("Кому передать") : cfg.select === "hold" ? t("Причина удержания") : t("Причина отмены");
+        cfg.select === "targets" ? t("Кому передать") : cfg.select === "hold" ? t("Причина удержания") : cfg.select === "skipClose" ? t("Причина") : t("Причина отмены");
       $("dialogSelect").innerHTML = opts
         .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`)
         .join("");
@@ -2666,7 +2749,24 @@
       return;
     }
     const payload = { choice: cfg.select ? $("dialogSelect").value : null, reason };
+    const bulkIds = open.bulkIds;
     closeDialog();
+    if (open.id === "closeUnprocessed" && bulkIds && bulkIds.length > 1) {
+      let n = 0;
+      bulkIds.forEach((id) => {
+        const item = state.events.find((x) => x.id === id);
+        if (!item || !availability("closeUnprocessed", item).ok) return;
+        item.state = "closed";
+        skipCloseEvent(item, payload);
+        state.checked.delete(id);
+        n += 1;
+      });
+      toast(t("Закрыто без обработки: {n}", { n }));
+      state.mode = "queue";
+      syncSelection();
+      renderAll();
+      return;
+    }
     runTransition(open.id, ev, payload);
   }
 
@@ -3044,6 +3144,16 @@
     bulkBtn.title = state.checked.size
       ? t("Выбрано {n} из {max}", { n: state.checked.size, max: LIMITS.maxBulk })
       : t("Отметьте от 2 до {max} новых событий одного типа", { max: LIMITS.maxBulk });
+    const checkedEv = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+    $("clearSelectionBtn").disabled = state.checked.size === 0;
+    const closeSel = $("closeSelectedBtn");
+    const canSkipBulk =
+      can("incident:close:unprocessed") &&
+      !state.onBreak &&
+      checkedEv.length >= 2 &&
+      checkedEv.every((e) => availability("closeUnprocessed", e).ok);
+    closeSel.disabled = !canSkipBulk;
+    closeSel.hidden = !can("incident:close:unprocessed");
     const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     state.page = Math.min(Math.max(1, state.page), pages);
     const start = (state.page - 1) * PAGE_SIZE;
@@ -3937,12 +4047,23 @@
       renderMap();
       renderStatus();
     });
+    $("scenarioRoot").addEventListener("input", (e) => {
+      const ev = selected();
+      if (!ev || !isMine(ev) || ev.state !== "in_progress" || state.onBreak) return;
+      const el = e.target.closest("textarea[data-ans]");
+      if (!el) return;
+      ev.answers[el.dataset.ans] = el.value;
+      const next = $("stepNext");
+      const step = scenarioSteps(ev)[ev.stepIndex];
+      if (next && step) next.disabled = !isStepValid(ev, step);
+    });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
       if (!ev || !isMine(ev) || ev.state !== "in_progress" || state.onBreak) return;
       const el = e.target.closest("[data-ans]");
       if (!el) return;
       ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
+      if (el.matches("textarea")) return;
       if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
       renderScenario();
       renderStatus();
@@ -3974,12 +4095,7 @@
         return;
       }
       if (e.target.closest("#stepNext")) {
-        const steps = scenarioSteps(ev);
-        if (ev.stepIndex < steps.length - 1 && canOpenStep(ev, ev.stepIndex + 1)) {
-          goToStep(ev, ev.stepIndex + 1);
-        } else {
-          goToStep(ev, firstOpenStep(ev));
-        }
+        goNextStep(ev);
         return;
       }
       const confirm = e.target.closest("[data-confirm]");
@@ -4004,6 +4120,12 @@
       }
     });
     $("groupProcessBtn").addEventListener("click", () => groupProcess());
+    $("selectSimilarBtn").addEventListener("click", () => selectSimilar());
+    $("clearSelectionBtn").addEventListener("click", () => {
+      state.checked.clear();
+      renderEvents();
+    });
+    $("closeSelectedBtn").addEventListener("click", () => closeSelected());
     $("videoStage").addEventListener("click", (e) => {
       const nav = e.target.closest("[data-cam-step]");
       if (nav) stepCamera(Number(nav.dataset.camStep));
@@ -4074,6 +4196,52 @@
       renderGroups();
     });
     document.addEventListener("keydown", onKey);
+  }
+
+  function selectSimilar() {
+    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
+    let typeId = picked[0] && picked[0].typeId;
+    if (!typeId) {
+      const ev = selected();
+      if (ev && ev.state === "new") typeId = ev.typeId;
+    }
+    if (!typeId) {
+      const firstNew = visibleEvents().find((e) => e.state === "new");
+      typeId = firstNew && firstNew.typeId;
+    }
+    if (!typeId) {
+      toast(t("Нет новых событий для выборки"));
+      return;
+    }
+    if (picked.some((e) => e.typeId !== typeId)) {
+      toast(t("В выборе уже разные типы событий"));
+      return;
+    }
+    const candidates = visibleEvents().filter((e) => e.state === "new" && e.typeId === typeId);
+    const take = candidates.slice(0, LIMITS.maxBulk);
+    state.checked = new Set(take.map((e) => e.id));
+    toast(t("Выбрано однотипных: {n}", { n: take.length }));
+    renderEvents();
+  }
+
+  function closeSelected() {
+    if (state.onBreak) {
+      toast(t("На перерыве доступен только просмотр"));
+      return;
+    }
+    const list = [...state.checked]
+      .map((id) => state.events.find((e) => e.id === id))
+      .filter((e) => e && availability("closeUnprocessed", e).ok);
+    if (list.length < 2) {
+      toast(t("Отметьте от 2 до {max} новых событий одного типа", { max: LIMITS.maxBulk }));
+      return;
+    }
+    openDialog("closeUnprocessed", list[0]);
+    if (!state.dialog) return;
+    state.dialog.bulkIds = list.map((e) => e.id);
+    $("dialogNote").textContent = t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", {
+      n: list.length,
+    });
   }
 
   // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый

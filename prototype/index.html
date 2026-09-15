@@ -161,6 +161,7 @@
           <header class="panel-h">
             <h2>Очередь <em id="eventsCount">0</em></h2>
             <div class="panel-h-actions">
+              <button type="button" class="btn small" id="closeSelectedBtn" disabled>Закрыть выбранные</button>
               <button type="button" class="btn small" id="groupProcessBtn" disabled>Обработать как одно</button>
             </div>
           </header>
@@ -178,6 +179,16 @@
                 <option value="done">Завершённые</option>
                 <option value="all">Все</option>
               </select>
+              <div class="events-select" role="group" aria-label="Выборка однотипных">
+                <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события">
+                  <span class="material-symbols-outlined">library_add_check</span>
+                  Однотипные
+                </button>
+                <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение" disabled>
+                  <span class="material-symbols-outlined">deselect</span>
+                  Снять
+                </button>
+              </div>
             </div>
             <div class="events-list" id="eventsList"></div>
             <nav class="events-pager" id="eventsPager" aria-label="Страницы очереди" hidden></nav>
