@@ -1,125 +1,124 @@
-# Ревью репозитория IM: ошибки, противоречия, неточности
+# Ревью IM 2026-10-01: полное, роль «продакт»
 
-Дата: 2026-10-01. Состояние репозитория: коммит `59d3eea` («22»), ветка `main`.
+Дата: 2026-10-01. Проверяемый коммит: `f52d87e`, ветка `main`. Действующие правила: v4. Роли: продакт.
 
-Что просмотрено: README, Vision, правила v1–v4, разбор v1, `prototype/README.md`, `prototype/app.js` целиком, `index.html`, `styles.css`, `bridge.css`, словари переводов, `shots/_run.ps1`. Пункты с пометкой ✅ воспроизведены запуском прототипа в Chrome. Остальное найдено чтением кода и документов.
+Что просмотрено глазами продакта:
 
-Ссылки ведут на файлы в коммите `59d3eea`, поэтому номера строк не уедут при исправлениях. В то время документы лежали в корне. Позже, в коммите `7b4c97d`, их перенесли в `Specification/`.
+- Vision — каждое требование;
+- правила v4 — словарь, состояния и категории, права, нормативы, кнопки, горячие клавиши, открытые вопросы (§15), соответствие прототипу (§17);
+- версии правил 001–004 — как они ведутся;
+- README;
+- прототип — сценарии и их варианты ответа, демо-данные, права, языки, панели, видео и карта.
 
-У каждого пункта постоянный номер. Номера используются в [плане исправлений](plan.md) и в сообщениях коммитов:
+Плюс автоматические проверки. Пункты с пометкой ✅ проверены запуском в Chrome. Остальное найдено чтением кода и документов.
 
-- `BUG` — прототип;
-- `RULE` — правила v4;
-- `DOC` — документы;
-- `DATA` — демо-данные;
-- `PROC` — процесс.
+Ссылки ведут на файлы в коммите `f52d87e`.
+
+Номера и важность — по договорённостям в [reviews/README.md](../README.md). План исправлений — [plan.md](plan.md).
 
 ## Главное
 
-1. В прототипе не работает «Принять» — главный сценарий передачи v2–v4 (BUG-01).
-2. Открытая карточка перерисовывается каждые ~11 с и сбрасывает ввод (BUG-02).
-3. Уровень эскалации в v4 одновременно означает «сколько раз передавали» и «ступень иерархии». Из‑за этого автоэскалация пропускает старшего смены (BUG-03, RULE-01).
-4. README и `prototype/README.md` местами описывают уже не то, что лежит в репозитории (раздел 4).
+1. В прототипе не работает «Принять» — основной сценарий передачи (BUG-01). Кнопка «Далее» подменяет выбранный вариант ответа первым из списка, поэтому классификация инцидента молча меняется (BUG-02).
+2. Нигде не сказано, какая часть Vision покрыта правилами и прототипом, а какая отложена. Сервер, отчёты, конструктор сценариев и вход в систему не описаны, и непонятно, забыты они или отложены сознательно (DOC-02).
+3. Два прямых требования Vision не описаны в правилах: роли с наборами прав (RULE-01) и режимы группировки событий (RULE-03).
+4. Отчётность может врать:
+   - итог сценария не связан с переходом, поэтому ложная тревога попадает то в закрытые, то в отменённые (RULE-02);
+   - передачей можно обнулить норматив закрытия (RULE-07).
+5. Правила заявляют, что прототип приведён к v4, хотя он отступает от них как минимум в семи местах (RULE-06).
 
-## 1. Ошибки в прототипе
+Находки с метками других ролей пришли от автоматических проверок.
 
-**Серьёзные**
+## Автоматические проверки
 
-- **BUG-01** ✅ **Кнопка «Принять» не работает.** В [app.js:2224](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2224) функция `accept.run(ev)` обращается к `payload`, который она не получает. Нажатие на кнопку или клавишу `A` даёт `ReferenceError: payload is not defined`. Карточка не открывается и уведомления нет, но инцидент при этом уже молча переведён в «В работе». Строка появилась в коммите «22».
-  Как воспроизвести: фильтр «Мне на принятие» → «Принять» на INC‑1836 → ошибка в консоли. То же самое произойдёт с передачей, которую симуляция коллег присылает примерно через 46 с.
-- **BUG-02** ✅ **Открытая карточка перерисовывается каждые ~11 с.** Симуляция коллег и автоэскалация вызывают `renderAll()` ([app.js:4666](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L4666)), и содержимое карточки полностью пересоздаётся. Если оператор в этот момент печатает комментарий, курсор теряется. Открытый выпадающий список закрывается.
-- **BUG-03** **Автоэскалация пропускает старшего смены.** Адресат берётся как `AUTO.levels[escalationLevel]` ([app.js:2955](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2955)), а ручная передача тоже увеличивает уровень. Если коллега передал инцидент оператору и тот не принял его вовремя, инцидент уходит сразу «Дежурному ЦОД».
-- **BUG-04** **При ручной передаче норматив реакции всегда 150 с** ([app.js:2458](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2458)). Условие `escalationLevel > 0` после увеличения уровня всегда истинно. Значения уровней 120/90 с из `AUTO.levels` не используются, а v4 требует брать норматив от уровня.
+- Самопроверка: 10 из 14 шагов прошли. Упавшие шаги — BUG-01, BUG-02, BUG-03, BUG-04.
+- Ссылки: 9 нерабочих, все в корневом README — DOC-01.
+- Покрытие самопроверки в ревью одной ролью не оценивалось.
 
-**Средние и мелкие**
+## 1. Системные причины
 
-- **BUG-05** **Можно передать инцидент самому себе.** Себя в списке адресатов нет, но есть «Дежурная группа старших», в которую входит `me` ([app.js:1597](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L1597), [app.js:2718](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2718)). Это нарушает §8.1 и §10.1.3 v4. Кроме того, рядовой оператор входит в группу «старших».
-- **BUG-06** **`Enter` открывает форму закрытия, даже когда фокус на кнопке** ([app.js:4638](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L4638)). Обработчик пропускает только поля ввода, поэтому нажатие Enter на «Подтвердить» или «Далее» срабатывает дважды.
-- **BUG-07** **Горячие клавиши срабатывают при открытых справочных окнах** (регламент, список хоткеев): блокирует их только окно перехода.
-- **BUG-08** **`N` берёт первое новое событие из всего массива** ([app.js:4632](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L4632)). Фильтр, выбранная группа и приоритет не учитываются.
-- **BUG-09** **Одна отметка `slaBreached` на разные просрочки.** Просрочка удержания ставит ту же отметку, что и нарушение норматива ([app.js:2985](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2985)). После этого настоящее нарушение норматива закрытия уже не фиксируется.
-- **BUG-10** **`closedUnprocessed` записывается, но нигде не читается** ([app.js:2470](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2470)). В интерфейсе «закрыт без обработки» ничем не отличается от обычного закрытия.
-- **BUG-11** **«Переоткрыть» сбрасывает не всё** ([app.js:2416](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2416)). Остаются `closedBy`, `closedUnprocessed` и `answers.result` от прежнего закрытия.
-- **BUG-12** **У приоритета `low` нет цвета полоски.** В CSS есть только critical, high и medium ([styles.css:863](https://github.com/soulhome2/IM/blob/59d3eea/prototype/styles.css#L863)), а `low` стоит у четырёх событий. В документах приоритетов три, «низкого» нет.
+- **ARCH-01** [средний] *продакт, архитектор* **Каждая версия правил — полная копия примерно на 600 строк.** Для согласования с заказчиком и передачи разработчикам нужен один действующий документ, а сейчас их четыре. Кроме того, ошибки тянутся из версии в версию незамеченными:
+  - ссылка «(§16)» у термина ITSM/ITIL ведёт не туда — с версии 2 ([002:24](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/002%20States%20rules%20IM.md?plain=1#L24));
+  - «Перехватить» из «Ожидает принятия» противоречит описанию права — тоже с версии 2 ([002:230](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/002%20States%20rules%20IM.md?plain=1#L230)).
 
-## 2. Прототип расходится с v4
+## 2. Ошибки в прототипе
 
-В [004 §17](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L579) сказано, что прототип приведён к v4. Расхождения:
+- **BUG-01** [блокер] *тестировщик* ✅ **Кнопка «Принять» не работает.** Функция `accept.run(ev)` обращается к `payload`, который она не получает ([app.js:2224](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L2224)). Нажатие на кнопку или клавишу `A` даёт `Uncaught ReferenceError: payload is not defined`. Карточка не открывается, но инцидент уже молча переведён в «В работе». Это главный сценарий передачи: адресат не может нормально принять переданный ему инцидент. На любом показе прототипа это всплывёт первым.
+  Как воспроизвести: фильтр «Мне на принятие» → «Принять» на INC‑1836.
+- **BUG-02** [высокий] *тестировщик, продакт* ✅ **«Далее» подменяет ответ на шаге с вариантами.** `flushStepAnswer` записывает значение первого элемента с `data-ans`, а не отмеченного ([app.js:1937-1943](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L1937-L1943)). Выбрали «Ложная» — после «Далее» записано «Реальная». Для продукта это самое опасное: классификация уходит в результат закрытия и в отчётность. Ложные срабатывания будут посчитаны как реальные.
+- **BUG-03** [низкий] *продакт, дизайнер* ✅ **Приоритет «низкий» есть в данных, но не в правилах.** В правилах приоритетов три: критический, высокий, средний ([004:43](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L43)). В прототипе у четырёх событий приоритет `low` ([app.js:1323](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L1323)), для него есть норматив закрытия ([app.js:1666](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L1666)), но нет цвета полоски ([styles.css:863-865](https://github.com/soulhome2/IM/blob/f52d87e/prototype/styles.css#L863-L865)). Нужно решить, есть ли такой приоритет в продукте.
+- **BUG-04** [низкий] *UX* ✅ **Пять подписей не переведены на английский и испанский.** Это «Выбрать {id}», «Уровень эскалации», «Страница {p}», «План: {name}», «Шаги сценария» — всплывающие подсказки и подписи для экранного диктора ([app.js:3303](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3303), [app.js:3317](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3317), [app.js:3252](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3252), [app.js:3771](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3771), [app.js:3433](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3433)). Ключей нет ни в одном словаре.
 
-- **BUG-13** **`Esc` и «К очереди».** По §13 ([004:476](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L476)) `Esc` откладывает карточку. В прототипе это просто возврат к очереди без смены состояния ([app.js:3940](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L3940), [index.html:200](https://github.com/soulhome2/IM/blob/59d3eea/prototype/index.html#L200)). Сам документ тоже противоречит себе: для «Отложить» причина обязательна, а `Esc` её не спрашивает.
-- **BUG-14** **«Закрыть» в очереди у своих инцидентов.** Прототип показывает её у своих «В работе» и «Отложен» ([app.js:2659](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2659)), а в таблице §7 её там нет.
-- **BUG-15** **Подпись кнопки в карточке.** Кнопка закрытия без обработки подписана просто «Закрыть» ([app.js:2379](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2379)), в §7 — «Закрыть без обработки».
-- **BUG-16** **Автоэскалация при открытой карточке.** Прототип возвращает оператора в очередь, а §9.3 требует перевести карточку в режим просмотра с уведомлением.
-- **BUG-17** **Не реализован возврат в очередь** после долгого обрыва сессии (§12.3).
-- **BUG-18** **Не реализовано ручное исключение инцидента из группы** (§11).
-- **BUG-19** **`Ctrl+A` не проверяет право `incident:bulk`.**
+## 4. Противоречия и пробелы в правилах
 
-## 3. Логические противоречия в правилах v4
+- **RULE-01** [средний] *продакт, архитектор* **Нет ролей с наборами прав.** Vision требует назначать разные уровни прав: оператор, старший смены, администратор ([Vision:13](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L13)). Правила перечисляют права ([004:191-211](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L191-L211)) и говорят, что права выдаются роли ([004:22](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L22)). Но ни одной роли с её набором прав нет. В прототипе один набор прав на всех ([app.js:1690](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L1690)), и почти все права включены. Непонятно, что может рядовой оператор, а что только старший смены: например, перехват, переоткрытие, закрытие без обработки.
+- **RULE-02** [средний] *продакт, архитектор* **Итог сценария не связан с переходом.** Правила отделяют отмену от закрытия: ложная тревога и плановая проверка — это не «успешно обработано» ([004:94](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L94), причины отмены — [004:114-116](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L114-L116)). Но в сценариях есть те же исходы как варианты ответа, и после них инцидент обычно закрывается:
+  - «Ложная», «Персонал / ложная», «Ошибка детектора», «Ложная сработка детектора» ([app.js:47](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L47), [app.js:73](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L73), [app.js:123](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L123), [app.js:181](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L181));
+  - «Тест системы» ([app.js:53](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L53));
+  - «Требует выезда» ([app.js:47](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L47)) — после него инцидент можно сразу закрыть, хотя наряд ещё едет. Для этого в правилах есть удержание «Выезд наряда» ([004:105](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L105)).
 
-Файл: [004 States rules IM.md](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1).
+  Демо-данные показывают оба пути сразу. INC‑1831 закрыт с итогом «Ложная, тест системы» ([app.js:1461](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L1461)), а другой инцидент отменён с причиной «Ложная тревога». Одно и то же событие попадёт в отчётах то в закрытые, то в отменённые.
+- **RULE-03** [средний] *продакт* **Режимы группировки из Vision не описаны.** Vision требует группировать события по региону, по типу события, по типу объекта, а также по своему списку объектов, который обрабатывается как один ([Vision:20](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L20)). В правилах группировки нет. Групповая обработка в §11 — это другое: несколько однотипных событий одной карточкой. В прототипе есть только дерево объектов и сквозные подборки по видам устройств ([app.js:373](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L373)). Группировки по типу события и своих списков объектов нет, и нигде не сказано, что они отложены.
+- **RULE-04** [низкий] *продакт, UX* **Горячие клавиши: «под себя» или в схеме.** Vision требует настраивать горячие клавиши под себя ([Vision:26](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L26)). Правила проверяют дубли клавиш «при сохранении схемы» ([004:479](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L479)), то есть считают клавиши настройкой администратора. В личных настройках оператора их нет ([004:216](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L216)). Прототип обещает «задавать под себя» ([index.html:328](https://github.com/soulhome2/IM/blob/f52d87e/prototype/index.html#L328)). Кто и что настраивает, не решено.
+- **RULE-05** [средний] *продакт* **У открытых вопросов нет владельца и срока.** В §15 пять вопросов с вариантами, но без того, кто решает и до какого момента ([004:554-564](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L554-L564)). От них зависят отчётность (разделять ли «выполнено» и «закрыто»), нормативы (календарь или смена) и переоткрытие (срок). Без владельца они дойдут до разработчиков нерешёнными.
+- **RULE-06** [средний] *продакт, разработчик* **Правила заявляют полное соответствие прототипа.** «Прототип приведён к v4» ([004:579](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L579), [004:7](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L7)). При этом прототип отступает от правил:
+  - `Esc` в своей карточке не откладывает инцидент, а только возвращает к очереди ([004:476](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L476), [app.js:3940](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3940));
+  - в очереди у своих «В работе» и «Отложен» есть «Закрыть», а в §7 нет ([app.js:2659](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L2659));
+  - в карточке кнопка подписана «Закрыть», а не «Закрыть без обработки» ([app.js:2379](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L2379));
+  - при автоэскалации открытая карточка закрывается, а не переходит в просмотр ([004:358](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L358), [app.js:2969](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L2969));
+  - нет возврата в очередь после долгого обрыва сессии ([004:251](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L251));
+  - нет ручного исключения инцидента из группы ([004:424](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L424));
+  - эмуляция коллег меняет данные в обход правил ([app.js:4459](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L4459)).
 
-- **RULE-01** **Уровень эскалации смешивает два смысла.** Это и «сколько раз передавали», и «ступень иерархии» ([004:52](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L52), [004:325-336](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L325-L336)). После одной передачи коллеге уровень 1, хотя старший смены не участвовал. Две передачи «вбок» исчерпывают потолок `max_level = 2`, и до ЦОД инцидент автоматически уже не дойдёт.
-- **RULE-02** **Передачей можно обнулять норматив закрытия.** «Передать» останавливает норматив закрытия, «Принять» запускает его заново ([004:232](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L232)). От такой лазейки §8.3 защищает норматив реакции, но не норматив закрытия. Таблица §4 ([004:181](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L181)) вообще говорит, что этот норматив останавливается только при закрытии или отмене.
-- **RULE-03** **Групповая обработка и лимит одновременных инцидентов.** «Обработать как одно» переводит в работу сразу N инцидентов, а лимит активных равен 1 ([004:238](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L238), [004:376](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L376)). Правило «группа считается за один» есть только в коде.
-- **RULE-04** **Недостижимое правило группы.** «Норматив истёк у члена группы → он выходит и эскалируется» ([004:422](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L422)) при настройках по умолчанию не срабатывает. Норматив реакции у членов группы уже остановлен, а истечение норматива закрытия по умолчанию состояние не меняет.
-- **RULE-05** **Гарантия выхода из карточки и лимит отложенных** ([004:385-391](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L385-L391)). Если у роли есть только право откладывать и уже набрано 5 отложенных, выхода нет. Как лимит отложенных действует при автоматической постановке на удержание в перерыв, не сказано. В §10.4 этого лимита нет.
-- **RULE-06** **«Перехватить» из «Ожидает принятия».** Право описано как отъём «у работающего оператора» ([004:206](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L206), [004:233](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L233)), но в «Ожидает принятия» никто не работает. В 002 §17 прямо сказано, что «Перехватить» — только для занятого другим.
-- **RULE-07** **Права «Закрыть без обработки» без области.** Передать чужое «Ожидает принятия» можно только с `transfer:any`, а закрыть его можно без всякого `:any`.
-- **RULE-08** **Формат ключей прав.** `incident:close:unprocessed` и `incident:schema:admin` ломают заявленную схему `ресурс:действие:область`. Маска `incident:close:*` не захватит само `incident:close`.
-- **RULE-09** **Неполные таблицы кнопок §7.**
-  - В очереди нет строки «Отложен · ФИО», хотя такой бейдж есть в §2.4.
-  - В карточке нет строки для `new`.
-  - «Вам на принятие» в очереди даёт «Закрыть», а в карточке — нет.
-- **RULE-10** **Диаграмма §3 неполная.** Автоэскалация на ней есть, а другие автоматические переходы из §6.2 (перерыв, обрыв сессии, возврат в `new`) не нарисованы.
-- **RULE-11** §7 «условия не выполнены — кнопки нет» против §10.2 «кнопка заблокирована с подсказкой».
-- **RULE-12** §12.1 «Занят — назначаются, в пределах лимита» при лимите 1.
-- **RULE-13** Причина удержания «Перерыв оператора» тоже системная ([004:107](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L107)), поэтому формально попадает под возврат в очередь по таймауту ([004:251](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L251)).
-- **RULE-14** `on_hold` отнесено к категории `pending` наравне с ничьими `new`.
-- **RULE-15** §18 «кнопки в шапке очереди не нужны» против кнопок выборки в шапке из §11.
+  Кто согласует правила по прототипу, увидит не то, что написано.
+- **RULE-07** [высокий] *продакт, архитектор* **Передачей можно обнулить норматив закрытия.** «Передать» останавливает норматив закрытия, а «Принять» запускает его заново ([004:232](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L232)). Норматив реакции правила от этого защищают (§8.3), а норматив закрытия — нет. Таблица §4 вообще говорит, что этот норматив останавливается только при закрытии или отмене ([004:181](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L181)). Для продукта это значит, что просрочку закрытия можно скрыть передачей коллеге, и отчёты о времени обработки будут неверны.
+- **RULE-08** [низкий] *продакт, архитектор* **«Отложен» считается ожидающим наравне с новыми.** Состояние «Отложен» отнесено к категории `pending` вместе с ничьими новыми инцидентами ([004:86](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L86)). А от категории зависят счётчики, группировка очереди и отчёты ([004:121](https://github.com/soulhome2/IM/blob/f52d87e/Specification/State_rules/004%20States%20rules%20IM.md?plain=1#L121)). В «ждут реакции» попадут инциденты, с которыми уже работают.
 
-## 4. Неточности в сопроводительных документах
+## 5. Документы
 
-- **DOC-01** [README.md:32](https://github.com/soulhome2/IM/blob/59d3eea/README.md?plain=1#L32): «кнопки очереди снизу плашки» устарело. Коммит «22» вернул колонку справа, и v4 §7 и §18 это подтверждают.
-- **DOC-02** **README и prototype/README противоречат друг другу.** README: «сервер не нужен» ([README.md:11](https://github.com/soulhome2/IM/blob/59d3eea/README.md?plain=1#L11)). prototype/README: нужен сервер от корня ([prototype/README.md:76](https://github.com/soulhome2/IM/blob/59d3eea/prototype/README.md?plain=1#L76)).
-- **DOC-03** **[prototype/README.md](https://github.com/soulhome2/IM/blob/59d3eea/prototype/README.md?plain=1) устарел и противоречит сам себе:**
-  - «JS и разметка не трогались» (строка 5), хотя последующие коммиты их меняли;
-  - «эскалация красная, перенаправление оранжевое» (строка 27) против «красный снят» (строки 42 и 68).
-- **DOC-04** **[shots/_run.ps1](https://github.com/soulhome2/IM/blob/59d3eea/prototype/shots/_run.ps1)** не работает:
-  - жёстко прописаны пути конкретного пользователя Windows;
-  - селекторы `data-do=escalate` и `redirect` указывают на кнопки, которых больше нет.
-- **DOC-05** **[Vision](https://github.com/soulhome2/IM/blob/59d3eea/AxxonNext%20Incident%20Manager%20Vision.md?plain=1):**
-  - нумерация сбита: в разделе 3 дважды «2.1», в разделе 4 подразделы «6.1–6.3»;
-  - вместо ссылки на документ — поисковый запрос Google;
-  - висит строка-дубль «Сводные отчеты…».
-- **DOC-06** **Разбор v1** ([States rules IM - analisys.md](https://github.com/soulhome2/IM/blob/59d3eea/States%20rules%20IM%20-%20analisys.md?plain=1)) написан по другой редакции v1, «Правила перехода состояний МИ 1.md», которой в репозитории нет:
-  - все номера разделов сдвинуты на 1;
-  - номера строк не совпадают («Перехватить (строка 90)» в 001 стоит на строке 159);
-  - замечание о строке «Закрыто», выпавшей из таблицы, к текущему 001 уже не относится.
-- **DOC-07** **Название продукта везде разное:** «AxxonNext Incident Manager» в Vision, «Axxon Incident Manager» в README и заголовке прототипа. В шапке прототипа опечатка «AxxonsSoft» ([index.html:19](https://github.com/soulhome2/IM/blob/59d3eea/prototype/index.html#L19)). В имени файла опечатка «analisys».
-- **DOC-08** Ссылка «(§16)» у термина ITSM/ITIL ([004:24](https://github.com/soulhome2/IM/blob/59d3eea/004%20States%20rules%20IM.md?plain=1#L24)) ведёт на дельту v3→v4, где про названия ничего нет.
+- **DOC-01** [средний] *разработчик* ✅ **В корневом README 9 нерабочих ссылок.** Не открывается ни один документ из таблицы «Документы»: правила и Vision перенесли в `Specification/`, а ссылки остались прежними ([README.md:27-32](https://github.com/soulhome2/IM/blob/f52d87e/README.md?plain=1#L27-L32)). README — точка входа для коллег, заказчика и разработчиков. Полный список выдаёт `python3 tools/check_links.py`.
+- **DOC-02** [средний] *продакт* **Нет сверки Vision с правилами и прототипом.** README говорит, что репозиторий — про рабочее место оператора ([README.md:3](https://github.com/soulhome2/IM/blob/f52d87e/README.md?plain=1#L3)). Но нигде не сказано, какие требования Vision покрыты, какие частично, а какие отложены или вне этого репозитория. Сверка по каждому требованию:
 
-## 5. Демонстрационные данные
+  | Требование Vision | Где | Состояние |
+  |---|---|---|
+  | API с плагинами к внешнему ПО ([5](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L5)) | — | нет |
+  | Работа в любом браузере ([6](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L6)) | прототип, телефон — §7 | есть |
+  | HTTPS и вход в систему ([7](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L7)) | — | нет |
+  | Обработка по сценариям ([11](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L11)) | прототип, §14.5 | есть |
+  | Видеоархив и карта ([12](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L12)) | прототип | есть |
+  | Уровни прав: оператор, старший, администратор ([13](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L13)) | права §5, ролей нет | частично, RULE-01 |
+  | Обмен событиями, перехват, контроль оператора ([14-16](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L14-L16)) | §6.1, §6.3, прототип | есть |
+  | Группировка по региону, типу события, типу объекта, свой список ([20](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L20)) | дерево объектов в прототипе | частично, RULE-03 |
+  | Групповая обработка ([21](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L21)) | §11, прототип | есть |
+  | Состав, расположение и размер панелей ([25](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L25)) | скрыть, показать, размер; переставить нельзя | частично |
+  | Горячие клавиши под себя ([26](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L26)) | — | нет, RULE-04 |
+  | Время отдыха ([27](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L27)) | перерыв вручную, §12; расписания нет | частично |
+  | Меню вспомогательных ссылок с настройкой ([28](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L28)) | меню справки в прототипе; настройка не описана | частично |
+  | Панели: группы, события, обработка, карта, видео ([32-36](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L32-L36)) | прототип | есть |
+  | Дашборды ([37](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L37)) | — | открытый вопрос, DOC-03 |
+  | Диспетчер событий: фильтры, хранение, источники ([43-46](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L43-L46)) | — | нет |
+  | Таймеры и автоэскалация ([47](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L47)) | §4, §9 | есть |
+  | Конструктор сценариев, экспорт и импорт ([51](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L51), [53](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L53)) | вопрос в §15 | нет |
+  | Типы элементов сценария ([52](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L52)) | прототип: флажок, выбор, список, поле, макрос | есть |
+  | Архив и онлайн ([59](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L59)) | прототип | есть |
+  | Несколько камер одновременно, камеры региона ([60](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L60)) | одна камера с переключением ([app.js:3649](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L3649)) | частично |
+  | Место инцидента на карте ([64](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L64)) | прототип, автоматически | есть, вопрос — DOC-03 |
+  | Результаты в AxxonData ([70](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L70)) | §14.2 | частично |
+  | Отчёты, кадры и карта в отчёте, сегментация, экспорт, сводные ([71-77](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L71-L77), [83](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L83)) | — | нет |
+  | Журнал действий оператора ([81](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L81)) | журнал по каждому инциденту; общего журнала оператора нет | частично |
 
-- **DATA-01** **Устройства на планах не того этажа или корпуса.** Камеры 2‑го этажа офиса и ТЦ стоят на планах 1‑го этажа, внутри других помещений ([app.js:923](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L923), [app.js:961](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L961)). Корпус Б нарисован на плане корпуса А. Склад №3 (этаж Б) — на плане этажа А.
-- **DATA-02** **Одно устройство в чужих группах:**
-  - камера «Главный вход» — в Конференц‑зале;
-  - камера «Испытательный стенд» — в Офисе 1 другого корпуса;
-  - device‑8 числится сразу в двух складах.
-- **DATA-03** **INC‑1851.** Место указано «Магазин 2, коридор примерочных», а источник — датчик Магазина 1 и камера витрины ([app.js:1040](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L1040)).
-- **DATA-04** **INC‑1826.** В журнале сначала «Инцидент закрыт» (Петрова), потом «Отменён» (Сидоров). Перехода из «Закрыто» в «Отменено» в модели нет.
-- **DATA-05** **INC‑1843.** Уровень 1, но адресат — ЦОД, а по настройкам уровень 1 — старший смены. Журнал начинается сразу с эскалации.
-- **DATA-06** **Старая терминология в журналах:** «Эскалация →…» вместо «Передано».
+  Без такой таблицы заказчик и разработчики не отличат то, что отложено сознательно, от того, что забыли.
+- **DOC-03** [низкий] *продакт* **Открытые вопросы Vision нигде не ведутся.** Vision оставляет три вопроса, и ни одного из них нет среди открытых вопросов правил (§15):
+  - нужны ли дашборды ([Vision:37](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L37));
+  - где настраивать связи камер ([Vision:60](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L60));
+  - показывать место на карте автоматически или по запросу ([Vision:64](https://github.com/soulhome2/IM/blob/f52d87e/Specification/AxxonNext%20Incident%20Manager%20Vision.md?plain=1#L64)).
 
-## 6. Переводы, мелочи, процесс
-
-- **BUG-20** **Переводы и мелочи кода:**
-  - в английском словаре нет «Отменено: {n}»;
-  - «Передать» переведено дважды по‑разному: «Hand over» и «Transfer»;
-  - в словарях остались неиспользуемые ключи от v2 («Перенаправить» и другие);
-  - «Инцидент не выбран» не переводится ([app.js:3412](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L3412));
-  - комментарий «к модели v2» в коде устарел ([app.js:2074](https://github.com/soulhome2/IM/blob/59d3eea/prototype/app.js#L2074)).
-- **PROC-01** В последних коммитах сообщения «22», «21», «111» — по ним нельзя понять, что менялось.
+  Последний прототип по сути решил — «автоматически», — но решение нигде не записано.
+- **DOC-04** [низкий] *продакт* **Три языка интерфейса без требования.** Прототип переключается между русским, английским и испанским ([app.js:9-13](https://github.com/soulhome2/IM/blob/f52d87e/prototype/app.js#L9-L13)). Ни в Vision, ни в правилах языков нет. Перевод стоит денег на каждое изменение: BUG-04 показывает, что он уже отстаёт. Нужно решить, какие языки нужны продукту и кто ведёт переводы.
+- **DOC-05** [низкий] *продакт* **Название продукта везде разное.** «AxxonNext Incident Manager» — в имени файла Vision, «Axxon Incident Manager» — в README и заголовке прототипа ([README.md:3](https://github.com/soulhome2/IM/blob/f52d87e/README.md?plain=1#L3), [index.html:6](https://github.com/soulhome2/IM/blob/f52d87e/prototype/index.html#L6)). В шапке прототипа — «Incident Manager» и «AxxonsSoft / ITV» с опечаткой ([index.html:18-19](https://github.com/soulhome2/IM/blob/f52d87e/prototype/index.html#L18-L19)).
 
 ## Ограничения проверки
 
-- Скриншоты в `prototype/shots/` и значения токенов `theme/one-psim.css` не сверялись.
+- Смотрела только роль «продакт». Архитектура, поведение прототипа, удобство, дизайн и взгляд разработчика глубоко не проверялись. Находки с их метками пришли только от автоматических проверок.
+- Бизнес‑приоритеты неизвестны. Что из Vision нужно в этой фазе, решают люди, поэтому находки продакта в плане сформулированы как вопросы.
+- Серверная часть, отчёты и машина состояний (отдельный репозиторий) не проверялись: их здесь нет.
+- Самопроверка и ссылки прогнаны только в Chrome на Linux.

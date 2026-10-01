@@ -1,0 +1,32 @@
+# Проверки на каждый push: самопроверка прототипа и ссылки в документах.
+# Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
+# что что-то сломалось; подробности — в журнале шага.
+name: checks
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Самопроверка прототипа
+        if: always()
+        run: |
+          google-chrome --headless=new --disable-gpu --no-sandbox --no-first-run \
+            --virtual-time-budget=15000 \
+            --dump-dom "file://$PWD/prototype/index.html?selftest" > selftest.html
+          python3 - <<'EOF'
+          import html, re, sys
+          page = open("selftest.html", encoding="utf-8").read()
+          log = re.search(r'<pre id="selftest-log"[^>]*>(.*?)</pre>', page, re.S)
+          print(html.unescape(log.group(1)) if log else "Отчёт самопроверки не найден")
+          sys.exit(0 if 'data-selftest="pass"' in page else 1)
+          EOF
+
+      - name: Ссылки в документах
+        if: always()
+        run: python3 tools/check_links.py
