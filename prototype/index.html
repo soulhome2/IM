@@ -167,14 +167,8 @@
                 <span class="material-symbols-outlined">search</span>
                 <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по объекту, типу, ID..." />
               </div>
-              <select id="eventFilter" class="search-input">
-                <option value="open">Открытые</option>
-                <option value="inbox">Мне на принятие</option>
-                <option value="mine">Мои</option>
-                <option value="foreign">Чужие</option>
-                <option value="done">Завершённые</option>
-                <option value="all">Все</option>
-              </select>
+              <!-- Фильтры по состоянию — из машины (queueFilters) -->
+              <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
               <div class="events-types">
                 <select id="eventTypeFilter" class="search-input" aria-label="Тип события"></select>
                 <select id="deviceTypeFilter" class="search-input" aria-label="Тип устройства"></select>

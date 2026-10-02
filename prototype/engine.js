@@ -29,6 +29,15 @@
     const isMine = (ev) => ev.owner === ME;
     const isTarget = (ev) => Boolean(ev.owner) && (ev.owner === ME || (isGroup(ev.owner) && ctx.memberOf(ev.owner, ME)));
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
+    // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
+    // адресован», даже если владельцем записан я сам: так передают лично оператору
+    function ownership(ev) {
+      if (ev.state === "pending_acceptance" && isTarget(ev)) return "target";
+      if (isMine(ev)) return "owner";
+      return isTarget(ev) ? "target" : "other";
+    }
+    // Условие «отношение ко мне» в scopeRule: владелец — это мой инцидент, адресат — адресованный мне
+    const matchesOwnership = (ev, role) => (role === "owner" ? isMine(ev) : role === "target" ? isTarget(ev) : ownership(ev) === role);
     const asList = (v) => (Array.isArray(v) ? v : [v]);
     const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
     const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
@@ -64,43 +73,56 @@
 
     /* ===== Таймеры: дедлайны — метки времени (§4, правило 1) ===== */
 
-    function startTimer(ev, id, arg) {
-      if (id === "reaction") {
-        let sec = baseNorm(ev, "reaction");
-        if (arg === "byEscalationLevel") sec = levelNorm(ev, ev.escalationLevel);
-        else if (arg === "escalation.level.reactionSec") sec = levelNorm(ev, ev.escalationLevel);
-        else if (typeof arg === "number") sec = arg;
-        ev.reactionDueAt = now() + sec * 1000;
-      } else if (id === "resolution") {
-        resumeTimer(ev, "resolution");
-      } else if (id === "hold") {
-        const reason = catalogItem("hold", ev.holdReason);
-        ev.holdSince = now();
-        ev.holdDueAt = reason ? now() + reason.maxMinutes * 60000 : null;
+    // Где у инцидента прототипа лежат дедлайн и остаток таймера (deadlineField машины)
+    const FIELDS = {
+      reaction: { due: "reactionDueAt" },
+      resolution: { due: "resolutionDueAt", left: "resolutionLeftMs" },
+      hold: { due: "holdDueAt", since: "holdSince" },
+    };
+    const dueOf = (ev, id) => ev[FIELDS[id].due];
+
+    // Длительность таймера: из справочника (secFrom, например срок удержания по причине),
+    // по уровню эскалации или по нормативам (§4)
+    function timerSec(ev, id, arg) {
+      const t = timers[id];
+      if (t.secFrom) {
+        const [catalog, attr] = t.secFrom.replace("reasonCatalogs.", "").split("[].");
+        const item = catalogItem(catalog, ev.holdReason);
+        return item ? item[attr] * (attr === "maxMinutes" ? 60 : 1) : null;
       }
+      if (arg === "byEscalationLevel" || arg === "escalation.level.reactionSec") return levelNorm(ev, ev.escalationLevel);
+      if (typeof arg === "number") return arg;
+      return baseNorm(ev, id);
+    }
+
+    // Таймер с startsOnce запускается один раз за жизнь инцидента: дальше start = продолжить с остатка
+    function startTimer(ev, id, arg) {
+      const t = timers[id];
+      if (t.startsOnce) return resumeTimer(ev, id);
+      const sec = timerSec(ev, id, arg);
+      ev[FIELDS[id].due] = sec == null ? null : now() + sec * 1000;
+      if (FIELDS[id].since) ev[FIELDS[id].since] = now();
     }
     function stopTimer(ev, id) {
-      if (id === "reaction") ev.reactionDueAt = null;
-      else if (id === "resolution") pauseTimer(ev, "resolution");
-      else if (id === "hold") {
-        ev.holdSince = null;
-        ev.holdDueAt = null;
-      }
+      if (timers[id].startsOnce) return pauseTimer(ev, id);
+      ev[FIELDS[id].due] = null;
+      if (FIELDS[id].since) ev[FIELDS[id].since] = null;
     }
-    // Норматив закрытия запускается один раз и дальше только приостанавливается (startsOnce, RULE-07)
+    // Пауза и продолжение — только у таймеров с pausable (норматив закрытия, RULE-07)
     function pauseTimer(ev, id) {
-      if (id !== "resolution") return stopTimer(ev, id);
-      if (ev.resolutionDueAt) ev.resolutionLeftMs = Math.max(0, ev.resolutionDueAt - now());
-      ev.resolutionDueAt = null;
+      const f = FIELDS[id];
+      if (!timers[id].pausable || !f.left) return stopTimer(ev, id);
+      if (ev[f.due]) ev[f.left] = Math.max(0, ev[f.due] - now());
+      ev[f.due] = null;
     }
     function resumeTimer(ev, id) {
-      if (id !== "resolution") return startTimer(ev, id);
-      if (ev.resolutionDueAt) return;
-      const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : baseNorm(ev, "resolution") * 1000;
-      ev.resolutionDueAt = now() + left;
-      ev.resolutionLeftMs = null;
+      const f = FIELDS[id];
+      if (!timers[id].pausable || !f.left) return startTimer(ev, id);
+      if (ev[f.due]) return;
+      const left = ev[f.left] != null ? ev[f.left] : timerSec(ev, id) * 1000;
+      ev[f.due] = now() + left;
+      ev[f.left] = null;
     }
-    const dueOf = (ev, id) => (id === "reaction" ? ev.reactionDueAt : id === "resolution" ? ev.resolutionDueAt : ev.holdDueAt);
 
     // Срабатывание по дедлайну — один раз на каждый дедлайн, как у планировщика на сервере (§14.3)
     function timerExpired(ev, id) {
@@ -131,8 +153,10 @@
 
     const GUARDS = {
       hasPermission: (ev, [key]) => (ctx.can(key) ? null : ["Нет права: {p}", { p: key }]),
-      hasScopedPermission: (ev, [prefix]) => {
-        const own = ev.state === "new" || isMine(ev) || isTarget(ev);
+      // Область права — по scopeRule условия: own, если выполнено хоть одно из anyOf (§5)
+      hasScopedPermission: (ev, [prefix], opts, guard) => {
+        const rule = (guard && guard.scopeRule && guard.scopeRule.own) || { anyOf: [] };
+        const own = rule.anyOf.some((c) => (c.state ? ev.state === c.state : c.ownership ? matchesOwnership(ev, c.ownership) : false));
         const key = `${prefix}:${own ? "own" : "any"}`;
         return ctx.can(key) ? null : ["Нет права: {p}", { p: key }];
       },
@@ -206,7 +230,7 @@
         const fn = GUARDS[g.fn];
         if (!fn) return { why: [`Условие не реализовано: ${g.fn}`], hidden: false };
         const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
-        const why = fn(ev, args, opts);
+        const why = fn(ev, args, opts, g);
         if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide" };
       }
       return null;
@@ -243,7 +267,7 @@
         });
       });
       W.navActions.items.forEach((nav) => {
-        if (!nav.surface.includes(surface) || nav.id === "back_to_queue" || nav.id === "run_macro") return;
+        if (!nav.surface.includes(surface)) return;
         const a = availability(nav.id, ev);
         if (a.hidden || !a.ok) return;
         out.push({ id: nav.id, kind: "nav", label: nav.label, hint: nav.hint || nav.label, style: nav.style, enabled: true });
@@ -273,13 +297,12 @@
       );
     }
 
+    // Подпись результата; если у результата есть справочник причин и причина выбрана — подпись причины
     function closeResultLabel(ev) {
-      if (ev.closeResult === "mass" && ev.massCause) {
-        const cause = catalogItem("mass_fault", ev.massCause);
-        if (cause) return cause.label;
-      }
       const item = catalogItem("close_result", ev.closeResult);
-      return item ? item.label : "";
+      if (!item) return "";
+      const cause = item.causeCatalog && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
+      return cause ? cause.label : item.label;
     }
 
     function value(arg, ev, form, scope) {
@@ -387,8 +410,9 @@
 
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
 
-    const TIMER_OF = { auto_escalate: "reaction", escalation_ceiling: "reaction", resolution_overdue: "resolution", hold_overdue: "hold" };
-
+    // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
+    // выполнены. Таймер, по которому срабатывает переход, — из его условия timerExpired.
+    // scope: incidents_owned_by_agent — только инциденты текущего оператора (перерыв, §12.2)
     function tick() {
       const changed = [];
       ctx.events().forEach((ev) => {
@@ -396,10 +420,10 @@
         W.transitions.forEach((tr) => {
           if (tr.trigger !== "timer" && tr.trigger !== "system") return;
           if (!tr.from.includes(ev.state)) return;
-          if (tr.id === "system_hold_break" || tr.id === "system_hold_idle") return;
+          if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
           if (firstFail(ev, tr.guards)) return;
-          const timer = TIMER_OF[tr.id];
-          if (timer) markFired(ev, timer);
+          const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
+          if (timerGuard) markFired(ev, timerGuard.args[0]);
           applyEffects(tr, ev, {}, tr.actor || "dispatcher");
           changed.push({ id: ev.id, transition: tr.id });
         });
@@ -407,22 +431,17 @@
       return changed;
     }
 
-    // Уход на перерыв: системное откладывание своих инцидентов в работе (§12.2)
-    function goNotReady() {
-      const tr = transitions.system_hold_break;
-      const list = ctx.events().filter((e) => e.state === "in_progress" && isMine(e));
-      list.forEach((ev) => applyEffects(tr, ev, {}, "system"));
-      return list.map((e) => e.id);
-    }
+    // Можно ли править шаги сценария (§10.4, scenarioEdit машины); нет — карточка на просмотр
+    const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);
 
     /* ===== Формы, бейджи, массовые действия ===== */
 
     function noteFor(f, ev, extra) {
-      const ownership = isMine(ev) ? "owner" : isTarget(ev) ? "target" : "other";
+      const role = ownership(ev);
       const note = (f.notes || []).find((n) => {
         const w = n.when || {};
         if (w.state && w.state !== ev.state) return false;
-        if (w.ownership && w.ownership !== ownership) return false;
+        if (w.ownership && w.ownership !== role) return false;
         if (w.grouped && !(extra && extra.groupSize > 1)) return false;
         return true;
       });
@@ -470,7 +489,7 @@
 
     // Бейдж под смотрящего оператора (§2.4)
     function badge(ev) {
-      const role = isMine(ev) ? "owner" : isTarget(ev) ? "target" : "other";
+      const role = ownership(ev);
       const rule = W.badges.rules.find((r) => {
         if (r.state !== ev.state) return false;
         if (r.when && r.when.closeResult && r.when.closeResult !== ev.closeResult) return false;
@@ -486,11 +505,49 @@
 
     const bulk = (id) => (transitions[id] && transitions[id].bulk) || { allowed: false };
 
+    // Фильтр очереди по описанию из машины (queueFilters): состояния, категории, отношение ко мне
+    function inQueueFilter(ev, filterId) {
+      const f = W.queueFilters.find((q) => q.id === filterId);
+      if (!f) return true;
+      if (f.states && !f.states.includes(ev.state)) return false;
+      if (f.stateCategories && !f.stateCategories.includes(states[ev.state].category)) return false;
+      if (f.ownership && f.ownership !== ownership(ev)) return false;
+      return true;
+    }
+
+    // «Обработать как одно» (§11): «Взять» с bulk.createsGroup на каждом отмеченном и общий group_id.
+    // Условия и общие поля — из grouping машины. group_id ставится до проверки «Взять»: группа
+    // считается в лимите активных одной единицей
+    function createGroup(list, groupId) {
+      const g = W.grouping;
+      const claim = W.transitions.find((t) => t.bulk && t.bulk.createsGroup);
+      if (!g.enabled || !claim) return { ok: false, why: ["Групповая обработка выключена"] };
+      if (!g.permissions.every(ctx.can)) return { ok: false, why: ["Нет права на групповую обработку"] };
+      if (list.length < g.createFrom.minItems) return { ok: false, why: ["Выберите хотя бы {n} события", { n: g.createFrom.minItems }] };
+      if (list.length > g.createFrom.maxItems) return { ok: false, why: ["Не больше {max} событий в группе", { max: g.createFrom.maxItems }] };
+      if (!list.every((e) => g.createFrom.states.includes(e.state))) return { ok: false, why: ["В группу берутся только новые события"] };
+      if (g.createFrom.sameEventType && list.some((e) => e.typeId !== list[0].typeId)) {
+        return { ok: false, why: ["В группе должен быть один тип события"] };
+      }
+      list.forEach((ev) => (ev.groupId = groupId));
+      const blocked = list.find((ev) => !availability(claim.id, ev).ok);
+      if (blocked) {
+        const why = availability(claim.id, blocked).why;
+        list.forEach((ev) => (ev.groupId = null));
+        return { ok: false, why };
+      }
+      list.forEach((ev) => applyEffects(claim, ev, {}, ME));
+      if (g.shared.includes("scenarioAnswers")) list.forEach((ev) => ctx.shareAnswers(ev, list[0]));
+      return { ok: true };
+    }
+
+    const canExcludeFromGroup = (ev) => Boolean(ev && ev.groupId) && !firstFail(ev, W.grouping.excludeGuards);
+
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
     function excludeFromGroup(ev) {
       if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
-      const fail = firstFail(ev, [{ fn: "stateIs", args: [["in_progress"]] }, { fn: "isOwner" }, { fn: "agentReady" }]);
+      const fail = firstFail(ev, W.grouping.excludeGuards);
       if (fail) return { ok: false, why: fail.why };
       const groupId = ev.groupId;
       ev.groupId = null;
@@ -513,8 +570,11 @@
       isNav: (id) => Boolean(navActions[id]),
       isDone,
       isTarget,
+      ownership,
+      inQueueFilter,
       availability,
       actions,
+      session: W.session,
       run,
       form,
       badge,
@@ -526,10 +586,12 @@
       pauseTimer,
       resumeTimer,
       tick,
-      goNotReady,
+      canEditScenario,
       applyAs,
       closeResultLabel,
+      createGroup,
       excludeFromGroup,
+      canExcludeFromGroup,
       units,
     };
   }

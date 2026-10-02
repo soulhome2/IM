@@ -273,6 +273,8 @@
 
     await step("Отклонить адресованную передачу", async () => {
       await setFilter("inbox");
+      const badge = $("eventsList").querySelector('[data-id="INC-1843"] .badge');
+      expect(badge && badge.textContent.includes("Вам на принятие"), `у адресованного лично бейдж «${badge ? badge.textContent : "нет"}»`);
       const b = button($("eventsList"), "reject", "INC-1843");
       expect(b, "у INC-1843 нет кнопки «Отклонить»");
       await click(b);

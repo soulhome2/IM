@@ -119,6 +119,17 @@ def check_workflow(w, err):
         for x in q.get("stateCategories", []):
             if x not in cats:
                 err.append(f"фильтр {q['id']}: нет категории {x}")
+    guarded = w["navActions"]["items"] + [
+        dict(w["scenarioEdit"], id="scenarioEdit"),
+        {"id": "grouping.excludeGuards", "guards": w["grouping"].get("excludeGuards", [])},
+    ]
+    for item in guarded:
+        for g in item.get("guards", []):
+            if g["fn"] not in guards:
+                err.append(f"{item['id']}: условие {g['fn']} не в реестре")
+    for s in w["session"]["states"]:
+        if s.get("permission") and s["permission"] not in perms:
+            err.append(f"состояние оператора {s['id']}: нет права {s['permission']}")
     for b in w["badges"]["rules"]:
         if b["state"] not in states:
             err.append(f"бейдж: нет состояния {b['state']}")

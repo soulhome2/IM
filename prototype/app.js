@@ -1636,22 +1636,9 @@
 
   /* ===== Права: ресурс:действие:область (§5) ===== */
 
-  const PERMISSIONS = {
-    "incident:claim": true,
-    "incident:hold": true,
-    "incident:release": true,
-    "incident:close": true,
-    "incident:close:unprocessed": true,
-    "incident:reopen": true,
-    "incident:transfer:own": true,
-    "incident:transfer:any": true,
-    "incident:reassign": true,
-    "incident:read:any": true,
-    "incident:bulk": true,
-    "incident:run_action": true,
-    "incident:schema:admin": false,
-    "agent:set_not_ready": true,
-  };
+  // Права демо-оператора: весь каталог прав машины, кроме настройки схемы. В продукте права
+  // приходят из внешней системы (§5), здесь — один набор на всех (§17)
+  const PERMISSIONS = Object.fromEntries(WORKFLOW.permissions.map((p) => [p.key, p.key !== "incident:schema:admin"]));
 
   const can = (key) => PERMISSIONS[key] === true;
 
@@ -1734,6 +1721,10 @@
     log: (ev, whoId, template, vars) => log(ev, whoId, template, vars),
     transferTargets: () => targetOptions(),
     defaultTransferTarget: () => state.escalateTo,
+    // У членов группы ответы общие (grouping.shared): один объект ответов на всех
+    shareAnswers: (ev, first) => {
+      ev.answers = first.answers;
+    },
     // У членов группы ответы общие: при исключении инцидент получает свою копию
     detachAnswers: (ev) => {
       ev.answers = JSON.parse(JSON.stringify(ev.answers));
@@ -1922,7 +1913,8 @@
 
   function flushStepAnswer(ev) {
     const root = $("scenarioRoot");
-    if (!root || !ev) return;
+    // Ответы пишет только тот, кому машина разрешает править сценарий (scenarioEdit)
+    if (!root || !ev || !engine.canEditScenario(ev)) return;
     const el = root.querySelector("[data-ans]");
     if (!el) return;
     if (el.type === "radio") {
@@ -2149,8 +2141,11 @@
     return [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
   }
 
+  // Кого можно взять группой сценария — по grouping.createFrom машины (§11)
+  const groupable = (e) => WORKFLOW.grouping.createFrom.states.includes(e.state);
   function sameTypeNew(list) {
-    return Boolean(list.length) && list.every((e) => e.state === "new" && e.typeId === list[0].typeId);
+    const sameType = !WORKFLOW.grouping.createFrom.sameEventType || list.every((e) => e.typeId === list[0].typeId);
+    return Boolean(list.length) && sameType && list.every(groupable);
   }
 
   // Массовые действия — по режимам машины (bulk): each_allowed — если доступно каждому
@@ -2486,7 +2481,7 @@
     if (!tr) return;
     const targets = actionTargets(id, ev);
     if (targets.length >= 2) {
-      if (id === "claim") {
+      if (engine.bulk(id).createsGroup) {
         groupProcess();
         return;
       }
@@ -2624,12 +2619,8 @@
       list = eventsForDevices(ids);
     }
     return list.filter((e) => {
-      if (state.filter === "open" && isDone(e)) return false;
-      if (state.filter === "mine" && !isMine(e)) return false;
-      if (state.filter === "inbox" && !(e.state === "pending_acceptance" && isTarget(e))) return false;
-      // «Чужие» — то, что закреплено за другими: адресованное мне живёт в своём фильтре
-      if (state.filter === "foreign" && (isTarget(e) || isDone(e) || e.state === "new")) return false;
-      if (state.filter === "done" && !isDone(e)) return false;
+      // Фильтр по состоянию и отношению ко мне — из машины (queueFilters)
+      if (!engine.inQueueFilter(e, state.filter)) return false;
       if (state.eventType !== "all" && e.typeId !== state.eventType) return false;
       if (state.deviceType !== "all") {
         const src = DEVICE_CATALOG[eventSource(e)];
@@ -2646,8 +2637,13 @@
     });
   }
 
-  // Списки фильтров: типы событий — из самих событий, типы устройств — из справочника
+  // Списки фильтров: по состоянию — из машины, типы событий — из самих событий,
+  // типы устройств — из справочника
   function renderTypeFilters() {
+    $("eventFilter").innerHTML = WORKFLOW.queueFilters
+      .map((f) => `<option value="${escapeHtml(f.id)}">${te(f.label)}</option>`)
+      .join("");
+    $("eventFilter").value = state.filter;
     const types = new Map();
     state.events.forEach((e) => types.set(e.typeId, e.type));
     $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
@@ -2900,9 +2896,9 @@
           n: mates.length,
           ids: mates.map((e) => e.id).join(", "),
         })
-      )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${state.onBreak ? "disabled" : ""}>${te(
-        "Исключить из группы"
-      )}</button></div>`;
+      )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${
+        engine.canExcludeFromGroup(ev) ? "" : "disabled"
+      }>${te("Исключить из группы")}</button></div>`;
     }
     if (isDone(ev)) {
       const why =
@@ -2952,7 +2948,7 @@
     }
     const steps = scenarioSteps(ev);
     const prog = stepProgress(ev);
-    const editable = isMine(ev) && ev.state === "in_progress" && !state.onBreak;
+    const editable = engine.canEditScenario(ev);
     const acts = cardActions(ev);
 
     ensureCursor(ev);
@@ -2960,7 +2956,9 @@
     const step = steps[i];
     const last = i === steps.length - 1;
     const canNext = isStepValid(ev, step);
-    const canClose = scenarioDone(ev) && editable;
+    // «Закрыть инцидент» в конце сценария — когда доступен результат «Обработан» (§2.2)
+    const canClose =
+      editable && canDo("close", ev, "card") && engine.closeResults(ev, "card").some((r) => r.id === "processed" && !r.disabled);
     const incomplete = steps.findIndex((s) => s.required && !isStepValid(ev, s));
 
     root.innerHTML = `
@@ -3489,7 +3487,8 @@
   // Уход на перерыв — с причиной из машины (§12.1); активный инцидент откладывается системой,
   // право incident:hold не требуется (§12.2: system_hold_break)
   function toggleBreak() {
-    if (!can("agent:set_not_ready")) {
+    const notReady = WORKFLOW.session.states.find((s) => s.id === "not_ready");
+    if (notReady.permission && !can(notReady.permission)) {
       toast(t("Нет права уходить на перерыв"));
       return;
     }
@@ -3507,7 +3506,8 @@
     state.onBreak = true;
     state.agentState = "not_ready";
     state.breakReason = reasonId;
-    engine.goNotReady();
+    // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
+    engine.tick();
     toast(t("Перерыв. Новые события не назначаются"));
     renderAll();
   }
@@ -3745,7 +3745,7 @@
     });
     $("scenarioRoot").addEventListener("input", (e) => {
       const ev = selected();
-      if (!ev || !isMine(ev) || ev.state !== "in_progress" || state.onBreak) return;
+      if (!engine.canEditScenario(ev)) return;
       const el = e.target.closest("textarea[data-ans]");
       if (!el) return;
       ev.answers[el.dataset.ans] = el.value;
@@ -3755,7 +3755,7 @@
     });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
-      if (!ev || !isMine(ev) || ev.state !== "in_progress" || state.onBreak) return;
+      if (!engine.canEditScenario(ev)) return;
       const el = e.target.closest("[data-ans]");
       if (!el) return;
       ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
@@ -3787,7 +3787,7 @@
         trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "card");
         return;
       }
-      const editable = isMine(ev) && ev.state === "in_progress" && !state.onBreak;
+      const editable = engine.canEditScenario(ev);
       const crumb = e.target.closest("[data-crumb]");
       if (crumb) {
         goToStep(ev, Number(crumb.dataset.crumb));
@@ -3811,11 +3811,12 @@
         return;
       }
       const macro = e.target.closest("[data-macro]");
-      if (macro && !can("incident:run_action")) {
-        toast(t("Нет права запускать макросы"));
+      const macroCheck = macro ? availability("run_macro", ev) : null;
+      if (macro && !macroCheck.ok) {
+        toast(macroCheck.why);
         return;
       }
-      if (macro && editable) {
+      if (macro) {
         const name = macro.dataset.macro;
         if (!ev.launched.includes(name)) ev.launched.push(name);
         toast(t("Макрос: {name}", { name: t(name) }));
@@ -3926,14 +3927,14 @@
       if (ev) typeId = ev.typeId;
     }
     if (!typeId) {
-      const firstNew = visibleEvents().find((e) => e.state === "new");
+      const firstNew = visibleEvents().find(groupable);
       typeId = firstNew && firstNew.typeId;
     }
     if (!typeId) {
       toast(t("Нет новых событий для выборки"));
       return;
     }
-    const candidates = visibleEvents().filter((e) => e.state === "new" && e.typeId === typeId);
+    const candidates = visibleEvents().filter((e) => groupable(e) && e.typeId === typeId);
     if (!candidates.length) {
       toast(t("Нет новых событий для выборки"));
       return;
@@ -3947,40 +3948,18 @@
 
   // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый
   // инцидент сохраняет собственное состояние и собственные таймеры.
-  // «Обработать как одно» (§11): «Взять» машины на каждом отмеченном и общий group_id.
-  // Группа считается одной единицей в лимите активных, поэтому group_id ставится до взятия.
+  // «Обработать как одно» (§11): группу создаёт исполнитель по grouping машины
   function groupProcess() {
     if (state.checked.size < 2) return;
-    const grouping = WORKFLOW.grouping;
-    if (!grouping.permissions.every(can)) {
-      toast(t("Нет права на групповую обработку"));
-      return;
-    }
     const picked = checkedEvents();
-    if (!picked.every((e) => grouping.createFrom.states.includes(e.state))) {
-      toast(t("В группу берутся только новые события"));
-      return;
-    }
-    if (grouping.createFrom.sameEventType && picked.some((e) => e.typeId !== picked[0].typeId)) {
-      toast(t("В группе должен быть один тип события"));
-      return;
-    }
-    if (picked.length > grouping.createFrom.maxItems) {
-      toast(t("Не больше {max} событий в группе", { max: grouping.createFrom.maxItems }));
-      return;
-    }
     const groupId = `GRP-${Date.now().toString().slice(-4)}`;
-    picked.forEach((ev) => (ev.groupId = groupId));
-    const blocked = picked.find((ev) => !canDo("claim", ev));
-    if (blocked) {
-      picked.forEach((ev) => (ev.groupId = null));
-      toast(availability("claim", blocked).why);
+    const r = engine.createGroup(picked, groupId);
+    if (!r.ok) {
+      toast(say(r.why));
       return;
     }
     const first = picked[0];
     picked.forEach((ev) => {
-      engine.run("claim", ev, {});
-      ev.answers = first.answers;
       log(ev, "me", "Групповая обработка {grp} вместе с {ids}", {
         grp: groupId,
         ids: picked
@@ -4113,52 +4092,56 @@
     return ids;
   }
 
+  // Все горячие клавиши — из машины (§13); в полях ввода работают только те, у которых
+  // worksInInput: F1 и Esc
   function onKey(e) {
-    // Регламент доступен из любого места, в том числе из поля ввода.
-    if (e.key === "F1") {
-      e.preventDefault();
-      closeMenus();
-      showModal("modalRegulation");
-      return;
-    }
-    // Esc разбирается по приоритету: форма → полный экран → панель групп → карточка (§13.1)
-    if (e.key === "Escape") {
+    const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
+    if (!hotkey) return;
+    const target = e.target;
+    const inInput = target instanceof Element && target.matches("input, textarea, select");
+    if (inInput && !hotkey.worksInInput) return;
+    if (state.dialog && hotkey.action !== "escape_chain") return;
+    runHotkey(hotkey, e);
+  }
+
+  // Esc разбирается по цепочке машины: форма → полный экран → панель групп → к очереди (§13.1).
+  // Срабатывает первое звено, которому есть что закрыть.
+  const ESCAPE_STEPS = {
+    close_form: () => {
       const openMenu = closeMenus();
       if (openMenu) {
         openMenu.querySelector("[aria-haspopup]").focus();
-        return;
+        return true;
       }
       if (state.dialog) {
         closeDialog();
-        return;
+        return true;
       }
       const openModal = document.querySelector(".modal:not([hidden])");
-      if (openModal) {
-        openModal.hidden = true;
-        return;
-      }
-      if (state.full) {
-        toggleFull(state.full);
-        return;
-      }
-      if (state.groupsOn && narrowQuery.matches) {
-        closeDrawer();
-        return;
-      }
-      if (state.mode === "work") backToQueue();
-      return;
-    }
-    // В полях ввода работают только F1 и Esc (§13.3)
-    const target = e.target;
-    if (target instanceof Element && target.matches("input, textarea, select")) return;
-    if (state.dialog) return;
-    const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
-    if (hotkey) runHotkey(hotkey, e);
-  }
+      if (!openModal) return false;
+      openModal.hidden = true;
+      return true;
+    },
+    exit_fullscreen: () => {
+      if (!state.full) return false;
+      toggleFull(state.full);
+      return true;
+    },
+    close_groups_panel: () => {
+      if (!(state.groupsOn && narrowQuery.matches)) return false;
+      closeDrawer();
+      return true;
+    },
+    back_to_queue: () => {
+      if (state.mode !== "work") return false;
+      backToQueue();
+      return true;
+    },
+  };
 
-  // Имя клавиши в записи машины: «N», «Ctrl+A», «Enter», «ArrowLeft», «?»
+  // Имя клавиши в записи машины: «N», «Ctrl+A», «Enter», «ArrowLeft», «?», «Esc»
   function keyName(e) {
-    const base = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    const base = e.key === "Escape" ? "Esc" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
     return e.ctrlKey || e.metaKey ? `Ctrl+${base}` : base;
   }
 
@@ -4167,9 +4150,19 @@
     const [kind, name] = hotkey.action.split(":");
     const ev = selected();
     const surface = state.mode === "work" ? "card" : "queue";
+    if (hotkey.action === "escape_chain") {
+      hotkey.chain.some((stepId) => ESCAPE_STEPS[stepId] && ESCAPE_STEPS[stepId]());
+      return;
+    }
+    if (kind === "docs" && name === "regulation") {
+      e.preventDefault();
+      closeMenus();
+      showModal("modalRegulation");
+      return;
+    }
     if (kind === "transition") {
       if (hotkey.scope === "next_new") {
-        const next = state.events.find((x) => x.state === "new");
+        const next = state.events.find((x) => canDo(name, x, "queue"));
         if (next) trigger(name, next, "queue");
         return;
       }

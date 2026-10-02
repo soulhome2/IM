@@ -2275,6 +2275,25 @@ window.IM_WORKFLOW = {
     "reopenWindowMin": 1440,
     "groupCountsAsOneUnit": true
   },
+  "scenarioEdit": {
+    "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (PATCH .../scenario/answers, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
+    "guards": [
+      {
+        "fn": "stateIs",
+        "args": [
+          [
+            "in_progress"
+          ]
+        ]
+      },
+      {
+        "fn": "isOwner"
+      },
+      {
+        "fn": "agentReady"
+      }
+    ]
+  },
   "grouping": {
     "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся.",
     "enabled": true,
@@ -2303,6 +2322,22 @@ window.IM_WORKFLOW = {
     "memberLeavesGroupOn": [
       "reaction_timer_expired",
       "manual_exclude"
+    ],
+    "excludeGuards": [
+      {
+        "fn": "stateIs",
+        "args": [
+          [
+            "in_progress"
+          ]
+        ]
+      },
+      {
+        "fn": "isOwner"
+      },
+      {
+        "fn": "agentReady"
+      }
     ],
     "selectionHelpers": [
       {

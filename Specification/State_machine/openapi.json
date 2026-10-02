@@ -1805,6 +1805,11 @@
               "additionalProperties": true
             }
           },
+          "scenarioEdit": {
+            "type": "object",
+            "description": "§10.4. Условия правки шагов сценария. Не выполнены — карточка на просмотр (IncidentCard.readOnly)",
+            "additionalProperties": true
+          },
           "queueFilters": {
             "type": "array",
             "items": {
