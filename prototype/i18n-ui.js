@@ -365,6 +365,11 @@ window.IM_DICT_UI = {
     "Форма → полный экран → панель групп → возврат к очереди":
       "Form → full screen → groups panel → back to the queue",
     "Эскалация или перенаправление выбранного": "Escalate or redirect the selected one",
+    "Выбрать {id}": "Select {id}",
+    "Уровень эскалации": "Escalation level",
+    "Страница {p}": "Page {p}",
+    "План: {name}": "Plan: {name}",
+    "Шаги сценария": "Scenario steps",
   },
 
   es: {
@@ -741,5 +746,10 @@ window.IM_DICT_UI = {
     "Форма → полный экран → панель групп → возврат к очереди":
       "Formulario → pantalla completa → panel de grupos → volver a la cola",
     "Эскалация или перенаправление выбранного": "Escalar o redirigir el seleccionado",
+    "Выбрать {id}": "Seleccionar {id}",
+    "Уровень эскалации": "Nivel de escalada",
+    "Страница {p}": "Página {p}",
+    "План: {name}": "Plano: {name}",
+    "Шаги сценария": "Pasos del escenario",
   },
 };
