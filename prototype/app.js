@@ -1939,6 +1939,12 @@
     if (!root || !ev) return;
     const el = root.querySelector("[data-ans]");
     if (!el) return;
+    if (el.type === "radio") {
+      // У радиогрупп data-ans на каждом варианте: берём отмеченный, а не первый.
+      const picked = root.querySelector(`[data-ans="${el.dataset.ans}"]:checked`);
+      if (picked) ev.answers[el.dataset.ans] = picked.value;
+      return;
+    }
     ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
   }
 
