@@ -1688,7 +1688,7 @@
 
   /* ===== Лимиты (§10.2, §11) ===== */
 
-  const LIMITS = { maxActive: 1, maxOnHold: 5, maxBulk: 10, reopenWindowMin: 60 };
+  const LIMITS = { maxActive: 1, maxOnHold: 5, maxBulk: 10, reopenWindowMin: 24 * 60 };
 
   /* ===== Права: ресурс:действие:область (§5) ===== */
 
