@@ -42,6 +42,12 @@
     await click($("dialogConfirm"));
   }
 
+  // Остаток норматива закрытия в строке состояния карточки, в секундах
+  function resolutionLeft() {
+    const m = $("statusSla").textContent.match(/(\d+):(\d\d)/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
   async function openOwn(id) {
     if (mode() === "work") return;
     await setFilter("mine");
@@ -133,6 +139,7 @@
     let closedId = null;
     let workId = null;
     let acceptedId = null;
+    let acceptedLeft = null;
 
     await step("Взять новое событие", async () => {
       await setFilter("open");
@@ -228,6 +235,9 @@
       acceptedId = b.dataset.ev;
       await click(b);
       expect(mode() === "work", "карточка не открылась");
+      acceptedLeft = resolutionLeft();
+      // Даём нормативу закрытия пройти, чтобы потом отличить продолжение от перезапуска
+      await wait(2500);
       return acceptedId;
     });
 
@@ -239,6 +249,23 @@
       await click(b);
       await confirmDialog("самопроверка");
       expect(mode() === "queue", "после возврата карточка не закрылась");
+    });
+
+    await step("Норматив закрытия не обнуляется при возврате в очередь", async () => {
+      expect(acceptedLeft != null, "при «Принять» не было отсчёта норматива закрытия");
+      await setFilter("open");
+      let b = button($("eventsList"), "claim", acceptedId);
+      for (let page = 2; !b && page <= 20; page++) {
+        const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+        if (!nav || nav.disabled) break;
+        await click(nav);
+        b = button($("eventsList"), "claim", acceptedId);
+      }
+      expect(b, `${acceptedId} нет в очереди`);
+      await click(b);
+      const left = resolutionLeft();
+      expect(left != null && left < acceptedLeft, `было ${acceptedLeft} с, после повторного взятия ${left} с`);
+      return `${acceptedLeft} → ${left} с`;
     });
 
     await step("Закрыть без обработки из очереди", async () => {

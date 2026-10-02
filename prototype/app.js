@@ -2021,18 +2021,16 @@
   const startReaction = (ev, sec) => {
     ev.reactionDueAt = Date.now() + (sec || ev.slaSec || 300) * 1000;
   };
+  // Норматив закрытия запускается один раз — при первом взятии в работу. Дальше передача,
+  // возврат в очередь, удержание и закрытие его только приостанавливают, а взятие, принятие
+  // и переоткрытие продолжают с остатка (RULE-07).
   const startResolution = (ev) => {
-    ev.resolutionDueAt = Date.now() + resolutionSec(ev) * 1000;
-    ev.resolutionLeftMs = null;
-  };
-  const stopResolution = (ev) => {
-    ev.resolutionDueAt = null;
+    const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : resolutionSec(ev) * 1000;
+    ev.resolutionDueAt = Date.now() + left;
     ev.resolutionLeftMs = null;
   };
   const pauseResolution = (ev) => {
-    ev.resolutionLeftMs = ev.resolutionDueAt
-      ? Math.max(0, ev.resolutionDueAt - Date.now())
-      : resolutionSec(ev) * 1000;
+    if (ev.resolutionDueAt) ev.resolutionLeftMs = Math.max(0, ev.resolutionDueAt - Date.now());
     ev.resolutionDueAt = null;
   };
   const resumeResolution = (ev) => {
@@ -2302,7 +2300,7 @@
         ev.owner = null;
         ev.holdReason = null;
         ev.holdSince = null;
-        stopResolution(ev);
+        pauseResolution(ev);
         startReaction(ev);
         log(ev, "me", "Возвращён в очередь: {why}", { why: payload.reason });
         ev.groupId = null;
@@ -2374,7 +2372,7 @@
         ev.closedBy = "me";
         ev.closedAt = Date.now();
         stopReaction(ev);
-        stopResolution(ev);
+        pauseResolution(ev);
         if (payload && payload.reason) ev.answers.result = payload.reason;
         log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
         if (!(payload && payload.silent)) toast(t("{id} закрыт", { id: ev.id }));
@@ -2410,7 +2408,7 @@
         ev.closedBy = "me";
         ev.closedAt = Date.now();
         stopReaction(ev);
-        stopResolution(ev);
+        pauseResolution(ev);
         log(ev, "me", "Отменён: {why}. {note}", {
           why: rawCancel(payload.choice),
           note: payload.reason,
@@ -2460,7 +2458,7 @@
     ev.escalationLevel += 1;
     ev.holdReason = null;
     ev.holdSince = null;
-    stopResolution(ev);
+    pauseResolution(ev);
     startReaction(ev, ev.escalationLevel > 0 ? 150 : ev.slaSec);
     log(ev, byId, "Передано → {who} (уровень {lvl}). {why}", {
       who: actorRaw(targetId),
@@ -2477,7 +2475,7 @@
     ev.holdReason = null;
     ev.holdSince = null;
     stopReaction(ev);
-    stopResolution(ev);
+    pauseResolution(ev);
     log(ev, "me", "Закрыт без обработки: {why}. {note}", {
       why: rawSkipClose(payload.choice),
       note: payload.reason || "Причина не указана",
@@ -2963,7 +2961,7 @@
     ev.owner = level.target;
     ev.escalationLevel += 1;
     ev.holdReason = null;
-    stopResolution(ev);
+    pauseResolution(ev);
     startReaction(ev, level.reactionSec);
     log(ev, "dispatcher", "Автоэскалация → {who} (уровень {lvl}). {why}", {
       who: actorRaw(level.target),
