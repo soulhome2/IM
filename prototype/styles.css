@@ -863,6 +863,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .event-pri.critical { background: var(--crit); }
 .event-pri.high { background: var(--warn); }
 .event-pri.medium { background: var(--info); }
+.event-pri.low { background: var(--muted); }
 .event-main { min-width: 0; display: grid; gap: 4px; }
 .event-title { display: flex; justify-content: space-between; gap: 8px; }
 .event-title strong { font-size: 14px; font-weight: 600; }
