@@ -36,9 +36,19 @@
     await wait();
   }
 
+  // Поле формы перехода по имени из машины: resultId, causeId, comment, targetId…
+  const field = (name) => $("dialogFields").querySelector(`[data-field="${name}"]`);
+
+  async function setField(name, value) {
+    field(name).value = value;
+    field(name).dispatchEvent(new Event("change", { bubbles: true }));
+    await wait();
+  }
+
   async function confirmDialog(text) {
     expect(!$("modalDialog").hidden, "форма перехода не открылась");
-    if (text && !$("dialogTextField").hidden) $("dialogText").value = text;
+    const comment = field("comment");
+    if (text && comment && !comment.closest("[data-field-box]").hidden) comment.value = text;
     await click($("dialogConfirm"));
   }
 
@@ -80,7 +90,7 @@
   async function openOwn(id) {
     if (mode() === "work") return;
     await setFilter("mine");
-    const b = button($("eventsList"), "continueOwn", id) || button($("eventsList"), "resume", id);
+    const b = button($("eventsList"), "open_card", id) || button($("eventsList"), "resume", id);
     expect(b, `${id} нет среди своих инцидентов`);
     await click(b);
     expect(mode() === "work", `карточка ${id} не открылась`);
@@ -150,7 +160,7 @@
     const leftovers = new Set(findRussian());
     // Карточка тоже должна быть переведена: открываем завершённый инцидент на просмотр
     await setFilter("done");
-    const view = button($("eventsList"), "viewDone");
+    const view = button($("eventsList"), "open_done");
     if (view) {
       await click(view);
       findRussian().forEach((s) => leftovers.add(s));
@@ -170,6 +180,7 @@
     let acceptedId = null;
     let acceptedLeft = null;
     let freshId = null;
+    let groupPair = [];
 
     await step("Взять новое событие", async () => {
       await setFilter("open");
@@ -209,7 +220,7 @@
         const close = root().querySelector('.scenario-actions [data-do="close"]');
         if (close) {
           await click(close);
-          expect($("dialogSelect").value === "processed", `результат по умолчанию «${$("dialogSelect").value}», а не «Обработан»`);
+          expect(field("resultId").value === "processed", `результат по умолчанию «${field("resultId").value}», а не «Обработан»`);
           await confirmDialog();
           expect(mode() === "queue", "после закрытия карточка не закрылась");
           return closedId;
@@ -321,10 +332,9 @@
       expect(b, "в карточке нет кнопки «Закрыть»");
       await click(b);
       // «Обработан» доступен, только если сценарий заполнен; у принятого инцидента он может быть уже заполнен
-      const processed = $("dialogSelect").querySelector('option[value="processed"]');
+      const processed = field("resultId").querySelector('option[value="processed"]');
       expect(processed, "в форме нет результата «Обработан»");
-      $("dialogSelect").value = "false_alarm";
-      $("dialogSelect").dispatchEvent(new Event("change"));
+      await setField("resultId", "false_alarm");
       await click($("dialogConfirm"));
       expect(!$("modalDialog").hidden, "закрылось без обязательного комментария");
       await confirmDialog("самопроверка");
@@ -352,8 +362,8 @@
       const close = button(root(), "close");
       expect(close, "в карточке нет кнопки «Закрыть»");
       await click(close);
-      const processed = $("dialogSelect").querySelector('option[value="processed"]');
-      const other = $("dialogSelect").querySelector('option[value="false_alarm"]');
+      const processed = field("resultId").querySelector('option[value="processed"]');
+      const other = field("resultId").querySelector('option[value="false_alarm"]');
       expect(processed && processed.disabled, "«Обработан» доступен при пустом сценарии");
       expect(other && !other.disabled, "«Ложная тревога» недоступна");
       document.querySelector('[data-close="modalDialog"]').click();
@@ -366,13 +376,17 @@
       await pressKey("Escape");
       expect(mode() === "queue", "Esc не вернул к очереди");
       await setFilter("mine");
-      expect(button($("eventsList"), "continueOwn", freshId), `${freshId} больше не «В работе»`);
+      expect(button($("eventsList"), "open_card", freshId), `${freshId} больше не «В работе»`);
     });
 
-    await step("Перерыв с открытой карточкой откладывает инцидент", async () => {
+    await step("Перерыв с открытой карточкой: инцидент отложен, карточка — просмотр", async () => {
       await openOwn(freshId);
       await click($("breakBtn"));
-      expect(mode() === "queue", "на перерыве карточка осталась открытой");
+      await confirmDialog();
+      // Карточка не закрывается, а становится просмотром (§9, §14.8): править отложенный нельзя
+      expect(mode() === "work", "на перерыве карточка закрылась, а должна стать просмотром");
+      expect(!root().querySelector("#stepNext:not([disabled])"), "на перерыве сценарий можно править");
+      await click($("backToQueue"));
       await setFilter("mine");
       const row = $("eventsList").querySelector(`[data-id="${freshId}"]`);
       const text = row ? row.textContent : "";
@@ -382,10 +396,11 @@
 
     await step("Закрыть отложенный с результатом «Массовый сбой»", async () => {
       await setFilter("mine");
-      const b = button($("eventsList"), "closeUnprocessed", freshId);
+      const b = button($("eventsList"), "close", freshId);
       expect(b, `у отложенного ${freshId} нет кнопки «Закрыть»`);
       await click(b);
-      expect($("dialogSelect").value.startsWith("mass:"), "в форме не выбран массовый сбой");
+      expect(field("resultId").value === "mass", "в форме не выбран массовый сбой");
+      expect(field("causeId") && !field("causeId").closest("[data-field-box]").hidden, "нет причины сбоя");
       await confirmDialog("самопроверка");
       await setFilter("done");
       const row = await rowOnPages(freshId);
@@ -430,6 +445,7 @@
       }
       expect(pair, "нет типа событий с двумя новыми");
       const [a, b] = pair;
+      groupPair = pair;
       await click($("eventsList").querySelector(`[data-check="${a}"]`));
       await click($("eventsList").querySelector(`[data-check="${b}"]`));
       await click(button($("eventsList"), "claim", a));
@@ -440,6 +456,18 @@
       const both = [a, b].every((id) => $("eventsList").querySelector(`[data-id="${id}"]`));
       expect(both, `в работу ушли не оба: ${a}, ${b}`);
       return `${a} + ${b}`;
+    });
+
+    await step("Исключить из группы: инцидент остаётся в работе отдельно", async () => {
+      await openOwn(groupPair[0]);
+      const b = root().querySelector("[data-exclude]");
+      expect(b, "в карточке группы нет кнопки «Исключить из группы»");
+      await click(b);
+      expect(!root().querySelector("[data-exclude]"), "после исключения карточка всё ещё показывает группу");
+      await click($("backToQueue"));
+      await setFilter("mine");
+      expect(button($("eventsList"), "open_card", groupPair[0]), `${groupPair[0]} больше не «В работе»`);
+      return groupPair[0];
     });
 
     await step("Фильтр по типу устройства поверх группы", async () => {
@@ -461,7 +489,7 @@
 
     await step("Закрыть без обработки из очереди", async () => {
       await setFilter("open");
-      const b = [...$("eventsList").querySelectorAll('[data-do="closeUnprocessed"]')].find((x) => {
+      const b = [...$("eventsList").querySelectorAll('[data-do="close"]')].find((x) => {
         const row = x.closest(".event");
         return !x.disabled && row && row.querySelector('[data-do="claim"]');
       });
@@ -495,6 +523,8 @@
 
     await step("Перерыв и возврат на смену", async () => {
       await click($("breakBtn"));
+      expect(field("reasonId"), "перерыв не спросил причину");
+      await confirmDialog();
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
       await click($("breakBtn"));
       expect($("breakBanner").hidden, "плашка перерыва не исчезла");

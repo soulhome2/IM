@@ -1,0 +1,538 @@
+/* Исполнитель машины состояний в браузере: Specification/State_machine/workflow.v4.json,
+   подключённой как window.IM_WORKFLOW (prototype/workflow.js).
+
+   Делает то, что в продукте делает сервер: решает, какие действия доступны (/actions),
+   выполняет переход (/transitions), строит формы и бейджи, считает нормативы и выполняет
+   автоматические переходы по таймерам. Интерфейс прототипа обращается только к этим
+   функциям — так же, как фронтенд продукта к API. Своей таблицы переходов здесь нет:
+   условия и эффекты берутся из реестров машины (§14.8).
+
+   Данные инцидента и всё, что относится к интерфейсу (сценарии, журнал, подписи людей,
+   открытая карточка), передаёт прототип через ctx в create(). */
+(() => {
+  // Стили бейджей машины → классы прототипа
+  const BADGE_CLASS = { escalated: "esc", paused: "pause", done: "ok", done_unprocessed: "cancel" };
+
+  function create(ctx) {
+    const W = ctx.workflow;
+    const ME = ctx.me;
+    const transitions = Object.fromEntries(W.transitions.map((t) => [t.id, t]));
+    const navActions = Object.fromEntries(W.navActions.items.map((n) => [n.id, n]));
+    const guardRegistry = Object.fromEntries(W.registries.guards.map((g) => [g.fn, g]));
+    const forms = Object.fromEntries(W.forms.map((f) => [f.id, f]));
+    const timers = Object.fromEntries(W.timers.map((t) => [t.id, t]));
+    const catalogs = W.reasonCatalogs;
+    const states = Object.fromEntries(W.states.map((s) => [s.id, s]));
+
+    const now = () => ctx.now();
+    const isGroup = (id) => Boolean(id) && ctx.isGroup(id);
+    const isMine = (ev) => ev.owner === ME;
+    const isTarget = (ev) => Boolean(ev.owner) && (ev.owner === ME || (isGroup(ev.owner) && ctx.memberOf(ev.owner, ME)));
+    const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
+    const asList = (v) => (Array.isArray(v) ? v : [v]);
+    const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
+    const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
+
+    /* ===== Нормативы (§4, правило 2) ===== */
+
+    // Самая специфичная строка overrides, иначе byPriority, иначе defaultSec
+    function baseNorm(ev, timerId) {
+      const t = timers[timerId];
+      let best = null;
+      let bestScore = -1;
+      (t.overrides || []).forEach((o) => {
+        const keys = Object.keys(o).filter((k) => k !== "sec");
+        const match = keys.every((k) =>
+          k === "eventType" ? o[k] === ev.typeId : k === "sourceGroup" ? ctx.inGroup(ev, o[k]) : o[k] === ev[k]
+        );
+        if (match && keys.length > bestScore) {
+          best = o.sec;
+          bestScore = keys.length;
+        }
+      });
+      if (best != null) return best;
+      if (t.byPriority && t.byPriority[ev.priority] != null) return t.byPriority[ev.priority];
+      return t.defaultSec;
+    }
+
+    // Норматив реакции уровня автоэскалации (§8.3)
+    function levelNorm(ev, level) {
+      const levels = W.escalation.levels;
+      const found = levels.find((l) => l.level === level) || levels[levels.length - 1];
+      return found ? found.reactionSec : baseNorm(ev, "reaction");
+    }
+
+    /* ===== Таймеры: дедлайны — метки времени (§4, правило 1) ===== */
+
+    function startTimer(ev, id, arg) {
+      if (id === "reaction") {
+        let sec = baseNorm(ev, "reaction");
+        if (arg === "byEscalationLevel") sec = levelNorm(ev, ev.escalationLevel);
+        else if (arg === "escalation.level.reactionSec") sec = levelNorm(ev, ev.escalationLevel);
+        else if (typeof arg === "number") sec = arg;
+        ev.reactionDueAt = now() + sec * 1000;
+      } else if (id === "resolution") {
+        resumeTimer(ev, "resolution");
+      } else if (id === "hold") {
+        const reason = catalogItem("hold", ev.holdReason);
+        ev.holdSince = now();
+        ev.holdDueAt = reason ? now() + reason.maxMinutes * 60000 : null;
+      }
+    }
+    function stopTimer(ev, id) {
+      if (id === "reaction") ev.reactionDueAt = null;
+      else if (id === "resolution") pauseTimer(ev, "resolution");
+      else if (id === "hold") {
+        ev.holdSince = null;
+        ev.holdDueAt = null;
+      }
+    }
+    // Норматив закрытия запускается один раз и дальше только приостанавливается (startsOnce, RULE-07)
+    function pauseTimer(ev, id) {
+      if (id !== "resolution") return stopTimer(ev, id);
+      if (ev.resolutionDueAt) ev.resolutionLeftMs = Math.max(0, ev.resolutionDueAt - now());
+      ev.resolutionDueAt = null;
+    }
+    function resumeTimer(ev, id) {
+      if (id !== "resolution") return startTimer(ev, id);
+      if (ev.resolutionDueAt) return;
+      const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : baseNorm(ev, "resolution") * 1000;
+      ev.resolutionDueAt = now() + left;
+      ev.resolutionLeftMs = null;
+    }
+    const dueOf = (ev, id) => (id === "reaction" ? ev.reactionDueAt : id === "resolution" ? ev.resolutionDueAt : ev.holdDueAt);
+
+    // Срабатывание по дедлайну — один раз на каждый дедлайн, как у планировщика на сервере (§14.3)
+    function timerExpired(ev, id) {
+      const due = dueOf(ev, id);
+      if (!due || due > now()) return false;
+      ev.firedTimers = ev.firedTimers || {};
+      return ev.firedTimers[id] !== due;
+    }
+    function markFired(ev, id) {
+      ev.firedTimers = ev.firedTimers || {};
+      ev.firedTimers[id] = dueOf(ev, id);
+    }
+
+    /* ===== Лимиты (§10.2): группа сценария — одна единица ===== */
+
+    function units(stateId, ev) {
+      const own = ev ? ev.groupId || ev.id : null;
+      return new Set(
+        ctx
+          .events()
+          .filter((e) => e.state === stateId && isMine(e))
+          .map((e) => e.groupId || e.id)
+          .filter((u) => u !== own)
+      );
+    }
+
+    /* ===== Условия: реестр машины (§14.8) ===== */
+
+    const GUARDS = {
+      hasPermission: (ev, [key]) => (ctx.can(key) ? null : ["Нет права: {p}", { p: key }]),
+      hasScopedPermission: (ev, [prefix]) => {
+        const own = ev.state === "new" || isMine(ev) || isTarget(ev);
+        const key = `${prefix}:${own ? "own" : "any"}`;
+        return ctx.can(key) ? null : ["Нет права: {p}", { p: key }];
+      },
+      isOwner: (ev) => (isMine(ev) ? null : ["Вы не владелец инцидента"]),
+      isNotOwner: (ev) => (isMine(ev) ? ["Инцидент уже ваш"] : null),
+      isOwnerInStates: (ev, [list]) => (!asList(list).includes(ev.state) || isMine(ev) ? null : ["Вы не владелец инцидента"]),
+      isTarget: (ev) => (isTarget(ev) ? null : ["Передача адресована другому"]),
+      isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["Передача адресована вам"] : null),
+      targetIsNotSelf: () => null,
+      agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
+      agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
+      // Признак активности оператора в прототипе не отслеживается (§17): без сервера не воспроизвести
+      agentIdleFor: () => ["Оператор на связи"],
+      withinActiveLimit: (ev) => {
+        const u = units("in_progress", ev);
+        return u.size < W.limits.maxActive
+          ? null
+          : ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: [...u][0] }];
+      },
+      withinHoldLimit: (ev) =>
+        units("on_hold", ev).size < W.limits.maxOnHold ? null : ["Больше {n} отложенных держать нельзя", { n: W.limits.maxOnHold }],
+      withinReopenWindow: (ev) =>
+        Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin
+          ? null
+          : ["Срок переоткрытия истёк: {n} мин", { n: W.limits.reopenWindowMin }],
+      requiredStepsFilled: (ev, [setId]) => (ctx.stepsFilled(ev, setId) ? null : ["Заполните обязательные шаги закрытия"]),
+      closeResultAllowed: (ev, [resultId], opts) => {
+        const options = closeResults(ev, opts && opts.surface);
+        if (resultId) {
+          const o = options.find((x) => x.id === resultId);
+          if (!o) return ["Результат недоступен"];
+          return o.disabled ? [o.why] : null;
+        }
+        if (options.some((o) => !o.disabled)) return null;
+        return options.length ? [options[0].why] : ["Нет права: {p}", { p: "incident:close" }];
+      },
+      timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["Норматив не истёк"]),
+      flagBelow: (ev, [field, n]) => (flagValue(ev, field) < setting(n) ? null : ["Достигнут предел"]),
+      flagAtLeast: (ev, [field, n]) => (flagValue(ev, field) >= setting(n) ? null : ["Предел не достигнут"]),
+      holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["Другая причина удержания"]),
+      stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["Недоступно в текущем состоянии"]),
+      canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["Нет права открывать чужие карточки"]),
+      minSelected: () => null,
+      settingEnabled: (ev, [key]) => (setting(key) ? null : ["Выключено настройкой"]),
+    };
+
+    const flagValue = (ev, field) => (field === "escalation_level" ? ev.escalationLevel : ev[field]);
+    function setting(path) {
+      if (typeof path !== "string") return path;
+      if (path === "escalation.onResolutionOverdue.alert") return W.escalation.onResolutionOverdue === "alert";
+      return path.split(".").reduce((o, k) => (o == null ? o : o[k]), W);
+    }
+
+    // Результаты закрытия, которые этот оператор может выбрать для этого инцидента (§2.2)
+    function closeResults(ev, surface) {
+      const out = [];
+      catalogs.close_result.items.forEach((item) => {
+        if (!ctx.can(item.permission)) return;
+        if (!item.fromStates.includes(ev.state)) return;
+        if (item.ownerOnlyInStates.includes(ev.state) && !isMine(ev)) return;
+        if (surface && item.surfaces && !item.surfaces.includes(surface)) return;
+        const stepsOk = item.requiredStepSet === "none" || ctx.stepsFilled(ev, item.requiredStepSet);
+        out.push({ id: item.id, label: item.label, disabled: !stepsOk, why: stepsOk ? null : "Заполните обязательные шаги закрытия" });
+      });
+      return out;
+    }
+
+    // Первое невыполненное условие: { why, hidden } по onFail реестра; null — всё выполнено
+    function firstFail(ev, guards, opts) {
+      for (const g of guards || []) {
+        const fn = GUARDS[g.fn];
+        if (!fn) return { why: [`Условие не реализовано: ${g.fn}`], hidden: false };
+        const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
+        const why = fn(ev, args, opts);
+        if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide" };
+      }
+      return null;
+    }
+
+    /* ===== Доступность и список действий (/actions, §7) ===== */
+
+    function availability(id, ev, opts) {
+      const tr = transitions[id];
+      const nav = navActions[id];
+      if (!ev || (!tr && !nav)) return { hidden: true };
+      if (tr && !tr.from.includes(ev.state)) return { hidden: true };
+      const fail = firstFail(ev, tr ? tr.guards : nav.guards, opts);
+      if (fail) return { hidden: fail.hidden, disabled: true, why: fail.why };
+      return { ok: true };
+    }
+
+    function actions(ev, surface) {
+      const out = [];
+      W.transitions.forEach((tr) => {
+        if (tr.trigger !== "manual" || !tr.ui.surface.includes(surface)) return;
+        const a = availability(tr.id, ev, { surface });
+        if (a.hidden) return;
+        out.push({
+          id: tr.id,
+          kind: "transition",
+          label: tr.label,
+          hint: a.why || tr.hint || tr.label,
+          style: tr.ui.style || "outline",
+          enabled: Boolean(a.ok),
+          formId: tr.form,
+          hotkey: tr.ui.hotkey,
+          navigate: tr.ui.navigate,
+        });
+      });
+      W.navActions.items.forEach((nav) => {
+        if (!nav.surface.includes(surface) || nav.id === "back_to_queue" || nav.id === "run_macro") return;
+        const a = availability(nav.id, ev);
+        if (a.hidden || !a.ok) return;
+        out.push({ id: nav.id, kind: "nav", label: nav.label, hint: nav.hint || nav.label, style: nav.style, enabled: true });
+      });
+      // Навигация — первой: «Продолжить», «Открыть», «Просмотр» стоят во главе колонки
+      return out.filter((a) => a.kind === "nav").concat(out.filter((a) => a.kind === "transition"));
+    }
+
+    /* ===== Выполнение перехода (/transitions, §6) ===== */
+
+    function vars(ev, form, extra) {
+      const prog = ctx.progress(ev);
+      const hold = catalogItem("hold", ev.holdReason);
+      return Object.assign(
+        {
+          comment: (form && form.comment) || "",
+          stepNumber: ctx.stepNumber(ev),
+          holdReasonLabel: hold ? hold.label : "",
+          targetName: ctx.actorName(ev.owner),
+          escalationLevel: ev.escalationLevel,
+          closeResultLabel: closeResultLabel(ev),
+          filledSteps: prog.filled,
+          totalSteps: prog.total,
+          escalationReason: W.escalation.reason,
+        },
+        extra || {}
+      );
+    }
+
+    function closeResultLabel(ev) {
+      if (ev.closeResult === "mass" && ev.massCause) {
+        const cause = catalogItem("mass_fault", ev.massCause);
+        if (cause) return cause.label;
+      }
+      const item = catalogItem("close_result", ev.closeResult);
+      return item ? item.label : "";
+    }
+
+    function value(arg, ev, form, scope) {
+      if (arg === "actor") return scope.actor;
+      if (arg === "now") return now();
+      if (typeof arg === "string" && arg.startsWith("form.")) {
+        const [name, mod] = arg.slice(5).split(".");
+        const v = form ? form[name] : undefined;
+        if (mod === "ifGroup") return isGroup(v) ? v : null;
+        return v == null || v === "" ? null : v;
+      }
+      if (arg === "escalation.level.target") return scope.level ? refToId(scope.level.targetRef) : null;
+      if (arg === "escalation.level.target.ifGroup") {
+        const id = scope.level ? refToId(scope.level.targetRef) : null;
+        return isGroup(id) ? id : null;
+      }
+      return arg;
+    }
+
+    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached" };
+
+    const EFFECTS = {
+      setOwner: (ev, [arg], s) => {
+        ev.owner = arg === "actorIfEmpty" ? ev.owner || s.actor : value(arg, ev, s.form, s);
+      },
+      setAssignmentGroup: (ev, [arg], s) => {
+        ev.assignmentGroup = value(arg, ev, s.form, s);
+      },
+      setHoldReason: (ev, [arg], s) => {
+        ev.holdReason = value(arg, ev, s.form, s);
+      },
+      clearHoldReason: (ev) => {
+        ev.holdReason = null;
+      },
+      startTimer: (ev, [id, arg]) => startTimer(ev, id, arg),
+      stopTimer: (ev, [id]) => stopTimer(ev, id),
+      pauseTimer: (ev, [id]) => pauseTimer(ev, id),
+      resumeTimer: (ev, [id]) => resumeTimer(ev, id),
+      increment: (ev, [field]) => {
+        if (field === "escalation_level") ev.escalationLevel += 1;
+        else ev[field] = (ev[field] || 0) + 1;
+      },
+      setFlag: (ev, [field, arg], s) => {
+        ev[FLAG_FIELD[field] || field] = value(arg, ev, s.form, s);
+      },
+      appendLog: (ev, [template], s) => ctx.log(ev, s.actor, template, vars(ev, s.form, s.logVars)),
+      returnToQueue: () => {},
+      evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
+      setCursor: (ev) => ctx.setCursor(ev),
+      clearGroup: (ev) => {
+        ev.groupId = null;
+      },
+      notify: () => {},
+      externalCommand: () => {},
+    };
+
+    function applyEffects(tr, ev, form, actor) {
+      const scope = {
+        actor,
+        form,
+        transitionId: tr.id,
+        previousOwner: ev.owner,
+        level: W.escalation.levels.find((l) => l.level === ev.escalationLevel + 1) || null,
+        logVars: { previousOwnerName: ctx.actorName(ev.owner) },
+      };
+      if (tr.to) ev.state = tr.to;
+      tr.effects.forEach((e) => {
+        const fn = EFFECTS[e.fn];
+        if (fn) fn(ev, e.args || [], scope);
+      });
+    }
+
+    // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
+    function validateForm(tr, ev, form) {
+      const f = tr.form ? forms[tr.form] : null;
+      if (!f) return null;
+      for (const field of f.fields) {
+        if (field.visibleWhen && !field.visibleWhen.in.includes(form[field.visibleWhen.field])) continue;
+        let required = field.required;
+        if (field.requiredFrom) {
+          const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
+          const item = catalogItem(catalog, form.resultId);
+          required = Boolean(item && item[attr]);
+        }
+        const v = form[field.name];
+        if (required && (v == null || String(v).trim() === "")) {
+          return field.kind === "text" ? ["Укажите причину — поле обязательно"] : ["Заполните поле «{name}»", { name: field.label }];
+        }
+      }
+      return null;
+    }
+
+    function run(id, ev, form, opts) {
+      const tr = transitions[id];
+      if (!tr) return { ok: false, why: ["Неизвестное действие"] };
+      form = form || {};
+      const a = availability(id, ev, { form, surface: opts && opts.surface });
+      if (!a.ok) return { ok: false, why: a.why };
+      const bad = validateForm(tr, ev, form);
+      if (bad) return { ok: false, why: bad };
+      if (form.targetId && form.targetId === ME) return { ok: false, why: ["Передача на себя запрещена"] };
+      applyEffects(tr, ev, form, ME);
+      return { ok: true, navigate: tr.ui.navigate };
+    }
+
+    /* ===== Автоматические переходы (§6.2): планировщик ===== */
+
+    const TIMER_OF = { auto_escalate: "reaction", escalation_ceiling: "reaction", resolution_overdue: "resolution", hold_overdue: "hold" };
+
+    function tick() {
+      const changed = [];
+      ctx.events().forEach((ev) => {
+        if (isDone(ev)) return;
+        W.transitions.forEach((tr) => {
+          if (tr.trigger !== "timer" && tr.trigger !== "system") return;
+          if (!tr.from.includes(ev.state)) return;
+          if (tr.id === "system_hold_break" || tr.id === "system_hold_idle") return;
+          if (firstFail(ev, tr.guards)) return;
+          const timer = TIMER_OF[tr.id];
+          if (timer) markFired(ev, timer);
+          applyEffects(tr, ev, {}, tr.actor || "dispatcher");
+          changed.push({ id: ev.id, transition: tr.id });
+        });
+      });
+      return changed;
+    }
+
+    // Уход на перерыв: системное откладывание своих инцидентов в работе (§12.2)
+    function goNotReady() {
+      const tr = transitions.system_hold_break;
+      const list = ctx.events().filter((e) => e.state === "in_progress" && isMine(e));
+      list.forEach((ev) => applyEffects(tr, ev, {}, "system"));
+      return list.map((e) => e.id);
+    }
+
+    /* ===== Формы, бейджи, массовые действия ===== */
+
+    function noteFor(f, ev, extra) {
+      const ownership = isMine(ev) ? "owner" : isTarget(ev) ? "target" : "other";
+      const note = (f.notes || []).find((n) => {
+        const w = n.when || {};
+        if (w.state && w.state !== ev.state) return false;
+        if (w.ownership && w.ownership !== ownership) return false;
+        if (w.grouped && !(extra && extra.groupSize > 1)) return false;
+        return true;
+      });
+      if (!note) return null;
+      const prog = ctx.progress(ev);
+      return [
+        note.text,
+        Object.assign(
+          {
+            nextEscalationLevel: ev.escalationLevel + 1,
+            ownerName: ctx.actorName(ev.owner),
+            filledSteps: prog.filled,
+            totalSteps: prog.total,
+            minutesSinceClose: Math.max(1, Math.round((now() - (ev.closedAt || now())) / 60000)),
+          },
+          extra || {}
+        ),
+      ];
+    }
+
+    function form(formId, ev, opts) {
+      const f = forms[formId];
+      if (!f) return null;
+      const fields = f.fields.map((field) => {
+        let options = null;
+        let defaultValue = null;
+        if (field.source === "transferTargets") {
+          options = ctx.transferTargets(ev).filter((o) => !(field.excludes || []).includes("currentOwner") || o.id !== ev.owner);
+          if (field.defaultFrom) defaultValue = ctx.defaultTransferTarget();
+        } else if (field.source && field.source.startsWith("reasonCatalog:")) {
+          const catalog = field.source.split(":")[1];
+          if (field.optionsFrom === "actions" && catalog === "close_result") {
+            options = closeResults(ev, opts && opts.surface).map((o) => ({ id: o.id, label: o.label, disabled: o.disabled, why: o.why }));
+          } else {
+            options = catalogs[catalog].items
+              .filter((i) => !(field.excludeSystemItems && i.setBy === "system"))
+              .map((i) => ({ id: i.id, label: i.label }));
+          }
+          if (field.defaultWhen && ctx.stepsFilled(ev, field.defaultWhen.requiredStepsFilled)) defaultValue = field.defaultWhen.value;
+        }
+        return Object.assign({}, field, { options, defaultValue });
+      });
+      return { id: f.id, title: f.title, confirmLabel: f.confirmLabel, style: f.style, note: noteFor(f, ev, opts && opts.noteVars), fields };
+    }
+
+    // Бейдж под смотрящего оператора (§2.4)
+    function badge(ev) {
+      const role = isMine(ev) ? "owner" : isTarget(ev) ? "target" : "other";
+      const rule = W.badges.rules.find((r) => {
+        if (r.state !== ev.state) return false;
+        if (r.when && r.when.closeResult && r.when.closeResult !== ev.closeResult) return false;
+        return r.viewerRole === "any" || r.viewerRole === role;
+      });
+      if (!rule) return { label: [states[ev.state].label], cls: ev.state };
+      const hold = catalogItem("hold", ev.holdReason);
+      return {
+        label: [rule.label, { ownerName: ctx.actorName(ev.owner), holdReasonLabel: hold ? hold.label : "", closeResultLabel: closeResultLabel(ev) }],
+        cls: BADGE_CLASS[rule.style] || rule.style,
+      };
+    }
+
+    const bulk = (id) => (transitions[id] && transitions[id].bulk) || { allowed: false };
+
+    // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
+    // инцидент остаётся в работе со своей копией ответов
+    function excludeFromGroup(ev) {
+      if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
+      const fail = firstFail(ev, [{ fn: "stateIs", args: [["in_progress"]] }, { fn: "isOwner" }, { fn: "agentReady" }]);
+      if (fail) return { ok: false, why: fail.why };
+      const groupId = ev.groupId;
+      ev.groupId = null;
+      ctx.detachAnswers(ev);
+      ctx.log(ev, ME, "Исключён из группы {grp}", { grp: groupId });
+      return { ok: true };
+    }
+
+    // Эффекты перехода от имени другого участника без проверки условий — только для эмуляции
+    // коллег в прототипе: в продукте их действия приходят с сервера (поток событий)
+    function applyAs(id, ev, form, actor) {
+      const tr = transitions[id];
+      if (tr) applyEffects(tr, ev, form || {}, actor);
+    }
+
+    return {
+      workflow: W,
+      transition: (id) => transitions[id] || null,
+      nav: (id) => navActions[id] || null,
+      isNav: (id) => Boolean(navActions[id]),
+      isDone,
+      isTarget,
+      availability,
+      actions,
+      run,
+      form,
+      badge,
+      bulk,
+      closeResults,
+      norm: baseNorm,
+      startTimer,
+      stopTimer,
+      pauseTimer,
+      resumeTimer,
+      tick,
+      goNotReady,
+      applyAs,
+      closeResultLabel,
+      excludeFromGroup,
+      units,
+    };
+  }
+
+  window.IMEngine = { create };
+})();

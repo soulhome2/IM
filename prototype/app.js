@@ -1616,79 +1616,23 @@
     return `${t(actor.name)} · ${t(actor.role)}`;
   };
 
-  /* ===== Состояния (§2.1) ===== */
+  /* ===== Машина состояний (§2–§11): состояния, справочники, нормативы, лимиты ===== */
 
-  const STATES = {
-    new: { category: "pending", cls: "new", label: "Новое" },
-    pending_acceptance: { category: "pending", cls: "esc", label: "Ожидает принятия" },
-    in_progress: { category: "active", cls: "mine", label: "В работе" },
-    on_hold: { category: "active", cls: "pause", label: "Отложен" },
-    closed: { category: "done", cls: "ok", label: "Закрыто" },
-  };
+  // Модель берётся из Specification/State_machine/workflow.v4.json (prototype/workflow.js),
+  // переходы выполняет её исполнитель engine.js. Своей таблицы переходов в прототипе нет.
+  const WORKFLOW = window.IM_WORKFLOW;
+  const STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
+  const LIMITS = WORKFLOW.limits;
+  const HOLD_REASONS = WORKFLOW.reasonCatalogs.hold.items;
 
-  const HOLD_REASONS = [
-    { id: "third_party", label: "Ожидание третьей стороны", maxMin: 30 },
-    { id: "patrol", label: "Выезд наряда", maxMin: 45 },
-    { id: "no_data", label: "Нет данных, вернуться позже", maxMin: 60 },
-    { id: "break", label: "Перерыв оператора", maxMin: 30, system: true },
-    { id: "no_link", label: "Нет связи с оператором", maxMin: 20, system: true },
-  ];
-
-  // Результат закрытия (§2.2). Конечное состояние одно — closed, итог хранится в closeResult (RULE-02).
-  // «Обработан» требует сценария, остальные — нет. «Массовый сбой» — по праву incident:close:unprocessed,
-  // с причиной из справочника массовых сбоев.
-  const CLOSE_RESULTS = [
-    { id: "processed", label: "Обработан" },
-    { id: "false_alarm", label: "Ложная тревога" },
-    { id: "duplicate", label: "Дубликат" },
-    { id: "drill", label: "Плановая проверка" },
-    { id: "impossible", label: "Прервано: обработка невозможна" },
-    { id: "mass", label: "Массовый сбой" },
-  ];
-
-  const MASS_FAULT_REASONS = [
-    { id: "power", label: "Отключение электричества на объекте" },
-    { id: "link", label: "Потеря связи с объектом" },
-    { id: "mass_fault", label: "Массовый сбой оборудования" },
-    { id: "known", label: "Известная неисправность, работы ведутся" },
-  ];
-
-  // rawLabel отдаёт русский источник для журнала, holdLabel/resultLabel — перевод для экрана
-  const rawLabel = (list, id) => {
-    const item = list.find((r) => r.id === id);
+  // rawHold отдаёт русский источник для журнала, holdLabel/resultLabel — перевод для экрана
+  const rawHold = (id) => {
+    const item = HOLD_REASONS.find((r) => r.id === id);
     return item ? item.label : "Причина не указана";
   };
-  const holdLabel = (id) => t(rawLabel(HOLD_REASONS, id));
-  const rawHold = (id) => rawLabel(HOLD_REASONS, id);
-  // Массовый сбой в журнале и на экране — по причине из справочника, остальные — по результату
-  const rawResult = (ev) =>
-    ev.closeResult === "mass" && ev.massCause ? rawLabel(MASS_FAULT_REASONS, ev.massCause) : rawLabel(CLOSE_RESULTS, ev.closeResult);
-  const resultLabel = (ev) => t(rawResult(ev));
-
-  /* ===== Нормативы (§4) ===== */
-
-  // Норматив реакции приходит из данных события (ev.slaSec), норматив закрытия — от приоритета.
-  const RESOLUTION_SEC = { critical: 600, high: 900, medium: 1500, low: 1800 };
-  const resolutionSec = (ev) => RESOLUTION_SEC[ev.priority] || 900;
-
-  /* ===== Автоэскалация (§9). Настройки — под правом incident:schema:admin ===== */
-
-  const AUTO = {
-    enabled: true,
-    trigger: "reaction",
-    fromStates: ["new", "pending_acceptance"],
-    levels: [
-      { level: 1, target: "petrova", reactionSec: 120 },
-      { level: 2, target: "noc", reactionSec: 90 },
-    ],
-    maxLevel: 2,
-    onResolutionOverdue: "alert",
-    reason: "Автоэскалация: превышен норматив реакции",
-  };
-
-  /* ===== Лимиты (§10.2, §11) ===== */
-
-  const LIMITS = { maxActive: 1, maxOnHold: 5, maxBulk: 10, reopenWindowMin: 24 * 60 };
+  const holdLabel = (id) => t(rawHold(id));
+  const resultLabel = (ev) => t(engine.closeResultLabel(ev));
+  const levelTarget = (level) => level.targetRef.split(":")[1];
 
   /* ===== Права: ресурс:действие:область (§5) ===== */
 
@@ -1764,6 +1708,40 @@
   const defaultTarget = () => actorLabel(state.escalateTo);
 
   const $ = (id) => document.getElementById(id);
+
+  // Исполнитель машины: делает то, что в продукте делает сервер (/actions, /transitions).
+  // Всё, что относится к интерфейсу и демо-данным, он получает отсюда.
+  const engine = IMEngine.create({
+    workflow: WORKFLOW,
+    me: "me",
+    now: () => Date.now(),
+    events: () => state.events,
+    can,
+    isGroup: (id) => GROUPS.some((g) => g.id === id),
+    memberOf: (groupId, userId) => {
+      const group = GROUPS.find((g) => g.id === groupId);
+      return Boolean(group && group.members.includes(userId));
+    },
+    inGroup: (ev, groupId) => eventsInNode(findNode(TREE, groupId) || { children: [] }).includes(ev),
+    agentState: () => state.agentState,
+    stepsFilled: (ev, setId) => setId === "none" || scenarioDone(ev),
+    progress: (ev) => stepProgress(ev),
+    stepNumber: (ev) => ev.stepIndex + 1,
+    setCursor: (ev) => {
+      ev.stepIndex = firstOpenStep(ev);
+    },
+    actorName: (id) => actorRaw(id),
+    log: (ev, whoId, template, vars) => log(ev, whoId, template, vars),
+    transferTargets: () => targetOptions(),
+    defaultTransferTarget: () => state.escalateTo,
+    // У членов группы ответы общие: при исключении инцидент получает свою копию
+    detachAnswers: (ev) => {
+      ev.answers = JSON.parse(JSON.stringify(ev.answers));
+    },
+    // Инцидент увели: открытая карточка остаётся и сама становится просмотром — править
+    // чужой или отложенный инцидент нельзя (§9, §14.8: evictOpenCard)
+    onEvict: () => {},
+  });
 
   function nowStamp() {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
@@ -1983,12 +1961,7 @@
   const isDone = (ev) => Boolean(ev) && STATES[ev.state].category === "done";
   const isMine = (ev) => Boolean(ev) && ev.owner === "me";
 
-  function isTarget(ev) {
-    if (!ev || !ev.owner) return false;
-    if (ev.owner === "me") return true;
-    const group = GROUPS.find((g) => g.id === ev.owner);
-    return Boolean(group && group.members.includes("me"));
-  }
+  const isTarget = (ev) => Boolean(ev) && engine.isTarget(ev);
 
   // Инциденты одной группы считаются одной единицей: иначе групповая обработка
   // упиралась бы в лимит активных (§10.2, §11).
@@ -2023,29 +1996,12 @@
 
   /* ===== Таймеры (§4): дедлайны — метки времени, отсчёт рисует клиент ===== */
 
-  const stopReaction = (ev) => {
-    ev.reactionDueAt = null;
-  };
-  const startReaction = (ev, sec) => {
-    ev.reactionDueAt = Date.now() + (sec || ev.slaSec || 300) * 1000;
-  };
-  // Норматив закрытия запускается один раз — при первом взятии в работу. Дальше передача,
-  // возврат в очередь, удержание и закрытие его только приостанавливают, а взятие, принятие
-  // и переоткрытие продолжают с остатка (RULE-07).
-  const startResolution = (ev) => {
-    const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : resolutionSec(ev) * 1000;
-    ev.resolutionDueAt = Date.now() + left;
-    ev.resolutionLeftMs = null;
-  };
-  const pauseResolution = (ev) => {
-    if (ev.resolutionDueAt) ev.resolutionLeftMs = Math.max(0, ev.resolutionDueAt - Date.now());
-    ev.resolutionDueAt = null;
-  };
-  const resumeResolution = (ev) => {
-    const left = ev.resolutionLeftMs != null ? ev.resolutionLeftMs : resolutionSec(ev) * 1000;
-    ev.resolutionDueAt = Date.now() + left;
-    ev.resolutionLeftMs = null;
-  };
+  // Таймеры ведёт исполнитель машины: нормативы по схеме (§4, правило 2), норматив закрытия
+  // запускается один раз и дальше только приостанавливается (RULE-07). Обёртки нужны
+  // приведению демо-данных и эмуляции коллег.
+  const stopReaction = (ev) => engine.stopTimer(ev, "reaction");
+  const startReaction = (ev, arg) => engine.startTimer(ev, "reaction", arg);
+  const startResolution = (ev) => engine.resumeTimer(ev, "resolution");
 
   function timerView(ev) {
     if (!ev || isDone(ev)) return null;
@@ -2061,26 +2017,10 @@
     return null;
   }
 
+  // Бейдж считает исполнитель по правилам машины (§2.4), здесь — только перевод
   function badgeView(ev) {
-    const meta = STATES[ev.state];
-    if (ev.state === "new") return { text: t("Новое"), cls: "new" };
-    if (ev.state === "pending_acceptance") {
-      return isTarget(ev)
-        ? { text: t("Вам на принятие"), cls: "inbox" }
-        : { text: t("Ожидает принятия · {who}", { who: actorName(ev.owner) }), cls: "esc" };
-    }
-    if (ev.state === "in_progress") {
-      return isMine(ev) ? { text: t("В работе"), cls: "mine" } : { text: actorName(ev.owner), cls: "foreign" };
-    }
-    if (ev.state === "on_hold") {
-      return isMine(ev)
-        ? { text: t("Отложен · {why}", { why: holdLabel(ev.holdReason) }), cls: "pause" }
-        : { text: t("Отложен · {who}", { who: actorName(ev.owner) }), cls: "pause" };
-    }
-    if (ev.state === "closed" && ev.closeResult && ev.closeResult !== "processed") {
-      return { text: t("Закрыто · {why}", { why: resultLabel(ev) }), cls: "cancel" };
-    }
-    return { text: t(meta.label), cls: meta.cls };
+    const b = engine.badge(ev);
+    return { text: t(b.label[0], logVars(b.label[1])), cls: b.cls };
   }
 
   /* ===== Приведение демонстрационных данных к модели v2 ===== */
@@ -2100,6 +2040,8 @@
       ev.slaBreached = false;
       ev.groupId = null;
       ev.holdSince = null;
+      ev.holdDueAt = null;
+      ev.assignmentGroup = null;
       ev.closedAt = null;
       ev.reactionDueAt = null;
       ev.resolutionDueAt = null;
@@ -2113,7 +2055,9 @@
         if (ev.paused) {
           ev.state = "on_hold";
           ev.holdReason = ev.holdReason || "third_party";
-          ev.holdSince = now - 4 * 60000;
+          engine.startTimer(ev, "hold");
+          ev.holdSince -= 4 * 60000;
+          ev.holdDueAt -= 4 * 60000;
           ev.resolutionLeftMs = (ev.slaSec || 600) * 1000;
         } else {
           ev.state = "in_progress";
@@ -2142,7 +2086,7 @@
     if (inbox) {
       inbox.owner = "grp-leads";
       inbox.escalationLevel = 1;
-      startReaction(inbox, 150);
+      startReaction(inbox, "byEscalationLevel");
       log(inbox, "sidorov", "Эскалация → {who}. {why}", {
         who: "Дежурная группа старших",
         why: "Нужен допуск в зону",
@@ -2152,7 +2096,7 @@
     const inboxMine = pick("INC-1843");
     if (inboxMine) {
       inboxMine.owner = "me";
-      startReaction(inboxMine, 150);
+      startReaction(inboxMine, "byEscalationLevel");
       log(inboxMine, "noc", "Передано → {who} (уровень {lvl}). {why}", {
         who: ME,
         lvl: inboxMine.escalationLevel,
@@ -2172,330 +2116,27 @@
     if (fresh) fresh.closedAt = Date.now() - 12 * 60000;
   }
 
-  /* ===== Переходы (§6) ===== */
+  /* ===== Переходы (§6): доступность и выполнение — в исполнителе машины ===== */
 
-  // Мягкие условия оставляют кнопку видимой и блокируют её с подсказкой (§10.2).
-  // Условия принадлежности прячут кнопку: действие не относится к этой ситуации.
-  const OWNERSHIP_GUARDS = [
-    "owner",
-    "target",
-    "notOwner",
-    "reopenWindow",
-    "ownOrFree",
-    "readForeign",
-    "canTransfer",
-    "canSkipClose",
-    "canClose",
-  ];
+  // Ответ исполнителя [шаблон, подстановки] → строка на языке интерфейса
+  const say = (why) => (why ? t(why[0], logVars(why[1])) : "");
 
-  const GUARDS = {
-    owner: (ev) => (isMine(ev) ? null : t("Вы не владелец инцидента")),
-    notOwner: (ev) => (isMine(ev) ? t("Инцидент уже ваш") : null),
-    target: (ev) => (isTarget(ev) ? null : t("Передача адресована другому")),
-    activeLimit: (ev) => {
-      const units = myUnits("in_progress", ev.id);
-      if (units.size < LIMITS.maxActive) return null;
-      return t("Лимит активных ({n}). Сначала закройте или отложите {id}", {
-        n: LIMITS.maxActive,
-        id: [...units][0],
-      });
-    },
-    holdLimit: () =>
-      myUnits("on_hold").size < LIMITS.maxOnHold
-        ? null
-        : t("Больше {n} отложенных держать нельзя", { n: LIMITS.maxOnHold }),
-    canClose: () =>
-      can("incident:close") || can("incident:close:unprocessed") ? null : t("Нет права: {p}", { p: "incident:close" }),
-    canSkipClose: (ev) => {
-      if (!can("incident:close:unprocessed")) return t("Нет права: {p}", { p: "incident:close:unprocessed" });
-      if (ev.state === "in_progress" || ev.state === "on_hold") {
-        return isMine(ev) ? null : t("Вы не владелец инцидента");
-      }
-      if (ev.state === "new" || ev.state === "pending_acceptance") return null;
-      return t("Действие «{name}» недоступно в текущем состоянии", { name: t("Закрыть без обработки") });
-    },
-    reopenWindow: (ev) => {
-      const min = Math.round((Date.now() - (ev.closedAt || 0)) / 60000);
-      return min <= LIMITS.reopenWindowMin
-        ? null
-        : t("Срок переоткрытия истёк: {n} мин", { n: LIMITS.reopenWindowMin });
-    },
-    readForeign: (ev) =>
-      isMine(ev) || ev.closedBy === "me" || can("incident:read:any")
-        ? null
-        : t("Нет права открывать чужие карточки"),
-  };
-
-  const TRANSITIONS = {
-    claim: {
-      label: "Взять",
-      hint: "Взять инцидент в работу",
-      style: "primary",
-      from: ["new"],
-      to: "in_progress",
-      perm: "incident:claim",
-      guards: ["activeLimit"],
-      run(ev) {
-        ev.owner = "me";
-        stopReaction(ev);
-        startResolution(ev);
-        ev.stepIndex = firstOpenStep(ev);
-        log(ev, "me", "Взято в работу");
-        toast(t("{id} в работе", { id: ev.id }));
-        return "card";
-      },
-    },
-    accept: {
-      label: "Принять",
-      hint: "Принять адресованную вам передачу",
-      style: "primary",
-      from: ["pending_acceptance"],
-      to: "in_progress",
-      perm: "incident:claim",
-      guards: ["target", "activeLimit"],
-      run(ev, payload) {
-        ev.owner = "me";
-        stopReaction(ev);
-        startResolution(ev);
-        ensureCursor(ev);
-        log(ev, "me", "Передача принята, прогресс сценария сохранён");
-        if (!(payload && payload.silent)) toast(t("{id} принят в работу", { id: ev.id }));
-        return "card";
-      },
-    },
-    reject: {
-      label: "Отклонить",
-      hint: "Вернуть передачу в общую очередь",
-      style: "outline",
-      from: ["pending_acceptance"],
-      to: "new",
-      perm: "incident:release",
-      guards: ["target"],
-      dialog: "reject",
-      run(ev, payload) {
-        ev.owner = null;
-        startReaction(ev);
-        log(ev, "me", "Передача отклонена: {why}", { why: payload.reason });
-        if (!(payload && payload.silent)) toast(t("{id} возвращён в очередь", { id: ev.id }));
-        return "queue";
-      },
-    },
-    hold: {
-      label: "Отложить",
-      hint: "Отложить с указанием причины",
-      style: "outline",
-      from: ["in_progress"],
-      to: "on_hold",
-      perm: "incident:hold",
-      guards: ["owner", "holdLimit"],
-      dialog: "hold",
-      hotkey: "H",
-      run(ev, payload) {
-        ev.holdReason = payload.choice;
-        ev.holdSince = Date.now();
-        pauseResolution(ev);
-        ensureCursor(ev);
-        log(ev, "me", "Отложен на шаге {n}: {why}", {
-          n: ev.stepIndex + 1,
-          why: rawHold(payload.choice),
-        });
-        if (!(payload && payload.silent)) toast(t("{id} отложен", { id: ev.id }));
-        return "queue";
-      },
-    },
-    resume: {
-      label: "Возобновить",
-      hint: "Продолжить обработку с того же остатка норматива",
-      style: "primary",
-      from: ["on_hold"],
-      to: "in_progress",
-      perm: "incident:claim",
-      guards: ["owner", "activeLimit"],
-      hotkey: "R",
-      run(ev) {
-        ev.holdReason = null;
-        ev.holdSince = null;
-        resumeResolution(ev);
-        ensureCursor(ev);
-        log(ev, "me", "Обработка возобновлена на шаге {n}", { n: ev.stepIndex + 1 });
-        return "card";
-      },
-    },
-    release: {
-      label: "Вернуть в очередь",
-      hint: "Снять с себя и вернуть инцидент в общую очередь",
-      style: "outline",
-      from: ["in_progress", "on_hold"],
-      to: "new",
-      perm: "incident:release",
-      guards: ["owner"],
-      dialog: "release",
-      run(ev, payload) {
-        ev.owner = null;
-        ev.holdReason = null;
-        ev.holdSince = null;
-        pauseResolution(ev);
-        startReaction(ev);
-        log(ev, "me", "Возвращён в очередь: {why}", { why: payload.reason });
-        ev.groupId = null;
-        if (!(payload && payload.silent)) toast(t("{id} возвращён в очередь", { id: ev.id }));
-        return "queue";
-      },
-    },
-    transfer: {
-      label: "Передать",
-      hint: "Передать инцидент другому адресату",
-      style: "warn",
-      from: ["new", "pending_acceptance", "in_progress", "on_hold"],
-      to: "pending_acceptance",
-      guards: ["canTransfer"],
-      dialog: "transfer",
-      hotkey: "E",
-      run(ev, payload) {
-        const prev = ev.owner;
-        const foreign = prev && !isMine(ev) && !isTarget(ev);
-        applyEscalation(ev, payload.choice, payload.reason, "me");
-        if (foreign) {
-          log(ev, "system", "Прежний владелец {who} уведомлён, его карточка переведена в просмотр", {
-            who: actorRaw(prev),
-          });
-        }
-        if (!(payload && payload.silent)) toast(t("{id} передан → {who}", { id: ev.id, who: actorName(payload.choice) }));
-        return "queue";
-      },
-    },
-    takeover: {
-      label: "Перехватить",
-      hint: "Забрать инцидент у работающего оператора",
-      style: "danger",
-      from: ["pending_acceptance", "in_progress", "on_hold"],
-      to: "in_progress",
-      perm: "incident:reassign",
-      guards: ["notOwner", "activeLimit"],
-      dialog: "takeover",
-      hotkey: "T",
-      // Перехват доступен только из карточки: сначала нужно увидеть, что уже сделано (§7).
-      surface: "card",
-      run(ev) {
-        const prev = ev.owner;
-        const prog = stepProgress(ev);
-        ev.owner = "me";
-        ev.holdReason = null;
-        stopReaction(ev);
-        if (!ev.resolutionDueAt) resumeResolution(ev);
-        ensureCursor(ev);
-        log(ev, "me", "Перехват у {who}. Прогресс сценария сохранён ({a}/{b})", {
-          who: actorRaw(prev),
-          a: prog.filled,
-          b: prog.total,
-        });
-        toast(t("Перехвачен {id}", { id: ev.id }));
-        return "card";
-      },
-    },
-    close: {
-      label: "Закрыть",
-      hint: "Закрыть с результатом: обработан, ложная тревога, дубликат, проверка",
-      style: "outline",
-      from: ["in_progress"],
-      to: "closed",
-      guards: ["owner", "canClose"],
-      dialog: "close",
-      run(ev, payload) {
-        closeEvent(ev, payload);
-        if (!(payload && payload.silent))
-          toast(t(ev.closeResult === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.id }));
-        return "queue";
-      },
-    },
-    closeUnprocessed: {
-      label: "Закрыть",
-      hint: "Закрыть с результатом «Массовый сбой», без сценария",
-      style: "outline",
-      from: ["new", "pending_acceptance", "in_progress", "on_hold"],
-      to: "closed",
-      perm: "incident:close:unprocessed",
-      guards: ["canSkipClose"],
-      dialog: "closeUnprocessed",
-      run(ev, payload) {
-        closeEvent(ev, payload);
-        if (!(payload && payload.silent)) toast(t("{id} закрыт без обработки", { id: ev.id }));
-        return "queue";
-      },
-    },
-    reopen: {
-      label: "Переоткрыть",
-      hint: "Вернуть завершённый инцидент в работу",
-      style: "outline",
-      from: ["closed"],
-      to: "in_progress",
-      perm: "incident:reopen",
-      guards: ["reopenWindow", "activeLimit"],
-      dialog: "reopen",
-      run(ev, payload, from) {
-        // Результат очищается, прежний остаётся в журнале записью о закрытии (RULE-02)
-        const was = "закрытия";
-        ev.owner = "me";
-        ev.closeResult = null;
-        ev.massCause = null;
-        // Отметка о нарушении норматива не сбрасывается: иначе просрочку можно скрыть переоткрытием
-        startResolution(ev);
-        ensureCursor(ev);
-        log(ev, "me", "Переоткрыт после {was}: {why}", { was, why: payload.reason });
-        toast(t("{id} переоткрыт", { id: ev.id }));
-        return "card";
-      },
-    },
-  };
-
-  // Действия без смены состояния (§6.3)
-  const NAV_ACTIONS = {
-    continueOwn: { label: "Продолжить", hint: "Вернуться к своей карточке", style: "primary" },
-    viewForeign: {
-      label: "Открыть",
-      hint: "Просмотр без изменений",
-      style: "outline",
-      guards: ["readForeign"],
-    },
-    viewDone: { label: "Просмотр", hint: "Открыть карточку завершённого инцидента", style: "outline", guards: ["readForeign"] },
-  };
-
-  function applyEscalation(ev, targetId, reason, byId) {
-    ev.state = "pending_acceptance";
-    ev.owner = targetId;
-    ev.escalationLevel += 1;
-    ev.holdReason = null;
-    ev.holdSince = null;
-    pauseResolution(ev);
-    startReaction(ev, ev.escalationLevel > 0 ? 150 : ev.slaSec);
-    log(ev, byId, "Передано → {who} (уровень {lvl}). {why}", {
-      who: actorRaw(targetId),
-      lvl: ev.escalationLevel,
-      why: reason || "Причина не указана",
-    });
+  function availability(id, ev, surface) {
+    const a = engine.availability(id, ev, { surface });
+    return a.ok ? a : Object.assign({}, a, { why: say(a.why) });
   }
 
-  // Закрытие с результатом (§6.1). choice — результат, у массового сбоя — «mass:причина»
-  function closeEvent(ev, payload) {
-    const [result, cause] = String((payload && payload.choice) || "processed").split(":");
-    ev.owner = "me";
-    ev.closedBy = "me";
-    ev.closedAt = Date.now();
-    ev.closeResult = result;
-    ev.massCause = cause || null;
-    ev.holdReason = null;
-    ev.holdSince = null;
-    stopReaction(ev);
-    pauseResolution(ev);
-    if (result === "processed") {
-      if (payload && payload.reason) ev.answers.result = payload.reason;
-      log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
-      return;
-    }
-    log(ev, "me", "Закрыт без обработки: {why}. {note}", {
-      why: rawResult(ev),
-      note: (payload && payload.reason) || "Причина не указана",
-    });
+  const canDo = (id, ev, surface) => Boolean(engine.availability(id, ev, { surface }).ok);
+
+  function actionView(a) {
+    return {
+      id: a.id,
+      label: t(a.label),
+      hint: Array.isArray(a.hint) ? say(a.hint) : t(a.hint),
+      style: a.style || "outline",
+      disabled: !a.enabled,
+      nav: a.kind === "nav",
+    };
   }
 
   function groupMates(ev) {
@@ -2512,13 +2153,15 @@
     return Boolean(list.length) && list.every((e) => e.state === "new" && e.typeId === list[0].typeId);
   }
 
-  // Массово из очереди: Передать и Закрыть — на любой выборке, если действие
-  // доступно каждому; Взять — только на однотипных new (группа сценария).
+  // Массовые действия — по режимам машины (bulk): each_allowed — если доступно каждому
+  // отмеченному, same_type_new — только однотипные новые (группа сценария), group — только
+  // на членах группы сценария (§11)
   function selectionAllows(id, list) {
     if (!list || list.length < 2) return true;
-    if (id === "transfer") return list.every((e) => availability("transfer", e).ok);
-    if (id === "closeUnprocessed") return list.every((e) => availability("closeUnprocessed", e).ok);
-    if (id === "claim") return sameTypeNew(list) && list.every((e) => availability("claim", e).ok);
+    const mode = engine.bulk(id);
+    if (!mode.allowed) return false;
+    if (mode.mode === "same_type_new") return sameTypeNew(list) && list.every((e) => canDo(id, e));
+    if (mode.mode === "each_allowed" || mode.mode === "group_or_each_allowed") return list.every((e) => canDo(id, e));
     return false;
   }
 
@@ -2526,32 +2169,30 @@
     const picked = checkedEvents();
     const inSel = ev && picked.some((e) => e.id === ev.id);
     if (inSel && picked.length >= 2 && selectionAllows(id, picked)) {
-      return picked.filter((e) => availability(id, e).ok);
+      return picked.filter((e) => canDo(id, e));
     }
-    if (ev && ev.groupId) {
-      const mates = groupMates(ev).filter((e) => availability(id, e).ok);
+    if (ev && ev.groupId && engine.bulk(id).allowed) {
+      const mates = groupMates(ev).filter((e) => canDo(id, e));
       if (mates.length >= 2) return mates;
     }
     return ev ? [ev] : [];
   }
 
-  function bulkCopy(id, n) {
+  function bulkCopy(id, list) {
+    const n = list.length;
+    const oneGroup = list.every((e) => e.groupId && e.groupId === list[0].groupId);
     const table = {
       transfer: {
         title: t("Передать {n} инцидентов", { n }),
         note: t("Будут переданы {n} событий одному адресату. Одна причина на всю выборку.", { n }),
         confirm: t("Передать {n}", { n }),
-        toast: (p) => t("Передано: {n} → {who}", { n, who: actorName(p.choice) }),
-      },
-      closeUnprocessed: {
-        title: t("Закрыть без обработки: {n}", { n }),
-        note: t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", { n }),
-        confirm: t("Закрыть {n}", { n }),
-        toast: () => t("Закрыто без обработки: {n}", { n }),
+        toast: (form) => t("Передано: {n} → {who}", { n, who: actorName(form.targetId) }),
       },
       close: {
         title: t("Закрыть {n} инцидентов", { n }),
-        note: t("Закроются все {n} инцидентов группы.", { n }),
+        note: oneGroup
+          ? t("Закроются все {n} инцидентов группы.", { n })
+          : t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", { n }),
         confirm: t("Закрыть {n}", { n }),
         toast: () => t("Закрыто: {n}", { n }),
       },
@@ -2568,7 +2209,7 @@
         toast: () => t("Возвращено в очередь: {n}", { n }),
       },
       reject: {
-        title: t("Отклонить {n} эскалаций", { n }),
+        title: t("Отклонить {n} передач", { n }),
         note: t("В очередь вернутся {n} инцидентов. Одна причина на всех.", { n }),
         confirm: t("Отклонить {n}", { n }),
         toast: () => t("Отклонено: {n}", { n }),
@@ -2577,12 +2218,12 @@
     return table[id] || null;
   }
 
-  function openBulkDialog(id, list) {
+  function openBulkDialog(id, list, surface) {
     if (list.length < 2) return false;
-    openDialog(id, list[0]);
+    openDialog(id, list[0], surface);
     if (!state.dialog) return false;
     state.dialog.bulkIds = list.map((e) => e.id);
-    const copy = bulkCopy(id, list.length);
+    const copy = bulkCopy(id, list);
     if (copy) {
       $("dialogTitle").textContent = copy.title;
       $("dialogNote").textContent = copy.note;
@@ -2592,22 +2233,20 @@
     return true;
   }
 
-  function runBulk(id, list, payload) {
-    const tr = TRANSITIONS[id];
-    if (!tr || !list.length) return false;
+  function runBulk(id, list, form, surface) {
+    if (!list.length) return false;
     let nav = null;
     const done = [];
     list.forEach((item) => {
-      if (!availability(id, item).ok) return;
-      const from = item.state;
-      item.state = tr.to;
-      nav = tr.run(item, Object.assign({}, payload, { silent: true }), from) || nav;
+      const r = engine.run(id, item, form, { surface });
+      if (!r.ok) return;
+      nav = r.navigate || nav;
       done.push(item);
     });
     if (!done.length) return false;
     state.checked.clear();
-    const copy = bulkCopy(id, done.length);
-    toast(copy && copy.toast ? copy.toast(payload || {}) : t("Обработано: {n}", { n: done.length }));
+    const copy = bulkCopy(id, done);
+    toast(copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length }));
     const focus = done[0];
     state.selectedId = focus.id;
     if (nav === "card") {
@@ -2623,58 +2262,9 @@
     return true;
   }
 
-  // Своё, ничьё или адресованное мне — transfer:own; чужое — transfer:any (§5 v3).
-  GUARDS.canTransfer = (ev) => {
-    const ownSide = ev.state === "new" || isMine(ev) || isTarget(ev);
-    if (ownSide) return can("incident:transfer:own") ? null : t("Нет права: {p}", { p: "incident:transfer:own" });
-    return can("incident:transfer:any") ? null : t("Нет права: {p}", { p: "incident:transfer:any" });
-  };
-  GUARDS.ownOrFree = (ev) =>
-    ev.state === "new" || isMine(ev) || isTarget(ev) ? null : t("Инцидент занят другим оператором");
-
-  function availability(id, ev) {
-    const tr = TRANSITIONS[id] || NAV_ACTIONS[id];
-    if (!tr || !ev) return { hidden: true };
-    if (TRANSITIONS[id] && !tr.from.includes(ev.state)) return { hidden: true };
-    if (tr.perm && !can(tr.perm)) return { hidden: true, why: t("Нет права: {p}", { p: tr.perm }) };
-    for (const name of tr.guards || []) {
-      const why = GUARDS[name](ev);
-      if (why) return { hidden: OWNERSHIP_GUARDS.includes(name), why, disabled: true };
-    }
-    // На перерыве доступен только просмотр — одно правило вместо пометок у переходов (§10.1)
-    if (state.onBreak && TRANSITIONS[id]) {
-      return { disabled: true, why: t("На перерыве доступен только просмотр") };
-    }
-    return { ok: true };
-  }
-
-  function actionView(id, ev) {
-    const tr = TRANSITIONS[id] || NAV_ACTIONS[id];
-    const state_ = availability(id, ev);
-    return {
-      id,
-      label: t(tr.label),
-      hint: state_.why || t(tr.hint || tr.label),
-      style: tr.style || "outline",
-      hidden: Boolean(state_.hidden),
-      disabled: Boolean(state_.disabled),
-      nav: Boolean(NAV_ACTIONS[id]),
-    };
-  }
-
-  // Набор кнопок повторяет таблицу §7: кнопка есть, если переход доступен.
+  // Кнопки очереди и карточки — те, что вернул исполнитель для этой поверхности (§7)
   function queueActions(ev) {
-    const mine = isMine(ev);
-    const ids = [];
-    if (ev.state === "new") ids.push("claim", "transfer", "closeUnprocessed");
-    else if (ev.state === "pending_acceptance")
-      isTarget(ev) ? ids.push("accept", "reject", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer", "closeUnprocessed");
-    else if (ev.state === "in_progress")
-      mine ? ids.push("continueOwn", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer");
-    else if (ev.state === "on_hold")
-      mine ? ids.push("resume", "transfer", "closeUnprocessed") : ids.push("viewForeign", "transfer");
-    else ids.push("viewDone", "reopen");
-    const views = ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+    const views = engine.actions(ev, "queue").map(actionView);
     const picked = checkedEvents();
     if (picked.length < 2 || !state.checked.has(ev.id)) return views;
     const why = t("Для этой выборки действие недоступно");
@@ -2682,40 +2272,43 @@
   }
 
   function cardActions(ev) {
-    const mine = isMine(ev);
-    const ids = [];
-    if (mine && ev.state === "in_progress") {
-      ids.push("hold", "transfer", "release", "close");
-    } else if (mine && ev.state === "on_hold") ids.push("resume", "transfer", "release", "closeUnprocessed");
-    else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "transfer");
-    else if (!mine && !isDone(ev)) ids.push("takeover", "transfer");
-    else if (isDone(ev)) ids.push("reopen");
-    return ids.map((id) => actionView(id, ev)).filter((a) => !a.hidden);
+    return engine
+      .actions(ev, "card")
+      .filter((a) => a.kind === "transition")
+      .map(actionView);
   }
-
-  const canDo = (id, ev) => Boolean(availability(id, ev).ok);
 
   /* ===== Выполнение перехода ===== */
 
-  function runTransition(id, ev, payload) {
-    const tr = TRANSITIONS[id];
-    if (!tr || !ev) return false;
-    const check = availability(id, ev);
-    if (!check.ok) {
-      if (check.why) toast(check.why);
+  // Уведомления после перехода — забота интерфейса, а не машины
+  const TOASTS = {
+    claim: (ev) => t("{id} в работе", { id: ev.id }),
+    accept: (ev) => t("{id} принят в работу", { id: ev.id }),
+    reject: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
+    hold: (ev) => t("{id} отложен", { id: ev.id }),
+    release: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
+    transfer: (ev) => t("{id} передан → {who}", { id: ev.id, who: actorName(ev.owner) }),
+    takeover: (ev) => t("Перехвачен {id}", { id: ev.id }),
+    close: (ev) => t(ev.closeResult === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.id }),
+    reopen: (ev) => t("{id} переоткрыт", { id: ev.id }),
+  };
+
+  function runTransition(id, ev, form, surface) {
+    if (!ev) return false;
+    const r = engine.run(id, ev, form || {}, { surface });
+    if (!r.ok) {
+      toast(say(r.why));
       return false;
     }
     state.selectedId = ev.id;
-    const from = ev.state;
-    ev.state = tr.to;
-    const nav = tr.run(ev, payload || {}, from) || null;
+    if (TOASTS[id]) toast(TOASTS[id](ev));
     if (state.checked.has(ev.id)) state.checked.clear();
     else state.checked.delete(ev.id);
-    if (nav === "card") {
+    if (r.navigate === "card") {
       focusCameras(ev);
       state.mode = "work";
       state.mobileView = "card";
-    } else if (nav === "queue") {
+    } else if (r.navigate === "queue") {
       state.mode = "queue";
       state.page = pageOfEvent(ev.id);
       // Закрытый инцидент уходит из фильтра «Открытые», и выделение
@@ -2726,232 +2319,153 @@
     return true;
   }
 
-  /* ===== Формы переходов: одно окно на все действия ===== */
+  /* ===== Формы переходов: строятся по формам машины (forms) ===== */
 
   const TARGET_LIST = () => OPERATORS.filter((op) => !op.self).concat(GROUPS);
 
-  const DIALOGS = {
-    transfer: {
-      title: "Передать инцидент",
-      note: (ev) => {
-        if (ev.state === "new")
-          return t("Инцидент передаётся без взятия в работу. Уровень станет {lvl}.", { lvl: ev.escalationLevel + 1 });
-        if (!isMine(ev) && !isTarget(ev))
-          return t("Инцидент занят: {who}. Передача другому адресату без перехвата.", { who: actorName(ev.owner) });
-        return t("Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {lvl}.", {
-          lvl: ev.escalationLevel + 1,
-        });
+  // Адресаты передачи: себя в списке нет всегда, владельца исключает форма машины (§8.1)
+  function targetOptions() {
+    return TARGET_LIST().map((op) => {
+      const parts = [actorLabel(op.id)];
+      if (op.duty !== "на смене") parts.push(t(op.duty));
+      if (op.id === state.escalateTo) parts.push(t("предвыбор"));
+      return { id: op.id, label: parts.join(" · ") };
+    });
+  }
+
+  // Форма перерыва — не переход инцидента, а состояние оператора (§12): своя, по session машины
+  const BREAK_FORM = {
+    id: "__break__",
+    title: "Перерыв",
+    confirmLabel: "Уйти на перерыв",
+    style: "primary",
+    note: ["Активный инцидент будет отложен системой. Новые события не назначаются."],
+    fields: [
+      {
+        name: "reasonId",
+        kind: "select",
+        label: "Причина перерыва",
+        required: true,
+        options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: r.label })),
       },
-      select: "targets",
-      text: { label: "Причина", required: true, ph: "Почему передаёте" },
-      confirm: "Передать",
-      style: "warn",
-    },
-    hold: {
-      title: "Отложить инцидент",
-      note: () => t("Норматив закрытия приостанавливается и продолжится при возобновлении."),
-      select: "hold",
-      text: { label: "Комментарий", required: false, ph: "Чего ждём" },
-      confirm: "Отложить",
-      style: "primary",
-    },
-    release: {
-      title: "Вернуть в очередь",
-      note: () => t("Инцидент станет ничьим, норматив реакции запустится заново. Прогресс сценария сохранится."),
-      text: { label: "Причина", required: true, ph: "Почему возвращаете" },
-      confirm: "Вернуть",
-      style: "primary",
-    },
-    reject: {
-      title: "Отклонить эскалацию",
-      note: () => t("Инцидент вернётся в общую очередь, уровень эскалации сохранится."),
-      text: { label: "Причина", required: true, ph: "Почему не принимаете" },
-      confirm: "Отклонить",
-      style: "primary",
-    },
-    close: {
-      title: "Закрытие инцидента",
-      note: (ev) => {
-        const prog = stepProgress(ev);
-        const n = groupMates(ev).length;
-        const base = t("Сценарий заполнен: {a} из {b}. Результат уйдёт в AxxonData.", { a: prog.filled, b: prog.total });
-        return n > 1 ? `${base} ${t("Закроются все {n} инцидентов группы.", { n })}` : base;
-      },
-      select: "closeResult",
-      // Комментарий обязателен для всех результатов, кроме «Обработан» (§2.2)
-      text: { label: "Комментарий", required: (choice) => choice !== "processed", ph: "Итог обработки для отчёта" },
-      confirm: "Закрыть инцидент",
-      style: "primary",
-    },
-    closeUnprocessed: {
-      title: "Закрыть: массовый сбой",
-      note: () => t("Сценарий не заполняется. Для массовых сбоев, когда причина уже известна."),
-      select: "massFault",
-      text: { label: "Комментарий", required: true, ph: "Что произошло на объекте" },
-      confirm: "Закрыть",
-      style: "primary",
-    },
-    reopen: {
-      title: "Переоткрыть инцидент",
-      note: (ev) =>
-        t("Завершён {n} мин назад. Норматив закрытия продолжится с остатка.", {
-          n: Math.max(1, Math.round((Date.now() - (ev.closedAt || Date.now())) / 60000)),
-        }),
-      text: { label: "Основание", required: true, ph: "Почему требуется вернуть в работу" },
-      confirm: "Переоткрыть",
-      style: "primary",
-    },
-    takeover: {
-      title: "Перехватить инцидент",
-      note: (ev) => {
-        const prog = stepProgress(ev);
-        return t("Инцидент занят: {who}. Прогресс сценария {a}/{b} сохранится, его карточка закроется.", {
-          who: actorName(ev.owner),
-          a: prog.filled,
-          b: prog.total,
-        });
-      },
-      confirm: "Перехватить",
-      style: "danger",
-    },
+    ],
   };
 
-  function selectOptions(kind, ev) {
-    if (kind === "targets") {
-      // Себя в списке нет всегда, владельца — при передаче чужого (§8.1)
-      return TARGET_LIST()
-        .filter((op) => op.id !== ev.owner)
-        .map((op) => {
-          const parts = [actorLabel(op.id)];
-          if (op.duty !== "на смене") parts.push(t(op.duty));
-          if (op.id === state.escalateTo) parts.push(t("предвыбор"));
-          return { id: op.id, label: parts.join(" · ") };
-        });
+  function fieldRequired(field, values) {
+    if (field.requiredFrom) {
+      const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
+      const item = WORKFLOW.reasonCatalogs[catalog].items.find((i) => i.id === values.resultId);
+      return Boolean(item && item[attr]);
     }
-    if (kind === "closeResult" || kind === "massFault") return closeOptions(ev, kind === "massFault");
-    return HOLD_REASONS.filter((r) => !r.system).map((r) => ({ id: r.id, label: t(r.label) }));
+    return Boolean(field.required);
   }
 
-  // Результаты закрытия по правам (§2.2): «Обработан» — только с заполненным сценарием
-  function closeOptions(ev, massOnly) {
-    const opts = [];
-    if (!massOnly && can("incident:close")) {
-      CLOSE_RESULTS.filter((r) => r.id !== "mass").forEach((r) => {
-        const blocked = r.id === "processed" && !scenarioDone(ev);
-        opts.push({
-          id: r.id,
-          label: blocked ? `${t(r.label)} — ${t("Заполните обязательные шаги закрытия")}` : t(r.label),
-          disabled: blocked,
-        });
-      });
+  const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
+
+  function fieldHtml(field) {
+    const box = `class="field" data-field-box="${field.name}"`;
+    const label = `<span data-label-for="${field.name}">${escapeHtml(t(field.label))}</span>`;
+    if (field.kind === "select") {
+      const options = (field.options || [])
+        .map((o) => {
+          const text = o.disabled && o.why ? `${t(o.label)} — ${t(o.why)}` : t(o.label);
+          return `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(text)}</option>`;
+        })
+        .join("");
+      const hint =
+        field.source === "transferTargets"
+          ? `<p class="field-hint">${te("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() })}</p>`
+          : "";
+      return `<label ${box}>${label}<select data-field="${field.name}">${options}</select></label>${hint}`;
     }
-    if (can("incident:close:unprocessed")) {
-      MASS_FAULT_REASONS.forEach((r) => opts.push({ id: `mass:${r.id}`, label: t(r.label), group: t("Массовый сбой") }));
-    }
-    return opts;
+    return `<label ${box}>${label}<textarea rows="3" data-field="${field.name}" placeholder="${escapeHtml(
+      t(field.placeholder || "")
+    )}"></textarea></label>`;
   }
 
-  function optionsHtml(opts) {
-    let html = "";
-    let group = null;
-    opts.forEach((o) => {
-      if ((o.group || null) !== group) {
-        if (group) html += "</optgroup>";
-        group = o.group || null;
-        if (group) html += `<optgroup label="${escapeHtml(group)}">`;
-      }
-      html += `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(o.label)}</option>`;
+  function dialogValues() {
+    const values = {};
+    $("dialogFields")
+      .querySelectorAll("[data-field]")
+      .forEach((el) => (values[el.dataset.field] = el.value.trim()));
+    return values;
+  }
+
+  // Видимость зависимых полей и звёздочка обязательности — по выбранному значению (§2.2)
+  function refreshDialogFields() {
+    const open = state.dialog;
+    if (!open) return;
+    const values = dialogValues();
+    open.form.fields.forEach((field) => {
+      const visible = fieldVisible(field, values);
+      const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
+      if (box) box.hidden = !visible;
+      const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
+      if (label) label.textContent = t(field.label) + (visible && fieldRequired(field, values) ? " *" : "");
     });
-    return group ? `${html}</optgroup>` : html;
   }
 
-  const textRequired = (cfg) =>
-    Boolean(cfg.text) &&
-    (typeof cfg.text.required === "function" ? cfg.text.required($("dialogSelect").value) : cfg.text.required);
-
-  function refreshDialogText() {
-    const cfg = state.dialog && DIALOGS[state.dialog.id];
-    if (!cfg || !cfg.text) return;
-    $("dialogTextLabel").textContent = t(cfg.text.label) + (textRequired(cfg) ? " *" : "");
+  function showForm(open, form) {
+    state.dialog = Object.assign(open, { form });
+    $("dialogTitle").textContent = t(form.title);
+    $("dialogNote").textContent = say(form.note);
+    $("dialogNote").hidden = !form.note;
+    $("dialogFields").innerHTML = form.fields.map(fieldHtml).join("");
+    form.fields.forEach((field) => {
+      if (field.kind !== "select") return;
+      const enabled = (field.options || []).filter((o) => !o.disabled);
+      const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : enabled[0] && enabled[0].id;
+      const el = $("dialogFields").querySelector(`[data-field="${field.name}"]`);
+      if (el && pick) el.value = pick;
+    });
+    refreshDialogFields();
+    const confirm = $("dialogConfirm");
+    confirm.textContent = t(form.confirmLabel);
+    confirm.className = `btn ${form.style || "primary"}`;
+    $("modalDialog").hidden = false;
+    ($("dialogFields").querySelector("[data-field]") || confirm).focus();
   }
 
-  function openDialog(id, ev) {
-    const tr = TRANSITIONS[id];
-    const cfg = DIALOGS[id];
-    if (!tr || !cfg || !ev) return;
-    const check = availability(id, ev);
+  function openDialog(id, ev, surface) {
+    const tr = engine.transition(id);
+    if (!tr || !tr.form || !ev) return;
+    const check = availability(id, ev, surface);
     if (!check.ok) {
       if (check.why) toast(check.why);
       return;
     }
     state.selectedId = ev.id;
-    state.dialog = { id, eventId: ev.id };
-    const opts = cfg.select ? selectOptions(cfg.select, ev) : [];
-
-    $("dialogTitle").textContent = t(cfg.title);
-    $("dialogNote").textContent = cfg.note ? cfg.note(ev) : "";
-    $("dialogNote").hidden = !cfg.note;
-
-    const selectField = $("dialogSelectField");
-    selectField.hidden = !cfg.select;
-    if (cfg.select) {
-      $("dialogSelectLabel").textContent =
-        cfg.select === "targets"
-          ? t("Кому передать")
-          : cfg.select === "hold"
-            ? t("Причина удержания")
-            : cfg.select === "closeResult"
-              ? t("Результат")
-              : t("Причина");
-      $("dialogSelect").innerHTML = optionsHtml(opts);
-      const first = (opts.find((o) => !o.disabled) || opts[0]).id;
-      const preselect = cfg.select === "targets" ? state.escalateTo : first;
-      $("dialogSelect").value = opts.some((o) => o.id === preselect && !o.disabled) ? preselect : first;
-    }
-
-    const textField = $("dialogTextField");
-    textField.hidden = !cfg.text;
-    if (cfg.text) {
-      refreshDialogText();
-      const area = $("dialogText");
-      area.value = "";
-      area.placeholder = t(cfg.text.ph || "");
-    }
-
-    $("dialogHint").textContent =
-      cfg.select === "targets" ? t("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() }) : "";
-    $("dialogHint").hidden = cfg.select !== "targets";
-
-    const confirm = $("dialogConfirm");
-    confirm.textContent = t(cfg.confirm);
-    confirm.className = `btn ${cfg.style || "primary"}`;
-    $("modalDialog").hidden = false;
-    (cfg.select ? $("dialogSelect") : cfg.text ? $("dialogText") : confirm).focus();
+    const form = engine.form(tr.form, ev, { surface, noteVars: { groupSize: groupMates(ev).length } });
+    showForm({ id, eventId: ev.id, surface }, form);
   }
 
   function submitDialog() {
     const open = state.dialog;
     if (!open) return;
-    const ev = state.events.find((e) => e.id === open.eventId);
-    const cfg = DIALOGS[open.id];
-    if (!ev || !cfg) return;
-    const reason = cfg.text ? $("dialogText").value.trim() : "";
-    if (textRequired(cfg) && !reason) {
+    const values = dialogValues();
+    open.form.fields.forEach((field) => {
+      if (!fieldVisible(field, values)) delete values[field.name];
+    });
+    const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(f, values) && !values[f.name]);
+    if (missing) {
       toast(t("Укажите причину — поле обязательно"));
-      $("dialogText").focus();
+      const el = $("dialogFields").querySelector(`[data-field="${missing.name}"]`);
+      if (el) el.focus();
       return;
     }
-    const payload = { choice: cfg.select ? $("dialogSelect").value : null, reason };
     const bulkIds = open.bulkIds;
     closeDialog();
-    if (bulkIds && bulkIds.length > 1) {
-      const list = bulkIds
-        .map((id) => state.events.find((x) => x.id === id))
-        .filter((item) => item && availability(open.id, item).ok);
-      runBulk(open.id, list, payload);
+    if (open.id === BREAK_FORM.id) {
+      goOnBreak(values.reasonId);
       return;
     }
-    runTransition(open.id, ev, payload);
+    const ev = state.events.find((e) => e.id === open.eventId);
+    if (bulkIds && bulkIds.length > 1) {
+      const list = bulkIds.map((id) => state.events.find((x) => x.id === id)).filter((item) => item && canDo(open.id, item));
+      runBulk(open.id, list, values, open.surface);
+      return;
+    }
+    runTransition(open.id, ev, values, open.surface);
   }
 
   function closeDialog() {
@@ -2960,87 +2474,36 @@
   }
 
   // Переход либо спрашивает подробности в форме, либо выполняется сразу.
-  function trigger(id, ev) {
+  function trigger(id, ev, surface) {
     if (!ev) return;
     const picked = checkedEvents();
     if (picked.length >= 2 && picked.some((e) => e.id === ev.id) && !selectionAllows(id, picked)) {
       toast(t("Для этой выборки действие недоступно"));
       return;
     }
-    if (NAV_ACTIONS[id]) return openCard(id, ev);
+    if (engine.isNav(id)) return openCard(id, ev);
+    const tr = engine.transition(id);
+    if (!tr) return;
     const targets = actionTargets(id, ev);
     if (targets.length >= 2) {
       if (id === "claim") {
         groupProcess();
         return;
       }
-      if (DIALOGS[id]) {
-        openBulkDialog(id, targets);
+      if (tr.form) {
+        openBulkDialog(id, targets, surface);
         return;
       }
-      runBulk(id, targets, {});
+      runBulk(id, targets, {}, surface);
       return;
     }
-    const check = availability(id, ev);
+    const check = availability(id, ev, surface);
     if (!check.ok) {
-      toast(
-        check.why ||
-          t("Действие «{name}» недоступно в текущем состоянии", { name: t((TRANSITIONS[id] || {}).label || id) })
-      );
+      toast(check.why || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
       return;
     }
-    if (DIALOGS[id]) return openDialog(id, ev);
-    runTransition(id, ev);
-  }
-
-  /* ===== Автоматические переходы (§6.2, §9) ===== */
-
-  function autoEscalate(ev) {
-    if (!AUTO.enabled || AUTO.trigger !== "reaction") return false;
-    if (!AUTO.fromStates.includes(ev.state)) return false;
-    if (!ev.reactionDueAt || ev.reactionDueAt > Date.now()) return false;
-    if (ev.escalationLevel >= AUTO.maxLevel) {
-      if (ev.slaBreached) return false;
-      ev.slaBreached = true;
-      stopReaction(ev);
-      log(ev, "dispatcher", "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному");
-      return true;
-    }
-    const level = AUTO.levels[ev.escalationLevel] || AUTO.levels[AUTO.levels.length - 1];
-    ev.state = "pending_acceptance";
-    ev.owner = level.target;
-    ev.escalationLevel += 1;
-    ev.holdReason = null;
-    pauseResolution(ev);
-    startReaction(ev, level.reactionSec);
-    log(ev, "dispatcher", "Автоэскалация → {who} (уровень {lvl}). {why}", {
-      who: actorRaw(level.target),
-      lvl: ev.escalationLevel,
-      why: AUTO.reason,
-    });
-    toast(t("Автоэскалация {id} → {who}", { id: ev.id, who: actorName(level.target) }));
-    // Если карточка была открыта, она переводится в режим просмотра (§9.3)
-    if (state.mode === "work" && state.selectedId === ev.id) state.mode = "queue";
-    return true;
-  }
-
-  function checkResolution(ev) {
-    if (ev.state !== "in_progress" || ev.slaBreached) return false;
-    if (!ev.resolutionDueAt || ev.resolutionDueAt > Date.now()) return false;
-    ev.slaBreached = true;
-    log(ev, "dispatcher", "Норматив закрытия нарушен, алерт старшему смены");
-    return true;
-  }
-
-  function checkHold(ev) {
-    if (ev.state !== "on_hold" || ev.slaBreached || !ev.holdSince) return false;
-    const reason = HOLD_REASONS.find((r) => r.id === ev.holdReason);
-    if (!reason || Date.now() - ev.holdSince < reason.maxMin * 60000) return false;
-    ev.slaBreached = true;
-    log(ev, "dispatcher", "Предельный срок удержания «{why}» истёк, алерт ответственному", {
-      why: rawHold(ev.holdReason),
-    });
-    return true;
+    if (tr.form) return openDialog(id, ev, surface);
+    runTransition(id, ev, {}, surface);
   }
 
   function renderEscalateDefault() {
@@ -3049,8 +2512,8 @@
       .map((op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(actorLabel(op.id))}</option>`)
       .join("");
     select.value = state.escalateTo;
-    $("autoLevels").textContent = AUTO.levels
-      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.target) }))
+    $("autoLevels").textContent = WORKFLOW.escalation.levels
+      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(levelTarget(l)) }))
       .join(", ");
   }
 
@@ -3437,7 +2900,9 @@
           n: mates.length,
           ids: mates.map((e) => e.id).join(", "),
         })
-      )}</div>`;
+      )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${state.onBreak ? "disabled" : ""}>${te(
+        "Исключить из группы"
+      )}</button></div>`;
     }
     if (isDone(ev)) {
       const why =
@@ -4021,29 +3486,29 @@
 
   /* ===== Состояние оператора (§12.2) ===== */
 
+  // Уход на перерыв — с причиной из машины (§12.1); активный инцидент откладывается системой,
+  // право incident:hold не требуется (§12.2: system_hold_break)
   function toggleBreak() {
     if (!can("agent:set_not_ready")) {
       toast(t("Нет права уходить на перерыв"));
       return;
     }
-    state.onBreak = !state.onBreak;
-    state.agentState = state.onBreak ? "not_ready" : "ready";
-    if (state.onBreak) {
-      // Активный инцидент откладывается системой: право incident:hold не требуется
-      state.events
-        .filter((e) => e.state === "in_progress" && isMine(e))
-        .forEach((e) => {
-          e.state = "on_hold";
-          e.holdReason = "break";
-          e.holdSince = Date.now();
-          pauseResolution(e);
-          log(e, "system", "Отложен системой: {why}", { why: rawHold("break") });
-        });
-      if (state.mode === "work") state.mode = "queue";
-      toast(t("Перерыв. Новые события не назначаются"));
-    } else {
-      toast(t("Вы снова на смене"));
+    if (!state.onBreak) {
+      showForm({ id: BREAK_FORM.id }, BREAK_FORM);
+      return;
     }
+    state.onBreak = false;
+    state.agentState = "ready";
+    toast(t("Вы снова на смене"));
+    renderAll();
+  }
+
+  function goOnBreak(reasonId) {
+    state.onBreak = true;
+    state.agentState = "not_ready";
+    state.breakReason = reasonId;
+    engine.goNotReady();
+    toast(t("Перерыв. Новые события не назначаются"));
     renderAll();
   }
 
@@ -4264,7 +3729,7 @@
       }
       const act = e.target.closest("[data-do]");
       if (act) {
-        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev));
+        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "queue");
         return;
       }
       const row = e.target.closest("[data-id]");
@@ -4310,9 +3775,16 @@
     $("scenarioRoot").addEventListener("click", (e) => {
       const ev = selected();
       if (!ev) return;
+      const exclude = e.target.closest("[data-exclude]");
+      if (exclude) {
+        const r = engine.excludeFromGroup(ev);
+        toast(r.ok ? t("{id} исключён из группы", { id: ev.id }) : say(r.why));
+        renderAll();
+        return;
+      }
       const act = e.target.closest("[data-do]");
       if (act) {
-        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev));
+        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "card");
         return;
       }
       const editable = isMine(ev) && ev.state === "in_progress" && !state.onBreak;
@@ -4420,7 +3892,7 @@
       });
     });
     $("dialogConfirm").addEventListener("click", submitDialog);
-    $("dialogSelect").addEventListener("change", refreshDialogText);
+    $("dialogFields").addEventListener("change", refreshDialogFields);
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
       else TREE.forEach((n) => state.openGroups.add(n.id));
@@ -4475,43 +3947,40 @@
 
   // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый
   // инцидент сохраняет собственное состояние и собственные таймеры.
+  // «Обработать как одно» (§11): «Взять» машины на каждом отмеченном и общий group_id.
+  // Группа считается одной единицей в лимите активных, поэтому group_id ставится до взятия.
   function groupProcess() {
     if (state.checked.size < 2) return;
-    if (state.onBreak) {
-      toast(t("На перерыве доступен только просмотр"));
-      return;
-    }
-    if (!can("incident:bulk") || !can("incident:claim")) {
+    const grouping = WORKFLOW.grouping;
+    if (!grouping.permissions.every(can)) {
       toast(t("Нет права на групповую обработку"));
       return;
     }
-    const limitWhy = GUARDS.activeLimit({ id: "__bulk__" });
-    if (limitWhy) {
-      toast(limitWhy);
-      return;
-    }
-    const picked = [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
-    if (picked.some((e) => e.state !== "new")) {
+    const picked = checkedEvents();
+    if (!picked.every((e) => grouping.createFrom.states.includes(e.state))) {
       toast(t("В группу берутся только новые события"));
       return;
     }
-    if (picked.some((e) => e.typeId !== picked[0].typeId)) {
+    if (grouping.createFrom.sameEventType && picked.some((e) => e.typeId !== picked[0].typeId)) {
       toast(t("В группе должен быть один тип события"));
       return;
     }
-    if (picked.length > LIMITS.maxBulk) {
-      toast(t("Не больше {max} событий в группе", { max: LIMITS.maxBulk }));
+    if (picked.length > grouping.createFrom.maxItems) {
+      toast(t("Не больше {max} событий в группе", { max: grouping.createFrom.maxItems }));
       return;
     }
     const groupId = `GRP-${Date.now().toString().slice(-4)}`;
+    picked.forEach((ev) => (ev.groupId = groupId));
+    const blocked = picked.find((ev) => !canDo("claim", ev));
+    if (blocked) {
+      picked.forEach((ev) => (ev.groupId = null));
+      toast(availability("claim", blocked).why);
+      return;
+    }
     const first = picked[0];
     picked.forEach((ev) => {
-      ev.state = "in_progress";
-      ev.owner = "me";
-      ev.groupId = groupId;
+      engine.run("claim", ev, {});
       ev.answers = first.answers;
-      stopReaction(ev);
-      startResolution(ev);
       log(ev, "me", "Групповая обработка {grp} вместе с {ids}", {
         grp: groupId,
         ids: picked
@@ -4595,11 +4064,11 @@
 
   // Коллега передаёт свой инцидент оператору: появляется «Вам на принятие».
   function simHandoff() {
-    const pool = foreignActive().filter((e) => e.escalationLevel < AUTO.maxLevel);
+    const pool = foreignActive().filter((e) => e.escalationLevel < WORKFLOW.escalation.maxLevel);
     if (!pool.length) return null;
     const ev = pool[0];
     const from = ev.owner;
-    applyEscalation(ev, "me", "Нужен оператор с доступом к архиву объекта", from);
+    engine.applyAs("transfer", ev, { targetId: "me", comment: "Нужен оператор с доступом к архиву объекта" }, from);
     toast(t("{who} передал {id} вам", { who: actorName(from), id: ev.id }));
     return ev.id;
   }
@@ -4609,11 +4078,7 @@
     const pool = foreignActive();
     if (!pool.length) return null;
     const ev = pool[pool.length - 1];
-    ev.state = "on_hold";
-    ev.holdReason = "no_link";
-    ev.holdSince = Date.now();
-    pauseResolution(ev);
-    log(ev, "system", "Отложен системой: {why}. Алерт старшему смены", { why: rawHold("no_link") });
+    engine.applyAs("system_hold_idle", ev, {}, "system");
     toast(t("Нет связи с {who} — {id} отложен системой", { who: actorName(ev.owner), id: ev.id }));
     return ev.id;
   }
@@ -4687,47 +4152,53 @@
     const target = e.target;
     if (target instanceof Element && target.matches("input, textarea, select")) return;
     if (state.dialog) return;
-    if (e.key === "ArrowLeft") return stepCamera(-1);
-    if (e.key === "ArrowRight") return stepCamera(1);
-    const key = e.key.toLowerCase();
+    const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
+    if (hotkey) runHotkey(hotkey, e);
+  }
+
+  // Имя клавиши в записи машины: «N», «Ctrl+A», «Enter», «ArrowLeft», «?»
+  function keyName(e) {
+    const base = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    return e.ctrlKey || e.metaKey ? `Ctrl+${base}` : base;
+  }
+
+  // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет переход
+  function runHotkey(hotkey, e) {
+    const [kind, name] = hotkey.action.split(":");
     const ev = selected();
-    const chord = e.ctrlKey || e.metaKey;
-    if (chord && key === "a") {
+    const surface = state.mode === "work" ? "card" : "queue";
+    if (kind === "transition") {
+      if (hotkey.scope === "next_new") {
+        const next = state.events.find((x) => x.state === "new");
+        if (next) trigger(name, next, "queue");
+        return;
+      }
+      trigger(name, ev, surface);
+    } else if (kind === "form" && name === "open" && state.mode === "work") {
+      trigger(hotkey.action.split(":")[2], ev, "card");
+    } else if (kind === "group") {
+      groupProcess();
+    } else if (kind === "selection") {
       e.preventDefault();
-      selectSimilar();
-      return;
-    }
-    if (chord && key === "d") {
-      e.preventDefault();
-      if (state.checked.size) {
+      if (name === "same_type") selectSimilar();
+      else if (state.checked.size) {
         state.checked.clear();
         renderEvents();
       }
-      return;
-    }
-    if (key === "?" || (e.shiftKey && e.key === "/")) {
+    } else if (kind === "session") {
+      $("breakBtn").click();
+    } else if (kind === "docs" && name === "hotkeys") {
       $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
-    }
-    if (key === "b") $("breakBtn").click();
-    if (key === "e") trigger("transfer", ev);
-    if (key === "a") trigger("accept", ev);
-    if (key === "r") trigger("resume", ev);
-    if (key === "h") trigger("hold", ev);
-    if (key === "t") trigger("takeover", ev);
-    if (key === "n") {
-      const next = state.events.find((x) => x.state === "new");
-      if (next) trigger("claim", next);
-    }
-    if (key === "g") groupProcess();
-    // Enter только открывает форму закрытия: подтверждение — отдельным нажатием (§13.2)
-    if (e.key === "Enter" && state.mode === "work") trigger("close", ev);
-    if (["1", "2", "3", "4"].includes(e.key)) {
-      const ev = selected();
-      const cam = ev && ev.cameras && ev.cameras[Number(e.key) - 1];
-      if (cam) {
-        state.activeCam = cam;
-        renderVideo();
-        renderMap();
+    } else if (kind === "media") {
+      if (name === "camera_prev") stepCamera(-1);
+      else if (name === "camera_next") stepCamera(1);
+      else if (name === "camera_select") {
+        const cam = ev && ev.cameras && ev.cameras[hotkey.args[0] - 1];
+        if (cam) {
+          state.activeCam = cam;
+          renderVideo();
+          renderMap();
+        }
       }
     }
   }
@@ -4737,14 +4208,14 @@
     const stamp = nowStamp();
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
-    let changed = false;
-    state.events.forEach((e) => {
-      if (isDone(e)) return;
-      if (autoEscalate(e)) changed = true;
-      if (checkResolution(e)) changed = true;
-      if (checkHold(e)) changed = true;
+    // Автоматические переходы машины по дедлайнам (§6.2): в продукте их выполняет сервер
+    const fired = engine.tick();
+    fired.forEach(({ id, transition }) => {
+      if (transition !== "auto_escalate") return;
+      const ev = state.events.find((x) => x.id === id);
+      toast(t("Автоэскалация {id} → {who}", { id, who: actorName(ev.owner) }));
     });
-    if (changed) {
+    if (fired.length) {
       renderAll();
       return;
     }

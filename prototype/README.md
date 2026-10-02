@@ -11,6 +11,18 @@
 | [`index.html`](index.html) | Добавлен `<link rel="stylesheet" href="bridge.css" />` после `styles.css` |
 | [`shots/`](shots/) | Оригинал и результат 1440×900, hover/pressed реальным наведением |
 
+## Логика: машина состояний
+
+Логику прототип берёт из машины состояний [`Specification/State_machine/workflow.v4.json`](../Specification/State_machine/workflow.v4.json). Своей таблицы переходов у него нет.
+
+| Файл | Роль |
+|---|---|
+| [`workflow.js`](workflow.js) | Машина, собранная скриптом `tools/build_workflow.py`: из `file://` браузер не читает JSON. Руками не правится |
+| [`engine.js`](engine.js) | Исполнитель машины: доступные действия, переходы, формы, бейджи, нормативы, автоматические переходы. Делает то, что в продукте делает сервер, и повторяет его API |
+| [`app.js`](app.js) | Интерфейс и демо-данные. С логикой общается только через `engine.js` |
+
+После правки машины — `python3 tools/build_workflow.py`, затем самопроверка `index.html?selftest`.
+
 ## Диагностика (§0)
 
 - Слой переменных: `:root` / `[data-theme=light]` / `[data-theme=dark]`, ~72 переменные.

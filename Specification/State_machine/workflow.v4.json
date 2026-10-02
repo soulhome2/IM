@@ -119,7 +119,12 @@
       "pausable": false,
       "defaultSec": 300,
       "overridesBy": ["eventType", "priority", "sourceGroup", "escalationLevel"],
-      "overrides": [],
+      "overrides": [
+        { "priority": "critical", "sec": 240 },
+        { "priority": "high", "sec": 420 },
+        { "priority": "medium", "sec": 900 },
+        { "priority": "low", "sec": 1800 }
+      ],
       "onExpire": "auto_escalate"
     },
     {
@@ -165,15 +170,15 @@
       ]
     },
     "close_result": {
-      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates предварительные (§15).",
+      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates предварительные (§15). surfaces — где результат предлагается: из очереди только «Массовый сбой», остальные — из карточки (§7).",
       "field": "close_result",
       "requiredOnTransition": ["close"],
       "items": [
-        { "id": "processed", "label": "Обработан", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false },
-        { "id": "false_alarm", "label": "Ложная тревога", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
-        { "id": "duplicate", "label": "Дубликат", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
-        { "id": "drill", "label": "Плановая проверка", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
-        { "id": "impossible", "label": "Прервано: обработка невозможна", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
+        { "id": "processed", "label": "Обработан", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false , "surfaces": ["card"] },
+        { "id": "false_alarm", "label": "Ложная тревога", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
+        { "id": "duplicate", "label": "Дубликат", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
+        { "id": "drill", "label": "Плановая проверка", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
+        { "id": "impossible", "label": "Прервано: обработка невозможна", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
         {
           "id": "mass",
           "label": "Массовый сбой",
@@ -182,6 +187,7 @@
           "ownerOnlyInStates": ["in_progress", "on_hold"],
           "requiredStepSet": "none",
           "commentRequired": true,
+          "surfaces": ["queue", "card"],
           "causeCatalog": "mass_fault"
         }
       ]
@@ -306,7 +312,7 @@
       "title": "Перехватить инцидент",
       "confirmLabel": "Перехватить",
       "style": "danger",
-      "notes": [{ "when": {}, "text": "Инцидент занят: {ownerName}. Прогресс сценария {filledSteps}/{totalSteps} сохранится, его карточка закроется." }],
+      "notes": [{ "when": {}, "text": "Инцидент занят: {ownerName}. Прогресс сценария {filledSteps}/{totalSteps} сохранится, его карточка перейдёт в просмотр." }],
       "fields": []
     }
   ],
@@ -763,9 +769,37 @@
   "navActions": {
     "$comment": "§6.3. Не переходы: состояние и владелец не меняются. Кнопки очереди/карточки всё равно приходят с сервера вместе с переходами.",
     "items": [
-      { "id": "open_card", "label": "Продолжить", "style": "primary", "guards": [{ "fn": "isOwner" }], "surface": ["queue"] },
-      { "id": "open_readonly", "label": "Открыть", "style": "outline", "guards": [{ "fn": "hasPermission", "args": ["incident:read:any"] }], "surface": ["queue"] },
-      { "id": "open_done", "label": "Просмотр", "style": "outline", "guards": [{ "fn": "canReadDone" }], "surface": ["queue"] },
+      {
+        "id": "open_card",
+        "label": "Продолжить",
+        "hint": "Вернуться к своей карточке",
+        "style": "primary",
+        "guards": [{ "fn": "stateIs", "args": [["in_progress"]] }, { "fn": "isOwner" }],
+        "surface": ["queue"],
+        "$comment": "§7. Только у своего «В работе»: у отложенного — «Возобновить», это переход."
+      },
+      {
+        "id": "open_readonly",
+        "label": "Открыть",
+        "hint": "Просмотр без изменений",
+        "style": "outline",
+        "guards": [
+          { "fn": "stateIs", "args": [["pending_acceptance", "in_progress", "on_hold"]] },
+          { "fn": "isNotOwner" },
+          { "fn": "isNotTarget" },
+          { "fn": "hasPermission", "args": ["incident:read:any"] }
+        ],
+        "surface": ["queue"],
+        "$comment": "§6.3. Чужой инцидент в работе или ожидающий принятия у другого: только просмотр."
+      },
+      {
+        "id": "open_done",
+        "label": "Просмотр",
+        "hint": "Открыть карточку завершённого инцидента",
+        "style": "outline",
+        "guards": [{ "fn": "stateIs", "args": [["closed"]] }, { "fn": "canReadDone" }],
+        "surface": ["queue"]
+      },
       { "id": "back_to_queue", "label": "К очереди", "style": "ghost", "guards": [], "surface": ["card"] },
       { "id": "run_macro", "label": "Запустить макрос", "style": "outline", "guards": [{ "fn": "hasPermission", "args": ["incident:run_action"] }, { "fn": "isOwner" }, { "fn": "agentReady" }, { "fn": "stateIs", "args": ["in_progress"] }], "surface": ["card"] }
     ]
@@ -777,11 +811,11 @@
     "trigger": "reaction",
     "fromStates": ["new", "pending_acceptance"],
     "levels": [
-      { "level": 1, "targetRef": "user:<guid старшего смены>", "reactionSec": 120 },
-      { "level": 2, "targetRef": "user:<guid дежурного ЦОД>", "reactionSec": 90 }
+      { "level": 1, "targetRef": "user:petrova", "reactionSec": 120 },
+      { "level": 2, "targetRef": "user:noc", "reactionSec": 90 }
     ],
     "maxLevel": 2,
-    "alertTarget": "user:<guid старшего смены>",
+    "alertTarget": "user:petrova",
     "onResolutionOverdue": "alert",
     "reason": "Автоэскалация: превышен норматив реакции"
   },
@@ -879,6 +913,7 @@
       { "fn": "isNotOwner", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "isOwnerInStates", "args": ["stateIds"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "isTarget", "args": [], "onFail": "hide" },
+      { "fn": "isNotTarget", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "targetIsNotSelf", "args": [], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "agentReady", "args": [], "onFail": "disable" },
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },

@@ -292,15 +292,8 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
       <h3 id="dialogTitle"></h3>
       <p class="muted" id="dialogNote" hidden></p>
-      <label class="field" id="dialogSelectField" hidden>
-        <span id="dialogSelectLabel"></span>
-        <select id="dialogSelect"></select>
-      </label>
-      <p class="field-hint" id="dialogHint" hidden></p>
-      <label class="field" id="dialogTextField" hidden>
-        <span id="dialogTextLabel"></span>
-        <textarea id="dialogText" rows="3"></textarea>
-      </label>
+      <!-- Поля строятся по форме перехода из машины состояний -->
+      <div id="dialogFields"></div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" data-close="modalDialog">Отмена</button>
         <button type="button" class="btn primary" id="dialogConfirm"></button>
@@ -513,6 +506,8 @@
   <script src="i18n-data.js"></script>
   <script src="i18n-html.js"></script>
   <script src="i18n-ui.js"></script>
+  <script src="workflow.js"></script>
+  <script src="engine.js"></script>
   <script src="app.js"></script>
   <!-- Самопроверка: работает только при открытии index.html?selftest -->
   <script src="selftest.js"></script>

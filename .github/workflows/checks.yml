@@ -29,7 +29,9 @@ jobs:
 
       - name: Машина состояний
         if: always()
-        run: python3 tools/check_machine.py
+        run: |
+          python3 tools/check_machine.py
+          python3 tools/build_workflow.py --check
 
       - name: Ссылки в документах
         if: always()

@@ -4001,6 +4001,17 @@
               "null"
             ],
             "description": "Для `close_result`: справочник уточняющих причин"
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "card"
+              ]
+            },
+            "description": "Для `close_result`: где результат предлагается. Из очереди — только «Массовый сбой» (§7)"
           }
         }
       },
