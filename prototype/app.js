@@ -1744,6 +1744,9 @@
     openGroups: new Set(TREE.map((n) => n.id)),
     groupQuery: "",
     filter: "open",
+    // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
+    eventType: "all",
+    deviceType: "all",
     search: "",
     selectedId: "INC-1847",
     checked: new Set(),
@@ -1848,6 +1851,7 @@
     applyStatic();
     applyTheme(state.themeMode);
     renderEscalateDefault();
+    renderTypeFilters();
     renderAll();
   }
 
@@ -3152,6 +3156,11 @@
       // «Чужие» — то, что закреплено за другими: адресованное мне живёт в своём фильтре
       if (state.filter === "foreign" && (isTarget(e) || isDone(e) || e.state === "new")) return false;
       if (state.filter === "done" && !isDone(e)) return false;
+      if (state.eventType !== "all" && e.typeId !== state.eventType) return false;
+      if (state.deviceType !== "all") {
+        const src = DEVICE_CATALOG[eventSource(e)];
+        if (!src || src.type !== state.deviceType) return false;
+      }
       if (state.search) {
         const q = state.search.toLowerCase();
         const blob = `${e.id} ${t(e.type)} ${t(e.object)} ${t(e.location)} ${e.type} ${e.object} ${
@@ -3161,6 +3170,20 @@
       }
       return true;
     });
+  }
+
+  // Списки фильтров: типы событий — из самих событий, типы устройств — из справочника
+  function renderTypeFilters() {
+    const types = new Map();
+    state.events.forEach((e) => types.set(e.typeId, e.type));
+    $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
+      .concat([...types].map(([id, label]) => `<option value="${escapeHtml(id)}">${te(label)}</option>`))
+      .join("");
+    $("eventTypeFilter").value = state.eventType;
+    $("deviceTypeFilter").innerHTML = [`<option value="all">${te("Все типы устройств")}</option>`]
+      .concat(Object.entries(DEVICE_TYPES).map(([id, d]) => `<option value="${escapeHtml(id)}">${te(d.label)}</option>`))
+      .join("");
+    $("deviceTypeFilter").value = state.deviceType;
   }
 
   function renderTreeHtml(nodes, level, trace) {
@@ -4160,6 +4183,17 @@
       syncSelection();
       renderAll();
     });
+    [
+      ["eventTypeFilter", "eventType"],
+      ["deviceTypeFilter", "deviceType"],
+    ].forEach(([id, key]) =>
+      $(id).addEventListener("change", (e) => {
+        state[key] = e.target.value;
+        state.page = 1;
+        syncSelection();
+        renderAll();
+      })
+    );
     $("eventSearch").addEventListener("input", (e) => {
       state.search = e.target.value;
       state.page = 1;

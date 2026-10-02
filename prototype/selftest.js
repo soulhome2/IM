@@ -313,6 +313,25 @@
       return id;
     });
 
+    await step("Фильтр по типу события поверх группы", async () => {
+      await setFilter("all");
+      const select = $("eventTypeFilter");
+      const opt = [...select.options].find((o) => o.value !== "all");
+      expect(opt, "в фильтре нет ни одного типа события");
+      const before = $("eventsList").querySelectorAll(".event").length;
+      select.value = opt.value;
+      select.dispatchEvent(new Event("change"));
+      await wait();
+      const rows = [...$("eventsList").querySelectorAll(".event")];
+      const stray = rows.filter((r) => !r.textContent.includes(opt.textContent));
+      select.value = "all";
+      select.dispatchEvent(new Event("change"));
+      await setFilter("open");
+      expect(rows.length, `по типу «${opt.textContent}» ничего не нашлось`);
+      expect(!stray.length, `в выборке «${opt.textContent}» есть события другого типа: ${stray.length}`);
+      return `${opt.textContent}: ${rows.length} из ${before}`;
+    });
+
     await step("Перерыв и возврат на смену", async () => {
       await click($("breakBtn"));
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");

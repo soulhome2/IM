@@ -379,6 +379,10 @@ window.IM_DICT_UI = {
     "Сценарий не заполняется. Для массовых сбоев, когда причина уже известна.": "The scenario is not filled in. For mass failures when the cause is already known.",
     "Инцидент закрыт: {why}.": "Incident closed: {why}.",
     "Сработка от уборщика": "Triggered by the cleaning staff",
+    "Все типы событий": "All event types",
+    "Все типы устройств": "All device types",
+    "Тип события": "Event type",
+    "Тип устройства": "Device type",
   },
 
   es: {
@@ -769,5 +773,9 @@ window.IM_DICT_UI = {
     "Сценарий не заполняется. Для массовых сбоев, когда причина уже известна.": "El escenario no se rellena. Para fallos masivos cuya causa ya se conoce.",
     "Инцидент закрыт: {why}.": "Incidente cerrado: {why}.",
     "Сработка от уборщика": "Activado por el personal de limpieza",
+    "Все типы событий": "Todos los tipos de evento",
+    "Все типы устройств": "Todos los tipos de dispositivo",
+    "Тип события": "Tipo de evento",
+    "Тип устройства": "Tipo de dispositivo",
   },
 };
