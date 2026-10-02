@@ -1,5 +1,5 @@
 {
-  "$comment": "Единая JSON-модель workflow операторской части МИ. Соответствует '004 States rules IM.md' (v4). Формат записи перехода — §14.8. Это конфигурация: бэкенд её хранит, валидирует и исполняет; фронтенд по ней рисует кнопки, формы и бейджи и ничего не зашивает в код.",
+  "$comment": "Единая JSON-модель workflow операторской части МИ. Соответствует действующим правилам Specification/State_rules/States rules IM.md: v4 и изменения после неё по журналу §16. Формат записи перехода — §14.8. Это конфигурация: бэкенд её хранит, валидирует и исполняет; фронтенд по ней рисует кнопки, формы и бейджи и ничего не зашивает в код.",
 
   "schema": {
     "id": "im.operator.incident",
@@ -59,7 +59,7 @@
       "id": "on_hold",
       "label": "Отложен",
       "labelKey": "workflow.state.on_hold",
-      "category": "pending",
+      "category": "active",
       "terminal": false,
       "owner": "operator",
       "activeTimer": "resolution_paused"
@@ -68,15 +68,6 @@
       "id": "closed",
       "label": "Закрыто",
       "labelKey": "workflow.state.closed",
-      "category": "done",
-      "terminal": true,
-      "owner": "closed_by",
-      "activeTimer": null
-    },
-    {
-      "id": "canceled",
-      "label": "Отменено",
-      "labelKey": "workflow.state.canceled",
       "category": "done",
       "terminal": true,
       "owner": "closed_by",
@@ -94,8 +85,8 @@
       { "state": "in_progress", "viewerRole": "other", "label": "{ownerName}", "style": "foreign" },
       { "state": "on_hold", "viewerRole": "owner", "label": "Отложен · {holdReasonLabel}", "style": "paused" },
       { "state": "on_hold", "viewerRole": "other", "label": "Отложен · {ownerName}", "style": "paused" },
-      { "state": "closed", "viewerRole": "any", "label": "Закрыто", "style": "done" },
-      { "state": "canceled", "viewerRole": "any", "label": "Отменено · {cancelReasonLabel}", "style": "canceled" }
+      { "state": "closed", "viewerRole": "any", "when": { "closeResult": "processed" }, "label": "Закрыто", "style": "done" },
+      { "state": "closed", "viewerRole": "any", "label": "Закрыто · {closeResultLabel}", "style": "done_unprocessed" }
     ]
   },
 
@@ -103,10 +94,9 @@
     { "key": "incident:claim", "label": "Взять новое, принять адресованную передачу, возобновить свой отложенный" },
     { "key": "incident:hold", "label": "Отложить свой инцидент с указанием причины" },
     { "key": "incident:release", "label": "Вернуть свой инцидент в очередь; отклонить адресованную передачу" },
-    { "key": "incident:close", "label": "Закрыть с записью результата после обязательных шагов" },
-    { "key": "incident:close:unprocessed", "label": "Закрыть без прохождения сценария" },
-    { "key": "incident:cancel", "label": "Отменить: ложная тревога, дубликат, прерванная обработка" },
-    { "key": "incident:reopen", "label": "Вернуть в работу закрытый или отменённый инцидент" },
+    { "key": "incident:close", "label": "Закрыть свой инцидент с результатом: «Обработан» — после обязательных шагов; «Ложная тревога», «Дубликат», «Плановая проверка», «Прервано» — без сценария" },
+    { "key": "incident:close:unprocessed", "label": "Закрыть с результатом «Массовый сбой» без сценария, в том числе не беря в работу" },
+    { "key": "incident:reopen", "label": "Вернуть в работу закрытый инцидент" },
     { "key": "incident:transfer:own", "label": "Передать своё, ничьё или адресованное мне" },
     { "key": "incident:transfer:any", "label": "Передать инцидент, занятый другим оператором" },
     { "key": "incident:reassign", "label": "Перехватить инцидент у работающего оператора" },
@@ -121,13 +111,15 @@
     {
       "id": "reaction",
       "label": "Реакция",
+      "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет и группу устройств; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, sec }. У реакции дополнительно escalationLevel — норматив уровня автоэскалации (§8.3).",
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
       "startsOnEnter": ["new", "pending_acceptance"],
-      "stopsOnEnter": ["in_progress", "closed", "canceled"],
+      "stopsOnEnter": ["in_progress", "closed"],
       "pausable": false,
       "defaultSec": 300,
       "overridesBy": ["eventType", "priority", "sourceGroup", "escalationLevel"],
+      "overrides": [],
       "onExpire": "auto_escalate"
     },
     {
@@ -135,12 +127,16 @@
       "label": "Закрытие",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
+      "$comment": "§4, правило 6 (RULE-07). Запускается один раз — при первом входе в in_progress. Дальше не останавливается и не перезапускается, только приостанавливается вне in_progress и продолжается с остатка при возврате. Иначе просрочку можно скрыть передачей, возвратом в очередь или переоткрытием.",
       "startsOnEnter": ["in_progress"],
-      "stopsOnEnter": ["closed", "canceled"],
+      "startsOnce": true,
+      "stopsOnEnter": [],
       "pausable": true,
-      "pausedInStates": ["on_hold"],
+      "pausedInStates": ["new", "pending_acceptance", "on_hold", "closed"],
       "defaultSec": 900,
       "byPriority": { "critical": 600, "high": 900, "medium": 1500, "low": 1800 },
+      "overridesBy": ["eventType", "priority", "sourceGroup"],
+      "overrides": [],
       "onExpire": "resolution_overdue"
     },
     {
@@ -149,7 +145,7 @@
       "deadlineField": "hold_due_at",
       "meaning": "Сколько инцидент можно держать в on_hold по выбранной причине",
       "startsOnEnter": ["on_hold"],
-      "stopsOnEnter": ["in_progress", "new", "closed", "canceled"],
+      "stopsOnEnter": ["in_progress", "new", "closed"],
       "pausable": false,
       "secFrom": "reasonCatalogs.hold[].maxMinutes",
       "onExpire": "hold_overdue"
@@ -168,19 +164,32 @@
         { "id": "no_link", "label": "Нет связи с оператором", "maxMinutes": 20, "setBy": "system" }
       ]
     },
-    "cancel": {
-      "field": "cancel_reason",
-      "requiredOnTransition": ["cancel"],
+    "close_result": {
+      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates предварительные (§15).",
+      "field": "close_result",
+      "requiredOnTransition": ["close"],
       "items": [
-        { "id": "false_alarm", "label": "Ложная тревога", "setBy": "operator" },
-        { "id": "duplicate", "label": "Дубликат", "setBy": "operator" },
-        { "id": "drill", "label": "Плановая проверка", "setBy": "operator" },
-        { "id": "impossible", "label": "Прервано: обработка невозможна", "setBy": "operator", "skipsRequiredSteps": true }
+        { "id": "processed", "label": "Обработан", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false },
+        { "id": "false_alarm", "label": "Ложная тревога", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
+        { "id": "duplicate", "label": "Дубликат", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
+        { "id": "drill", "label": "Плановая проверка", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
+        { "id": "impossible", "label": "Прервано: обработка невозможна", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true },
+        {
+          "id": "mass",
+          "label": "Массовый сбой",
+          "permission": "incident:close:unprocessed",
+          "fromStates": ["new", "pending_acceptance", "in_progress", "on_hold"],
+          "ownerOnlyInStates": ["in_progress", "on_hold"],
+          "requiredStepSet": "none",
+          "commentRequired": true,
+          "causeCatalog": "mass_fault"
+        }
       ]
     },
-    "close_unprocessed": {
-      "field": "close_reason",
-      "requiredOnTransition": ["close_unprocessed"],
+    "mass_fault": {
+      "$comment": "§2.2. Причина массового сбоя — уточнение к результату «Массовый сбой».",
+      "field": "close_cause",
+      "requiredOnTransition": [],
       "items": [
         { "id": "power", "label": "Отключение электричества на объекте", "setBy": "operator" },
         { "id": "link", "label": "Потеря связи с объектом", "setBy": "operator" },
@@ -191,7 +200,7 @@
   },
 
   "stepSets": {
-    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан заполнить оператор перед обычным закрытием. Состав шагов приходит из сценария (features/editor), здесь только ссылка на набор.",
+    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан заполнить оператор перед закрытием с результатом «Обработан». Состав шагов приходит из сценария (features/editor), здесь только ссылка на набор.",
     "closing": { "id": "closing", "label": "Закрытие", "rule": "all_required_steps_answered" },
     "none": { "id": "none", "label": "Без проверки", "rule": "always_true" }
   },
@@ -236,7 +245,7 @@
       "title": "Вернуть в очередь",
       "confirmLabel": "Вернуть",
       "style": "primary",
-      "notes": [{ "when": {}, "text": "Инцидент станет ничьим, норматив реакции запустится заново. Прогресс сценария сохранится." }],
+      "notes": [{ "when": {}, "text": "Инцидент станет ничьим, норматив реакции запустится заново, норматив закрытия приостановится. Прогресс сценария сохранится." }],
       "fields": [{ "name": "comment", "kind": "text", "label": "Причина", "required": true, "placeholder": "Почему возвращаете" }]
     },
     {
@@ -248,17 +257,6 @@
       "fields": [{ "name": "comment", "kind": "text", "label": "Причина", "required": true, "placeholder": "Почему не принимаете" }]
     },
     {
-      "id": "cancel",
-      "title": "Отменить инцидент",
-      "confirmLabel": "Отменить инцидент",
-      "style": "danger",
-      "notes": [{ "when": {}, "text": "Отменённый инцидент не считается обработанным в отчётности." }],
-      "fields": [
-        { "name": "reasonId", "kind": "select", "label": "Причина отмены", "required": true, "source": "reasonCatalog:cancel" },
-        { "name": "comment", "kind": "text", "label": "Комментарий", "required": true, "placeholder": "Что выяснено" }
-      ]
-    },
-    {
       "id": "close",
       "title": "Закрытие инцидента",
       "confirmLabel": "Закрыть инцидент",
@@ -267,17 +265,32 @@
         { "when": { "grouped": true }, "text": "Сценарий заполнен: {filledSteps} из {totalSteps}. Закроются все {groupSize} инцидентов группы." },
         { "when": {}, "text": "Сценарий заполнен: {filledSteps} из {totalSteps}. Результат уйдёт в AxxonData." }
       ],
-      "fields": [{ "name": "comment", "kind": "text", "label": "Результат", "required": false, "placeholder": "Итог обработки для отчёта" }]
-    },
-    {
-      "id": "close_unprocessed",
-      "title": "Закрыть без обработки",
-      "confirmLabel": "Закрыть",
-      "style": "primary",
-      "notes": [{ "when": {}, "text": "Сценарий не заполняется. Для массовых сбоев, когда причина уже известна. Инцидент будет закрыт, не отменён." }],
       "fields": [
-        { "name": "reasonId", "kind": "select", "label": "Причина", "required": true, "source": "reasonCatalog:close_unprocessed" },
-        { "name": "comment", "kind": "text", "label": "Комментарий", "required": true, "placeholder": "Что произошло на объекте" }
+        {
+          "name": "resultId",
+          "kind": "select",
+          "label": "Результат",
+          "required": true,
+          "source": "reasonCatalog:close_result",
+          "optionsFrom": "actions",
+          "defaultWhen": { "requiredStepsFilled": "closing", "value": "processed" }
+        },
+        {
+          "name": "causeId",
+          "kind": "select",
+          "label": "Причина сбоя",
+          "required": true,
+          "source": "reasonCatalog:mass_fault",
+          "visibleWhen": { "field": "resultId", "in": ["mass"] }
+        },
+        {
+          "name": "comment",
+          "kind": "text",
+          "label": "Комментарий",
+          "required": false,
+          "requiredFrom": "reasonCatalog:close_result.commentRequired",
+          "placeholder": "Итог обработки для отчёта"
+        }
       ]
     },
     {
@@ -285,7 +298,7 @@
       "title": "Переоткрыть инцидент",
       "confirmLabel": "Переоткрыть",
       "style": "primary",
-      "notes": [{ "when": {}, "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия запустится заново." }],
+      "notes": [{ "when": {}, "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия продолжится с остатка." }],
       "fields": [{ "name": "comment", "kind": "text", "label": "Основание", "required": true, "placeholder": "Почему требуется вернуть в работу" }]
     },
     {
@@ -318,7 +331,7 @@
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "startTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Взято в работу"] }
       ],
@@ -346,7 +359,7 @@
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "startTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Передача принята, прогресс сценария сохранён"] }
       ],
       "bulk": { "allowed": false },
@@ -449,7 +462,7 @@
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "clearHoldReason" },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
@@ -487,7 +500,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["form.targetId.ifGroup"] },
         { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "byEscalationLevel"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Передано → {targetName} (уровень {escalationLevel}). {comment}"] },
@@ -537,101 +550,51 @@
     },
     {
       "id": "close",
-      "label": "Закрыть инцидент",
-      "labelKey": "workflow.transition.close",
-      "hint": "Записать результат и закрыть",
-      "from": ["in_progress"],
-      "to": "closed",
-      "trigger": "manual",
-      "concurrency": { "expectedVersion": true, "onTimerConflict": "manual_wins" },
-      "form": "close",
-      "requiredStepSet": "closing",
-      "guards": [
-        { "fn": "hasPermission", "args": ["incident:close"] },
-        { "fn": "isOwner" },
-        { "fn": "agentReady" },
-        { "fn": "requiredStepsFilled", "args": ["closing"] }
-      ],
-      "effects": [
-        { "kind": "transactional", "fn": "setFlag", "args": ["closed_by", "actor"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["closed_at", "now"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["result", "form.comment"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Инцидент закрыт. Результат уйдёт в AxxonData"] },
-        { "kind": "transactional", "fn": "returnToQueue" },
-        { "kind": "external", "fn": "externalCommand", "args": ["axxondata.export_incident"] }
-      ],
-      "bulk": { "allowed": true, "mode": "group", "minItems": 2, "sharedForm": true },
-      "ui": { "surface": ["card"], "style": "primary", "hotkey": "Enter", "navigate": "queue" }
-    },
-    {
-      "id": "close_unprocessed",
       "label": "Закрыть",
-      "labelKey": "workflow.transition.close_unprocessed",
-      "hint": "Закрыть без обработки по сценарию",
+      "labelKey": "workflow.transition.close",
+      "hint": "Закрыть с результатом",
+      "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты.",
       "from": ["new", "pending_acceptance", "in_progress", "on_hold"],
       "to": "closed",
       "trigger": "manual",
       "concurrency": { "expectedVersion": true, "onTimerConflict": "manual_wins" },
-      "form": "close_unprocessed",
-      "requiredStepSet": "none",
+      "form": "close",
+      "requiredStepSet": "byCloseResult",
       "guards": [
-        { "fn": "hasPermission", "args": ["incident:close:unprocessed"] },
-        { "fn": "isOwnerInStates", "args": [["in_progress", "on_hold"]] },
-        { "fn": "agentReady" }
+        { "fn": "agentReady" },
+        { "fn": "closeResultAllowed", "args": ["form.resultId"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "setOwner", "args": ["actorIfEmpty"] },
+        { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closed_by", "actor"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closed_at", "now"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["closed_unprocessed", true] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["close_reason", "form.reasonId"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["close_result", "form.resultId"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", "form.causeId"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["result", "form.comment"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Закрыт без обработки: {closeReasonLabel}. {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Закрыт: {closeResultLabel}. {comment}"] },
         { "kind": "transactional", "fn": "returnToQueue" },
         { "kind": "external", "fn": "externalCommand", "args": ["axxondata.export_incident"] }
       ],
-      "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "sharedForm": true, "createsGroup": false },
-      "ui": { "surface": ["queue", "card"], "style": "outline", "hotkey": null, "navigate": "queue" }
-    },
-    {
-      "id": "cancel",
-      "label": "Отменить",
-      "labelKey": "workflow.transition.cancel",
-      "hint": "Обработка невозможна, ложная тревога или дубликат",
-      "from": ["in_progress"],
-      "to": "canceled",
-      "trigger": "manual",
-      "concurrency": { "expectedVersion": true, "onTimerConflict": "manual_wins" },
-      "form": "cancel",
-      "requiredStepSet": "none",
-      "guards": [
-        { "fn": "hasPermission", "args": ["incident:cancel"] },
-        { "fn": "isOwner" },
-        { "fn": "agentReady" }
-      ],
-      "effects": [
-        { "kind": "transactional", "fn": "setFlag", "args": ["cancel_reason", "form.reasonId"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["closed_by", "actor"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["closed_at", "now"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Отменён: {cancelReasonLabel}. {comment}"] },
-        { "kind": "transactional", "fn": "returnToQueue" }
-      ],
-      "bulk": { "allowed": true, "mode": "group", "minItems": 2, "sharedForm": true },
-      "ui": { "surface": ["card"], "style": "danger", "hotkey": null, "navigate": "queue" }
+      "bulk": {
+        "allowed": true,
+        "mode": "group_or_each_allowed",
+        "$comment": "§11. Группа сценария закрывается одним результатом на всех; ручная выборка — если выбранный результат доступен каждому.",
+        "minItems": 2,
+        "sharedForm": true,
+        "createsGroup": false
+      },
+      "ui": { "surface": ["queue", "card"], "style": "outline", "hotkey": "Enter", "navigate": "queue" }
     },
     {
       "id": "reopen",
       "label": "Переоткрыть",
       "labelKey": "workflow.transition.reopen",
       "hint": "Вернуть завершённый инцидент в работу",
-      "from": ["closed", "canceled"],
+      "from": ["closed"],
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": { "expectedVersion": true, "onTimerConflict": "manual_wins" },
@@ -645,10 +608,10 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["cancel_reason", null] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["sla_breached", false] },
-        { "kind": "transactional", "fn": "startTimer", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после {previousStateLabel}: {comment}"] }
+        { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
+        { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] }
       ],
       "bulk": { "allowed": false },
       "ui": { "surface": ["queue", "card"], "style": "outline", "hotkey": null, "navigate": "card" }
@@ -676,7 +639,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["escalation.level.target.ifGroup"] },
         { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Автоэскалация → {targetName} (уровень {escalationLevel}). {escalationReason}"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
@@ -789,7 +752,7 @@
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор не отвечает"] }
       ],
@@ -809,16 +772,16 @@
   },
 
   "escalation": {
-    "$comment": "§9. Настройки под правом incident:schema:admin.",
+    "$comment": "§9. Настройки под правом incident:schema:admin. Адресаты уровней и получатель алерта — конкретные пользователи (§8.3): ролей МИ не знает. Значения ниже — пример: при смене людей администратор меняет их в схеме и публикует новую версию.",
     "enabled": true,
     "trigger": "reaction",
     "fromStates": ["new", "pending_acceptance"],
     "levels": [
-      { "level": 1, "targetRef": "role:shift_lead", "reactionSec": 120 },
-      { "level": 2, "targetRef": "role:noc", "reactionSec": 90 }
+      { "level": 1, "targetRef": "user:<guid старшего смены>", "reactionSec": 120 },
+      { "level": 2, "targetRef": "user:<guid дежурного ЦОД>", "reactionSec": 90 }
     ],
     "maxLevel": 2,
-    "alertTarget": "role:shift_lead",
+    "alertTarget": "user:<guid старшего смены>",
     "onResolutionOverdue": "alert",
     "reason": "Автоэскалация: превышен норматив реакции"
   },
@@ -828,7 +791,7 @@
     "maxActive": 1,
     "maxOnHold": 5,
     "maxBulk": 10,
-    "reopenWindowMin": 60,
+    "reopenWindowMin": 1440,
     "groupCountsAsOneUnit": true
   },
 
@@ -878,9 +841,15 @@
     { "key": "Ctrl+D", "action": "selection:clear", "worksInInput": false },
     { "key": "B", "action": "session:toggle_break", "worksInInput": false },
     { "key": "Enter", "action": "form:open:close", "worksInInput": false },
-    { "key": "F1", "action": "docs:regulation", "worksInInput": true },
-    { "key": "?", "action": "docs:hotkeys", "worksInInput": false },
-    { "key": "Esc", "action": "escape_chain", "worksInInput": true, "chain": ["close_form", "exit_fullscreen", "close_groups_panel", "back_to_queue"] }
+    { "key": "ArrowLeft", "action": "media:camera_prev", "worksInInput": false },
+    { "key": "ArrowRight", "action": "media:camera_next", "worksInInput": false },
+    { "key": "1", "action": "media:camera_select", "args": [1], "worksInInput": false },
+    { "key": "2", "action": "media:camera_select", "args": [2], "worksInInput": false },
+    { "key": "3", "action": "media:camera_select", "args": [3], "worksInInput": false },
+    { "key": "4", "action": "media:camera_select", "args": [4], "worksInInput": false },
+    { "key": "F1", "action": "docs:regulation", "worksInInput": true, "reassignable": false },
+    { "key": "?", "action": "docs:hotkeys", "worksInInput": false, "reassignable": false },
+    { "key": "Esc", "action": "escape_chain", "worksInInput": true, "reassignable": false, "chain": ["close_form", "exit_fullscreen", "close_groups_panel", "back_to_queue"] }
   ],
 
   "queueFilters": [
@@ -893,13 +862,11 @@
   ],
 
   "queueGrouping": {
-    "$comment": "Vision §1.3. Типы группировки очереди.",
-    "modes": [
-      { "id": "none", "label": "Без группировки" },
-      { "id": "source_group", "label": "По группе объектов", "default": true },
-      { "id": "event_type", "label": "По типу события" },
-      { "id": "object_type", "label": "По типу объекта" },
-      { "id": "custom", "label": "Кастомная", "configurable": true }
+    "$comment": "§19 (RULE-03). Четыре режима группировки из Vision покрываются двумя механизмами. Регион и свой список — группы устройств: вложенные, одно устройство может входить в несколько групп; выбранная группа ограничивает очередь событиями её устройств, включая вложенные группы. Тип события и тип устройства-источника — фильтры очереди поверх выбранной группы. Дерево групп отдаёт GET /operator/reference/source-groups.",
+    "groups": { "nested": true, "deviceInManyGroups": true, "selectionIncludesNested": true },
+    "filters": [
+      { "id": "eventType", "label": "Тип события", "field": "eventType" },
+      { "id": "deviceType", "label": "Тип устройства", "field": "source.typeId" }
     ]
   },
 
@@ -920,6 +887,7 @@
       { "fn": "withinHoldLimit", "args": [], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "withinReopenWindow", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "requiredStepsFilled", "args": ["stepSetId"], "onFail": "disable" },
+      { "fn": "closeResultAllowed", "args": ["resultId"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без resultId — доступен ли хоть один результат: так решается, показывать ли кнопку." },
       { "fn": "timerExpired", "args": ["timerId"], "onFail": "hide" },
       { "fn": "flagBelow", "args": ["field", "n"], "onFail": "hide" },
       { "fn": "flagAtLeast", "args": ["field", "n"], "onFail": "hide", "extendsBaseRegistry": true },
@@ -938,12 +906,12 @@
       { "fn": "startTimer", "kind": "transactional" },
       { "fn": "stopTimer", "kind": "transactional" },
       { "fn": "pauseTimer", "kind": "transactional" },
-      { "fn": "resumeTimer", "kind": "transactional" },
+      { "fn": "resumeTimer", "kind": "transactional", "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept и reopen используют один эффект." },
       { "fn": "increment", "kind": "transactional" },
       { "fn": "setFlag", "kind": "transactional" },
       { "fn": "appendLog", "kind": "transactional" },
       { "fn": "returnToQueue", "kind": "transactional" },
-      { "fn": "evictOpenCard", "kind": "transactional" },
+      { "fn": "evictOpenCard", "kind": "transactional", "$comment": "§9, §14.8. Открытая у человека карточка переходит в режим просмотра с уведомлением (incident.card_evicted в потоке); карточка не закрывается." },
       { "fn": "setCursor", "kind": "transactional", "extendsBaseRegistry": true },
       { "fn": "clearGroup", "kind": "transactional", "extendsBaseRegistry": true },
       { "fn": "notify", "kind": "external" },
@@ -952,21 +920,36 @@
   },
 
   "validation": {
-    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации.",
+    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации. Ролей МИ не знает (§5, RULE-01): проверки, зависящие от прав, идут на типовых наборах прав из typicalPermissionSets.",
     "rules": [
       "unreachable_state",
       "non_terminal_state_without_outgoing",
       "state_without_incoming",
-      "role_state_without_any_transition",
-      "target_role_cannot_exit_state",
+      "permission_set_state_without_any_transition",
+      "target_permission_set_cannot_exit_state",
       "duplicate_hotkey",
       "unknown_permission_reference",
-      "unused_permission",
-      "claim_without_exit_permission"
+      "unused_permission"
     ],
+    "typicalPermissionSets": {
+      "$comment": "§14.7. Примеры наборов прав для валидатора и симулятора. Это не роли: настоящие роли и их состав настраиваются во внешней системе.",
+      "items": [
+        {
+          "id": "operator",
+          "label": "Оператор",
+          "permissions": ["incident:claim", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+        },
+        {
+          "id": "shift_lead",
+          "label": "Старший смены",
+          "permissions": ["incident:claim", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+        }
+      ]
+    },
     "claimWithoutExitPermission": {
-      "$comment": "§10.3. Роль с incident:claim обязана иметь хотя бы одно из перечисленного, иначе схема не публикуется.",
-      "requiresAnyOf": ["incident:hold", "incident:release", "incident:cancel"]
+      "$comment": "§10.3. Требование к набору прав пользователя: с incident:claim нужен хотя бы один выход из карточки. Роли собираются во внешней системе, поэтому проверяется не при публикации схемы, а при входе: если выхода нет, incident:claim не действует, администратору уходит предупреждение. Требование передаётся внешней системе вместе с каталогом прав.",
+      "checkedOn": "session_start",
+      "requiresAnyOf": ["incident:hold", "incident:release", "incident:close"]
     }
   },
 

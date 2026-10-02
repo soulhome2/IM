@@ -50,6 +50,8 @@ google-chrome --headless=new --disable-gpu --no-first-run \
 - При открытии через `file://` браузер скрывает текст ошибок JS («Script error.»). Чтобы увидеть полный текст, поднять сервер `python3 -m http.server` из корня репозитория и открыть `http://127.0.0.1:<порт>/prototype/index.html?selftest`.
 - Если headless‑браузера нет (на Windows это `msedge` или полный путь к Chrome), попросить пользователя открыть `prototype/index.html?selftest` и вставить отчёт из угла страницы.
 
+**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow.v4.json` и `openapi.json`.
+
 **Ссылки в документах:** `python3 tools/check_links.py`.
 
 **Покрытие самопроверки.** Для каждого нового или изменённого перехода, кнопки, формы проверить, есть ли шаг в `prototype/selftest.js`. Нет шага — это находка: новый функционал не защищён от поломки.

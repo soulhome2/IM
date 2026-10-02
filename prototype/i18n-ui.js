@@ -383,6 +383,7 @@ window.IM_DICT_UI = {
     "Все типы устройств": "All device types",
     "Тип события": "Event type",
     "Тип устройства": "Device type",
+    "Нужна проверка по камерам объекта": "Site cameras need to be checked",
   },
 
   es: {
@@ -777,5 +778,6 @@ window.IM_DICT_UI = {
     "Все типы устройств": "Todos los tipos de dispositivo",
     "Тип события": "Tipo de evento",
     "Тип устройства": "Tipo de dispositivo",
+    "Нужна проверка по камерам объекта": "Hay que revisar las cámaras del sitio",
   },
 };

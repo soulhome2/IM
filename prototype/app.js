@@ -2148,6 +2148,17 @@
         why: "Нужен допуск в зону",
       });
     }
+    // Второй инцидент, адресованный лично оператору: на нём проверяется «Отклонить»
+    const inboxMine = pick("INC-1843");
+    if (inboxMine) {
+      inboxMine.owner = "me";
+      startReaction(inboxMine, 150);
+      log(inboxMine, "noc", "Передано → {who} (уровень {lvl}). {why}", {
+        who: ME,
+        lvl: inboxMine.escalationLevel,
+        why: "Нужна проверка по камерам объекта",
+      });
+    }
     const falseAlarm = pick("INC-1826");
     if (falseAlarm) {
       falseAlarm.closeResult = "false_alarm";
@@ -2427,7 +2438,7 @@
         ev.owner = "me";
         ev.closeResult = null;
         ev.massCause = null;
-        ev.slaBreached = false;
+        // Отметка о нарушении норматива не сбрасывается: иначе просрочку можно скрыть переоткрытием
         startResolution(ev);
         ensureCursor(ev);
         log(ev, "me", "Переоткрыт после {was}: {why}", { was, why: payload.reason });

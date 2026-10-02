@@ -48,6 +48,35 @@
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   }
 
+  // Кнопка перехода у конкретного инцидента — на любой странице очереди
+  async function buttonOnPages(id, ev) {
+    let b = button($("eventsList"), id, ev);
+    for (let page = 2; !b && page <= 20; page++) {
+      const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+      if (!nav || nav.disabled) break;
+      await click(nav);
+      b = button($("eventsList"), id, ev);
+    }
+    return b;
+  }
+
+  // Строка инцидента в очереди — на любой странице
+  async function rowOnPages(ev) {
+    let row = $("eventsList").querySelector(`[data-id="${ev}"]`);
+    for (let page = 2; !row && page <= 20; page++) {
+      const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+      if (!nav || nav.disabled) break;
+      await click(nav);
+      row = $("eventsList").querySelector(`[data-id="${ev}"]`);
+    }
+    return row;
+  }
+
+  async function pressKey(key) {
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    await wait();
+  }
+
   async function openOwn(id) {
     if (mode() === "work") return;
     await setFilter("mine");
@@ -140,6 +169,7 @@
     let workId = null;
     let acceptedId = null;
     let acceptedLeft = null;
+    let freshId = null;
 
     await step("Взять новое событие", async () => {
       await setFilter("open");
@@ -230,9 +260,23 @@
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
     });
 
+    await step("Отклонить адресованную передачу", async () => {
+      await setFilter("inbox");
+      const b = button($("eventsList"), "reject", "INC-1843");
+      expect(b, "у INC-1843 нет кнопки «Отклонить»");
+      await click(b);
+      await confirmDialog("самопроверка");
+      await setFilter("open");
+      const row = await rowOnPages("INC-1843");
+      const text = row ? row.textContent : "";
+      expect(text.includes("Новое"), "после «Отклонить» инцидент не стал новым");
+      expect(text.includes("ур. 1"), "после «Отклонить» не сохранился уровень эскалации");
+      return "INC-1843";
+    });
+
     await step("Принять адресованную передачу", async () => {
       await setFilter("inbox");
-      const b = button($("eventsList"), "accept");
+      const b = button($("eventsList"), "accept", "INC-1836");
       expect(b, "нет инцидентов на принятие");
       acceptedId = b.dataset.ev;
       await click(b);
@@ -296,6 +340,123 @@
       expect(row && row.textContent.includes("Ложная тревога"), `${acceptedId} не помечен результатом «Ложная тревога»`);
       await setFilter("open");
       return acceptedId;
+    });
+
+    await step("«Обработан» недоступен, пока сценарий не заполнен", async () => {
+      await setFilter("open");
+      const b = button($("eventsList"), "claim");
+      expect(b, "нет доступной кнопки «Взять»");
+      freshId = b.dataset.ev;
+      await click(b);
+      expect(mode() === "work", "карточка не открылась");
+      const close = button(root(), "close");
+      expect(close, "в карточке нет кнопки «Закрыть»");
+      await click(close);
+      const processed = $("dialogSelect").querySelector('option[value="processed"]');
+      const other = $("dialogSelect").querySelector('option[value="false_alarm"]');
+      expect(processed && processed.disabled, "«Обработан» доступен при пустом сценарии");
+      expect(other && !other.disabled, "«Ложная тревога» недоступна");
+      document.querySelector('[data-close="modalDialog"]').click();
+      await wait();
+      return freshId;
+    });
+
+    await step("Esc в своей карточке возвращает к очереди, инцидент остаётся в работе", async () => {
+      await openOwn(freshId);
+      await pressKey("Escape");
+      expect(mode() === "queue", "Esc не вернул к очереди");
+      await setFilter("mine");
+      expect(button($("eventsList"), "continueOwn", freshId), `${freshId} больше не «В работе»`);
+    });
+
+    await step("Перерыв с открытой карточкой откладывает инцидент", async () => {
+      await openOwn(freshId);
+      await click($("breakBtn"));
+      expect(mode() === "queue", "на перерыве карточка осталась открытой");
+      await setFilter("mine");
+      const row = $("eventsList").querySelector(`[data-id="${freshId}"]`);
+      const text = row ? row.textContent : "";
+      await click($("breakBtn"));
+      expect(text.includes("Перерыв оператора"), `${freshId} не отложен с причиной «Перерыв оператора»`);
+    });
+
+    await step("Закрыть отложенный с результатом «Массовый сбой»", async () => {
+      await setFilter("mine");
+      const b = button($("eventsList"), "closeUnprocessed", freshId);
+      expect(b, `у отложенного ${freshId} нет кнопки «Закрыть»`);
+      await click(b);
+      expect($("dialogSelect").value.startsWith("mass:"), "в форме не выбран массовый сбой");
+      await confirmDialog("самопроверка");
+      await setFilter("done");
+      const row = await rowOnPages(freshId);
+      expect(row && row.textContent.includes("Закрыто ·"), `${freshId} не закрыт с результатом`);
+    });
+
+    await step("Переоткрыть: инцидент в работе, результат очищен", async () => {
+      await setFilter("done");
+      const b = await buttonOnPages("reopen", freshId);
+      expect(b, `у ${freshId} нет кнопки «Переоткрыть»`);
+      await click(b);
+      await confirmDialog("самопроверка");
+      expect(mode() === "work", "после переоткрытия карточка не открылась");
+      expect($("statusSla").textContent.includes("Закрытие"), "норматив закрытия не идёт");
+      // В режиме карточки очередь не перерисовывается: сначала к очереди
+      await click($("backToQueue"));
+      await setFilter("mine");
+      const row = $("eventsList").querySelector(`[data-id="${freshId}"]`);
+      expect(row && !row.textContent.includes("Закрыто"), `${freshId} всё ещё помечен закрытым`);
+      // Освобождаем лимит активных для следующего шага
+      await openOwn(freshId);
+      await click(button(root(), "release"));
+      await confirmDialog("самопроверка");
+    });
+
+    await step("Обработать как одно: два однотипных берутся вместе", async () => {
+      await setFilter("open");
+      // Тип, у которого на первой странице есть два новых события: перебираем фильтр по типу
+      const select = $("eventTypeFilter");
+      let pair = null;
+      for (const opt of [...select.options].filter((o) => o.value !== "all")) {
+        select.value = opt.value;
+        select.dispatchEvent(new Event("change"));
+        await wait();
+        const ids = [...$("eventsList").querySelectorAll(".event")]
+          .filter((r) => r.querySelector('[data-do="claim"]:not([disabled])'))
+          .map((r) => r.dataset.id);
+        if (ids.length >= 2) {
+          pair = ids.slice(0, 2);
+          break;
+        }
+      }
+      expect(pair, "нет типа событий с двумя новыми");
+      const [a, b] = pair;
+      await click($("eventsList").querySelector(`[data-check="${a}"]`));
+      await click($("eventsList").querySelector(`[data-check="${b}"]`));
+      await click(button($("eventsList"), "claim", a));
+      select.value = "all";
+      select.dispatchEvent(new Event("change"));
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("mine");
+      const both = [a, b].every((id) => $("eventsList").querySelector(`[data-id="${id}"]`));
+      expect(both, `в работу ушли не оба: ${a}, ${b}`);
+      return `${a} + ${b}`;
+    });
+
+    await step("Фильтр по типу устройства поверх группы", async () => {
+      await setFilter("all");
+      const select = $("deviceTypeFilter");
+      const total = $("eventsList").querySelectorAll(".event").length;
+      select.value = "fire-detector";
+      select.dispatchEvent(new Event("change"));
+      await wait();
+      const rows = [...$("eventsList").querySelectorAll(".event")];
+      const stray = rows.filter((r) => !r.textContent.includes("Пожарная тревога"));
+      select.value = "all";
+      select.dispatchEvent(new Event("change"));
+      await setFilter("open");
+      expect(rows.length, "по типу «Пожарный извещатель» ничего не нашлось");
+      expect(!stray.length, `у пожарного извещателя нашлись события другого типа: ${stray.length}`);
+      return `${rows.length} из ${total}`;
     });
 
     await step("Закрыть без обработки из очереди", async () => {

@@ -1,4 +1,4 @@
-# Проверки на каждый push: самопроверка прототипа и ссылки в документах.
+# Проверки на каждый push: самопроверка прототипа, целостность машины состояний и ссылки в документах.
 # Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
 # что что-то сломалось; подробности — в журнале шага.
 name: checks
@@ -26,6 +26,10 @@ jobs:
           print(html.unescape(log.group(1)) if log else "Отчёт самопроверки не найден")
           sys.exit(0 if 'data-selftest="pass"' in page else 1)
           EOF
+
+      - name: Машина состояний
+        if: always()
+        run: python3 tools/check_machine.py
 
       - name: Ссылки в документах
         if: always()
