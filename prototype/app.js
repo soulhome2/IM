@@ -1621,7 +1621,7 @@
     new: { category: "pending", cls: "new", label: "Новое" },
     pending_acceptance: { category: "pending", cls: "esc", label: "Ожидает принятия" },
     in_progress: { category: "active", cls: "mine", label: "В работе" },
-    on_hold: { category: "pending", cls: "pause", label: "Отложен" },
+    on_hold: { category: "active", cls: "pause", label: "Отложен" },
     closed: { category: "done", cls: "ok", label: "Закрыто" },
     canceled: { category: "done", cls: "cancel", label: "Отменено" },
   };
