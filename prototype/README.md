@@ -56,7 +56,7 @@
 | Текстовое поле, textarea, search | 1px + focus ring | Нет лестницы editor hover/typed |
 | Чипы `.chip.lvl` / `.chip.grp` | цвет из уже замапленных `--esc-*` / `--badge-foreign*` | Нет лестницы chip |
 | Шаги сценария `.crumb.current` | номер и подпись в accent | Это не дерево и не кнопка; §2.3 их не перечисляет |
-| `.btn.danger` (Отменить), `.btn.ok` (макрос запущен) | тройки feedback | У Button нет danger/success appearance |
+| `.btn.danger` (Перехватить), `.btn.ok` (макрос запущен) | тройки feedback | У Button нет danger/success appearance |
 | Обёртка языка `.lang:hover` | рамка accent | Не ComboBox-опция и не кнопка |
 | Тики камеры `.cam-tick.active` | заливка accent | Нет лестницы pager-dots |
 

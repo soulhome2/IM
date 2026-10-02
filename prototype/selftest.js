@@ -175,9 +175,11 @@
     await step("Закрыть инцидент по сценарию", async () => {
       await openOwn(closedId);
       for (let i = 0; i < 10; i++) {
-        const close = button(root(), "close");
+        // Кнопка в конце сценария, а не «Закрыть» в панели действий
+        const close = root().querySelector('.scenario-actions [data-do="close"]');
         if (close) {
           await click(close);
+          expect($("dialogSelect").value === "processed", `результат по умолчанию «${$("dialogSelect").value}», а не «Обработан»`);
           await confirmDialog();
           expect(mode() === "queue", "после закрытия карточка не закрылась");
           return closedId;
@@ -266,6 +268,34 @@
       const left = resolutionLeft();
       expect(left != null && left < acceptedLeft, `было ${acceptedLeft} с, после повторного взятия ${left} с`);
       return `${acceptedLeft} → ${left} с`;
+    });
+
+    await step("Закрыть с результатом «Ложная тревога» без сценария", async () => {
+      expect(acceptedId, "нечего закрывать: «Принять» не сработал");
+      await openOwn(acceptedId);
+      const b = button(root(), "close");
+      expect(b, "в карточке нет кнопки «Закрыть»");
+      await click(b);
+      // «Обработан» доступен, только если сценарий заполнен; у принятого инцидента он может быть уже заполнен
+      const processed = $("dialogSelect").querySelector('option[value="processed"]');
+      expect(processed, "в форме нет результата «Обработан»");
+      $("dialogSelect").value = "false_alarm";
+      $("dialogSelect").dispatchEvent(new Event("change"));
+      await click($("dialogConfirm"));
+      expect(!$("modalDialog").hidden, "закрылось без обязательного комментария");
+      await confirmDialog("самопроверка");
+      expect(mode() === "queue", "после закрытия карточка не закрылась");
+      await setFilter("done");
+      let row = $("eventsList").querySelector(`[data-id="${acceptedId}"]`);
+      for (let page = 2; !row && page <= 20; page++) {
+        const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+        if (!nav || nav.disabled) break;
+        await click(nav);
+        row = $("eventsList").querySelector(`[data-id="${acceptedId}"]`);
+      }
+      expect(row && row.textContent.includes("Ложная тревога"), `${acceptedId} не помечен результатом «Ложная тревога»`);
+      await setFilter("open");
+      return acceptedId;
     });
 
     await step("Закрыть без обработки из очереди", async () => {

@@ -1459,6 +1459,7 @@
       media: "map",
       cameras: ["device-15"],
       answers: { visual: true, verdict: "Ложная", kind: "Тест системы", note: "Плановая проверка АПС" },
+      closeResult: "drill",
       launched: [],
       log: [
         { t: "12:41:26", who: "Диспетчер", text: "Сработка пожарного датчика" },
@@ -1623,7 +1624,6 @@
     in_progress: { category: "active", cls: "mine", label: "В работе" },
     on_hold: { category: "active", cls: "pause", label: "Отложен" },
     closed: { category: "done", cls: "ok", label: "Закрыто" },
-    canceled: { category: "done", cls: "cancel", label: "Отменено" },
   };
 
   const HOLD_REASONS = [
@@ -1634,31 +1634,36 @@
     { id: "no_link", label: "Нет связи с оператором", maxMin: 20, system: true },
   ];
 
-  const CANCEL_REASONS = [
+  // Результат закрытия (§2.2). Конечное состояние одно — closed, итог хранится в closeResult (RULE-02).
+  // «Обработан» требует сценария, остальные — нет. «Массовый сбой» — по праву incident:close:unprocessed,
+  // с причиной из справочника массовых сбоев.
+  const CLOSE_RESULTS = [
+    { id: "processed", label: "Обработан" },
     { id: "false_alarm", label: "Ложная тревога" },
     { id: "duplicate", label: "Дубликат" },
     { id: "drill", label: "Плановая проверка" },
     { id: "impossible", label: "Прервано: обработка невозможна" },
+    { id: "mass", label: "Массовый сбой" },
   ];
 
-  const SKIP_CLOSE_REASONS = [
+  const MASS_FAULT_REASONS = [
     { id: "power", label: "Отключение электричества на объекте" },
     { id: "link", label: "Потеря связи с объектом" },
     { id: "mass_fault", label: "Массовый сбой оборудования" },
     { id: "known", label: "Известная неисправность, работы ведутся" },
   ];
 
-  // rawLabel отдаёт русский источник для журнала, holdLabel/cancelLabel — перевод для экрана
+  // rawLabel отдаёт русский источник для журнала, holdLabel/resultLabel — перевод для экрана
   const rawLabel = (list, id) => {
     const item = list.find((r) => r.id === id);
     return item ? item.label : "Причина не указана";
   };
   const holdLabel = (id) => t(rawLabel(HOLD_REASONS, id));
-  const cancelLabel = (id) => t(rawLabel(CANCEL_REASONS, id));
-  const skipCloseLabel = (id) => t(rawLabel(SKIP_CLOSE_REASONS, id));
   const rawHold = (id) => rawLabel(HOLD_REASONS, id);
-  const rawCancel = (id) => rawLabel(CANCEL_REASONS, id);
-  const rawSkipClose = (id) => rawLabel(SKIP_CLOSE_REASONS, id);
+  // Массовый сбой в журнале и на экране — по причине из справочника, остальные — по результату
+  const rawResult = (ev) =>
+    ev.closeResult === "mass" && ev.massCause ? rawLabel(MASS_FAULT_REASONS, ev.massCause) : rawLabel(CLOSE_RESULTS, ev.closeResult);
+  const resultLabel = (ev) => t(rawResult(ev));
 
   /* ===== Нормативы (§4) ===== */
 
@@ -1693,7 +1698,6 @@
     "incident:release": true,
     "incident:close": true,
     "incident:close:unprocessed": true,
-    "incident:cancel": true,
     "incident:reopen": true,
     "incident:transfer:own": true,
     "incident:transfer:any": true,
@@ -2069,8 +2073,8 @@
         ? { text: t("Отложен · {why}", { why: holdLabel(ev.holdReason) }), cls: "pause" }
         : { text: t("Отложен · {who}", { who: actorName(ev.owner) }), cls: "pause" };
     }
-    if (ev.state === "canceled") {
-      return { text: t("Отменено · {why}", { why: cancelLabel(ev.cancelReason) }), cls: "cancel" };
+    if (ev.state === "closed" && ev.closeResult && ev.closeResult !== "processed") {
+      return { text: t("Закрыто · {why}", { why: resultLabel(ev) }), cls: "cancel" };
     }
     return { text: t(meta.label), cls: meta.cls };
   }
@@ -2087,7 +2091,8 @@
       ev.owner = owner;
       ev.escalationLevel = 0;
       ev.holdReason = null;
-      ev.cancelReason = null;
+      ev.closeResult = ev.closeResult || null;
+      ev.massCause = null;
       ev.slaBreached = false;
       ev.groupId = null;
       ev.holdSince = null;
@@ -2119,6 +2124,7 @@
         startReaction(ev);
       } else {
         ev.state = "closed";
+        ev.closeResult = ev.closeResult || "processed";
         ev.closedAt = now - 3 * 3600000;
       }
       delete ev.status;
@@ -2138,12 +2144,14 @@
         why: "Нужен допуск в зону",
       });
     }
-    const canceled = pick("INC-1826");
-    if (canceled) {
-      canceled.state = "canceled";
-      canceled.cancelReason = "false_alarm";
-      canceled.closedAt = Date.now() - 25 * 60000;
-      log(canceled, "sidorov", "Отменён: {why}", { why: "Ложная тревога" });
+    const falseAlarm = pick("INC-1826");
+    if (falseAlarm) {
+      falseAlarm.closeResult = "false_alarm";
+      falseAlarm.closedAt = Date.now() - 25 * 60000;
+      log(falseAlarm, "sidorov", "Закрыт без обработки: {why}. {note}", {
+        why: "Ложная тревога",
+        note: "Сработка от уборщика",
+      });
     }
     const fresh = pick("INC-1837");
     if (fresh) fresh.closedAt = Date.now() - 12 * 60000;
@@ -2153,7 +2161,17 @@
 
   // Мягкие условия оставляют кнопку видимой и блокируют её с подсказкой (§10.2).
   // Условия принадлежности прячут кнопку: действие не относится к этой ситуации.
-  const OWNERSHIP_GUARDS = ["owner", "target", "notOwner", "reopenWindow", "ownOrFree", "readForeign", "canTransfer", "canSkipClose"];
+  const OWNERSHIP_GUARDS = [
+    "owner",
+    "target",
+    "notOwner",
+    "reopenWindow",
+    "ownOrFree",
+    "readForeign",
+    "canTransfer",
+    "canSkipClose",
+    "canClose",
+  ];
 
   const GUARDS = {
     owner: (ev) => (isMine(ev) ? null : t("Вы не владелец инцидента")),
@@ -2171,7 +2189,8 @@
       myUnits("on_hold").size < LIMITS.maxOnHold
         ? null
         : t("Больше {n} отложенных держать нельзя", { n: LIMITS.maxOnHold }),
-    closingSteps: (ev) => (scenarioDone(ev) ? null : t("Заполните обязательные шаги закрытия")),
+    canClose: () =>
+      can("incident:close") || can("incident:close:unprocessed") ? null : t("Нет права: {p}", { p: "incident:close" }),
     canSkipClose: (ev) => {
       if (!can("incident:close:unprocessed")) return t("Нет права: {p}", { p: "incident:close:unprocessed" });
       if (ev.state === "in_progress" || ev.state === "on_hold") {
@@ -2360,28 +2379,23 @@
       },
     },
     close: {
-      label: "Закрыть инцидент",
-      hint: "Записать результат и закрыть",
-      style: "primary",
+      label: "Закрыть",
+      hint: "Закрыть с результатом: обработан, ложная тревога, дубликат, проверка",
+      style: "outline",
       from: ["in_progress"],
       to: "closed",
-      perm: "incident:close",
-      guards: ["owner", "closingSteps"],
+      guards: ["owner", "canClose"],
       dialog: "close",
       run(ev, payload) {
-        ev.closedBy = "me";
-        ev.closedAt = Date.now();
-        stopReaction(ev);
-        pauseResolution(ev);
-        if (payload && payload.reason) ev.answers.result = payload.reason;
-        log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
-        if (!(payload && payload.silent)) toast(t("{id} закрыт", { id: ev.id }));
+        closeEvent(ev, payload);
+        if (!(payload && payload.silent))
+          toast(t(ev.closeResult === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.id }));
         return "queue";
       },
     },
     closeUnprocessed: {
       label: "Закрыть",
-      hint: "Закрыть без обработки по сценарию",
+      hint: "Закрыть с результатом «Массовый сбой», без сценария",
       style: "outline",
       from: ["new", "pending_acceptance", "in_progress", "on_hold"],
       to: "closed",
@@ -2389,31 +2403,8 @@
       guards: ["canSkipClose"],
       dialog: "closeUnprocessed",
       run(ev, payload) {
-        skipCloseEvent(ev, payload);
+        closeEvent(ev, payload);
         if (!(payload && payload.silent)) toast(t("{id} закрыт без обработки", { id: ev.id }));
-        return "queue";
-      },
-    },
-    cancel: {
-      label: "Отменить",
-      hint: "Обработка невозможна, ложная тревога или дубликат",
-      style: "danger",
-      from: ["in_progress"],
-      to: "canceled",
-      perm: "incident:cancel",
-      guards: ["owner"],
-      dialog: "cancel",
-      run(ev, payload) {
-        ev.cancelReason = payload.choice;
-        ev.closedBy = "me";
-        ev.closedAt = Date.now();
-        stopReaction(ev);
-        pauseResolution(ev);
-        log(ev, "me", "Отменён: {why}. {note}", {
-          why: rawCancel(payload.choice),
-          note: payload.reason,
-        });
-        if (!(payload && payload.silent)) toast(t("{id} отменён", { id: ev.id }));
         return "queue";
       },
     },
@@ -2421,15 +2412,17 @@
       label: "Переоткрыть",
       hint: "Вернуть завершённый инцидент в работу",
       style: "outline",
-      from: ["closed", "canceled"],
+      from: ["closed"],
       to: "in_progress",
       perm: "incident:reopen",
       guards: ["reopenWindow", "activeLimit"],
       dialog: "reopen",
       run(ev, payload, from) {
-        const was = from === "canceled" ? "отмены" : "закрытия";
+        // Результат очищается, прежний остаётся в журнале записью о закрытии (RULE-02)
+        const was = "закрытия";
         ev.owner = "me";
-        ev.cancelReason = null;
+        ev.closeResult = null;
+        ev.massCause = null;
         ev.slaBreached = false;
         startResolution(ev);
         ensureCursor(ev);
@@ -2467,18 +2460,26 @@
     });
   }
 
-  function skipCloseEvent(ev, payload) {
+  // Закрытие с результатом (§6.1). choice — результат, у массового сбоя — «mass:причина»
+  function closeEvent(ev, payload) {
+    const [result, cause] = String((payload && payload.choice) || "processed").split(":");
     ev.owner = "me";
     ev.closedBy = "me";
     ev.closedAt = Date.now();
-    ev.closedUnprocessed = true;
+    ev.closeResult = result;
+    ev.massCause = cause || null;
     ev.holdReason = null;
     ev.holdSince = null;
     stopReaction(ev);
     pauseResolution(ev);
+    if (result === "processed") {
+      if (payload && payload.reason) ev.answers.result = payload.reason;
+      log(ev, "me", "Инцидент закрыт. Результат уйдёт в AxxonData");
+      return;
+    }
     log(ev, "me", "Закрыт без обработки: {why}. {note}", {
-      why: rawSkipClose(payload.choice),
-      note: payload.reason || "Причина не указана",
+      why: rawResult(ev),
+      note: (payload && payload.reason) || "Причина не указана",
     });
   }
 
@@ -2556,12 +2557,6 @@
         note: t("В очередь вернутся {n} инцидентов. Одна причина на всех.", { n }),
         confirm: t("Отклонить {n}", { n }),
         toast: () => t("Отклонено: {n}", { n }),
-      },
-      cancel: {
-        title: t("Отменить {n} инцидентов", { n }),
-        note: t("Будут отменены {n} инцидентов группы.", { n }),
-        confirm: t("Отменить {n}", { n }),
-        toast: () => t("Отменено: {n}", { n }),
       },
     };
     return table[id] || null;
@@ -2675,8 +2670,7 @@
     const mine = isMine(ev);
     const ids = [];
     if (mine && ev.state === "in_progress") {
-      ids.push("hold", "transfer", "release", "cancel");
-      if (!scenarioDone(ev)) ids.push("closeUnprocessed");
+      ids.push("hold", "transfer", "release", "close");
     } else if (mine && ev.state === "on_hold") ids.push("resume", "transfer", "release", "closeUnprocessed");
     else if (isTarget(ev) && ev.state === "pending_acceptance") ids.push("accept", "reject", "transfer");
     else if (!mine && !isDone(ev)) ids.push("takeover", "transfer");
@@ -2709,7 +2703,7 @@
     } else if (nav === "queue") {
       state.mode = "queue";
       state.page = pageOfEvent(ev.id);
-      // Закрытый или отменённый инцидент уходит из фильтра «Открытые», и выделение
+      // Закрытый инцидент уходит из фильтра «Открытые», и выделение
       // нужно передать соседу, иначе видеомонитор остаётся на завершённом.
       syncSelection();
     }
@@ -2760,14 +2754,6 @@
       confirm: "Отклонить",
       style: "primary",
     },
-    cancel: {
-      title: "Отменить инцидент",
-      note: () => t("Отменённый инцидент не считается обработанным в отчётности."),
-      select: "cancel",
-      text: { label: "Комментарий", required: true, ph: "Что выяснено" },
-      confirm: "Отменить инцидент",
-      style: "danger",
-    },
     close: {
       title: "Закрытие инцидента",
       note: (ev) => {
@@ -2776,15 +2762,16 @@
         const base = t("Сценарий заполнен: {a} из {b}. Результат уйдёт в AxxonData.", { a: prog.filled, b: prog.total });
         return n > 1 ? `${base} ${t("Закроются все {n} инцидентов группы.", { n })}` : base;
       },
-      text: { label: "Результат", required: false, ph: "Итог обработки для отчёта" },
+      select: "closeResult",
+      // Комментарий обязателен для всех результатов, кроме «Обработан» (§2.2)
+      text: { label: "Комментарий", required: (choice) => choice !== "processed", ph: "Итог обработки для отчёта" },
       confirm: "Закрыть инцидент",
       style: "primary",
     },
     closeUnprocessed: {
-      title: "Закрыть без обработки",
-      note: () =>
-        t("Сценарий не заполняется. Для массовых сбоев, когда причина уже известна. Инцидент будет закрыт, не отменён."),
-      select: "skipClose",
+      title: "Закрыть: массовый сбой",
+      note: () => t("Сценарий не заполняется. Для массовых сбоев, когда причина уже известна."),
+      select: "massFault",
       text: { label: "Комментарий", required: true, ph: "Что произошло на объекте" },
       confirm: "Закрыть",
       style: "primary",
@@ -2826,8 +2813,51 @@
           return { id: op.id, label: parts.join(" · ") };
         });
     }
-    const list = kind === "hold" ? HOLD_REASONS : kind === "skipClose" ? SKIP_CLOSE_REASONS : CANCEL_REASONS;
-    return list.filter((r) => !r.system).map((r) => ({ id: r.id, label: t(r.label) }));
+    if (kind === "closeResult" || kind === "massFault") return closeOptions(ev, kind === "massFault");
+    return HOLD_REASONS.filter((r) => !r.system).map((r) => ({ id: r.id, label: t(r.label) }));
+  }
+
+  // Результаты закрытия по правам (§2.2): «Обработан» — только с заполненным сценарием
+  function closeOptions(ev, massOnly) {
+    const opts = [];
+    if (!massOnly && can("incident:close")) {
+      CLOSE_RESULTS.filter((r) => r.id !== "mass").forEach((r) => {
+        const blocked = r.id === "processed" && !scenarioDone(ev);
+        opts.push({
+          id: r.id,
+          label: blocked ? `${t(r.label)} — ${t("Заполните обязательные шаги закрытия")}` : t(r.label),
+          disabled: blocked,
+        });
+      });
+    }
+    if (can("incident:close:unprocessed")) {
+      MASS_FAULT_REASONS.forEach((r) => opts.push({ id: `mass:${r.id}`, label: t(r.label), group: t("Массовый сбой") }));
+    }
+    return opts;
+  }
+
+  function optionsHtml(opts) {
+    let html = "";
+    let group = null;
+    opts.forEach((o) => {
+      if ((o.group || null) !== group) {
+        if (group) html += "</optgroup>";
+        group = o.group || null;
+        if (group) html += `<optgroup label="${escapeHtml(group)}">`;
+      }
+      html += `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(o.label)}</option>`;
+    });
+    return group ? `${html}</optgroup>` : html;
+  }
+
+  const textRequired = (cfg) =>
+    Boolean(cfg.text) &&
+    (typeof cfg.text.required === "function" ? cfg.text.required($("dialogSelect").value) : cfg.text.required);
+
+  function refreshDialogText() {
+    const cfg = state.dialog && DIALOGS[state.dialog.id];
+    if (!cfg || !cfg.text) return;
+    $("dialogTextLabel").textContent = t(cfg.text.label) + (textRequired(cfg) ? " *" : "");
   }
 
   function openDialog(id, ev) {
@@ -2851,18 +2881,23 @@
     selectField.hidden = !cfg.select;
     if (cfg.select) {
       $("dialogSelectLabel").textContent =
-        cfg.select === "targets" ? t("Кому передать") : cfg.select === "hold" ? t("Причина удержания") : cfg.select === "skipClose" ? t("Причина") : t("Причина отмены");
-      $("dialogSelect").innerHTML = opts
-        .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`)
-        .join("");
-      const preselect = cfg.select === "targets" ? state.escalateTo : opts[0].id;
-      $("dialogSelect").value = opts.some((o) => o.id === preselect) ? preselect : opts[0].id;
+        cfg.select === "targets"
+          ? t("Кому передать")
+          : cfg.select === "hold"
+            ? t("Причина удержания")
+            : cfg.select === "closeResult"
+              ? t("Результат")
+              : t("Причина");
+      $("dialogSelect").innerHTML = optionsHtml(opts);
+      const first = (opts.find((o) => !o.disabled) || opts[0]).id;
+      const preselect = cfg.select === "targets" ? state.escalateTo : first;
+      $("dialogSelect").value = opts.some((o) => o.id === preselect && !o.disabled) ? preselect : first;
     }
 
     const textField = $("dialogTextField");
     textField.hidden = !cfg.text;
     if (cfg.text) {
-      $("dialogTextLabel").textContent = t(cfg.text.label) + (cfg.text.required ? " *" : "");
+      refreshDialogText();
       const area = $("dialogText");
       area.value = "";
       area.placeholder = t(cfg.text.ph || "");
@@ -2886,7 +2921,7 @@
     const cfg = DIALOGS[open.id];
     if (!ev || !cfg) return;
     const reason = cfg.text ? $("dialogText").value.trim() : "";
-    if (cfg.text && cfg.text.required && !reason) {
+    if (textRequired(cfg) && !reason) {
       toast(t("Укажите причину — поле обязательно"));
       $("dialogText").focus();
       return;
@@ -3372,8 +3407,8 @@
     }
     if (isDone(ev)) {
       const why =
-        ev.state === "canceled"
-          ? t("Инцидент отменён: {why}.", { why: cancelLabel(ev.cancelReason) })
+        ev.closeResult && ev.closeResult !== "processed"
+          ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) })
           : t("Инцидент закрыт.");
       const more = canDo("reopen", ev)
         ? t("Доступно переоткрытие.")
@@ -4340,6 +4375,7 @@
       });
     });
     $("dialogConfirm").addEventListener("click", submitDialog);
+    $("dialogSelect").addEventListener("change", refreshDialogText);
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
       else TREE.forEach((n) => state.openGroups.add(n.id));
