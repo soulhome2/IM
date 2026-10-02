@@ -80,8 +80,8 @@ window.IM_DICT_UI = {
     "Дубликат": "Duplicate",
     "Журнал": "Journal",
     "Забрать инцидент у работающего оператора": "Take the incident from the operator working on it",
-    "Завершён {n} мин назад. Норматив закрытия запустится заново.":
-      "Finished {n} min ago. The resolution timer will start again.",
+    "Завершён {n} мин назад. Норматив закрытия продолжится с остатка.":
+      "Finished {n} min ago. The resolution timer will continue from where it stopped.",
     "Закроются все {n} инцидентов группы.": "All {n} incidents in the group will be closed.",
     "Закрытие": "Resolution",
     "Закрытие инцидента": "Closing the incident",
@@ -452,8 +452,8 @@ window.IM_DICT_UI = {
     "Дубликат": "Duplicado",
     "Журнал": "Registro",
     "Забрать инцидент у работающего оператора": "Quitar el incidente al operador que lo tramita",
-    "Завершён {n} мин назад. Норматив закрытия запустится заново.":
-      "Finalizado hace {n} min. El objetivo de resolución se reiniciará.",
+    "Завершён {n} мин назад. Норматив закрытия продолжится с остатка.":
+      "Finalizado hace {n} min. El objetivo de resolución continuará desde donde se detuvo.",
     "Закрытие": "Resolución",
     "Закроются все {n} инцидентов группы.": "Se cerrarán los {n} incidentes del grupo.",
     "Закрытие инцидента": "Cierre del incidente",
