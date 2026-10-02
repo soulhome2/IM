@@ -2215,7 +2215,7 @@
       to: "in_progress",
       perm: "incident:claim",
       guards: ["target", "activeLimit"],
-      run(ev) {
+      run(ev, payload) {
         ev.owner = "me";
         stopReaction(ev);
         startResolution(ev);
