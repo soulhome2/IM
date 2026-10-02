@@ -64,7 +64,7 @@
 
 Как вести: сделанное — `[x]` и номер коммита; сообщение коммита начинается с номера пункта; решения — в таблицу; возражение — цитатой под пунктом, с именем.
 
-Проверить после правки: `prototype/index.html?selftest`, `python3 tools/check_machine.py`, `python3 tools/check_links.py`.
+Проверить после правки: `prototype/index.html?selftest`, `python3 tools/check_machine.py`, `python3 tools/check_mutations.py`, `python3 tools/check_links.py`.
 
 ## Этап 1. Исправления, которые не требуют решений
 
