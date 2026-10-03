@@ -2,7 +2,11 @@
    Проходит основные переходы через интерфейс, как оператор, и показывает отчёт.
    Без параметра ничего не делает. После прогона демо-данные в этой вкладке
    изменены — для чистого прототипа перезагрузите страницу без ?selftest.
-   Для CI: на <html> ставится data-selftest="pass" или "fail", текст отчёта — в #selftest-log. */
+   Для CI: на <html> ставится data-selftest="pass" или "fail", текст отчёта — в #selftest-log.
+   Шаги, которые продолжают работу с инцидентом предыдущего шага, называют его третьим
+   аргументом step(). Если он не прошёл, шаг не выполняется и пишется SKIP с первой причиной.
+   После упавшего шага прототип возвращается в очередь и освобождает лимит активных,
+   чтобы независимые шаги дальше не падали следом. */
 (() => {
   if (!new URLSearchParams(location.search).has("selftest")) return;
 
@@ -44,6 +48,10 @@
     field(name).dispatchEvent(new Event("change", { bubbles: true }));
     await wait();
   }
+
+  // Комментарий, который самопроверка вводит в формы. Латиницей: введённый оператором текст
+  // не переводится, и проверка перевода не должна его считать
+  const NOTE = "selftest";
 
   async function confirmDialog(text) {
     expect(!$("modalDialog").hidden, "форма перехода не открылась");
@@ -96,7 +104,17 @@
     expect(mode() === "work", `карточка ${id} не открылась`);
   }
 
-  async function step(name, fn) {
+  // Итог каждого шага по имени и, для пропущенных, — шаг, из-за которого пропущен
+  const status = {};
+  const cause = {};
+
+  async function step(name, fn, after) {
+    if (after && status[after] !== "ok") {
+      cause[name] = status[after] === "skip" ? cause[after] : after;
+      status[name] = "skip";
+      results.push({ ok: true, skipped: true, name, note: `пропущен: зависит от «${cause[name]}»` });
+      return;
+    }
     const before = errors.length;
     let ok = true;
     let note = "";
@@ -112,8 +130,33 @@
       note = `${note ? note + "; " : ""}ошибка JS: ${errs.join("; ")}`;
     }
     results.push({ ok, name, note });
+    status[name] = ok ? "ok" : "fail";
     if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
     await wait();
+    if (!ok) await recover();
+  }
+
+  // После падения: к очереди, с перерыва на смену, свои инциденты «В работе» — обратно в очередь
+  async function recover() {
+    try {
+      if (mode() === "work") await click($("backToQueue"));
+      if (!$("breakBanner").hidden) await click($("breakBtn"));
+      for (let i = 0; i < 5; i++) {
+        await setFilter("mine");
+        const open = button($("eventsList"), "open_card");
+        if (!open) break;
+        await click(open);
+        const release = button(root(), "release");
+        if (!release) break;
+        await click(release);
+        await confirmDialog(NOTE);
+      }
+      if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+    } catch (err) {
+      results.push({ ok: false, name: "Уборка после упавшего шага", note: err.message });
+    }
   }
 
   // Шаги сценария: подтвердить, выбрать вариант, перейти «Далее»
@@ -211,7 +254,7 @@
         await click($("stepNext"));
       }
       throw new Error("в сценарии не нашлось шага с вариантами");
-    });
+    }, "Взять новое событие");
 
     await step("Запустить макрос из сценария", async () => {
       await openOwn(closedId);
@@ -230,7 +273,7 @@
         await click(next);
       }
       throw new Error("в сценарии нет шага с макросами");
-    });
+    }, "Ответ с вариантами сохраняется после «Далее»");
 
     await step("Закрыть инцидент по сценарию", async () => {
       await openOwn(closedId);
@@ -250,7 +293,7 @@
         await click(next);
       }
       throw new Error("кнопка «Закрыть инцидент» так и не появилась");
-    });
+    }, "Запустить макрос из сценария");
 
     let foreignTransferred = null;
     await step("Передать чужой инцидент", async () => {
@@ -261,7 +304,7 @@
       expect(rows.length, "нет чужих инцидентов, которые можно передать");
       foreignTransferred = rows[0].dataset.id;
       await click(button($("eventsList"), "transfer", foreignTransferred));
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       await setFilter("all");
       const row = await rowOnPages(foreignTransferred);
       expect(row && row.textContent.includes("Ожидает принятия"), `${foreignTransferred} не ожидает принятия после передачи`);
@@ -287,7 +330,7 @@
       // Освобождаем лимит активных для следующих шагов
       await openOwn(id);
       await click(button(root(), "release"));
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       return id;
     });
 
@@ -310,7 +353,7 @@
       await click(b);
       await confirmDialog();
       expect(mode() === "queue", "после «Отложить» карточка не закрылась");
-    });
+    }, "Взять, вернуться к очереди, продолжить");
 
     await step("Возобновить", async () => {
       await setFilter("mine");
@@ -318,7 +361,7 @@
       expect(b, `у ${workId} нет кнопки «Возобновить»`);
       await click(b);
       expect(mode() === "work", "карточка не открылась");
-    });
+    }, "Отложить");
 
     await step("Передать; себя и своей группы нет среди адресатов", async () => {
       await openOwn(workId);
@@ -328,9 +371,9 @@
       const offered = [...field("targetId").options].map((o) => o.value);
       const self = offered.filter((id) => id === "me" || id === "grp-leads");
       expect(!self.length, `среди адресатов есть сам оператор или его группа: ${self.join(", ")}`);
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
-    });
+    }, "Возобновить");
 
     await step("Отклонить адресованную передачу", async () => {
       await setFilter("inbox");
@@ -339,7 +382,7 @@
       const b = button($("eventsList"), "reject", "INC-1843");
       expect(b, "у INC-1843 нет кнопки «Отклонить»");
       await click(b);
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       await setFilter("open");
       const row = await rowOnPages("INC-1843");
       const text = row ? row.textContent : "";
@@ -362,14 +405,13 @@
     });
 
     await step("Вернуть в очередь", async () => {
-      expect(acceptedId, "нечего возвращать: «Принять» не сработал");
       await openOwn(acceptedId);
       const b = button(root(), "release");
       expect(b, "в карточке нет кнопки «Вернуть в очередь»");
       await click(b);
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       expect(mode() === "queue", "после возврата карточка не закрылась");
-    });
+    }, "Принять адресованную передачу");
 
     await step("Норматив закрытия не обнуляется при возврате в очередь", async () => {
       expect(acceptedLeft != null, "при «Принять» не было отсчёта норматива закрытия");
@@ -386,10 +428,9 @@
       const left = resolutionLeft();
       expect(left != null && left < acceptedLeft, `было ${acceptedLeft} с, после повторного взятия ${left} с`);
       return `${acceptedLeft} → ${left} с`;
-    });
+    }, "Вернуть в очередь");
 
     await step("Закрыть с результатом «Ложная тревога» без сценария", async () => {
-      expect(acceptedId, "нечего закрывать: «Принять» не сработал");
       await openOwn(acceptedId);
       const b = button(root(), "close");
       expect(b, "в карточке нет кнопки «Закрыть»");
@@ -400,7 +441,7 @@
       await setField("resultId", "false_alarm");
       await click($("dialogConfirm"));
       expect(!$("modalDialog").hidden, "закрылось без обязательного комментария");
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       expect(mode() === "queue", "после закрытия карточка не закрылась");
       await setFilter("done");
       let row = $("eventsList").querySelector(`[data-id="${acceptedId}"]`);
@@ -413,7 +454,7 @@
       expect(row && row.textContent.includes("Ложная тревога"), `${acceptedId} не помечен результатом «Ложная тревога»`);
       await setFilter("open");
       return acceptedId;
-    });
+    }, "Норматив закрытия не обнуляется при возврате в очередь");
 
     await step("«Обработан» недоступен, пока сценарий не заполнен", async () => {
       await setFilter("open");
@@ -440,7 +481,7 @@
       expect(mode() === "queue", "Esc не вернул к очереди");
       await setFilter("mine");
       expect(button($("eventsList"), "open_card", freshId), `${freshId} больше не «В работе»`);
-    });
+    }, "«Обработан» недоступен, пока сценарий не заполнен");
 
     await step("Перерыв с открытой карточкой: инцидент отложен, карточка — просмотр", async () => {
       await openOwn(freshId);
@@ -455,7 +496,7 @@
       const text = row ? row.textContent : "";
       await click($("breakBtn"));
       expect(text.includes("Перерыв оператора"), `${freshId} не отложен с причиной «Перерыв оператора»`);
-    });
+    }, "Esc в своей карточке возвращает к очереди, инцидент остаётся в работе");
 
     await step("Закрыть отложенный с результатом «Массовый сбой»", async () => {
       await setFilter("mine");
@@ -464,18 +505,18 @@
       await click(b);
       expect(field("resultId").value === "mass", "в форме не выбран массовый сбой");
       expect(field("causeId") && !field("causeId").closest("[data-field-box]").hidden, "нет причины сбоя");
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       await setFilter("done");
       const row = await rowOnPages(freshId);
       expect(row && row.textContent.includes("Закрыто ·"), `${freshId} не закрыт с результатом`);
-    });
+    }, "Перерыв с открытой карточкой: инцидент отложен, карточка — просмотр");
 
     await step("Переоткрыть: инцидент в работе, результат очищен", async () => {
       await setFilter("done");
       const b = await buttonOnPages("reopen", freshId);
       expect(b, `у ${freshId} нет кнопки «Переоткрыть»`);
       await click(b);
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       expect(mode() === "work", "после переоткрытия карточка не открылась");
       expect($("statusSla").textContent.includes("Закрытие"), "норматив закрытия не идёт");
       // В режиме карточки очередь не перерисовывается: сначала к очереди
@@ -486,8 +527,8 @@
       // Освобождаем лимит активных для следующего шага
       await openOwn(freshId);
       await click(button(root(), "release"));
-      await confirmDialog("самопроверка");
-    });
+      await confirmDialog(NOTE);
+    }, "Закрыть отложенный с результатом «Массовый сбой»");
 
     await step("Обработать как одно: два однотипных берутся вместе", async () => {
       await setFilter("open");
@@ -531,7 +572,7 @@
       expect((b.title || "").includes("Лимит активных"), `нет подсказки о лимите: «${b.title}»`);
       await click($("backToQueue"));
       return groupPair[0];
-    });
+    }, "Обработать как одно: два однотипных берутся вместе");
 
     await step("Фильтр по типу устройства поверх группы", async () => {
       await setFilter("all");
@@ -559,7 +600,7 @@
       expect(b, "у новых событий нет кнопки «Закрыть»");
       const id = b.dataset.ev;
       await click(b);
-      await confirmDialog("самопроверка");
+      await confirmDialog(NOTE);
       await setFilter("open");
       expect(!$("eventsList").querySelector(`[data-id="${id}"]`), `${id} остался среди открытых`);
       return id;
@@ -617,9 +658,10 @@
 
   function report() {
     const failed = results.filter((r) => !r.ok).length;
-    const lines = results.map((r) => `${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.note ? " — " + r.note : ""}`);
+    const skipped = results.filter((r) => r.skipped).length;
+    const lines = results.map((r) => `${r.skipped ? "SKIP" : r.ok ? "PASS" : "FAIL"}  ${r.name}${r.note ? " — " + r.note : ""}`);
     const summary = failed
-      ? `Самопроверка: ${failed} из ${results.length} не прошли`
+      ? `Самопроверка: ${failed} из ${results.length} не прошли${skipped ? `, ${skipped} пропущены` : ""}`
       : `Самопроверка: все ${results.length} проверок прошли`;
     document.documentElement.dataset.selftest = failed ? "fail" : "pass";
     lines.forEach((line) => console.log(`SELFTEST ${line}`));
