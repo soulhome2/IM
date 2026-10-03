@@ -634,6 +634,17 @@
       expect($("breakBanner").hidden, "плашка перерыва не исчезла");
     });
 
+    await step("Горячие клавиши не работают при открытой справке", async () => {
+      await setFilter("open");
+      await pressKey("?");
+      expect(!$("modalHotkeys").hidden, "справка по ? не открылась");
+      await pressKey("n");
+      const taken = mode() === "work";
+      await pressKey("?");
+      expect(!taken, "N взял инцидент за окном справки");
+      expect($("modalHotkeys").hidden, "? не закрыл справку");
+    });
+
     await step("Цвет полоски у каждого приоритета", async () => {
       await setFilter("all");
       const missing = new Set();

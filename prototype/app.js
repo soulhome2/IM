@@ -4088,13 +4088,19 @@
 
   // Все горячие клавиши — из машины (§13); в полях ввода работают только те, у которых
   // worksInInput: F1 и Esc
+  // Когда горячая клавиша не срабатывает (§13, правило 3): в поле ввода и при открытом окне —
+  // кроме клавиш с worksInInput / worksInModal; Enter и пробел на кнопке или ссылке в фокусе —
+  // их собственное действие, а не горячая клавиша
   function onKey(e) {
     const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
     if (!hotkey) return;
-    const target = e.target;
-    const inInput = target instanceof Element && target.matches("input, textarea, select");
+    const target = e.target instanceof Element ? e.target : null;
+    const inInput = target && target.matches("input, textarea, select");
     if (inInput && !hotkey.worksInInput) return;
-    if (state.dialog && hotkey.action !== "escape_chain") return;
+    const onControl = target && target.matches("button, a[href], summary, [role='button']");
+    if (onControl && (e.key === "Enter" || e.key === " ")) return;
+    const modalOpen = Boolean(state.dialog) || Boolean(document.querySelector(".modal:not([hidden])"));
+    if (modalOpen && !hotkey.worksInModal) return;
     runHotkey(hotkey, e);
   }
 

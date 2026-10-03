@@ -2514,18 +2514,21 @@ window.IM_WORKFLOW = {
       "key": "F1",
       "action": "docs:regulation",
       "worksInInput": true,
+      "worksInModal": true,
       "reassignable": false
     },
     {
       "key": "?",
       "action": "docs:hotkeys",
       "worksInInput": false,
+      "worksInModal": true,
       "reassignable": false
     },
     {
       "key": "Esc",
       "action": "escape_chain",
       "worksInInput": true,
+      "worksInModal": true,
       "reassignable": false,
       "chain": [
         "close_form",

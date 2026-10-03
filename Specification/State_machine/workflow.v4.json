@@ -897,9 +897,9 @@
     { "key": "2", "action": "media:camera_select", "args": [2], "worksInInput": false },
     { "key": "3", "action": "media:camera_select", "args": [3], "worksInInput": false },
     { "key": "4", "action": "media:camera_select", "args": [4], "worksInInput": false },
-    { "key": "F1", "action": "docs:regulation", "worksInInput": true, "reassignable": false },
-    { "key": "?", "action": "docs:hotkeys", "worksInInput": false, "reassignable": false },
-    { "key": "Esc", "action": "escape_chain", "worksInInput": true, "reassignable": false, "chain": ["close_form", "exit_fullscreen", "close_groups_panel", "back_to_queue"] }
+    { "key": "F1", "action": "docs:regulation", "worksInInput": true, "worksInModal": true, "reassignable": false },
+    { "key": "?", "action": "docs:hotkeys", "worksInInput": false, "worksInModal": true, "reassignable": false },
+    { "key": "Esc", "action": "escape_chain", "worksInInput": true, "worksInModal": true, "reassignable": false, "chain": ["close_form", "exit_fullscreen", "close_groups_panel", "back_to_queue"] }
   ],
 
   "queueFilters": [

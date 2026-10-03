@@ -67,6 +67,10 @@ def escalate_to_my_group(w):
     w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
 
 
+def key_in_modal(w):
+    next(h for h in w["hotkeys"] if h["key"] == "N")["worksInModal"] = True
+
+
 def hold_with_unknown_effect(w):
     hold = transition(w, "hold")
     hold["effects"].append({"kind": "transactional", "fn": "teleport"})
@@ -118,6 +122,7 @@ MUTATIONS = [
     ("holdBreach", "предельный срок удержания ~2 с — нарушение удержания", short_hold),
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
+    ("modalKey", "«Взять следующее» работает при открытой справке", key_in_modal),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

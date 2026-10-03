@@ -42,6 +42,12 @@
   }
 
   const PROBES = {
+    async modalKey() {
+      await setFilter("open");
+      await key("?");
+      await key("n");
+      return [mode() === "work", "при открытой справке N взял инцидент: " + (mode() === "work")];
+    },
     async selfTarget() {
       const id = await claimFirst();
       await click(anyBtn(root(), "transfer"));
