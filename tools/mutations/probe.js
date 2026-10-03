@@ -42,6 +42,24 @@
   }
 
   const PROBES = {
+    async ceiling() {
+      await setFilter("open");
+      await wait(3500);
+      await setFilter("open");
+      const breached = [...$("eventsList").querySelectorAll(".event")].filter(
+        (r) => r.querySelector('[data-do="claim"]') && r.querySelector(".breached")
+      ).length;
+      return [breached > 0, "новых с нарушением реакции: " + breached];
+    },
+    async holdBreach() {
+      const id = await claimFirst();
+      await click(anyBtn(root(), "hold"));
+      await confirm();
+      await wait(3500);
+      await setFilter("mine");
+      const chip = row(id) && row(id).querySelector(".breached");
+      return [Boolean(chip), "отметка нарушения у отложенного: " + Boolean(chip)];
+    },
     async atomic() {
       const id = await claimFirst();
       await click(anyBtn(root(), "hold"));

@@ -43,6 +43,17 @@ def short_resolution(w):
     timer["overrides"] = []
 
 
+def reaction_ceiling(w):
+    timer = next(t for t in w["timers"] if t["id"] == "reaction")
+    timer["overrides"] = [{"sec": 2}]
+    w["escalation"]["maxLevel"] = 0
+
+
+def short_hold(w):
+    for item in w["reasonCatalogs"]["hold"]["items"]:
+        item["maxMinutes"] = 0.03
+
+
 def hold_with_unknown_effect(w):
     hold = transition(w, "hold")
     hold["effects"].append({"kind": "transactional", "fn": "teleport"})
@@ -90,6 +101,8 @@ MUTATIONS = [
     ("breakReason", "новая причина перерыва", lambda w: w["session"]["breakReasons"].append({"id": "probe", "label": "Проба"})),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
+    ("ceiling", "норматив реакции 2 с, потолок эскалации 0 — нарушение реакции", reaction_ceiling),
+    ("holdBreach", "предельный срок удержания ~2 с — нарушение удержания", short_hold),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (
