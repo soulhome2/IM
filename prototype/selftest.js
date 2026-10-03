@@ -175,6 +175,40 @@
     }
   }
 
+  // Контраст текста с фоном по WCAG: фон — первый непрозрачный слой с наложением полупрозрачных
+  function contrast(el) {
+    const parse = (c) => {
+      const n = (c.match(/[\d.]+/g) || []).map(Number);
+      const srgb = c.startsWith("color(");
+      const k = srgb ? 255 : 1;
+      return { r: n[0] * k, g: n[1] * k, b: n[2] * k, a: n[3] == null ? 1 : n[3] };
+    };
+    const over = (top, base) => ({
+      r: top.r * top.a + base.r * (1 - top.a),
+      g: top.g * top.a + base.g * (1 - top.a),
+      b: top.b * top.a + base.b * (1 - top.a),
+    });
+    const layers = [];
+    for (let e = el; e; e = e.parentElement) {
+      const c = parse(getComputedStyle(e).backgroundColor);
+      if (c.a > 0) layers.push(c);
+      if (c.a >= 1) break;
+    }
+    let bg = { r: 255, g: 255, b: 255 };
+    layers.reverse().forEach((c) => (bg = over(c, bg)));
+    const fg = over(parse(getComputedStyle(el).color), bg);
+    const lum = ({ r, g, b }) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  async function setTheme(theme) {
+    if (document.documentElement.dataset.theme !== theme) await click($("themeToggle"));
+  }
+
   // Шаги сценария: подтвердить, выбрать вариант, перейти «Далее»
   async function answerCurrentStep() {
     const confirm = root().querySelector("[data-confirm]");
@@ -699,6 +733,22 @@
       expect(r, "узкая страница не ответила");
       expect(r.scroll <= r.width, `ширина ${r.scroll} при экране ${r.width}: ${r.wide.join(", ")}`);
       return `${r.scroll} из ${r.width}`;
+    });
+
+    await step("Контраст отсчёта норматива не ниже 4,5:1 в обеих темах", async () => {
+      const original = document.documentElement.dataset.theme;
+      const low = [];
+      for (const theme of ["light", "dark"]) {
+        await setTheme(theme);
+        await setFilter("all");
+        $("eventsList").querySelectorAll(".event-sla").forEach((el) => {
+          const r = contrast(el);
+          if (r < 4.5) low.push(`${theme}: «${el.textContent.trim()}» ${r.toFixed(2)}`);
+        });
+      }
+      await setTheme(original);
+      await setFilter("open");
+      expect(!low.length, `низкий контраст: ${low.slice(0, 4).join("; ")}`);
     });
 
     await step("Цвет полоски у каждого приоритета", async () => {

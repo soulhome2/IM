@@ -19,6 +19,9 @@
   --on-accent: #ffffff;
   --crit: #dc2626;
   --warn: #d97706;
+  /* Предупреждающий цвет для текста: заливочный --warn на светлом фоне не читается */
+  --warn-text: #b45309;
+  --crit-text: #b91c1c;
   --ok: #16a34a;
   --info: #1976d2;
   --hover: #f1f5f9;
@@ -86,6 +89,8 @@
   --on-accent: #0f172a;
   --crit: #f87171;
   --warn: #fbbf24;
+  --warn-text: #fbbf24;
+  --crit-text: #fca5a5;
   --ok: #4ade80;
   --info: #42a5f5;
   --hover: #334155;
@@ -778,7 +783,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .tree-ev {
   font-size: 12px;
   font-weight: 500;
-  color: var(--warn);
+  color: var(--warn-text);
   min-width: 14px;
   text-align: right;
   flex-shrink: 0;
@@ -884,15 +889,15 @@ select.search-input { padding-right: 36px; }
 .event-title time { font-size: 12px; font-weight: 500; color: var(--faint); flex-shrink: 0; }
 .event-sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.event-sla { font-size: 12px; font-weight: 500; color: var(--warn); }
-.event-sla.late { color: var(--crit); }
+.event-sla { font-size: 12px; font-weight: 500; color: var(--warn-text); }
+.event-sla.late { color: var(--crit-text); }
 /* Норматив закрытия на удержании: отсчёт стоит, внимания не требует */
 .event-sla.held,
-.sla.held { color: var(--faint); }
+.sla.held { color: var(--muted); }
 .event-sla.held .material-symbols-outlined,
 .sla.held .material-symbols-outlined { font-size: 13px; vertical-align: -2px; }
 .event-sla.breached,
-.sla.breached { color: var(--crit); }
+.sla.breached { color: var(--crit-text); }
 .event-prog { font-size: 12px; font-weight: 500; color: var(--faint); }
 
 /* Уровень эскалации и признак группы */
@@ -981,8 +986,8 @@ select.search-input { padding-right: 36px; }
 .incident-kicker .sla.breached { margin-left: auto; }
 .incident-head h3 { margin: 0 0 3px; font-size: 20px; font-weight: 600; }
 .incident-meta { color: var(--muted); font-size: 14px; }
-.sla { color: var(--warn); }
-.sla.late { color: var(--crit); }
+.sla { color: var(--warn-text); }
+.sla.late { color: var(--crit-text); }
 
 .progress {
   height: 4px;
@@ -1230,7 +1235,7 @@ select.search-input { padding-right: 36px; }
 .scenario-actions-end { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .step-hint {
   padding: 0 var(--card-x) 12px;
-  color: var(--warn);
+  color: var(--warn-text);
   font-size: 14px;
 }
 

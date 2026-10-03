@@ -48,6 +48,10 @@
   /* status */
   --crit: var(--one-danger);
   --warn: var(--one-warning);
+  /* текст: в светлой теме --one-warning-icon (#995300, 5,9:1 на белом), в тёмной — тот же оранжевый */
+  --warn-text: var(--one-warning-icon);
+  /* красный текст: --one-danger с примесью текстового красного кита — 4,5:1 и на выделенной строке */
+  --crit-text: color-mix(in srgb, var(--one-danger) 70%, var(--one-danger-text));
   --ok: var(--one-success-icon);
   --info: var(--one-info);
 
