@@ -34,6 +34,10 @@ jobs:
           python3 tools/check_machine.py
           python3 tools/build_workflow.py --check
 
+      - name: Словари перевода
+        if: always()
+        run: python3 tools/check_i18n.py
+
       - name: Правила только в машине
         if: always()
         run: python3 tools/check_mutations.py
