@@ -909,7 +909,7 @@ select.search-input { padding-right: 36px; }
   border: 1px solid var(--stroke-2);
   color: var(--muted);
 }
-.chip.lvl { color: var(--esc-bg); border-color: var(--break-border); }
+.chip.lvl { color: var(--warn-text); border-color: var(--break-border); }
 .chip.grp { color: var(--badge-foreign); border-color: var(--badge-foreign-border); }
 
 /* Кнопки справа колонкой одной ширины: набор из 2–4 действий не растягивает их по-разному */
@@ -953,13 +953,13 @@ select.search-input { padding-right: 36px; }
 }
 .badge.mine { color: var(--badge-mine); background: var(--duty-bg); }
 .badge.foreign { color: var(--badge-foreign); background: var(--badge-foreign-border); }
-.badge.esc { color: var(--badge-esc); background: var(--danger-bg); }
+.badge.esc { color: var(--crit-text); background: var(--danger-bg); }
 .badge.new { color: var(--badge-new); background: var(--break-bg); }
 .badge.pause { color: var(--break-text); background: var(--break-bg); }
 .badge.ok { color: var(--ok-text); background: var(--ok-bg); }
 /* Ждёт действия именно от этого оператора — самый заметный бейдж */
 .badge.inbox { color: var(--on-accent); background: var(--accent); font-weight: 600; }
-.badge.cancel { color: var(--faint); background: var(--hover); }
+.badge.cancel { color: var(--text); background: var(--hover); }
 .pick { align-self: center; }
 
 .empty {

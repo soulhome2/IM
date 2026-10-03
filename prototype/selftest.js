@@ -735,20 +735,25 @@
       return `${r.scroll} из ${r.width}`;
     });
 
-    await step("Контраст отсчёта норматива не ниже 4,5:1 в обеих темах", async () => {
+    await step("Контраст отсчётов, бейджей и уровня не ниже 4,5:1 в обеих темах", async () => {
       const original = document.documentElement.dataset.theme;
-      const low = [];
+      const low = new Set();
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
         await setFilter("all");
-        $("eventsList").querySelectorAll(".event-sla").forEach((el) => {
-          const r = contrast(el);
-          if (r < 4.5) low.push(`${theme}: «${el.textContent.trim()}» ${r.toFixed(2)}`);
-        });
+        for (let page = 1; page <= 20; page++) {
+          const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+          if (page > 1 && (!nav || nav.disabled)) break;
+          if (nav && page > 1) await click(nav);
+          $("eventsList").querySelectorAll(".event-sla, .badge, .chip.lvl").forEach((el) => {
+            const r = contrast(el);
+            if (r < 4.5) low.add(`${theme} ${el.className}: ${r.toFixed(2)}`);
+          });
+        }
       }
       await setTheme(original);
       await setFilter("open");
-      expect(!low.length, `низкий контраст: ${low.slice(0, 4).join("; ")}`);
+      expect(!low.size, `низкий контраст: ${[...low].join("; ")}`);
     });
 
     await step("Цвет полоски у каждого приоритета", async () => {
