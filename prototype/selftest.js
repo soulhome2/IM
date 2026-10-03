@@ -338,6 +338,8 @@
       expect(mode() === "work", "чужая карточка не открылась");
       const take = button(root(), "takeover", id);
       expect(take, "в чужой карточке нет кнопки «Перехватить»");
+      const note = root().querySelector(".work-note");
+      expect(note && !note.textContent.includes(".."), `две точки подряд: «${note ? note.textContent : ""}»`);
       await click(take);
       await confirmDialog();
       await click($("backToQueue"));

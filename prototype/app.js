@@ -2940,7 +2940,9 @@
         ev.state === "pending_acceptance"
           ? t("Инцидент ожидает принятия: {who}.", { who: actorName(engine.addressee(ev)) })
           : t("Инцидент обрабатывает {who}.", { who: actorName(ev.owner) });
-      return `<div class="work-note">${escapeHtml(`${holder} ${t("Просмотр без изменений")} — ${rights}.`)}</div>`;
+      // Имя вида «Петрова М.» уже кончается точкой — вторую не ставим
+      const sentence = holder.replace(/\.\.$/, ".");
+      return `<div class="work-note">${escapeHtml(`${sentence} ${t("Просмотр без изменений")} — ${rights}.`)}</div>`;
     }
     if (ev.state === "on_hold") {
       return `<div class="work-note">${te("Инцидент отложен: {why}. Норматив закрытия приостановлен.", {
