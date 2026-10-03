@@ -42,6 +42,18 @@
   }
 
   const PROBES = {
+    async selfTarget() {
+      const id = await claimFirst();
+      await click(anyBtn(root(), "transfer"));
+      const target = field("targetId");
+      const has = Boolean(target && target.querySelector('option[value="grp-leads"]'));
+      if (has) target.value = "grp-leads";
+      await confirm("проба");
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("inbox");
+      const accept = btn($("eventsList"), "accept", id);
+      return [has && Boolean(accept), "своя группа в адресатах: " + has + ", можно принять: " + Boolean(accept)];
+    },
     async ceiling() {
       await setFilter("open");
       await wait(3500);

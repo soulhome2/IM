@@ -27,7 +27,9 @@
     const now = () => ctx.now();
     const isGroup = (id) => Boolean(id) && ctx.isGroup(id);
     const isMine = (ev) => ev.owner === ME;
-    const isTarget = (ev) => Boolean(ev.owner) && (ev.owner === ME || (isGroup(ev.owner) && ctx.memberOf(ev.owner, ME)));
+    // «Я» как адресат: сам оператор и группы, в которые он входит (§10.1)
+    const isSelf = (id) => Boolean(id) && (id === ME || (isGroup(id) && ctx.memberOf(id, ME)));
+    const isTarget = (ev) => isSelf(ev.owner);
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
     // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
     // адресован», даже если владельцем записан я сам: так передают лично оператору
@@ -168,7 +170,7 @@
       // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
       targetIsNotSelf: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
-        return target && target === ME ? ["Передача на себя запрещена"] : null;
+        return isSelf(target) ? ["Передача на себя запрещена"] : null;
       },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
@@ -512,8 +514,11 @@
         let options = null;
         let defaultValue = null;
         if (field.source === "transferTargets") {
-          options = ctx.transferTargets(ev).filter((o) => !(field.excludes || []).includes("currentOwner") || o.id !== ev.owner);
-          if (field.defaultFrom) defaultValue = ctx.defaultTransferTarget();
+          const excludes = field.excludes || [];
+          options = ctx
+            .transferTargets(ev)
+            .filter((o) => !(excludes.includes("self") && isSelf(o.id)) && !(excludes.includes("currentOwner") && o.id === ev.owner));
+          if (field.defaultFrom && options.some((o) => o.id === ctx.defaultTransferTarget())) defaultValue = ctx.defaultTransferTarget();
         } else if (field.source && field.source.startsWith("reasonCatalog:")) {
           const catalog = field.source.split(":")[1];
           if (field.optionsFrom === "actions" && catalog === "close_result") {
@@ -620,6 +625,7 @@
       isNav: (id) => Boolean(navActions[id]),
       isDone,
       isTarget,
+      isSelf,
       ownership,
       inQueueFilter,
       availability,

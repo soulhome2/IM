@@ -2317,9 +2317,9 @@
 
   /* ===== Формы переходов: строятся по формам машины (forms) ===== */
 
-  const TARGET_LIST = () => OPERATORS.filter((op) => !op.self).concat(GROUPS);
+  const TARGET_LIST = () => OPERATORS.concat(GROUPS);
 
-  // Адресаты передачи: себя в списке нет всегда, владельца исключает форма машины (§8.1)
+  // Адресаты передачи: себя, свои группы и владельца исключает форма машины (excludes, §8.1, §10.1)
   function targetOptions() {
     return TARGET_LIST().map((op) => {
       const parts = [actorLabel(op.id)];
@@ -2505,6 +2505,7 @@
   function renderEscalateDefault() {
     const select = $("escalateDefault");
     select.innerHTML = TARGET_LIST()
+      .filter((op) => !engine.isSelf(op.id))
       .map((op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(actorLabel(op.id))}</option>`)
       .join("");
     select.value = state.escalateTo;

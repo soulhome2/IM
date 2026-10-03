@@ -320,11 +320,14 @@
       expect(mode() === "work", "карточка не открылась");
     });
 
-    await step("Передать", async () => {
+    await step("Передать; себя и своей группы нет среди адресатов", async () => {
       await openOwn(workId);
       const b = button(root(), "transfer");
       expect(b, "в карточке нет кнопки «Передать»");
       await click(b);
+      const offered = [...field("targetId").options].map((o) => o.value);
+      const self = offered.filter((id) => id === "me" || id === "grp-leads");
+      expect(!self.length, `среди адресатов есть сам оператор или его группа: ${self.join(", ")}`);
       await confirmDialog("самопроверка");
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
     });
