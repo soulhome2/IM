@@ -460,15 +460,15 @@
       return `${a} + ${b}`;
     });
 
-    await step("Исключить из группы: инцидент остаётся в работе отдельно", async () => {
+    // При лимите активных 1 исключение сделало бы две единицы в работе (RULE-13). Путь, где
+    // исключение проходит, проверяет мутация exclude в tools/check_mutations.py
+    await step("Исключить из группы нельзя, если превысится лимит активных", async () => {
       await openOwn(groupPair[0]);
       const b = root().querySelector("[data-exclude]");
       expect(b, "в карточке группы нет кнопки «Исключить из группы»");
-      await click(b);
-      expect(!root().querySelector("[data-exclude]"), "после исключения карточка всё ещё показывает группу");
+      expect(b.disabled, "кнопка активна, хотя лимит активных превысится");
+      expect((b.title || "").includes("Лимит активных"), `нет подсказки о лимите: «${b.title}»`);
       await click($("backToQueue"));
-      await setFilter("mine");
-      expect(button($("eventsList"), "open_card", groupPair[0]), `${groupPair[0]} больше не «В работе»`);
       return groupPair[0];
     });
 

@@ -2897,7 +2897,7 @@
           ids: mates.map((e) => e.id).join(", "),
         })
       )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${
-        engine.canExcludeFromGroup(ev) ? "" : "disabled"
+        engine.canExcludeFromGroup(ev) ? "" : `disabled title="${escapeHtml(say(engine.excludeBlock(ev)))}"`
       }>${te("Исключить из группы")}</button></div>`;
     }
     if (isDone(ev)) {

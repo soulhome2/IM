@@ -849,7 +849,8 @@
     "excludeGuards": [
       { "fn": "stateIs", "args": [["in_progress"]] },
       { "fn": "isOwner" },
-      { "fn": "agentReady" }
+      { "fn": "agentReady" },
+      { "fn": "withinActiveLimit", "args": [1], "$comment": "§10.2, RULE-13: исключённый инцидент остаётся в работе отдельной единицей — лимит должен это позволять" }
     ],
     "selectionHelpers": [
       { "id": "select_all", "label": "Выбрать все", "scope": "current_filter", "limit": "maxBulk" },
@@ -932,7 +933,12 @@
       { "fn": "agentReady", "args": [], "onFail": "disable" },
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "agentIdleFor", "args": ["seconds"], "onFail": "disable", "extendsBaseRegistry": true },
-      { "fn": "withinActiveLimit", "args": [], "onFail": "disable" },
+      {
+        "fn": "withinActiveLimit",
+        "args": ["extraUnits?"],
+        "onFail": "disable",
+        "$comment": "§10.2. Сколько единиц уже в работе, не считая единицы самого инцидента (группа — одна единица). extraUnits — сколько единиц добавит действие сверх неё: исключение из группы делает её двумя (RULE-13)."
+      },
       { "fn": "withinHoldLimit", "args": [], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "withinReopenWindow", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "requiredStepsFilled", "args": ["stepSetId"], "onFail": "disable" },

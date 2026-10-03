@@ -79,6 +79,11 @@ MUTATIONS = [
     ("breakReason", "новая причина перерыва", lambda w: w["session"]["breakReasons"].append({"id": "probe", "label": "Проба"})),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
+    (
+        "exclude",
+        "исключение из группы без проверки лимита",
+        lambda w: w["grouping"].update(excludeGuards=[g for g in w["grouping"]["excludeGuards"] if g["fn"] != "withinActiveLimit"]),
+    ),
 ]
 
 

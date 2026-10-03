@@ -2337,6 +2337,13 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "agentReady"
+      },
+      {
+        "fn": "withinActiveLimit",
+        "args": [
+          1
+        ],
+        "$comment": "§10.2, RULE-13: исключённый инцидент остаётся в работе отдельной единицей — лимит должен это позволять"
       }
     ],
     "selectionHelpers": [
@@ -2674,8 +2681,11 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "withinActiveLimit",
-        "args": [],
-        "onFail": "disable"
+        "args": [
+          "extraUnits?"
+        ],
+        "onFail": "disable",
+        "$comment": "§10.2. Сколько единиц уже в работе, не считая единицы самого инцидента (группа — одна единица). extraUnits — сколько единиц добавит действие сверх неё: исключение из группы делает её двумя (RULE-13)."
       },
       {
         "fn": "withinHoldLimit",

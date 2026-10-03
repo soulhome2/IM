@@ -170,11 +170,12 @@
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
       // Признак активности оператора в прототипе не отслеживается (§17): без сервера не воспроизвести
       agentIdleFor: () => ["Оператор на связи"],
-      withinActiveLimit: (ev) => {
+      // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
+      withinActiveLimit: (ev, [extra = 0]) => {
         const u = units("in_progress", ev);
-        return u.size < W.limits.maxActive
-          ? null
-          : ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: [...u][0] }];
+        if (u.size + extra < W.limits.maxActive) return null;
+        if (extra) return ["Лимит активных ({n}): после исключения в работе станет больше", { n: W.limits.maxActive }];
+        return ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: [...u][0] }];
       },
       withinHoldLimit: (ev) =>
         units("on_hold", ev).size < W.limits.maxOnHold ? null : ["Больше {n} отложенных держать нельзя", { n: W.limits.maxOnHold }],
@@ -542,6 +543,8 @@
     }
 
     const canExcludeFromGroup = (ev) => Boolean(ev && ev.groupId) && !firstFail(ev, W.grouping.excludeGuards);
+    // Почему исключить нельзя — для подсказки на кнопке
+    const excludeBlock = (ev) => (ev && ev.groupId ? (firstFail(ev, W.grouping.excludeGuards) || {}).why || null : null);
 
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
@@ -592,6 +595,7 @@
       createGroup,
       excludeFromGroup,
       canExcludeFromGroup,
+      excludeBlock,
       units,
     };
   }

@@ -42,6 +42,27 @@
   }
 
   const PROBES = {
+    async exclude() {
+      const sel = $("eventTypeFilter");
+      let pair = null;
+      for (const o of [...sel.options].filter((x) => x.value !== "all")) {
+        sel.value = o.value;
+        sel.dispatchEvent(new Event("change"));
+        await wait();
+        const ids = [...$("eventsList").querySelectorAll(".event")]
+          .filter((r) => r.querySelector('[data-do="claim"]:not([disabled])'))
+          .map((r) => r.dataset.id);
+        if (ids.length >= 2) {
+          pair = ids.slice(0, 2);
+          break;
+        }
+      }
+      await click($("eventsList").querySelector(`[data-check="${pair[0]}"]`));
+      await click($("eventsList").querySelector(`[data-check="${pair[1]}"]`));
+      await click(btn($("eventsList"), "claim", pair[0]));
+      const b = root().querySelector("[data-exclude]");
+      return [Boolean(b && !b.disabled), "«Исключить из группы» активна: " + Boolean(b && !b.disabled)];
+    },
     async empty() {
       const counts = [];
       for (const f of ["open", "mine", "inbox", "done", "all"]) {
