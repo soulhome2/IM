@@ -756,6 +756,20 @@
       expect(!low.size, `низкий контраст: ${[...low].join("; ")}`);
     });
 
+    await step("Время событий в очереди не позже текущего", async () => {
+      const toSec = (s) => s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
+      const now = new Date();
+      const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      // В первые минуты после полуночи демо-время законно уходит во вчерашний день
+      if (nowSec < 3600) return "проверка пропущена около полуночи";
+      await setFilter("all");
+      const late = [...$("eventsList").querySelectorAll(".event time")]
+        .map((el) => el.textContent.trim())
+        .filter((s) => /^\d\d:\d\d:\d\d$/.test(s) && toSec(s) > nowSec + 5);
+      await setFilter("open");
+      expect(!late.length, `события из будущего: ${late.join(", ")}`);
+    });
+
     await step("Цвет полоски у каждого приоритета", async () => {
       await setFilter("all");
       const missing = new Set();

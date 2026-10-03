@@ -2026,7 +2026,31 @@
 
   /* ===== Приведение демонстрационных данных к модели v2 ===== */
 
+  // Время в демо-данных записано строками. Сдвигаем его к моменту открытия страницы: самое
+  // свежее событие — минуту назад, промежутки сохраняются. Иначе новые записи журнала,
+  // которые берут текущие часы, оказывались бы раньше событий
+  function shiftDemoTimes(list) {
+    const isStamp = (s) => typeof s === "string" && /^\d{1,2}:\d\d:\d\d$/.test(s);
+    const toSec = (s) => s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmt = (sec) => {
+      const day = ((sec % 86400) + 86400) % 86400;
+      return `${pad(Math.floor(day / 3600))}:${pad(Math.floor((day % 3600) / 60))}:${pad(day % 60)}`;
+    };
+    const stamps = list.flatMap((ev) => [ev.time, ...(ev.log || []).map((entry) => entry.t)]).filter(isStamp);
+    if (!stamps.length) return;
+    const now = new Date();
+    const shift = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 60 - Math.max(...stamps.map(toSec));
+    list.forEach((ev) => {
+      if (isStamp(ev.time)) ev.time = fmt(toSec(ev.time) + shift);
+      (ev.log || []).forEach((entry) => {
+        if (isStamp(entry.t)) entry.t = fmt(toSec(entry.t) + shift);
+      });
+    });
+  }
+
   function migrateEvents(list) {
+    shiftDemoTimes(list);
     const byName = {};
     OPERATORS.forEach((op) => (byName[op.name] = op.id));
     const now = Date.now();
