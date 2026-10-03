@@ -436,11 +436,12 @@ select.search-input,
 .btn.danger:hover { background: var(--danger-border); }
 /* Передача — шаг с передачей ответственности, поэтому отдельный цвет. */
 .btn.warn { background: var(--esc-bg); color: var(--esc-text); }
-.btn.warn:hover:not(:disabled) { background: var(--esc-hover); }
+.btn.warn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--esc-hover); }
 .btn.ok { background: var(--ok-bg); color: var(--ok-text); }
 .btn.outline { border: 2px solid var(--stroke-2); background: transparent; color: var(--text); }
-.btn.outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: transparent; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.outline:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--accent); color: var(--accent); background: transparent; }
+.btn:disabled,
+.btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
 
 .icon-btn {
   width: 36px;
@@ -453,7 +454,7 @@ select.search-input,
   align-items: center;
   justify-content: center;
 }
-.icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--hover); color: var(--text); }
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .icon-btn .material-symbols-outlined { color: inherit; font-size: 20px; }
 .icon-btn.on { background: var(--accent-dim); color: var(--accent); }
@@ -844,7 +845,7 @@ select.search-input { padding-right: 36px; }
   transition: background 0.15s ease, color 0.15s ease;
 }
 .pager-btn .material-symbols-outlined { font-size: 20px; color: inherit; }
-.pager-btn:hover:not(:disabled):not(.current) { background: var(--hover); color: var(--text); }
+.pager-btn:hover:not(:disabled):not([aria-disabled="true"]):not(.current) { background: var(--hover); color: var(--text); }
 .pager-btn.current { background: var(--accent); color: var(--on-accent); }
 .pager-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .pager-gap { min-width: 20px; text-align: center; color: var(--faint); font-size: 13px; }
@@ -1158,7 +1159,7 @@ select.search-input { padding-right: 36px; }
   font-weight: 500;
   justify-self: start;
 }
-.confirm-btn:hover:not(:disabled) { border-color: var(--accent); }
+.confirm-btn:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--accent); }
 .confirm-btn.on {
   border-color: var(--accent);
   background: var(--accent-dim);
@@ -1202,7 +1203,7 @@ select.search-input { padding-right: 36px; }
   color: var(--text);
 }
 .macro-row .btn:not(.ok) { background: var(--panel); }
-.macro-row .btn:not(.ok):hover:not(:disabled) { border-color: var(--accent); background: var(--panel); }
+.macro-row .btn:not(.ok):hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--accent); background: var(--panel); }
 .macro-row .btn.ok { border-color: var(--ok-border); color: var(--ok-text); }
 
 /* Переходы по состоянию инцидента отделены от навигации по шагам сценария */

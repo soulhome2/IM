@@ -1833,6 +1833,14 @@
     if (focusTarget) focusTarget.focus();
   }
 
+  // Недоступная кнопка действия остаётся в фокусе и нажимается (aria-disabled, а не disabled):
+  // нажатие показывает причину. Так её узнают и на телефоне, и с клавиатуры, и экранным диктором
+  function explainIfOff(btn) {
+    if (btn.getAttribute("aria-disabled") !== "true") return false;
+    toast(btn.title || t("Действие недоступно"));
+    return true;
+  }
+
   function toast(text) {
     const el = document.createElement("div");
     el.className = "toast";
@@ -2862,7 +2870,7 @@
                   (a) =>
                     `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${
                       e.id
-                    }" title="${escapeHtml(a.hint)}" ${a.disabled ? "disabled" : ""}>${escapeHtml(a.label)}</button>`
+                    }" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
                 )
                 .join("")}
             </div>
@@ -2891,7 +2899,7 @@
           ids: mates.map((e) => e.id).join(", "),
         })
       )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${
-        engine.canExcludeFromGroup(ev) ? "" : `disabled title="${escapeHtml(say(engine.excludeBlock(ev)))}"`
+        engine.canExcludeFromGroup(ev) ? "" : `aria-disabled="true" title="${escapeHtml(say(engine.excludeBlock(ev)))}"`
       }>${te("Исключить из группы")}</button></div>`;
     }
     if (isDone(ev)) {
@@ -3006,7 +3014,7 @@
                     (a) =>
                       `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${
                         ev.id
-                      }" title="${escapeHtml(a.hint)}" ${a.disabled ? "disabled" : ""}>${escapeHtml(a.label)}</button>`
+                      }" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
                   )
                   .join("")}</div>`
               : ""
@@ -3722,6 +3730,7 @@
         return;
       }
       const act = e.target.closest("[data-do]");
+      if (act && explainIfOff(act)) return;
       if (act) {
         trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "queue");
         return;
@@ -3770,6 +3779,7 @@
       const ev = selected();
       if (!ev) return;
       const exclude = e.target.closest("[data-exclude]");
+      if (exclude && explainIfOff(exclude)) return;
       if (exclude) {
         const r = engine.excludeFromGroup(ev);
         toast(r.ok ? t("{id} исключён из группы", { id: ev.id }) : say(r.why));
@@ -3777,6 +3787,7 @@
         return;
       }
       const act = e.target.closest("[data-do]");
+      if (act && explainIfOff(act)) return;
       if (act) {
         trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "card");
         return;

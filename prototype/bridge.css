@@ -117,9 +117,9 @@ textarea:focus-visible,
 /* ---- Rules the variable layer cannot express -------------------------------- */
 
 /* Transfer is one warn action. The old red-vs-orange split died with escalate/redirect (v3). */
-.btn.warn:hover:not(:disabled),
-.btn.warn:active:not(:disabled) { color: var(--esc-text); }
-.btn.warn:active:not(:disabled) { background: var(--esc-bg); }
+.btn.warn:hover:not(:disabled):not([aria-disabled="true"]),
+.btn.warn:active:not(:disabled):not([aria-disabled="true"]) { color: var(--esc-text); }
+.btn.warn:active:not(:disabled):not([aria-disabled="true"]) { background: var(--esc-bg); }
 
 /* Selection is shown by the background only (D-011). */
 .mobile-nav button.active { color: var(--text); }
@@ -144,40 +144,40 @@ textarea,
 
 /* primary */
 .btn.primary { background: var(--one-accent); color: var(--one-accent-on); border: 1px solid var(--one-accent); }
-.btn.primary:hover:not(:disabled) { background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on); }
-.btn.primary:active:not(:disabled) { background: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
+.btn.primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-primary-hover); border-color: var(--one-primary-hover); color: var(--one-accent-on); }
+.btn.primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-primary-pressed); border-color: var(--one-primary-pressed); }
 
 /* outline — hover/pressed fill only; border and label unchanged */
 .btn.outline { background: transparent; color: var(--one-fg); border: 1px solid var(--one-border); }
-.btn.outline:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); border-color: var(--one-border); }
-.btn.outline:active:not(:disabled) { background: var(--one-control-pressed); border-color: var(--one-border); }
+.btn.outline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-hover); color: var(--one-fg); border-color: var(--one-border); }
+.btn.outline:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-pressed); border-color: var(--one-border); }
 
 /* subtle / ghost */
 .btn,
 .btn.ghost { color: var(--one-fg); }
-.btn:hover:not(:disabled),
-.btn.ghost:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
-.btn:active:not(:disabled),
-.btn.ghost:active:not(:disabled) { background: var(--one-control-pressed); }
+.btn:hover:not(:disabled):not([aria-disabled="true"]),
+.btn.ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-hover); color: var(--one-fg); }
+.btn:active:not(:disabled):not([aria-disabled="true"]),
+.btn.ghost:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-pressed); }
 .icon-btn { color: var(--one-fg-muted); }
-.icon-btn:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
-.icon-btn:active:not(:disabled) { background: var(--one-control-pressed); }
+.icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-hover); color: var(--one-fg); }
+.icon-btn:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-pressed); }
 
 /* ToggleButton on-state (D-018): primary fill, not the Button selected ring. */
 .icon-btn.on,
 .icon-btn[aria-pressed="true"] { background: var(--one-accent); color: var(--one-accent-on); box-shadow: none; }
-.icon-btn.on:hover:not(:disabled),
-.icon-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--one-primary-hover); color: var(--one-accent-on); }
-.icon-btn.on:active:not(:disabled),
-.icon-btn[aria-pressed="true"]:active:not(:disabled) { background: var(--one-primary-pressed); color: var(--one-accent-on); }
+.icon-btn.on:hover:not(:disabled):not([aria-disabled="true"]),
+.icon-btn[aria-pressed="true"]:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-primary-hover); color: var(--one-accent-on); }
+.icon-btn.on:active:not(:disabled):not([aria-disabled="true"]),
+.icon-btn[aria-pressed="true"]:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-primary-pressed); color: var(--one-accent-on); }
 .icon-btn.on:disabled,
 .icon-btn[aria-pressed="true"]:disabled { background: var(--one-control-disabled); color: var(--one-fg-disabled); }
 
 /* Theme button is an action with a changing glyph, not an on/off toggle.
    The prototype marks it aria-pressed only in Light. */
 .icon-btn.theme-btn[aria-pressed="true"] { background: transparent; color: var(--one-fg-muted); }
-.icon-btn.theme-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--one-control-hover); color: var(--one-fg); }
-.icon-btn.theme-btn[aria-pressed="true"]:active:not(:disabled) { background: var(--one-control-pressed); color: var(--one-fg); }
+.icon-btn.theme-btn[aria-pressed="true"]:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-hover); color: var(--one-fg); }
+.icon-btn.theme-btn[aria-pressed="true"]:active:not(:disabled):not([aria-disabled="true"]) { background: var(--one-control-pressed); color: var(--one-fg); }
 .theme-btn:hover .theme-icon { color: inherit; }
 
 /* Archive / Online segments = ToggleButton */
@@ -192,9 +192,12 @@ textarea,
 
 /* disabled — tokens, not opacity */
 .btn:disabled,
+.btn[aria-disabled="true"],
 .icon-btn:disabled { opacity: 1; color: var(--one-fg-disabled); cursor: not-allowed; }
-.btn.primary:disabled { background: var(--one-control-disabled); border-color: var(--one-border); }
-.btn.outline:disabled { background: transparent; border-color: var(--one-border); }
+.btn.primary:disabled,
+.btn.primary[aria-disabled="true"] { background: var(--one-control-disabled); border-color: var(--one-border); }
+.btn.outline:disabled,
+.btn.outline[aria-disabled="true"] { background: transparent; border-color: var(--one-border); }
 
 /* <select> = ComboBox; option ladder from MuiAutocomplete (D-017). */
 @supports (appearance: base-select) {

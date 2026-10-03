@@ -42,10 +42,13 @@
     await wait();
   }
 
+  // Недоступная кнопка действия помечена aria-disabled: она остаётся в фокусе и объясняет причину
+  const off = (b) => b.disabled || b.getAttribute("aria-disabled") === "true";
+
   // Первая доступная кнопка перехода; ev — номер инцидента, если важен конкретный
   function button(scope, id, ev) {
     const list = [...scope.querySelectorAll(`[data-do="${id}"]`)];
-    return list.find((b) => !b.disabled && (!ev || b.dataset.ev === ev)) || null;
+    return list.find((b) => !off(b) && (!ev || b.dataset.ev === ev)) || null;
   }
 
   async function click(el) {
@@ -312,7 +315,7 @@
     await step("Передать чужой инцидент", async () => {
       await setFilter("foreign");
       const rows = [...$("eventsList").querySelectorAll(".event")].filter(
-        (r) => r.querySelector('[data-do="open_readonly"]') && r.querySelector('[data-do="transfer"]:not([disabled])')
+        (r) => r.querySelector('[data-do="open_readonly"]') && r.querySelector('[data-do="transfer"]:not([aria-disabled="true"])')
       );
       expect(rows.length, "нет чужих инцидентов, которые можно передать");
       foreignTransferred = rows[0].dataset.id;
@@ -358,6 +361,20 @@
       await openOwn(workId);
       return workId;
     });
+
+    await step("Недоступная кнопка объясняет причину по нажатию", async () => {
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      const b = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find(off);
+      expect(b, "при занятом лимите нет недоступной кнопки «Взять»");
+      expect(b.getAttribute("aria-disabled") === "true" && !b.disabled, "недоступная кнопка не получает фокус и нажатие");
+      const before = $("toasts").children.length;
+      await click(b);
+      const last = $("toasts").lastElementChild;
+      const text = last ? last.textContent : "";
+      expect($("toasts").children.length > before && text.includes("Лимит активных"), `нажатие не объяснило причину: «${text}»`);
+      return text;
+    }, "Взять, вернуться к очереди, продолжить");
 
     await step("Отложить", async () => {
       await openOwn(workId);
@@ -553,7 +570,7 @@
         select.dispatchEvent(new Event("change"));
         await wait();
         const ids = [...$("eventsList").querySelectorAll(".event")]
-          .filter((r) => r.querySelector('[data-do="claim"]:not([disabled])'))
+          .filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'))
           .map((r) => r.dataset.id);
         if (ids.length >= 2) {
           pair = ids.slice(0, 2);
@@ -581,7 +598,7 @@
       await openOwn(groupPair[0]);
       const b = root().querySelector("[data-exclude]");
       expect(b, "в карточке группы нет кнопки «Исключить из группы»");
-      expect(b.disabled, "кнопка активна, хотя лимит активных превысится");
+      expect(off(b), "кнопка активна, хотя лимит активных превысится");
       expect((b.title || "").includes("Лимит активных"), `нет подсказки о лимите: «${b.title}»`);
       await click($("backToQueue"));
       return groupPair[0];
@@ -608,7 +625,7 @@
       await setFilter("open");
       const b = [...$("eventsList").querySelectorAll('[data-do="close"]')].find((x) => {
         const row = x.closest(".event");
-        return !x.disabled && row && row.querySelector('[data-do="claim"]');
+        return !off(x) && row && row.querySelector('[data-do="claim"]');
       });
       expect(b, "у новых событий нет кнопки «Закрыть»");
       const id = b.dataset.ev;

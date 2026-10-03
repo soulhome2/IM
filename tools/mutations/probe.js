@@ -17,8 +17,9 @@
     $("eventFilter").dispatchEvent(new Event("change"));
     await wait();
   };
+  const off = (b) => b.disabled || b.getAttribute("aria-disabled") === "true";
   const btn = (scope, id, ev) =>
-    [...scope.querySelectorAll(`[data-do="${id}"]`)].find((b) => !b.disabled && (!ev || b.dataset.ev === ev)) || null;
+    [...scope.querySelectorAll(`[data-do="${id}"]`)].find((b) => !off(b) && (!ev || b.dataset.ev === ev)) || null;
   const anyBtn = (scope, id, ev) => [...scope.querySelectorAll(`[data-do="${id}"]`)].find((b) => !ev || b.dataset.ev === ev) || null;
   const field = (n) => $("dialogFields").querySelector(`[data-field="${n}"]`);
   const mode = () => $("workspace").dataset.mode;
@@ -142,7 +143,7 @@
         sel.dispatchEvent(new Event("change"));
         await wait();
         const ids = [...$("eventsList").querySelectorAll(".event")]
-          .filter((r) => r.querySelector('[data-do="claim"]:not([disabled])'))
+          .filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'))
           .map((r) => r.dataset.id);
         if (ids.length >= 2) {
           pair = ids.slice(0, 2);
@@ -153,7 +154,7 @@
       await click($("eventsList").querySelector(`[data-check="${pair[1]}"]`));
       await click(btn($("eventsList"), "claim", pair[0]));
       const b = root().querySelector("[data-exclude]");
-      return [Boolean(b && !b.disabled), "«Исключить из группы» активна: " + Boolean(b && !b.disabled)];
+      return [Boolean(b && !off(b)), "«Исключить из группы» активна: " + Boolean(b && !off(b))];
     },
     async empty() {
       const counts = [];
@@ -226,7 +227,7 @@
     },
     async grouping() {
       await setFilter("open");
-      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]:not([disabled])'));
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'));
       const a = rows[0];
       const b = rows.find((r) => r.querySelector(".event-title strong").textContent !== a.querySelector(".event-title strong").textContent);
       // Список перерисовывается после каждой галочки: строки ищем заново по номеру
