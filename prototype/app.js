@@ -2017,10 +2017,11 @@
     return null;
   }
 
-  // Бейдж считает исполнитель по правилам машины (§2.4), здесь — только перевод
+  // Бейдж считает исполнитель по правилам машины (§2.4), здесь — перевод и оформление:
+  // класс CSS бейджа совпадает со стилем из машины (badges.rules[].style)
   function badgeView(ev) {
     const b = engine.badge(ev);
-    return { text: t(b.label[0], logVars(b.label[1])), cls: b.cls };
+    return { text: t(b.label[0], logVars(b.label[1])), cls: b.style };
   }
 
   /* ===== Приведение демонстрационных данных к модели v2 ===== */

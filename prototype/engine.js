@@ -10,9 +10,6 @@
    Данные инцидента и всё, что относится к интерфейсу (сценарии, журнал, подписи людей,
    открытая карточка), передаёт прототип через ctx в create(). */
 (() => {
-  // Стили бейджей машины → классы прототипа
-  const BADGE_CLASS = { escalated: "esc", paused: "pause", done: "ok", done_unprocessed: "cancel" };
-
   function create(ctx) {
     const W = ctx.workflow;
     const ME = ctx.me;
@@ -550,11 +547,11 @@
         if (r.when && r.when.closeResult && r.when.closeResult !== ev.closeResult) return false;
         return r.viewerRole === "any" || r.viewerRole === role;
       });
-      if (!rule) return { label: [states[ev.state].label], cls: ev.state };
+      if (!rule) return { label: [states[ev.state].label], style: ev.state };
       const hold = catalogItem("hold", ev.holdReason);
       return {
         label: [rule.label, { ownerName: ctx.actorName(addressee(ev)), holdReasonLabel: hold ? hold.label : "", closeResultLabel: closeResultLabel(ev) }],
-        cls: BADGE_CLASS[rule.style] || rule.style,
+        style: rule.style,
       };
     }
 
