@@ -213,6 +213,25 @@
       throw new Error("в сценарии не нашлось шага с вариантами");
     });
 
+    await step("Запустить макрос из сценария", async () => {
+      await openOwn(closedId);
+      for (let i = 0; i < 8; i++) {
+        const macro = root().querySelector("[data-macro]");
+        if (macro) {
+          const name = macro.dataset.macro;
+          await click(macro);
+          const after = root().querySelector(`[data-macro="${name}"]`);
+          expect(after && after.classList.contains("ok"), `макрос «${name}» не отмечен запущенным`);
+          return name;
+        }
+        await answerCurrentStep();
+        const next = $("stepNext");
+        expect(next && !next.disabled, "до шага с макросами не дойти");
+        await click(next);
+      }
+      throw new Error("в сценарии нет шага с макросами");
+    });
+
     await step("Закрыть инцидент по сценарию", async () => {
       await openOwn(closedId);
       for (let i = 0; i < 10; i++) {
@@ -231,6 +250,45 @@
         await click(next);
       }
       throw new Error("кнопка «Закрыть инцидент» так и не появилась");
+    });
+
+    let foreignTransferred = null;
+    await step("Передать чужой инцидент", async () => {
+      await setFilter("foreign");
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter(
+        (r) => r.querySelector('[data-do="open_readonly"]') && r.querySelector('[data-do="transfer"]:not([disabled])')
+      );
+      expect(rows.length, "нет чужих инцидентов, которые можно передать");
+      foreignTransferred = rows[0].dataset.id;
+      await click(button($("eventsList"), "transfer", foreignTransferred));
+      await confirmDialog("самопроверка");
+      await setFilter("all");
+      const row = await rowOnPages(foreignTransferred);
+      expect(row && row.textContent.includes("Ожидает принятия"), `${foreignTransferred} не ожидает принятия после передачи`);
+      return foreignTransferred;
+    });
+
+    await step("Перехватить чужой инцидент", async () => {
+      await setFilter("foreign");
+      const row = [...$("eventsList").querySelectorAll(".event")].find(
+        (r) => r.dataset.id !== foreignTransferred && r.querySelector('[data-do="open_readonly"]') && r.textContent.includes("Закрытие")
+      );
+      expect(row, "нет чужого инцидента в работе");
+      const id = row.dataset.id;
+      await click(button($("eventsList"), "open_readonly", id));
+      expect(mode() === "work", "чужая карточка не открылась");
+      const take = button(root(), "takeover", id);
+      expect(take, "в чужой карточке нет кнопки «Перехватить»");
+      await click(take);
+      await confirmDialog();
+      await click($("backToQueue"));
+      await setFilter("mine");
+      expect(button($("eventsList"), "open_card", id), `${id} не стал моим «В работе»`);
+      // Освобождаем лимит активных для следующих шагов
+      await openOwn(id);
+      await click(button(root(), "release"));
+      await confirmDialog("самопроверка");
+      return id;
     });
 
     await step("Взять, вернуться к очереди, продолжить", async () => {

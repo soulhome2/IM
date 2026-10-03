@@ -86,6 +86,11 @@ MUTATIONS = [
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
+    (
+        "autoEscalation",
+        "норматив реакции уровней 2 с — автоэскалация, открытая карточка остаётся просмотром",
+        lambda w: [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]],
+    ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
     (
         "exclude",

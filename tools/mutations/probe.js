@@ -42,6 +42,20 @@
   }
 
   const PROBES = {
+    async autoEscalation() {
+      await setFilter("open");
+      const id = btn($("eventsList"), "claim").dataset.ev;
+      await click(btn($("eventsList"), "transfer", id));
+      field("targetId").value = "sidorov";
+      await confirm("проба");
+      await setFilter("foreign");
+      await click(btn($("eventsList"), "open_readonly", id));
+      const opened = mode() === "work";
+      await wait(4000);
+      const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
+      const escalated = toasts.includes("Автоэскалация");
+      return [opened && escalated && mode() === "work", `автоэскалация: ${escalated}, карточка открыта: ${mode() === "work"}`];
+    },
     async breach() {
       const id = await claimFirst();
       await click($("backToQueue"));
