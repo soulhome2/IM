@@ -791,12 +791,13 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 /* Ширина фильтра — по самому длинному варианту: подписи разной длины в трёх языках */
 .events-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   padding: 12px 12px 8px;
   align-items: center;
 }
 .events-toolbar select { min-width: 132px; }
+/* Кнопки выборки — в шапке очереди: поиску остаётся вся строка */
 .events-select { display: flex; gap: 6px; flex-shrink: 0; }
 .events-types {
   grid-column: 1 / -1;
@@ -1755,6 +1756,8 @@ kbd {
   .clock,
   #toggleMedia { display: none; }
   .events-types { grid-template-columns: minmax(0, 1fr); }
+  #panelEvents .panel-h { flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+  #panelEvents .panel-h .events-select { flex: 1 1 100%; }
   .topbar-cluster { padding-left: 8px; }
   .topbar-actions { gap: 4px; }
   /* Язык — только значок: список тот же, он лежит поверх значка невидимым */

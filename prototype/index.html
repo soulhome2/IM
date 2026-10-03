@@ -160,6 +160,20 @@
         <section class="panel" id="panelEvents" data-panel="events">
           <header class="panel-h">
             <h2>Очередь <em id="eventsCount">0</em></h2>
+            <div class="events-select" role="group" aria-label="Выборка событий">
+              <button type="button" class="btn ghost small" id="selectAllBtn" title="Выбрать все видимые события">
+                <span class="material-symbols-outlined">select_all</span>
+                Выбрать все
+              </button>
+              <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события (Ctrl+A)">
+                <span class="material-symbols-outlined">library_add_check</span>
+                Однотипные
+              </button>
+              <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение (Ctrl+D)" disabled>
+                <span class="material-symbols-outlined">deselect</span>
+                Снять
+              </button>
+            </div>
           </header>
           <div class="panel-b events-body">
             <div class="events-toolbar">
@@ -172,20 +186,6 @@
               <div class="events-types">
                 <select id="eventTypeFilter" class="search-input" aria-label="Тип события"></select>
                 <select id="deviceTypeFilter" class="search-input" aria-label="Тип устройства"></select>
-              </div>
-              <div class="events-select" role="group" aria-label="Выборка событий">
-                <button type="button" class="btn ghost small" id="selectAllBtn" title="Выбрать все видимые события">
-                  <span class="material-symbols-outlined">select_all</span>
-                  Выбрать все
-                </button>
-                <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события (Ctrl+A)">
-                  <span class="material-symbols-outlined">library_add_check</span>
-                  Однотипные
-                </button>
-                <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение (Ctrl+D)" disabled>
-                  <span class="material-symbols-outlined">deselect</span>
-                  Снять
-                </button>
               </div>
             </div>
             <div class="events-list" id="eventsList"></div>
