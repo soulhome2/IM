@@ -79,6 +79,7 @@
     "$comment": "§2.4. Бейдж не хранится — вычисляется сервером под смотрящего оператора и отдаётся в поле badge каждой записи очереди.",
     "rules": [
       { "state": "new", "viewerRole": "any", "label": "Новое", "style": "new" },
+      { "state": "pending_acceptance", "viewerRole": "target", "when": { "addressee": "group" }, "label": "Вашей группе · {ownerName}", "style": "inbox" },
       { "state": "pending_acceptance", "viewerRole": "target", "label": "Вам на принятие", "style": "inbox" },
       { "state": "pending_acceptance", "viewerRole": "other", "label": "Ожидает принятия · {ownerName}", "style": "escalated" },
       { "state": "in_progress", "viewerRole": "owner", "label": "В работе", "style": "mine" },

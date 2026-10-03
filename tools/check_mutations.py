@@ -76,6 +76,11 @@ def close_without_placeholder(w):
     del next(f for f in form["fields"] if f["name"] == "resultId")["placeholder"]
 
 
+def group_badge(w):
+    rule = next(r for r in w["badges"]["rules"] if r.get("when", {}).get("addressee") == "group")
+    rule["label"] = "Группе на принятие"
+
+
 def hold_with_unknown_effect(w):
     hold = transition(w, "hold")
     hold["effects"].append({"kind": "transactional", "fn": "teleport"})
@@ -129,6 +134,7 @@ MUTATIONS = [
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
     ("modalKey", "«Взять следующее» работает при открытой справке", key_in_modal),
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
+    ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

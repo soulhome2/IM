@@ -97,6 +97,15 @@ window.IM_WORKFLOW = {
       {
         "state": "pending_acceptance",
         "viewerRole": "target",
+        "when": {
+          "addressee": "group"
+        },
+        "label": "Вашей группе · {ownerName}",
+        "style": "inbox"
+      },
+      {
+        "state": "pending_acceptance",
+        "viewerRole": "target",
         "label": "Вам на принятие",
         "style": "inbox"
       },

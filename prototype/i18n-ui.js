@@ -139,6 +139,7 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
     "Удержание": "Hold",
+    "Вашей группе · {ownerName}": "Your group · {ownerName}",
     "Выберите результат": "Select a result",
     "Подгрупп / устройств с открытыми инцидентами": "Subgroups / devices with open incidents",
     "Открытых инцидентов{crit}": "Open incidents{crit}",
@@ -493,6 +494,7 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "El objetivo de resolución está en pausa mientras el incidente espera",
     "Удержание": "Espera",
+    "Вашей группе · {ownerName}": "Su grupo · {ownerName}",
     "Выберите результат": "Elija un resultado",
     "Подгрупп / устройств с открытыми инцидентами": "Subgrupos / dispositivos con incidentes abiertos",
     "Открытых инцидентов{crit}": "Incidentes abiertos{crit}",

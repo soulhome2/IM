@@ -545,6 +545,8 @@
       const rule = W.badges.rules.find((r) => {
         if (r.state !== ev.state) return false;
         if (r.when && r.when.closeResult && r.when.closeResult !== ev.closeResult) return false;
+        // Адресат — группа или человек: передачу группе может принять любой из неё (§2.4)
+        if (r.when && r.when.addressee && r.when.addressee !== (isGroup(addressee(ev)) ? "group" : "person")) return false;
         return r.viewerRole === "any" || r.viewerRole === role;
       });
       if (!rule) return { label: [states[ev.state].label], style: ev.state };

@@ -43,6 +43,12 @@
   }
 
   const PROBES = {
+    async groupBadge() {
+      await setFilter("inbox");
+      const badge = row("INC-1836") && row("INC-1836").querySelector(".badge");
+      const text = badge ? badge.textContent : "";
+      return [text.includes("Группе на принятие"), "бейдж INC-1836: " + text];
+    },
     async closeEmpty() {
       await claimFirst();
       await click(anyBtn(root(), "close"));

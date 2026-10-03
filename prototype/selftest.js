@@ -462,6 +462,8 @@
 
     await step("Принять адресованную передачу", async () => {
       await setFilter("inbox");
+      const badge = $("eventsList").querySelector('[data-id="INC-1836"] .badge');
+      expect(badge && badge.textContent.includes("Вашей группе"), `у переданного группе бейдж «${badge ? badge.textContent : "нет"}»`);
       const b = button($("eventsList"), "accept", "INC-1836");
       expect(b, "нет инцидентов на принятие");
       acceptedId = b.dataset.ev;
