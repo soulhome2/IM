@@ -2348,15 +2348,6 @@
     ],
   };
 
-  function fieldRequired(field, values) {
-    if (field.requiredFrom) {
-      const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
-      const item = WORKFLOW.reasonCatalogs[catalog].items.find((i) => i.id === values.resultId);
-      return Boolean(item && item[attr]);
-    }
-    return Boolean(field.required);
-  }
-
   const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
 
   function fieldHtml(field) {
@@ -2398,7 +2389,7 @@
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
-      if (label) label.textContent = t(field.label) + (visible && fieldRequired(field, values) ? " *" : "");
+      if (label) label.textContent = t(field.label) + (visible && engine.fieldRequired(open.form, field, values) ? " *" : "");
     });
   }
 
@@ -2443,7 +2434,7 @@
     open.form.fields.forEach((field) => {
       if (!fieldVisible(field, values)) delete values[field.name];
     });
-    const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(f, values) && !values[f.name]);
+    const missing = open.form.fields.find((f) => fieldVisible(f, values) && engine.fieldRequired(open.form, f, values) && !values[f.name]);
     if (missing) {
       toast(t("Укажите причину — поле обязательно"));
       const el = $("dialogFields").querySelector(`[data-field="${missing.name}"]`);

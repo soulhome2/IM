@@ -308,6 +308,16 @@
       );
     }
 
+    // Обязательность поля: required или requiredFrom "reasonCatalog:<справочник>.<признак>" —
+    // признак позиции, выбранной в поле той же формы с source "reasonCatalog:<справочник>"
+    function fieldRequired(f, field, values) {
+      if (!field.requiredFrom) return Boolean(field.required);
+      const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
+      const source = f.fields.find((x) => x.source === `reasonCatalog:${catalog}`);
+      const item = source ? catalogItem(catalog, values[source.name]) : null;
+      return Boolean(item && item[attr]);
+    }
+
     // Подпись результата; если у результата есть справочник причин и причина выбрана — подпись причины
     function closeResultLabel(ev) {
       const item = catalogItem("close_result", ev.closeResult);
@@ -340,7 +350,7 @@
         ev.state = stateId;
       },
       setOwner: (ev, [arg], s) => {
-        ev.owner = arg === "actorIfEmpty" ? ev.owner || s.actor : value(arg, ev, s.form, s);
+        ev.owner = value(arg, ev, s.form, s);
       },
       setAssignmentGroup: (ev, [arg], s) => {
         ev.assignmentGroup = value(arg, ev, s.form, s);
@@ -429,12 +439,7 @@
       if (!f) return null;
       for (const field of f.fields) {
         if (field.visibleWhen && !field.visibleWhen.in.includes(form[field.visibleWhen.field])) continue;
-        let required = field.required;
-        if (field.requiredFrom) {
-          const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
-          const item = catalogItem(catalog, form.resultId);
-          required = Boolean(item && item[attr]);
-        }
+        const required = fieldRequired(f, field, form);
         const v = form[field.name];
         if (required && (v == null || String(v).trim() === "")) {
           return field.kind === "text" ? ["Укажите причину — поле обязательно"] : ["Заполните поле «{name}»", { name: field.label }];
@@ -628,6 +633,7 @@
       isDone,
       isTarget,
       isSelf,
+      fieldRequired,
       addressee,
       ownership,
       inQueueFilter,

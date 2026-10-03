@@ -130,6 +130,90 @@ stateDiagram-v2
 
 Поэтому `TransitionResult.externalEffects` возвращает только `status: "queued"`, а фактический результат приходит записью журнала и событием в потоке.
 
+### Язык значений
+
+Аргументы условий и эффектов — не свободный текст. У каждого значения один смысл, и бэкенд понимает его так же, как исполнитель прототипа ([prototype/engine.js](../../prototype/engine.js)). Иначе два исполнителя одной машины разойдутся, и ни одна проверка этого не заметит. Ниже — все значения, которые машина использует сейчас. Новое значение сначала описывается здесь, потом появляется в машине.
+
+**Адресат.** Адресат инцидента — `owner`, а если он пуст — `assignment_group`. `owner` — всегда человек; пока передачу группе никто не принял, `owner` пуст, а группа — в `assignment_group` (§8.1).
+
+**Кто и что записывается** — аргументы `setOwner`, `setAssignmentGroup`, `setHoldReason`, второй аргумент `setFlag`:
+
+| Значение | Смысл |
+|---|---|
+| `actor` | тот, кто выполняет переход. У переходов по таймеру и системных — `actor` перехода (`dispatcher`, `system`) |
+| `null` | очистить поле |
+| `now` | время сервера в момент перехода |
+| `form.<поле>` | значение поля формы перехода; пустая строка — то же, что `null` |
+| `escalation.level.target` | адресат уровня автоэскалации, на который переходит инцидент: позиция `escalation.levels[]` с `level` = текущий `escalation_level` + 1. `targetRef` записан как `user:<id>` или `group:<id>`, значение — `<id>` |
+| `<значение>.ifPerson` | значение, если это человек, иначе `null`. Так в `owner` попадает только человек |
+| `<значение>.ifGroup` | значение, если это дежурная группа, иначе `null`. Так группа попадает в `assignment_group` |
+| id позиции справочника (`setHoldReason`) | например `break`, `no_link` — системные причины удержания |
+
+**Кому сообщить** — аргументы `notify` и `evictOpenCard`:
+
+| Значение | Смысл |
+|---|---|
+| `owner` | владелец после перехода |
+| `previousOwner` | владелец до перехода, до первого эффекта |
+| `newTarget` | адресат после перехода |
+| `shift_lead` | старший смены |
+| `escalation.alertTarget` | получатель алерта из настроек эскалации |
+
+В прототипе `notify` и `externalCommand` ничего не отправляют: уведомлений и внешних систем у него нет.
+
+**Отношение смотрящего к инциденту** — `ownership` в `scopeRule` и `notes[].when`, `viewerRole` в `badges`, `ownership` в `queueFilters`:
+
+| Значение | Когда |
+|---|---|
+| `owner` | `owner` — смотрящий |
+| `target` | адресат — смотрящий или дежурная группа, в которую он входит. В `pending_acceptance` проверяется раньше `owner`: передача лично оператору — «вам на принятие», а не «ваш» |
+| `other` | всё остальное, в том числе ничей инцидент в `new` |
+| `any` (только `viewerRole`) | любой смотрящий |
+
+«Себя» в `targetIsNotSelf` и в `excludes: ["self"]` формы — смотрящий и дежурные группы, в которые он входит (§10.1). `excludes: ["currentOwner"]` — адресат инцидента.
+
+**Поля инцидента** — первый аргумент `setFlag`, `increment`, `flagBelow`, `flagAtLeast`:
+
+| Поле | Смысл |
+|---|---|
+| `escalation_level` | уровень эскалации; +1 при каждой передаче и автоэскалации |
+| `close_result` | id результата закрытия из `reasonCatalogs.close_result` |
+| `close_cause` | причина сбоя из справочника `causeCatalog` выбранного результата |
+| `result` | комментарий при закрытии |
+| `closed_by`, `closed_at` | кто и когда закрыл |
+| `sla_breached` | есть хоть одна запись в `breaches` |
+
+В API и в прототипе те же поля в camelCase; в прототипе `close_cause` называется `massCause`, `result` — `closeComment`.
+
+**Настройки** — аргументы `settingEnabled`, `flagBelow`, `flagAtLeast`, `agentIdleFor`, `restartTimer`: путь от корня машины, например `escalation.enabled`, `escalation.maxLevel`, `session.idleHoldSec`, `limits.reopenResolutionSec`. Один путь вычисляемый: `escalation.onResolutionOverdue.alert` истинен, когда `escalation.onResolutionOverdue` = `"alert"`.
+
+**Длительность таймеров:**
+
+| Запись | Длительность |
+|---|---|
+| `startTimer(id)` | норматив таймера: самая специфичная строка `overrides` (больше совпавших условий), иначе `byPriority`, иначе `defaultSec` |
+| `startTimer("reaction", "byEscalationLevel")`, `startTimer("reaction", "escalation.level.reactionSec")` | `reactionSec` уровня, который у инцидента после `increment` (он стоит раньше в списке эффектов). Уровня нет в `levels` — последний уровень; `levels` пуст — обычный норматив |
+| `restartTimer(id, путь)` | заново, без остатка: значение настройки по пути; `null` — обычный норматив |
+| `secFrom: "reasonCatalogs.<справочник>[].<поле>"` | поле позиции справочника, выбранной в инциденте (для `hold` — причина удержания). `maxMinutes` — в минутах |
+| `startsOnce: true` | таймер запускается один раз за жизнь инцидента: повторный `startTimer` продолжает с остатка, `stopTimer` — пауза |
+| `pausable: true` | `pauseTimer` сохраняет остаток, `resumeTimer` продолжает с него. У таймера без `pausable` пауза — это остановка |
+
+**Срабатывание.** `timerExpired` истинно один раз на каждый дедлайн: после перехода по таймеру тот же дедлайн больше не срабатывает, новый — срабатывает. `scope: "incidents_owned_by_agent"` у системного перехода — только инциденты, владелец которых — этот оператор.
+
+**Лимиты.** Единица — инцидент или группа сценария целиком (`groupCountsAsOneUnit`). `withinActiveLimit(extraUnits)` — сколько единиц добавит действие сверх самого инцидента: у исключения из группы это 1. `withinHoldLimit` — по `maxOnHold`, стоит только у ручного «Отложить» (§10.2).
+
+**Формы.** `requiredFrom: "reasonCatalog:<справочник>.<признак>"` — поле обязательно, если у позиции, выбранной в поле той же формы с `source: "reasonCatalog:<справочник>"`, признак истинен. `visibleWhen: { field, in }` — поле видно, когда значение `field` входит в `in`.
+
+**Подстановки в тексты:**
+
+| Где | Переменные |
+|---|---|
+| `appendLog` | `{comment}`, `{stepNumber}`, `{holdReasonLabel}`, `{targetName}` — адресат после перехода, `{escalationLevel}` — после перехода, `{closeResultLabel}`, `{filledSteps}`, `{totalSteps}`, `{previousOwnerName}` — адресат до перехода, `{escalationReason}` — `escalation.reason` |
+| `forms[].notes` | `{ownerName}` — адресат, `{nextEscalationLevel}`, `{filledSteps}`, `{totalSteps}` |
+| `badges` | `{ownerName}` — адресат, `{holdReasonLabel}`, `{closeResultLabel}` — подпись причины сбоя, если она выбрана, иначе результата |
+
+`setCursor("firstOpenStep")` — курсор сценария на первый незаполненный шаг.
+
 ---
 
 ## Карта API: что за что отвечает
