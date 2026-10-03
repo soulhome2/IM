@@ -96,6 +96,21 @@
       const escalated = toasts.includes("Автоэскалация");
       return [opened && escalated && mode() === "work", `автоэскалация: ${escalated}, карточка открыта: ${mode() === "work"}`];
     },
+    async groupTarget() {
+      await setFilter("open");
+      const id = btn($("eventsList"), "claim").dataset.ev;
+      await click(btn($("eventsList"), "transfer", id));
+      field("targetId").value = "sidorov";
+      await confirm("проба");
+      await wait(3500);
+      await setFilter("inbox");
+      const accept = btn($("eventsList"), "accept", id);
+      if (accept) await click(accept);
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("mine");
+      const mine = Boolean(btn($("eventsList"), "open_card", id));
+      return [Boolean(accept) && mine, `на принятие группе: ${Boolean(accept)}, после «Принять» мой: ${mine}`];
+    },
     async breach() {
       const id = await claimFirst();
       await click($("backToQueue"));

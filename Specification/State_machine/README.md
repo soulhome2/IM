@@ -238,9 +238,10 @@ POST /operator/incidents/{g}/transitions/close     formValues: { comment }
 **Передача**
 
 ```
-GET  /operator/transfer-targets?incidentGuid={g}   → список без себя и без владельца
+GET  /operator/transfer-targets?incidentGuid={g}   → список без себя, своих групп и владельца
 POST /operator/incidents/{g}/transitions/transfer  formValues: { targetId, comment }
-   → owner = адресат, escalation_level +1, reaction перезапущен, resolution приостановлен
+   → человеку: owner = адресат; группе: owner = null, assignment_group = группа (§8.1)
+   → escalation_level +1, reaction перезапущен, resolution приостановлен
    → прежнему владельцу приходит incident.card_evicted в поток
 ```
 

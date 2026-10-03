@@ -2077,7 +2077,8 @@
     const pick = (id) => list.find((e) => e.id === id);
     const inbox = pick("INC-1836");
     if (inbox) {
-      inbox.owner = "grp-leads";
+      inbox.owner = null;
+      inbox.assignmentGroup = "grp-leads";
       inbox.escalationLevel = 1;
       startReaction(inbox, "byEscalationLevel");
       log(inbox, "sidorov", "Эскалация → {who}. {why}", {
@@ -2283,7 +2284,7 @@
     reject: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
     hold: (ev) => t("{id} отложен", { id: ev.id }),
     release: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
-    transfer: (ev) => t("{id} передан → {who}", { id: ev.id, who: actorName(ev.owner) }),
+    transfer: (ev) => t("{id} передан → {who}", { id: ev.id, who: actorName(engine.addressee(ev)) }),
     takeover: (ev) => t("Перехвачен {id}", { id: ev.id }),
     close: (ev) => t(ev.closeResult === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.id }),
     reopen: (ev) => t("{id} переоткрыт", { id: ev.id }),
@@ -2926,7 +2927,7 @@
           : t("перехват и передача недоступны по правам");
       const holder =
         ev.state === "pending_acceptance"
-          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(ev.owner) })
+          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(engine.addressee(ev)) })
           : t("Инцидент обрабатывает {who}.", { who: actorName(ev.owner) });
       return `<div class="work-note">${escapeHtml(`${holder} ${t("Просмотр без изменений")} — ${rights}.`)}</div>`;
     }
@@ -4208,7 +4209,7 @@
     fired.forEach(({ id, transition }) => {
       if (transition !== "auto_escalate") return;
       const ev = state.events.find((x) => x.id === id);
-      toast(t("Автоэскалация {id} → {who}", { id, who: actorName(ev.owner) }));
+      toast(t("Автоэскалация {id} → {who}", { id, who: actorName(engine.addressee(ev)) }));
     });
     if (fired.length) {
       renderAll();

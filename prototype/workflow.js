@@ -1238,7 +1238,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            "form.targetId"
+            "form.targetId.ifPerson"
           ]
         },
         {
@@ -1707,7 +1707,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            "escalation.level.target"
+            "escalation.level.target.ifPerson"
           ]
         },
         {

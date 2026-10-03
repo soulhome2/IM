@@ -61,6 +61,12 @@ def transfer_to_self(w):
     transition(w, "transfer")["guards"] = [g for g in transition(w, "transfer")["guards"] if g["fn"] != "targetIsNotSelf"]
 
 
+def escalate_to_my_group(w):
+    for lvl in w["escalation"]["levels"]:
+        lvl["reactionSec"] = 2
+    w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
+
+
 def hold_with_unknown_effect(w):
     hold = transition(w, "hold")
     hold["effects"].append({"kind": "transactional", "fn": "teleport"})
@@ -111,6 +117,7 @@ MUTATIONS = [
     ("ceiling", "норматив реакции 2 с, потолок эскалации 0 — нарушение реакции", reaction_ceiling),
     ("holdBreach", "предельный срок удержания ~2 с — нарушение удержания", short_hold),
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
+    ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

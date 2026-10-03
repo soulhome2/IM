@@ -502,7 +502,7 @@
         { "fn": "targetIsNotSelf" }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "setOwner", "args": ["form.targetId"] },
+        { "kind": "transactional", "fn": "setOwner", "args": ["form.targetId.ifPerson"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["form.targetId.ifGroup"] },
         { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
@@ -641,7 +641,7 @@
         { "fn": "flagBelow", "args": ["escalation_level", "escalation.maxLevel"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "setOwner", "args": ["escalation.level.target"] },
+        { "kind": "transactional", "fn": "setOwner", "args": ["escalation.level.target.ifPerson"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["escalation.level.target.ifGroup"] },
         { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
         { "kind": "transactional", "fn": "clearHoldReason" },

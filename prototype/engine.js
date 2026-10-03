@@ -29,7 +29,9 @@
     const isMine = (ev) => ev.owner === ME;
     // «Я» как адресат: сам оператор и группы, в которые он входит (§10.1)
     const isSelf = (id) => Boolean(id) && (id === ME || (isGroup(id) && ctx.memberOf(id, ME)));
-    const isTarget = (ev) => isSelf(ev.owner);
+    // Адресат: владелец-человек, а пока группа не приняла — сама группа (assignment_group, §8.1)
+    const addressee = (ev) => ev.owner || ev.assignmentGroup || null;
+    const isTarget = (ev) => isSelf(addressee(ev));
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
     // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
     // адресован», даже если владельцем записан я сам: так передают лично оператору
@@ -295,7 +297,7 @@
           comment: (form && form.comment) || "",
           stepNumber: ctx.stepNumber(ev),
           holdReasonLabel: hold ? hold.label : "",
-          targetName: ctx.actorName(ev.owner),
+          targetName: ctx.actorName(addressee(ev)),
           escalationLevel: ev.escalationLevel,
           closeResultLabel: closeResultLabel(ev),
           filledSteps: prog.filled,
@@ -315,19 +317,19 @@
     }
 
     function value(arg, ev, form, scope) {
+      // Модификаторы адресата: .ifGroup — только группа, .ifPerson — только человек, иначе null
+      const mod = typeof arg === "string" && arg.match(/^(.+)\.(ifGroup|ifPerson)$/);
+      if (mod) {
+        const v = value(mod[1], ev, form, scope);
+        return v && isGroup(v) === (mod[2] === "ifGroup") ? v : null;
+      }
       if (arg === "actor") return scope.actor;
       if (arg === "now") return now();
       if (typeof arg === "string" && arg.startsWith("form.")) {
-        const [name, mod] = arg.slice(5).split(".");
-        const v = form ? form[name] : undefined;
-        if (mod === "ifGroup") return isGroup(v) ? v : null;
+        const v = form ? form[arg.slice(5)] : undefined;
         return v == null || v === "" ? null : v;
       }
       if (arg === "escalation.level.target") return scope.level ? refToId(scope.level.targetRef) : null;
-      if (arg === "escalation.level.target.ifGroup") {
-        const id = scope.level ? refToId(scope.level.targetRef) : null;
-        return isGroup(id) ? id : null;
-      }
       return arg;
     }
 
@@ -364,7 +366,7 @@
       // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
       recordBreach: (ev, [kind]) => {
         ev.breaches = ev.breaches || [];
-        ev.breaches.push({ kind, at: now(), owner: ev.owner });
+        ev.breaches.push({ kind, at: now(), owner: addressee(ev) });
         ev.slaBreached = true;
       },
       increment: (ev, [field]) => {
@@ -397,7 +399,7 @@
         transitionId: tr.id,
         previousOwner: draft.owner,
         level: W.escalation.levels.find((l) => l.level === draft.escalationLevel + 1) || null,
-        logVars: { previousOwnerName: ctx.actorName(draft.owner) },
+        logVars: { previousOwnerName: ctx.actorName(addressee(draft)) },
       };
       if (tr.to) draft.state = tr.to;
       tr.effects.forEach((e) => {
@@ -497,7 +499,7 @@
         Object.assign(
           {
             nextEscalationLevel: ev.escalationLevel + 1,
-            ownerName: ctx.actorName(ev.owner),
+            ownerName: ctx.actorName(addressee(ev)),
             filledSteps: prog.filled,
             totalSteps: prog.total,
             minutesSinceClose: Math.max(1, Math.round((now() - (ev.closedAt || now())) / 60000)),
@@ -517,7 +519,7 @@
           const excludes = field.excludes || [];
           options = ctx
             .transferTargets(ev)
-            .filter((o) => !(excludes.includes("self") && isSelf(o.id)) && !(excludes.includes("currentOwner") && o.id === ev.owner));
+            .filter((o) => !(excludes.includes("self") && isSelf(o.id)) && !(excludes.includes("currentOwner") && o.id === addressee(ev)));
           if (field.defaultFrom && options.some((o) => o.id === ctx.defaultTransferTarget())) defaultValue = ctx.defaultTransferTarget();
         } else if (field.source && field.source.startsWith("reasonCatalog:")) {
           const catalog = field.source.split(":")[1];
@@ -546,7 +548,7 @@
       if (!rule) return { label: [states[ev.state].label], cls: ev.state };
       const hold = catalogItem("hold", ev.holdReason);
       return {
-        label: [rule.label, { ownerName: ctx.actorName(ev.owner), holdReasonLabel: hold ? hold.label : "", closeResultLabel: closeResultLabel(ev) }],
+        label: [rule.label, { ownerName: ctx.actorName(addressee(ev)), holdReasonLabel: hold ? hold.label : "", closeResultLabel: closeResultLabel(ev) }],
         cls: BADGE_CLASS[rule.style] || rule.style,
       };
     }
@@ -626,6 +628,7 @@
       isDone,
       isTarget,
       isSelf,
+      addressee,
       ownership,
       inQueueFilter,
       availability,
