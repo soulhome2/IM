@@ -139,6 +139,9 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
     "Удержание": "Hold",
+    "Подгрупп / устройств с открытыми инцидентами": "Subgroups / devices with open incidents",
+    "Открытых инцидентов{crit}": "Open incidents{crit}",
+    ", есть критический": ", including a critical one",
     "Время до предельного срока удержания по причине": "Time left before the hold limit for this reason",
     "Норматив нарушен": "Target breached",
     "Нужен допуск в зону": "Zone clearance required",
@@ -489,6 +492,9 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "El objetivo de resolución está en pausa mientras el incidente espera",
     "Удержание": "Espera",
+    "Подгрупп / устройств с открытыми инцидентами": "Subgrupos / dispositivos con incidentes abiertos",
+    "Открытых инцидентов{crit}": "Incidentes abiertos{crit}",
+    ", есть критический": ", incluido uno crítico",
     "Время до предельного срока удержания по причине": "Tiempo restante hasta el límite de espera por este motivo",
     "Норматив нарушен": "Objetivo incumplido",
     "Нужен допуск в зону": "Se requiere autorización de acceso a la zona",

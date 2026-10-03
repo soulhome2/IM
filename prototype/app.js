@@ -2684,8 +2684,18 @@
               <span class="toggle-icon material-symbols-outlined">chevron_right</span>
               <span class="material-symbols-outlined">${icon}</span>
               <span class="node-text">${escapeHtml(name)}</span>
-              ${!item.isDevice && hasKids ? `<span class="tree-badge">${badgeText(item)}</span>` : ""}
-              ${openCount ? `<span class="tree-ev ${crit ? "crit" : ""}">${openCount}</span>` : ""}
+              ${
+                !item.isDevice && hasKids
+                  ? `<span class="tree-badge" title="${te("Подгрупп / устройств с открытыми инцидентами")}">${badgeText(item)}</span>`
+                  : ""
+              }
+              ${
+                openCount
+                  ? `<span class="tree-ev ${crit ? "crit" : ""}" title="${te("Открытых инцидентов{crit}", {
+                      crit: crit ? t(", есть критический") : "",
+                    })}">${openCount}</span>`
+                  : ""
+              }
             </div>
             ${hasKids ? `<ul role="group">${renderTreeHtml(item.children, level + 1, trace)}</ul>` : ""}
           </li>`;
