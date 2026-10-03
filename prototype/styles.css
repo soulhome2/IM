@@ -805,6 +805,8 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   gap: 8px;
 }
 .events-types select { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Отступ .search-input не должен прятать текст списка под стрелкой */
+select.search-input { padding-right: 36px; }
 .events-select .btn { display: inline-flex; align-items: center; gap: 4px; }
 .events-select .material-symbols-outlined { font-size: 18px; }
 .events-list {
@@ -1751,8 +1753,15 @@ kbd {
   .brand-text,
   .clock,
   #toggleMedia { display: none; }
-  .topbar-cluster { padding-left: 12px; }
-  .user-btn { padding: 4px 4px 4px 10px; margin-left: 0; }
+  .events-types { grid-template-columns: minmax(0, 1fr); }
+  .topbar-cluster { padding-left: 8px; }
+  .topbar-actions { gap: 4px; }
+  /* Язык — только значок: список тот же, он лежит поверх значка невидимым */
+  .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
+  .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }
+  .user-btn { padding: 4px; margin-left: 0; }
+  .user-btn .chevron { display: none; }
+  .duty { white-space: nowrap; }
   .user-btn .operator-meta { display: none; }
   .break-banner { padding: 8px 12px; }
 

@@ -8,6 +8,19 @@
    После упавшего шага прототип возвращается в очередь и освобождает лимит активных,
    чтобы независимые шаги дальше не падали следом. */
 (() => {
+  // Страница, открытая самопроверкой в узкой рамке: сообщает, шире ли она экрана
+  if (new URLSearchParams(location.search).has("widthcheck")) {
+    window.addEventListener("load", () =>
+      setTimeout(() => {
+        const wide = [...document.querySelectorAll("body *")]
+          .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+          .slice(0, 3)
+          .map((el) => el.id || el.className);
+        parent.postMessage({ widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide }, "*");
+      }, 300)
+    );
+    return;
+  }
   if (!new URLSearchParams(location.search).has("selftest")) return;
 
   const $ = (id) => document.getElementById(id);
@@ -643,6 +656,27 @@
       await pressKey("?");
       expect(!taken, "N взял инцидент за окном справки");
       expect($("modalHotkeys").hidden, "? не закрыл справку");
+    });
+
+    await step("На телефоне 360 пикселей страница не шире экрана", async () => {
+      const frame = document.createElement("iframe");
+      frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";
+      const report = new Promise((resolve) => {
+        const onMessage = (e) => {
+          if (!e.data || !e.data.widthcheck) return;
+          window.removeEventListener("message", onMessage);
+          resolve(e.data);
+        };
+        window.addEventListener("message", onMessage);
+        setTimeout(() => resolve(null), 5000);
+      });
+      frame.src = location.pathname.split("/").pop() + "?widthcheck";
+      document.body.appendChild(frame);
+      const r = await report;
+      frame.remove();
+      expect(r, "узкая страница не ответила");
+      expect(r.scroll <= r.width, `ширина ${r.scroll} при экране ${r.width}: ${r.wide.join(", ")}`);
+      return `${r.scroll} из ${r.width}`;
     });
 
     await step("Цвет полоски у каждого приоритета", async () => {
