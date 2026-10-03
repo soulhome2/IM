@@ -99,7 +99,12 @@ def check_workflow(w, err):
         if item.get("causeCatalog") and item["causeCatalog"] not in catalogs:
             err.append(f"результат {rid}: нет справочника {item['causeCatalog']}")
 
+    keys = [h["key"] for h in w["hotkeys"]]
+    for key in sorted({k for k in keys if keys.count(k) > 1}):
+        err.append(f"клавиша {key} назначена дважды (§13, правило 5)")
     for h in w["hotkeys"]:
+        if h["key"].startswith("Ctrl+"):
+            err.append(f"клавиша {h['key']}: сочетания с Ctrl занимает браузер (§13, правило 5)")
         action = h["action"]
         if action.startswith("transition:") and action.split(":", 1)[1] not in transitions:
             err.append(f"клавиша {h['key']}: нет перехода {action}")

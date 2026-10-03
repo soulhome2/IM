@@ -2358,12 +2358,12 @@ window.IM_WORKFLOW = {
         "id": "select_same_type",
         "label": "Однотипные",
         "scope": "state:new + same_event_type",
-        "hotkey": "Ctrl+A"
+        "hotkey": "Shift+A"
       },
       {
         "id": "clear_selection",
         "label": "Снять",
-        "hotkey": "Ctrl+D"
+        "hotkey": "Shift+D"
       }
     ]
   },
@@ -2451,12 +2451,12 @@ window.IM_WORKFLOW = {
       "worksInInput": false
     },
     {
-      "key": "Ctrl+A",
+      "key": "Shift+A",
       "action": "selection:same_type",
       "worksInInput": false
     },
     {
-      "key": "Ctrl+D",
+      "key": "Shift+D",
       "action": "selection:clear",
       "worksInInput": false
     },

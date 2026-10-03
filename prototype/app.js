@@ -3244,6 +3244,7 @@
     if (!cams.length) {
       $("videoStage").innerHTML = `<div class="empty">${te("К инциденту не привязаны камеры")}</div>`;
       $("camStrip").hidden = true;
+      $("camStrip").innerHTML = "";
       return;
     }
     if (!cams.includes(state.activeCam)) state.activeCam = cams[0];
@@ -3283,6 +3284,8 @@
     `;
 
     $("camStrip").hidden = !many;
+    // Скрытая полоса не должна хранить подписи прошлого инцидента и прошлого языка
+    if (!many) $("camStrip").innerHTML = "";
     if (many) {
       $("camStrip").innerHTML = `
         <div class="cam-ticks">
@@ -4207,10 +4210,12 @@
     },
   };
 
-  // Имя клавиши в записи машины: «N», «Ctrl+A», «Enter», «ArrowLeft», «?», «Esc»
+  // Имя клавиши в записи машины: «N», «Shift+A», «Ctrl+K», «Enter», «ArrowLeft», «?», «Esc».
+  // Shift пишется только у букв: «?» набирается с Shift, но это своя клавиша
   function keyName(e) {
     const base = e.key === "Escape" ? "Esc" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-    return e.ctrlKey || e.metaKey ? `Ctrl+${base}` : base;
+    if (e.ctrlKey || e.metaKey) return `Ctrl+${base}`;
+    return e.shiftKey && /^[A-ZА-ЯЁ]$/.test(base) ? `Shift+${base}` : base;
   }
 
   // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет переход

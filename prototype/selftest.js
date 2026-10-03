@@ -106,8 +106,8 @@
     return row;
   }
 
-  async function pressKey(key) {
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  async function pressKey(key, mods) {
+    document.body.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ key, bubbles: true }, mods)));
     await wait();
   }
 
@@ -704,6 +704,21 @@
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
       await click($("breakReturn"));
       expect($("breakBanner").hidden, "кнопка на плашке не вернула на смену");
+    });
+
+    await step("Shift+A выбирает однотипные, Shift+D снимает выделение", async () => {
+      await setFilter("open");
+      // «Снять» доступна, только когда выборка не пуста — на любой странице очереди
+      const picked = () => !$("clearSelectionBtn").disabled;
+      await pressKey("A", { shiftKey: true });
+      const after = picked();
+      const last = $("toasts").lastElementChild;
+      await pressKey("D", { shiftKey: true });
+      expect(after, "Shift+A ничего не выбрал");
+      expect(!picked(), "Shift+D не снял выделение");
+      await pressKey("A", { ctrlKey: true });
+      expect(!picked(), "Ctrl+A перехвачен прототипом");
+      return last ? last.textContent : "";
     });
 
     await step("Горячие клавиши не работают при открытой справке", async () => {

@@ -857,8 +857,8 @@
     ],
     "selectionHelpers": [
       { "id": "select_all", "label": "Выбрать все", "scope": "current_filter", "limit": "maxBulk" },
-      { "id": "select_same_type", "label": "Однотипные", "scope": "state:new + same_event_type", "hotkey": "Ctrl+A" },
-      { "id": "clear_selection", "label": "Снять", "hotkey": "Ctrl+D" }
+      { "id": "select_same_type", "label": "Однотипные", "scope": "state:new + same_event_type", "hotkey": "Shift+A" },
+      { "id": "clear_selection", "label": "Снять", "hotkey": "Shift+D" }
     ]
   },
 
@@ -889,8 +889,8 @@
     { "key": "T", "action": "transition:takeover", "worksInInput": false },
     { "key": "H", "action": "transition:hold", "worksInInput": false },
     { "key": "G", "action": "group:create", "worksInInput": false },
-    { "key": "Ctrl+A", "action": "selection:same_type", "worksInInput": false },
-    { "key": "Ctrl+D", "action": "selection:clear", "worksInInput": false },
+    { "key": "Shift+A", "action": "selection:same_type", "worksInInput": false },
+    { "key": "Shift+D", "action": "selection:clear", "worksInInput": false },
     { "key": "B", "action": "session:toggle_break", "worksInInput": false },
     { "key": "Enter", "action": "form:open:close", "worksInInput": false },
     { "key": "ArrowLeft", "action": "media:camera_prev", "worksInInput": false },
