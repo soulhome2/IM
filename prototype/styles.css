@@ -893,7 +893,7 @@ select.search-input { padding-right: 36px; }
 .event-sla.late { color: var(--crit-text); }
 /* Норматив закрытия на удержании: отсчёт стоит, внимания не требует */
 .event-sla.held,
-.sla.held { color: var(--muted); }
+.sla.held { color: var(--text); }
 .event-sla.held .material-symbols-outlined,
 .sla.held .material-symbols-outlined { font-size: 13px; vertical-align: -2px; }
 .event-sla.breached,
