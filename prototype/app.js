@@ -2809,6 +2809,17 @@
     )}</b>${view.running ? "" : ' <span class="material-symbols-outlined">pause</span>'}</span>`;
   }
 
+  // Предельный срок удержания по причине (таймер hold машины, §4): сколько ещё можно держать
+  function holdChip(ev, extra) {
+    if (ev.state !== "on_hold" || !ev.holdDueAt) return "";
+    const left = ev.holdDueAt - Date.now();
+    const cls = [extra || "event-sla", left < 120000 ? "late" : ""].filter(Boolean).join(" ");
+    const hint = t("Время до предельного срока удержания по причине");
+    return `<span class="${cls}" data-hold-timer="${ev.id}" title="${escapeHtml(hint)}">${te("Удержание")} <b class="sla-t">${fmtSla(
+      left
+    )}</b></span>`;
+  }
+
   // Чекбокс на любом событии очереди; смешанные типы можно набирать вручную (§11)
   function bulkEligible(ev) {
     if (state.checked.has(ev.id)) return true;
@@ -2854,6 +2865,7 @@
                     : ""
                 }
                 ${timerChip(e)}
+                ${holdChip(e)}
                 ${
                   e.groupId
                     ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
@@ -3086,6 +3098,7 @@
               : ""
           }
           ${timerChip(ev, "sla")}
+          ${holdChip(ev, "sla")}
           ${
             ev.groupId
               ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
@@ -4234,6 +4247,13 @@
       if (!view) return;
       el.querySelector(".sla-t").textContent = fmtSla(view.leftMs);
       el.classList.toggle("late", view.running && view.leftMs < 120000);
+    });
+    document.querySelectorAll("[data-hold-timer]").forEach((el) => {
+      const e = state.events.find((x) => x.id === el.dataset.holdTimer);
+      if (!e || !e.holdDueAt) return;
+      const left = e.holdDueAt - Date.now();
+      el.querySelector(".sla-t").textContent = fmtSla(left);
+      el.classList.toggle("late", left < 120000);
     });
     const ev = selected();
     if (ev) $("statusSla").textContent = statusTimerText(ev);

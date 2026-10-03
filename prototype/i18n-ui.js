@@ -138,6 +138,8 @@ window.IM_DICT_UI = {
       "The resolution timer pauses and continues when you resume.",
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
+    "Удержание": "Hold",
+    "Время до предельного срока удержания по причине": "Time left before the hold limit for this reason",
     "Норматив нарушен": "Target breached",
     "Нужен допуск в зону": "Zone clearance required",
     "Нужен оператор с доступом к архиву площадки": "An operator with access to the site archive is needed",
@@ -486,6 +488,8 @@ window.IM_DICT_UI = {
       "El objetivo de resolución se pausa y continuará al reanudar.",
     "Норматив закрытия приостановлен на время удержания":
       "El objetivo de resolución está en pausa mientras el incidente espera",
+    "Удержание": "Espera",
+    "Время до предельного срока удержания по причине": "Tiempo restante hasta el límite de espera por este motivo",
     "Норматив нарушен": "Objetivo incumplido",
     "Нужен допуск в зону": "Se requiere autorización de acceso a la zona",
     "Нужен оператор с доступом к архиву площадки":

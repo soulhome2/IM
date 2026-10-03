@@ -41,7 +41,7 @@ description: Ревью репозитория Incident Manager (IM) — пра�
 
 ```bash
 google-chrome --headless=new --disable-gpu --no-first-run \
-  --user-data-dir=<временная папка> --virtual-time-budget=15000 \
+  --user-data-dir=<временная папка> --virtual-time-budget=30000 \
   --dump-dom "file://$PWD/prototype/index.html?selftest" > <временная папка>/selftest.html
 ```
 

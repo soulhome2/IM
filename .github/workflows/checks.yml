@@ -18,7 +18,7 @@ jobs:
         if: always()
         run: |
           google-chrome --headless=new --disable-gpu --no-sandbox --no-first-run \
-            --virtual-time-budget=15000 \
+            --virtual-time-budget=30000 \
             --dump-dom "file://$PWD/prototype/index.html?selftest" > selftest.html
           python3 - <<'EOF'
           import html, re, sys

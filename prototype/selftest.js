@@ -383,6 +383,9 @@
       await click(b);
       await confirmDialog();
       expect(mode() === "queue", "после «Отложить» карточка не закрылась");
+      await setFilter("mine");
+      const row = $("eventsList").querySelector(`[data-id="${workId}"]`);
+      expect(row && row.querySelector("[data-hold-timer]"), "у отложенного не виден срок удержания");
     }, "Взять, вернуться к очереди, продолжить");
 
     await step("Возобновить", async () => {
