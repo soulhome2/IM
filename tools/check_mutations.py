@@ -43,6 +43,11 @@ def short_resolution(w):
     timer["overrides"] = []
 
 
+def hold_with_unknown_effect(w):
+    hold = transition(w, "hold")
+    hold["effects"].append({"kind": "transactional", "fn": "teleport"})
+
+
 def without_manual_transitions(w):
     w["transitions"] = [t for t in w["transitions"] if t["trigger"] != "manual"]
     w["navActions"]["items"] = []
@@ -85,6 +90,7 @@ MUTATIONS = [
     ("breakReason", "новая причина перерыва", lambda w: w["session"]["breakReasons"].append({"id": "probe", "label": "Проба"})),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
+    ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (
         "autoEscalation",

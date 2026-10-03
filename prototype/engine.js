@@ -165,7 +165,11 @@
       isOwnerInStates: (ev, [list]) => (!asList(list).includes(ev.state) || isMine(ev) ? null : ["Вы не владелец инцидента"]),
       isTarget: (ev) => (isTarget(ev) ? null : ["Передача адресована другому"]),
       isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["Передача адресована вам"] : null),
-      targetIsNotSelf: () => null,
+      // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
+      targetIsNotSelf: (ev, args, opts) => {
+        const target = opts && opts.form ? opts.form.targetId : null;
+        return target && target === ME ? ["Передача на себя запрещена"] : null;
+      },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
       // Признак активности оператора в прототипе не отслеживается (§17): без сервера не воспроизвести
@@ -200,7 +204,9 @@
       holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["Другая причина удержания"]),
       stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["Недоступно в текущем состоянии"]),
       canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["Нет права открывать чужие карточки"]),
-      minSelected: () => null,
+      // Сколько инцидентов отмечено для массового действия; без выборки условие выполнено
+      minSelected: (ev, [n], opts) =>
+        opts && opts.selectedCount != null && opts.selectedCount < n ? ["Выберите хотя бы {n} события", { n }] : null,
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["Выключено настройкой"]),
     };
 
@@ -326,6 +332,9 @@
     const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached" };
 
     const EFFECTS = {
+      setState: (ev, [stateId]) => {
+        ev.state = stateId;
+      },
       setOwner: (ev, [arg], s) => {
         ev.owner = arg === "actorIfEmpty" ? ev.owner || s.actor : value(arg, ev, s.form, s);
       },
@@ -374,20 +383,40 @@
       externalCommand: () => {},
     };
 
-    function applyEffects(tr, ev, form, actor) {
+    // Переход атомарен (§14.1, §14.2): эффекты выполняются на черновике инцидента, и только если
+    // все прошли без ошибки, черновик становится инцидентом. Неизвестный эффект — ошибка, а не пропуск
+    function draftOf(ev) {
+      return Object.assign({}, ev, { log: ev.log.slice(), breaches: (ev.breaches || []).slice() });
+    }
+    function effectsOn(draft, tr, form, actor) {
       const scope = {
         actor,
         form,
         transitionId: tr.id,
-        previousOwner: ev.owner,
-        level: W.escalation.levels.find((l) => l.level === ev.escalationLevel + 1) || null,
-        logVars: { previousOwnerName: ctx.actorName(ev.owner) },
+        previousOwner: draft.owner,
+        level: W.escalation.levels.find((l) => l.level === draft.escalationLevel + 1) || null,
+        logVars: { previousOwnerName: ctx.actorName(draft.owner) },
       };
-      if (tr.to) ev.state = tr.to;
+      if (tr.to) draft.state = tr.to;
       tr.effects.forEach((e) => {
         const fn = EFFECTS[e.fn];
-        if (fn) fn(ev, e.args || [], scope);
+        if (!fn) throw new Error(`Эффект не реализован: ${e.fn}`);
+        fn(draft, e.args || [], scope);
       });
+    }
+    function applyEffects(tr, ev, form, actor) {
+      return applyAll(tr, [ev], form, actor);
+    }
+    // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
+    function applyAll(tr, list, form, actor) {
+      const drafts = list.map(draftOf);
+      try {
+        drafts.forEach((d) => effectsOn(d, tr, form, actor));
+      } catch (err) {
+        return { ok: false, why: ["Переход не выполнен: {error}", { error: err.message }] };
+      }
+      list.forEach((ev, i) => Object.assign(ev, drafts[i]));
+      return { ok: true };
     }
 
     // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
@@ -418,8 +447,8 @@
       if (!a.ok) return { ok: false, why: a.why };
       const bad = validateForm(tr, ev, form);
       if (bad) return { ok: false, why: bad };
-      if (form.targetId && form.targetId === ME) return { ok: false, why: ["Передача на себя запрещена"] };
-      applyEffects(tr, ev, form, ME);
+      const applied = applyEffects(tr, ev, form, ME);
+      if (!applied.ok) return applied;
       return { ok: true, navigate: tr.ui.navigate };
     }
 
@@ -439,8 +468,7 @@
           if (firstFail(ev, tr.guards)) return;
           const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
           if (timerGuard) markFired(ev, timerGuard.args[0]);
-          applyEffects(tr, ev, {}, tr.actor || "dispatcher");
-          changed.push({ id: ev.id, transition: tr.id });
+          if (applyEffects(tr, ev, {}, tr.actor || "dispatcher").ok) changed.push({ id: ev.id, transition: tr.id });
         });
       });
       return changed;
@@ -551,7 +579,11 @@
         list.forEach((ev) => (ev.groupId = null));
         return { ok: false, why };
       }
-      list.forEach((ev) => applyEffects(claim, ev, {}, ME));
+      const applied = applyAll(claim, list, {}, ME);
+      if (!applied.ok) {
+        list.forEach((ev) => (ev.groupId = null));
+        return applied;
+      }
       if (g.shared.includes("scenarioAnswers")) list.forEach((ev) => ctx.shareAnswers(ev, list[0]));
       return { ok: true };
     }
@@ -577,11 +609,12 @@
     // коллег в прототипе: в продукте их действия приходят с сервера (поток событий)
     function applyAs(id, ev, form, actor) {
       const tr = transitions[id];
-      if (tr) applyEffects(tr, ev, form || {}, actor);
+      return tr ? applyEffects(tr, ev, form || {}, actor) : { ok: false, why: ["Неизвестное действие"] };
     }
 
     return {
       workflow: W,
+      implemented: { guards: Object.keys(GUARDS), effects: Object.keys(EFFECTS) },
       transition: (id) => transitions[id] || null,
       nav: (id) => navActions[id] || null,
       isNav: (id) => Boolean(navActions[id]),

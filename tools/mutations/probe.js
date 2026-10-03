@@ -42,6 +42,16 @@
   }
 
   const PROBES = {
+    async atomic() {
+      const id = await claimFirst();
+      await click(anyBtn(root(), "hold"));
+      await confirm();
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("mine");
+      const stillWorking = Boolean(btn($("eventsList"), "open_card", id));
+      const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
+      return [stillWorking && toasts.includes("Переход не выполнен"), `остался «В работе»: ${stillWorking}; ${toasts.slice(-80)}`];
+    },
     async autoEscalation() {
       await setFilter("open");
       const id = btn($("eventsList"), "claim").dataset.ev;

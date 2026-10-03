@@ -2,7 +2,8 @@
 """Проверка машины состояний: workflow.v4.json и openapi.json сходятся сами с собой и между собой.
 
 Запуск из корня репозитория: python3 tools/check_machine.py
-Проверяет, что переходы ссылаются на существующие состояния, формы, условия, эффекты,
+Проверяет, что всё из реестров условий и эффектов реализовано в prototype/engine.js;
+что переходы ссылаются на существующие состояния, формы, условия, эффекты,
 права и таймеры; что справочники, горячие клавиши и фильтры очереди ссылаются на то,
 что есть в модели; что состояния, справочники и бейджи в API совпадают с моделью
 и все $ref в API разрешаются. Смысл правил не проверяет — только целостность.
@@ -135,6 +136,23 @@ def check_workflow(w, err):
             err.append(f"бейдж: нет состояния {b['state']}")
 
 
+def check_engine(w, err):
+    """Всё, что есть в реестрах машины, умеет исполнитель прототипа (BUG-06)."""
+    path = os.path.join(ROOT, "prototype", "engine.js")
+    with open(path, encoding="utf-8") as f:
+        src = f.read()
+
+    def names(block):
+        body = src.split(f"const {block} = {{", 1)[1].split("\n    };", 1)[0]
+        return set(re.findall(r"^      (\w+): ", body, re.M))
+
+    for kind, block in (("guards", "GUARDS"), ("effects", "EFFECTS")):
+        implemented = names(block)
+        for item in w["registries"][kind]:
+            if item["fn"] not in implemented:
+                err.append(f"{'условие' if kind == 'guards' else 'эффект'} {item['fn']} есть в реестре, но не реализован в prototype/engine.js")
+
+
 def check_api(w, o, err):
     schemas = o["components"]["schemas"]
     states = {s["id"] for s in w["states"]}
@@ -168,6 +186,7 @@ def main():
         print(f"Не читается: {e}")
         return 1
     check_workflow(w, err)
+    check_engine(w, err)
     check_api(w, o, err)
     for e in err:
         print(e)
