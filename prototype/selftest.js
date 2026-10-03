@@ -665,8 +665,8 @@
       expect(field("reasonId"), "перерыв не спросил причину");
       await confirmDialog();
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
-      await click($("breakBtn"));
-      expect($("breakBanner").hidden, "плашка перерыва не исчезла");
+      await click($("breakReturn"));
+      expect($("breakBanner").hidden, "кнопка на плашке не вернула на смену");
     });
 
     await step("Горячие клавиши не работают при открытой справке", async () => {

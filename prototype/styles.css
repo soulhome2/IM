@@ -515,6 +515,8 @@ select.search-input,
   font-size: 13px;
   font-weight: 500;
 }
+.break-banner:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.break-banner .btn { flex-shrink: 0; }
 
 /* Ширины боковых панелей задаются переменными: значения *-user пишет
    перетаскивание сплиттеров, остальное — раскладка по умолчанию. */

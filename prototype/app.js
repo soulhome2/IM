@@ -3888,6 +3888,9 @@
       closeMenus();
       toggleBreak();
     });
+    $("breakReturn").addEventListener("click", () => {
+      if (state.onBreak) toggleBreak();
+    });
     $("hotkeysBtn").addEventListener("click", () => {
       closeMenus();
       $("modalHotkeys").hidden = false;
