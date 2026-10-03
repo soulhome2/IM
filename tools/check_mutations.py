@@ -71,6 +71,11 @@ def key_in_modal(w):
     next(h for h in w["hotkeys"] if h["key"] == "N")["worksInModal"] = True
 
 
+def close_without_placeholder(w):
+    form = next(f for f in w["forms"] if f["id"] == "close")
+    del next(f for f in form["fields"] if f["name"] == "resultId")["placeholder"]
+
+
 def hold_with_unknown_effect(w):
     hold = transition(w, "hold")
     hold["effects"].append({"kind": "transactional", "fn": "teleport"})
@@ -123,6 +128,7 @@ MUTATIONS = [
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
     ("modalKey", "«Взять следующее» работает при открытой справке", key_in_modal),
+    ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

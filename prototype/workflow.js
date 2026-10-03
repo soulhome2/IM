@@ -635,7 +635,9 @@ window.IM_WORKFLOW = {
           "defaultWhen": {
             "requiredStepsFilled": "closing",
             "value": "processed"
-          }
+          },
+          "placeholder": "Выберите результат",
+          "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultWhen или вариант один"
         },
         {
           "name": "causeId",

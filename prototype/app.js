@@ -2393,11 +2393,13 @@
           return `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(text)}</option>`;
         })
         .join("");
+      // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
+      const empty = field.placeholder ? `<option value="" disabled>${te(field.placeholder)}</option>` : "";
       const hint =
         field.source === "transferTargets"
           ? `<p class="field-hint">${te("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() })}</p>`
           : "";
-      return `<label ${box}>${label}<select data-field="${field.name}">${options}</select></label>${hint}`;
+      return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select></label>${hint}`;
     }
     return `<label ${box}>${label}<textarea rows="3" data-field="${field.name}" placeholder="${escapeHtml(
       t(field.placeholder || "")
@@ -2435,9 +2437,11 @@
     form.fields.forEach((field) => {
       if (field.kind !== "select") return;
       const enabled = (field.options || []).filter((o) => !o.disabled);
-      const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : enabled[0] && enabled[0].id;
+      // Список с placeholder заполняется сам, только если выбирать не из чего или значение задала схема
+      const fallback = field.placeholder ? (enabled.length === 1 ? enabled[0].id : "") : enabled[0] && enabled[0].id;
+      const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : fallback;
       const el = $("dialogFields").querySelector(`[data-field="${field.name}"]`);
-      if (el && pick) el.value = pick;
+      if (el) el.value = pick || "";
     });
     refreshDialogFields();
     const confirm = $("dialogConfirm");

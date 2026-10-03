@@ -539,6 +539,9 @@
       const other = field("resultId").querySelector('option[value="false_alarm"]');
       expect(processed && processed.disabled, "«Обработан» доступен при пустом сценарии");
       expect(other && !other.disabled, "«Ложная тревога» недоступна");
+      expect(field("resultId").value === "", `результат выбран за оператора: «${field("resultId").value}»`);
+      await click($("dialogConfirm"));
+      expect(!$("modalDialog").hidden, "закрылось без выбранного результата");
       document.querySelector('[data-close="modalDialog"]').click();
       await wait();
       return freshId;

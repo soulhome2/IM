@@ -43,6 +43,12 @@
   }
 
   const PROBES = {
+    async closeEmpty() {
+      await claimFirst();
+      await click(anyBtn(root(), "close"));
+      const value = field("resultId").value;
+      return [value !== "", "результат в форме выбран заранее: «" + value + "»"];
+    },
     async modalKey() {
       await setFilter("open");
       await key("?");
