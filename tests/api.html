@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тесты API МИ</title>
+    <style>
+      body { margin: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+      pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
+      @media (prefers-color-scheme: dark) { body { background: #1b1c20; color: #eee; } }
+    </style>
+  </head>
+  <body>
+    <h1>Тесты API операторской части</h1>
+    <p>
+      Сценарии и случайные прогоны против встроенного сервера прототипа: те же запросы, что у интерфейса и будущего
+      бэкенда. Ответы сверяются со схемами <code>openapi.json</code>. Открывается двойным кликом.
+    </p>
+    <strong id="apitest-summary">Идёт прогон…</strong>
+    <pre id="apitest-log"></pre>
+    <script src="../prototype/workflow.js"></script>
+    <script src="../prototype/openapi.js"></script>
+    <script src="../prototype/engine.js"></script>
+    <script src="../prototype/demo-data.js"></script>
+    <script src="../prototype/server.js"></script>
+    <script src="../prototype/api.js"></script>
+    <script src="../prototype/contract.js"></script>
+    <script src="harness.js"></script>
+    <script src="api-scenarios.js"></script>
+    <script src="api-properties.js"></script>
+    <script>
+      IMTest.run();
+    </script>
+  </body>
+</html>

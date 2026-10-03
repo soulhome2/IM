@@ -6,7 +6,8 @@
 что переходы ссылаются на существующие состояния, формы, условия, эффекты,
 права и таймеры; что справочники, горячие клавиши и фильтры очереди ссылаются на то,
 что есть в модели; что состояния, справочники и бейджи в API совпадают с моделью
-и все $ref в API разрешаются. Смысл правил не проверяет — только целостность.
+и все $ref в API разрешаются; что интерфейс прототипа (app.js) говорит только с API
+и не трогает исполнитель и демо-данные напрямую. Смысл правил не проверяет — только целостность.
 Код выхода 1, если есть ошибки.
 """
 import json
@@ -182,6 +183,20 @@ def check_api(w, o, err):
             err.append(f"API: $ref на несуществующую схему {name}")
 
 
+def check_layers(err):
+    """Интерфейс прототипа говорит только с API: не трогает исполнитель, демо-данные и сервер
+    напрямую. Единственное место, где он их называет, — создание встроенного сервера."""
+    path = os.path.join(ROOT, "prototype", "app.js")
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    forbidden = re.compile(r"\bIMEngine\b|\bengine\.|\bIM_DEMO\b|\bembedded\.(?!recorded)|\bserver\.handle\b")
+    for n, line in enumerate(lines, 1):
+        if "IMServer.create(" in line:
+            continue
+        if forbidden.search(line):
+            err.append(f"app.js:{n}: интерфейс обращается к данным или исполнителю в обход API: {line.strip()[:80]}")
+
+
 def main():
     err = []
     try:
@@ -192,6 +207,7 @@ def main():
         return 1
     check_workflow(w, err)
     check_engine(w, err)
+    check_layers(err)
     check_api(w, o, err)
     for e in err:
         print(e)

@@ -139,6 +139,7 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
     "Удержание": "Hold",
+    "Запущен макрос «{name}»": "Macro «{name}» launched",
     "В полях ввода работают только {keys}.": "Only {keys} work in input fields.",
     "При открытом окне — только {keys}.": "With a dialog open, only {keys}.",
     "Набор можно будет задавать «под себя» в настройках оператора.": "You will be able to customize the set in operator settings.",
@@ -495,6 +496,7 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "El objetivo de resolución está en pausa mientras el incidente espera",
     "Удержание": "Espera",
+    "Запущен макрос «{name}»": "Macro «{name}» ejecutada",
     "В полях ввода работают только {keys}.": "En los campos de entrada solo funcionan {keys}.",
     "При открытом окне — только {keys}.": "Con una ventana abierta, solo {keys}.",
     "Набор можно будет задавать «под себя» в настройках оператора.": "El conjunto se podrá personalizar en los ajustes del operador.",

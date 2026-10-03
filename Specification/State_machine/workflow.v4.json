@@ -575,6 +575,7 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closed_by", "actor"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closed_at", "now"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", "form.resultId"] },

@@ -1,5 +1,4 @@
 (() => {
-  const ME = "Иванов А. С.";
 
   /* ===== Языки =====
      Тексты состояний и переходов — переводимые лейблы, а не идентификаторы:
@@ -34,419 +33,6 @@
 
   const te = (ru, vars) => escapeHtml(t(ru, vars));
 
-  const SCENARIOS = {
-    fire: {
-      title: "Пожарная тревога",
-      steps: [
-        { id: "visual", type: "checkbox", label: "Тревога подтверждена по видео", required: true },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Классификация",
-          required: true,
-          options: ["Реальная", "Ложная", "Требует выезда"],
-        },
-        {
-          id: "kind",
-          type: "combo",
-          label: "Тип сработки",
-          options: ["Задымление", "Открытое пламя", "Датчик без визуального подтверждения", "Тест системы"],
-        },
-        { id: "note", type: "edit", label: "Комментарий / номер наряда", placeholder: "Что сделано, кого вызвали" },
-        {
-          id: "macros",
-          type: "macros",
-          label: "Макросы площадки",
-          buttons: ["Оповещение по площадке", "Разблокировать эвакуационные выходы"],
-        },
-      ],
-    },
-    intrusion: {
-      title: "Проникновение",
-      steps: [
-        { id: "visual", type: "checkbox", label: "Нарушитель виден в кадре", required: true },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Классификация",
-          required: true,
-          options: ["Реальное проникновение", "Персонал / ложная", "Недостаточно данных"],
-        },
-        {
-          id: "zone",
-          type: "combo",
-          label: "Зона",
-          options: ["Периметр", "Служебный вход", "Склад", "Офисная зона"],
-        },
-        { id: "note", type: "edit", label: "Описание", placeholder: "Маршрут, приметы, действия охраны" },
-        { id: "macros", type: "macros", label: "Макросы", buttons: ["Включить сирену", "Переключить PTZ на зону"] },
-      ],
-    },
-    sabotage: {
-      title: "Саботаж камеры",
-      steps: [
-        { id: "lost", type: "checkbox", label: "Подтверждена потеря видео / закрытие объектива" },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Причина",
-          required: true,
-          options: ["Умышленное воздействие", "Неисправность", "Погодные условия"],
-        },
-        { id: "note", type: "edit", label: "Комментарий", placeholder: "Камера, симптомы, заявка в сервис" },
-        { id: "macros", type: "macros", label: "Макросы", buttons: ["Создать заявку на ремонт"] },
-      ],
-    },
-    loiter: {
-      title: "Скопление / праздношатание",
-      steps: [
-        { id: "visual", type: "checkbox", label: "Ситуация подтверждена", required: true },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Решение",
-          required: true,
-          options: ["Направить охрану", "Наблюдать", "Ложная"],
-        },
-        { id: "note", type: "edit", label: "Комментарий" },
-      ],
-    },
-    ppe: {
-      title: "Отсутствие СИЗ",
-      steps: [
-        { id: "visual", type: "checkbox", label: "Отсутствие каски подтверждено по видео", required: true },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Классификация",
-          required: true,
-          options: ["Реальное нарушение", "Ошибка детектора", "Сотрудник вне рабочей зоны"],
-        },
-        {
-          id: "who",
-          type: "combo",
-          label: "Кто нарушитель",
-          options: ["Сотрудник склада", "Водитель поставщика", "Подрядчик", "Не идентифицирован"],
-        },
-        {
-          id: "note",
-          type: "edit",
-          label: "Комментарий / кому передано",
-          placeholder: "Табельный номер, бригадир, номер акта",
-        },
-        {
-          id: "macros",
-          type: "macros",
-          label: "Макросы зоны",
-          buttons: ["Голосовое оповещение в зону", "Уведомить инженера по охране труда"],
-        },
-      ],
-    },
-    alcohol: {
-      title: "Превышение уровня алкоголя",
-      steps: [
-        { id: "visual", type: "checkbox", label: "Личность на точке прохода подтверждена по видео", required: true },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Результат проверки",
-          required: true,
-          options: ["Превышение подтверждено", "Повторный тест в норме", "Сбой алкорамки"],
-        },
-        {
-          id: "level",
-          type: "combo",
-          label: "Показание прибора",
-          options: ["0,3–0,5 ‰", "0,5–1,0 ‰", "Более 1,0 ‰", "Показание не считано"],
-        },
-        { id: "note", type: "edit", label: "Комментарий", placeholder: "ФИО, смена, кому передан сотрудник" },
-        {
-          id: "macros",
-          type: "macros",
-          label: "Макросы точки прохода",
-          buttons: ["Заблокировать турникет", "Вызвать медпункт"],
-        },
-      ],
-    },
-    glass: {
-      title: "Звук разбития стекла",
-      steps: [
-        { id: "audio", type: "checkbox", label: "Звуковое событие прослушано оператором", required: true },
-        { id: "visual", type: "checkbox", label: "Повреждение видно на камерах зоны" },
-        {
-          id: "verdict",
-          type: "radio",
-          label: "Классификация",
-          required: true,
-          options: ["Разбитие витрины или стекла", "Бытовой шум: посуда, погрузка", "Ложная сработка детектора"],
-        },
-        { id: "note", type: "edit", label: "Комментарий", placeholder: "Что повреждено, вызвана ли охрана" },
-        {
-          id: "macros",
-          type: "macros",
-          label: "Макросы зоны",
-          buttons: ["Включить сирену зоны", "Направить охрану к витрине"],
-        },
-      ],
-    },
-  };
-
-  const DEVICE_TYPES = {
-    camera: { icon: "videocam", label: "Камера видеонаблюдения" },
-    "fire-detector": { icon: "local_fire_department", label: "Пожарный извещатель" },
-    "panic-button": { icon: "crisis_alert", label: "Тревожная кнопка" },
-    "ppe-detector": { icon: "engineering", label: "Детектор СИЗ" },
-    "access-point": { icon: "sensor_door", label: "Виртуальная точка прохода" },
-    microphone: { icon: "mic", label: "Микрофон" },
-  };
-
-  const DEVICE_CATALOG = {
-    "device-1": { name: "Главный вход", type: "camera" },
-    "device-2": { name: "Стойка ресепшн", type: "camera" },
-    "device-3": { name: "Конференц-зал — сцена", type: "camera" },
-    "device-4": { name: "Конференц-зал — общий план", type: "camera" },
-    "device-5": { name: "Опенспейс разработки", type: "camera" },
-    "device-6": { name: "Маркетинг — рабочая зона", type: "camera" },
-    "device-7": { name: "Переговорная «Невада»", type: "camera" },
-    "device-8": { name: "Ворота погрузки А", type: "camera" },
-    "device-9": { name: "Стеллажи А1–А8", type: "camera" },
-    "device-10": { name: "Зона приёмки товара", type: "camera" },
-    "device-11": { name: "Разгрузочная рампа", type: "camera" },
-    "device-12": { name: "Центральный проход", type: "camera" },
-    "device-13": { name: "Холодильная камера", type: "camera" },
-    "device-14": { name: "Пост погрузчика", type: "camera" },
-    "device-15": { name: "Испытательный стенд", type: "camera" },
-    "device-16": { name: "Вход в чистую зону", type: "camera" },
-    "device-17": { name: "Лабораторные столы", type: "camera" },
-    "device-18": { name: "Серверная стойка", type: "camera" },
-    "device-19": { name: "Вытяжной шкаф", type: "camera" },
-    "device-20": { name: "Коридор корпуса Б", type: "camera" },
-    "device-21": { name: "Переговорная «Юпитер»", type: "camera" },
-    "device-22": { name: "Офисная кухня", type: "camera" },
-    "device-23": { name: "Торговый зал", type: "camera" },
-    "device-24": { name: "Кассовая зона", type: "camera" },
-    "device-25": { name: "Коридор примерочных", type: "camera" },
-    "device-26": { name: "Витрина у входа", type: "camera" },
-    "device-27": { name: "Зал ресторана", type: "camera" },
-    "device-28": { name: "Кухня ресторана", type: "camera" },
-    "device-29": { name: "Фойе и бар", type: "camera" },
-    "device-30": { name: "Кинозал №3", type: "camera" },
-    "device-31": { name: "Зона ожидания — общий план", type: "camera" },
-    "device-32": { name: "Гардероб", type: "camera" },
-    "device-33": { name: "Обзор поста охраны", type: "camera" },
-    "device-34": { name: "КПП — проходная", type: "camera" },
-    "device-35": { name: "КПП — шлагбаум и въезд", type: "camera" },
-    "fire-1": { name: "Датчик дыма 1", type: "fire-detector" },
-    "fire-2": { name: "Датчик дыма 2", type: "fire-detector" },
-    "fire-3": { name: "Датчик дыма 3", type: "fire-detector" },
-    "fire-4": { name: "Датчик дыма 4", type: "fire-detector" },
-    "fire-5": { name: "Датчик дыма 5", type: "fire-detector" },
-    "fire-6": { name: "Датчик дыма — зона ожидания", type: "fire-detector" },
-    "panic-1": { name: "Тревожная кнопка — пост охраны", type: "panic-button" },
-    "panic-2": { name: "Тревожная кнопка — ресепшн", type: "panic-button" },
-    "ppe-1": { name: "Детектор СИЗ — разгрузочная рампа", type: "ppe-detector" },
-    "ppe-2": { name: "Детектор СИЗ — вход в цех", type: "ppe-detector" },
-    "gate-1": { name: "Точка прохода — КПП склада", type: "access-point" },
-    "gate-2": { name: "Точка прохода — турникет офиса", type: "access-point" },
-    "mic-1": { name: "Микрофон — витрина у входа", type: "microphone" },
-    "mic-2": { name: "Микрофон — торговый зал", type: "microphone" },
-  };
-
-  const DEVICES_IN_REPAIR = ["device-9", "device-19", "device-25", "fire-3", "ppe-2"];
-
-  const PAGE_SIZE = 8;
-
-  function devicesOfType(type) {
-    return Object.keys(DEVICE_CATALOG).filter((id) => DEVICE_CATALOG[id].type === type);
-  }
-  function workingOfType(type) {
-    return devicesOfType(type).filter((id) => !DEVICES_IN_REPAIR.includes(id));
-  }
-  function inRepairOfType(type) {
-    return devicesOfType(type).filter((id) => DEVICES_IN_REPAIR.includes(id));
-  }
-
-  const TOPOLOGY = [
-    {
-      id: "group-1",
-      name: "Главный офис",
-      children: [
-        {
-          id: "group-2",
-          name: "1-й этаж",
-          children: [
-            {
-              id: "group-3",
-              name: "Приемная",
-              devices: ["device-1", "device-2", "fire-1", "gate-2"],
-              children: [
-                { id: "group-28", name: "Зона ожидания", devices: ["device-31", "device-32", "fire-6"] },
-                { id: "group-29", name: "Пост охраны", devices: ["device-33", "panic-1", "panic-2"] },
-              ],
-            },
-            { id: "group-4", name: "Конференц-зал", devices: ["device-3", "device-4", "fire-2", "device-1"] },
-          ],
-        },
-        {
-          id: "group-5",
-          name: "2-й этаж",
-          children: [
-            { id: "group-6", name: "Отдел разработки", devices: ["device-5"] },
-            { id: "group-7", name: "Отдел маркетинга", devices: ["device-6", "device-7"] },
-          ],
-        },
-      ],
-    },
-    {
-      id: "group-8",
-      name: "Складской комплекс",
-      children: [
-        {
-          id: "group-9",
-          name: "Этаж А",
-          children: [
-            { id: "group-10", name: "Склад №1", devices: ["device-8", "device-9", "device-10", "fire-3"] },
-            {
-              id: "group-11",
-              name: "Склад №2",
-              devices: ["device-11", "device-12", "device-8", "ppe-1", "ppe-2"],
-            },
-          ],
-        },
-        {
-          id: "group-12",
-          name: "Этаж Б",
-          children: [{ id: "group-13", name: "Склад №3", devices: ["device-13", "device-14"] }],
-        },
-        {
-          id: "group-30",
-          name: "КПП и проходная",
-          devices: ["device-34", "device-35", "gate-1"],
-        },
-      ],
-    },
-    {
-      id: "group-14",
-      name: "Технопарк",
-      children: [
-        {
-          id: "group-15",
-          name: "Корпус А",
-          children: [
-            { id: "group-16", name: "Лаборатория 1", devices: ["device-15", "device-16", "fire-4"] },
-            { id: "group-17", name: "Лаборатория 2", devices: ["device-17", "device-18", "device-19"] },
-          ],
-        },
-        {
-          id: "group-18",
-          name: "Корпус Б",
-          children: [
-            { id: "group-19", name: "Офис 1", devices: ["device-20", "device-15"] },
-            { id: "group-20", name: "Офис 2", devices: ["device-21", "device-22"] },
-          ],
-        },
-      ],
-    },
-    {
-      id: "group-21",
-      name: "Торговый центр",
-      children: [
-        {
-          id: "group-22",
-          name: "1-й этаж",
-          children: [
-            { id: "group-23", name: "Магазин 1", devices: ["device-23", "device-24", "fire-5", "mic-2"] },
-            { id: "group-24", name: "Магазин 2", devices: ["device-25", "device-26", "mic-1"] },
-          ],
-        },
-        {
-          id: "group-25",
-          name: "2-й этаж",
-          children: [
-            { id: "group-26", name: "Ресторан", devices: ["device-27", "device-28"] },
-            { id: "group-27", name: "Кинотеатр", devices: ["device-29", "device-30"] },
-          ],
-        },
-      ],
-    },
-    {
-      id: "group-all-cameras",
-      name: "Все камеры",
-      description: "Сквозная подборка камер видеонаблюдения со всех площадок, разделённая по состоянию оборудования.",
-      children: [
-        {
-          id: "group-cameras-working",
-          name: "Рабочие",
-          description: "Камеры в штатной работе.",
-          devices: workingOfType("camera"),
-        },
-        {
-          id: "group-cameras-repair",
-          name: "В ремонте",
-          description: "Камеры, временно выведенные из эксплуатации.",
-          devices: inRepairOfType("camera"),
-        },
-      ],
-    },
-    {
-      id: "group-fire-detectors",
-      name: "Пожарные датчики",
-      description: "Сквозная подборка пожарных датчиков со всех площадок, разделённая по состоянию оборудования.",
-      children: [
-        {
-          id: "group-fire-working",
-          name: "Рабочие",
-          description: "Датчики в штатной работе.",
-          devices: workingOfType("fire-detector"),
-        },
-        {
-          id: "group-fire-repair",
-          name: "В ремонте",
-          description: "Датчики, временно выведенные из эксплуатации.",
-          devices: inRepairOfType("fire-detector"),
-        },
-      ],
-    },
-    {
-      id: "group-detectors",
-      name: "Детекторы и микрофоны",
-      description: "Сквозная подборка аналитических детекторов, точек прохода и микрофонов.",
-      children: [
-        {
-          id: "group-ppe",
-          name: "Детекторы СИЗ",
-          description: "Контроль средств индивидуальной защиты в производственных зонах.",
-          devices: devicesOfType("ppe-detector"),
-        },
-        {
-          id: "group-access",
-          name: "Виртуальные точки прохода",
-          description: "Турникеты, КПП и алкорамки, объединённые в виртуальные точки прохода.",
-          devices: devicesOfType("access-point"),
-        },
-        {
-          id: "group-mics",
-          name: "Микрофоны",
-          description: "Аудиодетекция: разбитие стекла, крик, выстрел.",
-          devices: devicesOfType("microphone"),
-        },
-      ],
-    },
-  ];
-
-  function buildTree(nodes) {
-    return nodes.map((node) => {
-      const group = { id: node.id, name: node.name };
-      if (node.description) group.description = node.description;
-      group.children = node.children ? buildTree(node.children) : [];
-      (node.devices || []).forEach((deviceId) => {
-        group.children.push({ id: deviceId, isDevice: true });
-      });
-      return group;
-    });
-  }
-
-  const TREE = buildTree(TOPOLOGY);
 
   // Кадры видеомонитора: инлайновые SVG-сцены, viewBox 320x180, растягиваются по кадру.
   const SCENES = {
@@ -978,692 +564,52 @@
     Технопарк: "lab",
   };
 
-  function devView(id) {
-    const spec = DEVICE_CATALOG[id] || {};
-    return {
-      id,
-      name: spec.name || id,
-      type: spec.type || "camera",
-      typeLabel: (DEVICE_TYPES[spec.type] || DEVICE_TYPES.camera).label,
-      scene: SCENE_BY_DEVICE[id] || "hall",
-    };
-  }
+  /* ===== Устройства на экране =====
+     Название и тип устройства приходят от сервера (DeviceRef в карточке и дереве групп).
+     Здесь только оформление: значок типа, кадр камеры, место на плане. */
 
-  // Источник инцидента — первое устройство в deviceIds: датчик, детектор или камера аналитики.
-  function eventSource(ev) {
-    return (ev.deviceIds && ev.deviceIds[0]) || (ev.cameras && ev.cameras[0]) || null;
-  }
-
-  function eventPlan(ev) {
-    const ids = [eventSource(ev), ...(ev.deviceIds || []), ...(ev.cameras || [])].filter(Boolean);
-    for (const id of ids) {
-      if (DEVICE_POS[id]) return DEVICE_POS[id].plan;
-    }
-    return PLAN_BY_SITE[ev.site] || "mall";
-  }
-
-  const EVENTS = [
-    {
-      id: "INC-1847",
-      time: "14:31:08",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "Магазин 1, торговый зал",
-      region: "Торговый центр",
-      priority: "critical",
-      status: "new",
-      operator: null,
-      slaSec: 240,
-      deviceIds: ["fire-5", "device-23", "device-24"],
-      media: "both",
-      cameras: ["device-23", "device-24", "device-26"],
-      answers: {},
-      launched: [],
-      log: [{ t: "14:31:08", who: "Диспетчер", text: "Событие поставлено в очередь" }],
-    },
-    {
-      // Парный к INC-1847 однотипный инцидент: на нём проверяется «Обработать как одно» (§11)
-      id: "INC-1851",
-      time: "14:30:51",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "Магазин 2, коридор примерочных",
-      region: "Торговый центр",
-      priority: "critical",
-      status: "new",
-      operator: null,
-      slaSec: 240,
-      deviceIds: ["fire-5", "device-26"],
-      media: "both",
-      cameras: ["device-26", "device-23"],
-      answers: {},
-      launched: [],
-      log: [{ t: "14:30:51", who: "Диспетчер", text: "Событие поставлено в очередь" }],
-    },
-    {
-      id: "INC-1850",
-      time: "14:30:12",
-      typeId: "glass",
-      type: "Детекция звука разбития стекла",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "Магазин 2, витрина у входа",
-      region: "Торговый центр",
-      priority: "high",
-      status: "new",
-      operator: null,
-      slaSec: 300,
-      deviceIds: ["mic-1", "device-26", "device-23"],
-      media: "both",
-      cameras: ["device-26", "device-23"],
-      answers: {},
-      launched: [],
-      log: [
-        { t: "14:30:12", who: "Аудиодетекция", text: "Микрофон «Витрина у входа»: спектр разбития стекла, 87 дБ" },
-      ],
-    },
-    {
-      id: "INC-1849",
-      time: "14:29:35",
-      typeId: "alcohol",
-      type: "Детекция превышения уровня алкоголя",
-      site: "Складской комплекс",
-      siteType: "КПП",
-      location: "КПП, проходная — турникет №2",
-      region: "Складской комплекс",
-      priority: "high",
-      status: "new",
-      operator: null,
-      slaSec: 420,
-      deviceIds: ["gate-1", "device-34", "device-35"],
-      media: "both",
-      cameras: ["device-34", "device-35"],
-      answers: {},
-      launched: [],
-      log: [
-        { t: "14:29:35", who: "Точка прохода", text: "Алкорамка на турникете №2: показание выше порога, проход заблокирован" },
-      ],
-    },
-    {
-      id: "INC-1846",
-      time: "14:28:41",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №1, ворота погрузки А",
-      region: "Складской комплекс",
-      priority: "high",
-      status: "foreign",
-      operator: "Петрова М.",
-      slaSec: 420,
-      deviceIds: ["device-8", "device-9", "device-10"],
-      media: "video",
-      cameras: ["device-8", "device-10", "device-11"],
-      answers: { visual: true, verdict: "Недостаточно данных" },
-      launched: [],
-      log: [
-        { t: "14:28:41", who: "Диспетчер", text: "Событие поставлено в очередь" },
-        { t: "14:29:02", who: "Петрова М.", text: "Взято в работу · шаг 2/5" },
-      ],
-    },
-    {
-      id: "INC-1848",
-      time: "14:26:14",
-      typeId: "ppe",
-      type: "Отсутствие каски",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №2, разгрузочная рампа",
-      region: "Складской комплекс",
-      priority: "medium",
-      status: "foreign",
-      operator: "Сидоров К.",
-      stepIndex: 2,
-      slaSec: 720,
-      deviceIds: ["ppe-1", "device-11", "device-8"],
-      media: "both",
-      cameras: ["device-11", "device-8"],
-      answers: { visual: true, verdict: "Реальное нарушение" },
-      launched: [],
-      log: [
-        { t: "14:26:14", who: "Детектор СИЗ", text: "Зона рампы: человек без защитной каски, достоверность 0,93" },
-        { t: "14:26:58", who: "Сидоров К.", text: "Взято в работу" },
-        { t: "14:27:40", who: "Сидоров К.", text: "Нарушение подтверждено, ищу табельный номер" },
-      ],
-    },
-    {
-      id: "INC-1845",
-      time: "14:22:17",
-      typeId: "sabotage",
-      type: "Саботаж камеры",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "Магазин 2, коридор примерочных",
-      region: "Торговый центр",
-      priority: "medium",
-      status: "mine",
-      operator: "Иванов А. С.",
-      paused: true,
-      stepIndex: 1,
-      slaSec: 900,
-      deviceIds: ["device-25"],
-      media: "video",
-      cameras: ["device-25", "device-26"],
-      answers: { lost: true },
-      launched: [],
-      log: [
-        { t: "14:22:17", who: "Диспетчер", text: "Потеря видеопотока «Коридор примерочных»" },
-        { t: "14:23:05", who: "Иванов А. С.", text: "Взято в работу" },
-        { t: "14:24:40", who: "Иванов А. С.", text: "Обработка приостановлена на шаге 2" },
-      ],
-    },
-    {
-      id: "INC-1844",
-      time: "14:19:03",
-      typeId: "loiter",
-      type: "Скопление людей",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "1-й этаж, витрина у входа",
-      region: "Торговый центр",
-      priority: "medium",
-      status: "foreign",
-      operator: "Гусев Р. А.",
-      stepIndex: 1,
-      slaSec: 600,
-      deviceIds: ["device-26", "device-23"],
-      media: "both",
-      cameras: ["device-26", "device-23"],
-      answers: { visual: true },
-      launched: [],
-      log: [
-        { t: "14:19:03", who: "Диспетчер", text: "Детектор скопления" },
-        { t: "14:19:48", who: "Гусев Р. А.", text: "Взято в работу · смотрю по камерам входной группы" },
-      ],
-    },
-    {
-      id: "INC-1843",
-      time: "14:11:55",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Главный офис",
-      siteType: "Офис",
-      location: "Приемная, пост охраны",
-      region: "Главный офис",
-      priority: "high",
-      status: "escalated",
-      operator: "Дежурный ЦОД",
-      slaSec: 180,
-      deviceIds: ["panic-1", "device-33"],
-      media: "map",
-      cameras: [],
-      answers: { visual: true, verdict: "Реальное проникновение" },
-      launched: ["Включить сирену"],
-      log: [
-        { t: "14:12:20", who: "Сидоров К.", text: "Эскалация в ЦОД: нет доступа к площадке" },
-      ],
-    },
-    {
-      id: "INC-1842",
-      time: "14:06:12",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №1, датчик дыма 3",
-      region: "Складской комплекс",
-      priority: "high",
-      status: "new",
-      operator: null,
-      slaSec: 300,
-      deviceIds: ["fire-3", "device-8", "device-10"],
-      media: "map",
-      cameras: [],
-      answers: {},
-      launched: [],
-      log: [{ t: "14:06:12", who: "Диспетчер", text: "Сработка пожарного датчика" }],
-    },
-    {
-      id: "INC-1841",
-      time: "13:58:44",
-      typeId: "loiter",
-      type: "Скопление людей",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "2-й этаж, фойе кинотеатра",
-      region: "Торговый центр",
-      priority: "medium",
-      status: "new",
-      operator: null,
-      slaSec: 660,
-      deviceIds: ["device-29", "device-30"],
-      media: "video",
-      cameras: ["device-29", "device-30"],
-      answers: {},
-      launched: [],
-      log: [{ t: "13:58:44", who: "Видеоаналитика", text: "Превышение плотности людей в зоне" }],
-    },
-    {
-      id: "INC-1840",
-      time: "13:51:09",
-      typeId: "sabotage",
-      type: "Саботаж камеры",
-      site: "Технопарк",
-      siteType: "Лаборатория",
-      location: "Корпус А, лаборатория 2",
-      region: "Технопарк",
-      priority: "medium",
-      status: "foreign",
-      operator: "Сидоров К.",
-      slaSec: 540,
-      deviceIds: ["device-18", "device-17"],
-      media: "video",
-      cameras: ["device-18"],
-      answers: { lost: true },
-      launched: [],
-      log: [
-        { t: "13:51:09", who: "Видеоаналитика", text: "Потеря видеопотока" },
-        { t: "13:52:31", who: "Сидоров К.", text: "Взято в работу · шаг 1/4" },
-      ],
-    },
-    {
-      id: "INC-1839",
-      time: "13:44:57",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №2, центральный проход",
-      region: "Складской комплекс",
-      priority: "high",
-      status: "new",
-      operator: null,
-      slaSec: 360,
-      deviceIds: ["device-11", "device-12"],
-      media: "both",
-      cameras: ["device-11"],
-      answers: {},
-      launched: [],
-      log: [{ t: "13:44:57", who: "Диспетчер", text: "Событие поставлено в очередь" }],
-    },
-    {
-      id: "INC-1838",
-      time: "13:37:12",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Главный офис",
-      siteType: "Офис",
-      location: "1-й этаж, конференц-зал",
-      region: "Главный офис",
-      priority: "critical",
-      status: "new",
-      operator: null,
-      slaSec: 210,
-      deviceIds: ["fire-2", "device-3", "device-4"],
-      media: "both",
-      cameras: ["device-3", "device-4"],
-      answers: {},
-      launched: [],
-      log: [{ t: "13:37:12", who: "Диспетчер", text: "Сработка пожарного датчика" }],
-    },
-    {
-      id: "INC-1837",
-      time: "13:29:38",
-      typeId: "loiter",
-      type: "Скопление людей",
-      site: "Главный офис",
-      siteType: "Офис",
-      location: "Приемная, зона ожидания",
-      region: "Главный офис",
-      priority: "low",
-      status: "closed",
-      operator: "Иванов А. С.",
-      slaSec: 0,
-      deviceIds: ["device-31", "device-32"],
-      media: "video",
-      cameras: ["device-31"],
-      answers: { visual: true, verdict: "Наблюдать", note: "Очередь на регистрацию, разошлись сами" },
-      launched: [],
-      log: [
-        { t: "13:29:38", who: "Видеоаналитика", text: "Скопление в зоне ожидания" },
-        { t: "13:35:02", who: "Иванов А. С.", text: "Инцидент закрыт" },
-      ],
-    },
-    {
-      id: "INC-1836",
-      time: "13:22:05",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Технопарк",
-      siteType: "Лаборатория",
-      location: "Корпус А, вход в чистую зону",
-      region: "Технопарк",
-      priority: "high",
-      status: "escalated",
-      operator: "Дежурный ЦОД",
-      slaSec: 150,
-      deviceIds: ["device-16", "device-15"],
-      media: "both",
-      cameras: ["device-16"],
-      answers: { visual: true, verdict: "Недостаточно данных" },
-      launched: [],
-      log: [{ t: "13:24:11", who: "Петрова М.", text: "Эскалация: требуется допуск в чистую зону" }],
-    },
-    {
-      id: "INC-1835",
-      time: "13:14:49",
-      typeId: "sabotage",
-      type: "Саботаж камеры",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №3, холодильная камера",
-      region: "Складской комплекс",
-      priority: "medium",
-      status: "new",
-      operator: null,
-      slaSec: 480,
-      deviceIds: ["device-13"],
-      media: "video",
-      cameras: ["device-13"],
-      answers: {},
-      launched: [],
-      log: [{ t: "13:14:49", who: "Видеоаналитика", text: "Резкое падение освещённости кадра" }],
-    },
-    {
-      id: "INC-1834",
-      time: "13:06:31",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "2-й этаж, кухня ресторана",
-      region: "Торговый центр",
-      priority: "critical",
-      status: "mine",
-      operator: "Иванов А. С.",
-      paused: true,
-      stepIndex: 2,
-      slaSec: 195,
-      deviceIds: ["device-28", "device-27"],
-      media: "both",
-      cameras: ["device-27", "device-28"],
-      answers: { visual: true, verdict: "Реальная", kind: "Задымление" },
-      launched: [],
-      log: [
-        { t: "13:06:31", who: "Диспетчер", text: "Задымление на кухне" },
-        { t: "13:08:44", who: "Иванов А. С.", text: "Обработка приостановлена на шаге 3" },
-      ],
-    },
-    {
-      id: "INC-1833",
-      time: "12:58:17",
-      typeId: "loiter",
-      type: "Скопление людей",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Этаж А, разгрузочная рампа",
-      region: "Складской комплекс",
-      priority: "low",
-      status: "new",
-      operator: null,
-      slaSec: 720,
-      deviceIds: ["device-11", "device-10"],
-      media: "video",
-      cameras: ["device-11", "device-10"],
-      answers: {},
-      launched: [],
-      log: [{ t: "12:58:17", who: "Видеоаналитика", text: "Группа людей у рампы дольше 10 минут" }],
-    },
-    {
-      id: "INC-1832",
-      time: "12:49:53",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Главный офис",
-      siteType: "Офис",
-      location: "2-й этаж, отдел разработки",
-      region: "Главный офис",
-      priority: "medium",
-      status: "foreign",
-      operator: "Петрова М.",
-      slaSec: 600,
-      deviceIds: ["device-5"],
-      media: "video",
-      cameras: ["device-5"],
-      answers: { visual: true },
-      launched: [],
-      log: [
-        { t: "12:49:53", who: "СКУД", text: "Проход без карты в нерабочее время" },
-        { t: "12:51:02", who: "Петрова М.", text: "Взято в работу · шаг 1/5" },
-      ],
-    },
-    {
-      id: "INC-1831",
-      time: "12:41:26",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Технопарк",
-      siteType: "Лаборатория",
-      location: "Корпус А, лаборатория 1",
-      region: "Технопарк",
-      priority: "high",
-      status: "closed",
-      operator: "Сидоров К.",
-      slaSec: 0,
-      deviceIds: ["fire-4", "device-15", "device-16"],
-      media: "map",
-      cameras: ["device-15"],
-      answers: { visual: true, verdict: "Ложная", kind: "Тест системы", note: "Плановая проверка АПС" },
-      closeResult: "drill",
-      launched: [],
-      log: [
-        { t: "12:41:26", who: "Диспетчер", text: "Сработка пожарного датчика" },
-        { t: "12:47:10", who: "Сидоров К.", text: "Инцидент закрыт: плановый тест" },
-      ],
-    },
-    {
-      id: "INC-1830",
-      time: "12:33:04",
-      typeId: "sabotage",
-      type: "Саботаж камеры",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "1-й этаж, витрина у входа",
-      region: "Торговый центр",
-      priority: "medium",
-      status: "new",
-      operator: null,
-      slaSec: 420,
-      deviceIds: ["device-26"],
-      media: "video",
-      cameras: ["device-26"],
-      answers: {},
-      launched: [],
-      log: [{ t: "12:33:04", who: "Видеоаналитика", text: "Камера смещена с сектора обзора" }],
-    },
-    {
-      id: "INC-1829",
-      time: "12:25:40",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Технопарк",
-      siteType: "Офис",
-      location: "Корпус Б, коридор",
-      region: "Технопарк",
-      priority: "low",
-      status: "closed",
-      operator: "Иванов А. С.",
-      slaSec: 0,
-      deviceIds: ["device-20"],
-      media: "video",
-      cameras: ["device-20"],
-      answers: { visual: true, verdict: "Персонал / ложная", note: "Сотрудник клининга по графику" },
-      launched: [],
-      log: [
-        { t: "12:25:40", who: "СКУД", text: "Открытие двери без карты" },
-        { t: "12:28:55", who: "Иванов А. С.", text: "Инцидент закрыт" },
-      ],
-    },
-    {
-      id: "INC-1828",
-      time: "12:17:12",
-      typeId: "fire",
-      type: "Пожарная тревога",
-      site: "Главный офис",
-      siteType: "Офис",
-      location: "Приемная, зона ожидания",
-      region: "Главный офис",
-      priority: "high",
-      status: "new",
-      operator: null,
-      slaSec: 330,
-      deviceIds: ["fire-6", "device-31"],
-      media: "both",
-      cameras: ["device-31"],
-      answers: {},
-      launched: [],
-      log: [{ t: "12:17:12", who: "Диспетчер", text: "Сработка датчика дыма в зоне ожидания" }],
-    },
-    {
-      id: "INC-1827",
-      time: "12:08:35",
-      typeId: "loiter",
-      type: "Скопление людей",
-      site: "Торговый центр",
-      siteType: "Торговый центр",
-      location: "1-й этаж, кассовая зона",
-      region: "Торговый центр",
-      priority: "low",
-      status: "new",
-      operator: null,
-      slaSec: 780,
-      deviceIds: ["device-24"],
-      media: "video",
-      cameras: ["device-24"],
-      answers: {},
-      launched: [],
-      log: [{ t: "12:08:35", who: "Видеоаналитика", text: "Очередь на кассах дольше норматива" }],
-    },
-    {
-      id: "INC-1826",
-      time: "11:59:48",
-      typeId: "intrusion",
-      type: "Проникновение",
-      site: "Складской комплекс",
-      siteType: "Склад",
-      location: "Склад №1, стеллажи А1–А8",
-      region: "Складской комплекс",
-      priority: "medium",
-      status: "closed",
-      operator: "Петрова М.",
-      slaSec: 0,
-      deviceIds: ["device-9", "device-8"],
-      media: "video",
-      cameras: ["device-8"],
-      answers: { visual: true, verdict: "Персонал / ложная", zone: "Склад" },
-      launched: [],
-      log: [
-        { t: "11:59:48", who: "Видеоаналитика", text: "Движение в закрытой зоне" },
-        { t: "12:04:19", who: "Петрова М.", text: "Инцидент закрыт" },
-      ],
-    },
-  ];
-
-  // Адресаты эскалации: в продукте — пользователи и роли из системы прав доступа.
-  /* ===== Операторы и дежурные группы (§8.1) ===== */
-
-  const OPERATORS = [
-    { id: "me", name: ME, role: "оператор", duty: "на смене", self: true },
-    { id: "petrova", name: "Петрова М.", role: "старший смены", duty: "на смене" },
-    { id: "sidorov", name: "Сидоров К.", role: "оператор", duty: "на смене" },
-    { id: "noc", name: "Дежурный ЦОД", role: "круглосуточный пост", duty: "на смене" },
-    { id: "gusev", name: "Гусев Р. А.", role: "начальник охраны площадки", duty: "на смене" },
-    { id: "kuznetsov", name: "Кузнецов И. П.", role: "инженер ТСО", duty: "по вызову" },
-  ];
-
-  // Инцидент можно адресовать дежурной группе: владельцем становится человек,
-  // который первым нажал «Принять».
-  const GROUPS = [
-    {
-      id: "grp-leads",
-      name: "Дежурная группа старших",
-      role: "группа",
-      duty: "на смене",
-      group: true,
-      members: ["petrova", "me"],
-    },
-  ];
-
-  const ACTORS = OPERATORS.concat(GROUPS, [
-    { id: "dispatcher", name: "Диспетчер", role: "система", system: true },
-    { id: "system", name: "Система", role: "система", system: true },
-  ]);
-
-  const findActor = (id) => ACTORS.find((o) => o.id === id) || null;
-  const actorRaw = (id) => {
-    const actor = findActor(id);
-    return actor ? actor.name : "Не назначен";
-  };
-  const actorName = (id) => t(actorRaw(id));
-  const actorLabel = (id) => {
-    const actor = findActor(id);
-    if (!actor) return t("Не назначен");
-    return `${t(actor.name)} · ${t(actor.role)}`;
+  const DEVICE_ICON = {
+    camera: "videocam",
+    "fire-detector": "local_fire_department",
+    "panic-button": "crisis_alert",
+    "ppe-detector": "engineering",
+    "access-point": "sensor_door",
+    microphone: "mic",
   };
 
-  /* ===== Машина состояний (§2–§11): состояния, справочники, нормативы, лимиты ===== */
+  const PAGE_SIZE = 8;
 
-  // Модель берётся из Specification/State_machine/workflow.v4.json (prototype/workflow.js),
-  // переходы выполняет её исполнитель engine.js. Своей таблицы переходов в прототипе нет.
-  const WORKFLOW = window.IM_WORKFLOW;
-  const STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
-  const LIMITS = WORKFLOW.limits;
-  const HOLD_REASONS = WORKFLOW.reasonCatalogs.hold.items;
+  /* ===== Связь с сервером =====
+     Интерфейс говорит только с API (api.js) — запросами и ответами из openapi.json.
+     По умолчанию это встроенный сервер в этой же вкладке (server.js), с ?api=… — настоящий бэкенд. */
 
-  // rawHold отдаёт русский источник для журнала, holdLabel/resultLabel — перевод для экрана
-  const rawHold = (id) => {
-    const item = HOLD_REASONS.find((r) => r.id === id);
-    return item ? item.label : "Причина не указана";
-  };
-  const holdLabel = (id) => t(rawHold(id));
-  const resultLabel = (ev) => t(engine.closeResultLabel(ev));
-  const levelTarget = (level) => level.targetRef.split(":")[1];
+  const apiBase = new URLSearchParams(location.search).get("api");
+  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, demo: window.IM_DEMO });
+  const api = IMApi.create(apiBase ? { baseUrl: apiBase } : { server: embedded });
+  // Ответы встроенного сервера — самопроверке: она сверяет их со схемами openapi.json
+  if (embedded) window.IM_RECORDED = embedded.recorded;
+  const enc = encodeURIComponent;
+  const incPath = (guid) => `/operator/incidents/${enc(guid)}`;
 
-  /* ===== Права: ресурс:действие:область (§5) ===== */
+  // Схема workflow — из /operator/workflow/active: формы, клавиши, фильтры, справочники
+  let WORKFLOW = null;
+  let STATES = {};
+  let LIMITS = {};
 
-  // Права демо-оператора: весь каталог прав машины, кроме настройки схемы. В продукте права
-  // приходят из внешней системы (§5), здесь — один набор на всех (§17)
-  const PERMISSIONS = Object.fromEntries(WORKFLOW.permissions.map((p) => [p.key, p.key !== "incident:schema:admin"]));
-
-  const can = (key) => PERMISSIONS[key] === true;
-
-  // Эмуляция работы коллег: они разбирают события из общей очереди, двигают
-  // сценарии, теряют связь и передают инцидент оператору.
-  const SIM = {
-    enabled: true,
-    colleagues: ["sidorov", "petrova", "gusev"],
-    firstTakeSec: 12,
-    takeEverySec: 24,
-    stepEverySec: 11,
-    handoffSec: 46,
-    dropSec: 88,
-    maxTaken: 3,
-    taken: 0,
-    takeTick: 0,
-    stepTick: 0,
-    handoffTick: 0,
-    dropTick: 0,
-    handoffDone: false,
-    dropDone: false,
+  // Последние ответы сервера. Своих данных у интерфейса нет: всё — из этих ответов
+  const store = {
+    session: null,
+    page: { items: [], total: 0, page: 1, pageSize: PAGE_SIZE },
+    counters: {},
+    tree: [],
+    eventTypes: [],
+    deviceTypes: [],
+    targets: [],
+    card: null,
+    selection: null,
   };
 
   const state = {
-    events: EVENTS,
     mode: "queue",
     groupsOn: true,
     mediaOn: true,
@@ -1671,8 +617,9 @@
     camFor: null,
     mobileView: "queue",
     page: 1,
+    focus: true,
     groupId: "all",
-    openGroups: new Set(TREE.map((n) => n.id)),
+    openGroups: new Set(),
     groupQuery: "",
     filter: "open",
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
@@ -1681,63 +628,53 @@
     search: "",
     selectedId: "INC-1847",
     checked: new Set(),
-    onBreak: false,
-    agentState: "ready",
+    // Шаг, который смотрит оператор в карточке на просмотр: курсор владельца не двигается
+    viewStep: new Map(),
     videoMode: "archive",
-    activeCam: "device-23",
+    activeCam: null,
     full: null,
-    // Предвыбор адресата в форме передачи — личная настройка оператора,
-    // на автоэскалацию не влияет (§8.2).
-    escalateTo: "petrova",
     dialog: null,
   };
 
-  const defaultTarget = () => actorLabel(state.escalateTo);
-
   const $ = (id) => document.getElementById(id);
 
-  // Исполнитель машины: делает то, что в продукте делает сервер (/actions, /transitions).
-  // Всё, что относится к интерфейсу и демо-данным, он получает отсюда.
-  const engine = IMEngine.create({
-    workflow: WORKFLOW,
-    me: "me",
-    now: () => Date.now(),
-    events: () => state.events,
-    can,
-    isGroup: (id) => GROUPS.some((g) => g.id === id),
-    memberOf: (groupId, userId) => {
-      const group = GROUPS.find((g) => g.id === groupId);
-      return Boolean(group && group.members.includes(userId));
-    },
-    inGroup: (ev, groupId) => eventsInNode(findNode(TREE, groupId) || { children: [] }).includes(ev),
-    agentState: () => state.agentState,
-    stepsFilled: (ev, setId) => setId === "none" || scenarioDone(ev),
-    progress: (ev) => stepProgress(ev),
-    stepNumber: (ev) => ev.stepIndex + 1,
-    setCursor: (ev) => {
-      ev.stepIndex = firstOpenStep(ev);
-    },
-    actorName: (id) => actorRaw(id),
-    log: (ev, whoId, template, vars) => log(ev, whoId, template, vars),
-    transferTargets: () => targetOptions(),
-    defaultTransferTarget: () => state.escalateTo,
-    // У членов группы ответы общие (grouping.shared): один объект ответов на всех
-    shareAnswers: (ev, first) => {
-      ev.answers = first.answers;
-    },
-    // У членов группы ответы общие: при исключении инцидент получает свою копию
-    detachAnswers: (ev) => {
-      ev.answers = JSON.parse(JSON.stringify(ev.answers));
-    },
-    // Инцидент увели: открытая карточка остаётся и сама становится просмотром — править
-    // чужой или отложенный инцидент нельзя (§9, §14.8: evictOpenCard)
-    onEvict: () => {},
-  });
+  const can = (key) => Boolean(store.session && store.session.permissions.includes(key));
+  const onBreak = () => Boolean(store.session && store.session.agentState === "not_ready");
+  const prefs = () => (store.session ? store.session.preferences : {});
+
+  // Имя участника — из ActorRef ответа или из списка адресатов передачи
+  const targetById = (id) => store.targets.find((x) => x.id === id) || null;
+  const actorName = (ref) => {
+    if (!ref) return t("Не назначен");
+    if (typeof ref === "string") {
+      const target = targetById(ref);
+      return target ? t(target.name) : ref;
+    }
+    return t(ref.name || "");
+  };
+  const actorLabel = (id) => {
+    const target = targetById(id);
+    return target ? `${t(target.name)} · ${t(target.role)}` : t("Не назначен");
+  };
+  const defaultTarget = () => actorLabel(prefs().defaultTransferTargetId);
+  const addresseeOf = (ev) => (ev && (ev.owner || ev.assignmentGroup)) || null;
+
+  // Ответ сервера [шаблон, подстановки] → строка на языке интерфейса
+  const say = (key, vars) => (key ? t(key, logVars(vars)) : "");
+  const problemText = (err) => {
+    const p = err && err.problem;
+    if (!p) return t("Нет связи с сервером");
+    return p.messageKey ? say(p.messageKey, p.messageVars) : t(p.message || "");
+  };
 
   function nowStamp() {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
     return new Date().toLocaleTimeString(locale, { hour12: false });
   }
+  const fmtTime = (iso) => {
+    const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+    return iso ? new Date(iso).toLocaleTimeString(locale, { hour12: false }) : "";
+  };
 
   const narrowQuery = window.matchMedia("(max-width: 900px)");
 
@@ -1756,6 +693,10 @@
     btn.setAttribute("aria-label", label);
     btn.setAttribute("aria-pressed", String(theme === "light"));
   }
+
+  /* ===== Статичные тексты разметки =====
+     Русский текст в index.html — он же ключ словаря. Оригиналы снимаются один
+     раз до первой отрисовки, поэтому переключать язык можно сколько угодно. */
 
   /* ===== Статичные тексты разметки =====
      Русский текст в index.html — он же ключ словаря. Оригиналы снимаются один
@@ -1836,6 +777,7 @@
 
   // Недоступная кнопка действия остаётся в фокусе и нажимается (aria-disabled, а не disabled):
   // нажатие показывает причину. Так её узнают и на телефоне, и с клавиатуры, и экранным диктором
+
   function explainIfOff(btn) {
     if (btn.getAttribute("aria-disabled") !== "true") return false;
     toast(btn.title || t("Действие недоступно"));
@@ -1850,100 +792,198 @@
     setTimeout(() => el.remove(), 3200);
   }
 
+  /* ===== Загрузка с сервера ===== */
+
+  function queueQuery() {
+    return {
+      filter: state.filter,
+      search: state.search,
+      sourceGroupGuid: state.groupId === "all" ? null : state.groupId,
+      eventTypeGuid: state.eventType === "all" ? null : state.eventType,
+      deviceTypeId: state.deviceType === "all" ? null : state.deviceType,
+      page: state.page,
+      pageSize: PAGE_SIZE,
+      focusGuid: state.selectedId,
+    };
+  }
+
+  // Всё, что видно на экране, — заново с сервера: сессия, страница очереди, счётчики, дерево,
+  // карточка выбранного. Запросы во время загрузки не теряются: загрузка повторится один раз
+  let loading = null;
+  let reloadAgain = false;
+  function reload() {
+    if (loading) {
+      reloadAgain = true;
+      return loading;
+    }
+    loading = (async () => {
+      const focus = state.focus;
+      const jump = state.jump;
+      state.focus = false;
+      state.jump = false;
+      let [session, page, counters, tree] = await Promise.all([
+        api.get("/operator/session"),
+        api.get("/operator/incidents", queueQuery()),
+        api.get("/operator/incidents/counters"),
+        api.get("/operator/reference/source-groups"),
+      ]);
+      // После действия очередь открывается на странице с выбранным инцидентом
+      if (jump && page.focusPage && page.focusPage !== page.page) {
+        state.page = page.focusPage;
+        page = await api.get("/operator/incidents", queueQuery());
+      }
+      Object.assign(store, { session, page, counters, tree });
+      state.page = page.page;
+      if (!state.openGroups.size && !state.treeSeen) {
+        tree.forEach((n) => state.openGroups.add(n.guid));
+        state.treeSeen = true;
+      }
+      // Если выбранное событие спрятал фильтр, поиск или другая группа, выделение
+      // переходит на первое видимое: иначе видеомонитор и карта показывают чужую зону.
+      if (state.mode === "queue" && focus && page.focusPage == null) {
+        state.selectedId = page.items.length ? page.items[0].guid : null;
+      }
+      await loadCard();
+      renderAll();
+    })()
+      .catch((err) => toast(problemText(err)))
+      .finally(() => {
+        loading = null;
+        if (reloadAgain) {
+          reloadAgain = false;
+          reload();
+        }
+      });
+    return loading;
+  }
+
+  async function loadCard() {
+    const id = state.selectedId;
+    store.card = id ? await api.get(incPath(id)).catch(() => null) : null;
+    if (store.card) focusCameras(store.card);
+    heartbeat();
+  }
+
+  // Какая карточка открыта — серверу, чтобы он знал, чью карточку выселять (§9.3)
+  let lastBeat = undefined;
+  function heartbeat() {
+    const open = state.selectedId || null;
+    if (open === lastBeat) return;
+    lastBeat = open;
+    api.post("/operator/session/heartbeat", { openIncidentGuid: open }).catch(() => {});
+  }
+
+  // Выделенное событие: в карточке и для видео — полная карточка, в очереди — строка
   function selected() {
-    return state.events.find((e) => e.id === state.selectedId) || null;
+    if (store.card && store.card.guid === state.selectedId) return store.card;
+    return store.page.items.find((e) => e.guid === state.selectedId) || null;
   }
 
-  // Если выбранное событие спрятал фильтр, поиск или другая группа, выделение
-  // переходит на первое видимое: иначе видеомонитор и карта показывают чужую зону.
-  function syncSelection() {
-    if (state.mode === "work") return;
-    const list = visibleEvents();
-    if (list.some((e) => e.id === state.selectedId)) return;
-    const next = list[0] || null;
-    state.selectedId = next ? next.id : null;
-    if (next) focusCameras(next);
-  }
+  /* ===== Сценарий: шаги и ответы приходят в карточке (ScenarioProgress) ===== */
 
-  function scenarioSteps(ev) {
-    return SCENARIOS[ev.typeId].steps;
-  }
-
-  function stepShort(step) {
-    if (step.type === "checkbox") return "Подтверждение";
-    return step.label;
-  }
+  const STEP_KIND = { Checkbox: "checkbox", RadioButton: "radio", Select: "combo", Comment: "edit", Macros: "macros" };
+  const stepKind = (step) => STEP_KIND[step.type] || "edit";
+  const stepRequired = (step) => (step.requiredFor || []).includes("closing");
+  const scenarioOf = (ev) => (ev && ev.scenario) || null;
+  const stepsOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).steps : []);
+  const answersOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).answers : {});
+  const launchedOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).launchedMacros : []);
+  const stepShort = (step) => step.view.short || step.title;
 
   function stepAnswerText(ev, step) {
-    if (step.type === "checkbox") return ev.answers[step.id] ? "Да" : "";
-    if (step.type === "macros") return ev.launched.length ? `${ev.launched.length} макрос` : "";
-    return ev.answers[step.id] || "";
+    const kind = stepKind(step);
+    const answers = answersOf(ev);
+    if (kind === "checkbox") return answers[step.id] ? "Да" : "";
+    if (kind === "macros") return launchedOf(ev).length ? `${launchedOf(ev).length} макрос` : "";
+    return answers[step.id] || "";
   }
 
+  // Заполнен ли шаг — проверка формы на клиенте; обязательность шагов сверяет и сервер
   function isStepValid(ev, step) {
-    if (!step.required) return true;
-    if (step.type === "checkbox") return ev.answers[step.id] === true;
-    if (step.type === "macros") return true;
-    return Boolean(ev.answers[step.id]);
-  }
-
-  function scenarioDone(ev) {
-    return scenarioSteps(ev).every((s) => isStepValid(ev, s));
+    if (!stepRequired(step)) return true;
+    const kind = stepKind(step);
+    const answers = answersOf(ev);
+    if (kind === "checkbox") return answers[step.id] === true;
+    if (kind === "macros") return true;
+    return Boolean(answers[step.id]);
   }
 
   function firstOpenStep(ev) {
-    const steps = scenarioSteps(ev);
-    const blocked = steps.findIndex((s) => s.required && !isStepValid(ev, s));
+    const steps = stepsOf(ev);
+    const blocked = steps.findIndex((s) => stepRequired(s) && !isStepValid(ev, s));
     if (blocked !== -1) return blocked;
     const empty = steps.findIndex((s) => !stepAnswerText(ev, s));
     return empty === -1 ? steps.length - 1 : empty;
   }
 
   function canOpenStep(ev, index) {
-    const steps = scenarioSteps(ev);
+    const steps = stepsOf(ev);
     if (index < 0 || index >= steps.length) return false;
     return steps.slice(0, index).every((s) => isStepValid(ev, s));
   }
 
-  function ensureCursor(ev) {
-    if (typeof ev.stepIndex !== "number") ev.stepIndex = firstOpenStep(ev);
-    const last = scenarioSteps(ev).length - 1;
-    if (ev.stepIndex < 0) ev.stepIndex = 0;
-    if (ev.stepIndex > last) ev.stepIndex = last;
-    if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
+  // Шаг на экране: у владельца — курсор сервера, на просмотре — свой, курсор владельца не трогаем
+  function cursorOf(ev) {
+    const steps = stepsOf(ev);
+    if (!steps.length) return 0;
+    if (ev.readOnly && state.viewStep.has(ev.guid)) return Math.min(state.viewStep.get(ev.guid), steps.length - 1);
+    const i = steps.findIndex((s) => s.id === ev.scenario.cursorStepId);
+    return i === -1 ? firstOpenStep(ev) : i;
   }
 
-  function goToStep(ev, index) {
+  function stepProgress(ev) {
+    if (!ev) return { filled: 0, total: 0 };
+    return scenarioOf(ev) ? ev.scenario.progress : ev.scenarioProgress;
+  }
+
+  async function goToStep(ev, index) {
     if (!canOpenStep(ev, index)) return;
-    ev.stepIndex = index;
+    if (ev.readOnly) {
+      state.viewStep.set(ev.guid, index);
+      renderScenario();
+      renderStatus();
+      return;
+    }
+    try {
+      ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: stepsOf(ev)[index].id });
+    } catch (err) {
+      toast(problemText(err));
+    }
     renderScenario();
     renderStatus();
   }
 
-  function flushStepAnswer(ev) {
-    const root = $("scenarioRoot");
-    // Ответы пишет только тот, кому машина разрешает править сценарий (scenarioEdit)
-    if (!root || !ev || !engine.canEditScenario(ev)) return;
-    const el = root.querySelector("[data-ans]");
-    if (!el) return;
-    if (el.type === "radio") {
-      // У радиогрупп data-ans на каждом варианте: берём отмеченный, а не первый.
-      const picked = root.querySelector(`[data-ans="${el.dataset.ans}"]:checked`);
-      if (picked) ev.answers[el.dataset.ans] = picked.value;
-      return;
+  // Ответ из поля шага — на сервер (автосохранение, PATCH …/scenario/answers)
+  async function saveAnswers(ev, answers) {
+    if (!ev || ev.readOnly) return;
+    Object.assign(ev.scenario.answers, answers);
+    try {
+      await api.patch(`${incPath(ev.guid)}/scenario/answers`, { answers });
+    } catch (err) {
+      toast(problemText(err));
     }
-    ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
+    // Ответы меняют доступность «Обработан» и прогресс — карточку заново
+    await loadCard();
+    renderScenario();
+    renderStatus();
   }
 
-  function goNextStep(ev) {
-    flushStepAnswer(ev);
-    const steps = scenarioSteps(ev);
-    const next = ev.stepIndex + 1;
-    if (next < steps.length && canOpenStep(ev, next)) {
-      goToStep(ev, next);
-      return;
-    }
-    if (ev.stepIndex < steps.length - 1) {
+  async function flushStepAnswer(ev) {
+    const root = $("scenarioRoot");
+    if (!root || !ev || ev.readOnly) return;
+    const el = root.querySelector("textarea[data-ans]");
+    if (!el || answersOf(ev)[el.dataset.ans] === el.value) return;
+    await saveAnswers(ev, { [el.dataset.ans]: el.value });
+  }
+
+  async function goNextStep(ev) {
+    await flushStepAnswer(ev);
+    ev = selected();
+    const steps = stepsOf(ev);
+    const i = cursorOf(ev);
+    const next = i + 1;
+    if (next < steps.length && canOpenStep(ev, next)) return goToStep(ev, next);
+    if (i < steps.length - 1) {
       renderScenario();
       renderStatus();
       return;
@@ -1951,36 +991,12 @@
     goToStep(ev, firstOpenStep(ev));
   }
 
-  function stepProgress(ev) {
-    const steps = scenarioSteps(ev);
-    const filled = steps.filter((s) => Boolean(stepAnswerText(ev, s))).length;
-    return { filled, total: steps.length };
-  }
+  /* ===== Слой представления: моё, чужое, бейджи (§2.4) — считает сервер ===== */
 
-  /* ===== Слой представления: моё, чужое, бейджи (§2.4) ===== */
+  const isDone = (ev) => Boolean(ev) && ev.stateCategory === "done";
+  const isMine = (ev) => Boolean(ev) && ev.ownership === "owner";
+  const isTarget = (ev) => Boolean(ev) && ev.ownership === "target";
 
-  const isDone = (ev) => Boolean(ev) && STATES[ev.state].category === "done";
-  const isMine = (ev) => Boolean(ev) && ev.owner === "me";
-
-  const isTarget = (ev) => Boolean(ev) && engine.isTarget(ev);
-
-  // Инциденты одной группы считаются одной единицей: иначе групповая обработка
-  // упиралась бы в лимит активных (§10.2, §11).
-  function myUnits(stateId, skipId) {
-    return new Set(
-      state.events
-        .filter((e) => e.state === stateId && isMine(e) && e.id !== skipId)
-        .map((e) => e.groupId || e.id)
-    );
-  }
-
-  // В журнал пишутся русские шаблон и подстановки: перевод делается при отрисовке,
-  // иначе запись навсегда осталась бы на языке, включённом в момент записи.
-  function log(ev, whoId, ru, vars) {
-    ev.log.push({ t: nowStamp(), whoId, k: ru, v: vars || null });
-  }
-  const logWho = (entry) => (entry.whoId ? actorName(entry.whoId) : t(entry.who || ""));
-  // Значение подстановки: число, русская строка или вложенная пара [шаблон, подстановки]
   function logVar(value) {
     if (Array.isArray(value)) return t(value[0], logVars(value[1]));
     return typeof value === "string" ? t(value) : value;
@@ -1990,223 +1006,66 @@
     Object.entries(vars || {}).forEach(([key, value]) => (out[key] = logVar(value)));
     return out;
   }
-  function logText(entry) {
-    if (!entry.k) return t(entry.text || "");
-    return t(entry.k, logVars(entry.v));
-  }
+  const journalText = (entry) => t(entry.templateKey || entry.text || "", logVars(entry.vars));
 
   /* ===== Таймеры (§4): дедлайны — метки времени, отсчёт рисует клиент ===== */
 
-  // Таймеры ведёт исполнитель машины: нормативы по схеме (§4, правило 2), норматив закрытия
-  // запускается один раз и дальше только приостанавливается (RULE-07). Обёртки нужны
-  // приведению демо-данных и эмуляции коллег.
-  const stopReaction = (ev) => engine.stopTimer(ev, "reaction");
-  const startReaction = (ev, arg) => engine.startTimer(ev, "reaction", arg);
-  const startResolution = (ev) => engine.resumeTimer(ev, "resolution");
-
-  function timerView(ev) {
-    if (!ev || isDone(ev)) return null;
-    if (ev.reactionDueAt) {
-      return { kind: "reaction", label: "Реакция", leftMs: ev.reactionDueAt - Date.now(), running: true };
-    }
-    if (ev.resolutionDueAt) {
-      return { kind: "resolution", label: "Закрытие", leftMs: ev.resolutionDueAt - Date.now(), running: true };
-    }
-    if (ev.resolutionLeftMs != null) {
-      return { kind: "resolution", label: "Закрытие", leftMs: ev.resolutionLeftMs, running: false };
-    }
-    return null;
+  function timerView(timer) {
+    if (!timer) return null;
+    const leftMs = timer.running && timer.dueAt ? Date.parse(timer.dueAt) - Date.now() : timer.remainingMs;
+    return { kind: timer.id, label: timer.label, leftMs, running: timer.running, due: timer.running ? Date.parse(timer.dueAt) : null };
   }
 
-  // Бейдж считает исполнитель по правилам машины (§2.4), здесь — перевод и оформление:
-  // класс CSS бейджа совпадает со стилем из машины (badges.rules[].style)
   function badgeView(ev) {
-    const b = engine.badge(ev);
-    return { text: t(b.label[0], logVars(b.label[1])), cls: b.style };
+    return { text: t(ev.badge.template || ev.badge.label, logVars(ev.badge.vars)), cls: ev.badge.style };
   }
 
-  /* ===== Приведение демонстрационных данных к модели v2 ===== */
+  const holdLabel = (id) => {
+    const item = WORKFLOW.reasonCatalogs.hold.items.find((r) => r.id === id);
+    return t(item ? item.label : "Причина не указана");
+  };
+  const resultLabel = (ev) => t(ev.closeResultLabel || "");
 
-  // Время в демо-данных записано строками. Сдвигаем его к моменту открытия страницы: самое
-  // свежее событие — минуту назад, промежутки сохраняются. Иначе новые записи журнала,
-  // которые берут текущие часы, оказывались бы раньше событий
-  function shiftDemoTimes(list) {
-    const isStamp = (s) => typeof s === "string" && /^\d{1,2}:\d\d:\d\d$/.test(s);
-    const toSec = (s) => s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
-    const pad = (n) => String(n).padStart(2, "0");
-    const fmt = (sec) => {
-      const day = ((sec % 86400) + 86400) % 86400;
-      return `${pad(Math.floor(day / 3600))}:${pad(Math.floor((day % 3600) / 60))}:${pad(day % 60)}`;
-    };
-    const stamps = list.flatMap((ev) => [ev.time, ...(ev.log || []).map((entry) => entry.t)]).filter(isStamp);
-    if (!stamps.length) return;
-    const now = new Date();
-    const shift = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 60 - Math.max(...stamps.map(toSec));
-    list.forEach((ev) => {
-      if (isStamp(ev.time)) ev.time = fmt(toSec(ev.time) + shift);
-      (ev.log || []).forEach((entry) => {
-        if (isStamp(entry.t)) entry.t = fmt(toSec(entry.t) + shift);
-      });
-    });
-  }
+  /* ===== Действия: какие кнопки доступны, считает сервер (AvailableAction) ===== */
 
-  function migrateEvents(list) {
-    shiftDemoTimes(list);
-    const byName = {};
-    OPERATORS.forEach((op) => (byName[op.name] = op.id));
-    const now = Date.now();
-    list.forEach((ev) => {
-      const legacy = ev.status;
-      const owner = ev.operator ? byName[ev.operator] || null : null;
-      ev.owner = owner;
-      ev.escalationLevel = 0;
-      ev.holdReason = null;
-      ev.closeResult = ev.closeResult || null;
-      ev.massCause = null;
-      ev.slaBreached = false;
-      ev.breaches = [];
-      ev.groupId = null;
-      ev.holdSince = null;
-      ev.holdDueAt = null;
-      ev.assignmentGroup = null;
-      ev.closedAt = null;
-      ev.reactionDueAt = null;
-      ev.resolutionDueAt = null;
-      ev.resolutionLeftMs = null;
-      if (legacy === "new") {
-        ev.state = "new";
-        ev.owner = null;
-        startReaction(ev);
-      } else if (legacy === "mine") {
-        ev.owner = "me";
-        if (ev.paused) {
-          ev.state = "on_hold";
-          ev.holdReason = ev.holdReason || "third_party";
-          engine.startTimer(ev, "hold");
-          ev.holdSince -= 4 * 60000;
-          ev.holdDueAt -= 4 * 60000;
-          ev.resolutionLeftMs = (ev.slaSec || 600) * 1000;
-        } else {
-          ev.state = "in_progress";
-          startResolution(ev);
-        }
-      } else if (legacy === "foreign") {
-        ev.state = "in_progress";
-        startResolution(ev);
-      } else if (legacy === "escalated") {
-        ev.state = "pending_acceptance";
-        ev.escalationLevel = 1;
-        startReaction(ev);
-      } else {
-        ev.state = "closed";
-        ev.closeResult = ev.closeResult || "processed";
-        ev.closedAt = now - 3 * 3600000;
-      }
-      delete ev.status;
-      delete ev.operator;
-      delete ev.paused;
-    });
-
-    // Демонстрационные ситуации, которых не было в первой версии модели.
-    const pick = (id) => list.find((e) => e.id === id);
-    const inbox = pick("INC-1836");
-    if (inbox) {
-      inbox.owner = null;
-      inbox.assignmentGroup = "grp-leads";
-      inbox.escalationLevel = 1;
-      startReaction(inbox, "byEscalationLevel");
-      log(inbox, "sidorov", "Эскалация → {who}. {why}", {
-        who: "Дежурная группа старших",
-        why: "Нужен допуск в зону",
-      });
-    }
-    // Второй инцидент, адресованный лично оператору: на нём проверяется «Отклонить»
-    const inboxMine = pick("INC-1843");
-    if (inboxMine) {
-      inboxMine.owner = "me";
-      startReaction(inboxMine, "byEscalationLevel");
-      log(inboxMine, "noc", "Передано → {who} (уровень {lvl}). {why}", {
-        who: ME,
-        lvl: inboxMine.escalationLevel,
-        why: "Нужна проверка по камерам площадки",
-      });
-    }
-    const falseAlarm = pick("INC-1826");
-    if (falseAlarm) {
-      falseAlarm.closeResult = "false_alarm";
-      falseAlarm.closedAt = Date.now() - 25 * 60000;
-      log(falseAlarm, "sidorov", "Закрыт без обработки: {why}. {note}", {
-        why: "Ложная тревога",
-        note: "Сработка от уборщика",
-      });
-    }
-    const fresh = pick("INC-1837");
-    if (fresh) fresh.closedAt = Date.now() - 12 * 60000;
-  }
-
-  /* ===== Переходы (§6): доступность и выполнение — в исполнителе машины ===== */
-
-  // Ответ исполнителя [шаблон, подстановки] → строка на языке интерфейса
-  const say = (why) => (why ? t(why[0], logVars(why[1])) : "");
-
-  function availability(id, ev, surface) {
-    const a = engine.availability(id, ev, { surface });
-    return a.ok ? a : Object.assign({}, a, { why: say(a.why) });
-  }
-
-  const canDo = (id, ev, surface) => Boolean(engine.availability(id, ev, { surface }).ok);
+  const transitionDef = (id) => WORKFLOW.transitions.find((x) => x.id === id) || null;
+  const navDef = (id) => WORKFLOW.navActions.items.find((x) => x.id === id) || null;
+  const isNav = (id) => Boolean(navDef(id));
+  const actionOf = (ev, id) => (ev && ev.actions ? ev.actions.find((a) => a.id === id) : null) || null;
+  const canDo = (id, ev) => Boolean(actionOf(ev, id) && actionOf(ev, id).enabled);
+  const actionWhy = (a) => (a && a.reasonKey ? say(a.reasonKey, a.reasonVars) : "");
 
   function actionView(a) {
+    const def = a.kind === "nav" ? navDef(a.id) : transitionDef(a.id);
     return {
       id: a.id,
       label: t(a.label),
-      hint: Array.isArray(a.hint) ? say(a.hint) : t(a.hint),
+      hint: a.enabled ? t((def && def.hint) || a.label) : actionWhy(a),
       style: a.style || "outline",
       disabled: !a.enabled,
       nav: a.kind === "nav",
     };
   }
 
-  function groupMates(ev) {
-    if (!ev) return [];
-    if (!ev.groupId) return [ev];
-    return state.events.filter((e) => e.groupId === ev.groupId);
+  // Действие над выборкой — по ответу сервера на /incidents/selection (режимы bulk машины, §11)
+  const selectionAction = (id) => (store.selection ? store.selection.actions.find((a) => a.id === id) : null) || null;
+  const inSelection = (ev) => Boolean(ev) && state.checked.size >= 2 && state.checked.has(ev.guid);
+
+  async function updateSelection() {
+    if (state.checked.size < 2) {
+      store.selection = null;
+      return;
+    }
+    store.selection = await api.post("/operator/incidents/selection", { mode: "explicit", incidentGuids: [...state.checked] });
   }
 
-  function checkedEvents() {
-    return [...state.checked].map((id) => state.events.find((e) => e.id === id)).filter(Boolean);
-  }
-
-  // Кого можно взять группой сценария — по grouping.createFrom машины (§11)
-  const groupable = (e) => WORKFLOW.grouping.createFrom.states.includes(e.state);
-  function sameTypeNew(list) {
-    const sameType = !WORKFLOW.grouping.createFrom.sameEventType || list.every((e) => e.typeId === list[0].typeId);
-    return Boolean(list.length) && sameType && list.every(groupable);
-  }
-
-  // Массовые действия — по режимам машины (bulk): each_allowed — если доступно каждому
-  // отмеченному, same_type_new — только однотипные новые (группа сценария), group — только
-  // на членах группы сценария (§11)
-  function selectionAllows(id, list) {
-    if (!list || list.length < 2) return true;
-    const mode = engine.bulk(id);
-    if (!mode.allowed) return false;
-    if (mode.mode === "same_type_new") return sameTypeNew(list) && list.every((e) => canDo(id, e));
-    if (mode.mode === "each_allowed" || mode.mode === "group_or_each_allowed") return list.every((e) => canDo(id, e));
-    return false;
-  }
-
+  // Кому достанется действие: выборке, группе сценария или одному инциденту (§11)
   function actionTargets(id, ev) {
-    const picked = checkedEvents();
-    const inSel = ev && picked.some((e) => e.id === ev.id);
-    if (inSel && picked.length >= 2 && selectionAllows(id, picked)) {
-      return picked.filter((e) => canDo(id, e));
-    }
-    if (ev && ev.groupId && engine.bulk(id).allowed) {
-      const mates = groupMates(ev).filter((e) => canDo(id, e));
-      if (mates.length >= 2) return mates;
-    }
-    return ev ? [ev] : [];
+    if (inSelection(ev) && selectionAction(id) && selectionAction(id).enabled) return [...state.checked];
+    const tr = transitionDef(id);
+    const group = ev && ev.group;
+    if (group && tr && tr.bulk && tr.bulk.allowed && group.members.length >= 2) return group.members.map((m) => m.guid);
+    return ev ? [ev.guid] : [];
   }
 
   function bulkCopy(id, list) {
@@ -2249,12 +1108,12 @@
     return table[id] || null;
   }
 
-  function openBulkDialog(id, list, surface) {
-    if (list.length < 2) return false;
-    openDialog(id, list[0], surface);
+  function openBulkDialog(id, ev, guids, surface) {
+    if (guids.length < 2) return false;
+    openDialog(id, ev, surface);
     if (!state.dialog) return false;
-    state.dialog.bulkIds = list.map((e) => e.id);
-    const copy = bulkCopy(id, list);
+    state.dialog.bulkIds = guids;
+    const copy = bulkCopy(id, guids.map((guid) => ({ id: guid, groupId: ev.groupGuid })));
     if (copy) {
       $("dialogTitle").textContent = copy.title;
       $("dialogNote").textContent = copy.note;
@@ -2264,113 +1123,99 @@
     return true;
   }
 
-  function runBulk(id, list, form, surface) {
-    if (!list.length) return false;
-    let nav = null;
-    const done = [];
-    list.forEach((item) => {
-      const r = engine.run(id, item, form, { surface });
-      if (!r.ok) return;
-      nav = r.navigate || nav;
-      done.push(item);
-    });
-    if (!done.length) return false;
+  async function runBulk(id, guids, form, surface) {
+    let res;
+    try {
+      res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface });
+    } catch (err) {
+      toast(problemText(err));
+      return false;
+    }
+    if (!res.succeeded.length) {
+      toast(res.failed.length ? problemText({ problem: res.failed[0].problem }) : t("Действие недоступно"));
+      return false;
+    }
     state.checked.clear();
+    store.selection = null;
+    const done = res.succeeded.map((e) => ({ id: e.guid, groupId: e.groupGuid }));
     const copy = bulkCopy(id, done);
     toast(copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length }));
-    const focus = done[0];
-    state.selectedId = focus.id;
-    if (nav === "card") {
-      focusCameras(focus);
-      state.mode = "work";
-      state.mobileView = "card";
-    } else if (nav === "queue") {
-      state.mode = "queue";
-      state.page = pageOfEvent(focus.id);
-      syncSelection();
-    }
-    renderAll();
+    state.selectedId = done[0].id;
+    navigate(res.navigate);
+    await reload();
     return true;
   }
 
-  // Кнопки очереди и карточки — те, что вернул исполнитель для этой поверхности (§7)
+  function navigate(to) {
+    if (to === "card") {
+      state.mode = "work";
+      state.mobileView = "card";
+    } else if (to === "queue") {
+      state.mode = "queue";
+      state.focus = true;
+      state.jump = true;
+    }
+  }
+
+  // Кнопки очереди и карточки — те, что вернул сервер для этой поверхности (§7)
   function queueActions(ev) {
-    const views = engine.actions(ev, "queue").map(actionView);
-    const picked = checkedEvents();
-    if (picked.length < 2 || !state.checked.has(ev.id)) return views;
+    const views = ev.actions.map(actionView);
+    if (!inSelection(ev)) return views;
     const why = t("Для этой выборки действие недоступно");
-    return views.map((a) => (selectionAllows(a.id, picked) ? a : { ...a, disabled: true, hint: why }));
+    return views.map((a) => {
+      if (a.nav) return a;
+      const sel = selectionAction(a.id);
+      return sel && sel.enabled ? a : { ...a, disabled: true, hint: why };
+    });
   }
 
   function cardActions(ev) {
-    return engine
-      .actions(ev, "card")
-      .filter((a) => a.kind === "transition")
-      .map(actionView);
+    return ev.actions.filter((a) => a.kind === "transition").map(actionView);
   }
 
   /* ===== Выполнение перехода ===== */
 
   // Уведомления после перехода — забота интерфейса, а не машины
   const TOASTS = {
-    claim: (ev) => t("{id} в работе", { id: ev.id }),
-    accept: (ev) => t("{id} принят в работу", { id: ev.id }),
-    reject: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
-    hold: (ev) => t("{id} отложен", { id: ev.id }),
-    release: (ev) => t("{id} возвращён в очередь", { id: ev.id }),
-    transfer: (ev) => t("{id} передан → {who}", { id: ev.id, who: actorName(engine.addressee(ev)) }),
-    takeover: (ev) => t("Перехвачен {id}", { id: ev.id }),
-    close: (ev) => t(ev.closeResult === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.id }),
-    reopen: (ev) => t("{id} переоткрыт", { id: ev.id }),
+    claim: (ev) => t("{id} в работе", { id: ev.number }),
+    accept: (ev) => t("{id} принят в работу", { id: ev.number }),
+    reject: (ev) => t("{id} возвращён в очередь", { id: ev.number }),
+    hold: (ev) => t("{id} отложен", { id: ev.number }),
+    release: (ev) => t("{id} возвращён в очередь", { id: ev.number }),
+    transfer: (ev) => t("{id} передан → {who}", { id: ev.number, who: actorName(addresseeOf(ev)) }),
+    takeover: (ev) => t("Перехвачен {id}", { id: ev.number }),
+    close: (ev) => t(ev.closeResultId === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.number }),
+    reopen: (ev) => t("{id} переоткрыт", { id: ev.number }),
   };
 
-  function runTransition(id, ev, form, surface) {
+  async function runTransition(id, ev, form, surface) {
     if (!ev) return false;
-    const r = engine.run(id, ev, form || {}, { surface });
-    if (!r.ok) {
-      toast(say(r.why));
+    let res;
+    try {
+      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface });
+    } catch (err) {
+      toast(problemText(err));
+      await reload();
       return false;
     }
-    state.selectedId = ev.id;
-    if (TOASTS[id]) toast(TOASTS[id](ev));
-    if (state.checked.has(ev.id)) state.checked.clear();
-    else state.checked.delete(ev.id);
-    if (r.navigate === "card") {
-      focusCameras(ev);
-      state.mode = "work";
-      state.mobileView = "card";
-    } else if (r.navigate === "queue") {
-      state.mode = "queue";
-      state.page = pageOfEvent(ev.id);
-      // Закрытый инцидент уходит из фильтра «Открытые», и выделение
-      // нужно передать соседу, иначе видеомонитор остаётся на завершённом.
-      syncSelection();
-    }
-    renderAll();
+    state.selectedId = ev.guid;
+    if (TOASTS[id]) toast(TOASTS[id](res.incident));
+    if (state.checked.has(ev.guid)) state.checked.clear();
+    store.selection = null;
+    navigate(res.navigate);
+    await reload();
     return true;
   }
 
-  /* ===== Формы переходов: строятся по формам машины (forms) ===== */
-
-  const TARGET_LIST = () => OPERATORS.concat(GROUPS);
-
-  // Адресаты передачи: себя, свои группы и владельца исключает форма машины (excludes, §8.1, §10.1)
-  function targetOptions() {
-    return TARGET_LIST().map((op) => {
-      const parts = [actorLabel(op.id)];
-      if (op.duty !== "на смене") parts.push(t(op.duty));
-      if (op.id === state.escalateTo) parts.push(t("предвыбор"));
-      return { id: op.id, label: parts.join(" · ") };
-    });
-  }
+  /* ===== Формы переходов: строятся по формам машины (forms) и вариантам из ответа сервера ===== */
 
   // Форма перерыва — не переход инцидента, а состояние оператора (§12): своя, по session машины
-  const BREAK_FORM = {
+  const breakForm = () => ({
     id: "__break__",
     title: "Перерыв",
     confirmLabel: "Уйти на перерыв",
     style: "primary",
-    note: ["Активный инцидент будет отложен системой. Новые события не назначаются."],
+    note: t("Активный инцидент будет отложен системой. Новые события не назначаются."),
     fields: [
       {
         name: "reasonId",
@@ -2380,19 +1225,36 @@
         options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: r.label })),
       },
     ],
-  };
+  });
+
+  // Обязательность поля: required или requiredFrom "reasonCatalog:<справочник>.<признак>" —
+  // признак позиции, выбранной в поле той же формы с source "reasonCatalog:<справочник>"
+  function fieldRequired(form, field, values) {
+    if (!field.requiredFrom) return Boolean(field.required);
+    const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
+    const source = form.fields.find((x) => x.source === `reasonCatalog:${catalog}`);
+    const items = (WORKFLOW.reasonCatalogs[catalog] || { items: [] }).items;
+    const item = source ? items.find((i) => i.id === values[source.name]) : null;
+    return Boolean(item && item[attr]);
+  }
 
   const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
+
+  // Подпись адресата передачи: ФИО · роль · не на смене · предвыбор (§8.1)
+  function optionLabel(field, o) {
+    if (field.source !== "transferTargets") return o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label);
+    const parts = [`${t(o.label)} · ${t(o.role || "")}`];
+    if (o.availabilityLabel) parts.push(t(o.availabilityLabel));
+    if (o.id === prefs().defaultTransferTargetId) parts.push(t("предвыбор"));
+    return parts.join(" · ");
+  }
 
   function fieldHtml(field) {
     const box = `class="field" data-field-box="${field.name}"`;
     const label = `<span data-label-for="${field.name}">${escapeHtml(t(field.label))}</span>`;
     if (field.kind === "select") {
       const options = (field.options || [])
-        .map((o) => {
-          const text = o.disabled && o.why ? `${t(o.label)} — ${t(o.why)}` : t(o.label);
-          return `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(text)}</option>`;
-        })
+        .map((o) => `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(optionLabel(field, o))}</option>`)
         .join("");
       // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
       const empty = field.placeholder ? `<option value="" disabled>${te(field.placeholder)}</option>` : "";
@@ -2425,14 +1287,14 @@
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
-      if (label) label.textContent = t(field.label) + (visible && engine.fieldRequired(open.form, field, values) ? " *" : "");
+      if (label) label.textContent = t(field.label) + (visible && fieldRequired(open.form, field, values) ? " *" : "");
     });
   }
 
   function showForm(open, form) {
     state.dialog = Object.assign(open, { form });
     $("dialogTitle").textContent = t(form.title);
-    $("dialogNote").textContent = say(form.note);
+    $("dialogNote").textContent = form.note || "";
     $("dialogNote").hidden = !form.note;
     $("dialogFields").innerHTML = form.fields.map(fieldHtml).join("");
     form.fields.forEach((field) => {
@@ -2452,27 +1314,33 @@
     ($("dialogFields").querySelector("[data-field]") || confirm).focus();
   }
 
+  // Форма — из машины (forms), варианты полей и пояснение — из ответа сервера (fieldOptions, formNote)
   function openDialog(id, ev, surface) {
-    const tr = engine.transition(id);
+    const tr = transitionDef(id);
     if (!tr || !tr.form || !ev) return;
-    const check = availability(id, ev, surface);
-    if (!check.ok) {
-      if (check.why) toast(check.why);
+    const a = actionOf(ev, id);
+    if (!a || !a.enabled) {
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
       return;
     }
-    state.selectedId = ev.id;
-    const form = engine.form(tr.form, ev, { surface, noteVars: { groupSize: groupMates(ev).length } });
-    showForm({ id, eventId: ev.id, surface }, form);
+    const def = WORKFLOW.forms.find((f) => f.id === tr.form);
+    const fields = def.fields.map((field) => {
+      const opts = (a.fieldOptions || {})[field.name];
+      return Object.assign({}, field, opts ? { options: opts.options, defaultValue: opts.defaultValue } : {});
+    });
+    const note = a.formNote ? say(a.formNote.key, a.formNote.vars) : "";
+    state.selectedId = ev.guid;
+    showForm({ id, eventId: ev.guid, ev, surface }, Object.assign({}, def, { fields, note }));
   }
 
-  function submitDialog() {
+  async function submitDialog() {
     const open = state.dialog;
     if (!open) return;
     const values = dialogValues();
     open.form.fields.forEach((field) => {
       if (!fieldVisible(field, values)) delete values[field.name];
     });
-    const missing = open.form.fields.find((f) => fieldVisible(f, values) && engine.fieldRequired(open.form, f, values) && !values[f.name]);
+    const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(open.form, f, values) && !values[f.name]);
     if (missing) {
       toast(t("Укажите причину — поле обязательно"));
       const el = $("dialogFields").querySelector(`[data-field="${missing.name}"]`);
@@ -2481,17 +1349,9 @@
     }
     const bulkIds = open.bulkIds;
     closeDialog();
-    if (open.id === BREAK_FORM.id) {
-      goOnBreak(values.reasonId);
-      return;
-    }
-    const ev = state.events.find((e) => e.id === open.eventId);
-    if (bulkIds && bulkIds.length > 1) {
-      const list = bulkIds.map((id) => state.events.find((x) => x.id === id)).filter((item) => item && canDo(open.id, item));
-      runBulk(open.id, list, values, open.surface);
-      return;
-    }
-    runTransition(open.id, ev, values, open.surface);
+    if (open.id === "__break__") return goOnBreak(values.reasonId);
+    if (bulkIds && bulkIds.length > 1) return runBulk(open.id, bulkIds, values, open.surface);
+    return runTransition(open.id, open.ev, values, open.surface);
   }
 
   function closeDialog() {
@@ -2502,45 +1362,36 @@
   // Переход либо спрашивает подробности в форме, либо выполняется сразу.
   function trigger(id, ev, surface) {
     if (!ev) return;
-    const picked = checkedEvents();
-    if (picked.length >= 2 && picked.some((e) => e.id === ev.id) && !selectionAllows(id, picked)) {
+    if (inSelection(ev) && !isNav(id) && !(selectionAction(id) && selectionAction(id).enabled)) {
       toast(t("Для этой выборки действие недоступно"));
       return;
     }
-    if (engine.isNav(id)) return openCard(id, ev);
-    const tr = engine.transition(id);
+    if (isNav(id)) return openCard(id, ev);
+    const tr = transitionDef(id);
     if (!tr) return;
     const targets = actionTargets(id, ev);
     if (targets.length >= 2) {
-      if (engine.bulk(id).createsGroup) {
-        groupProcess();
-        return;
-      }
-      if (tr.form) {
-        openBulkDialog(id, targets, surface);
-        return;
-      }
-      runBulk(id, targets, {}, surface);
-      return;
+      if (tr.bulk && tr.bulk.createsGroup) return groupProcess();
+      if (tr.form) return openBulkDialog(id, ev, targets, surface);
+      return runBulk(id, targets, {}, surface);
     }
-    const check = availability(id, ev, surface);
-    if (!check.ok) {
-      toast(check.why || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
+    const a = actionOf(ev, id);
+    if (!a || !a.enabled) {
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
       return;
     }
     if (tr.form) return openDialog(id, ev, surface);
-    runTransition(id, ev, {}, surface);
+    return runTransition(id, ev, {}, surface);
   }
 
   function renderEscalateDefault() {
     const select = $("escalateDefault");
-    select.innerHTML = TARGET_LIST()
-      .filter((op) => !engine.isSelf(op.id))
+    select.innerHTML = store.targets
       .map((op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(actorLabel(op.id))}</option>`)
       .join("");
-    select.value = state.escalateTo;
+    select.value = prefs().defaultTransferTargetId || "";
     $("autoLevels").textContent = WORKFLOW.escalation.levels
-      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(levelTarget(l)) }))
+      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.targetRef.split(":")[1]) }))
       .join(", ");
   }
 
@@ -2552,29 +1403,13 @@
       .replace(/"/g, "&quot;");
   }
 
-  function deviceInfo(node) {
-    const id = typeof node === "string" ? node : node.id;
-    const spec = DEVICE_CATALOG[id];
-    return {
-      id,
-      name: spec ? spec.name : id,
-      deviceType: spec ? spec.type : "camera",
-    };
-  }
-
-  function orderedChildren(data) {
-    const groups = data.filter((item) => !item.isDevice);
-    const devices = data.filter((item) => item.isDevice);
-    return groups.concat(devices);
-  }
+  /* ===== Группы устройств: дерево с счётчиками приходит с сервера (SourceGroupNode) ===== */
 
   function findNode(nodes, id) {
     for (const node of nodes) {
-      if (node.id === id) return node;
-      if (node.children) {
-        const found = findNode(node.children, id);
-        if (found) return found;
-      }
+      if (node.guid === id) return node;
+      const found = findNode(node.children || [], id);
+      if (found) return found;
     }
     return null;
   }
@@ -2585,151 +1420,86 @@
     const wanted = new Set(deviceIds || []);
     const walk = (nodes, trail) => {
       for (const node of nodes) {
-        if (node.isDevice) {
-          if (wanted.has(node.id)) return trail;
-          continue;
-        }
-        const found = walk(node.children || [], trail.concat(node.id));
+        if ((node.devices || []).some((d) => wanted.has(d.guid))) return trail.concat(node.guid);
+        const found = walk(node.children || [], trail.concat(node.guid));
         if (found) return found;
       }
       return null;
     };
-    return walk(TREE, []) || [];
+    return walk(store.tree, []) || [];
   }
 
-  function collectDeviceIds(node) {
-    if (!node) return [];
-    if (node.isDevice) return [node.id];
-    const ids = [];
-    (node.children || []).forEach((child) => {
-      ids.push(...collectDeviceIds(child));
-    });
-    return [...new Set(ids)];
-  }
+  // В дереве — группы и устройства с открытыми инцидентами
+  const openDevices = (node) => (node.devices || []).filter((d) => d.counters && d.counters.open > 0);
+  const badgeText = (node) => `${(node.children || []).length}/${openDevices(node).length}`;
 
-  function deviceHasOpenIncident(id) {
-    return state.events.some((e) => !isDone(e) && (e.deviceIds || []).includes(id));
-  }
-
-  function visibleChildren(nodes) {
-    return orderedChildren(nodes || []).filter((item) => !item.isDevice || deviceHasOpenIncident(item.id));
-  }
-
-  function badgeText(node) {
-    const children = node.children || [];
-    const groups = children.filter((c) => !c.isDevice).length;
-    const devices = children.filter((c) => c.isDevice && deviceHasOpenIncident(c.id)).length;
-    return `${groups}/${devices}`;
-  }
-
-  function eventsForDevices(deviceIds) {
-    const set = new Set(deviceIds);
-    return state.events.filter((e) => (e.deviceIds || []).some((id) => set.has(id)));
-  }
-
-  function eventsInNode(node) {
-    return eventsForDevices(collectDeviceIds(node));
-  }
-
-  function nodeLabel(node) {
-    if (!node) return "";
-    return t(node.isDevice ? deviceInfo(node).name : node.name);
-  }
-
-  function nodeMatchesQuery(node, q) {
+  function nodeMatchesQuery(node, q, isDevice) {
     if (!q) return true;
-    if (node.isDevice && !deviceHasOpenIncident(node.id)) return false;
-    if (nodeLabel(node).toLowerCase().includes(q)) return true;
-    return visibleChildren(node.children).some((child) => nodeMatchesQuery(child, q));
+    if (t(node.name).toLowerCase().includes(q)) return true;
+    if (isDevice) return false;
+    return (node.children || []).some((c) => nodeMatchesQuery(c, q)) || openDevices(node).some((d) => nodeMatchesQuery(d, q, true));
   }
 
-  function visibleEvents() {
-    let list = state.events;
-    if (state.groupId !== "all") {
-      const node = findNode(TREE, state.groupId);
-      const ids = node ? collectDeviceIds(node) : [state.groupId];
-      list = eventsForDevices(ids);
-    }
-    return list.filter((e) => {
-      // Фильтр по состоянию и отношению ко мне — из машины (queueFilters)
-      if (!engine.inQueueFilter(e, state.filter)) return false;
-      if (state.eventType !== "all" && e.typeId !== state.eventType) return false;
-      if (state.deviceType !== "all") {
-        const src = DEVICE_CATALOG[eventSource(e)];
-        if (!src || src.type !== state.deviceType) return false;
-      }
-      if (state.search) {
-        const q = state.search.toLowerCase();
-        const blob = `${e.id} ${t(e.type)} ${t(e.site)} ${t(e.location)} ${e.type} ${e.site} ${
-          e.location
-        }`.toLowerCase();
-        if (!blob.includes(q)) return false;
-      }
-      return true;
-    });
-  }
-
-  // Списки фильтров: по состоянию — из машины, типы событий — из самих событий,
-  // типы устройств — из справочника
+  // Списки фильтров: по состоянию — из машины, типы событий и устройств — справочники сервера
   function renderTypeFilters() {
     $("eventFilter").innerHTML = WORKFLOW.queueFilters
       .map((f) => `<option value="${escapeHtml(f.id)}">${te(f.label)}</option>`)
       .join("");
     $("eventFilter").value = state.filter;
-    const types = new Map();
-    state.events.forEach((e) => types.set(e.typeId, e.type));
     $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
-      .concat([...types].map(([id, label]) => `<option value="${escapeHtml(id)}">${te(label)}</option>`))
+      .concat(store.eventTypes.map((e) => `<option value="${escapeHtml(e.id)}">${te(e.name)}</option>`))
       .join("");
     $("eventTypeFilter").value = state.eventType;
     $("deviceTypeFilter").innerHTML = [`<option value="all">${te("Все типы устройств")}</option>`]
-      .concat(Object.entries(DEVICE_TYPES).map(([id, d]) => `<option value="${escapeHtml(id)}">${te(d.label)}</option>`))
+      .concat(store.deviceTypes.map((d) => `<option value="${escapeHtml(d.id)}">${te(d.label)}</option>`))
       .join("");
     $("deviceTypeFilter").value = state.deviceType;
   }
 
-  function renderTreeHtml(nodes, level, trace) {
-    const q = state.groupQuery.trim().toLowerCase();
-    return visibleChildren(nodes)
-      .map((item) => {
-        const kids = item.isDevice ? [] : visibleChildren(item.children);
-        const hasKids = kids.length > 0;
-        const info = item.isDevice ? deviceInfo(item) : null;
-        const icon = info ? DEVICE_TYPES[info.deviceType].icon : "folder";
-        const name = t(info ? info.name : item.name);
-        const evs = item.isDevice ? eventsForDevices([item.id]) : eventsInNode(item);
-        const openCount = evs.filter((e) => !isDone(e)).length;
-        const crit = evs.some((e) => e.priority === "critical" && !isDone(e));
-        const hidden = q && !nodeMatchesQuery(item, q);
-        const forceOpen = Boolean(q && hasKids && nodeMatchesQuery(item, q));
-        const open = forceOpen || state.openGroups.has(item.id);
-        const title = t(item.description || (info ? info.name : item.name));
-        const traced = trace.ids.has(item.id) ? (item.id === trace.leaf ? "trace trace-leaf" : "trace") : "";
-        return `
+  function treeItemHtml(item, isDevice, level, trace, q) {
+    const kids = isDevice ? [] : (item.children || []).concat(openDevices(item));
+    const hasKids = kids.length > 0;
+    const icon = isDevice ? DEVICE_ICON[item.typeId] || "videocam" : "folder";
+    const counters = item.counters || { open: 0, critical: 0 };
+    const hidden = q && !nodeMatchesQuery(item, q, isDevice);
+    const forceOpen = Boolean(q && hasKids && nodeMatchesQuery(item, q, isDevice));
+    const open = forceOpen || state.openGroups.has(item.guid);
+    const title = t(item.description || item.name);
+    const traced = trace.ids.has(item.guid) ? (item.guid === trace.leaf ? "trace trace-leaf" : "trace") : "";
+    const crit = counters.critical > 0;
+    return `
           <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
-            state.groupId === item.id ? "active" : ""
-          } ${traced} ${item.isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
-              data-id="${item.id}" data-type="${item.isDevice ? "device" : "group"}" role="treeitem">
+            state.groupId === item.guid ? "active" : ""
+          } ${traced} ${isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
+              data-id="${escapeHtml(item.guid)}" data-type="${isDevice ? "device" : "group"}" role="treeitem">
             <div class="node-content" title="${escapeHtml(title)}">
               <span class="toggle-icon material-symbols-outlined">chevron_right</span>
               <span class="material-symbols-outlined">${icon}</span>
-              <span class="node-text">${escapeHtml(name)}</span>
+              <span class="node-text">${escapeHtml(t(item.name))}</span>
               ${
-                !item.isDevice && hasKids
+                !isDevice && hasKids
                   ? `<span class="tree-badge" title="${te("Подгрупп / устройств с открытыми инцидентами")}">${badgeText(item)}</span>`
                   : ""
               }
               ${
-                openCount
+                counters.open
                   ? `<span class="tree-ev ${crit ? "crit" : ""}" title="${te("Открытых инцидентов{crit}", {
                       crit: crit ? t(", есть критический") : "",
-                    })}">${openCount}</span>`
+                    })}">${counters.open}</span>`
                   : ""
               }
             </div>
-            ${hasKids ? `<ul role="group">${renderTreeHtml(item.children, level + 1, trace)}</ul>` : ""}
+            ${hasKids ? `<ul role="group">${renderTreeHtml(item, level + 1, trace)}</ul>` : ""}
           </li>`;
-      })
+  }
+
+  function renderTreeHtml(parent, level, trace) {
+    const q = state.groupQuery.trim().toLowerCase();
+    const groups = parent ? parent.children || [] : store.tree;
+    const devices = parent ? openDevices(parent) : [];
+    return groups
+      .map((g) => treeItemHtml(g, false, level, trace, q))
+      .concat(devices.map((d) => treeItemHtml(d, true, level, trace, q)))
       .join("");
   }
 
@@ -2739,10 +1509,11 @@
   // раскрывается — но только при смене события, чтобы не мешать сворачиванию
   function traceGroups() {
     const ev = selected();
-    const path = ev ? groupPathForDevices(ev.deviceIds) : [];
-    const changed = (ev ? ev.id : null) !== tracedEventId;
+    const devices = ev && ev.devices ? ev.devices.map((d) => d.guid) : [];
+    const path = groupPathForDevices(devices);
+    const changed = (ev ? ev.guid : null) !== tracedEventId && Boolean(ev && ev.devices);
     if (changed) {
-      tracedEventId = ev ? ev.id : null;
+      tracedEventId = ev.guid;
       path.forEach((id) => state.openGroups.add(id));
     }
     return { ids: new Set(path), leaf: path[path.length - 1] || null, changed };
@@ -2752,23 +1523,21 @@
     const trace = traceGroups();
     const collapseBtn = $("groupsCollapseAll");
     const expanded = state.openGroups.size > 0;
-    collapseBtn.querySelector(".material-symbols-outlined").textContent = expanded
-      ? "unfold_less"
-      : "unfold_more";
+    collapseBtn.querySelector(".material-symbols-outlined").textContent = expanded ? "unfold_less" : "unfold_more";
     collapseBtn.title = t(expanded ? "Свернуть все группы" : "Развернуть все группы");
 
-    const open = state.events.filter((e) => !isDone(e));
-    const crit = open.some((e) => e.priority === "critical");
+    const open = store.counters.open || 0;
+    const crit = store.tree.some((n) => n.counters && n.counters.critical > 0);
     $("groupsList").innerHTML = `
       <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group">
         <div class="node-content">
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
           <span class="node-text">${te("Все события")}</span>
-          <span class="tree-ev ${crit ? "crit" : ""}">${open.length}</span>
+          <span class="tree-ev ${crit ? "crit" : ""}">${open}</span>
         </div>
       </li>
-      ${renderTreeHtml(TREE, 0, trace)}
+      ${renderTreeHtml(null, 0, trace)}
     `;
     const q = state.groupQuery.trim();
     const visible = [...$("groupsList").querySelectorAll(".tree-node")].filter(
@@ -2792,11 +1561,6 @@
       out.push(n);
     });
     return out;
-  }
-
-  function pageOfEvent(id) {
-    const idx = visibleEvents().findIndex((e) => e.id === id);
-    return idx === -1 ? state.page : Math.floor(idx / PAGE_SIZE) + 1;
   }
 
   function renderPager(total, pages, start, shown) {
@@ -2832,8 +1596,10 @@
   }
 
   // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
+
+  // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
   function timerChip(ev, extra) {
-    const view = timerView(ev);
+    const view = timerView(ev.timer);
     if (!view) {
       return ev.slaBreached ? `<span class="event-sla late breached">${te("Норматив нарушен")}</span>` : "";
     }
@@ -2844,75 +1610,66 @@
     const hint = view.running
       ? t(view.kind === "reaction" ? "Время до нарушения норматива реакции" : "Время до нарушения норматива закрытия")
       : t("Норматив закрытия приостановлен на время удержания");
-    return `<span class="${cls}" data-timer="${ev.id}" title="${escapeHtml(hint)}">${te(view.label)} <b class="sla-t">${fmtSla(
-      view.leftMs
-    )}</b>${view.running ? "" : ' <span class="material-symbols-outlined">pause</span>'}</span>`;
+    return `<span class="${cls}" data-timer="${escapeHtml(ev.guid)}" ${view.running ? `data-due="${view.due}"` : ""} title="${escapeHtml(hint)}">${te(
+      view.label
+    )} <b class="sla-t">${fmtSla(view.leftMs)}</b>${view.running ? "" : ' <span class="material-symbols-outlined">pause</span>'}</span>`;
   }
 
   // Предельный срок удержания по причине (таймер hold машины, §4): сколько ещё можно держать
   function holdChip(ev, extra) {
-    if (ev.state !== "on_hold" || !ev.holdDueAt) return "";
-    const left = ev.holdDueAt - Date.now();
-    const cls = [extra || "event-sla", left < 120000 ? "late" : ""].filter(Boolean).join(" ");
+    const view = timerView(ev.holdTimer);
+    if (!view) return "";
+    const cls = [extra || "event-sla", view.leftMs < 120000 ? "late" : ""].filter(Boolean).join(" ");
     const hint = t("Время до предельного срока удержания по причине");
-    return `<span class="${cls}" data-hold-timer="${ev.id}" title="${escapeHtml(hint)}">${te("Удержание")} <b class="sla-t">${fmtSla(
-      left
-    )}</b></span>`;
+    return `<span class="${cls}" data-hold-timer="${escapeHtml(ev.guid)}" data-due="${view.due}" title="${escapeHtml(hint)}">${te(
+      "Удержание"
+    )} <b class="sla-t">${fmtSla(view.leftMs)}</b></span>`;
   }
 
   // Чекбокс на любом событии очереди; смешанные типы можно набирать вручную (§11)
-  function bulkEligible(ev) {
-    if (state.checked.has(ev.id)) return true;
-    return state.checked.size < LIMITS.maxBulk;
-  }
+  const bulkEligible = (ev) => state.checked.has(ev.guid) || state.checked.size < LIMITS.maxBulk;
+  const groupChip = (ev) =>
+    ev.groupGuid
+      ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", { n: ev.groupSize })}">${te("группа")}</span>`
+      : "";
 
   function renderEvents() {
-    const list = visibleEvents();
-    $("eventsCount").textContent = String(list.length);
+    const { items, total } = store.page;
+    $("eventsCount").textContent = String(total);
     $("clearSelectionBtn").disabled = state.checked.size === 0;
-    const selectable = list.filter((e) => !isDone(e));
-    $("selectAllBtn").disabled = selectable.length === 0;
-    const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-    state.page = Math.min(Math.max(1, state.page), pages);
+    $("selectAllBtn").disabled = !items.some((e) => !isDone(e));
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const start = (state.page - 1) * PAGE_SIZE;
-    const pageItems = list.slice(start, start + PAGE_SIZE);
-    renderPager(list.length, pages, start, pageItems.length);
-    $("eventsList").innerHTML = pageItems
-      .map((e) => {
-        const badge = badgeView(e);
-        const prog = stepProgress(e);
-        const acts = queueActions(e);
-        const pickable = bulkEligible(e);
-        return `
-          <article class="event ${state.selectedId === e.id ? "selected" : ""}" data-id="${e.id}">
-            <input class="pick" type="checkbox" data-check="${e.id}" aria-label="${te("Выбрать {id}", {
-              id: e.id,
-            })}" ${state.checked.has(e.id) ? "checked" : ""} ${pickable ? "" : "disabled"} />
+    renderPager(total, pages, start, items.length);
+    $("eventsList").innerHTML =
+      items
+        .map((e) => {
+          const badge = badgeView(e);
+          const prog = stepProgress(e);
+          const acts = queueActions(e);
+          const pickable = bulkEligible(e);
+          return `
+          <article class="event ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
+            <input class="pick" type="checkbox" data-check="${escapeHtml(e.guid)}" aria-label="${te("Выбрать {id}", {
+              id: e.number,
+            })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
             <div class="event-pri ${e.priority}"></div>
             <div class="event-main">
               <div class="event-title">
-                <strong>${te(e.type)}</strong>
-                <time>${e.time}</time>
+                <strong>${te(e.eventType.name)}</strong>
+                <time>${fmtTime(e.occurredAt)}</time>
               </div>
-              <div class="event-sub">${e.id} · ${te(e.site)} · ${te(e.location)}</div>
+              <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>
               <div class="event-foot">
                 <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
                 ${
                   e.escalationLevel
-                    ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", {
-                        lvl: e.escalationLevel,
-                      })}</span>`
+                    ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>`
                     : ""
                 }
                 ${timerChip(e)}
                 ${holdChip(e)}
-                ${
-                  e.groupId
-                    ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
-                        n: groupSize(e),
-                      })}">${te("группа")}</span>`
-                    : ""
-                }
+                ${groupChip(e)}
                 ${prog.filled ? `<span class="event-prog">${te("Сценарий {a}/{b}", { a: prog.filled, b: prog.total })}</span>` : ""}
               </div>
             </div>
@@ -2920,55 +1677,53 @@
               ${acts
                 .map(
                   (a) =>
-                    `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${
-                      e.id
-                    }" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
+                    `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${escapeHtml(
+                      e.guid
+                    )}" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
                 )
                 .join("")}
             </div>
           </article>
         `;
-      })
-      .join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
+        })
+        .join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
   }
+
+  const groupMembers = (ev) => (ev && ev.group ? ev.group.members : ev ? [ev] : []);
 
   function renderWorkHeader(ev) {
     if (!ev) {
       $("workTitle").textContent = t("Обработка");
       return;
     }
-    const n = groupMates(ev).length;
+    const n = groupMembers(ev).length;
     $("workTitle").textContent =
-      n > 1 ? `${ev.id} · ${t(ev.type)} · ${t("группа {n}", { n })}` : `${ev.id} · ${t(ev.type)}`;
+      n > 1 ? `${ev.number} · ${t(ev.eventType.name)} · ${t("группа {n}", { n })}` : `${ev.number} · ${t(ev.eventType.name)}`;
   }
 
   function workNote(ev) {
-    const mates = groupMates(ev);
+    const mates = groupMembers(ev);
     if (mates.length > 1 && isMine(ev) && ev.state === "in_progress") {
+      const ex = ev.group.exclude;
       return `<div class="work-note">${escapeHtml(
         t("В работе группа из {n}: {ids}. Один сценарий на всех.", {
           n: mates.length,
-          ids: mates.map((e) => e.id).join(", "),
+          ids: mates.map((e) => e.number).join(", "),
         })
-      )} <button type="button" class="btn ghost small" data-exclude="${ev.id}" ${
-        engine.canExcludeFromGroup(ev) ? "" : `aria-disabled="true" title="${escapeHtml(say(engine.excludeBlock(ev)))}"`
+      )} <button type="button" class="btn ghost small" data-exclude="${escapeHtml(ev.guid)}" ${
+        ex.enabled ? "" : `aria-disabled="true" title="${escapeHtml(say(ex.reasonKey, ex.reasonVars))}"`
       }>${te("Исключить из группы")}</button></div>`;
     }
     if (isDone(ev)) {
       const why =
-        ev.closeResult && ev.closeResult !== "processed"
-          ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) })
-          : t("Инцидент закрыт.");
-      const more = canDo("reopen", ev)
-        ? t("Доступно переоткрытие.")
-        : t("Карточка доступна только для просмотра.");
+        ev.closeResultId && ev.closeResultId !== "processed" ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) }) : t("Инцидент закрыт.");
+      const more = canDo("reopen", ev) ? t("Доступно переоткрытие.") : t("Карточка доступна только для просмотра.");
       return `<div class="work-note ok">${escapeHtml(`${why} ${more}`)}</div>`;
     }
     if (ev.state === "pending_acceptance" && isTarget(ev)) {
-      return `<div class="work-note inbox">${te(
-        "Инцидент адресован вам, уровень {lvl}. Примите его или отклоните с указанием причины.",
-        { lvl: ev.escalationLevel }
-      )}</div>`;
+      return `<div class="work-note inbox">${te("Инцидент адресован вам, уровень {lvl}. Примите его или отклоните с указанием причины.", {
+        lvl: ev.escalationLevel,
+      })}</div>`;
     }
     if (!isMine(ev)) {
       const rights = canDo("takeover", ev)
@@ -2978,7 +1733,7 @@
           : t("перехват и передача недоступны по правам");
       const holder =
         ev.state === "pending_acceptance"
-          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(engine.addressee(ev)) })
+          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(addresseeOf(ev)) })
           : t("Инцидент обрабатывает {who}.", { who: actorName(ev.owner) });
       // Имя вида «Петрова М.» уже кончается точкой — вторую не ставим
       const sentence = holder.replace(/\.\.$/, ".");
@@ -2986,10 +1741,10 @@
     }
     if (ev.state === "on_hold") {
       return `<div class="work-note">${te("Инцидент отложен: {why}. Норматив закрытия приостановлен.", {
-        why: holdLabel(ev.holdReason),
+        why: holdLabel(ev.holdReasonId),
       })}</div>`;
     }
-    if (state.onBreak) {
+    if (onBreak()) {
       return `<div class="work-note">${te("Вы на перерыве — изменения по сценарию недоступны.")}</div>`;
     }
     return "";
@@ -2998,24 +1753,24 @@
   function renderScenario() {
     const ev = selected();
     const root = $("scenarioRoot");
-    if (!ev) {
-      root.innerHTML = `<div class="empty">Инцидент не выбран</div>`;
+    if (!ev || !ev.scenario) {
+      root.innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
       return;
     }
-    const steps = scenarioSteps(ev);
+    const steps = stepsOf(ev);
     const prog = stepProgress(ev);
-    const editable = engine.canEditScenario(ev);
+    const editable = !ev.readOnly;
     const acts = cardActions(ev);
 
-    ensureCursor(ev);
-    const i = ev.stepIndex;
+    const i = cursorOf(ev);
     const step = steps[i];
     const last = i === steps.length - 1;
     const canNext = isStepValid(ev, step);
     // «Закрыть инцидент» в конце сценария — когда доступен результат «Обработан» (§2.2)
-    const canClose =
-      editable && canDo("close", ev, "card") && engine.closeResults(ev, "card").some((r) => r.id === "processed" && !r.disabled);
-    const incomplete = steps.findIndex((s) => s.required && !isStepValid(ev, s));
+    const close = actionOf(ev, "close");
+    const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
+    const canClose = editable && Boolean(close && close.enabled) && results.some((r) => r.id === "processed" && !r.disabled);
+    const incomplete = steps.findIndex((s) => stepRequired(s) && !isStepValid(ev, s));
 
     root.innerHTML = `
       <div class="work-doc">
@@ -3030,11 +1785,9 @@
               const answer = stepAnswerText(ev, s);
               const nav = open && !current;
               return `
-                <li class="crumb ${current ? "current" : ""} ${answer ? "done" : ""} ${
-                  open ? "" : "locked"
-                } ${nav ? "nav" : ""}" ${current ? 'aria-current="step"' : ""} ${
-                  nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""
-                } title="${te(s.label)}">
+                <li class="crumb ${current ? "current" : ""} ${answer ? "done" : ""} ${open ? "" : "locked"} ${nav ? "nav" : ""}" ${
+                  current ? 'aria-current="step"' : ""
+                } ${nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""} title="${te(s.title)}">
                   <span class="crumb-track">
                     <span class="crumb-n">${idx + 1}</span>
                     <span class="crumb-line" aria-hidden="true"></span>
@@ -3052,10 +1805,8 @@
         <div class="work-step">
           <div class="step-card">
             <div class="step-h">
-              <strong>${te(step.label)}</strong>
-              <span>${te("{i} из {n}", { i: i + 1, n: steps.length })}${
-                step.required ? "" : ` · ${te("необязательно")}`
-              }</span>
+              <strong>${te(step.title)}</strong>
+              <span>${te("{i} из {n}", { i: i + 1, n: steps.length })}${stepRequired(step) ? "" : ` · ${te("необязательно")}`}</span>
             </div>
             ${renderStepControl(step, ev, editable)}
           </div>
@@ -3066,9 +1817,9 @@
               ? `<div class="work-acts">${acts
                   .map(
                     (a) =>
-                      `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${
-                        ev.id
-                      }" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
+                      `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${escapeHtml(ev.guid)}" title="${escapeHtml(
+                        a.hint
+                      )}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
                   )
                   .join("")}</div>`
               : ""
@@ -3079,9 +1830,7 @@
               ${
                 editable
                   ? last && canClose
-                    ? `<button type="button" class="btn primary" data-do="close" data-ev="${ev.id}">${te(
-                        "Закрыть инцидент"
-                      )}</button>`
+                    ? `<button type="button" class="btn primary" data-do="close" data-ev="${escapeHtml(ev.guid)}">${te("Закрыть инцидент")}</button>`
                     : `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${te(
                         last ? "К незаполненным" : "Далее"
                       )}</button>`
@@ -3093,10 +1842,7 @@
           </div>
           ${
             last && editable && !canClose && incomplete !== -1
-              ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", {
-                  n: incomplete + 1,
-                  name: t(stepShort(steps[incomplete])),
-                })}</p>`
+              ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", { n: incomplete + 1, name: t(stepShort(steps[incomplete])) })}</p>`
               : ""
           }
           ${renderLog(ev)}
@@ -3106,60 +1852,52 @@
   }
 
   function renderLog(ev) {
-    const items = ev.log.slice(-4);
+    const items = (ev.journal || []).slice(-4);
     if (!items.length) return "";
     return `
       <div class="log">
         <h4>${te("Журнал")}</h4>
         <ul>
           ${items
-            .map(
-              (l) =>
-                `<li><b>${escapeHtml(l.t)}</b> · ${escapeHtml(logWho(l))} — ${escapeHtml(logText(l))}</li>`
-            )
+            .map((l) => `<li><b>${escapeHtml(fmtTime(l.at))}</b> · ${escapeHtml(actorName(l.actor))} — ${escapeHtml(journalText(l))}</li>`)
             .join("")}
         </ul>
       </div>
     `;
   }
 
-  // Сколько инцидентов закроется вместе с этим — оператору важно видеть это в карточке (§11)
-  const groupSize = (ev) => state.events.filter((e) => e.groupId && e.groupId === ev.groupId).length;
-  const groupChipText = (ev) => t("группа {n}", { n: groupSize(ev) });
-
   function renderIncidentHead(ev, prog) {
     const badge = badgeView(ev);
     return `
       <div class="incident-head">
         <div class="incident-kicker">
-          <span>${ev.id}</span>
+          <span>${escapeHtml(ev.number)}</span>
           <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
-          ${
-            ev.escalationLevel
-              ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>`
-              : ""
-          }
+          ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
           ${timerChip(ev, "sla")}
           ${holdChip(ev, "sla")}
           ${
-            ev.groupId
-              ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", {
-                  n: groupSize(ev),
-                })}">${escapeHtml(groupChipText(ev))}</span>`
+            ev.groupGuid
+              ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", { n: ev.groupSize })}">${te("группа {n}", {
+                  n: ev.groupSize,
+                })}</span>`
               : ""
           }
         </div>
-        <h3>${te(ev.type)}</h3>
+        <h3>${te(ev.eventType.name)}</h3>
         <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
-        <div class="progress"><i style="width:${Math.round((prog.filled / prog.total) * 100)}%"></i></div>
+        <div class="progress"><i style="width:${prog.total ? Math.round((prog.filled / prog.total) * 100) : 0}%"></i></div>
       </div>
     `;
   }
 
   function renderStepControl(step, ev, enabled) {
     const dis = enabled ? "" : "disabled";
-    if (step.type === "checkbox") {
-      const on = ev.answers[step.id] === true;
+    const kind = stepKind(step);
+    const answers = answersOf(ev);
+    const view = step.view || {};
+    if (kind === "checkbox") {
+      const on = answers[step.id] === true;
       return `
         <button type="button" class="confirm-btn ${on ? "on" : ""}" data-confirm="${step.id}" ${dis}>
           <span class="material-symbols-outlined">${on ? "check_circle" : "radio_button_unchecked"}</span>
@@ -3167,53 +1905,73 @@
         </button>
       `;
     }
-    if (step.type === "radio") {
-      return `<div class="radios">${step.options
+    if (kind === "radio") {
+      return `<div class="radios">${view.options
         .map(
           (o) =>
-            `<label class="${ev.answers[step.id] === o ? "picked" : ""}"><input type="radio" name="${
-              step.id
-            }" data-ans="${step.id}" value="${escapeHtml(o)}" ${
-              ev.answers[step.id] === o ? "checked" : ""
-            } ${dis} /> ${te(o)}</label>`
+            `<label class="${answers[step.id] === o ? "picked" : ""}"><input type="radio" name="${step.id}" data-ans="${step.id}" value="${escapeHtml(
+              o
+            )}" ${answers[step.id] === o ? "checked" : ""} ${dis} /> ${te(o)}</label>`
         )
         .join("")}</div>`;
     }
-    if (step.type === "combo") {
-      return `<select data-ans="${step.id}" ${dis}><option value="">${te("Выберите…")}</option>${step.options
-        .map(
-          (o) => `<option value="${escapeHtml(o)}" ${ev.answers[step.id] === o ? "selected" : ""}>${te(o)}</option>`
-        )
+    if (kind === "combo") {
+      return `<select data-ans="${step.id}" ${dis}><option value="">${te("Выберите…")}</option>${view.options
+        .map((o) => `<option value="${escapeHtml(o)}" ${answers[step.id] === o ? "selected" : ""}>${te(o)}</option>`)
         .join("")}</select>`;
     }
-    if (step.type === "edit") {
-      return `<textarea rows="4" data-ans="${step.id}" placeholder="${te(
-        step.placeholder || "Можно пропустить"
-      )}" ${dis}>${escapeHtml(ev.answers[step.id] || "")}</textarea>`;
+    if (kind === "edit") {
+      return `<textarea rows="4" data-ans="${step.id}" placeholder="${te(view.placeholder || "Можно пропустить")}" ${dis}>${escapeHtml(
+        answers[step.id] || ""
+      )}</textarea>`;
     }
-    if (step.type === "macros") {
-      return `<div class="macro-row">${step.buttons
+    if (kind === "macros") {
+      return `<div class="macro-row">${view.buttons
         .map((b) => {
-          const on = ev.launched.includes(b);
-          return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${escapeHtml(b)}" ${dis}>${
-            on ? `${te("Запущено")} · ` : ""
-          }${te(b)}</button>`;
+          const on = launchedOf(ev).includes(b);
+          return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${escapeHtml(b)}" ${dis}>${on ? `${te("Запущено")} · ` : ""}${te(b)}</button>`;
         })
         .join("")}</div>`;
     }
     return "";
   }
 
+  /* ===== Видео и карта: камеры и устройства — из карточки (IncidentMedia, DeviceRef) ===== */
+
+  const cardOfSelected = () => (store.card && store.card.guid === state.selectedId ? store.card : null);
+  const camerasOf = (ev) => (ev && ev.media ? ev.media.cameras.map((c) => c.guid) : []);
+
+  function devView(id) {
+    const ev = cardOfSelected();
+    const ref = (ev && ev.devices ? ev.devices.find((d) => d.guid === id) : null) || {};
+    const cam = ev && ev.media ? ev.media.cameras.find((c) => c.guid === id) : null;
+    return {
+      id,
+      name: ref.name || (cam && cam.name) || id,
+      type: ref.typeId || "camera",
+      typeLabel: ref.typeLabel || "Камера видеонаблюдения",
+      scene: SCENE_BY_DEVICE[id] || "hall",
+    };
+  }
+
+  function eventPlan(ev) {
+    const ids = [ev.source && ev.source.guid, ...(ev.devices || []).map((d) => d.guid)].filter(Boolean);
+    for (const id of ids) {
+      if (DEVICE_POS[id]) return DEVICE_POS[id].plan;
+    }
+    return PLAN_BY_SITE[ev.site] || "mall";
+  }
+
   function mediaMode() {
-    const ev = selected();
-    return ev && ev.media ? ev.media : "both";
+    const ev = cardOfSelected() || selected();
+    const kinds = ev && ev.mediaKinds ? ev.mediaKinds : ["video", "map"];
+    return kinds.length === 1 ? kinds[0] : "both";
   }
 
   function applyMediaLayout() {
     $("panelMedia").dataset.media = mediaMode();
   }
 
-  // Разворот на всю рабочую область и переключатели панелей — одна раскладка
   function applyLayoutState() {
     const ws = $("workspace");
     const mode = mediaMode();
@@ -3231,6 +1989,7 @@
   }
 
   // Подписи внутри готовых SVG-сцен и планов переводятся по тексту узла <text>
+
   function trSvg(svg) {
     if (LANG === "ru") return svg;
     return svg.replace(/(<text\b[^>]*>)([^<]+)(<\/text>)/g, (m, open, body, close) => {
@@ -3240,8 +1999,8 @@
   }
 
   function renderVideo() {
-    const ev = selected();
-    const cams = ev && ev.cameras ? ev.cameras : [];
+    const ev = cardOfSelected();
+    const cams = camerasOf(ev);
     if (!cams.length) {
       $("videoStage").innerHTML = `<div class="empty">${te("К инциденту не привязаны камеры")}</div>`;
       $("camStrip").hidden = true;
@@ -3255,7 +2014,7 @@
     const many = cams.length > 1;
 
     $("videoStage").innerHTML = `
-      <div class="cam" data-cam="${state.activeCam}">
+      <div class="cam" data-cam="${escapeHtml(state.activeCam)}">
         <svg class="cam-scene" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           ${trSvg(SCENES[cam.scene] || SCENES.hall)}
         </svg>
@@ -3264,20 +2023,20 @@
             <div class="mode-tag ${state.videoMode}">${live ? "LIVE" : te("АРХИВ")}</div>
             <b>${te(cam.name)}</b>
           </div>
-          <span>${live ? nowStamp() : ev.time}</span>
+          <span>${live ? nowStamp() : fmtTime(ev.occurredAt)}</span>
         </div>
       </div>
       ${
         many
           ? `
-        <button type="button" class="cam-nav prev" data-cam-step="-1" title="${te(
-          "Предыдущая камера (←)"
-        )}" aria-label="${te("Предыдущая камера")}">
+        <button type="button" class="cam-nav prev" data-cam-step="-1" title="${te("Предыдущая камера (←)")}" aria-label="${te(
+              "Предыдущая камера"
+            )}">
           <span class="material-symbols-outlined">chevron_left</span>
         </button>
-        <button type="button" class="cam-nav next" data-cam-step="1" title="${te(
-          "Следующая камера (→)"
-        )}" aria-label="${te("Следующая камера")}">
+        <button type="button" class="cam-nav next" data-cam-step="1" title="${te("Следующая камера (→)")}" aria-label="${te(
+              "Следующая камера"
+            )}">
           <span class="material-symbols-outlined">chevron_right</span>
         </button>`
           : ""
@@ -3293,9 +2052,9 @@
           ${cams
             .map((id, i) => {
               const c = devView(id);
-              return `<button type="button" class="cam-tick ${
-                i === idx ? "active" : ""
-              }" data-cam="${id}" title="${te(c.name)}" aria-label="${te(c.name)}"></button>`;
+              return `<button type="button" class="cam-tick ${i === idx ? "active" : ""}" data-cam="${escapeHtml(id)}" title="${te(
+                c.name
+              )}" aria-label="${te(c.name)}"></button>`;
             })
             .join("")}
         </div>
@@ -3305,8 +2064,7 @@
   }
 
   function stepCamera(delta) {
-    const ev = selected();
-    const cams = ev && ev.cameras ? ev.cameras : [];
+    const cams = camerasOf(cardOfSelected());
     if (cams.length < 2) return;
     const i = cams.indexOf(state.activeCam);
     state.activeCam = cams[(Math.max(0, i) + delta + cams.length) % cams.length];
@@ -3340,7 +2098,7 @@
   }
 
   function renderMap() {
-    const ev = selected();
+    const ev = cardOfSelected();
     if (!ev) {
       $("mapCaption").textContent = t("Место сработки");
       $("mapRoot").innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
@@ -3348,49 +2106,36 @@
     }
     const planId = eventPlan(ev);
     const plan = PLANS[planId] || PLANS.mall;
-    const source = eventSource(ev);
+    const source = ev.source ? ev.source.guid : null;
     $("mapCaption").textContent = t(plan.title);
 
-    const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter(
-      (id) => DEVICE_POS[id] && DEVICE_POS[id].plan === planId
-    );
+    const ids = (ev.devices || []).map((d) => d.guid).filter((id) => DEVICE_POS[id] && DEVICE_POS[id].plan === planId);
     // Источник рисуем последним, чтобы пульсация была поверх остальных значков.
     const ordered = ids.filter((id) => id !== source).concat(ids.includes(source) ? [source] : []);
-    const markers = ordered
-      .map((id) => deviceMarker(id, { source: id === source, active: id === state.activeCam }))
-      .join("");
-
+    const markers = ordered.map((id) => deviceMarker(id, { source: id === source, active: id === state.activeCam })).join("");
     const srcDev = source ? devView(source) : null;
-    const camCount = (ev.cameras || []).length;
+    const camCount = camerasOf(ev).length;
 
     $("mapRoot").innerHTML = `
-      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="${te("План: {name}", {
-        name: t(plan.title),
-      })}">
+      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="${te("План: {name}", { name: t(plan.title) })}">
         ${trSvg(plan.svg)}
         ${markers}
       </svg>
       <div class="map-legend">
-        <span class="map-legend-src">${
-          srcDev ? `${te(srcDev.typeLabel)}: ${te(srcDev.name)}` : te("Источник не указан")
-        }</span>
-        <span class="map-legend-cams">${
-          camCount ? te("Камер в зоне: {n}", { n: camCount }) : te("Камеры не привязаны")
-        }</span>
+        <span class="map-legend-src">${srcDev ? `${te(srcDev.typeLabel)}: ${te(srcDev.name)}` : te("Источник не указан")}</span>
+        <span class="map-legend-cams">${camCount ? te("Камер в зоне: {n}", { n: camCount }) : te("Камеры не привязаны")}</span>
       </div>
     `;
   }
 
   function renderStatus() {
     const ev = selected();
-    const open = state.events.filter((e) => !isDone(e)).length;
-    const mine = myUnits("in_progress").size;
-    const held = myUnits("on_hold").size;
+    const usage = store.session ? store.session.usage : { activeCount: 0, onHoldCount: 0 };
     $("statusQueue").textContent = t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", {
-      n: open,
-      a: mine,
+      n: store.counters.open || 0,
+      a: usage.activeCount,
       max: LIMITS.maxActive,
-      h: held,
+      h: usage.onHoldCount,
     });
     if (!ev) {
       $("statusIncident").textContent = t("Очередь ожидает выбора события");
@@ -3401,18 +2146,16 @@
     const prog = stepProgress(ev);
     const badge = badgeView(ev);
     $("statusIncident").textContent =
-      state.mode === "work"
-        ? t("Карточка {id} · {badge}", { id: ev.id, badge: badge.text })
-        : `${ev.id} · ${badge.text}`;
+      state.mode === "work" ? t("Карточка {id} · {badge}", { id: ev.number, badge: badge.text }) : `${ev.number} · ${badge.text}`;
     $("statusSteps").textContent =
-      state.mode === "work" && typeof ev.stepIndex === "number"
-        ? t("Шаг {i} из {n}", { i: ev.stepIndex + 1, n: prog.total })
+      state.mode === "work" && ev.scenario
+        ? t("Шаг {i} из {n}", { i: cursorOf(ev) + 1, n: prog.total })
         : t("Сценарий {a}/{b}", { a: prog.filled, b: prog.total });
     $("statusSla").textContent = statusTimerText(ev);
   }
 
   function statusTimerText(ev) {
-    const view = timerView(ev);
+    const view = timerView(ev.timer);
     if (!view) return ev.slaBreached ? t("Норматив нарушен") : "";
     if (!view.running) return t("{label} приостановлен: {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
     return t("{label}: осталось {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
@@ -3426,6 +2169,7 @@
   }
 
   function renderAll() {
+    if (!WORKFLOW) return;
     const ws = $("workspace");
     if (state.mode !== "work" && state.mobileView === "card") state.mobileView = "queue";
     ws.dataset.mode = state.mode;
@@ -3443,7 +2187,7 @@
     renderVideo();
     renderMap();
     renderStatus();
-    $("breakBanner").hidden = !state.onBreak;
+    $("breakBanner").hidden = !onBreak();
   }
 
   function syncToggle(btn, on, iconOn, iconOff, titleOn, titleOff) {
@@ -3456,14 +2200,7 @@
   function renderTopbar() {
     const groupsLocked = state.mode === "work" && !narrowQuery.matches;
     const groupsBtn = $("toggleGroups");
-    syncToggle(
-      groupsBtn,
-      state.groupsOn,
-      "left_panel_close",
-      "left_panel_open",
-      t("Скрыть панель групп"),
-      t("Показать панель групп")
-    );
+    syncToggle(groupsBtn, state.groupsOn, "left_panel_close", "left_panel_open", t("Скрыть панель групп"), t("Показать панель групп"));
     groupsBtn.disabled = groupsLocked;
     if (groupsLocked) groupsBtn.title = t("Панель групп скрыта на время обработки инцидента");
     [...$("mobileNav").children].forEach((b) => {
@@ -3473,7 +2210,7 @@
       else b.removeAttribute("aria-current");
       if (b.dataset.view === "card") b.disabled = state.mode !== "work";
     });
-    $("navQueueCount").textContent = String(state.events.filter((e) => !isDone(e)).length);
+    $("navQueueCount").textContent = String(store.counters.open || 0);
     syncToggle(
       $("toggleMedia"),
       state.mediaOn,
@@ -3491,45 +2228,38 @@
       t("Свернуть видеомонитор (Esc)"),
       t("Развернуть видеомонитор на всю рабочую область")
     );
-    syncToggle(
-      $("mapFull"),
-      state.full === "map",
-      "close_fullscreen",
-      "open_in_full",
-      t("Свернуть карту (Esc)"),
-      t("Развернуть карту на всю рабочую область")
-    );
+    syncToggle($("mapFull"), state.full === "map", "close_fullscreen", "open_in_full", t("Свернуть карту (Esc)"), t("Развернуть карту на всю рабочую область"));
     $("videoFull").disabled = mode === "map";
     $("mapFull").disabled = mode === "video";
-    // Состояние оператора — отдельная машина состояний (§12.1)
-    const agent = state.onBreak ? t("Перерыв") : myUnits("in_progress").size ? t("Занят") : t("На смене");
-    $("dutyBadge").textContent = agent;
-    $("dutyBadge").classList.toggle("off", state.onBreak);
-    $("breakBtnLabel").textContent = t(state.onBreak ? "Вернуться на смену" : "Уйти на перерыв");
+    // Состояние оператора — отдельная машина состояний (§12.1), значение отдаёт сервер
+    const agent = store.session ? store.session.agentState : "ready";
+    $("dutyBadge").textContent = agent === "not_ready" ? t("Перерыв") : agent === "busy" ? t("Занят") : t("На смене");
+    $("dutyBadge").classList.toggle("off", agent === "not_ready");
+    $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться на смену" : "Уйти на перерыв");
   }
 
   // При переходе к другому инциденту показываем камеру, ближайшую к источнику события.
   function focusCameras(ev) {
-    if (!ev || !ev.cameras || !ev.cameras.length) return;
-    if (state.camFor !== ev.id || !ev.cameras.includes(state.activeCam)) {
-      state.activeCam = ev.cameras[0];
-      state.camFor = ev.id;
+    const cams = camerasOf(ev);
+    if (!cams.length) return;
+    if (state.camFor !== ev.guid || !cams.includes(state.activeCam)) {
+      state.activeCam = cams[0];
+      state.camFor = ev.guid;
     }
   }
 
   // Навигация без смены состояния (§6.3)
-  function openCard(navId, ev) {
+  async function openCard(navId, ev) {
     if (!ev) return;
-    const check = availability(navId, ev);
-    if (!check.ok) {
-      if (check.why) toast(check.why);
+    const a = actionOf(ev, navId);
+    if (!a || !a.enabled) {
+      if (actionWhy(a)) toast(actionWhy(a));
       return;
     }
-    state.selectedId = ev.id;
-    focusCameras(ev);
-    ensureCursor(ev);
+    state.selectedId = ev.guid;
     state.mode = "work";
     state.mobileView = "card";
+    await loadCard();
     renderAll();
   }
 
@@ -3537,39 +2267,43 @@
   // в очереди с кнопкой «Продолжить». Отложить — отдельное действие с причиной.
   function backToQueue() {
     state.mode = "queue";
-    state.page = pageOfEvent(state.selectedId);
-    syncSelection();
+    state.focus = true;
+    state.jump = true;
     renderAll();
+    return reload();
   }
 
-  /* ===== Состояние оператора (§12.2) ===== */
+  /* ===== Состояние оператора (§12.2): перерыв — запрос к серверу ===== */
 
   // Уход на перерыв — с причиной из машины (§12.1); активный инцидент откладывается системой,
   // право incident:hold не требуется (§12.2: system_hold_break)
-  function toggleBreak() {
+  async function toggleBreak() {
     const notReady = WORKFLOW.session.states.find((s) => s.id === "not_ready");
     if (notReady.permission && !can(notReady.permission)) {
       toast(t("Нет права уходить на перерыв"));
       return;
     }
-    if (!state.onBreak) {
-      showForm({ id: BREAK_FORM.id }, BREAK_FORM);
+    if (!onBreak()) {
+      showForm({ id: "__break__" }, breakForm());
       return;
     }
-    state.onBreak = false;
-    state.agentState = "ready";
-    toast(t("Вы снова на смене"));
-    renderAll();
+    try {
+      await api.put("/operator/session/agent-state", { agentState: "ready" });
+      toast(t("Вы снова на смене"));
+    } catch (err) {
+      toast(problemText(err));
+    }
+    await reload();
   }
 
-  function goOnBreak(reasonId) {
-    state.onBreak = true;
-    state.agentState = "not_ready";
-    state.breakReason = reasonId;
-    // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
-    engine.tick();
-    toast(t("Перерыв. Новые события не назначаются"));
-    renderAll();
+  async function goOnBreak(reasonId) {
+    try {
+      await api.put("/operator/session/agent-state", { agentState: "not_ready", reasonId });
+      toast(t("Перерыв. Новые события не назначаются"));
+    } catch (err) {
+      toast(problemText(err));
+    }
+    await reload();
   }
 
   function closeDrawer() {
@@ -3586,6 +2320,8 @@
     });
     return open[0] || null;
   }
+
+  /* ===== Сплиттеры: группы | очередь-карточка | видеомонитор + карта ===== */
 
   /* ===== Сплиттеры: группы | очередь-карточка | видеомонитор + карта ===== */
 
@@ -3625,6 +2361,7 @@
   }
 
   // Панель не уже своего минимума и не отбирает место у центральной колонки
+
   function splitRange(key) {
     if (key === "video") {
       const stack = $("panelMedia").getBoundingClientRect().height;
@@ -3690,6 +2427,13 @@
     });
   }
 
+  // Смена фильтра, группы или поиска: очередь — заново, выделение — на видимое
+  function requery() {
+    state.page = 1;
+    state.focus = true;
+    return reload();
+  }
+
   function bind() {
     restoreLayout();
     bindSplitter("splitGroups", "groups", "col");
@@ -3715,9 +2459,7 @@
     $("backToQueue").addEventListener("click", () => backToQueue());
     $("eventFilter").addEventListener("change", (e) => {
       state.filter = e.target.value;
-      state.page = 1;
-      syncSelection();
-      renderAll();
+      requery();
     });
     [
       ["eventTypeFilter", "eventType"],
@@ -3725,16 +2467,12 @@
     ].forEach(([id, key]) =>
       $(id).addEventListener("change", (e) => {
         state[key] = e.target.value;
-        state.page = 1;
-        syncSelection();
-        renderAll();
+        requery();
       })
     );
     $("eventSearch").addEventListener("input", (e) => {
       state.search = e.target.value;
-      state.page = 1;
-      syncSelection();
-      renderAll();
+      requery();
     });
     $("mobileNav").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-view]");
@@ -3749,8 +2487,7 @@
       const btn = e.target.closest("[data-page]");
       if (!btn || btn.disabled) return;
       state.page = Number(btn.dataset.page);
-      renderEvents();
-      $("eventsList").scrollTop = 0;
+      reload().then(() => ($("eventsList").scrollTop = 0));
     });
     $("groupSearch").addEventListener("input", (e) => {
       state.groupQuery = e.target.value;
@@ -3770,12 +2507,10 @@
       }
       if (!e.target.closest(".node-content")) return;
       state.groupId = id;
-      state.page = 1;
       if (narrowQuery.matches) state.groupsOn = false;
-      syncSelection();
-      renderAll();
+      requery();
     });
-    $("eventsList").addEventListener("click", (e) => {
+    $("eventsList").addEventListener("click", async (e) => {
       const check = e.target.closest("[data-check]");
       if (check) {
         const id = check.dataset.check;
@@ -3784,19 +2519,21 @@
           toast(t("Не больше {max} событий в выборке", { max: LIMITS.maxBulk }));
           return;
         } else state.checked.add(id);
+        await updateSelection();
         renderEvents();
         return;
       }
       const act = e.target.closest("[data-do]");
       if (act && explainIfOff(act)) return;
       if (act) {
-        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "queue");
+        trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue");
         return;
       }
       const row = e.target.closest("[data-id]");
       if (!row || row.dataset.id === state.selectedId) return;
       state.selectedId = row.dataset.id;
-      focusCameras(selected());
+      renderEvents();
+      await loadCard();
       renderEvents();
       renderGroups();
       applyMediaLayout();
@@ -3806,24 +2543,20 @@
     });
     $("scenarioRoot").addEventListener("input", (e) => {
       const ev = selected();
-      if (!engine.canEditScenario(ev)) return;
+      if (!ev || ev.readOnly) return;
       const el = e.target.closest("textarea[data-ans]");
       if (!el) return;
-      ev.answers[el.dataset.ans] = el.value;
+      ev.scenario.answers[el.dataset.ans] = el.value;
       const next = $("stepNext");
-      const step = scenarioSteps(ev)[ev.stepIndex];
+      const step = stepsOf(ev)[cursorOf(ev)];
       if (next && step) next.disabled = !isStepValid(ev, step);
     });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
-      if (!engine.canEditScenario(ev)) return;
+      if (!ev || ev.readOnly) return;
       const el = e.target.closest("[data-ans]");
       if (!el) return;
-      ev.answers[el.dataset.ans] = el.type === "checkbox" ? el.checked : el.value;
-      if (el.matches("textarea")) return;
-      if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
-      renderScenario();
-      renderStatus();
+      saveAnswers(ev, { [el.dataset.ans]: el.type === "checkbox" ? el.checked : el.value });
     });
     $("scenarioRoot").addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -3833,31 +2566,34 @@
       e.stopPropagation();
       crumb.click();
     });
-    $("scenarioRoot").addEventListener("click", (e) => {
+    $("scenarioRoot").addEventListener("click", async (e) => {
       const ev = selected();
       if (!ev) return;
       const exclude = e.target.closest("[data-exclude]");
       if (exclude && explainIfOff(exclude)) return;
       if (exclude) {
-        const r = engine.excludeFromGroup(ev);
-        toast(r.ok ? t("{id} исключён из группы", { id: ev.id }) : say(r.why));
-        renderAll();
+        try {
+          await api.del(`/operator/incident-groups/${enc(ev.groupGuid)}/members/${enc(ev.guid)}`);
+          toast(t("{id} исключён из группы", { id: ev.number }));
+        } catch (err) {
+          toast(problemText(err));
+        }
+        await reload();
         return;
       }
       const act = e.target.closest("[data-do]");
       if (act && explainIfOff(act)) return;
       if (act) {
-        trigger(act.dataset.do, state.events.find((x) => x.id === act.dataset.ev), "card");
+        trigger(act.dataset.do, ev, "card");
         return;
       }
-      const editable = engine.canEditScenario(ev);
       const crumb = e.target.closest("[data-crumb]");
       if (crumb) {
         goToStep(ev, Number(crumb.dataset.crumb));
         return;
       }
       if (e.target.closest("#stepBack")) {
-        goToStep(ev, ev.stepIndex - 1);
+        goToStep(ev, cursorOf(ev) - 1);
         return;
       }
       if (e.target.closest("#stepNext")) {
@@ -3865,33 +2601,27 @@
         return;
       }
       const confirm = e.target.closest("[data-confirm]");
-      if (confirm && editable) {
+      if (confirm && !ev.readOnly) {
         const id = confirm.dataset.confirm;
-        ev.answers[id] = ev.answers[id] !== true;
-        if (!canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
-        renderScenario();
-        renderStatus();
+        saveAnswers(ev, { [id]: answersOf(ev)[id] !== true });
         return;
       }
       const macro = e.target.closest("[data-macro]");
-      const macroCheck = macro ? availability("run_macro", ev) : null;
-      if (macro && !macroCheck.ok) {
-        toast(macroCheck.why);
-        return;
-      }
       if (macro) {
         const name = macro.dataset.macro;
-        if (!ev.launched.includes(name)) ev.launched.push(name);
-        toast(t("Макрос: {name}", { name: t(name) }));
+        try {
+          await api.post(`${incPath(ev.guid)}/macros/${enc(name)}`, { stepId: stepsOf(ev)[cursorOf(ev)].id });
+          toast(t("Макрос: {name}", { name: t(name) }));
+        } catch (err) {
+          toast(problemText(err));
+        }
+        await loadCard();
         renderScenario();
       }
     });
     $("selectAllBtn").addEventListener("click", () => selectAllVisible());
     $("selectSimilarBtn").addEventListener("click", () => selectSimilar());
-    $("clearSelectionBtn").addEventListener("click", () => {
-      state.checked.clear();
-      renderEvents();
-    });
+    $("clearSelectionBtn").addEventListener("click", () => clearSelection());
     $("videoStage").addEventListener("click", (e) => {
       const nav = e.target.closest("[data-cam-step]");
       if (nav) stepCamera(Number(nav.dataset.camStep));
@@ -3922,7 +2652,7 @@
       toggleBreak();
     });
     $("breakReturn").addEventListener("click", () => {
-      if (state.onBreak) toggleBreak();
+      if (onBreak()) toggleBreak();
     });
     $("hotkeysBtn").addEventListener("click", () => {
       closeMenus();
@@ -3948,8 +2678,13 @@
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".menu")) closeMenus();
     });
-    $("escalateDefault").addEventListener("change", (e) => {
-      state.escalateTo = e.target.value;
+    $("escalateDefault").addEventListener("change", async (e) => {
+      try {
+        await api.patch("/operator/session/preferences", { defaultTransferTargetId: e.target.value });
+      } catch (err) {
+        toast(problemText(err));
+      }
+      store.session = await api.get("/operator/session");
       toast(t("Предвыбор адресата: {who}", { who: defaultTarget() }));
     });
     document.querySelectorAll("[data-close]").forEach((btn) => {
@@ -3962,207 +2697,73 @@
     $("dialogFields").addEventListener("change", refreshDialogFields);
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
-      else TREE.forEach((n) => state.openGroups.add(n.id));
+      else store.tree.forEach((n) => state.openGroups.add(n.guid));
       renderGroups();
     });
     document.addEventListener("keydown", onKey);
   }
 
-  function selectAllVisible() {
-    const candidates = visibleEvents().filter((e) => !isDone(e));
-    if (!candidates.length) {
-      toast(t("Нет событий для выборки"));
+  /* ===== Выборка (§11): правила выборки применяет сервер (/incidents/selection) ===== */
+
+  async function pickSelection(body, message) {
+    let res;
+    try {
+      res = await api.post("/operator/incidents/selection", Object.assign(queueQuery(), body));
+    } catch (err) {
+      toast(problemText(err));
       return;
     }
-    const take = candidates.slice(0, LIMITS.maxBulk);
-    state.checked = new Set(take.map((e) => e.id));
-    state.selectedId = take[0].id;
-    toast(
-      take.length < candidates.length
-        ? t("Выбрано {n} из {max}", { n: take.length, max: LIMITS.maxBulk })
-        : t("Выбрано событий: {n}", { n: take.length })
+    if (!res.incidentGuids.length) {
+      toast(t(body.mode === "same_type_new" ? "Нет новых событий для выборки" : "Нет событий для выборки"));
+      return;
+    }
+    state.checked = new Set(res.incidentGuids);
+    state.selectedId = res.incidentGuids[0];
+    toast(message(res));
+    await updateSelection();
+    await reload();
+  }
+
+  function selectAllVisible() {
+    return pickSelection({ mode: "all_in_filter" }, (res) =>
+      res.truncated
+        ? t("Выбрано {n} из {max}", { n: res.incidentGuids.length, max: LIMITS.maxBulk })
+        : t("Выбрано событий: {n}", { n: res.incidentGuids.length })
     );
-    renderEvents();
   }
 
   function selectSimilar() {
-    const picked = checkedEvents();
-    let typeId = picked[0] && picked[0].typeId;
-    if (!typeId) {
-      const ev = selected();
-      if (ev) typeId = ev.typeId;
-    }
-    if (!typeId) {
-      const firstNew = visibleEvents().find(groupable);
-      typeId = firstNew && firstNew.typeId;
-    }
-    if (!typeId) {
-      toast(t("Нет новых событий для выборки"));
-      return;
-    }
-    const candidates = visibleEvents().filter((e) => groupable(e) && e.typeId === typeId);
-    if (!candidates.length) {
-      toast(t("Нет новых событий для выборки"));
-      return;
-    }
-    const take = candidates.slice(0, LIMITS.maxBulk);
-    state.checked = new Set(take.map((e) => e.id));
-    state.selectedId = take[0].id;
-    toast(t("Выбрано однотипных: {n}", { n: take.length }));
+    const anchor = [...state.checked][0] || state.selectedId;
+    return pickSelection({ mode: "same_type_new", anchorIncidentGuid: anchor }, (res) =>
+      t("Выбрано однотипных: {n}", { n: res.incidentGuids.length })
+    );
+  }
+
+  function clearSelection() {
+    state.checked.clear();
+    store.selection = null;
     renderEvents();
   }
 
-  // Групповая обработка (§11): общий group_id, владелец и ответы, но каждый
-  // инцидент сохраняет собственное состояние и собственные таймеры.
-  // «Обработать как одно» (§11): группу создаёт исполнитель по grouping машины
-  function groupProcess() {
+  // «Обработать как одно» (§11): группу создаёт сервер по grouping машины
+  async function groupProcess() {
     if (state.checked.size < 2) return;
-    const picked = checkedEvents();
-    const groupId = `GRP-${Date.now().toString().slice(-4)}`;
-    const r = engine.createGroup(picked, groupId);
-    if (!r.ok) {
-      toast(say(r.why));
+    let group;
+    try {
+      group = await api.post("/operator/incident-groups", { incidentGuids: [...state.checked] });
+    } catch (err) {
+      toast(problemText(err));
       return;
     }
-    const first = picked[0];
-    picked.forEach((ev) => {
-      log(ev, "me", "Групповая обработка {grp} вместе с {ids}", {
-        grp: groupId,
-        ids: picked
-          .filter((x) => x.id !== ev.id)
-          .map((x) => x.id)
-          .join(", "),
-      });
-    });
-    state.selectedId = first.id;
+    state.selectedId = group.members[0].guid;
     state.checked.clear();
-    focusCameras(first);
-    ensureCursor(first);
-    toast(t("Группа из {n} событий в одной карточке", { n: picked.length }));
+    store.selection = null;
+    toast(t("Группа из {n} событий в одной карточке", { n: group.members.length }));
     state.mode = "work";
     state.mobileView = "card";
-    renderAll();
+    await reload();
   }
 
-  const SIM_NOTES = [
-    "Охрана направлена, время прибытия 2 мин",
-    "Передано бригадиру, акт №14-СБ",
-    "Уточняю по архиву, свидетелей нет",
-    "Наряд на месте, инцидент локализован",
-  ];
-
-  const foreignActive = () =>
-    state.events.filter((e) => e.state === "in_progress" && e.owner && !isMine(e) && !e.groupId);
-
-  // Коллега забирает одно из новых событий, видимых в очереди.
-  function simTakeEvent() {
-    const pool = visibleEvents()
-      .slice(0, PAGE_SIZE)
-      .filter((e) => e.state === "new" && e.id !== state.selectedId && !state.checked.has(e.id));
-    // В верхней части очереди всегда оставляем новое событие, чтобы оператору было что взять.
-    if (pool.length < 2) return null;
-    const ev = pool[pool.length - 1];
-    const who = SIM.colleagues[SIM.taken % SIM.colleagues.length];
-    ev.state = "in_progress";
-    ev.owner = who;
-    ev.stepIndex = 0;
-    stopReaction(ev);
-    startResolution(ev);
-    log(ev, who, "Взято в работу");
-    SIM.taken += 1;
-    toast(t("{id} взял в работу {who}", { id: ev.id, who: actorName(who) }));
-    return ev.id;
-  }
-
-  // Чужой сценарий продвигается на один шаг: меняются прогресс и журнал.
-  function simAdvanceEvent() {
-    const pool = foreignActive().filter((e) => !scenarioDone(e));
-    if (!pool.length) return null;
-    const ev = pool[Math.floor(Math.random() * pool.length)];
-    const steps = scenarioSteps(ev);
-    const idx = steps.findIndex((s) => !stepAnswerText(ev, s));
-    if (idx === -1) return null;
-    const step = steps[idx];
-    let done = "";
-    if (step.type === "checkbox") {
-      ev.answers[step.id] = true;
-      done = "подтверждено";
-    } else if (step.type === "macros") {
-      ev.launched.push(step.buttons[0]);
-      done = ["запущен макрос «{name}»", { name: step.buttons[0] }];
-    } else if (step.options) {
-      ev.answers[step.id] = step.options[Math.floor(Math.random() * step.options.length)];
-      done = ev.answers[step.id];
-    } else {
-      ev.answers[step.id] = SIM_NOTES[Math.floor(Math.random() * SIM_NOTES.length)];
-      done = ev.answers[step.id];
-    }
-    ev.stepIndex = Math.min(idx + 1, steps.length - 1);
-    log(ev, ev.owner, "Шаг {i}/{n} · {name}: {done}", {
-      i: idx + 1,
-      n: steps.length,
-      name: stepShort(step),
-      done,
-    });
-    return ev.id;
-  }
-
-  // Коллега передаёт свой инцидент оператору: появляется «Вам на принятие».
-  function simHandoff() {
-    const pool = foreignActive().filter((e) => e.escalationLevel < WORKFLOW.escalation.maxLevel);
-    if (!pool.length) return null;
-    const ev = pool[0];
-    const from = ev.owner;
-    engine.applyAs("transfer", ev, { targetId: "me", comment: "Нужен оператор с доступом к архиву площадки" }, from);
-    toast(t("{who} передал {id} вам", { who: actorName(from), id: ev.id }));
-    return ev.id;
-  }
-
-  // Отвал оператора (§12.3): сессия не отвечает, инцидент откладывается системой.
-  function simDrop() {
-    const pool = foreignActive();
-    if (!pool.length) return null;
-    const ev = pool[pool.length - 1];
-    engine.applyAs("system_hold_idle", ev, {}, "system");
-    toast(t("Нет связи с {who} — {id} отложен системой", { who: actorName(ev.owner), id: ev.id }));
-    return ev.id;
-  }
-
-  function simulateColleagues() {
-    const ids = [];
-    if (!SIM.enabled) return ids;
-    SIM.takeTick += 1;
-    if (SIM.taken < SIM.maxTaken && SIM.takeTick >= (SIM.taken ? SIM.takeEverySec : SIM.firstTakeSec)) {
-      SIM.takeTick = 0;
-      const id = simTakeEvent();
-      if (id) ids.push(id);
-    }
-    SIM.stepTick += 1;
-    if (SIM.stepTick >= SIM.stepEverySec) {
-      SIM.stepTick = 0;
-      const id = simAdvanceEvent();
-      if (id) ids.push(id);
-    }
-    SIM.handoffTick += 1;
-    if (!SIM.handoffDone && SIM.handoffTick >= SIM.handoffSec) {
-      SIM.handoffDone = true;
-      const id = simHandoff();
-      if (id) ids.push(id);
-    }
-    SIM.dropTick += 1;
-    if (!SIM.dropDone && SIM.dropTick >= SIM.dropSec) {
-      SIM.dropDone = true;
-      const id = simDrop();
-      if (id) ids.push(id);
-    }
-    return ids;
-  }
-
-  // Все горячие клавиши — из машины (§13); в полях ввода работают только те, у которых
-  // worksInInput: F1 и Esc
-  // Когда горячая клавиша не срабатывает (§13, правило 3): в поле ввода и при открытом окне —
-  // кроме клавиш с worksInInput / worksInModal; Enter и пробел на кнопке или ссылке в фокусе —
-  // их собственное действие, а не горячая клавиша
   function onKey(e) {
     const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
     if (!hotkey) return;
@@ -4178,6 +2779,7 @@
 
   // Esc разбирается по цепочке машины: форма → полный экран → панель групп → к очереди (§13.1).
   // Срабатывает первое звено, которому есть что закрыть.
+
   const ESCAPE_STEPS = {
     close_form: () => {
       const openMenu = closeMenus();
@@ -4213,6 +2815,7 @@
 
   // Справка по клавишам — из машины: подряд идущие клавиши с одной подписью — одна строка
   // («←» «→», «1–4»). Внизу — какие клавиши работают в полях ввода и при открытом окне (§13)
+
   const KEY_GLYPH = { ArrowLeft: "←", ArrowRight: "→" };
   const kbdHtml = (key) =>
     key
@@ -4243,6 +2846,7 @@
 
   // Имя клавиши в записи машины: «N», «Shift+A», «Ctrl+K», «Enter», «ArrowLeft», «?», «Esc».
   // Shift пишется только у букв: «?» набирается с Shift, но это своя клавиша
+
   function keyName(e) {
     const base = e.key === "Escape" ? "Esc" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
     if (e.ctrlKey || e.metaKey) return `Ctrl+${base}`;
@@ -4250,7 +2854,9 @@
   }
 
   // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет переход
-  function runHotkey(hotkey, e) {
+
+  // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет сервер
+  async function runHotkey(hotkey, e) {
     const [kind, name] = hotkey.action.split(":");
     const ev = selected();
     const surface = state.mode === "work" ? "card" : "queue";
@@ -4266,7 +2872,8 @@
     }
     if (kind === "transition") {
       if (hotkey.scope === "next_new") {
-        const next = state.events.find((x) => canDo(name, x, "queue"));
+        const open = await api.get("/operator/incidents", { filter: "open", pageSize: 1000 });
+        const next = open.items.find((x) => canDo(name, x));
         if (next) trigger(name, next, "queue");
         return;
       }
@@ -4278,10 +2885,7 @@
     } else if (kind === "selection") {
       e.preventDefault();
       if (name === "same_type") selectSimilar();
-      else if (state.checked.size) {
-        state.checked.clear();
-        renderEvents();
-      }
+      else if (state.checked.size) clearSelection();
     } else if (kind === "session") {
       $("breakBtn").click();
     } else if (kind === "docs" && name === "hotkeys") {
@@ -4290,7 +2894,7 @@
       if (name === "camera_prev") stepCamera(-1);
       else if (name === "camera_next") stepCamera(1);
       else if (name === "camera_select") {
-        const cam = ev && ev.cameras && ev.cameras[hotkey.args[0] - 1];
+        const cam = camerasOf(cardOfSelected())[hotkey.args[0] - 1];
         if (cam) {
           state.activeCam = cam;
           renderVideo();
@@ -4300,38 +2904,14 @@
     }
   }
 
-  // Планировщик: в продукте дедлайны ведёт сервер, здесь — тот же разбор по метке времени
+  // Часы и обратный отсчёт — на клиенте по меткам времени (§4). Дедлайны ведёт сервер:
+  // что сработало, он сообщает в потоке событий
   setInterval(() => {
     const stamp = nowStamp();
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
-    // Автоматические переходы машины по дедлайнам (§6.2): в продукте их выполняет сервер
-    const fired = engine.tick();
-    fired.forEach(({ id, transition }) => {
-      if (transition !== "auto_escalate") return;
-      const ev = state.events.find((x) => x.id === id);
-      toast(t("Автоэскалация {id} → {who}", { id, who: actorName(engine.addressee(ev)) }));
-    });
-    if (fired.length) {
-      renderAll();
-      return;
-    }
-    const simIds = simulateColleagues();
-    if (simIds.length) {
-      renderAll();
-      return;
-    }
-    document.querySelectorAll("[data-timer]").forEach((el) => {
-      const e = state.events.find((x) => x.id === el.dataset.timer);
-      const view = e && timerView(e);
-      if (!view) return;
-      el.querySelector(".sla-t").textContent = fmtSla(view.leftMs);
-      el.classList.toggle("late", view.running && view.leftMs < 120000);
-    });
-    document.querySelectorAll("[data-hold-timer]").forEach((el) => {
-      const e = state.events.find((x) => x.id === el.dataset.holdTimer);
-      if (!e || !e.holdDueAt) return;
-      const left = e.holdDueAt - Date.now();
+    document.querySelectorAll("[data-due]").forEach((el) => {
+      const left = Number(el.dataset.due) - Date.now();
       el.querySelector(".sla-t").textContent = fmtSla(left);
       el.classList.toggle("late", left < 120000);
     });
@@ -4339,22 +2919,56 @@
     if (ev) $("statusSla").textContent = statusTimerText(ev);
   }, 1000);
 
-  let savedTheme = "dark";
-  let savedLang = "ru";
-  try {
-    savedTheme = localStorage.getItem("im-theme") || "dark";
-    savedLang = localStorage.getItem("im-lang") || "ru";
-  } catch (err) {
-    savedTheme = "dark";
+  // Поток событий сервера: чужие действия и автоматические переходы — уведомление и обновление
+  function onServerEvent(msg) {
+    const tid = msg.payload && msg.payload.transitionId;
+    const id = msg.incident ? msg.incident.number : msg.incidentGuid;
+    const who = (ref) => actorName(ref);
+    const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
+    if (mine && msg.type !== "incident.card_evicted") return;
+    if (msg.type === "incident.auto_escalated") {
+      toast(t("Автоэскалация {id} → {who}", { id, who: who(msg.payload.addressee) }));
+    } else if (tid === "claim") {
+      toast(t("{id} взял в работу {who}", { id, who: who(msg.actor) }));
+    } else if (tid === "transfer" && msg.payload.addressee && msg.payload.addressee.id === store.session.operator.guid) {
+      toast(t("{who} передал {id} вам", { who: who(msg.actor), id }));
+    } else if (tid === "system_hold_idle") {
+      toast(t("Нет связи с {who} — {id} отложен системой", { who: who(msg.payload.previousOwner), id }));
+    }
+    reload();
   }
-  if (narrowQuery.matches) state.groupsOn = false;
-  narrowQuery.addEventListener("change", (e) => {
-    state.groupsOn = !e.matches;
-    renderAll();
-  });
-  migrateEvents(EVENTS);
-  collectStatic();
-  bind();
-  applyTheme(savedTheme);
-  applyLang(savedLang);
+
+  // Загрузка: схема, сессия, справочники — потом первая отрисовка
+  async function boot() {
+    WORKFLOW = await api.get("/operator/workflow/active");
+    STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
+    LIMITS = WORKFLOW.limits;
+    const [eventTypes, deviceTypes, targets] = await Promise.all([
+      api.get("/operator/reference/event-types"),
+      api.get("/operator/reference/device-types"),
+      api.get("/operator/transfer-targets"),
+    ]);
+    Object.assign(store, { eventTypes, deviceTypes, targets });
+    collectStatic();
+    bind();
+    let savedTheme = "dark";
+    let savedLang = "ru";
+    try {
+      savedTheme = localStorage.getItem("im-theme") || "dark";
+      savedLang = localStorage.getItem("im-lang") || "ru";
+    } catch (err) {
+      savedTheme = "dark";
+    }
+    if (narrowQuery.matches) state.groupsOn = false;
+    narrowQuery.addEventListener("change", (e) => {
+      state.groupsOn = !e.matches;
+      renderAll();
+    });
+    applyTheme(savedTheme);
+    await reload();
+    applyLang(savedLang);
+    api.subscribe(onServerEvent);
+  }
+
+  boot();
 })();

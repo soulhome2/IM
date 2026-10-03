@@ -12,7 +12,7 @@ description: Ревью репозитория Incident Manager (IM) — пра�
 ## Контекст репозитория
 
 - `Specification/` — Vision, сверка покрытия Vision `Vision coverage.md` и правила перехода состояний `State_rules/States rules IM.md`. Это действующие правила: один файл, правится на месте, номер версии — в шапке, журнал изменений — в §16. Прошлые версии лежат в `State_rules/archive/` и не правятся: их не ревьюить, ошибки в них не записывать.
-- `prototype/` — кликабельный прототип: `index.html`, логика и данные в `app.js`, переводы в `i18n-*.js`, оформление в `styles.css` и `bridge.css`.
+- `prototype/` — кликабельный прототип: `index.html`, интерфейс в `app.js`, встроенный сервер по `openapi.json` в `server.js` с исполнителем машины `engine.js` и демо-данными `demo-data.js`, клиент API `api.js`, переводы в `i18n-*.js`, оформление в `styles.css` и `bridge.css`.
 - `reviews/` — прошлые ревью и планы. Указатель и договорённости — `reviews/README.md`. Образец результата — `reviews/2026-10-01/`.
 - `Specification/State_machine/` — машина состояний: `workflow.v4.json` (JSON-модель workflow) и `openapi.json` (контракт API). Её ведёт программист. Формат не изобретать заново. Расхождения машины с правилами и прототипом — находки ревью. Решения по правилам считать предварительными, пока их не внесли в машину.
 - В репозитории работают двое и пушат прямо в `main`, без pull request. Коммитить и пушить — только по просьбе пользователя.
@@ -45,14 +45,18 @@ google-chrome --headless=new --disable-gpu --no-first-run \
   --dump-dom "file://$PWD/prototype/index.html?selftest" > <временная папка>/selftest.html
 ```
 
-- Отчёт — содержимое `<pre id="selftest-log">`, итог — атрибут `data-selftest="pass|fail"` у `<html>`.
+- Отчёт — содержимое `<pre id="selftest-log">`, итог — атрибут `data-selftest="pass|fail"` у `<html>`. Один из шагов сверяет ответы встроенного сервера со схемами `openapi.json`: его падение — расхождение прототипа с контрактом.
 - Временные файлы — в scratchpad, если он есть, иначе в системной временной папке. Не в репозитории.
 - При открытии через `file://` браузер скрывает текст ошибок JS («Script error.»). Чтобы увидеть полный текст, поднять сервер `python3 -m http.server` из корня репозитория и открыть `http://127.0.0.1:<порт>/prototype/index.html?selftest`.
 - Если headless‑браузера нет (на Windows это `msedge` или полный путь к Chrome), попросить пользователя открыть `prototype/index.html?selftest` и вставить отчёт из угла страницы.
 
-**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow.v4.json` и `openapi.json`.
+**Тесты API:** открыть `tests/api.html` тем же способом, что самопроверку (`--virtual-time-budget=120000`); отчёт — `<pre id="apitest-log">`, итог — `data-apitest="pass|fail"`. Сценарии по правилам, случайные прогоны с инвариантами, сверка ответов с `openapi.json`, покрытие маршрутов.
+
+**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow.v4.json` и `openapi.json`, граница слоёв прототипа.
 
 **Правила только в машине:** `python3 tools/check_mutations.py` — мутации машины меняют поведение прототипа. Мутация со статусом BAD — находка: правило продублировано в коде прототипа.
+
+**Мутации кода:** `python3 tools/check_code_mutations.py` — тесты ловят порчу исполнителя, сервера и интерфейса. Выжившая мутация — находка: дыра в тестах.
 
 **Словари перевода:** `python3 tools/check_i18n.py` — лишние ключи и расхождение языков.
 

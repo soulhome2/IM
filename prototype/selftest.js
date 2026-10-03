@@ -708,6 +708,22 @@
       expect($("breakBanner").hidden, "кнопка на плашке не вернула на смену");
     });
 
+    await step("Смешанная выборка: «Взять» у отмеченных недоступно с объяснением", async () => {
+      await setFilter("open");
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));
+      const a = rows[0];
+      const typeOf = (r) => r.querySelector(".event-title strong").textContent;
+      const b = rows.find((r) => typeOf(r) !== typeOf(a));
+      expect(a && b, "нет двух новых событий разного типа");
+      const ids = [a.dataset.id, b.dataset.id];
+      for (const id of ids) await click($("eventsList").querySelector(`[data-check="${id}"]`));
+      const claim = $("eventsList").querySelector(`[data-do="claim"][data-ev="${ids[0]}"]`);
+      const blocked = claim && off(claim) && /выборки/.test(claim.title);
+      await click($("clearSelectionBtn"));
+      expect(blocked, `«Взять» на смешанной выборке: ${claim ? claim.title : "нет кнопки"}`);
+      return ids.join(" + ");
+    });
+
     await step("Shift+A выбирает однотипные, Shift+D снимает выделение", async () => {
       await setFilter("open");
       // «Снять» доступна, только когда выборка не пуста — на любой странице очереди
@@ -804,6 +820,15 @@
       }
       await setFilter("open");
       expect(!missing.size, `нет цвета у приоритета: ${[...missing].join(", ")}`);
+    });
+
+    await step("Ответы встроенного сервера соответствуют openapi.json", async () => {
+      expect(window.IM_OPENAPI, "контракт openapi.js не подключён");
+      const recorded = window.IM_RECORDED || [];
+      expect(recorded.length, "встроенный сервер не записал ни одного ответа");
+      const problems = IMContract.problems(window.IM_OPENAPI, recorded);
+      expect(!problems.length, `расхождений ${problems.length}: ${problems.slice(0, 12).join("; ")}`);
+      return `${recorded.length} ответов`;
     });
 
     await step("Перевод на английский", () => checkLanguage("en"));

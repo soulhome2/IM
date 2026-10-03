@@ -609,6 +609,15 @@
               "maximum": 200,
               "default": 25
             }
+          },
+          {
+            "name": "focusGuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент, страницу которого вернуть в focusPage: клиент открывает очередь на странице выбранного после действия"
           }
         ],
         "responses": {
@@ -805,6 +814,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -876,6 +888,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -993,6 +1008,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -1023,6 +1044,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1071,6 +1095,9 @@
           },
           "412": {
             "$ref": "#/components/responses/VersionConflict"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1118,6 +1145,12 @@
                 }
               }
             }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         }
       }
@@ -1166,6 +1199,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1217,6 +1253,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       },
@@ -1250,6 +1289,12 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -1280,6 +1325,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1362,6 +1410,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1486,6 +1537,34 @@
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/IncidentStreamEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/operator/reference/device-types": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "listDeviceTypes",
+        "summary": "Типы устройств",
+        "description": "Для фильтра очереди по типу устройства-источника (§19).",
+        "responses": {
+          "200": {
+            "description": "Типы устройств",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceType"
+                  }
                 }
               }
             }
@@ -1681,6 +1760,15 @@
           "details": {
             "type": "object",
             "additionalProperties": true
+          },
+          "messageKey": {
+            "type": "string",
+            "description": "Шаблон сообщения — ключ словаря перевода на клиенте"
+          },
+          "messageVars": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Подстановки для шаблона: строка, число или пара [шаблон, подстановки]"
           }
         }
       },
@@ -1913,6 +2001,13 @@
                 }
               }
             }
+          },
+          "stateMapping": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "§14.6. Сопоставление состояний предыдущей версии при публикации: старое → новое. Пусто — состояния не переименовывались"
           }
         }
       },
@@ -2047,6 +2142,14 @@
           },
           "onExpire": {
             "type": "string"
+          },
+          "meaning": {
+            "type": "string",
+            "description": "Что измеряет таймер — для экрана настройки схемы"
+          },
+          "secFrom": {
+            "type": "string",
+            "description": "Длительность из справочника: reasonCatalogs.<справочник>[].<поле>, например reasonCatalogs.hold[].maxMinutes (README машины, «Язык значений»)"
           }
         }
       },
@@ -2160,6 +2263,10 @@
             "type": "object",
             "additionalProperties": true,
             "description": "Значение по умолчанию при условии, например «Обработан», когда шаги закрытия заполнены"
+          },
+          "excludeSystemItems": {
+            "type": "boolean",
+            "description": "Не показывать позиции справочника, которые ставит только система (setBy: system), например «Перерыв оператора»"
           }
         }
       },
@@ -2265,9 +2372,10 @@
                 "enum": [
                   "same_type_new",
                   "each_allowed",
-                  "group"
+                  "group",
+                  "group_or_each_allowed"
                 ],
-                "description": "§11. `same_type_new` — только однотипные новые (группа сценария); `each_allowed` — если действие доступно каждому отмеченному; `group` — на всех членов группы сценария."
+                "description": "§11. `same_type_new` — только однотипные новые (группа сценария); `each_allowed` — если действие доступно каждому отмеченному; `group` — на всех членов группы сценария. `group_or_each_allowed` — на всех членах группы сценария, иначе — если доступно каждому отмеченному."
               },
               "minItems": {
                 "type": "integer"
@@ -2312,11 +2420,23 @@
                 ],
                 "enum": [
                   "card",
-                  "queue"
+                  "queue",
+                  null
                 ],
                 "description": "Куда уходит интерфейс после успеха"
               }
             }
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "incidents_owned_by_agent"
+            ],
+            "description": "У системного перехода: к каким инцидентам применяется. incidents_owned_by_agent — только к инцидентам оператора, чьё состояние сменилось (§12.2)"
+          },
+          "bypassesPermissions": {
+            "type": "boolean",
+            "description": "Системный переход выполняется без проверки прав оператора: перерыв откладывает инцидент и без incident:hold (§12.2)"
           }
         }
       },
@@ -2817,6 +2937,13 @@
           },
           "pageSize": {
             "type": "integer"
+          },
+          "focusPage": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Страница, на которой инцидент из focusGuid при тех же фильтрах; null — не виден"
           }
         }
       },
@@ -3061,6 +3188,28 @@
               "$ref": "#/components/schemas/AvailableAction"
             },
             "description": "§7. Кнопки для очереди, уже с учётом прав, владения и лимитов."
+          },
+          "closeResultLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Подпись результата закрытия; у «Массового сбоя» — причина сбоя, если выбрана (§2.2)"
+          },
+          "holdTimer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimerState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§4. Предельный срок удержания: только у on_hold. Норматив закрытия в это время — в timer, приостановленный"
+          },
+          "groupSize": {
+            "type": "integer",
+            "description": "§11. Сколько инцидентов в группе сценария, 0 — не в группе"
           }
         }
       },
@@ -3087,6 +3236,18 @@
               "done",
               "done_unprocessed"
             ]
+          },
+          "template": {
+            "type": "string",
+            "description": "Русский шаблон подписи — ключ словаря перевода на клиенте (§14.9)",
+            "examples": [
+              "Ожидает принятия · {ownerName}"
+            ]
+          },
+          "vars": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Подстановки для шаблона: строка, число или пара [шаблон, подстановки]"
           }
         }
       },
@@ -3132,7 +3293,11 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null — системный источник без учётной записи, например детектор в журнале"
           },
           "kind": {
             "$ref": "#/components/schemas/ActorKind"
@@ -3214,7 +3379,8 @@
             ],
             "enum": [
               "card",
-              "queue"
+              "queue",
+              null
             ]
           },
           "bulkAllowed": {
@@ -3223,13 +3389,71 @@
           },
           "fieldOptions": {
             "type": "object",
-            "description": "Доступные значения полей формы для этого инцидента и этого оператора. Для перехода `close` — `resultId`: только результаты, которые разрешает closeResultAllowed (§2.2).",
+            "description": "Только у доступного действия с формой. Варианты полей-списков формы для этого инцидента и этого оператора и значение по умолчанию. Для перехода `close` — `resultId`: только результаты, которые разрешает closeResultAllowed, недоступные — с причиной (§2.2). Для `transfer` — `targetId`: адресаты без себя, своих групп и текущего адресата (§8.1)",
             "additionalProperties": {
-              "type": "array",
-              "items": {
-                "type": "string"
+              "type": "object",
+              "properties": {
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FieldOption"
+                  }
+                },
+                "defaultValue": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
               }
             }
+          },
+          "reasonKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Шаблон причины недоступности — ключ словаря перевода; reason — та же причина по-русски"
+          },
+          "reasonVars": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Подстановки для шаблона: строка, число или пара [шаблон, подстановки]"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createsGroup": {
+            "type": "boolean",
+            "description": "§11. Только в /incidents/selection: действие над выборкой создаёт группу сценария («Обработать как одно»)"
+          },
+          "formNote": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "vars": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Подстановки для шаблона: строка, число или пара [шаблон, подстановки]"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Пояснение формы перехода для этого инцидента — notes формы по отношению смотрящего и состоянию"
           }
         }
       },
@@ -3342,6 +3566,18 @@
           },
           "typeLabel": {
             "type": "string"
+          },
+          "counters": {
+            "type": "object",
+            "description": "Только в дереве групп: открытые инциденты устройства",
+            "properties": {
+              "open": {
+                "type": "integer"
+              },
+              "critical": {
+                "type": "integer"
+              }
+            }
           }
         }
       },
@@ -3384,6 +3620,18 @@
               "type": "string"
             },
             "description": "По каким действиям посчитать доступность для всей выборки."
+          },
+          "sourceGroupGuid": {
+            "type": "string",
+            "description": "Группа устройств — те же фильтры, что у очереди"
+          },
+          "eventTypeGuid": {
+            "type": "string",
+            "description": "Тип события — те же фильтры, что у очереди"
+          },
+          "deviceTypeId": {
+            "type": "string",
+            "description": "Тип устройства-источника — те же фильтры, что у очереди"
           }
         }
       },
@@ -3447,6 +3695,14 @@
           "idempotencyKey": {
             "type": "string",
             "description": "Защита от двойного нажатия и ретраев."
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "card"
+            ],
+            "description": "Откуда вызвано действие: от этого зависят доступные результаты закрытия (§2.2, surfaces)"
           }
         }
       },
@@ -3466,7 +3722,8 @@
             ],
             "enum": [
               "card",
-              "queue"
+              "queue",
+              null
             ],
             "description": "Куда должен уйти интерфейс: значение берётся из `ui.navigate` перехода."
           },
@@ -3528,6 +3785,14 @@
           },
           "idempotencyKey": {
             "type": "string"
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "card"
+            ],
+            "description": "Откуда вызвано действие: от этого зависят доступные результаты закрытия (§2.2, surfaces)"
           }
         }
       },
@@ -3562,7 +3827,8 @@
             ],
             "enum": [
               "card",
-              "queue"
+              "queue",
+              null
             ]
           }
         }
@@ -3609,6 +3875,39 @@
           "sharedAnswers": {
             "type": "object",
             "additionalProperties": true
+          },
+          "exclude": {
+            "type": "object",
+            "description": "§11. Можно ли исключить этот инцидент из группы и почему нет",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reasonKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reasonVars": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Подстановки для шаблона: строка, число или пара [шаблон, подстановки]"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -3688,7 +3987,8 @@
               "Image",
               "RadioButton",
               "Select",
-              "Checkbox"
+              "Checkbox",
+              "Macros"
             ]
           },
           "title": {
@@ -4149,6 +4449,10 @@
               },
               "mine": {
                 "type": "integer"
+              },
+              "critical": {
+                "type": "integer",
+                "description": "Сколько из открытых — критического приоритета"
               }
             }
           }
@@ -4238,6 +4542,57 @@
           }
         },
         "description": "`incident.card_evicted` — §9.3: инцидент увели (автоэскалация, перехват, передача чужого), открытая карточка должна немедленно перейти в режим просмотра с уведомлением."
+      },
+      "FieldOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Почему вариант недоступен, например «Заполните обязательные шаги закрытия»"
+          },
+          "role": {
+            "type": "string",
+            "description": "Только у адресатов передачи"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Только у адресатов передачи: на смене"
+          },
+          "availabilityLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Только у адресатов передачи: «по вызову» и подобное"
+          }
+        }
+      },
+      "DeviceType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "camera",
+              "fire-detector"
+            ]
+          },
+          "label": {
+            "type": "string"
+          }
+        }
       }
     }
   }

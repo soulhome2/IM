@@ -1,5 +1,5 @@
 // Собрано из Specification/State_machine/workflow.v4.json скриптом tools/build_workflow.py.
-// Руками не править: правится машина, затем сборка.
+// Руками не править: правится исходник, затем сборка.
 window.IM_WORKFLOW = {
   "$comment": "Единая JSON-модель workflow операторской части МИ. Соответствует действующим правилам Specification/State_rules/States rules IM.md, версия v7, и изменениям после неё по журналу §16. Формат записи перехода — §14.8. Это конфигурация: бэкенд её хранит, валидирует и исполняет; фронтенд по ней рисует кнопки, формы и бейджи и ничего не зашивает в код.",
   "schema": {
@@ -1484,6 +1484,13 @@ window.IM_WORKFLOW = {
           "fn": "setOwner",
           "args": [
             "actor"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setAssignmentGroup",
+          "args": [
+            null
           ]
         },
         {

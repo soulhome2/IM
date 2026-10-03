@@ -1,5 +1,5 @@
-# Проверки на каждый push: самопроверка прототипа, целостность машины состояний,
-# «правила только в машине» (мутации) и ссылки в документах.
+# Проверки на каждый push: самопроверка прототипа, тесты API, целостность машины
+# состояний, «правила только в машине» (мутации машины), мутации кода и ссылки в документах.
 # Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
 # что что-то сломалось; подробности — в журнале шага.
 name: checks
@@ -28,6 +28,20 @@ jobs:
           sys.exit(0 if 'data-selftest="pass"' in page else 1)
           EOF
 
+      - name: Тесты API
+        if: always()
+        run: |
+          google-chrome --headless=new --disable-gpu --no-sandbox --no-first-run \
+            --virtual-time-budget=120000 \
+            --dump-dom "file://$PWD/tests/api.html" > apitest.html
+          python3 - <<'EOF'
+          import html, re, sys
+          page = open("apitest.html", encoding="utf-8").read()
+          log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
+          print(html.unescape(log.group(1)) if log else "Отчёт тестов API не найден")
+          sys.exit(0 if 'data-apitest="pass"' in page else 1)
+          EOF
+
       - name: Машина состояний
         if: always()
         run: |
@@ -41,6 +55,10 @@ jobs:
       - name: Правила только в машине
         if: always()
         run: python3 tools/check_mutations.py
+
+      - name: Мутации кода — тесты ловят ошибки
+        if: always()
+        run: python3 tools/check_code_mutations.py
 
       - name: Ссылки в документах
         if: always()

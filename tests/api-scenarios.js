@@ -1,0 +1,595 @@
+/* Сценарные тесты API: «состояние, запрос → новое состояние, владелец, таймеры, журнал, коды
+   ошибок». Это исполняемая спецификация операторской части: те же проверки должен проходить
+   и бэкенд. Номера разделов — из Specification/State_rules/States rules IM.md. */
+(() => {
+  const { test, makeEnv, formFor, fullAnswers, actionOf, assert, enc } = IMTest;
+  const ME = "me";
+  const W = window.IM_WORKFLOW;
+  const lastJournal = (card) => card.journal[card.journal.length - 1];
+
+  // Новое критическое событие пожара — их в демо два, однотипная пара для группы (§11)
+  const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
+
+  /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
+
+  test("Взять: в работе у меня, норматив реакции снят, норматив закрытия идёт, запись в журнале", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    assert.eq(inc.timer.id, "reaction", "до взятия идёт");
+    assert.ok(inc.timer.running, "реакция идёт");
+    const res = await env.act(inc.guid, "claim", {}, "queue", "new");
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "in_progress", "состояние");
+    assert.ok(Number(c.version) > Number(inc.version), `версия выросла: ${inc.version} → ${c.version}`);
+    assert.eq(c.owner && c.owner.id, ME, "владелец");
+    assert.eq(c.ownership, "owner", "отношение ко мне");
+    assert.eq(c.timer.id, "resolution", "идёт норматив");
+    assert.ok(c.timer.running, "норматив закрытия идёт");
+    assert.eq(lastJournal(c).templateKey, "Взято в работу", "журнал");
+    assert.eq(res.body.navigate, "card", "переход в карточку");
+    assert.eq((await env.session()).usage.activeCount, 1, "активных у меня");
+  });
+
+  test("Лимит активных 1: второе «Взять» недоступно и отклоняется сервером", async () => {
+    const env = makeEnv();
+    const list = await env.all("open");
+    const news = list.filter((e) => e.state === "new");
+    assert.status(await env.act(news[0].guid, "claim", {}, "queue"), 200);
+    // «Взять» — действие очереди (§7): смотрим строку очереди
+    const second = (await env.all("open")).find((e) => e.guid === news[1].guid);
+    const claim = actionOf(second, "claim");
+    assert.ok(claim && !claim.enabled, "кнопка «Взять» у второго недоступна");
+    assert.ok(/Лимит активных/.test(claim.reason), `причина: ${claim.reason}`);
+    const second2 = await env.act(news[1].guid, "claim", {}, "queue");
+    assert.status(second2, 403, "LIMIT_EXCEEDED", "второе взятие");
+    assert.eq(second2.body.guard, "withinActiveLimit", "какое условие не выполнено");
+  });
+
+  test("Устаревшее состояние в запросе — конфликт версии 412 и актуальная карточка (§10.1, правило 1)", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    const conflict = await env.act(inc.guid, "claim", {}, "queue", "on_hold");
+    assert.status(conflict, 412, "VERSION_CONFLICT");
+    assert.eq(conflict.body.current && conflict.body.current.state, "new", "в ответе — актуальное состояние");
+    assert.eq((await env.card(inc.guid)).state, "new", "состояние не изменилось");
+  });
+
+  test("Переход не из этого состояния — 409 TRANSITION_NOT_ALLOWED_FROM_STATE", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "resume", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE");
+  });
+
+  /* ===== Отложить и возобновить (§6.1, §4) ===== */
+
+  test("Отложить: причина обязательна, норматив закрытия на паузе, срок удержания идёт", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    env.advance(30);
+    assert.status(await env.act(inc.guid, "hold", { reasonId: "" }), 422, null, "без причины");
+    const before = await env.card(inc.guid);
+    const left = Date.parse(before.timer.dueAt) - env.now;
+    const res = await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "on_hold", "состояние");
+    assert.eq(c.holdReasonId, "third_party", "причина");
+    assert.ok(!c.timer.running, "норматив закрытия приостановлен");
+    assert.near(c.timer.remainingMs, left, 1000, "остаток норматива сохранён");
+    assert.eq(c.holdTimer && c.holdTimer.id, "hold", "срок удержания");
+    assert.near(Date.parse(c.holdTimer.dueAt) - env.now, 30 * 60000, 1000, "срок удержания по причине — 30 мин");
+  });
+
+  test("Возобновить: норматив закрытия продолжается с остатка, причина удержания снята", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    await env.act(inc.guid, "hold", { reasonId: "patrol", comment: "наряд" });
+    const held = await env.card(inc.guid);
+    env.advance(600);
+    const res = await env.act(inc.guid, "resume", {}, "queue");
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "in_progress", "состояние");
+    assert.eq(c.holdReasonId, null, "причина снята");
+    assert.eq(c.holdTimer, null, "срок удержания снят");
+    assert.near(Date.parse(c.timer.dueAt) - env.now, held.timer.remainingMs, 1000, "продолжение с остатка, а не заново");
+  });
+
+  test("Предельный срок удержания истёк — нарушение «hold», инцидент остаётся отложенным", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" });
+    env.advance(30 * 60 + 1);
+    const c = await env.card(inc.guid);
+    assert.eq(c.state, "on_hold", "состояние");
+    assert.ok(c.slaBreached, "отметка нарушения");
+    assert.ok(c.breaches.some((b) => b.kind === "hold"), `нарушения: ${JSON.stringify(c.breaches.map((b) => b.kind))}`);
+    env.advance(60);
+    assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 1, "срабатывает один раз на дедлайн");
+  });
+
+  /* ===== Вернуть в очередь (§6.1, RULE-07) ===== */
+
+  test("Вернуть в очередь: ничей, норматив закрытия не обнуляется при повторном взятии", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    env.advance(120);
+    const res = await env.act(inc.guid, "release", { comment: "не моё" });
+    assert.status(res, 200);
+    assert.eq(res.body.incident.state, "new", "состояние");
+    assert.eq(res.body.incident.owner, null, "владелец");
+    assert.eq(res.body.incident.timer.id, "reaction", "снова идёт реакция");
+    const again = await env.act(inc.guid, "claim", {}, "queue");
+    const left = Date.parse(again.body.incident.timer.dueAt) - env.now;
+    const full = W.timers.find((x) => x.id === "resolution").byPriority.critical * 1000;
+    assert.ok(left <= full - 119000, `норматив закрытия продолжен: осталось ${left} из ${full}`);
+  });
+
+  /* ===== Передать (§8, RULE-19, RULE-20) ===== */
+
+  test("Передать человеку: ожидает принятия, адресат в owner, уровень +1, норматив закрытия на паузе", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const res = await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "нужен допуск" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "pending_acceptance", "состояние");
+    assert.eq(c.owner && c.owner.id, "sidorov", "owner — человек");
+    assert.eq(c.assignmentGroup, null, "группы нет");
+    assert.eq(c.escalationLevel, 1, "уровень");
+    assert.eq(c.ownership, "other", "для меня — чужой");
+    assert.eq(c.timer.id, "reaction", "идёт реакция адресата");
+    assert.eq(res.body.navigate, "queue", "возврат к очереди");
+  });
+
+  test("Передать себе и своей дежурной группе нельзя: нет в вариантах и отказ сервера (§10.1)", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const transfer = actionOf(await env.card(inc.guid), "transfer");
+    const ids = transfer.fieldOptions.targetId.options.map((o) => o.id);
+    assert.ok(!ids.includes(ME) && !ids.includes("grp-leads"), `варианты: ${ids.join(", ")}`);
+    assert.status(await env.act(inc.guid, "transfer", { targetId: ME, comment: "x" }), 403, "TRANSFER_TO_SELF_FORBIDDEN", "себе");
+    assert.status(await env.act(inc.guid, "transfer", { targetId: "grp-leads", comment: "x" }), 403, "TRANSFER_TO_SELF_FORBIDDEN", "своей группе");
+  });
+
+  test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {
+    const env = makeEnv();
+    const inc = await env.card("INC-1836");
+    assert.eq(inc.state, "pending_acceptance", "состояние");
+    assert.eq(inc.owner, null, "owner пуст");
+    assert.eq(inc.assignmentGroup && inc.assignmentGroup.id, "grp-leads", "группа");
+    assert.eq(inc.ownership, "target", "адресован мне через группу");
+    assert.ok(inc.badge.label.startsWith("Вашей группе"), `бейдж: ${inc.badge.label}`);
+    const res = await env.act(inc.guid, "accept", {}, "queue");
+    assert.status(res, 200);
+    assert.eq(res.body.incident.owner.id, ME, "владелец");
+    assert.eq(res.body.incident.assignmentGroup, null, "группа очищена");
+  });
+
+  test("Закрытый из «Ожидает принятия» группой и переоткрытый — у человека, без группы (§8.1)", async () => {
+    const env = makeEnv();
+    const inc = await env.card("INC-1836");
+    const close = actionOf((await env.all("inbox")).find((e) => e.guid === inc.guid), "close");
+    const res = await env.act(inc.guid, "close", formFor(close, { resultId: "mass" }), "queue");
+    assert.status(res, 200);
+    assert.eq(res.body.incident.assignmentGroup, null, "после закрытия группы нет");
+    const again = await env.act(inc.guid, "reopen", { comment: "вернули" });
+    assert.status(again, 200);
+    assert.eq(again.body.incident.owner.id, ME, "в работе у меня");
+    assert.eq(again.body.incident.assignmentGroup, null, "и не у группы");
+  });
+
+  test("Отклонить: инцидент снова новый, ничей, уровень эскалации сохранён", async () => {
+    const env = makeEnv();
+    const inc = await env.card("INC-1843");
+    assert.eq(inc.badge.label, "Вам на принятие", "бейдж личной передачи");
+    const res = await env.act(inc.guid, "reject", { comment: "не мой профиль" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "new", "состояние");
+    assert.eq(c.owner, null, "владелец");
+    assert.eq(c.escalationLevel, inc.escalationLevel, "уровень сохранён");
+  });
+
+  test("Права own и any: без incident:transfer:any своё передать можно, чужое — нет (§5)", async () => {
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin" && k !== "incident:transfer:any");
+    const env = makeEnv({ permissions: all });
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "своё" }), 200, null, "своё");
+    const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
+    const transfer = actionOf(foreign, "transfer");
+    assert.ok(!transfer || !transfer.enabled, "у чужого «Передать» недоступно");
+    const res = await env.act(foreign.guid, "transfer", { targetId: "sidorov", comment: "чужое" }, "queue");
+    assert.status(res, 403, "PERMISSION_DENIED", "чужое");
+    assert.ok(/transfer:any/.test(res.body.message), `причина: ${res.body.message}`);
+  });
+
+  test("Адресаты передачи: без себя и своих групп; для инцидента — без текущего адресата", async () => {
+    const env = makeEnv();
+    const all = await env.ok("GET", "/operator/transfer-targets");
+    const ids = all.map((x) => x.id);
+    assert.ok(!ids.includes(ME) && !ids.includes("grp-leads"), `список: ${ids.join(", ")}`);
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    await env.act(inc.guid, "transfer", { targetId: "petrova", comment: "x" });
+    const forInc = await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`);
+    assert.ok(!forInc.some((x) => x.id === "petrova"), "текущий адресат исключён");
+  });
+
+  /* ===== Перехват (§6.1) ===== */
+
+  test("Перехватить чужой: владелец — я, прогресс сценария сохранён; чужая карточка — только просмотр", async () => {
+    const env = makeEnv();
+    const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
+    const before = await env.card(foreign.guid);
+    assert.ok(before.readOnly, "чужая карточка — просмотр");
+    const patch = await env.call("PATCH", `/operator/incidents/${enc(foreign.guid)}/scenario/answers`, { answers: { x: 1 } });
+    assert.status(patch, 403, "PERMISSION_DENIED", "править чужой сценарий");
+    const res = await env.act(foreign.guid, "takeover", { comment: "срочно" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.owner.id, ME, "владелец");
+    assert.eq(c.scenarioProgress, before.scenarioProgress, "прогресс сохранён");
+    assert.ok(!c.readOnly, "теперь можно править");
+  });
+
+  /* ===== Закрыть (§2.2, RULE-23) ===== */
+
+  test("«Обработан» недоступен без обязательных шагов; с ними — выбран по умолчанию и закрывает", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    let card = await env.card(inc.guid);
+    let results = actionOf(card, "close").fieldOptions.resultId;
+    const processed = results.options.find((o) => o.id === "processed");
+    assert.ok(processed.disabled && processed.reason, "«Обработан» недоступен и объяснено почему");
+    assert.eq(results.defaultValue, null, "по умолчанию ничего не выбрано");
+    assert.status(await env.act(inc.guid, "close", { resultId: "processed" }), 403, null, "закрыть «Обработан» без шагов");
+    await env.ok("PATCH", `/operator/incidents/${enc(inc.guid)}/scenario/answers`, { answers: fullAnswers(card) });
+    card = await env.card(inc.guid);
+    results = actionOf(card, "close").fieldOptions.resultId;
+    assert.eq(results.defaultValue, "processed", "по умолчанию «Обработан»");
+    const res = await env.act(inc.guid, "close", { resultId: "processed" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "closed", "состояние");
+    assert.eq(c.closeResultId, "processed", "результат");
+    assert.eq(c.timer, null, "нормативы не идут");
+    assert.ok(c.closedAt, "время закрытия");
+  });
+
+  test("Результаты по поверхности: в очереди свой инцидент закрывают только «Массовым сбоем», в карточке — любым (§2.2, §7)", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const row = (await env.all("mine")).find((e) => e.guid === inc.guid);
+    assert.eq(actionOf(row, "close").fieldOptions.resultId.options.map((o) => o.id), ["mass"], "в очереди");
+    const inCard = actionOf(await env.card(inc.guid), "close").fieldOptions.resultId.options.map((o) => o.id);
+    assert.ok(inCard.includes("false_alarm") && inCard.includes("processed") && inCard.includes("mass"), `в карточке: ${inCard.join(", ")}`);
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "x" }, "queue"), 403, null, "«Ложная тревога» из очереди");
+  });
+
+  test("Чужой инцидент в работе «Массовым сбоем» не закрыть: только свой (ownerOnlyInStates, §2.2)", async () => {
+    const env = makeEnv();
+    const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
+    const close = actionOf(foreign, "close");
+    assert.ok(!close || !close.enabled, "«Закрыть» у чужого в работе недоступно");
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    assert.status(await env.act(foreign.guid, "close", { resultId: "mass", causeId: cause, comment: "x" }, "queue"), 403, null, "сервер отказывает");
+  });
+
+  test("«Ложная тревога» требует комментарий; комментарий сохраняется как result", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "" }), 422, "FORM_FIELD_REQUIRED");
+    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "уборщик" });
+    assert.status(res, 200);
+    assert.eq(res.body.incident.closeResultId, "false_alarm", "результат");
+    assert.eq(res.body.incident.result, "уборщик", "комментарий");
+  });
+
+  test("Из очереди закрывают только «Массовый сбой»: причина сбоя обязательна, подпись — причина", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    const close = actionOf(inc, "close");
+    assert.eq(close.fieldOptions.resultId.options.map((o) => o.id), ["mass"], "результаты в очереди");
+    assert.status(await env.act(inc.guid, "close", { resultId: "mass", comment: "свет" }, "queue"), 422, null, "без причины сбоя");
+    const cause = close.fieldOptions.causeId.options[0];
+    const res = await env.act(inc.guid, "close", { resultId: "mass", causeId: cause.id, comment: "свет" }, "queue");
+    assert.status(res, 200);
+    assert.eq(res.body.incident.closeCauseId, cause.id, "причина");
+    assert.eq(res.body.incident.closeResultLabel, cause.label, "подпись — причина сбоя");
+    assert.status(await env.act((await env.find((e) => e.state === "new")).guid, "close", { resultId: "false_alarm", comment: "x" }, "queue"), 403, null, "другой результат из очереди");
+  });
+
+  test("Переоткрыть: в работе у меня, результат очищен, нарушения сохранены; после срока — нельзя", async () => {
+    const env = makeEnv();
+    const done = await env.find((e) => e.state === "closed");
+    const res = await env.act(done.guid, "reopen", { comment: "вернулись" });
+    assert.status(res, 200);
+    const c = res.body.incident;
+    assert.eq(c.state, "in_progress", "состояние");
+    assert.eq(c.owner.id, ME, "владелец");
+    assert.eq(c.closeResultId, null, "результат очищен");
+    assert.eq(c.slaBreached, done.slaBreached, "отметка нарушения не сбрасывается");
+    const other = (await env.all("done"))[0];
+    env.advance(W.limits.reopenWindowMin * 60 + 60);
+    await env.act(c.guid, "close", { resultId: "false_alarm", comment: "x" });
+    assert.status(await env.act(other.guid, "reopen", { comment: "x" }), 403, "REOPEN_WINDOW_EXPIRED", "после срока переоткрытия");
+  });
+
+  /* ===== Автоэскалация и нормативы (§4, §9) ===== */
+
+  test("Автоэскалация по уровням и потолок: адресаты уровней, затем нарушение реакции без новой передачи", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    const reactionSec = W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+    env.advance(reactionSec + 1);
+    let c = await env.card(inc.guid);
+    const levels = W.escalation.levels;
+    assert.eq(c.state, "pending_acceptance", "после реакции");
+    assert.eq(c.escalationLevel, 1, "уровень");
+    assert.eq(c.owner && c.owner.id, levels[0].targetRef.split(":")[1], "адресат уровня 1");
+    env.advance(levels[0].reactionSec + 1);
+    c = await env.card(inc.guid);
+    assert.eq(c.escalationLevel, 2, "уровень 2");
+    assert.eq(c.owner && c.owner.id, levels[1].targetRef.split(":")[1], "адресат уровня 2");
+    env.advance(levels[1].reactionSec + 1);
+    c = await env.card(inc.guid);
+    assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");
+    assert.ok(c.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
+    assert.ok(c.journal.some((j) => /Автоэскалация/.test(j.templateKey)), "автоэскалация в журнале");
+  });
+
+  test("Норматив закрытия истёк — нарушение «resolution» один раз, состояние не меняется", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    const res = await env.act(inc.guid, "claim", {}, "queue");
+    const left = Date.parse(res.body.incident.timer.dueAt) - env.now;
+    env.advance(Math.ceil(left / 1000) + 1);
+    let c = await env.card(inc.guid);
+    assert.eq(c.state, "in_progress", "состояние");
+    assert.eq(c.breaches.filter((b) => b.kind === "resolution").length, 1, "одно нарушение");
+    env.advance(60);
+    c = await env.card(inc.guid);
+    assert.eq(c.breaches.filter((b) => b.kind === "resolution").length, 1, "повторно не срабатывает");
+  });
+
+  /* ===== Перерыв (§12) ===== */
+
+  test("Перерыв: инцидент в работе откладывается системой, действия недоступны; после возврата — доступны", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const res = await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
+    assert.eq(res.session.agentState, "not_ready", "состояние оператора");
+    assert.eq(res.affectedIncidents.map((x) => x.guid), [inc.guid], "отложенные системой");
+    const c = await env.card(inc.guid);
+    assert.eq(c.state, "on_hold", "состояние");
+    assert.eq(c.holdReasonId, "break", "причина «перерыв»");
+    assert.ok(c.readOnly, "на перерыве — просмотр");
+    const other = await env.find((e) => e.state === "new");
+    assert.ok(!actionOf(other, "claim").enabled, "«Взять» на перерыве недоступно");
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "ready" });
+    assert.status(await env.act(inc.guid, "resume", {}, "queue"), 200, null, "возобновить после возврата");
+  });
+
+  test("Лимит отложенных — только для ручного «Отложить»: перерыв откладывает и сверх лимита (§10.2)", async () => {
+    const env = makeEnv();
+    const max = W.limits.maxOnHold;
+    let held = (await env.session()).usage.onHoldCount;
+    while (held < max) {
+      const inc = await env.find((e) => e.state === "new");
+      await env.act(inc.guid, "claim", {}, "queue");
+      await env.act(inc.guid, "hold", { reasonId: "no_data", comment: "x" });
+      held = (await env.session()).usage.onHoldCount;
+    }
+    const inc = await env.find((e) => e.state === "new");
+    await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(await env.act(inc.guid, "hold", { reasonId: "no_data", comment: "x" }), 403, "LIMIT_EXCEEDED", "ручное сверх лимита");
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
+    assert.eq((await env.card(inc.guid)).state, "on_hold", "перерыв отложил сверх лимита");
+  });
+
+  /* ===== Группа сценария и выборка (§11) ===== */
+
+  test("«Обработать как одно»: оба в работе одной группой, в лимите — одна единица, ответы общие", async () => {
+    const env = makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+    const res = await env.call("POST", "/operator/incident-groups", { incidentGuids: fires.map((e) => e.guid) });
+    assert.status(res, 201);
+    const group = res.body;
+    assert.eq(group.members.length, 2, "в группе");
+    assert.ok(group.members.every((m) => m.state === "in_progress" && m.groupGuid === group.guid), "оба в работе одной группой");
+    assert.ok(group.members.every((m) => m.groupSize === 2), "размер группы у каждого — 2");
+    assert.eq((await env.session()).usage.activeCount, 1, "одна единица в лимите");
+    await env.ok("PATCH", `/operator/incidents/${enc(fires[0].guid)}/scenario/answers`, { answers: { visual: true } });
+    assert.eq((await env.card(fires[1].guid)).scenario.answers.visual, true, "ответ виден у второго");
+    const c = await env.card(fires[0].guid);
+    assert.ok(!c.group.exclude.enabled && /Лимит активных/.test(c.group.exclude.reason), "исключить нельзя — лимит");
+    assert.status(await env.call("DELETE", `/operator/incident-groups/${enc(group.guid)}/members/${enc(fires[0].guid)}`), 403, "LIMIT_EXCEEDED");
+  });
+
+  test("Группа из разных типов событий не создаётся", async () => {
+    const env = makeEnv();
+    const news = (await env.all("open")).filter((e) => e.state === "new");
+    const mixed = [news.find((e) => e.eventType.id === "fire"), news.find((e) => e.eventType.id !== "fire")];
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: mixed.map((e) => e.guid) }), 422, "BULK_SELECTION_INVALID");
+    assert.ok((await env.all("open")).filter((e) => mixed.some((m) => m.guid === e.guid)).every((e) => e.state === "new"), "никто не взят");
+  });
+
+  test("Выборка: однотипные — только новые того же типа; смешанная — «Взять» выборкой недоступно", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    const same = await env.ok("POST", "/operator/incidents/selection", { mode: "same_type_new", anchorIncidentGuid: inc.guid, filter: "open" });
+    const all = await env.all();
+    assert.ok(same.incidentGuids.length >= 2, "нашлись однотипные");
+    assert.ok(same.incidentGuids.every((id) => all.find((e) => e.guid === id).eventType.id === "fire"), "все — пожарные");
+    assert.ok(same.incidentGuids.every((id) => all.find((e) => e.guid === id).state === "new"), "все — новые");
+    const mixed = all.filter((e) => e.state === "new").filter((e, i, list) => list.findIndex((x) => x.eventType.id === e.eventType.id) === i).slice(0, 2);
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: mixed.map((e) => e.guid) });
+    assert.ok(!sel.actions.find((a) => a.id === "claim").enabled, "«Взять» на смешанной выборке");
+    const allIn = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
+    assert.ok(allIn.incidentGuids.length <= W.limits.maxBulk, "не больше лимита выборки");
+    assert.eq(allIn.truncated, (await env.all("open")).length > W.limits.maxBulk, "признак усечения");
+  });
+
+  test("Массовое действие: передача выборки — каждому, кому доступно; результат по каждому", async () => {
+    const env = makeEnv();
+    const news = (await env.all("open")).filter((e) => e.state === "new").slice(0, 3);
+    const res = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", {
+      incidentGuids: news.map((e) => e.guid),
+      formValues: { targetId: "sidorov", comment: "выборкой" },
+      surface: "queue",
+    });
+    assert.status(res, 200);
+    assert.eq(res.body.succeeded.length, 3, "передано");
+    assert.ok(res.body.succeeded.every((e) => e.state === "pending_acceptance" && e.owner.id === "sidorov"), "все у адресата");
+  });
+
+  /* ===== Сценарий (§10.4, §14.5) ===== */
+
+  test("Сценарий: курсор не перепрыгивает незаполненный обязательный шаг; ответы двигают прогресс; макрос в журнале", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const card = await env.card(inc.guid);
+    const steps = card.scenario.steps;
+    const locked = steps.findIndex((s, i) => i > 0 && steps.slice(0, i).some((p) => p.requiredFor.includes("closing")));
+    const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: steps[locked].id });
+    assert.status(jump, 409, "REQUIRED_STEPS_NOT_FILLED", "переход через незаполненный шаг");
+    const after = await env.ok("PATCH", `/operator/incidents/${enc(inc.guid)}/scenario/answers`, { answers: { [steps[0].id]: true } });
+    assert.eq(after.progress.filled, card.scenario.progress.filled + 1, "прогресс");
+    const macroStep = steps.find((s) => s.type === "Macros");
+    const name = macroStep.view.buttons[0];
+    const run = await env.call("POST", `/operator/incidents/${enc(inc.guid)}/macros/${enc(name)}`, { stepId: macroStep.id });
+    assert.status(run, 202);
+    const c = await env.card(inc.guid);
+    assert.ok(c.scenario.launchedMacros.includes(name), "макрос отмечен запущенным");
+    assert.ok(c.journal.some((j) => j.templateKey === "Запущен макрос «{name}»" && j.vars.name === name), "макрос в журнале");
+  });
+
+  /* ===== Очередь: фильтры, счётчики, страницы (§7, §19) ===== */
+
+  test("Счётчики фильтров совпадают с очередью; страницы и focusPage", async () => {
+    const env = makeEnv();
+    const counters = await env.ok("GET", "/operator/incidents/counters");
+    for (const f of W.queueFilters) {
+      const page = await env.ok("GET", `/operator/incidents?filter=${f.id}&pageSize=1000`);
+      assert.eq(page.total, counters[f.id], `фильтр «${f.id}»`);
+    }
+    const inbox = (await env.all("inbox")).map((e) => e.guid).sort();
+    assert.eq(inbox, ["INC-1836", "INC-1843"], "мне на принятие");
+    // Переданный коллеге — не «мне на принятие», а чужой (отношение к смотрящему, §7)
+    const inc = await newFire(env);
+    await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "x" }, "queue");
+    assert.ok(!(await env.all("inbox")).some((e) => e.guid === inc.guid), "переданный коллеге не во «Мне на принятие»");
+    assert.ok((await env.all("foreign")).some((e) => e.guid === inc.guid), "он в «Чужих»");
+    const open = await env.all("open");
+    const last = open[open.length - 1];
+    const page1 = await env.ok("GET", `/operator/incidents?filter=open&page=1&pageSize=5&focusGuid=${enc(last.guid)}`);
+    assert.eq(page1.page, 1, "страница не перелистывается сама");
+    assert.eq(page1.focusPage, Math.ceil(open.length / 5), "страница выбранного");
+    const hidden = await env.ok("GET", `/operator/incidents?filter=done&focusGuid=${enc(last.guid)}`);
+    assert.eq(hidden.focusPage, null, "невидимый при фильтре — null");
+  });
+
+  test("Фильтры группы, типа события, типа устройства и поиск сужают очередь", async () => {
+    const env = makeEnv();
+    const tree = await env.ok("GET", "/operator/reference/source-groups");
+    const all = await env.all();
+    const byGroup = await env.ok("GET", `/operator/incidents?filter=all&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`);
+    assert.ok(byGroup.total > 0 && byGroup.total < all.length, `группа «${tree[0].name}»: ${byGroup.total} из ${all.length}`);
+    const fire = await env.ok("GET", "/operator/incidents?filter=all&eventTypeGuid=fire&pageSize=1000");
+    assert.ok(fire.items.every((e) => e.eventType.id === "fire"), "тип события");
+    const dev = await env.ok("GET", "/operator/incidents?filter=all&deviceTypeId=fire-detector&pageSize=1000");
+    assert.ok(dev.items.every((e) => e.sourceDeviceTypeId === "fire-detector"), "тип устройства-источника");
+    const search = await env.ok("GET", "/operator/incidents?filter=all&search=INC-1847");
+    assert.eq(search.items.map((e) => e.guid), ["INC-1847"], "поиск по номеру");
+    const open = tree[0].counters.open;
+    assert.eq(open, (await env.ok("GET", `/operator/incidents?filter=open&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`)).total, "счётчик группы в дереве");
+  });
+
+  /* ===== Справочники, схема, сессия, карточка по частям ===== */
+
+  test("Схема workflow, справочники и приоритеты — те, что в машине", async () => {
+    const env = makeEnv();
+    const wf = await env.ok("GET", "/operator/workflow/active");
+    assert.eq(wf.transitions.map((t) => t.id), W.transitions.map((t) => t.id), "переходы схемы");
+    const hold = await env.ok("GET", "/operator/reference/reasons/hold");
+    assert.eq(hold.map((r) => r.id), W.reasonCatalogs.hold.items.map((r) => r.id), "причины удержания");
+    assert.status(await env.call("GET", "/operator/reference/reasons/nothing"), 404, "NOT_FOUND", "неизвестный справочник");
+    const types = await env.ok("GET", "/operator/reference/event-types");
+    assert.ok(types.some((x) => x.id === "fire") && types.every((x) => x.defaultReactionSec > 0), "типы событий с нормативом реакции");
+    const devices = await env.ok("GET", "/operator/reference/device-types");
+    assert.ok(devices.some((x) => x.id === "camera") && devices.every((x) => x.label), "типы устройств");
+    const priorities = await env.ok("GET", "/operator/reference/priorities");
+    assert.eq(priorities.map((x) => x.id), ["critical", "high", "medium", "low"], "приоритеты");
+  });
+
+  test("Настройки оператора: предвыбор адресата меняет значение по умолчанию в форме передачи (§8.2)", async () => {
+    const env = makeEnv();
+    await env.ok("PATCH", "/operator/session/preferences", { defaultTransferTargetId: "noc" });
+    assert.eq((await env.session()).preferences.defaultTransferTargetId, "noc", "сохранено в сессии");
+    const inc = await newFire(env);
+    assert.eq(actionOf(inc, "transfer").fieldOptions.targetId.defaultValue, "noc", "по умолчанию в форме");
+    assert.status(await env.call("POST", "/operator/session/heartbeat", { openIncidentGuid: inc.guid }), 204, null, "признак активности");
+  });
+
+  test("Действия карточки и очереди различаются по поверхности; сценарий, журнал и камеры — те же, что в карточке", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const card = await env.card(inc.guid);
+    const inCard = (await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/actions?surface=card`)).map((a) => a.id);
+    const inQueue = (await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/actions?surface=queue`)).map((a) => a.id);
+    assert.ok(inCard.includes("hold") && !inQueue.includes("hold"), `«Отложить» только в карточке: ${inCard} / ${inQueue}`);
+    assert.eq(await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/scenario`), card.scenario, "сценарий");
+    const journal = await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/journal`);
+    assert.eq(journal.items.length, card.journal.length, "журнал");
+    assert.eq(journal.total, journal.items.length, "всего записей");
+    assert.eq(await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/media`), card.media, "камеры и карта");
+  });
+
+  test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
+    const env = makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.call("POST", `/operator/incidents/${enc(inc.guid)}/journal`, { text: "  " }), 422, "FORM_FIELD_REQUIRED");
+    const res = await env.call("POST", `/operator/incidents/${enc(inc.guid)}/journal`, { text: "Позвонил на пост" });
+    assert.status(res, 201);
+    assert.eq([res.body.kind, res.body.text, res.body.actor.id], ["note", "Позвонил на пост", ME], "запись");
+    const c = await env.card(inc.guid);
+    assert.eq(c.state, "new", "состояние не изменилось");
+    assert.eq(lastJournal(c).text, "Позвонил на пост", "в журнале карточки");
+  });
+
+  /* ===== Ошибки и поток событий ===== */
+
+  test("Неизвестный инцидент и маршрут — 404 с кодом NOT_FOUND", async () => {
+    const env = makeEnv();
+    assert.status(await env.call("GET", "/operator/incidents/INC-0000"), 404, "NOT_FOUND");
+    assert.status(await env.act("INC-0000", "claim"), 404, "NOT_FOUND");
+    assert.status(await env.call("GET", "/operator/nothing"), 404, "NOT_FOUND");
+  });
+
+  test("Поток событий: автоэскалация приходит событием incident.auto_escalated с адресатом", async () => {
+    const env = makeEnv();
+    const got = [];
+    env.api.subscribe((m) => got.push(m));
+    const inc = await newFire(env);
+    env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
+    await new Promise((r) => setTimeout(r, 10));
+    const ev = got.find((m) => m.type === "incident.auto_escalated" && m.incidentGuid === inc.guid);
+    assert.ok(ev, `событие пришло: ${got.map((m) => m.type).join(", ")}`);
+    assert.eq(ev.payload.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
+  });
+})();

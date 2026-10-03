@@ -1,14 +1,14 @@
 /* Исполнитель машины состояний в браузере: Specification/State_machine/workflow.v4.json,
    подключённой как window.IM_WORKFLOW (prototype/workflow.js).
 
-   Делает то, что в продукте делает сервер: решает, какие действия доступны (/actions),
-   выполняет переход (/transitions), строит формы и бейджи, считает нормативы и выполняет
-   автоматические переходы по таймерам. Интерфейс прототипа обращается только к этим
-   функциям — так же, как фронтенд продукта к API. Своей таблицы переходов здесь нет:
-   условия и эффекты берутся из реестров машины (§14.8).
+   Решает, какие действия доступны (/actions), выполняет переход (/transitions), строит
+   формы и бейджи, считает нормативы и выполняет автоматические переходы по таймерам.
+   Его вызывает только встроенный сервер прототипа (server.js) — интерфейс сюда не
+   обращается, он говорит с сервером запросами API. Своей таблицы переходов здесь нет:
+   условия и эффекты берутся из реестров машины (§14.8). Образец для исполнителя бэкенда.
 
-   Данные инцидента и всё, что относится к интерфейсу (сценарии, журнал, подписи людей,
-   открытая карточка), передаёт прототип через ctx в create(). */
+   Данные инцидента и всё, что относится к сценарию, журналу и людям, передаёт сервер
+   через ctx в create(). */
 (() => {
   function create(ctx) {
     const W = ctx.workflow;
@@ -236,10 +236,10 @@
     function firstFail(ev, guards, opts) {
       for (const g of guards || []) {
         const fn = GUARDS[g.fn];
-        if (!fn) return { why: [`Условие не реализовано: ${g.fn}`], hidden: false };
+        if (!fn) return { why: [`Условие не реализовано: ${g.fn}`], hidden: false, guard: g.fn };
         const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
         const why = fn(ev, args, opts, g);
-        if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide" };
+        if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide", guard: g.fn };
       }
       return null;
     }
@@ -250,9 +250,10 @@
       const tr = transitions[id];
       const nav = navActions[id];
       if (!ev || (!tr && !nav)) return { hidden: true };
-      if (tr && !tr.from.includes(ev.state)) return { hidden: true };
+      if (tr && !tr.from.includes(ev.state)) return { hidden: true, notFrom: true, why: ["Недоступно в текущем состоянии"] };
       const fail = firstFail(ev, tr ? tr.guards : nav.guards, opts);
-      if (fail) return { hidden: fail.hidden, disabled: true, why: fail.why };
+      // guard — какое условие не выполнено: по нему сервер выбирает код ошибки
+      if (fail) return { hidden: fail.hidden, disabled: true, why: fail.why, guard: fail.guard };
       return { ok: true };
     }
 
@@ -586,9 +587,9 @@
       list.forEach((ev) => (ev.groupId = groupId));
       const blocked = list.find((ev) => !availability(claim.id, ev).ok);
       if (blocked) {
-        const why = availability(claim.id, blocked).why;
+        const { why, guard } = availability(claim.id, blocked);
         list.forEach((ev) => (ev.groupId = null));
-        return { ok: false, why };
+        return { ok: false, why, guard };
       }
       const applied = applyAll(claim, list, {}, ME);
       if (!applied.ok) {
@@ -608,7 +609,7 @@
     function excludeFromGroup(ev) {
       if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
       const fail = firstFail(ev, W.grouping.excludeGuards);
-      if (fail) return { ok: false, why: fail.why };
+      if (fail) return { ok: false, why: fail.why, guard: fail.guard };
       const groupId = ev.groupId;
       ev.groupId = null;
       ctx.detachAnswers(ev);
