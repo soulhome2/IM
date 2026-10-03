@@ -139,6 +139,9 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
     "Удержание": "Hold",
+    "В полях ввода работают только {keys}.": "Only {keys} work in input fields.",
+    "При открытом окне — только {keys}.": "With a dialog open, only {keys}.",
+    "Набор можно будет задавать «под себя» в настройках оператора.": "You will be able to customize the set in operator settings.",
     "Вашей группе · {ownerName}": "Your group · {ownerName}",
     "Выберите результат": "Select a result",
     "Подгрупп / устройств с открытыми инцидентами": "Subgroups / devices with open incidents",
@@ -265,8 +268,6 @@ window.IM_DICT_UI = {
 
     'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
       'Auto-escalation by reaction target: <b id="autoLevels"></b>. Configured by the shift administrator.',
-    "В полях ввода работают только F1 и Esc. Набор можно будет задавать «под себя» в настройках оператора.":
-      "Inside input fields only F1 and Esc work. The set will be customisable in the operator settings.",
     "Вернуться к очереди, инцидент остаётся за вами (Esc)":
       "Back to the queue, the incident stays with you (Esc)",
     "Взять следующее новое": "Take the next new one",
@@ -494,6 +495,9 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "El objetivo de resolución está en pausa mientras el incidente espera",
     "Удержание": "Espera",
+    "В полях ввода работают только {keys}.": "En los campos de entrada solo funcionan {keys}.",
+    "При открытом окне — только {keys}.": "Con una ventana abierta, solo {keys}.",
+    "Набор можно будет задавать «под себя» в настройках оператора.": "El conjunto se podrá personalizar en los ajustes del operador.",
     "Вашей группе · {ownerName}": "Su grupo · {ownerName}",
     "Выберите результат": "Elija un resultado",
     "Подгрупп / устройств с открытыми инцидентами": "Subgrupos / dispositivos con incidentes abiertos",
@@ -624,8 +628,6 @@ window.IM_DICT_UI = {
 
     'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
       'Autoescalado por objetivo de reacción: <b id="autoLevels"></b>. Lo configura el administrador de turno.',
-    "В полях ввода работают только F1 и Esc. Набор можно будет задавать «под себя» в настройках оператора.":
-      "En los campos de texto solo funcionan F1 y Esc. El conjunto se podrá personalizar en los ajustes del operador.",
     "Вернуться к очереди, инцидент остаётся за вами (Esc)":
       "Volver a la cola; el incidente sigue siendo suyo (Esc)",
     "Взять следующее новое": "Tomar el siguiente nuevo",

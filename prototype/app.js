@@ -1821,6 +1821,7 @@
     applyTheme(state.themeMode);
     renderEscalateDefault();
     renderTypeFilters();
+    renderHotkeysHelp();
     renderAll();
   }
 
@@ -4209,6 +4210,36 @@
       return true;
     },
   };
+
+  // Справка по клавишам — из машины: подряд идущие клавиши с одной подписью — одна строка
+  // («←» «→», «1–4»). Внизу — какие клавиши работают в полях ввода и при открытом окне (§13)
+  const KEY_GLYPH = { ArrowLeft: "←", ArrowRight: "→" };
+  const kbdHtml = (key) =>
+    key
+      .split("+")
+      .map((part) => `<kbd>${escapeHtml(KEY_GLYPH[part] || part)}</kbd>`)
+      .join("+");
+  function renderHotkeysHelp() {
+    const rows = [];
+    WORKFLOW.hotkeys.forEach((h) => {
+      const last = rows[rows.length - 1];
+      if (last && last.label === h.label) last.keys.push(h.key);
+      else rows.push({ label: h.label, keys: [h.key] });
+    });
+    $("hotkeysTable").innerHTML = rows
+      .map((r) => {
+        const digits = r.keys.length > 2 && r.keys.every((k) => /^\d$/.test(k));
+        const keys = digits ? `${kbdHtml(r.keys[0])}–${kbdHtml(r.keys[r.keys.length - 1])}` : r.keys.map(kbdHtml).join(" ");
+        return `<tr><td>${keys}</td><td>${te(r.label)}</td></tr>`;
+      })
+      .join("");
+    const list = (pick) => WORKFLOW.hotkeys.filter(pick).map((h) => h.key).join(", ");
+    $("hotkeysNote").textContent = [
+      t("В полях ввода работают только {keys}.", { keys: list((h) => h.worksInInput) }),
+      t("При открытом окне — только {keys}.", { keys: list((h) => h.worksInModal) }),
+      t("Набор можно будет задавать «под себя» в настройках оператора."),
+    ].join(" ");
+  }
 
   // Имя клавиши в записи машины: «N», «Shift+A», «Ctrl+K», «Enter», «ArrowLeft», «?», «Esc».
   // Shift пишется только у букв: «?» набирается с Shift, но это своя клавиша

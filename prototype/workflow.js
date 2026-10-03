@@ -2426,72 +2426,86 @@ window.IM_WORKFLOW = {
     {
       "key": "N",
       "action": "transition:claim",
+      "label": "Взять следующее новое",
       "scope": "next_new",
       "worksInInput": false
     },
     {
       "key": "A",
       "action": "transition:accept",
+      "label": "Принять адресованную передачу",
       "worksInInput": false
     },
     {
       "key": "R",
       "action": "transition:resume",
+      "label": "Возобновить свой отложенный",
       "worksInInput": false
     },
     {
       "key": "E",
       "action": "transition:transfer",
+      "label": "Передать выбранный",
       "worksInInput": false
     },
     {
       "key": "T",
       "action": "transition:takeover",
+      "label": "Перехватить (по праву, из карточки)",
       "worksInInput": false
     },
     {
       "key": "H",
       "action": "transition:hold",
+      "label": "Отложить с указанием причины",
       "worksInInput": false
     },
     {
       "key": "G",
       "action": "group:create",
+      "label": "Обработать выделенные как одно",
       "worksInInput": false
     },
     {
       "key": "Shift+A",
       "action": "selection:same_type",
+      "label": "Выбрать однотипные",
       "worksInInput": false
     },
     {
       "key": "Shift+D",
       "action": "selection:clear",
+      "label": "Снять выделение",
       "worksInInput": false
     },
     {
       "key": "B",
       "action": "session:toggle_break",
+      "label": "Перерыв / возврат на смену",
       "worksInInput": false
     },
     {
       "key": "Enter",
       "action": "form:open:close",
+      "label": "Открыть форму закрытия инцидента",
       "worksInInput": false
     },
     {
       "key": "ArrowLeft",
       "action": "media:camera_prev",
+      "label": "Карусель камер",
       "worksInInput": false
     },
     {
       "key": "ArrowRight",
       "action": "media:camera_next",
+      "label": "Карусель камер",
       "worksInInput": false
     },
     {
       "key": "1",
       "action": "media:camera_select",
+      "label": "Камера по номеру",
       "args": [
         1
       ],
@@ -2500,6 +2514,7 @@ window.IM_WORKFLOW = {
     {
       "key": "2",
       "action": "media:camera_select",
+      "label": "Камера по номеру",
       "args": [
         2
       ],
@@ -2508,6 +2523,7 @@ window.IM_WORKFLOW = {
     {
       "key": "3",
       "action": "media:camera_select",
+      "label": "Камера по номеру",
       "args": [
         3
       ],
@@ -2516,6 +2532,7 @@ window.IM_WORKFLOW = {
     {
       "key": "4",
       "action": "media:camera_select",
+      "label": "Камера по номеру",
       "args": [
         4
       ],
@@ -2524,6 +2541,7 @@ window.IM_WORKFLOW = {
     {
       "key": "F1",
       "action": "docs:regulation",
+      "label": "Регламент обработки инцидента — из любого места",
       "worksInInput": true,
       "worksInModal": true,
       "reassignable": false
@@ -2531,6 +2549,7 @@ window.IM_WORKFLOW = {
     {
       "key": "?",
       "action": "docs:hotkeys",
+      "label": "Эта справка",
       "worksInInput": false,
       "worksInModal": true,
       "reassignable": false
@@ -2538,6 +2557,7 @@ window.IM_WORKFLOW = {
     {
       "key": "Esc",
       "action": "escape_chain",
+      "label": "Форма → полный экран → панель групп → возврат к очереди",
       "worksInInput": true,
       "worksInModal": true,
       "reassignable": false,

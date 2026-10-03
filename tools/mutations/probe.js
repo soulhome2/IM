@@ -212,7 +212,12 @@
       await key("n");
       const afterN = mode();
       await key("m");
-      return [afterN === "queue" && mode() === "work", `после N: ${afterN}, после M: ${mode()}`];
+      const help = [...$("hotkeysTable").querySelectorAll("tr")].find((r) => r.textContent.includes("Взять следующее новое"));
+      const shown = help ? help.querySelector("kbd").textContent : "";
+      return [
+        afterN === "queue" && mode() === "work" && shown === "M",
+        `после N: ${afterN}, после M: ${mode()}, в справке: ${shown}`,
+      ];
     },
     async filter() {
       await setFilter("mine");

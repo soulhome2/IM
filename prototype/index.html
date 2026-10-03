@@ -299,25 +299,9 @@
   <div class="modal" id="modalHotkeys" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalHotkeysTitle">
       <h3 id="modalHotkeysTitle">Горячие клавиши</h3>
-      <table class="keys">
-        <tr><td><kbd>N</kbd></td><td>Взять следующее новое</td></tr>
-        <tr><td><kbd>A</kbd></td><td>Принять адресованную передачу</td></tr>
-        <tr><td><kbd>R</kbd></td><td>Возобновить свой отложенный</td></tr>
-        <tr><td><kbd>H</kbd></td><td>Отложить с указанием причины</td></tr>
-        <tr><td><kbd>E</kbd></td><td>Передать выбранный</td></tr>
-        <tr><td><kbd>T</kbd></td><td>Перехватить (по праву, из карточки)</td></tr>
-        <tr><td><kbd>G</kbd></td><td>Обработать выделенные как одно</td></tr>
-        <tr><td><kbd>Shift</kbd>+<kbd>A</kbd></td><td>Выбрать однотипные</td></tr>
-        <tr><td><kbd>Shift</kbd>+<kbd>D</kbd></td><td>Снять выделение</td></tr>
-        <tr><td><kbd>B</kbd></td><td>Перерыв / возврат на смену</td></tr>
-        <tr><td><kbd>Enter</kbd></td><td>Открыть форму закрытия инцидента</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Форма → полный экран → панель групп → возврат к очереди</td></tr>
-        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Карусель камер</td></tr>
-        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Камера по номеру</td></tr>
-        <tr><td><kbd>F1</kbd></td><td>Регламент обработки инцидента — из любого места</td></tr>
-        <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
-      </table>
-      <p class="muted">В полях ввода работают только F1 и Esc. Набор можно будет задавать «под себя» в настройках оператора.</p>
+      <!-- Клавиши и подписи — из машины (hotkeys), строит app.js -->
+      <table class="keys" id="hotkeysTable"></table>
+      <p class="muted" id="hotkeysNote"></p>
       <div class="modal-actions">
         <button type="button" class="btn primary" data-close="modalHotkeys">Закрыть</button>
       </div>
