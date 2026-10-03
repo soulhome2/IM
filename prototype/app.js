@@ -2030,6 +2030,7 @@
       ev.closeResult = ev.closeResult || null;
       ev.massCause = null;
       ev.slaBreached = false;
+      ev.breaches = [];
       ev.groupId = null;
       ev.holdSince = null;
       ev.holdDueAt = null;

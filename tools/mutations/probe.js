@@ -42,6 +42,23 @@
   }
 
   const PROBES = {
+    async breach() {
+      const id = await claimFirst();
+      await click($("backToQueue"));
+      await wait(3500);
+      await setFilter("mine");
+      const chip = row(id) && row(id).querySelector("[data-timer], .event-sla");
+      const breached = Boolean(chip && chip.classList.contains("breached"));
+      return [breached, "отметка нарушения у взятого инцидента: " + breached];
+    },
+    async reopenNorm() {
+      await setFilter("done");
+      await click(btn($("eventsList"), "reopen", "INC-1837"));
+      await confirm("проба");
+      const m = $("statusSla").textContent.match(/(\d+):(\d\d)/);
+      const sec = m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+      return [sec > 0 && sec <= 60, "после переоткрытия: " + $("statusSla").textContent];
+    },
     async exclude() {
       const sel = $("eventTypeFilter");
       let pair = null;

@@ -342,6 +342,20 @@
       stopTimer: (ev, [id]) => stopTimer(ev, id),
       pauseTimer: (ev, [id]) => pauseTimer(ev, id),
       resumeTimer: (ev, [id]) => resumeTimer(ev, id),
+      // Запуск заново, без остатка: длительность из настройки, иначе обычный норматив (RULE-11)
+      restartTimer: (ev, [id, settingPath]) => {
+        const f = FIELDS[id];
+        const configured = settingPath ? setting(settingPath) : null;
+        const sec = configured != null ? configured : baseNorm(ev, id);
+        ev[f.due] = now() + sec * 1000;
+        if (f.left) ev[f.left] = null;
+      },
+      // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
+      recordBreach: (ev, [kind]) => {
+        ev.breaches = ev.breaches || [];
+        ev.breaches.push({ kind, at: now(), owner: ev.owner });
+        ev.slaBreached = true;
+      },
       increment: (ev, [field]) => {
         if (field === "escalation_level") ev.escalationLevel += 1;
         else ev[field] = (ev[field] || 0) + 1;

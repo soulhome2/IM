@@ -37,6 +37,12 @@ def hold_without_pause(w):
     hold["effects"] = [e for e in hold["effects"] if e["fn"] != "pauseTimer"]
 
 
+def short_resolution(w):
+    timer = next(t for t in w["timers"] if t["id"] == "resolution")
+    timer["byPriority"] = {k: 2 for k in timer["byPriority"]}
+    timer["overrides"] = []
+
+
 def without_manual_transitions(w):
     w["transitions"] = [t for t in w["transitions"] if t["trigger"] != "manual"]
     w["navActions"]["items"] = []
@@ -79,6 +85,8 @@ MUTATIONS = [
     ("breakReason", "новая причина перерыва", lambda w: w["session"]["breakReasons"].append({"id": "probe", "label": "Проба"})),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
+    ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
+    ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
     (
         "exclude",
         "исключение из группы без проверки лимита",

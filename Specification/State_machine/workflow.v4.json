@@ -132,7 +132,7 @@
       "label": "Закрытие",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
-      "$comment": "§4, правило 6 (RULE-07). Запускается один раз — при первом входе в in_progress. Дальше не останавливается и не перезапускается, только приостанавливается вне in_progress и продолжается с остатка при возврате. Иначе просрочку можно скрыть передачей, возвратом в очередь или переоткрытием.",
+      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches.",
       "startsOnEnter": ["in_progress"],
       "startsOnce": true,
       "stopsOnEnter": [],
@@ -304,7 +304,7 @@
       "title": "Переоткрыть инцидент",
       "confirmLabel": "Переоткрыть",
       "style": "primary",
-      "notes": [{ "when": {}, "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия продолжится с остатка." }],
+      "notes": [{ "when": {}, "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия начнётся заново, прежние нарушения останутся." }],
       "fields": [{ "name": "comment", "kind": "text", "label": "Основание", "required": true, "placeholder": "Почему требуется вернуть в работу" }]
     },
     {
@@ -616,7 +616,7 @@
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
-        { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] }
       ],
       "bulk": { "allowed": false },
@@ -667,7 +667,7 @@
         { "fn": "flagAtLeast", "args": ["escalation_level", "escalation.maxLevel"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "setFlag", "args": ["sla_breached", true] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному"] },
         { "kind": "external", "fn": "notify", "args": ["escalation.alertTarget"] }
@@ -686,7 +686,7 @@
         { "fn": "settingEnabled", "args": ["escalation.onResolutionOverdue.alert"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "setFlag", "args": ["sla_breached", true] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, алерт старшему смены"] },
         { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
       ],
@@ -701,7 +701,7 @@
       "actor": "dispatcher",
       "guards": [{ "fn": "timerExpired", "args": ["hold"] }],
       "effects": [
-        { "kind": "transactional", "fn": "setFlag", "args": ["sla_breached", true] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["hold"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Предельный срок удержания «{holdReasonLabel}» истёк, алерт ответственному"] },
         { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
       ],
@@ -826,6 +826,7 @@
     "maxOnHold": 5,
     "maxBulk": 10,
     "reopenWindowMin": 1440,
+    "reopenResolutionSec": null,
     "groupCountsAsOneUnit": true
   },
 
@@ -943,7 +944,7 @@
       { "fn": "withinReopenWindow", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "requiredStepsFilled", "args": ["stepSetId"], "onFail": "disable" },
       { "fn": "closeResultAllowed", "args": ["resultId"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без resultId — доступен ли хоть один результат: так решается, показывать ли кнопку." },
-      { "fn": "timerExpired", "args": ["timerId"], "onFail": "hide" },
+      { "fn": "timerExpired", "args": ["timerId"], "onFail": "hide", "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание." },
       { "fn": "flagBelow", "args": ["field", "n"], "onFail": "hide" },
       { "fn": "flagAtLeast", "args": ["field", "n"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "onFail": "hide", "extendsBaseRegistry": true },
@@ -961,6 +962,8 @@
       { "fn": "startTimer", "kind": "transactional" },
       { "fn": "stopTimer", "kind": "transactional" },
       { "fn": "pauseTimer", "kind": "transactional" },
+      { "fn": "restartTimer", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — путь к настройке длительности; не задана (null) — обычный норматив по §4. Переоткрытие запускает так норматив закрытия." },
+      { "fn": "recordBreach", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
       { "fn": "resumeTimer", "kind": "transactional", "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept и reopen используют один эффект." },
       { "fn": "increment", "kind": "transactional" },
       { "fn": "setFlag", "kind": "transactional" },

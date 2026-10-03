@@ -253,7 +253,7 @@ window.IM_WORKFLOW = {
       "label": "Закрытие",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
-      "$comment": "§4, правило 6 (RULE-07). Запускается один раз — при первом входе в in_progress. Дальше не останавливается и не перезапускается, только приостанавливается вне in_progress и продолжается с остатка при возврате. Иначе просрочку можно скрыть передачей, возвратом в очередь или переоткрытием.",
+      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches.",
       "startsOnEnter": [
         "in_progress"
       ],
@@ -668,7 +668,7 @@ window.IM_WORKFLOW = {
       "notes": [
         {
           "when": {},
-          "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия продолжится с остатка."
+          "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия начнётся заново, прежние нарушения останутся."
         }
       ],
       "fields": [
@@ -1636,9 +1636,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "resumeTimer",
+          "fn": "restartTimer",
           "args": [
-            "resolution"
+            "resolution",
+            "limits.reopenResolutionSec"
           ]
         },
         {
@@ -1803,10 +1804,9 @@ window.IM_WORKFLOW = {
       "effects": [
         {
           "kind": "transactional",
-          "fn": "setFlag",
+          "fn": "recordBreach",
           "args": [
-            "sla_breached",
-            true
+            "reaction"
           ]
         },
         {
@@ -1861,10 +1861,9 @@ window.IM_WORKFLOW = {
       "effects": [
         {
           "kind": "transactional",
-          "fn": "setFlag",
+          "fn": "recordBreach",
           "args": [
-            "sla_breached",
-            true
+            "resolution"
           ]
         },
         {
@@ -1906,10 +1905,9 @@ window.IM_WORKFLOW = {
       "effects": [
         {
           "kind": "transactional",
-          "fn": "setFlag",
+          "fn": "recordBreach",
           "args": [
-            "sla_breached",
-            true
+            "hold"
           ]
         },
         {
@@ -2273,6 +2271,7 @@ window.IM_WORKFLOW = {
     "maxOnHold": 5,
     "maxBulk": 10,
     "reopenWindowMin": 1440,
+    "reopenResolutionSec": null,
     "groupCountsAsOneUnit": true
   },
   "scenarioEdit": {
@@ -2720,7 +2719,8 @@ window.IM_WORKFLOW = {
         "args": [
           "timerId"
         ],
-        "onFail": "hide"
+        "onFail": "hide",
+        "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание."
       },
       {
         "fn": "flagBelow",
@@ -2808,6 +2808,18 @@ window.IM_WORKFLOW = {
       {
         "fn": "pauseTimer",
         "kind": "transactional"
+      },
+      {
+        "fn": "restartTimer",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — путь к настройке длительности; не задана (null) — обычный норматив по §4. Переоткрытие запускает так норматив закрытия."
+      },
+      {
+        "fn": "recordBreach",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
       },
       {
         "fn": "resumeTimer",

@@ -2447,6 +2447,13 @@
           "groupCountsAsOneUnit": {
             "type": "boolean",
             "default": true
+          },
+          "reopenResolutionSec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "§4, правило 6. Норматив закрытия после переоткрытия, секунды. null — обычный норматив по §4"
           }
         }
       },
@@ -2964,7 +2971,44 @@
             ]
           },
           "slaBreached": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Есть хоть одно нарушение в breaches"
+          },
+          "breaches": {
+            "type": "array",
+            "description": "§2.2 (RULE-12). Нарушения нормативов: какое, когда, чьё. Не стираются, в том числе при переоткрытии",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "at"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "reaction",
+                    "resolution",
+                    "hold"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "owner": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ActorRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Владелец инцидента в момент нарушения"
+                }
+              }
+            }
           },
           "groupGuid": {
             "type": [
