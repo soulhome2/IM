@@ -169,7 +169,7 @@ window.IM_DICT_UI = {
       "The resolution timer is paused while the incident is on hold",
     "Норматив нарушен": "Target breached",
     "Нужен допуск в зону": "Zone clearance required",
-    "Нужен оператор с доступом к архиву объекта": "An operator with access to the site archive is needed",
+    "Нужен оператор с доступом к архиву площадки": "An operator with access to the site archive is needed",
     "Обработка возобновлена на шаге {n}": "Handling resumed at step {n}",
     "Обработка невозможна, ложная тревога или дубликат": "Handling impossible, false alarm or duplicate",
     "Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {lvl}.":
@@ -186,7 +186,7 @@ window.IM_DICT_UI = {
       "{n} incidents will go back to the queue. One reason for all.",
     "Отклонено: {n}": "Rejected: {n}",
     "Отклонить эскалацию": "Reject the escalation",
-    "Отключение электричества на объекте": "Site power outage",
+    "Отключение электричества на площадке": "Site power outage",
     "Открыть": "Open",
     "Открыть карточку завершённого инцидента": "Open the card of a finished incident",
     "Отложен": "On hold",
@@ -268,7 +268,7 @@ window.IM_DICT_UI = {
     "Показать панель групп": "Show groups panel",
     "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному":
       "Escalation ceiling reached: reaction target breached, alert to the person in charge",
-    "Потеря связи с объектом": "Lost connection to the site",
+    "Потеря связи с площадкой": "Lost connection to the site",
     "Почему возвращаете": "Why you are returning it",
     "Почему не принимаете": "Why you are not accepting it",
     "Почему требуется вернуть в работу": "Why it must go back into work",
@@ -383,7 +383,7 @@ window.IM_DICT_UI = {
     "Все типы устройств": "All device types",
     "Тип события": "Event type",
     "Тип устройства": "Device type",
-    "Нужна проверка по камерам объекта": "Site cameras need to be checked",
+    "Нужна проверка по камерам площадки": "Site cameras need to be checked",
     "{ownerName}": "{ownerName}",
     "Автоэскалация → {targetName} (уровень {escalationLevel}). {escalationReason}": "Auto-escalation → {targetName} (level {escalationLevel}). {escalationReason}",
     "Активный инцидент будет отложен системой. Новые события не назначаются.": "The active incident will be put on hold by the system. New events are not assigned.",
@@ -612,7 +612,7 @@ window.IM_DICT_UI = {
       "El objetivo de resolución está en pausa mientras el incidente espera",
     "Норматив нарушен": "Objetivo incumplido",
     "Нужен допуск в зону": "Se requiere autorización de acceso a la zona",
-    "Нужен оператор с доступом к архиву объекта":
+    "Нужен оператор с доступом к архиву площадки":
       "Se necesita un operador con acceso al archivo del sitio",
     "Обработка возобновлена на шаге {n}": "Tramitación reanudada en el paso {n}",
     "Обработка невозможна, ложная тревога или дубликат":
@@ -631,7 +631,7 @@ window.IM_DICT_UI = {
       "Volverán a la cola {n} incidentes. Una razón para todos.",
     "Отклонено: {n}": "Rechazados: {n}",
     "Отклонить эскалацию": "Rechazar la escalada",
-    "Отключение электричества на объекте": "Corte eléctrico en el sitio",
+    "Отключение электричества на площадке": "Corte eléctrico en el sitio",
     "Открыть": "Abrir",
     "Открыть карточку завершённого инцидента": "Abrir la ficha de un incidente finalizado",
     "Отложен": "En espera",
@@ -715,7 +715,7 @@ window.IM_DICT_UI = {
     "Показать панель групп": "Mostrar panel de grupos",
     "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному":
       "Techo de escalada alcanzado: objetivo de reacción incumplido, aviso al responsable",
-    "Потеря связи с объектом": "Pérdida de conexión con el sitio",
+    "Потеря связи с площадкой": "Pérdida de conexión con el sitio",
     "Почему возвращаете": "Por qué lo devuelve",
     "Почему не принимаете": "Por qué no lo acepta",
     "Почему требуется вернуть в работу": "Por qué debe volver a tramitarse",
@@ -833,7 +833,7 @@ window.IM_DICT_UI = {
     "Все типы устройств": "Todos los tipos de dispositivo",
     "Тип события": "Tipo de evento",
     "Тип устройства": "Tipo de dispositivo",
-    "Нужна проверка по камерам объекта": "Hay que revisar las cámaras del sitio",
+    "Нужна проверка по камерам площадки": "Hay que revisar las cámaras del sitio",
     "{ownerName}": "{ownerName}",
     "Автоэскалация → {targetName} (уровень {escalationLevel}). {escalationReason}": "Escalada automática → {targetName} (nivel {escalationLevel}). {escalationReason}",
     "Активный инцидент будет отложен системой. Новые события не назначаются.": "El incidente activo quedará en espera por el sistema. No se asignan eventos nuevos.",

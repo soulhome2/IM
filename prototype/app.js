@@ -56,8 +56,8 @@
         {
           id: "macros",
           type: "macros",
-          label: "Макросы объекта",
-          buttons: ["Оповещение по объекту", "Разблокировать эвакуационные выходы"],
+          label: "Макросы площадки",
+          buttons: ["Оповещение по площадке", "Разблокировать эвакуационные выходы"],
         },
       ],
     },
@@ -372,7 +372,7 @@
     {
       id: "group-all-cameras",
       name: "Все камеры",
-      description: "Сквозная подборка камер видеонаблюдения со всех объектов, разделённая по состоянию оборудования.",
+      description: "Сквозная подборка камер видеонаблюдения со всех площадок, разделённая по состоянию оборудования.",
       children: [
         {
           id: "group-cameras-working",
@@ -391,7 +391,7 @@
     {
       id: "group-fire-detectors",
       name: "Пожарные датчики",
-      description: "Сквозная подборка пожарных датчиков со всех объектов, разделённая по состоянию оборудования.",
+      description: "Сквозная подборка пожарных датчиков со всех площадок, разделённая по состоянию оборудования.",
       children: [
         {
           id: "group-fire-working",
@@ -971,7 +971,7 @@
     "gate-1": { plan: "checkpoint", x: 230, y: 74 },
   };
 
-  const PLAN_BY_OBJECT = {
+  const PLAN_BY_SITE = {
     "Торговый центр": "mall",
     "Складской комплекс": "warehouse",
     "Главный офис": "office",
@@ -999,7 +999,7 @@
     for (const id of ids) {
       if (DEVICE_POS[id]) return DEVICE_POS[id].plan;
     }
-    return PLAN_BY_OBJECT[ev.object] || "mall";
+    return PLAN_BY_SITE[ev.site] || "mall";
   }
 
   const EVENTS = [
@@ -1008,8 +1008,8 @@
       time: "14:31:08",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "Магазин 1, торговый зал",
       region: "Торговый центр",
       priority: "critical",
@@ -1029,8 +1029,8 @@
       time: "14:30:51",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "Магазин 2, коридор примерочных",
       region: "Торговый центр",
       priority: "critical",
@@ -1049,8 +1049,8 @@
       time: "14:30:12",
       typeId: "glass",
       type: "Детекция звука разбития стекла",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "Магазин 2, витрина у входа",
       region: "Торговый центр",
       priority: "high",
@@ -1071,8 +1071,8 @@
       time: "14:29:35",
       typeId: "alcohol",
       type: "Детекция превышения уровня алкоголя",
-      object: "Складской комплекс",
-      objectType: "КПП",
+      site: "Складской комплекс",
+      siteType: "КПП",
       location: "КПП, проходная — турникет №2",
       region: "Складской комплекс",
       priority: "high",
@@ -1093,8 +1093,8 @@
       time: "14:28:41",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №1, ворота погрузки А",
       region: "Складской комплекс",
       priority: "high",
@@ -1116,8 +1116,8 @@
       time: "14:26:14",
       typeId: "ppe",
       type: "Отсутствие каски",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №2, разгрузочная рампа",
       region: "Складской комплекс",
       priority: "medium",
@@ -1141,8 +1141,8 @@
       time: "14:22:17",
       typeId: "sabotage",
       type: "Саботаж камеры",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "Магазин 2, коридор примерочных",
       region: "Торговый центр",
       priority: "medium",
@@ -1167,8 +1167,8 @@
       time: "14:19:03",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "1-й этаж, витрина у входа",
       region: "Торговый центр",
       priority: "medium",
@@ -1191,8 +1191,8 @@
       time: "14:11:55",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Главный офис",
-      objectType: "Офис",
+      site: "Главный офис",
+      siteType: "Офис",
       location: "Приемная, пост охраны",
       region: "Главный офис",
       priority: "high",
@@ -1205,7 +1205,7 @@
       answers: { visual: true, verdict: "Реальное проникновение" },
       launched: ["Включить сирену"],
       log: [
-        { t: "14:12:20", who: "Сидоров К.", text: "Эскалация в ЦОД: нет доступа к объекту" },
+        { t: "14:12:20", who: "Сидоров К.", text: "Эскалация в ЦОД: нет доступа к площадке" },
       ],
     },
     {
@@ -1213,8 +1213,8 @@
       time: "14:06:12",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №1, датчик дыма 3",
       region: "Складской комплекс",
       priority: "high",
@@ -1233,8 +1233,8 @@
       time: "13:58:44",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "2-й этаж, фойе кинотеатра",
       region: "Торговый центр",
       priority: "medium",
@@ -1253,8 +1253,8 @@
       time: "13:51:09",
       typeId: "sabotage",
       type: "Саботаж камеры",
-      object: "Технопарк",
-      objectType: "Лаборатория",
+      site: "Технопарк",
+      siteType: "Лаборатория",
       location: "Корпус А, лаборатория 2",
       region: "Технопарк",
       priority: "medium",
@@ -1276,8 +1276,8 @@
       time: "13:44:57",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №2, центральный проход",
       region: "Складской комплекс",
       priority: "high",
@@ -1296,8 +1296,8 @@
       time: "13:37:12",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Главный офис",
-      objectType: "Офис",
+      site: "Главный офис",
+      siteType: "Офис",
       location: "1-й этаж, конференц-зал",
       region: "Главный офис",
       priority: "critical",
@@ -1316,8 +1316,8 @@
       time: "13:29:38",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "Главный офис",
-      objectType: "Офис",
+      site: "Главный офис",
+      siteType: "Офис",
       location: "Приемная, зона ожидания",
       region: "Главный офис",
       priority: "low",
@@ -1339,8 +1339,8 @@
       time: "13:22:05",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Технопарк",
-      objectType: "Лаборатория",
+      site: "Технопарк",
+      siteType: "Лаборатория",
       location: "Корпус А, вход в чистую зону",
       region: "Технопарк",
       priority: "high",
@@ -1359,8 +1359,8 @@
       time: "13:14:49",
       typeId: "sabotage",
       type: "Саботаж камеры",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №3, холодильная камера",
       region: "Складской комплекс",
       priority: "medium",
@@ -1379,8 +1379,8 @@
       time: "13:06:31",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "2-й этаж, кухня ресторана",
       region: "Торговый центр",
       priority: "critical",
@@ -1404,8 +1404,8 @@
       time: "12:58:17",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Этаж А, разгрузочная рампа",
       region: "Складской комплекс",
       priority: "low",
@@ -1424,8 +1424,8 @@
       time: "12:49:53",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Главный офис",
-      objectType: "Офис",
+      site: "Главный офис",
+      siteType: "Офис",
       location: "2-й этаж, отдел разработки",
       region: "Главный офис",
       priority: "medium",
@@ -1447,8 +1447,8 @@
       time: "12:41:26",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Технопарк",
-      objectType: "Лаборатория",
+      site: "Технопарк",
+      siteType: "Лаборатория",
       location: "Корпус А, лаборатория 1",
       region: "Технопарк",
       priority: "high",
@@ -1471,8 +1471,8 @@
       time: "12:33:04",
       typeId: "sabotage",
       type: "Саботаж камеры",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "1-й этаж, витрина у входа",
       region: "Торговый центр",
       priority: "medium",
@@ -1491,8 +1491,8 @@
       time: "12:25:40",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Технопарк",
-      objectType: "Офис",
+      site: "Технопарк",
+      siteType: "Офис",
       location: "Корпус Б, коридор",
       region: "Технопарк",
       priority: "low",
@@ -1514,8 +1514,8 @@
       time: "12:17:12",
       typeId: "fire",
       type: "Пожарная тревога",
-      object: "Главный офис",
-      objectType: "Офис",
+      site: "Главный офис",
+      siteType: "Офис",
       location: "Приемная, зона ожидания",
       region: "Главный офис",
       priority: "high",
@@ -1534,8 +1534,8 @@
       time: "12:08:35",
       typeId: "loiter",
       type: "Скопление людей",
-      object: "Торговый центр",
-      objectType: "Торговый центр",
+      site: "Торговый центр",
+      siteType: "Торговый центр",
       location: "1-й этаж, кассовая зона",
       region: "Торговый центр",
       priority: "low",
@@ -1554,8 +1554,8 @@
       time: "11:59:48",
       typeId: "intrusion",
       type: "Проникновение",
-      object: "Складской комплекс",
-      objectType: "Склад",
+      site: "Складской комплекс",
+      siteType: "Склад",
       location: "Склад №1, стеллажи А1–А8",
       region: "Складской комплекс",
       priority: "medium",
@@ -1582,7 +1582,7 @@
     { id: "petrova", name: "Петрова М.", role: "старший смены", duty: "на смене" },
     { id: "sidorov", name: "Сидоров К.", role: "оператор", duty: "на смене" },
     { id: "noc", name: "Дежурный ЦОД", role: "круглосуточный пост", duty: "на смене" },
-    { id: "gusev", name: "Гусев Р. А.", role: "начальник охраны объекта", duty: "на смене" },
+    { id: "gusev", name: "Гусев Р. А.", role: "начальник охраны площадки", duty: "на смене" },
     { id: "kuznetsov", name: "Кузнецов И. П.", role: "инженер ТСО", duty: "по вызову" },
   ];
 
@@ -2093,7 +2093,7 @@
       log(inboxMine, "noc", "Передано → {who} (уровень {lvl}). {why}", {
         who: ME,
         lvl: inboxMine.escalationLevel,
-        why: "Нужна проверка по камерам объекта",
+        why: "Нужна проверка по камерам площадки",
       });
     }
     const falseAlarm = pick("INC-1826");
@@ -2629,7 +2629,7 @@
       }
       if (state.search) {
         const q = state.search.toLowerCase();
-        const blob = `${e.id} ${t(e.type)} ${t(e.object)} ${t(e.location)} ${e.type} ${e.object} ${
+        const blob = `${e.id} ${t(e.type)} ${t(e.site)} ${t(e.location)} ${e.type} ${e.site} ${
           e.location
         }`.toLowerCase();
         if (!blob.includes(q)) return false;
@@ -2842,7 +2842,7 @@
                 <strong>${te(e.type)}</strong>
                 <time>${e.time}</time>
               </div>
-              <div class="event-sub">${e.id} · ${te(e.object)} · ${te(e.location)}</div>
+              <div class="event-sub">${e.id} · ${te(e.site)} · ${te(e.location)}</div>
               <div class="event-foot">
                 <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
                 ${
@@ -3094,7 +3094,7 @@
           }
         </div>
         <h3>${te(ev.type)}</h3>
-        <div class="incident-meta">${te(ev.object)} · ${te(ev.location)}</div>
+        <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
         <div class="progress"><i style="width:${Math.round((prog.filled / prog.total) * 100)}%"></i></div>
       </div>
     `;
@@ -4048,7 +4048,7 @@
     if (!pool.length) return null;
     const ev = pool[0];
     const from = ev.owner;
-    engine.applyAs("transfer", ev, { targetId: "me", comment: "Нужен оператор с доступом к архиву объекта" }, from);
+    engine.applyAs("transfer", ev, { targetId: "me", comment: "Нужен оператор с доступом к архиву площадки" }, from);
     toast(t("{who} передал {id} вам", { who: actorName(from), id: ev.id }));
     return ev.id;
   }
