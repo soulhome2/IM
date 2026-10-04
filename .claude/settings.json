@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git commit -qam 'План 2026-10-03: этап 1 выполнен *)"
-    ]
-  }
-}
