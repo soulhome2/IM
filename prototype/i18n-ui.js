@@ -151,6 +151,8 @@ window.IM_DICT_UI = {
     "Время до предельного срока удержания по причине": "Time left before the hold limit for this reason",
     "Норматив нарушен": "Target breached",
     "Нужен допуск в зону": "Zone clearance required",
+    "Вызван инженер ТСО": "Security systems engineer called",
+    "Наряд выехал на проверку": "Patrol dispatched to check",
     "Нужен оператор с доступом к архиву площадки": "An operator with access to the site archive is needed",
     "Ожидает принятия": "Awaiting acceptance",
     "Ожидание третьей стороны": "Waiting for a third party",
@@ -508,6 +510,8 @@ window.IM_DICT_UI = {
     "Время до предельного срока удержания по причине": "Tiempo restante hasta el límite de espera por este motivo",
     "Норматив нарушен": "Objetivo incumplido",
     "Нужен допуск в зону": "Se requiere autorización de acceso a la zona",
+    "Вызван инженер ТСО": "Se llamó al ingeniero de sistemas de seguridad",
+    "Наряд выехал на проверку": "La patrulla salió a verificar",
     "Нужен оператор с доступом к архиву площадки":
       "Se necesita un operador con acceso al archivo del sitio",
     "Ожидает принятия": "Pendiente de aceptación",

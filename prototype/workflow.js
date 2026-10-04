@@ -2015,6 +2015,7 @@ window.IM_WORKFLOW = {
       ],
       "to": "on_hold",
       "trigger": "system",
+      "scope": "incidents_owned_by_agent",
       "actor": "system",
       "guards": [
         {
@@ -2073,6 +2074,7 @@ window.IM_WORKFLOW = {
       ],
       "to": "new",
       "trigger": "system",
+      "scope": "incidents_owned_by_agent",
       "actor": "system",
       "guards": [
         {

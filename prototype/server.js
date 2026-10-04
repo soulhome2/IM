@@ -4,23 +4,46 @@
    машины (engine.js), автоматические — планировщик раз в секунду (§6.2). Интерфейс (app.js)
    разговаривает с ним только через api.js, теми же запросами, что с настоящим бэкендом.
    Работает в той же вкладке: страница открывается и с диска (file://), и с сайта.
-   Демо: один оператор («me»), права — весь каталог, эмуляция коллег (§17).
+   Данные — эталонный набор Specification/State_machine/fixtures/demo.json (prototype/fixture.js):
+   его же загружает бэкенд на тестовом стенде. Демо: один оператор, права — весь каталог,
+   эмуляция коллег (§17).
 
-   Параметры create(): workflow, demo — машина и демо-данные (данные копируются: у каждого
-   сервера свои); now — часы; autoTick: false — планировщик не запускается сам, его шаг
-   вызывают тесты (tick); colleagues: false — без эмуляции коллег; permissions — права
-   оператора списком ключей (по умолчанию — весь каталог, кроме настройки схемы). */
+   Параметры create(): workflow — машина; fixture — эталонный набор; colleagues — настройки
+   эмуляции коллег (colleagues.js) или false; now — часы; autoTick: false — планировщик не
+   запускается сам; permissions — права оператора списком ключей (по умолчанию — весь каталог,
+   кроме настройки схемы); testSupport: true — служебные операции тестового стенда
+   /test/reset и /test/clock (README машины, «Тестовый стенд»). */
 (() => {
   function create(opts) {
     const W = opts.workflow;
-    const D = JSON.parse(JSON.stringify(opts.demo));
-    const now = opts.now || (() => Date.now());
-    const ME = "me";
+    const FIXTURE = opts.fixture;
+    const ME = FIXTURE.operator;
     const iso = (ms) => (ms == null ? null : new Date(ms).toISOString());
+
+    // Часы. Тестовый стенд их останавливает и сдвигает (/test/clock), иначе идут вместе с настоящими
+    const realNow = opts.now || (() => Date.now());
+    const clock = { frozenAt: null, offset: 0 };
+    const now = () => (clock.frozenAt != null ? clock.frozenAt : realNow() + clock.offset);
+
+    /* ===== Данные: загружаются из эталонного набора (load) ===== */
+
+    let OPERATORS = [];
+    let GROUPS = [];
+    let ACTORS = [];
+    let DEVICE_TYPES = {};
+    let DEVICE_CATALOG = {};
+    let TREE = [];
+    let SCENARIOS = {};
+    let events = [];
+    let SIM = { enabled: false };
+    let session = null;
+    // Эмулированные коллеги: исполнитель каждого и с какого момента его сессия не отвечает
+    const colleagueEngines = {};
+    const colleagueIdleSince = {};
+    const PAGE_SIZE = 8;
 
     /* ===== Люди и права ===== */
 
-    const ACTORS = D.ACTORS;
     const findActor = (id) => ACTORS.find((a) => a.id === id) || null;
     const rawName = (id) => {
       const actor = findActor(id);
@@ -37,20 +60,13 @@
 
     // Права демо-оператора: весь каталог машины, кроме настройки схемы. В продукте права
     // приходят из внешней системы (§5), здесь — один набор на всех (§17)
-    const PERMISSIONS = opts.permissions || W.permissions.map((p) => p.key).filter((key) => key !== "incident:schema:admin");
+    const ALL_PERMISSIONS = W.permissions.map((p) => p.key).filter((key) => key !== "incident:schema:admin");
+    let PERMISSIONS = opts.permissions || ALL_PERMISSIONS;
     const can = (key) => PERMISSIONS.includes(key);
-
-    const session = {
-      agentState: "ready",
-      reasonId: null,
-      openIncidentGuid: null,
-      preferences: { defaultTransferTargetId: "petrova", locale: "ru" },
-    };
 
     /* ===== Устройства и группы ===== */
 
-    const DEVICE_TYPES = D.DEVICE_TYPES;
-    const deviceSpec = (id) => D.DEVICE_CATALOG[id] || { name: id, type: "camera" };
+    const deviceSpec = (id) => DEVICE_CATALOG[id] || { name: id, type: "camera" };
     function deviceRef(id) {
       const spec = deviceSpec(id);
       const type = DEVICE_TYPES[spec.type] ? spec.type : "camera";
@@ -82,13 +98,13 @@
         }
         return null;
       };
-      return walk(D.TREE) || { guid: "all", name: "Все события" };
+      return walk(TREE) || { guid: "all", name: "Все события" };
     }
     const touches = (ev, ids) => (ev.deviceIds || []).some((id) => ids.includes(id));
 
     /* ===== Сценарий (до подключения машины сценариев, §14.5, §17) ===== */
 
-    const scenarioOf = (ev) => D.SCENARIOS[ev.typeId];
+    const scenarioOf = (ev) => SCENARIOS[ev.typeId];
     const scenarioSteps = (ev) => scenarioOf(ev).steps;
     const stepShort = (step) => (step.type === "checkbox" ? "Подтверждение" : step.label);
     function stepAnswerText(ev, step) {
@@ -123,29 +139,13 @@
 
     /* ===== Журнал ===== */
 
-    function stamp(ms) {
-      const d = new Date(ms);
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    }
-    // Время в демо-данных записано строкой «чч:мм:сс» — на сегодня, не позже текущего момента
-    function atFromStamp(s) {
-      const [h, m, sec] = s.split(":").map(Number);
-      const d = new Date(now());
-      d.setHours(h, m, sec || 0, 0);
-      if (d.getTime() > now() + 1000) d.setDate(d.getDate() - 1);
-      return d.getTime();
-    }
     function log(ev, whoId, template, vars) {
       ev.log.push({ at: now(), whoId, k: template, v: vars || null });
     }
 
-    /* ===== Демо-данные → модель машины ===== */
-
-    const events = D.EVENTS;
-    const GROUPS = D.GROUPS;
-
-    const engine = IMEngine.create({
+    // Всё, что исполнитель знает о данных сервера. «Я» (me) у каждого исполнителя своё: у оператора
+    // стенда — он сам, у эмулированных коллег — коллега (их действия идут через те же переходы)
+    const engineCtx = {
       workflow: W,
       me: ME,
       now,
@@ -156,7 +156,7 @@
         const group = GROUPS.find((g) => g.id === groupId);
         return Boolean(group && group.members.includes(userId));
       },
-      inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(D.TREE, groupId))),
+      inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(TREE, groupId))),
       agentState: () => session.agentState,
       stepsFilled: (ev, setId) => setId === "none" || scenarioDone(ev),
       progress: (ev) => stepProgress(ev),
@@ -178,126 +178,101 @@
       onEvict: (ev, who, transitionId) => {
         if (who === ME) emit("incident.card_evicted", ev, null, { transitionId });
       },
-    });
+    };
+    const engine = IMEngine.create(Object.assign({}, engineCtx, { me: ME }));
 
-    // Время событий — к моменту запуска: самое свежее событие минуту назад, промежутки сохраняются
-    function shiftDemoTimes(list) {
-      const isStamp = (s) => typeof s === "string" && /^\d{1,2}:\d\d:\d\d$/.test(s);
-      const toSec = (s) => s.split(":").reduce((acc, part) => acc * 60 + Number(part), 0);
-      const pad = (n) => String(n).padStart(2, "0");
-      const fmt = (sec) => {
-        const day = ((sec % 86400) + 86400) % 86400;
-        return `${pad(Math.floor(day / 3600))}:${pad(Math.floor((day % 3600) / 60))}:${pad(day % 60)}`;
+    // Эталонный набор → модель сервера. Набор — снимок на момент capturedAt: при загрузке все
+    // времена сдвигаются на «сейчас − capturedAt», и набор выглядит свежим в любой день
+    function load(fixture) {
+      const data = JSON.parse(JSON.stringify(fixture));
+      const delta = now() - Date.parse(data.capturedAt);
+      const abs = (time) => (time == null ? null : Date.parse(time) + delta);
+      OPERATORS = data.people.operators;
+      GROUPS = data.people.dutyGroups.map((g) => Object.assign({ group: true }, g));
+      ACTORS = OPERATORS.concat(GROUPS, data.people.system.map((a) => Object.assign({ system: true }, a)));
+      DEVICE_TYPES = Object.fromEntries(data.deviceTypes.map((t) => [t.id, { label: t.label }]));
+      DEVICE_CATALOG = Object.fromEntries(data.devices.map((d) => [d.id, { name: d.name, type: d.type }]));
+      const tree = (groups) =>
+        groups.map((g) =>
+          Object.assign({ id: g.id, name: g.name }, g.description ? { description: g.description } : {}, {
+            children: tree(g.groups || []).concat((g.devices || []).map((id) => ({ id, isDevice: true }))),
+          })
+        );
+      TREE = tree(data.sourceGroups);
+      SCENARIOS = data.scenarios;
+      events = data.incidents.map((inc) => ({
+        id: inc.guid,
+        typeId: inc.eventType.id,
+        type: inc.eventType.name,
+        priority: inc.priority,
+        site: inc.site,
+        siteType: inc.siteType,
+        location: inc.location,
+        occurredAt: abs(inc.occurredAt),
+        deviceIds: inc.devices,
+        cameras: inc.cameras,
+        media: inc.media,
+        state: inc.state,
+        owner: inc.owner,
+        assignmentGroup: inc.assignmentGroup,
+        escalationLevel: inc.escalationLevel,
+        holdReason: inc.holdReason,
+        closeResult: inc.closeResult,
+        massCause: inc.closeCause,
+        closeComment: inc.result,
+        closedBy: inc.closedBy,
+        closedAt: abs(inc.closedAt),
+        reactionDueAt: null,
+        resolutionDueAt: null,
+        resolutionLeftMs: null,
+        holdSince: null,
+        holdDueAt: null,
+        timers: inc.timers,
+        slaBreached: inc.slaBreached,
+        breaches: (inc.breaches || []).map((b) => ({ kind: b.kind, at: abs(b.at), owner: b.owner || null })),
+        groupId: null,
+        answers: inc.scenario.answers,
+        launched: inc.scenario.launchedMacros,
+        log: inc.journal.map((j) => ({ at: abs(j.at), whoId: j.actor, who: j.actorName, k: j.template, v: j.vars })),
+        // Шаг, на котором остановился владелец; нет — первый незаполненный
+        stepIndex: inc.scenario.cursorStepId ? SCENARIOS[inc.eventType.id].steps.findIndex((s) => s.id === inc.scenario.cursorStepId) : undefined,
+        version: 1,
+      }));
+      // Таймеры: в наборе — с какого момента идут, длительность — норматив машины (§4).
+      // Запуск в прошлом сдвигает дедлайн: «удержание началось 4 минуты назад»
+      const shift = (ev, due, since, startedAt) => {
+        const ms = abs(startedAt) - now();
+        if (ev[due] != null) ev[due] += ms;
+        if (since && ev[since] != null) ev[since] += ms;
       };
-      const stamps = list.flatMap((ev) => [ev.time, ...(ev.log || []).map((entry) => entry.t)]).filter(isStamp);
-      if (!stamps.length) return;
-      const d = new Date(now());
-      const shift = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() - 60 - Math.max(...stamps.map(toSec));
-      list.forEach((ev) => {
-        if (isStamp(ev.time)) ev.time = fmt(toSec(ev.time) + shift);
-        (ev.log || []).forEach((entry) => {
-          if (isStamp(entry.t)) entry.t = fmt(toSec(entry.t) + shift);
-        });
-      });
-    }
-
-    function migrateEvents(list) {
-      shiftDemoTimes(list);
-      const byName = {};
-      D.OPERATORS.forEach((op) => (byName[op.name] = op.id));
-      const startReaction = (ev, arg) => engine.startTimer(ev, "reaction", arg);
-      list.forEach((ev) => {
-        const legacy = ev.status;
-        ev.occurredAt = atFromStamp(ev.time);
-        ev.log = (ev.log || []).map((entry) => ({
-          at: entry.t ? atFromStamp(entry.t) : now(),
-          whoId: entry.whoId || byName[entry.who] || null,
-          who: entry.who || null,
-          k: entry.k || entry.text,
-          v: entry.v || null,
-        }));
-        ev.owner = ev.operator ? byName[ev.operator] || null : null;
-        ev.escalationLevel = 0;
-        ev.holdReason = null;
-        ev.closeResult = ev.closeResult || null;
-        ev.massCause = null;
-        ev.slaBreached = false;
-        ev.breaches = [];
-        ev.groupId = null;
-        ev.holdSince = null;
-        ev.holdDueAt = null;
-        ev.assignmentGroup = null;
-        ev.closedAt = null;
-        ev.reactionDueAt = null;
-        ev.resolutionDueAt = null;
-        ev.resolutionLeftMs = null;
-        ev.version = 1;
-        if (legacy === "new") {
-          ev.state = "new";
-          ev.owner = null;
-          startReaction(ev);
-        } else if (legacy === "mine") {
-          ev.owner = ME;
-          if (ev.paused) {
-            ev.state = "on_hold";
-            ev.holdReason = ev.holdReason || "third_party";
-            engine.startTimer(ev, "hold");
-            ev.holdSince -= 4 * 60000;
-            ev.holdDueAt -= 4 * 60000;
-            ev.resolutionLeftMs = (ev.slaSec || 600) * 1000;
-          } else {
-            ev.state = "in_progress";
-            engine.resumeTimer(ev, "resolution");
-          }
-        } else if (legacy === "foreign") {
-          ev.state = "in_progress";
-          engine.resumeTimer(ev, "resolution");
-        } else if (legacy === "escalated") {
-          ev.state = "pending_acceptance";
-          ev.escalationLevel = 1;
-          startReaction(ev);
-        } else {
-          ev.state = "closed";
-          ev.closeResult = ev.closeResult || "processed";
-          ev.closedAt = now() - 3 * 3600000;
+      events.forEach((ev) => {
+        const t = ev.timers || {};
+        delete ev.timers;
+        if (t.reaction) {
+          engine.startTimer(ev, "reaction", ev.escalationLevel > 0 ? "byEscalationLevel" : undefined);
+          shift(ev, "reactionDueAt", null, t.reaction.startedAt);
         }
-        delete ev.status;
-        delete ev.operator;
-        delete ev.paused;
+        if (t.resolution && t.resolution.leftSec != null) ev.resolutionLeftMs = t.resolution.leftSec * 1000;
+        else if (t.resolution) {
+          engine.resumeTimer(ev, "resolution");
+          shift(ev, "resolutionDueAt", null, t.resolution.startedAt);
+        }
+        if (t.hold) {
+          engine.startTimer(ev, "hold");
+          shift(ev, "holdDueAt", "holdSince", t.hold.startedAt);
+        }
       });
-
-      // Демонстрационные ситуации, которых не было в первой версии модели
-      const pick = (id) => list.find((e) => e.id === id);
-      const inbox = pick("INC-1836");
-      if (inbox) {
-        inbox.owner = null;
-        inbox.assignmentGroup = "grp-leads";
-        inbox.escalationLevel = 1;
-        startReaction(inbox, "byEscalationLevel");
-        log(inbox, "sidorov", "Эскалация → {who}. {why}", { who: "Дежурная группа старших", why: "Нужен допуск в зону" });
-      }
-      // Второй инцидент, адресованный лично оператору: на нём проверяется «Отклонить»
-      const inboxMine = pick("INC-1843");
-      if (inboxMine) {
-        inboxMine.owner = ME;
-        startReaction(inboxMine, "byEscalationLevel");
-        log(inboxMine, "noc", "Передано → {who} (уровень {lvl}). {why}", {
-          who: D.ME,
-          lvl: inboxMine.escalationLevel,
-          why: "Нужна проверка по камерам площадки",
-        });
-      }
-      const falseAlarm = pick("INC-1826");
-      if (falseAlarm) {
-        falseAlarm.closeResult = "false_alarm";
-        falseAlarm.closedAt = now() - 25 * 60000;
-        log(falseAlarm, "sidorov", "Закрыт без обработки: {why}. {note}", { why: "Ложная тревога", note: "Сработка от уборщика" });
-      }
-      const fresh = pick("INC-1837");
-      if (fresh) fresh.closedAt = now() - 12 * 60000;
+      session = {
+        agentState: "ready",
+        reasonId: null,
+        openIncidentGuid: null,
+        preferences: { defaultTransferTargetId: "petrova", locale: "ru" },
+      };
+      SIM = opts.colleagues ? JSON.parse(JSON.stringify(opts.colleagues.SIM)) : { enabled: false };
+      Object.keys(colleagueIdleSince).forEach((id) => delete colleagueIdleSince[id]);
     }
 
-    migrateEvents(events);
+    load(FIXTURE);
 
     /* ===== Ответы API: представление для смотрящего оператора ===== */
 
@@ -555,7 +530,7 @@
 
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
     function targets() {
-      return D.OPERATORS.concat(GROUPS).map((op) => ({
+      return OPERATORS.concat(GROUPS).map((op) => ({
         id: op.id,
         kind: op.group ? "duty_group" : "operator",
         name: op.name,
@@ -572,7 +547,7 @@
     function visible(q) {
       let list = events;
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
-        const node = findNode(D.TREE, q.sourceGroupGuid);
+        const node = findNode(TREE, q.sourceGroupGuid);
         const ids = node ? collectDeviceIds(node) : [q.sourceGroupGuid];
         list = list.filter((e) => touches(e, ids));
       }
@@ -593,7 +568,7 @@
 
     function page(q) {
       const list = visible(q);
-      const size = Math.max(1, Number(q.pageSize) || D.PAGE_SIZE);
+      const size = Math.max(1, Number(q.pageSize) || PAGE_SIZE);
       const pages = Math.max(1, Math.ceil(list.length / size));
       const n = Math.min(Math.max(1, Number(q.page) || 1), pages);
       // На какой странице выбранный инцидент — если он виден при этих фильтрах (null — не виден)
@@ -993,9 +968,40 @@
         "/operator/reference/device-types",
         () => ({ status: 200, body: Object.entries(DEVICE_TYPES).map(([id, d]) => ({ id, label: d.label })) }),
       ],
-      ["GET", "/operator/reference/source-groups", () => ({ status: 200, body: treeView(D.TREE) })],
+      ["GET", "/operator/reference/source-groups", () => ({ status: 200, body: treeView(TREE) })],
       ["GET", "/operator/reference/priorities", () => ({ status: 200, body: ["critical", "high", "medium", "low"].map((id) => ({ id })) })],
-    ];
+    ].concat(opts.testSupport ? TEST_ROUTES() : []);
+
+    /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
+
+    function TEST_ROUTES() {
+      return [
+        [
+          "POST",
+          "/test/reset",
+          (p, q, body) => {
+            if (body.fixture && body.fixture !== "demo") return problem(404, "NOT_FOUND", ["Нет эталонного набора {name}", { name: body.fixture }]);
+            // Часы останавливаются: время в тестах идёт только по /test/clock
+            clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
+            PERMISSIONS = body.operatorPermissions || opts.permissions || ALL_PERMISSIONS;
+            load(FIXTURE);
+            return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
+          },
+        ],
+        [
+          "POST",
+          "/test/clock",
+          (p, q, body) => {
+            const sec = Number(body.advanceSec) || 0;
+            if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["Время назад не идёт"]);
+            if (clock.frozenAt != null) clock.frozenAt += sec * 1000;
+            else clock.offset += sec * 1000;
+            const fired = runScheduler();
+            return { status: 200, body: { now: iso(now()), fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
+          },
+        ],
+      ];
+    }
 
     const compiled = ROUTES.map(([method, template, fn]) => {
       const names = [];
@@ -1049,32 +1055,51 @@
       return fired;
     }
 
-    const SIM = D.SIM;
-    const foreignActive = () => events.filter((e) => e.state === "in_progress" && e.owner && e.owner !== ME && !e.groupId);
+    /* ===== Эмуляция коллег (§17): через те же переходы машины, от имени коллеги ===== */
 
-    // Коллега забирает одно из новых событий первой страницы очереди — не то, что открыто у оператора
+    // У каждого коллеги свой исполнитель: «я» — коллега, права — весь каталог, на смене. Признак
+    // активности — свой: потерявший связь коллега перестаёт отвечать, и системные переходы
+    // машины (system_hold_idle, затем system_release_idle) срабатывают по её же условиям
+    function colleague(id) {
+      if (!colleagueEngines[id]) {
+        colleagueEngines[id] = IMEngine.create(
+          Object.assign({}, engineCtx, {
+            me: id,
+            can: (key) => ALL_PERMISSIONS.includes(key),
+            agentState: () => "ready",
+            idleSec: () => (colleagueIdleSince[id] == null ? 0 : (now() - colleagueIdleSince[id]) / 1000),
+          })
+        );
+      }
+      return colleagueEngines[id];
+    }
+    const isColleague = (id) => Boolean(id) && id !== ME && OPERATORS.some((op) => op.id === id);
+    const foreignActive = () => events.filter((e) => e.state === "in_progress" && isColleague(e.owner) && !e.groupId);
+
+    // Коллега берёт одно из новых событий первой страницы очереди — не то, что открыто у оператора
     function simTakeEvent() {
       const pool = visible({ filter: "open" })
-        .slice(0, D.PAGE_SIZE)
+        .slice(0, PAGE_SIZE)
         .filter((e) => e.state === "new" && e.id !== session.openIncidentGuid);
       // В верхней части очереди всегда оставляем новое событие, чтобы оператору было что взять
       if (pool.length < 2) return;
       const ev = pool[pool.length - 1];
-      const who = SIM.colleagues[SIM.taken % SIM.colleagues.length];
-      ev.state = "in_progress";
-      ev.owner = who;
-      ev.stepIndex = 0;
-      engine.stopTimer(ev, "reaction");
-      engine.resumeTimer(ev, "resolution");
-      log(ev, who, "Взято в работу");
-      SIM.taken += 1;
-      touch([ev]);
-      emit("incident.state_changed", ev, who, { transitionId: "claim" });
+      // Берёт первый по очереди коллега, кому машина разрешает: свой лимит активных, права, на смене
+      for (let i = 0; i < SIM.colleagues.length; i++) {
+        const who = SIM.colleagues[(SIM.taken + i) % SIM.colleagues.length];
+        if (colleagueIdleSince[who] != null) continue;
+        const r = colleague(who).run("claim", ev, {}, { surface: "queue" });
+        if (!r.ok) continue;
+        SIM.taken += 1;
+        touch([ev]);
+        emit("incident.state_changed", ev, who, { transitionId: "claim" });
+        return;
+      }
     }
 
-    // Чужой сценарий продвигается на один шаг: меняются прогресс и журнал
+    // Коллега проходит шаг своего сценария — если машина разрешает ему править (scenarioEdit)
     function simAdvanceEvent() {
-      const pool = foreignActive().filter((e) => !scenarioDone(e));
+      const pool = foreignActive().filter((e) => !scenarioDone(e) && colleague(e.owner).canEditScenario(e));
       if (!pool.length) return;
       const ev = pool[Math.floor(Math.random() * pool.length)];
       const steps = scenarioSteps(ev);
@@ -1086,41 +1111,63 @@
         ev.answers[step.id] = true;
         done = "подтверждено";
       } else if (step.type === "macros") {
+        if (!colleague(ev.owner).availability("run_macro", ev).ok) return;
         ev.launched.push(step.buttons[0]);
         done = ["запущен макрос «{name}»", { name: step.buttons[0] }];
       } else if (step.options) {
         ev.answers[step.id] = step.options[Math.floor(Math.random() * step.options.length)];
         done = ev.answers[step.id];
       } else {
-        ev.answers[step.id] = D.SIM_NOTES[Math.floor(Math.random() * D.SIM_NOTES.length)];
+        const notes = opts.colleagues.SIM_NOTES;
+        ev.answers[step.id] = notes[Math.floor(Math.random() * notes.length)];
         done = ev.answers[step.id];
       }
       ev.stepIndex = Math.min(idx + 1, steps.length - 1);
       log(ev, ev.owner, "Шаг {i}/{n} · {name}: {done}", { i: idx + 1, n: steps.length, name: stepShort(step), done });
       touch([ev]);
       emit("journal.appended", ev, ev.owner, {});
+      // Сценарий заполнен — коллега закрывает инцидент как «Обработан» и освобождается для следующего
+      if (scenarioDone(ev)) {
+        const who = ev.owner;
+        const r = colleague(who).run("close", ev, { resultId: "processed" }, { surface: "card" });
+        if (r.ok) {
+          touch([ev]);
+          emit("incident.state_changed", ev, who, { transitionId: "close" });
+        }
+      }
     }
 
-    // Коллега передаёт свой инцидент оператору: появляется «Вам на принятие»
+    // Коллега передаёт свой инцидент оператору — переход «Передать» с его правами и проверками
     function simHandoff() {
-      const pool = foreignActive().filter((e) => e.escalationLevel < W.escalation.maxLevel);
-      if (!pool.length) return;
-      const ev = pool[0];
-      const from = ev.owner;
-      engine.applyAs("transfer", ev, { targetId: ME, comment: "Нужен оператор с доступом к архиву площадки" }, from);
-      touch([ev]);
-      emit("incident.owner_changed", ev, from, { transitionId: "transfer", addressee: actorRef(ME) });
+      for (const ev of foreignActive()) {
+        const from = ev.owner;
+        const r = colleague(from).run("transfer", ev, { targetId: ME, comment: "Нужен оператор с доступом к архиву площадки" }, { surface: "card" });
+        if (!r.ok) continue;
+        touch([ev]);
+        emit("incident.owner_changed", ev, from, { transitionId: "transfer", addressee: actorRef(ME) });
+        return;
+      }
     }
 
-    // Отвал оператора (§12.3): сессия не отвечает, инцидент откладывается системой
+    // Коллега теряет связь (§12.3): его сессия больше не отвечает. Дальше — системные переходы
+    // машины по признаку активности: сразу «отложен, нет связи», через idle_release — в очередь
     function simDrop() {
-      const pool = foreignActive();
-      if (!pool.length) return;
-      const ev = pool[pool.length - 1];
-      const owner = ev.owner;
-      engine.applyAs("system_hold_idle", ev, {}, "system");
-      touch([ev]);
-      emit("incident.state_changed", ev, "system", { transitionId: "system_hold_idle", previousOwner: actorRef(owner) });
+      const ev = foreignActive().pop();
+      if (!ev) return;
+      colleagueIdleSince[ev.owner] = now() - W.session.idleHoldSec * 1000;
+      colleagueTick(ev.owner);
+    }
+
+    // Системные переходы оператора-коллеги (scope: incidents_owned_by_agent) — по его состоянию
+    function colleagueTick(id) {
+      const before = Object.fromEntries(events.map((e) => [e.id, e.owner]));
+      colleague(id)
+        .tick({ agentOnly: true })
+        .forEach(({ id: guid, transition }) => {
+          const ev = find(guid);
+          touch([ev]);
+          emit("incident.state_changed", ev, "system", { transitionId: transition, previousOwner: actorRef(before[guid]) });
+        });
     }
 
     function simulateColleagues() {
@@ -1147,15 +1194,27 @@
       }
     }
 
-    if (opts.colleagues === false) SIM.enabled = false;
-    if (opts.autoTick !== false) {
-      setInterval(() => {
-        const fired = runScheduler();
-        if (!fired.length) simulateColleagues();
-      }, 1000);
+    // Секунда работы встроенного сервера: автоматические переходы, затем коллеги
+    function second() {
+      const fired = runScheduler();
+      Object.keys(colleagueIdleSince).forEach(colleagueTick);
+      if (!fired.length) simulateColleagues();
     }
 
-    return { handle, subscribe, recorded, tick: runScheduler, routes: ROUTES.map(([method, template]) => `${method} ${template}`) };
+    if (opts.autoTick !== false) setInterval(second, 1000);
+
+    return {
+      handle,
+      subscribe,
+      recorded,
+      tick: runScheduler,
+      // Для тестов эмуляции коллег: секунда работы при остановленных часах стенда
+      simulateSecond() {
+        if (clock.frozenAt != null) clock.frozenAt += 1000;
+        second();
+      },
+      routes: ROUTES.map(([method, template]) => `${method} ${template}`),
+    };
   }
 
   window.IMServer = { create };

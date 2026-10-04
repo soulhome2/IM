@@ -736,6 +736,7 @@
       "from": ["in_progress"],
       "to": "on_hold",
       "trigger": "system",
+      "scope": "incidents_owned_by_agent",
       "actor": "system",
       "guards": [{ "fn": "agentIdleFor", "args": ["session.idleHoldSec"] }],
       "effects": [
@@ -753,6 +754,7 @@
       "from": ["on_hold"],
       "to": "new",
       "trigger": "system",
+      "scope": "incidents_owned_by_agent",
       "actor": "system",
       "guards": [
         { "fn": "agentIdleFor", "args": ["session.idleReleaseSec"] },

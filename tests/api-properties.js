@@ -59,7 +59,7 @@
 
   async function walk(seed) {
     const r = rng(seed);
-    const env = makeEnv();
+    const env = await makeEnv();
     const history = [];
     const versions = new Map();
     const journals = new Map();
@@ -71,8 +71,8 @@
       const x = r();
       if (x < 0.14) {
         const sec = 1 + Math.floor(r() * 900);
-        const fired = env.advance(sec);
-        history.push(`+${sec} с${fired.length ? ` (${fired.map((f) => f.transition).join(",")})` : ""}`);
+        const fired = await env.advance(sec);
+        history.push(`+${sec} с${fired.length ? ` (${fired.map((f) => f.transitionId).join(",")})` : ""}`);
       } else if (x < 0.19) {
         const session = await env.session();
         const to = session.agentState === "not_ready" ? "ready" : "not_ready";
@@ -143,7 +143,7 @@
   });
 
   test("Инварианты верны на начальных демо-данных", async () => {
-    const env = makeEnv();
+    const env = await makeEnv();
     const bad = invariants(await env.all(), await env.session());
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });

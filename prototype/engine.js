@@ -173,8 +173,8 @@
       },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
-      // Признак активности оператора в прототипе не отслеживается (§17): без сервера не воспроизвести
-      agentIdleFor: () => ["Оператор на связи"],
+      // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
+      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() >= setting(path) ? null : ["Оператор на связи"]),
       // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
       withinActiveLimit: (ev, [extra = 0]) => {
         const u = units("in_progress", ev);
@@ -464,12 +464,16 @@
     // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
     // выполнены. Таймер, по которому срабатывает переход, — из его условия timerExpired.
     // scope: incidents_owned_by_agent — только инциденты текущего оператора (перерыв, §12.2)
-    function tick() {
+    // agentOnly — только переходы, привязанные к оператору (scope: incidents_owned_by_agent):
+    // так сервер проверяет состояние каждого оператора, не запуская общие таймеры повторно
+    function tick(opts) {
       const changed = [];
+      const agentOnly = Boolean(opts && opts.agentOnly);
       ctx.events().forEach((ev) => {
         if (isDone(ev)) return;
         W.transitions.forEach((tr) => {
           if (tr.trigger !== "timer" && tr.trigger !== "system") return;
+          if (agentOnly && tr.scope !== "incidents_owned_by_agent") return;
           if (!tr.from.includes(ev.state)) return;
           if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
           if (firstFail(ev, tr.guards)) return;
@@ -617,13 +621,6 @@
       return { ok: true };
     }
 
-    // Эффекты перехода от имени другого участника без проверки условий — только для эмуляции
-    // коллег в прототипе: в продукте их действия приходят с сервера (поток событий)
-    function applyAs(id, ev, form, actor) {
-      const tr = transitions[id];
-      return tr ? applyEffects(tr, ev, form || {}, actor) : { ok: false, why: ["Неизвестное действие"] };
-    }
-
     return {
       workflow: W,
       implemented: { guards: Object.keys(GUARDS), effects: Object.keys(EFFECTS) },
@@ -652,7 +649,6 @@
       resumeTimer,
       tick,
       canEditScenario,
-      applyAs,
       closeResultLabel,
       createGroup,
       excludeFromGroup,

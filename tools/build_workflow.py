@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js и prototype/openapi.js из Specification/State_machine/.
+"""Сборка prototype/workflow.js, openapi.js и fixture.js из Specification/State_machine/.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
-Поэтому машина и контракт API подключаются обычными скриптами:
-window.IM_WORKFLOW = { ... } и window.IM_OPENAPI = { ... }. Машину исполняет встроенный
-сервер прототипа, по контракту самопроверка сверяет его ответы.
+Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
+window.IM_WORKFLOW, window.IM_OPENAPI и window.IM_FIXTURE. Машину исполняет встроенный
+сервер прототипа на эталонных данных, по контракту самопроверка и тесты сверяют его ответы.
 Руками эти файлы не правятся — только исходники и затем эта сборка.
 
 Запуск из корня репозитория:
@@ -21,6 +21,7 @@ MACHINE = os.path.join(ROOT, "Specification", "State_machine")
 TARGETS = [
     ("workflow.v4.json", "workflow.js", "IM_WORKFLOW", 2),
     ("openapi.json", "openapi.js", "IM_OPENAPI", None),
+    ("fixtures/demo.json", "fixture.js", "IM_FIXTURE", None),
 ]
 
 

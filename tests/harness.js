@@ -1,42 +1,75 @@
-/* Стенд тестов API: окружение со своим сервером и часами, проверки, запуск и отчёт.
-   Окружение — встроенный сервер прототипа (server.js) с управляемыми часами: без эмуляции
-   коллег, планировщик шагает только по advance(). Тесты говорят с ним через api.js —
-   теми же запросами, что интерфейс и будущий бэкенд.
+/* Стенд тестов API: окружение, проверки, запуск и отчёт.
+   Тесты говорят с сервером только запросами из openapi.json — как интерфейс и бэкенд.
+   Каждый тест начинает с POST /test/reset (эталонный набор fixtures/demo.json, часы
+   остановлены), время сдвигает POST /test/clock. Поэтому один и тот же набор проходит:
+   - встроенный сервер прототипа (по умолчанию: tests/api.html);
+   - тестовый стенд бэкенда: tests/api.html?api=https://адрес — бэкенд должен поддерживать
+     /test/reset и /test/clock и разрешать запросы со страницы (CORS).
+   Ответы сверяются со схемами openapi.json, покрытие — по операциям контракта.
    Отчёт: <pre id="apitest-log">, итог — data-apitest="pass|fail" у <html>. */
 (() => {
   const tests = [];
-  const servers = [];
   const enc = encodeURIComponent;
+  const apiBase = new URLSearchParams(location.search).get("api");
+  const spec = window.IM_OPENAPI;
 
-  // Часы стенда: фиксированный день, чтобы прогон был воспроизводимым
-  const START = new Date(2026, 9, 3, 12, 0, 0).getTime();
+  // Один сервер на весь прогон: встроенный — со служебными операциями стенда, без своих часов
+  // и без эмуляции коллег; внешний — тестовый стенд бэкенда
+  const api = apiBase
+    ? IMApi.create({ baseUrl: apiBase })
+    : IMApi.create({
+        server: IMServer.create({
+          workflow: window.IM_WORKFLOW,
+          fixture: window.IM_FIXTURE,
+          colleagues: false,
+          autoTick: false,
+          testSupport: true,
+        }),
+      });
 
-  function makeEnv(opts) {
-    let clock = START;
-    const server = IMServer.create({
-      workflow: window.IM_WORKFLOW,
-      demo: window.IM_DEMO,
-      now: () => clock,
-      autoTick: false,
-      colleagues: false,
-      permissions: opts && opts.permissions,
+  // Каждый ответ запоминается вместе с операцией контракта — для сверки схем и покрытия
+  const recorded = [];
+  const templates = Object.keys(spec.paths).map((path) => {
+    const names = [];
+    const re = new RegExp(`^${path.replace(/\{(\w+)\}/g, (m, n) => (names.push(n), "([^/]+)"))}$`);
+    return { path, re, params: names.length };
+  });
+  function templateOf(path) {
+    const bare = path.split("?")[0];
+    const hits = templates.filter((t) => t.re.test(bare)).sort((a, b) => a.params - b.params);
+    return hits.length ? hits[0].path : null;
+  }
+  async function raw(method, path, body) {
+    const res = await api.raw(method, path, body);
+    const template = templateOf(path);
+    // 404 на адрес, которого нет в контракте, — правильный ответ, сверять нечего
+    if (template || res.status !== 404) recorded.push({ method, template: template || path.split("?")[0], status: res.status, body: res.body, kind: "http" });
+    return res;
+  }
+  api.subscribe((message) => recorded.push({ method: "GET", template: "/operator/stream", status: 200, body: message, kind: "stream" }));
+
+  async function makeEnv(opts) {
+    const reset = await raw("POST", "/test/reset", {
+      fixture: "demo",
+      operatorPermissions: (opts && opts.permissions) || undefined,
     });
-    const api = IMApi.create({ server });
-    servers.push(server);
+    if (reset.status !== 200) throw new Error(`Тестовый стенд не сбросился: POST /test/reset → ${reset.status}`);
+    let clock = Date.parse(reset.body.now);
     const env = {
-      server,
       api,
       get now() {
         return clock;
       },
-      // Время идёт вперёд, планировщик делает шаг: автоматические переходы по дедлайнам
-      advance(sec) {
-        clock += sec * 1000;
-        return server.tick();
+      // Время идёт вперёд, сервер выполняет всё, что за это время должно было сработать
+      async advance(sec) {
+        const res = await raw("POST", "/test/clock", { advanceSec: sec });
+        if (res.status !== 200) throw new Error(`POST /test/clock → ${res.status}`);
+        clock = Date.parse(res.body.now);
+        return res.body.fired;
       },
-      call: (method, path, body) => api.raw(method, path, body),
+      call: (method, path, body) => raw(method, path, body),
       async ok(method, path, body) {
-        const res = await api.raw(method, path, body);
+        const res = await raw(method, path, body);
         if (res.status >= 400) throw new Error(`${method} ${path} → ${res.status} ${res.body && res.body.message}`);
         return res.body;
       },
@@ -44,7 +77,7 @@
       card: (id) => env.ok("GET", `/operator/incidents/${enc(id)}`),
       session: () => env.ok("GET", "/operator/session"),
       act: (id, transition, formValues, surface, expectedState) =>
-        api.raw("POST", `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`, {
+        raw("POST", `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`, {
           formValues: formValues || {},
           surface: surface || "card",
           expectedState,
@@ -107,9 +140,26 @@
     tests.push({ name, fn });
   }
 
+  // Операции контракта, которые тесты не обязаны вызывать: редактор схемы — вне прототипа
+  const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas/;
+
   async function run() {
-    const lines = [];
+    const lines = [`INFO  Сервер: ${apiBase || "встроенный сервер прототипа"}`];
     let failed = 0;
+    // Сначала — доступен ли стенд: иначе каждый тест упал бы с одной и той же сетевой ошибкой
+    const probe = await api.raw("POST", "/test/reset", { fixture: "demo" }).catch((err) => ({ status: 0, error: err }));
+    if (probe.status !== 200) {
+      const why =
+        probe.status === 0
+          ? "сервер не ответил: нет сети, неверный адрес или бэкенд не разрешает запросы со страницы (CORS)"
+          : `POST /test/reset → ${probe.status}: на сервере нет служебных операций тестового стенда`;
+      lines.push(`FAIL  Тестовый стенд доступен — ${why}`);
+      document.documentElement.dataset.apitest = "fail";
+      document.getElementById("apitest-summary").textContent = "Тесты API не запущены: стенд недоступен";
+      document.getElementById("apitest-log").textContent = lines.join("\n");
+      lines.forEach((l) => console.log(`APITEST ${l}`));
+      return;
+    }
     for (const t of tests) {
       const started = Date.now();
       try {
@@ -121,29 +171,27 @@
       }
       if (Date.now() - started > 20000) lines.push(`      (долго: ${Date.now() - started} мс)`);
     }
-    // Все ответы всех окружений — со схемами openapi.json
-    const recordedAll = servers.flatMap((s) => s.recorded);
-    // Покрытие: каждый маршрут встроенного сервера вызван хоть одним тестом
-    const called = new Set(recordedAll.filter((r) => r.kind === "http").map((r) => `${r.method} ${r.template}`));
-    const routes = servers.length ? servers[0].routes : [];
-    const uncovered = routes.filter((r) => !called.has(r));
-    const ops = Object.entries(window.IM_OPENAPI.paths).flatMap(([path, item]) =>
+    // Все ответы — со схемами openapi.json
+    const problems = IMContract.problems(spec, recorded);
+    if (problems.length) {
+      failed += 1;
+      lines.push(`FAIL  Ответы соответствуют openapi.json — расхождений ${problems.length}: ${problems.slice(0, 12).join("; ")}`);
+    } else lines.push(`PASS  Ответы соответствуют openapi.json — ${recorded.length} ответов`);
+    // Покрытие: каждая операция контракта вызвана хоть одним тестом
+    const called = new Set(recorded.map((r) => `${r.method} ${r.template}`));
+    const ops = Object.entries(spec.paths).flatMap(([path, item]) =>
       Object.keys(item)
         .filter((m) => ["get", "post", "put", "patch", "delete"].includes(m))
         .map((m) => `${m.toUpperCase()} ${path}`)
     );
-    const notImplemented = ops.filter((op) => !routes.includes(op) && op !== "GET /operator/stream");
+    const uncovered = ops.filter((op) => !called.has(op) && !NOT_COVERED.test(op));
     if (uncovered.length) {
       failed += 1;
-      lines.push(`FAIL  Каждый маршрут сервера покрыт тестами — без тестов: ${uncovered.join(", ")}`);
-    } else lines.push(`PASS  Каждый маршрут сервера покрыт тестами — ${routes.length} маршрутов`);
-    lines.push(`INFO  Во встроенном сервере нет операций контракта: ${notImplemented.join(", ") || "—"}`);
-    const problems = IMContract.problems(window.IM_OPENAPI, recordedAll);
-    if (problems.length) {
-      failed += 1;
-      lines.push(`FAIL  Ответы соответствуют openapi.json — расхождений ${problems.length}: ${problems.slice(0, 12).join("; ")}`);
-    } else lines.push(`PASS  Ответы соответствуют openapi.json — ${recordedAll.length} ответов`);
-    const summary = failed ? `Тесты API: ${failed} из ${tests.length + 2} не прошли` : `Тесты API: все ${tests.length + 2} прошли`;
+      lines.push(`FAIL  Каждая операция контракта покрыта тестами — без тестов: ${uncovered.join(", ")}`);
+    } else lines.push(`PASS  Каждая операция контракта покрыта тестами — ${ops.length - ops.filter((op) => NOT_COVERED.test(op)).length} операций`);
+    lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы вне прототипа`);
+    const total = tests.length + 2;
+    const summary = failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`;
     document.documentElement.dataset.apitest = failed ? "fail" : "pass";
     lines.forEach((l) => console.log(`APITEST ${l}`));
     console.log(`APITEST ${summary}`);
@@ -151,5 +199,5 @@
     document.getElementById("apitest-log").textContent = lines.join("\n");
   }
 
-  window.IMTest = { test, run, makeEnv, formFor, fullAnswers, actionOf, assert, enc };
+  window.IMTest = { test, run, makeEnv, formFor, fullAnswers, actionOf, assert, enc, external: Boolean(apiBase) };
 })();

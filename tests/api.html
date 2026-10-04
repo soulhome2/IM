@@ -13,15 +13,18 @@
   <body>
     <h1>Тесты API операторской части</h1>
     <p>
-      Сценарии и случайные прогоны против встроенного сервера прототипа: те же запросы, что у интерфейса и будущего
-      бэкенда. Ответы сверяются со схемами <code>openapi.json</code>. Открывается двойным кликом.
+      Сценарии и случайные прогоны: те же запросы, что у интерфейса. Ответы сверяются со схемами
+      <code>openapi.json</code>. Открывается двойным кликом — тогда проверяется встроенный сервер прототипа. Тестовый
+      стенд бэкенда — <code>api.html?api=https://адрес</code>: нужны служебные операции <code>/test/reset</code> и
+      <code>/test/clock</code> (README машины, «Тестовый стенд»).
     </p>
     <strong id="apitest-summary">Идёт прогон…</strong>
     <pre id="apitest-log"></pre>
     <script src="../prototype/workflow.js"></script>
     <script src="../prototype/openapi.js"></script>
     <script src="../prototype/engine.js"></script>
-    <script src="../prototype/demo-data.js"></script>
+    <script src="../prototype/fixture.js"></script>
+    <script src="../prototype/colleagues.js"></script>
     <script src="../prototype/server.js"></script>
     <script src="../prototype/api.js"></script>
     <script src="../prototype/contract.js"></script>

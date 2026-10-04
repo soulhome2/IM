@@ -7,7 +7,8 @@
 права и таймеры; что справочники, горячие клавиши и фильтры очереди ссылаются на то,
 что есть в модели; что состояния, справочники и бейджи в API совпадают с моделью
 и все $ref в API разрешаются; что интерфейс прототипа (app.js) говорит только с API
-и не трогает исполнитель и демо-данные напрямую. Смысл правил не проверяет — только целостность.
+и не трогает исполнитель и демо-данные напрямую; что эталонный набор fixtures/demo.json ссылается
+на то, что есть, а время в нём — UTC и не позже снимка. Смысл правил не проверяет — только целостность.
 Код выхода 1, если есть ошибки.
 """
 import json
@@ -183,13 +184,131 @@ def check_api(w, o, err):
             err.append(f"API: $ref на несуществующую схему {name}")
 
 
+def check_fixture(w, err):
+    """Эталонный набор fixtures/demo.json: время — UTC и не позже снимка, ссылки на людей,
+    устройства, состояния, справочники и сценарии существуют, таймеры соответствуют состоянию."""
+    path = os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json")
+    with open(path, encoding="utf-8") as f:
+        fx = json.load(f)
+    utc = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+    captured = fx.get("capturedAt")
+    if not captured or not utc.match(captured):
+        err.append("эталон: capturedAt — время снимка в UTC, вида 2026-10-03T12:00:00Z")
+        return
+
+    def when(value, where):
+        if value is None:
+            return
+        if not isinstance(value, str) or not utc.match(value):
+            err.append(f"эталон: {where} — время в UTC вида 2026-10-03T12:00:00Z, а не «{value}»")
+        elif value > captured:
+            err.append(f"эталон: {where} позже снимка capturedAt")
+
+    people = fx["people"]
+    humans = {o["id"] for o in people["operators"]}
+    groups = {g["id"] for g in people["dutyGroups"]}
+    system = {a["id"] for a in people["system"]}
+    devices = {d["id"] for d in fx["devices"]}
+    types = {t["id"] for t in fx["deviceTypes"]}
+    states = {st["id"] for st in w["states"]}
+    catalog = lambda name: {i["id"] for i in w["reasonCatalogs"][name]["items"]}
+    if fx.get("operator") not in humans:
+        err.append("эталон: operator — не оператор из people.operators")
+    for d in fx["devices"]:
+        if d["type"] not in types:
+            err.append(f"эталон: у устройства {d['id']} неизвестный тип {d['type']}")
+
+    def walk(nodes):
+        for g in nodes:
+            for dev in g.get("devices", []):
+                if dev not in devices:
+                    err.append(f"эталон: в группе {g['id']} неизвестное устройство {dev}")
+            walk(g.get("groups", []))
+
+    walk(fx["sourceGroups"])
+    seen = set()
+    for inc in fx["incidents"]:
+        gid = inc["guid"]
+        where = f"эталон: {gid}"
+        if gid in seen:
+            err.append(f"{where} встречается дважды")
+        seen.add(gid)
+        st = inc["state"]
+        if st not in states:
+            err.append(f"{where}: нет состояния {st}")
+        scenario = fx["scenarios"].get(inc["eventType"]["id"])
+        if not scenario:
+            err.append(f"{where}: нет сценария для типа {inc['eventType']['id']}")
+        else:
+            ids = {s["id"] for s in scenario["steps"]}
+            cursor = inc["scenario"].get("cursorStepId")
+            if cursor is not None and cursor not in ids:
+                err.append(f"{where}: в сценарии нет шага {cursor}")
+            for key in inc["scenario"]["answers"]:
+                if key not in ids:
+                    err.append(f"{where}: ответ на несуществующий шаг {key}")
+        for dev in inc["devices"] + inc["cameras"]:
+            if dev not in devices:
+                err.append(f"{where}: неизвестное устройство {dev}")
+        if inc["owner"] is not None and inc["owner"] not in humans:
+            err.append(f"{where}: владелец {inc['owner']} — не оператор (owner — только человек, §8.1)")
+        if inc["assignmentGroup"] is not None and inc["assignmentGroup"] not in groups:
+            err.append(f"{where}: неизвестная дежурная группа {inc['assignmentGroup']}")
+        if inc["closedBy"] is not None and inc["closedBy"] not in humans:
+            err.append(f"{where}: закрыл неизвестный {inc['closedBy']}")
+        if inc["holdReason"] is not None and inc["holdReason"] not in catalog("hold"):
+            err.append(f"{where}: нет причины удержания {inc['holdReason']}")
+        if inc["closeResult"] is not None and inc["closeResult"] not in catalog("close_result"):
+            err.append(f"{where}: нет результата закрытия {inc['closeResult']}")
+        if inc["closeCause"] is not None and inc["closeCause"] not in catalog("mass_fault"):
+            err.append(f"{where}: нет причины сбоя {inc['closeCause']}")
+        when(inc["occurredAt"], f"{gid}.occurredAt")
+        when(inc["closedAt"], f"{gid}.closedAt")
+        for b in inc.get("breaches", []):
+            when(b.get("at"), f"{gid}.breaches[].at")
+        times = []
+        for j in inc["journal"]:
+            when(j["at"], f"{gid}.journal[].at")
+            times.append(j["at"])
+            if j["actor"] is not None and j["actor"] not in humans | groups | system:
+                err.append(f"{where}: в журнале неизвестный участник {j['actor']}")
+        if times != sorted(times):
+            err.append(f"{where}: журнал не по времени")
+        t = inc["timers"]
+        for name, timer in t.items():
+            if timer and "startedAt" in timer:
+                when(timer["startedAt"], f"{gid}.timers.{name}.startedAt")
+        # Какие таймеры идут — по состоянию (§4); длительность в наборе не задаётся
+        expect = {
+            "new": ("reaction",),
+            "pending_acceptance": ("reaction",),
+            "in_progress": ("resolution",),
+            "on_hold": ("resolution", "hold"),
+            "closed": (),
+        }.get(st, ())
+        running = tuple(n for n in ("reaction", "resolution", "hold") if t.get(n))
+        if running != expect:
+            err.append(f"{where}: в состоянии {st} должны идти таймеры: {', '.join(expect) or 'никакие'}, а заданы: {', '.join(running) or 'никакие'}")
+        if st == "on_hold" and "leftSec" not in (t.get("resolution") or {}):
+            err.append(f"{where}: у отложенного норматив закрытия стоит — leftSec, а не startedAt")
+    # Лимиты (§10.2) — у каждого оператора, не только у оператора стенда
+    for state, limit, name in (("in_progress", w["limits"]["maxActive"], "в работе"), ("on_hold", w["limits"]["maxOnHold"], "отложено")):
+        per = {}
+        for inc in fx["incidents"]:
+            if inc["state"] == state and inc["owner"]:
+                per[inc["owner"]] = per.get(inc["owner"], 0) + 1
+        for who, n in per.items():
+            if n > limit:
+                err.append(f"эталон: у {who} {name} {n}, лимит — {limit} (§10.2)")
+
+
 def check_layers(err):
     """Интерфейс прототипа говорит только с API: не трогает исполнитель, демо-данные и сервер
     напрямую. Единственное место, где он их называет, — создание встроенного сервера."""
     path = os.path.join(ROOT, "prototype", "app.js")
     with open(path, encoding="utf-8") as f:
         lines = f.read().split("\n")
-    forbidden = re.compile(r"\bIMEngine\b|\bengine\.|\bIM_DEMO\b|\bembedded\.(?!recorded)|\bserver\.handle\b")
+    forbidden = re.compile(r"\bIMEngine\b|\bengine\.|\bIM_FIXTURE\b|\bIM_COLLEAGUES\b|\bembedded\.(?!recorded)|\bserver\.handle\b")
     for n, line in enumerate(lines, 1):
         if "IMServer.create(" in line:
             continue
@@ -208,6 +327,7 @@ def main():
     check_workflow(w, err)
     check_engine(w, err)
     check_layers(err)
+    check_fixture(w, err)
     check_api(w, o, err)
     for e in err:
         print(e)

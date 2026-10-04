@@ -67,6 +67,10 @@
     {
       "name": "stream",
       "description": "§9, §14.3. Поток серверных событий: автоэскалация, срабатывание таймеров, чужие действия."
+    },
+    {
+      "name": "test-support",
+      "description": "Только тестовый стенд: сброс к эталонному набору и управляемое время. В боевой системе этих операций нет. По ним тесты API (tests/api.html) проверяют бэкенд теми же сценариями, что встроенный сервер прототипа."
     }
   ],
   "paths": {
@@ -1571,6 +1575,76 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/test/reset": {
+      "post": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testReset",
+        "summary": "Тестовый стенд: сбросить данные к эталонному набору",
+        "description": "Загружает fixtures/demo.json: время в наборе — смещения от момента сброса. Сбрасывает сессию оператора и настройки, по умолчанию останавливает часы.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Данные сброшены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestResetResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/test/clock": {
+      "post": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testClock",
+        "summary": "Тестовый стенд: сдвинуть время",
+        "description": "Часы сервера уходят вперёд, планировщик сразу выполняет всё, что за это время должно было сработать: автоэскалацию, нарушения нормативов (§6.2).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestClockRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Время сдвинуто",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestClockResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -4591,6 +4665,90 @@
           },
           "label": {
             "type": "string"
+          }
+        }
+      },
+      "TestResetRequest": {
+        "type": "object",
+        "properties": {
+          "fixture": {
+            "type": "string",
+            "enum": [
+              "demo"
+            ],
+            "description": "Эталонный набор: fixtures/demo.json рядом с этой спецификацией"
+          },
+          "operatorPermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Права оператора стенда на этот прогон, ключами каталога (§5). Не задано — весь каталог, кроме incident:schema:admin"
+          },
+          "freezeClock": {
+            "type": "boolean",
+            "default": true,
+            "description": "Остановить часы сервера: время идёт только по /test/clock"
+          }
+        }
+      },
+      "TestResetResult": {
+        "type": "object",
+        "required": [
+          "now"
+        ],
+        "properties": {
+          "fixture": {
+            "type": "string"
+          },
+          "now": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Момент сброса: от него отсчитаны смещения времени в наборе"
+          },
+          "frozen": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TestClockRequest": {
+        "type": "object",
+        "required": [
+          "advanceSec"
+        ],
+        "properties": {
+          "advanceSec": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "На сколько секунд сдвинуть часы сервера вперёд"
+          }
+        }
+      },
+      "TestClockResult": {
+        "type": "object",
+        "required": [
+          "now",
+          "fired"
+        ],
+        "properties": {
+          "now": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fired": {
+            "type": "array",
+            "description": "Автоматические переходы, которые выполнил планировщик за это время (§6.2)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "incidentGuid": {
+                  "type": "string"
+                },
+                "transitionId": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

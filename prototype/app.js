@@ -584,7 +584,7 @@
      По умолчанию это встроенный сервер в этой же вкладке (server.js), с ?api=… — настоящий бэкенд. */
 
   const apiBase = new URLSearchParams(location.search).get("api");
-  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, demo: window.IM_DEMO });
+  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: window.IM_COLLEAGUES });
   const api = IMApi.create(apiBase ? { baseUrl: apiBase } : { server: embedded });
   // Ответы встроенного сервера — самопроверке: она сверяет их со схемами openapi.json
   if (embedded) window.IM_RECORDED = embedded.recorded;

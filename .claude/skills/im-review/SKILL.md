@@ -12,7 +12,7 @@ description: Ревью репозитория Incident Manager (IM) — пра�
 ## Контекст репозитория
 
 - `Specification/` — Vision, сверка покрытия Vision `Vision coverage.md` и правила перехода состояний `State_rules/States rules IM.md`. Это действующие правила: один файл, правится на месте, номер версии — в шапке, журнал изменений — в §16. Прошлые версии лежат в `State_rules/archive/` и не правятся: их не ревьюить, ошибки в них не записывать.
-- `prototype/` — кликабельный прототип: `index.html`, интерфейс в `app.js`, встроенный сервер по `openapi.json` в `server.js` с исполнителем машины `engine.js` и демо-данными `demo-data.js`, клиент API `api.js`, переводы в `i18n-*.js`, оформление в `styles.css` и `bridge.css`.
+- `prototype/` — кликабельный прототип: `index.html`, интерфейс в `app.js`, встроенный сервер по `openapi.json` в `server.js` с исполнителем машины `engine.js` на эталонных данных `Specification/State_machine/fixtures/demo.json`, клиент API `api.js`, переводы в `i18n-*.js`, оформление в `styles.css` и `bridge.css`.
 - `reviews/` — прошлые ревью и планы. Указатель и договорённости — `reviews/README.md`. Образец результата — `reviews/2026-10-01/`.
 - `Specification/State_machine/` — машина состояний: `workflow.v4.json` (JSON-модель workflow) и `openapi.json` (контракт API). Её ведёт программист. Формат не изобретать заново. Расхождения машины с правилами и прототипом — находки ревью. Решения по правилам считать предварительными, пока их не внесли в машину.
 - В репозитории работают двое и пушат прямо в `main`, без pull request. Коммитить и пушить — только по просьбе пользователя.
