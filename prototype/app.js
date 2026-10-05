@@ -497,7 +497,10 @@
      По умолчанию это встроенный сервер в этой же вкладке (server.js), с ?api=… — настоящий бэкенд. */
 
   const apiBase = new URLSearchParams(location.search).get("api");
-  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: window.IM_COLLEAGUES });
+  // В самопроверке коллеги не эмулируются: очередь меняют только её шаги, и результат не зависит
+  // от скорости машины. Эмуляцию коллег проверяют тесты API, где время идёт по /test/clock
+  const selftestRun = new URLSearchParams(location.search).has("selftest");
+  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: selftestRun ? false : window.IM_COLLEAGUES });
   const api = IMApi.create(apiBase ? { baseUrl: apiBase } : { server: embedded });
   // Ответы встроенного сервера — самопроверке: она сверяет их со схемами openapi.json
   if (embedded) window.IM_RECORDED = embedded.recorded;
