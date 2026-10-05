@@ -450,6 +450,36 @@
     assert.eq(top.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
   });
 
+  test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — как на потолке", async () => {
+    if (IMTest.external) return "пропущено: адресатов уровней задаёт машина, её меняет только встроенный сервер";
+    // Своя копия машины: адресаты уровней — из targets. Ждём ровно до истечения реакции инцидента
+    async function escalate(targets, pick) {
+      const w = JSON.parse(JSON.stringify(W));
+      targets.forEach((ref, i) => (w.escalation.levels[i].targetRef = ref));
+      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
+      const reset = await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0 && pick(e));
+      let left = Math.ceil((Date.parse(inc.timer.dueAt) - Date.parse(reset.body.now)) / 1000) + 1;
+      const fired = [];
+      while (left > 0) {
+        const step = Math.min(left, w.session.idleHoldSec - 1);
+        await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: step })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
+        left -= step;
+      }
+      return { fired, card: await api.get(`/operator/incidents/${enc(inc.guid)}`) };
+    }
+    const inMall = (e) => e.site === "Торговый центр";
+    const skip = await escalate(["user:kuznetsov", "user:noc"], (e) => !inMall(e));
+    assert.eq([skip.fired, skip.card.owner && skip.card.owner.id, skip.card.escalationLevel], [["auto_escalate"], "noc", 2], "вне ТЦ: уровень 1 без доступа пропущен — сразу уровень 2");
+    const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
+    assert.eq([keep.card.owner && keep.card.owner.id, keep.card.escalationLevel], ["kuznetsov", 1], "в ТЦ: уровень 1, Кузнецов");
+    const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
+    assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — как на потолке");
+    assert.eq([none.card.state, none.card.owner, none.card.escalationLevel], ["new", null, 0], "никому не передан");
+    assert.ok(none.card.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
+  });
+
   test("Норматив закрытия истёк — нарушение «resolution» один раз, состояние не меняется", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

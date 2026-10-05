@@ -643,12 +643,12 @@
       "guards": [
         { "fn": "settingEnabled", "args": ["escalation.enabled"] },
         { "fn": "timerExpired", "args": ["reaction"] },
-        { "fn": "flagBelow", "args": ["escalation_level", "escalation.maxLevel"] }
+        { "fn": "escalationTargetAvailable", "args": [true] }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["escalation.level.target.ifPerson"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["escalation.level.target.ifGroup"] },
-        { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", "escalation.level.number"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
@@ -669,7 +669,7 @@
       "actor": "dispatcher",
       "guards": [
         { "fn": "timerExpired", "args": ["reaction"] },
-        { "fn": "flagAtLeast", "args": ["escalation_level", "escalation.maxLevel"] }
+        { "fn": "escalationTargetAvailable", "args": [false] }
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
@@ -709,13 +709,13 @@
       "guards": [
         { "fn": "settingIs", "args": ["escalation.onResolutionOverdue", "escalate"] },
         { "fn": "timerExpired", "args": ["resolution"] },
-        { "fn": "flagBelow", "args": ["escalation_level", "escalation.maxLevel"] }
+        { "fn": "escalationTargetAvailable", "args": [true] }
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setOwner", "args": ["escalation.level.target.ifPerson"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["escalation.level.target.ifGroup"] },
-        { "kind": "transactional", "fn": "increment", "args": ["escalation_level"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", "escalation.level.number"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
         { "kind": "transactional", "fn": "clearGroup" },
@@ -738,7 +738,7 @@
       "guards": [
         { "fn": "settingIs", "args": ["escalation.onResolutionOverdue", "escalate"] },
         { "fn": "timerExpired", "args": ["resolution"] },
-        { "fn": "flagAtLeast", "args": ["escalation_level", "escalation.maxLevel"] }
+        { "fn": "escalationTargetAvailable", "args": [false] }
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
@@ -1046,6 +1046,7 @@
       { "fn": "timerExpired", "args": ["timerId"], "onFail": "hide", "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание." },
       { "fn": "flagBelow", "args": ["field", "n"], "onFail": "hide" },
       { "fn": "flagAtLeast", "args": ["field", "n"], "onFail": "hide", "extendsBaseRegistry": true },
+      { "fn": "escalationTargetAvailable", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет (как на потолке). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "stateIs", "args": ["stateIds"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "canReadDone", "args": [], "onFail": "hide", "extendsBaseRegistry": true },

@@ -61,6 +61,8 @@ class Doc:
             return "я — кто выполнил"
         if v == "now":
             return "сейчас"
+        if v == "escalation.level.number":
+            return "номер найденного уровня эскалации"
         if isinstance(v, str) and v.startswith("form."):
             return f"из формы (`{v[5:]}`)"
         return f"`{v}`"
@@ -99,6 +101,8 @@ class Doc:
             "timerExpired": lambda: f"истёк таймер {self.tm(a[0])}",
             "flagBelow": lambda: f"`{a[0]}` меньше {self.setting(a[1])}",
             "flagAtLeast": lambda: f"`{a[0]}` не меньше {self.setting(a[1])}",
+            "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")
+            + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}) с доступом адресата к объекту инцидента; уровни без доступа пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",

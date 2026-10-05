@@ -1717,10 +1717,9 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "fn": "flagBelow",
+          "fn": "escalationTargetAvailable",
           "args": [
-            "escalation_level",
-            "escalation.maxLevel"
+            true
           ]
         }
       ],
@@ -1741,9 +1740,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "increment",
+          "fn": "setFlag",
           "args": [
-            "escalation_level"
+            "escalation_level",
+            "escalation.level.number"
           ]
         },
         {
@@ -1816,10 +1816,9 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "fn": "flagAtLeast",
+          "fn": "escalationTargetAvailable",
           "args": [
-            "escalation_level",
-            "escalation.maxLevel"
+            false
           ]
         }
       ],
@@ -1937,10 +1936,9 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "fn": "flagBelow",
+          "fn": "escalationTargetAvailable",
           "args": [
-            "escalation_level",
-            "escalation.maxLevel"
+            true
           ]
         }
       ],
@@ -1968,9 +1966,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "increment",
+          "fn": "setFlag",
           "args": [
-            "escalation_level"
+            "escalation_level",
+            "escalation.level.number"
           ]
         },
         {
@@ -2053,10 +2052,9 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "fn": "flagAtLeast",
+          "fn": "escalationTargetAvailable",
           "args": [
-            "escalation_level",
-            "escalation.maxLevel"
+            false
           ]
         }
       ],
@@ -3084,6 +3082,15 @@ window.IM_WORKFLOW = {
         ],
         "onFail": "hide",
         "extendsBaseRegistry": true
+      },
+      {
+        "fn": "escalationTargetAvailable",
+        "args": [
+          "expected"
+        ],
+        "onFail": "hide",
+        "extendsBaseRegistry": true,
+        "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет (как на потолке). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах."
       },
       {
         "fn": "holdReasonIn",

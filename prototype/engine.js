@@ -42,6 +42,13 @@
     const asList = (v) => (Array.isArray(v) ? v : [v]);
     const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
     const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
+    // Следующий уровень автоэскалации (§8.3): ближайший выше текущего и не выше потолка, у адресата
+    // которого есть доступ к объекту инцидента (§5); уровни без доступа пропускаются
+    const nextLevel = (ev) =>
+      W.escalation.levels
+        .filter((l) => l.level > ev.escalationLevel && l.level <= W.escalation.maxLevel)
+        .sort((a, b) => a.level - b.level)
+        .find((l) => !ctx.hasAccess || ctx.hasAccess(refToId(l.targetRef), ev)) || null;
 
     /* ===== Нормативы (§4, правило 2) ===== */
 
@@ -177,6 +184,7 @@
       },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
+      escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["Нет подходящего уровня эскалации"]),
       ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
       agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() >= setting(path) ? null : ["Оператор на связи"]),
@@ -345,11 +353,12 @@
         return v == null || v === "" ? null : v;
       }
       if (arg === "escalation.level.target") return scope.level ? refToId(scope.level.targetRef) : null;
+      if (arg === "escalation.level.number") return scope.level ? scope.level.level : null;
       if (arg === "owner.dutyGroup") return ev.owner ? ctx.dutyGroupOf(ev.owner) : null;
       return arg;
     }
 
-    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached" };
+    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached", escalation_level: "escalationLevel" };
 
     const EFFECTS = {
       setState: (ev, [stateId]) => {
@@ -414,7 +423,7 @@
         form,
         transitionId: tr.id,
         previousOwner: draft.owner,
-        level: W.escalation.levels.find((l) => l.level === draft.escalationLevel + 1) || null,
+        level: nextLevel(draft),
         logVars: { previousOwnerName: ctx.actorName(addressee(draft)) },
       };
       if (tr.to) draft.state = tr.to;
