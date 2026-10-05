@@ -28,7 +28,8 @@
         });
       const subscribe = (fn) => {
         const source = new EventSource(`${base}/operator/stream`, { withCredentials: true });
-        source.onmessage = (e) => fn(JSON.parse(e.data));
+        // Сообщения без имени (без строки event:), тип — в data.type; id: — для Last-Event-ID
+        source.onmessage = (e) => fn(JSON.parse(e.data), { lastEventId: e.lastEventId });
         return () => source.close();
       };
       return wrap(raw, subscribe);
@@ -44,7 +45,7 @@
         Object.entries(res.headers || {}).forEach(([name, value]) => (got[name.toLowerCase()] = String(value)));
         return { status: res.status, body: copy(res.body), headers: got };
       });
-    return wrap(raw, (fn) => server.subscribe(fn));
+    return wrap(raw, (fn) => server.subscribe((message) => fn(message, { lastEventId: message.id })));
   }
 
   // raw — ответ как есть: { status, body, headers }. Остальные методы отдают тело, ошибку — исключением

@@ -663,16 +663,19 @@
     assert.status(await env.call("GET", "/operator/nothing"), 404, "NOT_FOUND");
   });
 
-  test("Поток событий: автоэскалация приходит событием incident.auto_escalated с адресатом", async () => {
+  test("Поток событий: автоэскалация приходит событием incident.auto_escalated с адресатом; id: сообщения — его id", async () => {
     const env = await makeEnv();
     const got = [];
-    const stop = env.api.subscribe((m) => got.push(m));
+    const stop = env.api.subscribe((m, meta) => got.push({ m, meta }));
     const inc = await newFire(env);
     await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
-    const ev = got.find((m) => m.type === "incident.auto_escalated" && m.incidentGuid === inc.guid);
-    assert.ok(ev, `событие пришло: ${got.map((m) => m.type).join(", ")}`);
-    assert.eq(ev.payload.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
+    const found = got.find(({ m }) => m.type === "incident.auto_escalated" && m.incidentGuid === inc.guid);
+    assert.ok(found, `событие пришло: ${got.map(({ m }) => m.type).join(", ")}`);
+    assert.eq(found.m.payload.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
+    // Сообщение SSE: id: совпадает с id в data — по нему переподключение с Last-Event-ID
+    got.forEach(({ m, meta }) => assert.eq(meta && meta.lastEventId, m.id, `id: сообщения ${m.type}`));
+    assert.eq(new Set(got.map(({ m }) => m.id)).size, got.length, "id сообщений не повторяются");
   });
 })();
