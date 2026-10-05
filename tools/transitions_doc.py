@@ -86,6 +86,7 @@ class Doc:
             "isTarget": lambda: "адресат — я или моя дежурная группа",
             "isNotTarget": lambda: "адресат — не я и не моя дежурная группа",
             "targetIsNotSelf": lambda: "адресат — не я и не моя дежурная группа",
+            "targetHasAccess": lambda: "у адресата есть доступ к объекту инцидента (группе — хотя бы у одного участника)",
             "agentReady": lambda: "я не на перерыве",
             "agentStateIs": lambda: f"состояние оператора — «{self.agent.get(a[0], a[0])}»",
             "ownerHasDutyGroup": lambda: "владелец состоит в дежурной группе" if a[0] else "владелец не состоит ни в одной дежурной группе",

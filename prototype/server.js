@@ -113,6 +113,15 @@
       return out;
     }
     const canSee = (ev) => myDevices.has(eventSource(ev));
+    // Доступ адресата к объекту инцидента (§8.1): человеку — по его ролям, группе — хотя бы
+    // одному участнику
+    function hasAccess(id, ev) {
+      const group = GROUPS.find((g) => g.id === id);
+      if (group) return group.members.some((m) => hasAccess(m, ev));
+      if (id === ME) return canSee(ev);
+      const person = OPERATORS.find((o) => o.id === id);
+      return Boolean(person) && accessibleDevices(person.roles || []).has(eventSource(ev));
+    }
     // Группа устройства-источника: самая глубокая, где оно стоит (первое вхождение по дереву)
     function sourceGroupOf(ev) {
       const src = eventSource(ev);
@@ -196,6 +205,7 @@
       actorName: (id) => rawName(id),
       log,
       transferTargets: () => targets(),
+      hasAccess: (id, ev) => hasAccess(id, ev),
       defaultTransferTarget: () => session.preferences.defaultTransferTargetId,
       // У членов группы ответы общие (grouping.shared): один объект ответов на всех
       shareAnswers: (ev, first) => {
@@ -714,6 +724,7 @@
       withinHoldLimit: "LIMIT_EXCEEDED",
       agentReady: "AGENT_NOT_READY",
       targetIsNotSelf: "TRANSFER_TO_SELF_FORBIDDEN",
+      targetHasAccess: "TARGET_NO_ACCESS",
       requiredStepsFilled: "REQUIRED_STEPS_NOT_FILLED",
       withinReopenWindow: "REOPEN_WINDOW_EXPIRED",
     };
@@ -1045,7 +1056,7 @@
         (p, q) => {
           const ev = q.incidentGuid ? find(q.incidentGuid) : null;
           let list = targets().filter((o) => !engine.isSelf(o.id));
-          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev));
+          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && hasAccess(o.id, ev));
           return { status: 200, body: list.map(({ label, ...rest }) => rest) };
         },
       ],

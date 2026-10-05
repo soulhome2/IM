@@ -231,7 +231,7 @@
           "required": true,
           "source": "transferTargets",
           "defaultFrom": "session.preferences.defaultTransferTargetId",
-          "excludes": ["self", "currentOwner"]
+          "excludes": ["self", "currentOwner", "noAccess"]
         },
         { "name": "comment", "kind": "text", "label": "Причина", "required": true, "placeholder": "Почему передаёте" }
       ]
@@ -502,7 +502,8 @@
           }
         },
         { "fn": "agentReady" },
-        { "fn": "targetIsNotSelf" }
+        { "fn": "targetIsNotSelf" },
+        { "fn": "targetHasAccess" }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["form.targetId.ifPerson"] },
@@ -1027,6 +1028,7 @@
       { "fn": "isTarget", "args": [], "onFail": "hide" },
       { "fn": "isNotTarget", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "targetIsNotSelf", "args": [], "onFail": "disable", "extendsBaseRegistry": true },
+      { "fn": "targetHasAccess", "args": [], "onFail": "disable", "extendsBaseRegistry": true, "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)." },
       { "fn": "agentReady", "args": [], "onFail": "disable" },
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "agentIdleFor", "args": ["seconds"], "onFail": "disable", "extendsBaseRegistry": true },

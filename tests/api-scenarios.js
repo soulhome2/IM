@@ -764,6 +764,49 @@
     assert.ok(got.every((m) => !m.incidentGuid || seen.some((i) => i.guid === m.incidentGuid)), "о недоступных событий нет");
   });
 
+  test("Передача только адресату с доступом (§8.1): Кузнецов и «Охрана ТЦ» видят только «Торговый центр»", async () => {
+    const env = await makeEnv();
+    const news = (await env.all("open")).filter((e) => e.state === "new");
+    const mall = news.filter((e) => e.site === "Торговый центр");
+    const elsewhere = news.filter((e) => e.site !== "Торговый центр");
+    assert.ok(mall.length >= 1 && elsewhere.length >= 1, "есть новые и в ТЦ, и вне его");
+    const targetsOf = async (inc) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => t.id);
+    const outside = await targetsOf(elsewhere[0]);
+    assert.ok(!outside.includes("kuznetsov") && !outside.includes("grp-tc"), `вне ТЦ нет Кузнецова и «Охраны ТЦ»: ${outside}`);
+    const inside = await targetsOf(mall[0]);
+    assert.ok(inside.includes("kuznetsov") && inside.includes("grp-tc"), `в ТЦ они есть: ${inside}`);
+    const options = actionOf(elsewhere[0], "transfer").fieldOptions.targetId.options.map((o) => o.id);
+    assert.ok(!options.includes("kuznetsov") && !options.includes("grp-tc"), "и в форме передачи их нет");
+    for (const target of ["kuznetsov", "grp-tc"]) {
+      const res = await env.act(elsewhere[0].guid, "transfer", { targetId: target, comment: "тест" }, "queue");
+      assert.status(res, 403, "TARGET_NO_ACCESS", `передача вне ТЦ: ${target}`);
+      assert.eq(res.body.guard, "targetHasAccess", "какое условие не выполнено");
+    }
+    // Массовая передача: где у адресата нет доступа — в failed, остальное передаётся
+    const bulk = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", {
+      incidentGuids: [elsewhere[1] ? elsewhere[1].guid : elsewhere[0].guid, mall[0].guid],
+      formValues: { targetId: "kuznetsov", comment: "тест" },
+      surface: "queue",
+    });
+    assert.ok(bulk.succeeded.some((i) => i.guid === mall[0].guid), "инцидент ТЦ передан");
+    assert.ok(bulk.failed.length === 1 && bulk.failed[0].problem.code === "TARGET_NO_ACCESS", `вне ТЦ — отказ: ${JSON.stringify(bulk.failed.map((f) => f.problem.code))}`);
+  });
+
+  test("Передача группе: достаточно доступа хотя бы у одного участника (§8.1)", async () => {
+    if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
+    // Своя копия набора: в «Охране ТЦ» ещё Гусев, у которого доступ ко всему
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.people.dutyGroups.find((g) => g.id === "grp-tc").members.push("gusev");
+    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
+    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const targets = (await api.get("/operator/transfer-targets", { incidentGuid: inc.guid })).map((t) => t.id);
+    assert.ok(targets.includes("grp-tc") && !targets.includes("kuznetsov"), `группа есть, Кузнецова нет: ${targets}`);
+    const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
+    const res = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/transfer`, { formValues: { targetId: "grp-tc", comment: "тест" }, surface: "queue" }, { "If-Match": etag });
+    assert.status(res, 200, null, "передача группе со смешанным доступом");
+  });
+
   test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

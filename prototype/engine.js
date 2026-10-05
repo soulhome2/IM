@@ -171,6 +171,10 @@
         const target = opts && opts.form ? opts.form.targetId : null;
         return isSelf(target) ? ["Передача на себя запрещена"] : null;
       },
+      targetHasAccess: (ev, args, opts) => {
+        const target = opts && opts.form ? opts.form.targetId : null;
+        return !target || ctx.hasAccess(target, ev) ? null : ["У адресата нет доступа к объекту инцидента"];
+      },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
       ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
@@ -530,7 +534,12 @@
           const excludes = field.excludes || [];
           options = ctx
             .transferTargets(ev)
-            .filter((o) => !(excludes.includes("self") && isSelf(o.id)) && !(excludes.includes("currentOwner") && o.id === addressee(ev)));
+            .filter(
+              (o) =>
+                !(excludes.includes("self") && isSelf(o.id)) &&
+                !(excludes.includes("currentOwner") && o.id === addressee(ev)) &&
+                !(excludes.includes("noAccess") && !ctx.hasAccess(o.id, ev))
+            );
           if (field.defaultFrom && options.some((o) => o.id === ctx.defaultTransferTarget())) defaultValue = ctx.defaultTransferTarget();
         } else if (field.source && field.source.startsWith("reasonCatalog:")) {
           const catalog = field.source.split(":")[1];

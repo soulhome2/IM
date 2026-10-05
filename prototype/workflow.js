@@ -533,7 +533,8 @@ window.IM_WORKFLOW = {
           "defaultFrom": "session.preferences.defaultTransferTargetId",
           "excludes": [
             "self",
-            "currentOwner"
+            "currentOwner",
+            "noAccess"
           ]
         },
         {
@@ -1242,6 +1243,9 @@ window.IM_WORKFLOW = {
         },
         {
           "fn": "targetIsNotSelf"
+        },
+        {
+          "fn": "targetHasAccess"
         }
       ],
       "effects": [
@@ -2982,6 +2986,13 @@ window.IM_WORKFLOW = {
         "args": [],
         "onFail": "disable",
         "extendsBaseRegistry": true
+      },
+      {
+        "fn": "targetHasAccess",
+        "args": [],
+        "onFail": "disable",
+        "extendsBaseRegistry": true,
+        "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)."
       },
       {
         "fn": "agentReady",
