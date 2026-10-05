@@ -227,6 +227,21 @@ def check_fixture(w, err):
     entities += [("группа устройств", g) for g in node_ids(fx["sourceGroups"])]
     entities += [("план", p["id"]) for p in fx.get("plans", [])]
     entities += [("сценарий", v.get("guid")) for k, v in fx["scenarios"].items() if not k.startswith("$")]
+    entities += [("группа доступа", a.get("id")) for a in fx.get("accessGroups", [])]
+    # Группы доступа (§5): роли, группы устройств и устройства существуют
+    group_ids = set(node_ids(fx["sourceGroups"]))
+    for a in fx.get("accessGroups", []):
+        if not a.get("roles"):
+            err.append(f"эталон: группа доступа «{a.get('name')}» — не назначена ни одной роли")
+        for g in a.get("sourceGroups", []):
+            if g not in group_ids:
+                err.append(f"эталон: группа доступа «{a.get('name')}» — нет группы устройств {g}")
+        for d in a.get("devices", []):
+            if d not in devices:
+                err.append(f"эталон: группа доступа «{a.get('name')}» — нет устройства {d}")
+    for o in people["operators"]:
+        if not isinstance(o.get("roles"), list) or not o["roles"]:
+            err.append(f"эталон: у оператора {o['id']} нет ролей (roles) — ему ничего не видно (§5)")
     for kind, value in entities:
         if not isinstance(value, str) or not uuid.match(value):
             err.append(f"эталон: {kind} «{value}» — идентификатор не UUID")

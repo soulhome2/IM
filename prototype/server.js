@@ -37,6 +37,11 @@
     let PLANS = [];
     let TREE = [];
     let SCENARIOS = {};
+    // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
+    // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
+    let ACCESS_GROUPS = [];
+    let rolesOverride = null;
+    let myDevices = new Set();
     // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
     // (7 — запись журнала, 8 — группа обработки, 9 — запуск макроса), дальше — номер
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
@@ -93,6 +98,21 @@
       return [...new Set((node.children || []).flatMap(collectDeviceIds))];
     }
     const eventSource = (ev) => (ev.deviceIds && ev.deviceIds[0]) || (ev.cameras && ev.cameras[0]) || null;
+
+    // Устройства, доступные ролям, — по группам доступа (§5): группы устройств с вложенными и
+    // отдельные устройства. Инцидент виден, если доступно его устройство-источник
+    function accessibleDevices(roles) {
+      const out = new Set();
+      ACCESS_GROUPS.filter((a) => a.roles.some((r) => roles.includes(r))).forEach((a) => {
+        (a.sourceGroups || []).forEach((gid) => {
+          const node = findNode(TREE, gid);
+          if (node) collectDeviceIds(node).forEach((id) => out.add(id));
+        });
+        (a.devices || []).forEach((id) => out.add(id));
+      });
+      return out;
+    }
+    const canSee = (ev) => myDevices.has(eventSource(ev));
     // Группа устройства-источника: самая глубокая, где оно стоит (первое вхождение по дереву)
     function sourceGroupOf(ev) {
       const src = eventSource(ev);
@@ -212,6 +232,7 @@
         data.devices.map((d) => [d.id, { name: d.name, type: d.type, position: d.position || null, thumbnailUrl: d.thumbnailUrl || null }])
       );
       PLANS = data.plans || [];
+      ACCESS_GROUPS = data.accessGroups || [];
       const tree = (groups) =>
         groups.map((g) =>
           Object.assign({ id: g.id, name: g.name }, g.description ? { description: g.description } : {}, {
@@ -219,6 +240,8 @@
           })
         );
       TREE = tree(data.sourceGroups);
+      const me = data.people.operators.find((o) => o.id === ME) || {};
+      myDevices = accessibleDevices(rolesOverride || me.roles || []);
       SCENARIOS = data.scenarios;
       events = data.incidents.map((inc) => ({
         id: inc.guid,
@@ -484,7 +507,7 @@
         description: null,
         readOnly: !engine.canEditScenario(ev),
         source: src ? deviceRef(src) : null,
-        devices: deviceIds.map(deviceRef),
+        devices: deviceIds.filter((id) => myDevices.has(id)).map(deviceRef),
         scenario: scenarioView(ev),
         journal: journalView(ev),
         media: mediaView(ev),
@@ -504,9 +527,9 @@
     function mediaView(ev) {
       const src = eventSource(ev);
       const plan = planOf(ev);
-      const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])];
+      const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter((id) => myDevices.has(id));
       return {
-        cameras: (ev.cameras || []).map((id) => ({
+        cameras: (ev.cameras || []).filter((id) => myDevices.has(id)).map((id) => ({
           guid: id,
           name: deviceSpec(id).name,
           isSource: id === src,
@@ -581,7 +604,7 @@
     /* ===== Очередь: фильтр, группа, типы, поиск, страница ===== */
 
     function visible(q) {
-      let list = events;
+      let list = events.filter(canSee);
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
         const node = findNode(TREE, q.sourceGroupGuid);
         const ids = node ? collectDeviceIds(node) : [q.sourceGroupGuid];
@@ -615,20 +638,21 @@
 
     function counters() {
       const out = {};
-      W.queueFilters.forEach((f) => (out[f.id] = events.filter((e) => engine.inQueueFilter(e, f.id)).length));
+      W.queueFilters.forEach((f) => (out[f.id] = events.filter((e) => canSee(e) && engine.inQueueFilter(e, f.id)).length));
       return out;
     }
 
+    // Дерево групп — только группы, где есть доступные оператору устройства, и только они (§5)
     function treeView(nodes) {
       return nodes
-        .filter((n) => !n.isDevice)
+        .filter((n) => !n.isDevice && collectDeviceIds(n).some((id) => myDevices.has(id)))
         .map((n) => {
           const ids = collectDeviceIds(n);
-          const open = events.filter((e) => !isDone(e) && touches(e, ids));
+          const open = events.filter((e) => canSee(e) && !isDone(e) && touches(e, ids));
           const devices = (n.children || [])
-            .filter((c) => c.isDevice)
+            .filter((c) => c.isDevice && myDevices.has(c.id))
             .map((c) => {
-              const evs = events.filter((e) => !isDone(e) && touches(e, [c.id]));
+              const evs = events.filter((e) => canSee(e) && !isDone(e) && touches(e, [c.id]));
               return Object.assign(deviceRef(c.id), { counters: { open: evs.length, critical: evs.filter((e) => e.priority === "critical").length } });
             });
           return {
@@ -655,6 +679,8 @@
     const listeners = new Set();
     let seq = 0;
     function emit(type, ev, actorId, payload) {
+      // Об инциденте вне групп доступа оператор не узнаёт и из потока (§5)
+      if (ev && !canSee(ev)) return;
       const message = {
         id: String(++seq),
         type,
@@ -698,7 +724,13 @@
 
     /* ===== Маршруты API ===== */
 
-    const find = (guid) => events.find((e) => e.id === guid) || null;
+    // Инцидент по идентификатору: byId — для самого сервера, find — для запросов оператора,
+    // ему инцидент вне групп доступа не виден никак (§5)
+    const byId = (guid) => events.find((e) => e.id === guid) || null;
+    const find = (guid) => {
+      const ev = byId(guid);
+      return ev && canSee(ev) ? ev : null;
+    };
     const touch = (list) => list.forEach((e) => (e.version += 1));
 
     // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
@@ -793,7 +825,7 @@
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
             const fired = runScheduler();
             emit("session.agent_state_changed", null, ME, { agentState: "not_ready" });
-            return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => summary(find(f.id), "queue")) } };
+            return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => find(f.id)).filter(Boolean).map((ev) => summary(ev, "queue")) } };
           }
           if (body.agentState === "offline") {
             // Конец смены: адресованные лично и не принятые уходят дежурной группе или в очередь (§8.1)
@@ -801,7 +833,7 @@
             session.reasonId = null;
             const fired = runScheduler();
             emit("session.agent_state_changed", null, ME, { agentState: "offline" });
-            return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => summary(find(f.id), "queue")) } };
+            return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => find(f.id)).filter(Boolean).map((ev) => summary(ev, "queue")) } };
           }
           session.agentState = "ready";
           session.reasonId = null;
@@ -833,10 +865,12 @@
         "POST",
         "/operator/incidents/transitions/{transitionId}/bulk",
         (p, q, body) => {
-          const list = (body.incidentGuids || []).map(find).filter(Boolean);
+          const guids = body.incidentGuids || [];
+          const list = guids.map(find).filter(Boolean);
           if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["Выборка пуста"]);
           const succeeded = [];
-          const failed = [];
+          // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
+          const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["Инцидент не найден"]).body }));
           let navigate = null;
           list.forEach((ev) => {
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
@@ -1045,6 +1079,7 @@
             // Часы останавливаются: время в тестах идёт только по /test/clock
             clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
             PERMISSIONS = body.operatorPermissions || opts.permissions || ALL_PERMISSIONS;
+            rolesOverride = body.operatorRoles || null;
             load(FIXTURE);
             return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
           },
@@ -1105,7 +1140,7 @@
     function runScheduler() {
       const fired = engine.tick();
       fired.forEach(({ id, transition }) => {
-        const ev = find(id);
+        const ev = byId(id);
         touch([ev]);
         const tr = engine.transition(transition);
         emit(transition === "auto_escalate" ? "incident.auto_escalated" : "incident.state_changed", ev, tr.actor || "dispatcher", {
@@ -1227,7 +1262,7 @@
       colleague(id)
         .tick({ agentOnly: true })
         .forEach(({ id: guid, transition }) => {
-          const ev = find(guid);
+          const ev = byId(guid);
           touch([ev]);
           emit("incident.state_changed", ev, "system", { transitionId: transition, previousOwner: actorRef(before[guid]) });
         });

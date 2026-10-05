@@ -718,6 +718,52 @@
     return `инцидентов ${fx.incidents.length}, значков ${markers}`;
   });
 
+  test("Группы доступа (§5): с ролью «Оператор ТЦ» видно только «Торговый центр» — в очереди, счётчиках, выборке, дереве, потоке; чужое — 404", async () => {
+    const fx = window.IM_FIXTURE;
+    const role = "Оператор ТЦ";
+    // Доступные роли устройства — по группам доступа набора, с вложенными группами
+    const byId = {};
+    const index = (groups) => groups.forEach((g) => ((byId[g.id] = g), index(g.groups || [])));
+    index(fx.sourceGroups);
+    const devicesOf = (g) => (g.devices || []).concat(...(g.groups || []).map(devicesOf));
+    const allowed = new Set(
+      fx.accessGroups.filter((a) => a.roles.includes(role)).flatMap((a) => a.sourceGroups.flatMap((id) => devicesOf(byId[id])).concat(a.devices))
+    );
+    const sourceOf = (i) => i.devices[0] || i.cameras[0];
+    const seen = fx.incidents.filter((i) => allowed.has(sourceOf(i)));
+    const hidden = fx.incidents.filter((i) => !allowed.has(sourceOf(i)));
+    assert.ok(seen.length && hidden.length, "в наборе есть и доступные роли инциденты, и недоступные");
+
+    const env = await makeEnv({ roles: [role] });
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    assert.eq((await env.all("all")).map((e) => e.guid).sort(), seen.map((i) => i.guid).sort(), "в очереди — только доступные");
+    assert.eq((await env.ok("GET", "/operator/incidents/counters")).all, seen.length, "счётчик «Все»");
+    const other = hidden[0];
+    assert.status(await env.call("GET", `/operator/incidents/${enc(other.guid)}`), 404, "NOT_FOUND", "карточка недоступного");
+    assert.status(await env.call("GET", `/operator/incidents/${enc(other.guid)}/actions`), 404, "NOT_FOUND", "действия недоступного");
+    assert.status(await env.act(other.guid, "claim", {}, "queue"), 404, "NOT_FOUND", "переход над недоступным");
+    const all = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "all" });
+    assert.ok(all.incidentGuids.every((g) => seen.some((i) => i.guid === g)), "«Выбрать все» — только доступные");
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", {
+      incidentGuids: [seen.find((i) => i.state === "new").guid, other.guid],
+      formValues: { targetId: "petrova", comment: "тест" },
+      surface: "queue",
+    });
+    assert.ok(bulk.body.failed.some((f) => f.incidentGuid === other.guid && f.problem.code === "NOT_FOUND"), "массовое действие: недоступный — NOT_FOUND");
+    const tree = await env.ok("GET", "/operator/reference/source-groups");
+    const treeDevices = [];
+    const walk = (nodes) => nodes.forEach((n) => (treeDevices.push(...n.devices.map((d) => d.guid)), walk(n.children)));
+    walk(tree);
+    assert.ok(tree.length > 0 && treeDevices.every((d) => allowed.has(d)), `дерево групп — только доступные устройства: ${tree.map((n) => n.name)}`);
+    // Время идёт: недоступные новые эскалируются, но в поток о них ничего не приходит
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.ok(got.length > 0, "события о доступных пришли");
+    assert.ok(got.every((m) => !m.incidentGuid || seen.some((i) => i.guid === m.incidentGuid)), "о недоступных событий нет");
+  });
+
   test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

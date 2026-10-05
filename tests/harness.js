@@ -68,6 +68,7 @@
     const reset = await raw("POST", "/test/reset", {
       fixture: "demo",
       operatorPermissions: (opts && opts.permissions) || undefined,
+      operatorRoles: (opts && opts.roles) || undefined,
     });
     if (reset.status !== 200) throw new Error(`Тестовый стенд не сбросился: POST /test/reset → ${reset.status}`);
     let clock = Date.parse(reset.body.now);
