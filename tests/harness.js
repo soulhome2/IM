@@ -57,17 +57,36 @@
     });
     if (reset.status !== 200) throw new Error(`Тестовый стенд не сбросился: POST /test/reset → ${reset.status}`);
     let clock = Date.parse(reset.body.now);
+    let openIncidentGuid = null;
     const env = {
       api,
       get now() {
         return clock;
       },
-      // Время идёт вперёд, сервер выполняет всё, что за это время должно было сработать
+      // Признак активности оператора стенда (§12.3) и какая карточка у него открыта
+      async heartbeat(guid) {
+        if (guid !== undefined) openIncidentGuid = guid;
+        const res = await raw("POST", "/operator/session/heartbeat", { openIncidentGuid });
+        if (res.status !== 204) throw new Error(`POST /operator/session/heartbeat → ${res.status}`);
+        return res;
+      },
+      // Время идёт вперёд, сервер выполняет всё, что за это время должно было сработать.
+      // Оператор стенда на месте: часы идут шагами короче idleHoldSec, перед каждым — признак
+      // активности. Иначе бэкенд по §12.3 отложил бы его инциденты с причиной «нет связи»
       async advance(sec) {
-        const res = await raw("POST", "/test/clock", { advanceSec: sec });
-        if (res.status !== 200) throw new Error(`POST /test/clock → ${res.status}`);
-        clock = Date.parse(res.body.now);
-        return res.body.fired;
+        const step = Math.max(1, window.IM_WORKFLOW.session.idleHoldSec - 1);
+        const fired = [];
+        let left = sec;
+        do {
+          const chunk = Math.min(left, step);
+          await env.heartbeat();
+          const res = await raw("POST", "/test/clock", { advanceSec: chunk });
+          if (res.status !== 200) throw new Error(`POST /test/clock → ${res.status}`);
+          clock = Date.parse(res.body.now);
+          fired.push(...res.body.fired);
+          left -= chunk;
+        } while (left > 0);
+        return fired;
       },
       call: (method, path, body, headers) => raw(method, path, body, headers),
       async ok(method, path, body) {

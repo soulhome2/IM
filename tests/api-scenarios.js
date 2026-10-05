@@ -568,7 +568,7 @@
     assert.eq((await env.session()).preferences.defaultTransferTargetId, "noc", "сохранено в сессии");
     const inc = await newFire(env);
     assert.eq(actionOf(inc, "transfer").fieldOptions.targetId.defaultValue, "noc", "по умолчанию в форме");
-    assert.status(await env.call("POST", "/operator/session/heartbeat", { openIncidentGuid: inc.guid }), 204, null, "признак активности");
+    assert.status(await env.heartbeat(inc.guid), 204, null, "признак активности");
   });
 
   test("Действия карточки и очереди различаются по поверхности; сценарий, журнал и камеры — те же, что в карточке", async () => {
