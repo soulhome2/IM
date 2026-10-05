@@ -777,12 +777,14 @@
     heartbeat();
   }
 
-  // Какая карточка открыта — серверу, чтобы он знал, чью карточку выселять (§9.3)
-  let lastBeat = undefined;
-  function heartbeat() {
+  // Признак активности оператора (§12.3) и какая карточка открыта (§9.3): раз в
+  // session.heartbeatSec и сразу, как только открытая карточка сменилась. Без него сервер
+  // через idleHoldSec отложит инцидент оператора с причиной «нет связи»
+  let lastOpen = undefined;
+  function heartbeat(always) {
     const open = state.selectedId || null;
-    if (open === lastBeat) return;
-    lastBeat = open;
+    if (!always && open === lastOpen) return;
+    lastOpen = open;
     api.post("/operator/session/heartbeat", { openIncidentGuid: open }).catch(() => {});
   }
 
@@ -2873,6 +2875,7 @@
     WORKFLOW = await api.get("/operator/workflow/active");
     STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
     LIMITS = WORKFLOW.limits;
+    setInterval(() => heartbeat(true), WORKFLOW.session.heartbeatSec * 1000);
     const [eventTypes, deviceTypes, targets] = await Promise.all([
       api.get("/operator/reference/event-types"),
       api.get("/operator/reference/device-types"),

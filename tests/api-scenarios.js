@@ -392,6 +392,25 @@
 
   /* ===== Перерыв (§12) ===== */
 
+  test("Оператор замолчал (§12.3): через idleHoldSec — «Отложен, нет связи», через idleReleaseSec — снова в очереди, ничей", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    // Часы идут без heartbeat: оператор не на связи
+    const silent = async (sec) => {
+      const res = await env.call("POST", "/test/clock", { advanceSec: sec });
+      assert.status(res, 200, null, "сдвиг часов");
+      return res.body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    };
+    assert.eq(await silent(W.session.idleHoldSec - 10), [], "до idleHoldSec ничего не происходит");
+    assert.eq(await silent(20), ["system_hold_idle"], "после idleHoldSec — системное «Отложить»");
+    let c = await env.card(inc.guid);
+    assert.eq([c.state, c.holdReasonId, c.owner && c.owner.id], ["on_hold", "no_link", ME], "отложен у оператора, причина «нет связи»");
+    assert.eq(await silent(W.session.idleReleaseSec - W.session.idleHoldSec), ["system_release_idle"], "после idleReleaseSec — возврат в очередь");
+    c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner], ["new", null], "снова новый, ничей");
+  });
+
   test("Перерыв: инцидент в работе откладывается системой, действия недоступны; после возврата — доступны", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

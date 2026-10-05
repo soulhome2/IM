@@ -186,11 +186,17 @@
         if (who === ME) emit("incident.card_evicted", ev, null, { transitionId });
       },
     };
-    const engine = IMEngine.create(Object.assign({}, engineCtx, { me: ME }));
+    // Молчание оператора стенда (§12.3) — с последнего признака активности (heartbeat)
+    let lastHeartbeat = null;
+    const engine = IMEngine.create(
+      Object.assign({}, engineCtx, { me: ME, idleSec: () => (lastHeartbeat == null ? 0 : (now() - lastHeartbeat) / 1000) })
+    );
 
     // Эталонный набор → модель сервера. Набор — снимок на момент capturedAt: при загрузке все
     // времена сдвигаются на «сейчас − capturedAt», и набор выглядит свежим в любой день
     function load(fixture) {
+      // Сброс — вход оператора: молчание считается с этого момента
+      lastHeartbeat = now();
       serial.group = 0;
       serial.macro = 0;
       const data = JSON.parse(JSON.stringify(fixture));
@@ -798,6 +804,7 @@
         "/operator/session/heartbeat",
         (p, q, body) => {
           session.openIncidentGuid = body.openIncidentGuid || null;
+          lastHeartbeat = now();
           return { status: 204, body: null };
         },
       ],
