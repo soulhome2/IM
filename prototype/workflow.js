@@ -1870,9 +1870,10 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "fn": "settingEnabled",
+          "fn": "settingIs",
           "args": [
-            "escalation.onResolutionOverdue.alert"
+            "escalation.onResolutionOverdue",
+            "alert"
           ]
         }
       ],
@@ -1896,6 +1897,185 @@ window.IM_WORKFLOW = {
           "fn": "notify",
           "args": [
             "shift_lead"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "resolution_escalate",
+      "label": "Эскалация по нормативу закрытия",
+      "$comment": "§4, правило 4; §9 (RULE-27). Включается настройкой escalation.onResolutionOverdue = escalate: истёк норматив закрытия — нарушение и передача адресату следующего уровня, как автоэскалация по реакции. Три перехода по этому таймеру — алерт, эскалация, потолок — взаимоисключающие по условиям.",
+      "from": [
+        "in_progress"
+      ],
+      "to": "pending_acceptance",
+      "trigger": "timer",
+      "actor": "dispatcher",
+      "concurrency": {
+        "expectedVersion": false,
+        "onTimerConflict": "manual_wins"
+      },
+      "guards": [
+        {
+          "fn": "settingIs",
+          "args": [
+            "escalation.onResolutionOverdue",
+            "escalate"
+          ]
+        },
+        {
+          "fn": "timerExpired",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "fn": "flagBelow",
+          "args": [
+            "escalation_level",
+            "escalation.maxLevel"
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "recordBreach",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            "escalation.level.target.ifPerson"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setAssignmentGroup",
+          "args": [
+            "escalation.level.target.ifGroup"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "increment",
+          "args": [
+            "escalation_level"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction",
+            "escalation.level.reactionSec"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "evictOpenCard",
+          "args": [
+            "previousOwner"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "previousOwner"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "newTarget"
+          ]
+        }
+      ],
+      "bulk": {
+        "allowed": false
+      },
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "resolution_ceiling",
+      "label": "Норматив закрытия нарушен, потолок эскалации",
+      "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт ответственному, состояние не меняется.",
+      "from": [
+        "in_progress"
+      ],
+      "to": null,
+      "trigger": "timer",
+      "actor": "dispatcher",
+      "guards": [
+        {
+          "fn": "settingIs",
+          "args": [
+            "escalation.onResolutionOverdue",
+            "escalate"
+          ]
+        },
+        {
+          "fn": "timerExpired",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "fn": "flagAtLeast",
+          "args": [
+            "escalation_level",
+            "escalation.maxLevel"
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "recordBreach",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Норматив закрытия нарушен, потолок эскалации: алерт ответственному"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "escalation.alertTarget"
           ]
         }
       ],
@@ -2816,6 +2996,16 @@ window.IM_WORKFLOW = {
           "settingKey"
         ],
         "onFail": "hide"
+      },
+      {
+        "fn": "settingIs",
+        "args": [
+          "settingKey",
+          "value"
+        ],
+        "onFail": "hide",
+        "extendsBaseRegistry": true,
+        "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)."
       }
     ],
     "effects": [

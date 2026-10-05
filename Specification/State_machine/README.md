@@ -189,7 +189,7 @@ stateDiagram-v2
 
 В API и в прототипе те же поля в camelCase; в прототипе `close_cause` называется `massCause`, `result` — `closeComment`.
 
-**Настройки** — аргументы `settingEnabled`, `flagBelow`, `flagAtLeast`, `agentIdleFor`, `restartTimer`: путь от корня машины, например `escalation.enabled`, `escalation.maxLevel`, `session.idleHoldSec`, `limits.reopenResolutionSec`. Один путь вычисляемый: `escalation.onResolutionOverdue.alert` истинен, когда `escalation.onResolutionOverdue` = `"alert"`.
+**Настройки** — аргументы `settingEnabled`, `settingIs`, `flagBelow`, `flagAtLeast`, `agentIdleFor`, `restartTimer`: путь от корня машины, например `escalation.enabled`, `escalation.maxLevel`, `session.idleHoldSec`, `limits.reopenResolutionSec`. `settingIs(путь, значение)` — настройка равна значению: так три перехода по истечению норматива закрытия выбирают между `escalation.onResolutionOverdue` = `"alert"` и `"escalate"`. Вычисляемых путей нет.
 
 **Длительность таймеров:**
 
@@ -440,4 +440,4 @@ npx @redocly/cli lint Specification/State_machine/openapi.json
 
 Текущее состояние: спецификация валидна по OpenAPI 3.1 — 37 операций, 66 схем, все `$ref` разрешаются. Проверено исполнением: ответы встроенного сервера сверяют со схемами самопроверка прототипа и тесты API. Остаётся одно предупреждение `info-license-strict`: правило требует SPDX-идентификатор или URL лицензии, чего у внутреннего контракта нет.
 
-В модели workflow 5 состояний, 17 переходов (10 ручных + 7 автоматических), 7 форм; перекрёстные ссылки переходов на состояния, формы, guard'ы, эффекты, права и таймеры проверены и сходятся.
+В модели workflow 5 состояний, 19 переходов (10 ручных + 9 автоматических), 7 форм; перекрёстные ссылки переходов на состояния, формы, guard'ы, эффекты, права и таймеры проверены и сходятся.

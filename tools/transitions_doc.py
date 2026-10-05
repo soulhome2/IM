@@ -41,6 +41,12 @@ class Doc:
             value = value.get(key) if isinstance(value, dict) else None
         return f"`{path}` = {json.dumps(value, ensure_ascii=False)}" if value is not None else f"`{path}`"
 
+    def lookup(self, path):
+        value = self.w
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        return value
+
     def st(self, ids):
         ids = ids if isinstance(ids, list) else [ids]
         return ", ".join(f"«{self.states.get(i, i)}»" for i in ids)
@@ -94,6 +100,7 @@ class Doc:
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",
             "minSelected": lambda: f"выбрано не меньше {a[0]}",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
+            "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для условия {fn}: добавьте её в tools/transitions_doc.py")

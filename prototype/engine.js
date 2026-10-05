@@ -211,12 +211,12 @@
       minSelected: (ev, [n], opts) =>
         opts && opts.selectedCount != null && opts.selectedCount < n ? ["Выберите хотя бы {n} события", { n }] : null,
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["Выключено настройкой"]),
+      settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["Другое значение настройки"]),
     };
 
     const flagValue = (ev, field) => (field === "escalation_level" ? ev.escalationLevel : ev[field]);
     function setting(path) {
       if (typeof path !== "string") return path;
-      if (path === "escalation.onResolutionOverdue.alert") return W.escalation.onResolutionOverdue === "alert";
       return path.split(".").reduce((o, k) => (o == null ? o : o[k]), W);
     }
 

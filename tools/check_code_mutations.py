@@ -72,6 +72,7 @@ MUTATIONS = [
     ("ui-map-ignores-markers", "app.js", "const markers = ordered.map((m) => deviceMarker(m, { source: m.deviceGuid === source, active: m.deviceGuid === state.activeCam })).join(\"\");", "const markers = \"\";", "ui"),
     ("number-is-guid", "server.js", "        number: ev.number,", "        number: ev.id,", "api"),
     ("event-type-guid-is-id", "server.js", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeGuid !== q.eventTypeGuid) return false;", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeId !== q.eventTypeGuid) return false;", "api"),
+    ("setting-is-ignored", "engine.js", "settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : [\"Другое значение настройки\"]),", "settingIs: () => null,", "api"),
     ("stream-id-repeats", "server.js", "id: String(++seq),", "id: String(seq),", "api"),
     ("ui-required-from-ignored", "app.js", "if (!field.requiredFrom) return Boolean(field.required);", "return Boolean(field.required);", "ui"),
     ("ui-hotkeys-under-modal", "app.js", "if (modalOpen && !hotkey.worksInModal) return;", "", "ui"),

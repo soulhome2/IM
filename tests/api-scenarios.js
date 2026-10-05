@@ -7,9 +7,10 @@
   const W = window.IM_WORKFLOW;
   const lastJournal = (card) => card.journal[card.journal.length - 1];
 
-  // Новое критическое событие пожара — их в демо два, однотипная пара для группы (§11)
   // Инцидента с таким идентификатором нет: формат верный, записи нет
   const UNKNOWN = "10000000-0000-4000-8000-000000000000";
+
+  // Новое критическое событие пожара — их в демо два, однотипная пара для группы (§11)
   const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
 
   /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
@@ -374,6 +375,45 @@
     assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");
     assert.ok(c.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
     assert.ok(c.journal.some((j) => /Автоэскалация/.test(j.templateKey)), "автоэскалация в журнале");
+  });
+
+  test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и алерт", async () => {
+    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
+    // Своя копия машины с другой настройкой — так правило проверяется из машины, а не из кода
+    async function overdue(patch) {
+      const w = JSON.parse(JSON.stringify(W));
+      w.escalation.onResolutionOverdue = "escalate";
+      patch(w);
+      const api = IMApi.create({
+        server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }),
+      });
+      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const fire = (await api.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find(
+        (e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical"
+      );
+      const etag = (await api.raw("GET", `/operator/incidents/${enc(fire.guid)}`)).headers.etag;
+      const claimed = await api.raw("POST", `/operator/incidents/${enc(fire.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag });
+      assert.status(claimed, 200, null, "взять");
+      // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat
+      let left = w.timers.find((t) => t.id === "resolution").defaultSec + 1;
+      const fired = [];
+      while (left > 0) {
+        const step = Math.min(left, w.session.idleHoldSec - 1);
+        await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: step })).body.fired.filter((f) => f.incidentGuid === fire.guid).map((f) => f.transitionId));
+        left -= step;
+      }
+      return { fired, card: await api.get(`/operator/incidents/${enc(fire.guid)}`), w };
+    }
+    const up = await overdue(() => {});
+    assert.eq(up.fired, ["resolution_escalate"], "сработала эскалация, а не алерт");
+    const level1 = up.w.escalation.levels[0].targetRef.split(":")[1];
+    assert.eq([up.card.state, up.card.owner && up.card.owner.id, up.card.escalationLevel], ["pending_acceptance", level1, 1], "передан адресату первого уровня");
+    assert.eq(up.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
+    const top = await overdue((w) => (w.escalation.maxLevel = 0));
+    assert.eq(top.fired, ["resolution_ceiling"], "на потолке — алерт, без передачи");
+    assert.eq([top.card.state, top.card.owner && top.card.owner.id], ["in_progress", ME], "остался в работе у меня");
+    assert.eq(top.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
   });
 
   test("Норматив закрытия истёк — нарушение «resolution» один раз, состояние не меняется", async () => {
