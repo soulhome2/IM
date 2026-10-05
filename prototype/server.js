@@ -113,11 +113,18 @@
       return out;
     }
     const canSee = (ev) => myDevices.has(eventSource(ev));
+    // Состав дежурной группы (§8.1): все, у кого есть одна из её ролей, плюс отдельные люди.
+    // Считается на лету — роли меняются; порядок групп — порядок в наборе
+    const rolesOf = (id) => (id === ME && rolesOverride ? rolesOverride : (OPERATORS.find((o) => o.id === id) || {}).roles || []);
+    const membersOf = (group) => {
+      const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);
+      return [...new Set(byRole.concat(group.members || []))];
+    };
     // Доступ адресата к объекту инцидента (§8.1): человеку — по его ролям, группе — хотя бы
     // одному участнику
     function hasAccess(id, ev) {
       const group = GROUPS.find((g) => g.id === id);
-      if (group) return group.members.some((m) => hasAccess(m, ev));
+      if (group) return membersOf(group).some((m) => hasAccess(m, ev));
       if (id === ME) return canSee(ev);
       const person = OPERATORS.find((o) => o.id === id);
       return Boolean(person) && accessibleDevices(person.roles || []).has(eventSource(ev));
@@ -189,10 +196,10 @@
       can,
       isGroup: (id) => GROUPS.some((g) => g.id === id),
       // Дежурная группа человека (§8.1): первая, в которую он входит
-      dutyGroupOf: (userId) => (GROUPS.find((g) => g.members.includes(userId)) || {}).id || null,
+      dutyGroupOf: (userId) => (GROUPS.find((g) => membersOf(g).includes(userId)) || {}).id || null,
       memberOf: (groupId, userId) => {
         const group = GROUPS.find((g) => g.id === groupId);
-        return Boolean(group && group.members.includes(userId));
+        return Boolean(group && membersOf(group).includes(userId));
       },
       inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(TREE, groupId))),
       agentState: () => session.agentState,
@@ -583,7 +590,7 @@
           guid: ME,
           name: me.name,
           role: me.role,
-          dutyGroupGuids: GROUPS.filter((g) => g.members.includes(ME)).map((g) => g.id),
+          dutyGroupGuids: GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id),
         },
         shift: shiftView(),
         agentState: session.agentState === "not_ready" || session.agentState === "offline" ? session.agentState : usage().activeCount ? "busy" : "ready",
@@ -597,6 +604,10 @@
       };
     }
 
+    // Человек на смене — по набору; дежурная группа — если на смене хотя бы один участник (§8.1)
+    const onShift = (op) =>
+      op.group ? membersOf(op).some((m) => onShift(OPERATORS.find((o) => o.id === m) || {})) : op.duty === "на смене";
+
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
     function targets() {
       return OPERATORS.concat(GROUPS).map((op) => ({
@@ -604,10 +615,10 @@
         kind: op.group ? "duty_group" : "operator",
         name: op.name,
         label: op.name,
-        role: op.role,
-        available: op.duty === "на смене",
-        availabilityLabel: op.duty === "на смене" ? null : op.duty,
-        memberIds: op.members || [],
+        role: op.group ? "группа" : op.role,
+        available: onShift(op),
+        availabilityLabel: onShift(op) ? null : op.group ? "никого нет на смене" : op.duty,
+        memberIds: op.group ? membersOf(op) : [],
       }));
     }
 

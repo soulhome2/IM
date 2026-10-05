@@ -208,7 +208,15 @@ def check_fixture(w, err):
     humans = {o["id"] for o in people["operators"]}
     groups = {g["id"] for g in people["dutyGroups"]}
     target = (fx.get("operatorPreferences") or {}).get("defaultTransferTargetId")
-    own = {g["id"] for g in people["dutyGroups"] if fx.get("operator") in g.get("members", [])}
+    # Дежурные группы (§8.1): участники — люди с одной из ролей группы плюс названные отдельно
+    my_roles = next((o.get("roles", []) for o in people["operators"] if o["id"] == fx.get("operator")), [])
+    own = {g["id"] for g in people["dutyGroups"] if fx.get("operator") in g.get("members", []) or set(my_roles) & set(g.get("roles", []))}
+    for g in people["dutyGroups"]:
+        if not g.get("roles") and not g.get("members"):
+            err.append(f"эталон: дежурная группа {g['id']} — ни ролей, ни участников")
+        for m in g.get("members", []):
+            if m not in humans:
+                err.append(f"эталон: дежурная группа {g['id']} — нет человека {m}")
     if target is not None and (target not in humans | groups or target == fx.get("operator") or target in own):
         err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}

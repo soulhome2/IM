@@ -67,6 +67,7 @@ window.IM_DICT_UI = {
     "Далее": "Next",
     "Дежурная группа старших": "Shift supervisors group",
     "Охрана ТЦ": "Mall security",
+    "никого нет на смене": "nobody on shift",
     "Действие «{name}» недоступно в текущем состоянии": "Action “{name}” is unavailable in the current state",
     "Для этой выборки действие недоступно": "This action is not available for the current selection",
     "Доступно переоткрытие.": "Reopening is available.",
@@ -433,6 +434,7 @@ window.IM_DICT_UI = {
     "Далее": "Siguiente",
     "Дежурная группа старших": "Grupo de supervisores de turno",
     "Охрана ТЦ": "Seguridad del centro comercial",
+    "никого нет на смене": "nadie de turno",
     "Действие «{name}» недоступно в текущем состоянии":
       "La acción «{name}» no está disponible en el estado actual",
     "Для этой выборки действие недоступно": "Esta acción no está disponible para la selección actual",

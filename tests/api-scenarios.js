@@ -862,6 +862,43 @@
     assert.ok(mine.body.fired.some((f) => f.incidentGuid === forGroup.guid && f.transitionId === "addressee_lost_access"), "в группе доступа нет ни у кого — в очередь");
   });
 
+  test("Дежурная группа — по ролям и отдельным людям (§8.1); человек в нескольких группах — при конце смены первая по порядку", async () => {
+    const env = await makeEnv();
+    assert.eq((await env.session()).operator.dutyGroupGuids, ["grp-leads"], "я в группе старших — как отдельный участник");
+    const elsewhere = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const target = async (id) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(elsewhere.guid)}`)).find((t) => t.id === id);
+    assert.ok(!(await target("grp-tc")), "вне ТЦ «Охраны ТЦ» нет: у её участников нет доступа");
+    // Группа на смене, если на смене хотя бы один участник: в «Охране ТЦ» пока только Кузнецов «по вызову»
+    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    const tcBefore = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "grp-tc");
+    assert.eq([tcBefore.name, tcBefore.available], ["Охрана ТЦ", false], "у группы название; на смене никого");
+    // Гусеву — роль «Оператор ТЦ»: он входит в «Охрану ТЦ» по роли, и у группы появляется доступ
+    assert.status(await env.call("PUT", "/test/operators/gusev/roles", { roles: ["Оператор", "Оператор ТЦ"] }), 200, null, "роли Гусева");
+    const tc = await target("grp-tc");
+    assert.ok(tc && tc.memberIds.includes("gusev") && tc.memberIds.includes("kuznetsov"), `состав по роли: ${tc && tc.memberIds}`);
+    assert.eq(tc.available, true, "Гусев на смене — и группа на смене");
+    // Мне — тоже «Оператор ТЦ»: я в двух группах, первая по порядку — группа старших
+    assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] }), 200, null, "мои роли");
+    assert.eq((await env.session()).operator.dutyGroupGuids, ["grp-leads", "grp-tc"], "я в двух группах, по порядку");
+    const personal = await env.guidOf("INC-1843");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "завершить смену");
+    const after = await env.card(personal);
+    assert.eq(after.assignmentGroup && after.assignmentGroup.id, "grp-leads", "INC-1843 ушёл в первую по порядку группу");
+  });
+
+  test("Порядок дежурных групп задаёт администратор: при обратном порядке — в «Охрану ТЦ» (§8.1)", async () => {
+    if (IMTest.external) return "пропущено: порядок групп меняется только во встроенном сервере";
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.people.dutyGroups.reverse();
+    fixture.people.operators.find((o) => o.id === ME).roles.push("Оператор ТЦ");
+    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
+    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
+    await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
+    const card = await api.get(`/operator/incidents/${enc(guid)}`);
+    assert.eq(card.assignmentGroup && card.assignmentGroup.id, "grp-tc", "первая по порядку — теперь «Охрана ТЦ»");
+  });
+
   test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
