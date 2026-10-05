@@ -564,6 +564,9 @@
 
   test("Настройки оператора: предвыбор адресата меняет значение по умолчанию в форме передачи (§8.2)", async () => {
     const env = await makeEnv();
+    const preset = window.IM_FIXTURE.operatorPreferences;
+    const initial = (await env.session()).preferences;
+    Object.entries(preset).forEach(([key, value]) => assert.eq(initial[key], value, `после сброса ${key} — из эталонного набора`));
     await env.ok("PATCH", "/operator/session/preferences", { defaultTransferTargetId: "noc" });
     assert.eq((await env.session()).preferences.defaultTransferTargetId, "noc", "сохранено в сессии");
     const inc = await newFire(env);

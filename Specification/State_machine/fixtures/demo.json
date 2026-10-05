@@ -3,6 +3,10 @@
   "version": 2,
   "capturedAt": "2026-10-03T12:00:00Z",
   "operator": "me",
+  "operatorPreferences": {
+    "defaultTransferTargetId": "petrova",
+    "locale": "ru"
+  },
   "people": {
     "operators": [
       {

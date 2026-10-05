@@ -268,7 +268,7 @@
         agentState: "ready",
         reasonId: null,
         openIncidentGuid: null,
-        preferences: { defaultTransferTargetId: "petrova", locale: "ru" },
+        preferences: JSON.parse(JSON.stringify(fixture.operatorPreferences || {})),
       };
       SIM = opts.colleagues ? JSON.parse(JSON.stringify(opts.colleagues.SIM)) : { enabled: false };
       Object.keys(colleagueIdleSince).forEach((id) => delete colleagueIdleSince[id]);

@@ -207,6 +207,10 @@ def check_fixture(w, err):
     people = fx["people"]
     humans = {o["id"] for o in people["operators"]}
     groups = {g["id"] for g in people["dutyGroups"]}
+    target = (fx.get("operatorPreferences") or {}).get("defaultTransferTargetId")
+    own = {g["id"] for g in people["dutyGroups"] if fx.get("operator") in g.get("members", [])}
+    if target is not None and (target not in humans | groups or target == fx.get("operator") or target in own):
+        err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}
     devices = {d["id"] for d in fx["devices"]}
     types = {t["id"] for t in fx["deviceTypes"]}
