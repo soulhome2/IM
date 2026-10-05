@@ -4,7 +4,9 @@
    остановлены), время сдвигает POST /test/clock. Поэтому один и тот же набор проходит:
    - встроенный сервер прототипа (по умолчанию: tests/api.html);
    - тестовый стенд бэкенда: tests/api.html?api=https://адрес — бэкенд должен поддерживать
-     /test/reset и /test/clock и разрешать запросы со страницы (CORS).
+     /test/reset и /test/clock и разрешать запросы со страницы (CORS);
+   - петля: tests/api.html?api=loopback со страницы по http (python3 -m http.server) — тот же
+     встроенный сервер, но за сетевым клиентом: fetch, заголовки, поток SSE (loopback-sw.js).
    Ответы сверяются со схемами openapi.json, покрытие — по операциям контракта.
    Отчёт: <pre id="apitest-log">, итог — data-apitest="pass|fail" у <html>. */
 (() => {
@@ -14,18 +16,31 @@
   const spec = window.IM_OPENAPI;
 
   // Один сервер на весь прогон: встроенный — со служебными операциями стенда, без своих часов
-  // и без эмуляции коллег; внешний — тестовый стенд бэкенда
-  const api = apiBase
-    ? IMApi.create({ baseUrl: apiBase })
-    : IMApi.create({
-        server: IMServer.create({
-          workflow: window.IM_WORKFLOW,
-          fixture: window.IM_FIXTURE,
-          colleagues: false,
-          autoTick: false,
-          testSupport: true,
-        }),
-      });
+  // и без эмуляции коллег; внешний — тестовый стенд бэкенда; петля — встроенный по сети
+  let api = null;
+  async function connect() {
+    if (apiBase === "loopback") {
+      if (location.protocol === "file:" || !("serviceWorker" in navigator)) {
+        throw new Error("петля работает только со страницы по http(s): python3 -m http.server и http://127.0.0.1:8000/tests/api.html?api=loopback");
+      }
+      await navigator.serviceWorker.register("loopback-sw.js");
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+      }
+      return IMApi.create({ baseUrl: new URL("loopback-api", location.href).href });
+    }
+    if (apiBase) return IMApi.create({ baseUrl: apiBase });
+    return IMApi.create({
+      server: IMServer.create({
+        workflow: window.IM_WORKFLOW,
+        fixture: window.IM_FIXTURE,
+        colleagues: false,
+        autoTick: false,
+        testSupport: true,
+      }),
+    });
+  }
 
   // Каждый ответ запоминается вместе с операцией контракта — для сверки схем и покрытия
   const recorded = [];
@@ -48,7 +63,6 @@
     }
     return res;
   }
-  api.subscribe((message) => recorded.push({ method: "GET", template: "/operator/stream", status: 200, body: message, kind: "stream" }));
 
   async function makeEnv(opts) {
     const reset = await raw("POST", "/test/reset", {
@@ -189,9 +203,31 @@
   // Операции контракта, которые тесты не обязаны вызывать: редактор схемы — вне прототипа
   const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas/;
 
+  // Отчёт: строки в <pre id="apitest-log"> и в консоль, итог — атрибут data-apitest.
+  // С ?report=/адрес — ещё и POST туда: так его забирает tools/check_loopback.py
+  function finish(lines, summary, failed) {
+    const reportTo = new URLSearchParams(location.search).get("report");
+    if (reportTo) {
+      const body = lines.concat(summary, `RESULT ${failed ? "fail" : "pass"}`).join("\n");
+      fetch(reportTo, { method: "POST", body }).catch(() => {});
+    }
+    document.documentElement.dataset.apitest = failed ? "fail" : "pass";
+    lines.forEach((l) => console.log(`APITEST ${l}`));
+    console.log(`APITEST ${summary}`);
+    document.getElementById("apitest-summary").textContent = summary;
+    document.getElementById("apitest-log").textContent = lines.join("\n");
+  }
+
   async function run() {
-    const lines = [`INFO  Сервер: ${apiBase || "встроенный сервер прототипа"}`];
+    const lines = [`INFO  Сервер: ${apiBase === "loopback" ? "петля: встроенный сервер по сети" : apiBase || "встроенный сервер прототипа"}`];
     let failed = 0;
+    try {
+      api = await connect();
+    } catch (err) {
+      lines.push(`FAIL  Тестовый стенд доступен — ${err.message}`);
+      return finish(lines, "Тесты API не запущены: стенд недоступен", true);
+    }
+    api.subscribe((message) => recorded.push({ method: "GET", template: "/operator/stream", status: 200, body: message, kind: "stream" }));
     // Сначала — доступен ли стенд: иначе каждый тест упал бы с одной и той же сетевой ошибкой
     const probe = await api.raw("POST", "/test/reset", { fixture: "demo" }).catch((err) => ({ status: 0, error: err }));
     if (probe.status !== 200) {
@@ -200,11 +236,7 @@
           ? "сервер не ответил: нет сети, неверный адрес или бэкенд не разрешает запросы со страницы (CORS)"
           : `POST /test/reset → ${probe.status}: на сервере нет служебных операций тестового стенда`;
       lines.push(`FAIL  Тестовый стенд доступен — ${why}`);
-      document.documentElement.dataset.apitest = "fail";
-      document.getElementById("apitest-summary").textContent = "Тесты API не запущены: стенд недоступен";
-      document.getElementById("apitest-log").textContent = lines.join("\n");
-      lines.forEach((l) => console.log(`APITEST ${l}`));
-      return;
+      return finish(lines, "Тесты API не запущены: стенд недоступен", true);
     }
     for (const t of tests) {
       const started = Date.now();
@@ -238,11 +270,7 @@
     lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы вне прототипа`);
     const total = tests.length + 2;
     const summary = failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`;
-    document.documentElement.dataset.apitest = failed ? "fail" : "pass";
-    lines.forEach((l) => console.log(`APITEST ${l}`));
-    console.log(`APITEST ${summary}`);
-    document.getElementById("apitest-summary").textContent = summary;
-    document.getElementById("apitest-log").textContent = lines.join("\n");
+    finish(lines, summary, failed);
   }
 
   window.IMTest = { test, run, makeEnv, formFor, fullAnswers, actionOf, assert, enc, external: Boolean(apiBase) };

@@ -1,4 +1,4 @@
-# Проверки на каждый push: самопроверка прототипа, тесты API, целостность машины
+# Проверки на каждый push: самопроверка прототипа, тесты API (и по сети, через петлю), целостность машины
 # состояний, «правила только в машине» (мутации машины), мутации кода и ссылки в документах.
 # Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
 # что что-то сломалось; подробности — в журнале шага.
@@ -10,7 +10,8 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Версия закреплена: ubuntu-latest с 19 октября 2026 станет Ubuntu 26, переход — осознанно
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -41,6 +42,10 @@ jobs:
           print(html.unescape(log.group(1)) if log else "Отчёт тестов API не найден")
           sys.exit(0 if 'data-apitest="pass"' in page else 1)
           EOF
+
+      - name: Тесты API по сети (петля)
+        if: always()
+        run: python3 tools/check_loopback.py
 
       - name: Машина состояний
         if: always()

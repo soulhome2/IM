@@ -16,7 +16,8 @@
       Сценарии и случайные прогоны: те же запросы, что у интерфейса. Ответы сверяются со схемами
       <code>openapi.json</code>. Открывается двойным кликом — тогда проверяется встроенный сервер прототипа. Тестовый
       стенд бэкенда — <code>api.html?api=https://адрес</code>: нужны служебные операции <code>/test/reset</code> и
-      <code>/test/clock</code> (README машины, «Тестовый стенд»).
+      <code>/test/clock</code> (README машины, «Тестовый стенд»). Петля — <code>api.html?api=loopback</code> со страницы по
+      http: тот же встроенный сервер, но по сети, за Service Worker; запуск — <code>python3 tools/check_loopback.py</code>.
     </p>
     <strong id="apitest-summary">Идёт прогон…</strong>
     <pre id="apitest-log"></pre>
