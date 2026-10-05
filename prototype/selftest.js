@@ -111,6 +111,9 @@
     await wait();
   }
 
+  // Идентификатор инцидента по номеру из эталонного набора: guid — UUID, на экране — номер
+  const guidOf = (number) => window.IM_FIXTURE.incidents.find((i) => i.number === number).guid;
+
   async function openOwn(id) {
     if (mode() === "work") return;
     await setFilter("mine");
@@ -459,14 +462,14 @@
 
     await step("Отклонить адресованную передачу", async () => {
       await setFilter("inbox");
-      const badge = $("eventsList").querySelector('[data-id="INC-1843"] .badge');
+      const badge = $("eventsList").querySelector(`[data-id="${guidOf("INC-1843")}"] .badge`);
       expect(badge && badge.textContent.includes("Вам на принятие"), `у адресованного лично бейдж «${badge ? badge.textContent : "нет"}»`);
-      const b = button($("eventsList"), "reject", "INC-1843");
+      const b = button($("eventsList"), "reject", guidOf("INC-1843"));
       expect(b, "у INC-1843 нет кнопки «Отклонить»");
       await click(b);
       await confirmDialog(NOTE);
       await setFilter("open");
-      const row = await rowOnPages("INC-1843");
+      const row = await rowOnPages(guidOf("INC-1843"));
       const text = row ? row.textContent : "";
       expect(text.includes("Новое"), "после «Отклонить» инцидент не стал новым");
       expect(text.includes("ур. 1"), "после «Отклонить» не сохранился уровень эскалации");
@@ -475,9 +478,9 @@
 
     await step("Принять адресованную передачу", async () => {
       await setFilter("inbox");
-      const badge = $("eventsList").querySelector('[data-id="INC-1836"] .badge');
+      const badge = $("eventsList").querySelector(`[data-id="${guidOf("INC-1836")}"] .badge`);
       expect(badge && badge.textContent.includes("Вашей группе"), `у переданного группе бейдж «${badge ? badge.textContent : "нет"}»`);
-      const b = button($("eventsList"), "accept", "INC-1836");
+      const b = button($("eventsList"), "accept", guidOf("INC-1836"));
       expect(b, "нет инцидентов на принятие");
       acceptedId = b.dataset.ev;
       await click(b);

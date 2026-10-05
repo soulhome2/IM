@@ -2809,7 +2809,7 @@
             "properties": {
               "guid": {
                 "type": "string",
-                "format": "uuid"
+                "description": "Идентификатор оператора из внешней системы, как у `ActorRef.id`: формат задаёт она (§5)"
               },
               "name": {
                 "type": "string"
@@ -2821,8 +2821,7 @@
               "dutyGroupGuids": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "format": "uuid"
+                  "type": "string"
                 },
                 "description": "§8.1. Нужны, чтобы понимать, адресован ли инцидент моей дежурной группе."
               }
@@ -3105,7 +3104,10 @@
             "$ref": "#/components/schemas/Priority"
           },
           "sourceGroup": {
-            "type": "object",
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
               "guid": {
                 "type": "string",
@@ -3114,7 +3116,8 @@
               "name": {
                 "type": "string"
               }
-            }
+            },
+            "description": "Самая глубокая группа устройств, где стоит источник события (§19); `null`, если источник ни в одной группе"
           },
           "sourceDeviceTypeId": {
             "type": [

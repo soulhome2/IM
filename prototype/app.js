@@ -1369,7 +1369,7 @@
       .join("");
     $("eventFilter").value = state.filter;
     $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
-      .concat(store.eventTypes.map((e) => `<option value="${escapeHtml(e.id)}">${te(e.name)}</option>`))
+      .concat(store.eventTypes.map((e) => `<option value="${escapeHtml(e.guid)}">${te(e.name)}</option>`))
       .join("");
     $("eventTypeFilter").value = state.eventType;
     $("deviceTypeFilter").innerHTML = [`<option value="all">${te("Все типы устройств")}</option>`]

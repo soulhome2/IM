@@ -37,6 +37,10 @@
     let PLANS = [];
     let TREE = [];
     let SCENARIOS = {};
+    // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
+    // (7 — запись журнала, 8 — группа обработки, 9 — запуск макроса), дальше — номер
+    const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
+    const serial = { group: 0, macro: 0 };
     let events = [];
     let SIM = { enabled: false };
     let session = null;
@@ -101,7 +105,7 @@
         }
         return null;
       };
-      return walk(TREE) || { guid: "all", name: "Все события" };
+      return walk(TREE);
     }
     const touches = (ev, ids) => (ev.deviceIds || []).some((id) => ids.includes(id));
 
@@ -187,6 +191,8 @@
     // Эталонный набор → модель сервера. Набор — снимок на момент capturedAt: при загрузке все
     // времена сдвигаются на «сейчас − capturedAt», и набор выглядит свежим в любой день
     function load(fixture) {
+      serial.group = 0;
+      serial.macro = 0;
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
       const abs = (time) => (time == null ? null : Date.parse(time) + delta);
@@ -208,7 +214,9 @@
       SCENARIOS = data.scenarios;
       events = data.incidents.map((inc) => ({
         id: inc.guid,
+        number: inc.number,
         typeId: inc.eventType.id,
+        typeGuid: inc.eventType.guid,
         type: inc.eventType.name,
         priority: inc.priority,
         site: inc.site,
@@ -370,9 +378,9 @@
       const src = eventSource(ev);
       return {
         guid: ev.id,
-        number: ev.id,
+        number: ev.number,
         occurredAt: iso(ev.occurredAt),
-        eventType: { guid: ev.typeId, id: ev.typeId, name: ev.type },
+        eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
         priority: ev.priority,
         sourceGroup: sourceGroupOf(ev),
         sourceDeviceTypeId: src ? deviceRef(src).typeId : null,
@@ -410,7 +418,7 @@
       const sc = scenarioOf(ev);
       const steps = sc.steps;
       return {
-        scenarioGuid: ev.typeId,
+        scenarioGuid: sc.guid,
         scenarioVersion: 1,
         title: sc.title,
         steps: steps.map((s) => ({
@@ -431,7 +439,7 @@
 
     function journalView(ev) {
       return ev.log.map((entry, i) => ({
-        guid: `${ev.id}-${i}`,
+        guid: uuid(7, i, ev.id.slice(-12)),
         at: iso(entry.at),
         actor: actorRef(entry.whoId, entry.who),
         kind: entry.kind || (entry.whoId === "dispatcher" || entry.whoId === "system" || (!entry.whoId && entry.who) ? "system" : "transition"),
@@ -449,7 +457,7 @@
         guid: ev.groupId,
         createdAt: iso(ev.groupCreatedAt || now()),
         owner: actorRef(ev.owner),
-        eventType: { guid: ev.typeId, id: ev.typeId, name: ev.type },
+        eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
         members: mates.map((m) => summary(m, "card")),
         sharedAnswers: JSON.parse(JSON.stringify(ev.answers)),
         exclude: {
@@ -573,14 +581,14 @@
       }
       return list.filter((e) => {
         if (q.filter && !engine.inQueueFilter(e, q.filter)) return false;
-        if (q.eventTypeGuid && q.eventTypeGuid !== "all" && e.typeId !== q.eventTypeGuid) return false;
+        if (q.eventTypeGuid && q.eventTypeGuid !== "all" && e.typeGuid !== q.eventTypeGuid) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
           const src = eventSource(e);
           if (!src || deviceSpec(src).type !== q.deviceTypeId) return false;
         }
         if (q.search) {
           const needle = String(q.search).toLowerCase();
-          if (!`${e.id} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle)) return false;
+          if (!`${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle)) return false;
         }
         return true;
       });
@@ -629,7 +637,7 @@
     function eventTypes() {
       const seen = new Map();
       events.forEach((e) => {
-        if (!seen.has(e.typeId)) seen.set(e.typeId, { guid: e.typeId, id: e.typeId, name: e.type, defaultReactionSec: engine.norm({ typeId: e.typeId, priority: "medium" }, "reaction") });
+        if (!seen.has(e.typeId)) seen.set(e.typeId, { guid: e.typeGuid, id: e.typeId, name: e.type, defaultReactionSec: engine.norm({ typeId: e.typeId, priority: "medium" }, "reaction") });
       });
       return [...seen.values()];
     }
@@ -860,16 +868,15 @@
         "/operator/incident-groups",
         (p, q, body) => {
           const list = (body.incidentGuids || []).map(find).filter(Boolean);
-          const groupId = `GRP-${String(now()).slice(-4)}`;
+          const groupId = uuid(8, ++serial.group);
           const r = engine.createGroup(list, groupId);
           if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
           list.forEach((ev) => {
             ev.groupCreatedAt = now();
-            log(ev, ME, "Групповая обработка {grp} вместе с {ids}", {
-              grp: groupId,
+            log(ev, ME, "Групповая обработка вместе с {ids}", {
               ids: list
                 .filter((x) => x.id !== ev.id)
-                .map((x) => x.id)
+                .map((x) => x.number)
                 .join(", "),
             });
           });
@@ -944,7 +951,7 @@
           if (!ev.launched.includes(p.macroId)) ev.launched.push(p.macroId);
           log(ev, ME, "Запущен макрос «{name}»", { name: p.macroId });
           touch([ev]);
-          return { status: 202, body: { executionGuid: `MAC-${ev.version}`, macroId: p.macroId, status: "delivered", queuedAt: iso(now()) } };
+          return { status: 202, body: { executionGuid: uuid(9, ++serial.macro), macroId: p.macroId, status: "delivered", queuedAt: iso(now()) } };
         },
       ],
       [

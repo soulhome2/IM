@@ -614,10 +614,9 @@
       if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
       const fail = firstFail(ev, W.grouping.excludeGuards);
       if (fail) return { ok: false, why: fail.why, guard: fail.guard };
-      const groupId = ev.groupId;
       ev.groupId = null;
       ctx.detachAnswers(ev);
-      ctx.log(ev, ME, "Исключён из группы {grp}", { grp: groupId });
+      ctx.log(ev, ME, "Исключён из групповой обработки");
       return { ok: true };
     }
 

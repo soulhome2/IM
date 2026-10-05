@@ -8,6 +8,8 @@
   const lastJournal = (card) => card.journal[card.journal.length - 1];
 
   // Новое критическое событие пожара — их в демо два, однотипная пара для группы (§11)
+  // Инцидента с таким идентификатором нет: формат верный, записи нет
+  const UNKNOWN = "10000000-0000-4000-8000-000000000000";
   const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
 
   /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
@@ -185,7 +187,7 @@
 
   test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {
     const env = await makeEnv();
-    const inc = await env.card("INC-1836");
+    const inc = await env.card(await env.guidOf("INC-1836"));
     assert.eq(inc.state, "pending_acceptance", "состояние");
     assert.eq(inc.owner, null, "owner пуст");
     assert.eq(inc.assignmentGroup && inc.assignmentGroup.id, "grp-leads", "группа");
@@ -199,7 +201,7 @@
 
   test("Закрытый из «Ожидает принятия» группой и переоткрытый — у человека, без группы (§8.1)", async () => {
     const env = await makeEnv();
-    const inc = await env.card("INC-1836");
+    const inc = await env.card(await env.guidOf("INC-1836"));
     const close = actionOf((await env.all("inbox")).find((e) => e.guid === inc.guid), "close");
     const res = await env.act(inc.guid, "close", formFor(close, { resultId: "mass" }), "queue");
     assert.status(res, 200);
@@ -212,7 +214,7 @@
 
   test("Отклонить: инцидент снова новый, ничей, уровень эскалации сохранён", async () => {
     const env = await makeEnv();
-    const inc = await env.card("INC-1843");
+    const inc = await env.card(await env.guidOf("INC-1843"));
     assert.eq(inc.badge.label, "Вам на принятие", "бейдж личной передачи");
     const res = await env.act(inc.guid, "reject", { comment: "не мой профиль" });
     assert.status(res, 200);
@@ -513,7 +515,7 @@
       const page = await env.ok("GET", `/operator/incidents?filter=${f.id}&pageSize=1000`);
       assert.eq(page.total, counters[f.id], `фильтр «${f.id}»`);
     }
-    const inbox = (await env.all("inbox")).map((e) => e.guid).sort();
+    const inbox = (await env.all("inbox")).map((e) => e.number).sort();
     assert.eq(inbox, ["INC-1836", "INC-1843"], "мне на принятие");
     // Переданный коллеге — не «мне на принятие», а чужой (отношение к смотрящему, §7)
     const inc = await newFire(env);
@@ -535,12 +537,14 @@
     const all = await env.all();
     const byGroup = await env.ok("GET", `/operator/incidents?filter=all&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`);
     assert.ok(byGroup.total > 0 && byGroup.total < all.length, `группа «${tree[0].name}»: ${byGroup.total} из ${all.length}`);
-    const fire = await env.ok("GET", "/operator/incidents?filter=all&eventTypeGuid=fire&pageSize=1000");
-    assert.ok(fire.items.every((e) => e.eventType.id === "fire"), "тип события");
+    // Фильтр по типу события — по guid из справочника; машинный id (fire) — для нормативов и сценария
+    const fireType = (await env.ok("GET", "/operator/reference/event-types")).find((t) => t.id === "fire");
+    const fire = await env.ok("GET", `/operator/incidents?filter=all&eventTypeGuid=${enc(fireType.guid)}&pageSize=1000`);
+    assert.eq(fire.total, all.filter((e) => e.eventType.id === "fire").length, "тип события: все пожарные и только они");
     const dev = await env.ok("GET", "/operator/incidents?filter=all&deviceTypeId=fire-detector&pageSize=1000");
     assert.ok(dev.items.every((e) => e.sourceDeviceTypeId === "fire-detector"), "тип устройства-источника");
     const search = await env.ok("GET", "/operator/incidents?filter=all&search=INC-1847");
-    assert.eq(search.items.map((e) => e.guid), ["INC-1847"], "поиск по номеру");
+    assert.eq(search.items.map((e) => e.number), ["INC-1847"], "поиск по номеру");
     const open = tree[0].counters.open;
     assert.eq(open, (await env.ok("GET", `/operator/incidents?filter=open&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`)).total, "счётчик группы в дереве");
   });
@@ -693,8 +697,8 @@
 
   test("Неизвестный инцидент и маршрут — 404 с кодом NOT_FOUND", async () => {
     const env = await makeEnv();
-    assert.status(await env.call("GET", "/operator/incidents/INC-0000"), 404, "NOT_FOUND");
-    assert.status(await env.act("INC-0000", "claim"), 404, "NOT_FOUND");
+    assert.status(await env.call("GET", `/operator/incidents/${UNKNOWN}`), 404, "NOT_FOUND");
+    assert.status(await env.act(UNKNOWN, "claim"), 404, "NOT_FOUND");
     assert.status(await env.call("GET", "/operator/nothing"), 404, "NOT_FOUND");
   });
 

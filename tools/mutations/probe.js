@@ -29,6 +29,8 @@
     await wait();
   };
   const row = (id) => $("eventsList").querySelector(`[data-id="${id}"]`);
+  // Инцидент по номеру из эталонного набора: guid — UUID, на экране — номер
+  const guidOf = (number) => (window.IM_FIXTURE.incidents.find((i) => i.number === number) || {}).guid;
   async function claimFirst() {
     await setFilter("open");
     const b = btn($("eventsList"), "claim");
@@ -45,7 +47,7 @@
   const PROBES = {
     async groupBadge() {
       await setFilter("inbox");
-      const badge = row("INC-1836") && row("INC-1836").querySelector(".badge");
+      const badge = row(guidOf("INC-1836")) && row(guidOf("INC-1836")).querySelector(".badge");
       const text = badge ? badge.textContent : "";
       return [text.includes("Группе на принятие"), "бейдж INC-1836: " + text];
     },
@@ -141,7 +143,7 @@
     },
     async reopenNorm() {
       await setFilter("done");
-      await click(btn($("eventsList"), "reopen", "INC-1837"));
+      await click(btn($("eventsList"), "reopen", guidOf("INC-1837")));
       await confirm("проба");
       const m = $("statusSla").textContent.match(/(\d+):(\d\d)/);
       const sec = m ? Number(m[1]) * 60 + Number(m[2]) : -1;
@@ -196,7 +198,7 @@
     },
     async norm() {
       await setFilter("open");
-      const t = row("INC-1847").querySelector(".sla-t").textContent;
+      const t = row(guidOf("INC-1847")).querySelector(".sla-t").textContent;
       return [t.startsWith("9:") || t.startsWith("10:"), "реакция INC-1847: " + t];
     },
     async surfaces() {
@@ -221,11 +223,11 @@
     },
     async filter() {
       await setFilter("mine");
-      return [Boolean(row("INC-1837")), "закрытый свой INC-1837 во «Мои»: " + Boolean(row("INC-1837"))];
+      return [Boolean(row(guidOf("INC-1837"))), "закрытый свой INC-1837 во «Мои»: " + Boolean(row(guidOf("INC-1837")))];
     },
     async badge() {
       await setFilter("open");
-      const b = row("INC-1847").querySelector(".badge").textContent;
+      const b = row(guidOf("INC-1847")).querySelector(".badge").textContent;
       return [b === "Свежее", "бейдж: " + b];
     },
     async form() {
@@ -270,7 +272,7 @@
     },
     async reopen() {
       await setFilter("done");
-      const has = Boolean(anyBtn($("eventsList"), "reopen", "INC-1837"));
+      const has = Boolean(anyBtn($("eventsList"), "reopen", guidOf("INC-1837")));
       return [!has, "«Переоткрыть» у INC-1837 (закрыт 12 мин назад): " + has];
     },
     async escalation() {

@@ -213,6 +213,23 @@ def check_fixture(w, err):
         err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}
     devices = {d["id"] for d in fx["devices"]}
+    # Сущности МИ и Axxon — UUID, как в контракте; люди и группы людей — строки внешней системы (§5)
+    uuid = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+    def node_ids(gs):
+        for g in gs:
+            yield g["id"]
+            yield from node_ids(g.get("groups", []))
+
+    entities = [("инцидент", i["guid"]) for i in fx["incidents"]]
+    entities += [("тип события", i["eventType"].get("guid")) for i in fx["incidents"]]
+    entities += [("устройство", d["id"]) for d in fx["devices"]]
+    entities += [("группа устройств", g) for g in node_ids(fx["sourceGroups"])]
+    entities += [("план", p["id"]) for p in fx.get("plans", [])]
+    entities += [("сценарий", v.get("guid")) for k, v in fx["scenarios"].items() if not k.startswith("$")]
+    for kind, value in entities:
+        if not isinstance(value, str) or not uuid.match(value):
+            err.append(f"эталон: {kind} «{value}» — идентификатор не UUID")
     plans = {p["id"] for p in fx.get("plans", [])}
     sites = {i.get("site") for i in fx["incidents"]}
     for p in fx.get("plans", []):

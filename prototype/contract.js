@@ -4,6 +4,11 @@
   /* Сверка ответа со схемой openapi.json: типы, обязательные поля, перечисления, вложенные
      схемы. Поле, которого нет в схеме, — тоже расхождение: контракт должен описывать всё,
      что отдаёт сервер. Формат строк (format) и пояснения $comment не проверяются. */
+  const FORMATS = {
+    uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    "date-time": /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/,
+  };
+
   function checkSchema(spec, schema, value, where, out) {
     if (!schema || out.length > 40) return;
     if (schema.$ref) return checkSchema(spec, spec.components.schemas[schema.$ref.split("/").pop()], value, where, out);
@@ -37,6 +42,7 @@
       return;
     }
     if (schema.enum && !schema.enum.includes(value)) out.push(`${where}: «${value}» нет в enum`);
+    if (kind === "string" && FORMATS[schema.format] && !FORMATS[schema.format].test(value)) out.push(`${where}: «${value}» не ${schema.format}`);
     if (kind === "array" && schema.items) value.forEach((item, i) => checkSchema(spec, schema.items, item, `${where}[${i}]`, out));
     if (kind === "object" && (schema.properties || schema.required)) {
       (schema.required || []).forEach((key) => {

@@ -68,6 +68,8 @@ MUTATIONS = [
     ("media-no-positions", "server.js", ".map((id) => ({ deviceGuid: id, x: deviceSpec(id).position.x, y: deviceSpec(id).position.y, isSource: id === src })),", ".map((id) => ({ deviceGuid: id, x: 0, y: 0, isSource: id === src })),", "api"),
     ("media-plan-by-site-only", "server.js", "const placed = ids.map((id) => deviceSpec(id).position).find(Boolean);", "const placed = null;", "api"),
     ("ui-map-ignores-markers", "app.js", "const markers = ordered.map((m) => deviceMarker(m, { source: m.deviceGuid === source, active: m.deviceGuid === state.activeCam })).join(\"\");", "const markers = \"\";", "ui"),
+    ("number-is-guid", "server.js", "        number: ev.number,", "        number: ev.id,", "api"),
+    ("event-type-guid-is-id", "server.js", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeGuid !== q.eventTypeGuid) return false;", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeId !== q.eventTypeGuid) return false;", "api"),
     ("stream-id-repeats", "server.js", "id: String(++seq),", "id: String(seq),", "api"),
     ("ui-required-from-ignored", "app.js", "if (!field.requiredFrom) return Boolean(field.required);", "return Boolean(field.required);", "ui"),
     ("ui-hotkeys-under-modal", "app.js", "if (modalOpen && !hotkey.worksInModal) return;", "", "ui"),

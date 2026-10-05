@@ -96,6 +96,12 @@
       },
       all: async (filter) => (await env.ok("GET", `/operator/incidents?filter=${filter || "all"}&pageSize=1000`)).items,
       card: (id) => env.ok("GET", `/operator/incidents/${enc(id)}`),
+      // Идентификатор инцидента по номеру из эталонного набора (INC-1836): guid — UUID
+      async guidOf(number) {
+        const found = (await env.all("all")).find((e) => e.number === number);
+        if (!found) throw new Error(`нет инцидента ${number}`);
+        return found.guid;
+      },
       session: () => env.ok("GET", "/operator/session"),
       // Версия записи для If-Match (§14.1) — из ETag свежего чтения карточки, как у клиента,
       // который только что её открыл
