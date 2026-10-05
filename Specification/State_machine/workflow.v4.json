@@ -852,7 +852,7 @@
     "createFrom": { "states": ["new"], "sameEventType": true, "minItems": 2, "maxItems": 10 },
     "shared": ["group_id", "owner", "scenarioAnswers"],
     "notShared": ["state", "timers", "journal"],
-    "memberLeavesGroupOn": ["reaction_timer_expired", "manual_exclude"],
+    "memberLeavesGroupOn": ["manual_exclude"],
     "excludeGuards": [
       { "fn": "stateIs", "args": [["in_progress"]] },
       { "fn": "isOwner" },

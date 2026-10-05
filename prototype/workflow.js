@@ -2339,7 +2339,6 @@ window.IM_WORKFLOW = {
       "journal"
     ],
     "memberLeavesGroupOn": [
-      "reaction_timer_expired",
       "manual_exclude"
     ],
     "excludeGuards": [
