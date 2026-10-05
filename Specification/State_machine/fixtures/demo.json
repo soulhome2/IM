@@ -101,247 +101,539 @@
     {
       "id": "device-1",
       "name": "Главный вход",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 152,
+        "y": 214
+      },
+      "thumbnailUrl": "demo:scene/entrance"
     },
     {
       "id": "device-2",
       "name": "Стойка ресепшн",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 60,
+        "y": 164
+      },
+      "thumbnailUrl": "demo:scene/guard"
     },
     {
       "id": "device-3",
       "name": "Конференц-зал — сцена",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 60,
+        "y": 48
+      }
     },
     {
       "id": "device-4",
       "name": "Конференц-зал — общий план",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 176,
+        "y": 102
+      }
     },
     {
       "id": "device-5",
       "name": "Опенспейс разработки",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 312,
+        "y": 100
+      }
     },
     {
       "id": "device-6",
       "name": "Маркетинг — рабочая зона",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 346,
+        "y": 124
+      }
     },
     {
       "id": "device-7",
       "name": "Переговорная «Невада»",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 238,
+        "y": 122
+      }
     },
     {
       "id": "device-8",
       "name": "Ворота погрузки А",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 44,
+        "y": 172
+      },
+      "thumbnailUrl": "demo:scene/gate"
     },
     {
       "id": "device-9",
       "name": "Стеллажи А1–А8",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 208,
+        "y": 74
+      },
+      "thumbnailUrl": "demo:scene/racks"
     },
     {
       "id": "device-10",
       "name": "Зона приёмки товара",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 340,
+        "y": 76
+      },
+      "thumbnailUrl": "demo:scene/receiving"
     },
     {
       "id": "device-11",
       "name": "Разгрузочная рампа",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 66,
+        "y": 86
+      },
+      "thumbnailUrl": "demo:scene/dock"
     },
     {
       "id": "device-12",
       "name": "Центральный проход",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 160,
+        "y": 130
+      },
+      "thumbnailUrl": "demo:scene/racks"
     },
     {
       "id": "device-13",
       "name": "Холодильная камера",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 340,
+        "y": 210
+      }
     },
     {
       "id": "device-14",
       "name": "Пост погрузчика",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "warehouse",
+        "x": 66,
+        "y": 208
+      }
     },
     {
       "id": "device-15",
       "name": "Испытательный стенд",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 70,
+        "y": 62
+      }
     },
     {
       "id": "device-16",
       "name": "Вход в чистую зону",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 166,
+        "y": 116
+      }
     },
     {
       "id": "device-17",
       "name": "Лабораторные столы",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 250,
+        "y": 62
+      }
     },
     {
       "id": "device-18",
       "name": "Серверная стойка",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 340,
+        "y": 62
+      },
+      "thumbnailUrl": "demo:scene/server"
     },
     {
       "id": "device-19",
       "name": "Вытяжной шкаф",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 340,
+        "y": 112
+      }
     },
     {
       "id": "device-20",
       "name": "Коридор корпуса Б",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 200,
+        "y": 158
+      }
     },
     {
       "id": "device-21",
       "name": "Переговорная «Юпитер»",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 70,
+        "y": 212
+      }
     },
     {
       "id": "device-22",
       "name": "Офисная кухня",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "lab",
+        "x": 300,
+        "y": 212
+      }
     },
     {
       "id": "device-23",
       "name": "Торговый зал",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 96,
+        "y": 104
+      },
+      "thumbnailUrl": "demo:scene/hall"
     },
     {
       "id": "device-24",
       "name": "Кассовая зона",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 166,
+        "y": 124
+      },
+      "thumbnailUrl": "demo:scene/checkout"
     },
     {
       "id": "device-25",
       "name": "Коридор примерочных",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 258,
+        "y": 104
+      },
+      "thumbnailUrl": "demo:scene/corridor"
     },
     {
       "id": "device-26",
       "name": "Витрина у входа",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 62,
+        "y": 208
+      },
+      "thumbnailUrl": "demo:scene/storefront"
     },
     {
       "id": "device-27",
       "name": "Зал ресторана",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 240,
+        "y": 202
+      }
     },
     {
       "id": "device-28",
       "name": "Кухня ресторана",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 300,
+        "y": 172
+      }
     },
     {
       "id": "device-29",
       "name": "Фойе и бар",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 344,
+        "y": 204
+      }
     },
     {
       "id": "device-30",
       "name": "Кинозал №3",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "mall",
+        "x": 350,
+        "y": 168
+      }
     },
     {
       "id": "device-31",
       "name": "Зона ожидания — общий план",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 300,
+        "y": 74
+      },
+      "thumbnailUrl": "demo:scene/entrance"
     },
     {
       "id": "device-32",
       "name": "Гардероб",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 350,
+        "y": 50
+      }
     },
     {
       "id": "device-33",
       "name": "Обзор поста охраны",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "office",
+        "x": 258,
+        "y": 196
+      },
+      "thumbnailUrl": "demo:scene/guard"
     },
     {
       "id": "device-34",
       "name": "КПП — проходная",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "checkpoint",
+        "x": 292,
+        "y": 74
+      },
+      "thumbnailUrl": "demo:scene/checkpoint"
     },
     {
       "id": "device-35",
       "name": "КПП — шлагбаум и въезд",
-      "type": "camera"
+      "type": "camera",
+      "position": {
+        "plan": "checkpoint",
+        "x": 140,
+        "y": 148
+      },
+      "thumbnailUrl": "demo:scene/barrier"
     },
     {
       "id": "fire-1",
       "name": "Датчик дыма 1",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "office",
+        "x": 150,
+        "y": 142
+      }
     },
     {
       "id": "fire-2",
       "name": "Датчик дыма 2",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "office",
+        "x": 170,
+        "y": 42
+      }
     },
     {
       "id": "fire-3",
       "name": "Датчик дыма 3",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "warehouse",
+        "x": 268,
+        "y": 46
+      }
     },
     {
       "id": "fire-4",
       "name": "Датчик дыма 4",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "lab",
+        "x": 162,
+        "y": 42
+      }
     },
     {
       "id": "fire-5",
       "name": "Датчик дыма 5",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "mall",
+        "x": 62,
+        "y": 62
+      }
     },
     {
       "id": "fire-6",
       "name": "Датчик дыма — зона ожидания",
-      "type": "fire-detector"
+      "type": "fire-detector",
+      "position": {
+        "plan": "office",
+        "x": 240,
+        "y": 76
+      }
     },
     {
       "id": "panic-1",
       "name": "Тревожная кнопка — пост охраны",
-      "type": "panic-button"
+      "type": "panic-button",
+      "position": {
+        "plan": "office",
+        "x": 300,
+        "y": 214
+      }
     },
     {
       "id": "panic-2",
       "name": "Тревожная кнопка — ресепшн",
-      "type": "panic-button"
+      "type": "panic-button",
+      "position": {
+        "plan": "office",
+        "x": 44,
+        "y": 190
+      }
     },
     {
       "id": "ppe-1",
       "name": "Детектор СИЗ — разгрузочная рампа",
-      "type": "ppe-detector"
+      "type": "ppe-detector",
+      "position": {
+        "plan": "warehouse",
+        "x": 96,
+        "y": 122
+      }
     },
     {
       "id": "ppe-2",
       "name": "Детектор СИЗ — вход в цех",
-      "type": "ppe-detector"
+      "type": "ppe-detector",
+      "position": {
+        "plan": "warehouse",
+        "x": 330,
+        "y": 162
+      }
     },
     {
       "id": "gate-1",
       "name": "Точка прохода — КПП склада",
-      "type": "access-point"
+      "type": "access-point",
+      "position": {
+        "plan": "checkpoint",
+        "x": 230,
+        "y": 74
+      }
     },
     {
       "id": "gate-2",
       "name": "Точка прохода — турникет офиса",
-      "type": "access-point"
+      "type": "access-point",
+      "position": {
+        "plan": "office",
+        "x": 112,
+        "y": 180
+      }
     },
     {
       "id": "mic-1",
       "name": "Микрофон — витрина у входа",
-      "type": "microphone"
+      "type": "microphone",
+      "position": {
+        "plan": "mall",
+        "x": 116,
+        "y": 182
+      }
     },
     {
       "id": "mic-2",
       "name": "Микрофон — торговый зал",
-      "type": "microphone"
+      "type": "microphone",
+      "position": {
+        "plan": "mall",
+        "x": 132,
+        "y": 70
+      }
+    }
+  ],
+  "plans": [
+    {
+      "id": "mall",
+      "name": "Торговый центр · 1-й этаж",
+      "site": "Торговый центр",
+      "imageUrl": "demo:plan/mall"
+    },
+    {
+      "id": "warehouse",
+      "name": "Складской комплекс · Этаж А",
+      "site": "Складской комплекс",
+      "imageUrl": "demo:plan/warehouse"
+    },
+    {
+      "id": "office",
+      "name": "Главный офис · 1-й этаж",
+      "site": "Главный офис",
+      "imageUrl": "demo:plan/office"
+    },
+    {
+      "id": "lab",
+      "name": "Технопарк · Корпус А",
+      "site": "Технопарк",
+      "imageUrl": "demo:plan/lab"
+    },
+    {
+      "id": "checkpoint",
+      "name": "КПП и проходная склада",
+      "imageUrl": "demo:plan/checkpoint"
     }
   ],
   "sourceGroups": [

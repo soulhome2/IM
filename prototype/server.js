@@ -34,6 +34,7 @@
     let ACTORS = [];
     let DEVICE_TYPES = {};
     let DEVICE_CATALOG = {};
+    let PLANS = [];
     let TREE = [];
     let SCENARIOS = {};
     let events = [];
@@ -193,7 +194,10 @@
       GROUPS = data.people.dutyGroups.map((g) => Object.assign({ group: true }, g));
       ACTORS = OPERATORS.concat(GROUPS, data.people.system.map((a) => Object.assign({ system: true }, a)));
       DEVICE_TYPES = Object.fromEntries(data.deviceTypes.map((t) => [t.id, { label: t.label }]));
-      DEVICE_CATALOG = Object.fromEntries(data.devices.map((d) => [d.id, { name: d.name, type: d.type }]));
+      DEVICE_CATALOG = Object.fromEntries(
+        data.devices.map((d) => [d.id, { name: d.name, type: d.type, position: d.position || null, thumbnailUrl: d.thumbnailUrl || null }])
+      );
+      PLANS = data.plans || [];
       const tree = (groups) =>
         groups.map((g) =>
           Object.assign({ id: g.id, name: g.name }, g.description ? { description: g.description } : {}, {
@@ -473,8 +477,18 @@
       });
     }
 
+    // План инцидента: тот, где стоит источник или первое устройство события с положением,
+    // иначе план площадки
+    function planOf(ev) {
+      const ids = [eventSource(ev), ...(ev.deviceIds || []), ...(ev.cameras || [])].filter(Boolean);
+      const placed = ids.map((id) => deviceSpec(id).position).find(Boolean);
+      return PLANS.find((p) => (placed ? p.id === placed.plan : p.site === ev.site)) || null;
+    }
+
     function mediaView(ev) {
       const src = eventSource(ev);
+      const plan = planOf(ev);
+      const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])];
       return {
         cameras: (ev.cameras || []).map((id) => ({
           guid: id,
@@ -483,12 +497,16 @@
           archiveUrl: null,
           liveUrl: null,
           archiveStartAt: iso(ev.occurredAt),
-          thumbnailUrl: null,
+          thumbnailUrl: deviceSpec(id).thumbnailUrl,
         })),
-        // Положение значков на плане — у подсистемы карт; встроенный сервер отдаёт только состав
-        map: {
-          planName: ev.site || null,
-          markers: [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].map((id) => ({ deviceGuid: id, isSource: id === src })),
+        // Значки на плане — устройства и камеры инцидента, у которых есть положение на этом плане
+        map: plan && {
+          planGuid: plan.id,
+          planName: plan.name,
+          imageUrl: plan.imageUrl,
+          markers: ids
+            .filter((id) => (deviceSpec(id).position || {}).plan === plan.id)
+            .map((id) => ({ deviceGuid: id, x: deviceSpec(id).position.x, y: deviceSpec(id).position.y, isSource: id === src })),
         },
       };
     }

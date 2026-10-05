@@ -213,6 +213,17 @@ def check_fixture(w, err):
         err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}
     devices = {d["id"] for d in fx["devices"]}
+    plans = {p["id"] for p in fx.get("plans", [])}
+    sites = {i.get("site") for i in fx["incidents"]}
+    for p in fx.get("plans", []):
+        if p.get("site") and p["site"] not in sites:
+            err.append(f"эталон: план {p['id']} — площадки «{p['site']}» нет ни у одного инцидента")
+    for d in fx["devices"]:
+        pos = d.get("position")
+        if pos and (pos.get("plan") not in plans or not all(isinstance(pos.get(k), (int, float)) for k in ("x", "y"))):
+            err.append(f"эталон: устройство {d['id']} — положение на несуществующем плане или без x, y")
+        if d.get("thumbnailUrl") and d.get("type") != "camera":
+            err.append(f"эталон: устройство {d['id']} — картинка есть только у камеры")
     types = {t["id"] for t in fx["deviceTypes"]}
     states = {st["id"] for st in w["states"]}
     catalog = lambda name: {i["id"] for i in w["reasonCatalogs"][name]["items"]}

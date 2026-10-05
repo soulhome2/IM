@@ -589,6 +589,38 @@
     assert.eq(await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/media`), card.media, "камеры и карта");
   });
 
+  test("Камеры и план (GET …/media): картинки камер, план, значки с положением — из эталонного набора", async () => {
+    const env = await makeEnv();
+    const fx = window.IM_FIXTURE;
+    const dev = Object.fromEntries(fx.devices.map((d) => [d.guid || d.id, d]));
+    let markers = 0;
+    for (const inc of fx.incidents) {
+      const media = await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/media`);
+      const ids = [...new Set([...inc.devices, ...inc.cameras])];
+      const source = inc.devices[0] || inc.cameras[0];
+      assert.eq(
+        media.cameras.map((c) => [c.guid, c.thumbnailUrl, c.isSource]),
+        inc.cameras.map((id) => [id, dev[id].thumbnailUrl || null, id === source]),
+        `${inc.number}: камеры`
+      );
+      // План — там, где источник или первое устройство с положением, иначе план площадки
+      const placed = [source, ...ids].map((id) => dev[id] && dev[id].position).find(Boolean);
+      const plan = fx.plans.find((p) => (placed ? p.id === placed.plan : p.site === inc.site)) || null;
+      if (!plan) {
+        assert.eq(media.map, null, `${inc.number}: плана нет`);
+        continue;
+      }
+      assert.eq([media.map.planGuid, media.map.planName, media.map.imageUrl], [plan.guid || plan.id, plan.name, plan.imageUrl], `${inc.number}: план`);
+      const expected = ids
+        .filter((id) => dev[id].position && dev[id].position.plan === plan.id)
+        .map((id) => [id, dev[id].position.x, dev[id].position.y, id === source]);
+      const got = media.map.markers.map((m) => [m.deviceGuid, m.x, m.y, m.isSource]);
+      assert.eq(got.slice().sort(), expected.slice().sort(), `${inc.number}: значки на плане`);
+      markers += got.length;
+    }
+    return `инцидентов ${fx.incidents.length}, значков ${markers}`;
+  });
+
   test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

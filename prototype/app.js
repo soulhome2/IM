@@ -328,25 +328,6 @@
     `,
   };
 
-  const SCENE_BY_DEVICE = {
-    "device-1": "entrance",
-    "device-2": "guard",
-    "device-8": "gate",
-    "device-9": "racks",
-    "device-10": "receiving",
-    "device-11": "dock",
-    "device-12": "racks",
-    "device-18": "server",
-    "device-23": "hall",
-    "device-24": "checkout",
-    "device-25": "corridor",
-    "device-26": "storefront",
-    "device-31": "entrance",
-    "device-33": "guard",
-    "device-34": "checkpoint",
-    "device-35": "barrier",
-  };
-
   // Мини-глифы устройств для планов: система координат -8..8.
   const DEVICE_GLYPH = {
     camera: `<rect x="-7" y="-4" width="9" height="8" rx="1.5"/><path d="M2.4 -2.2 7.4 -5.2V5.2L2.4 2.2z"/>`,
@@ -359,7 +340,6 @@
 
   const PLANS = {
     mall: {
-      title: "Торговый центр · 1-й этаж",
       svg: `
         <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
         <rect x="32" y="32" width="158" height="106" fill="var(--map-room)" stroke="var(--stroke-2)"/>
@@ -385,7 +365,6 @@
       `,
     },
     warehouse: {
-      title: "Складской комплекс · Этаж А",
       svg: `
         <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
         <rect x="30" y="30" width="76" height="200" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
@@ -416,7 +395,6 @@
       `,
     },
     office: {
-      title: "Главный офис · 1-й этаж",
       svg: `
         <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
         <rect x="32" y="32" width="168" height="82" fill="var(--map-room)" stroke="var(--stroke-2)"/>
@@ -444,7 +422,6 @@
       `,
     },
     lab: {
-      title: "Технопарк · Корпус А",
       svg: `
         <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
         <rect x="32" y="32" width="158" height="94" fill="var(--map-room)" stroke="var(--stroke-2)"/>
@@ -473,7 +450,6 @@
       `,
     },
     checkpoint: {
-      title: "КПП и проходная склада",
       svg: `
         <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
         <rect x="16" y="96" width="368" height="66" fill="var(--map-room)" stroke="var(--stroke-2)"/>
@@ -499,69 +475,6 @@
         </g>
       `,
     },
-  };
-
-  const DEVICE_POS = {
-    "device-1": { plan: "office", x: 152, y: 214 },
-    "device-2": { plan: "office", x: 60, y: 164 },
-    "device-3": { plan: "office", x: 60, y: 48 },
-    "device-4": { plan: "office", x: 176, y: 102 },
-    "device-5": { plan: "office", x: 312, y: 100 },
-    "device-6": { plan: "office", x: 346, y: 124 },
-    "device-7": { plan: "office", x: 238, y: 122 },
-    "device-31": { plan: "office", x: 300, y: 74 },
-    "device-32": { plan: "office", x: 350, y: 50 },
-    "device-33": { plan: "office", x: 258, y: 196 },
-    "fire-1": { plan: "office", x: 150, y: 142 },
-    "fire-2": { plan: "office", x: 170, y: 42 },
-    "fire-6": { plan: "office", x: 240, y: 76 },
-    "panic-1": { plan: "office", x: 300, y: 214 },
-    "panic-2": { plan: "office", x: 44, y: 190 },
-    "gate-2": { plan: "office", x: 112, y: 180 },
-
-    "device-8": { plan: "warehouse", x: 44, y: 172 },
-    "device-9": { plan: "warehouse", x: 208, y: 74 },
-    "device-10": { plan: "warehouse", x: 340, y: 76 },
-    "device-11": { plan: "warehouse", x: 66, y: 86 },
-    "device-12": { plan: "warehouse", x: 160, y: 130 },
-    "device-13": { plan: "warehouse", x: 340, y: 210 },
-    "device-14": { plan: "warehouse", x: 66, y: 208 },
-    "fire-3": { plan: "warehouse", x: 268, y: 46 },
-    "ppe-1": { plan: "warehouse", x: 96, y: 122 },
-    "ppe-2": { plan: "warehouse", x: 330, y: 162 },
-
-    "device-15": { plan: "lab", x: 70, y: 62 },
-    "device-16": { plan: "lab", x: 166, y: 116 },
-    "device-17": { plan: "lab", x: 250, y: 62 },
-    "device-18": { plan: "lab", x: 340, y: 62 },
-    "device-19": { plan: "lab", x: 340, y: 112 },
-    "device-20": { plan: "lab", x: 200, y: 158 },
-    "device-21": { plan: "lab", x: 70, y: 212 },
-    "device-22": { plan: "lab", x: 300, y: 212 },
-    "fire-4": { plan: "lab", x: 162, y: 42 },
-
-    "device-23": { plan: "mall", x: 96, y: 104 },
-    "device-24": { plan: "mall", x: 166, y: 124 },
-    "device-25": { plan: "mall", x: 258, y: 104 },
-    "device-26": { plan: "mall", x: 62, y: 208 },
-    "device-27": { plan: "mall", x: 240, y: 202 },
-    "device-28": { plan: "mall", x: 300, y: 172 },
-    "device-29": { plan: "mall", x: 344, y: 204 },
-    "device-30": { plan: "mall", x: 350, y: 168 },
-    "fire-5": { plan: "mall", x: 62, y: 62 },
-    "mic-1": { plan: "mall", x: 116, y: 182 },
-    "mic-2": { plan: "mall", x: 132, y: 70 },
-
-    "device-34": { plan: "checkpoint", x: 292, y: 74 },
-    "device-35": { plan: "checkpoint", x: 140, y: 148 },
-    "gate-1": { plan: "checkpoint", x: 230, y: 74 },
-  };
-
-  const PLAN_BY_SITE = {
-    "Торговый центр": "mall",
-    "Складской комплекс": "warehouse",
-    "Главный офис": "office",
-    Технопарк: "lab",
   };
 
   /* ===== Устройства на экране =====
@@ -1959,17 +1872,17 @@
       name: ref.name || (cam && cam.name) || id,
       type: ref.typeId || "camera",
       typeLabel: ref.typeLabel || "Камера видеонаблюдения",
-      scene: SCENE_BY_DEVICE[id] || "hall",
+      thumbnailUrl: cam ? cam.thumbnailUrl : null,
     };
   }
 
-  function eventPlan(ev) {
-    const ids = [ev.source && ev.source.guid, ...(ev.devices || []).map((d) => d.guid)].filter(Boolean);
-    for (const id of ids) {
-      if (DEVICE_POS[id]) return DEVICE_POS[id].plan;
-    }
-    return PLAN_BY_SITE[ev.site] || "mall";
-  }
+  // Картинки камер и планов приходят ссылками (GET …/media). Ссылки demo:scene/<имя> и
+  // demo:plan/<имя> из эталонного набора — рисунки-заглушки прототипа (SCENES, PLANS),
+  // остальные — обычная картинка по ссылке
+  const demoArt = (url, kind) => {
+    const m = /^demo:(scene|plan)\/([\w-]+)$/.exec(url || "");
+    return m && m[1] === kind ? m[2] : null;
+  };
 
   function mediaMode() {
     const ev = cardOfSelected() || selected();
@@ -2024,9 +1937,13 @@
 
     $("videoStage").innerHTML = `
       <div class="cam" data-cam="${escapeHtml(state.activeCam)}">
-        <svg class="cam-scene" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          ${trSvg(SCENES[cam.scene] || SCENES.hall)}
-        </svg>
+        ${
+          cam.thumbnailUrl && !demoArt(cam.thumbnailUrl, "scene")
+            ? `<img class="cam-scene" src="${escapeHtml(cam.thumbnailUrl)}" alt="">`
+            : `<svg class="cam-scene" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          ${trSvg(SCENES[demoArt(cam.thumbnailUrl, "scene")] || SCENES.hall)}
+        </svg>`
+        }
         <div class="cam-hud">
           <div>
             <div class="mode-tag ${state.videoMode}">${live ? "LIVE" : te("АРХИВ")}</div>
@@ -2081,9 +1998,8 @@
     renderMap();
   }
 
-  function deviceMarker(id, opts) {
-    const pos = DEVICE_POS[id];
-    if (!pos) return "";
+  function deviceMarker(pos, opts) {
+    const id = pos.deviceGuid;
     const dev = devView(id);
     const cls = ["dev-marker", `dev-${dev.type}`, opts.source ? "is-source" : "", opts.active ? "is-active" : ""]
       .filter(Boolean)
@@ -2113,21 +2029,26 @@
       $("mapRoot").innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
       return;
     }
-    const planId = eventPlan(ev);
-    const plan = PLANS[planId] || PLANS.mall;
+    const plan = ev.media && ev.media.map;
+    if (!plan) {
+      $("mapCaption").textContent = t("Место сработки");
+      $("mapRoot").innerHTML = `<div class="empty">${te("План площадки не привязан")}</div>`;
+      return;
+    }
+    const art = demoArt(plan.imageUrl, "plan");
+    const drawing = art ? trSvg(PLANS[art] ? PLANS[art].svg : "") : `<image href="${escapeHtml(plan.imageUrl || "")}" width="400" height="260"/>`;
     const source = ev.source ? ev.source.guid : null;
-    $("mapCaption").textContent = t(plan.title);
+    $("mapCaption").textContent = t(plan.planName);
 
-    const ids = (ev.devices || []).map((d) => d.guid).filter((id) => DEVICE_POS[id] && DEVICE_POS[id].plan === planId);
     // Источник рисуем последним, чтобы пульсация была поверх остальных значков.
-    const ordered = ids.filter((id) => id !== source).concat(ids.includes(source) ? [source] : []);
-    const markers = ordered.map((id) => deviceMarker(id, { source: id === source, active: id === state.activeCam })).join("");
+    const ordered = plan.markers.filter((m) => m.deviceGuid !== source).concat(plan.markers.filter((m) => m.deviceGuid === source));
+    const markers = ordered.map((m) => deviceMarker(m, { source: m.deviceGuid === source, active: m.deviceGuid === state.activeCam })).join("");
     const srcDev = source ? devView(source) : null;
     const camCount = camerasOf(ev).length;
 
     $("mapRoot").innerHTML = `
-      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="${te("План: {name}", { name: t(plan.title) })}">
-        ${trSvg(plan.svg)}
+      <svg class="map-svg" viewBox="0 0 400 260" role="img" aria-label="${te("План: {name}", { name: t(plan.planName) })}">
+        ${drawing}
         ${markers}
       </svg>
       <div class="map-legend">

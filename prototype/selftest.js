@@ -285,6 +285,19 @@
       return closedId;
     });
 
+    await step(
+      "Камера и план — из ответа сервера: картинка камеры, источник на плане",
+      async () => {
+        await openOwn(closedId);
+        expect($("videoStage").querySelector(".cam-scene"), "нет картинки камеры");
+        expect($("mapRoot").querySelector(".dev-marker.is-source"), "на плане нет источника события");
+        const caption = $("mapCaption").textContent.trim();
+        expect(caption && caption !== "Место сработки", `подпись плана: «${caption}»`);
+        return caption;
+      },
+      "Взять новое событие"
+    );
+
     await step("Ответ с вариантами сохраняется после «Далее»", async () => {
       await openOwn(closedId);
       for (let i = 0; i < 6; i++) {
