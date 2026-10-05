@@ -180,7 +180,9 @@
         const u = units("in_progress", ev);
         if (u.size + extra < W.limits.maxActive) return null;
         if (extra) return ["Лимит активных ({n}): после исключения в работе станет больше", { n: W.limits.maxActive }];
-        return ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: [...u][0] }];
+        // В подсказке — номер инцидента, который держит лимит (у группы — номер первого из неё)
+        const busy = ctx.events().find((e) => e.state === "in_progress" && isMine(e) && u.has(e.groupId || e.id));
+        return ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
       },
       withinHoldLimit: (ev) =>
         units("on_hold", ev).size < W.limits.maxOnHold ? null : ["Больше {n} отложенных держать нельзя", { n: W.limits.maxOnHold }],

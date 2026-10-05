@@ -420,11 +420,13 @@
       const b = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find(off);
       expect(b, "при занятом лимите нет недоступной кнопки «Взять»");
       expect(b.getAttribute("aria-disabled") === "true" && !b.disabled, "недоступная кнопка не получает фокус и нажатие");
-      const before = $("toasts").children.length;
+      // Новое уведомление — новый последний элемент: старые исчезают сами, считать их нельзя
+      const before = $("toasts").lastElementChild;
       await click(b);
       const last = $("toasts").lastElementChild;
       const text = last ? last.textContent : "";
-      expect($("toasts").children.length > before && text.includes("Лимит активных"), `нажатие не объяснило причину: «${text}»`);
+      expect(last && last !== before && text.includes("Лимит активных"), `нажатие не объяснило причину: «${text}»`);
+      expect(!/[0-9a-f]{8}-[0-9a-f]{4}-/.test(text), `в подсказке идентификатор вместо номера: «${text}»`);
       return text;
     }, "Взять, вернуться к очереди, продолжить");
 
