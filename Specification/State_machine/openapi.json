@@ -1674,6 +1674,52 @@
           }
         }
       }
+    },
+    "/test/operators/{operatorId}/roles": {
+      "put": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testSetOperatorRoles",
+        "summary": "Тестовый стенд: сменить роли человека",
+        "description": "Меняет роли человека из набора посреди прогона — как в продукте при смене ролей или групп доступа. Сервер сразу выполняет то, что от этого сработало: у кого из владельцев и адресатов пропал доступ к объекту, тот инцидент возвращается в очередь (`addressee_lost_access`, §5). В ответе — выполненные переходы.",
+        "parameters": [
+          {
+            "name": "operatorId",
+            "in": "path",
+            "required": true,
+            "description": "Идентификатор человека из набора, например `petrova`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRolesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Роли изменены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRolesResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4784,6 +4830,55 @@
           "now": {
             "type": "string",
             "format": "date-time"
+          },
+          "fired": {
+            "type": "array",
+            "description": "Автоматические переходы, которые выполнил планировщик за это время (§6.2)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "incidentGuid": {
+                  "type": "string"
+                },
+                "transitionId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestRolesRequest": {
+        "type": "object",
+        "required": [
+          "roles"
+        ],
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Новые роли человека (§5)"
+          }
+        }
+      },
+      "TestRolesResult": {
+        "type": "object",
+        "required": [
+          "operatorId",
+          "roles",
+          "fired"
+        ],
+        "properties": {
+          "operatorId": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "fired": {
             "type": "array",

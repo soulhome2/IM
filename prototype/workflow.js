@@ -2423,6 +2423,96 @@ window.IM_WORKFLOW = {
       "ui": {
         "surface": []
       }
+    },
+    {
+      "id": "addressee_lost_access",
+      "label": "Возвращён в очередь: у владельца нет доступа к объекту",
+      "$comment": "§5, §6.2 (RULE-33). Группы доступа или роли изменились, и у владельца или адресата больше нет доступа к объекту инцидента — инцидент ему не виден, поэтому возвращается в очередь. Группе-адресату хватает доступа у одного участника. Уровень эскалации не меняется, прогресс сценария сохраняется.",
+      "from": [
+        "pending_acceptance",
+        "in_progress",
+        "on_hold"
+      ],
+      "to": "new",
+      "trigger": "system",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "addresseeHasAccess",
+          "args": [
+            false
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setAssignmentGroup",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearHoldReason"
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Возвращён в очередь: у {previousOwnerName} нет доступа к объекту"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "evictOpenCard",
+          "args": [
+            "previousOwner"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "shift_lead"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
     }
   ],
   "navActions": {
@@ -3012,6 +3102,15 @@ window.IM_WORKFLOW = {
         ],
         "onFail": "disable",
         "extendsBaseRegistry": true
+      },
+      {
+        "fn": "addresseeHasAccess",
+        "args": [
+          "expected"
+        ],
+        "onFail": "hide",
+        "extendsBaseRegistry": true,
+        "$comment": "§5. Есть ли у владельца или адресата инцидента доступ к его объекту: человеку — по ролям, группе-адресату — хотя бы у одного участника. Инцидент без адресата условию false не отвечает."
       },
       {
         "fn": "ownerHasDutyGroup",

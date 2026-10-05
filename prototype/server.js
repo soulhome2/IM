@@ -1096,6 +1096,23 @@
           },
         ],
         [
+          "PUT",
+          "/test/operators/{operatorId}/roles",
+          (p, q, body) => {
+            // Роли изменились (в продукте — роли или группы доступа): сервер сразу проверяет, у кого
+            // из владельцев и адресатов пропал доступ (addressee_lost_access, §5)
+            const person = OPERATORS.find((o) => o.id === p.operatorId);
+            if (!person) return problem(404, "NOT_FOUND", ["Нет оператора {id}", { id: p.operatorId }]);
+            person.roles = (body && body.roles) || [];
+            if (person.id === ME) {
+              rolesOverride = person.roles;
+              myDevices = accessibleDevices(person.roles);
+            }
+            const fired = runScheduler();
+            return { status: 200, body: { operatorId: person.id, roles: person.roles, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
+          },
+        ],
+        [
           "POST",
           "/test/clock",
           (p, q, body) => {

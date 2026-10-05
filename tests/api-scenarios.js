@@ -837,6 +837,31 @@
     assert.status(res, 200, null, "передача группе со смешанным доступом");
   });
 
+  test("Потеря доступа (§5): у владельца или адресата нет доступа к объекту — инцидент в очереди; группе хватает одного участника", async () => {
+    const env = await makeEnv();
+    const open = await env.all("open");
+    const hers = open.filter((e) => e.owner && e.owner.id === "petrova");
+    assert.ok(hers.some((e) => e.site !== "Торговый центр"), "у Петровой есть инциденты вне ТЦ");
+    // Инцидент ТЦ — Петровой: после смены роли он должен остаться у неё
+    const mall = open.find((e) => e.state === "new" && e.site === "Торговый центр");
+    assert.status(await env.act(mall.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "передать Петровой инцидент ТЦ");
+    const res = await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] });
+    assert.status(res, 200, null, "сменить роли Петровой");
+    for (const inc of hers.filter((e) => e.site !== "Торговый центр")) {
+      assert.ok(res.body.fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "addressee_lost_access"), `${inc.number}: сработала потеря доступа`);
+      const c = await env.card(inc.guid);
+      assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], `${inc.number}: снова новый, ничей`);
+      assert.ok(c.journal.some((j) => /нет доступа к объекту/.test(j.templateKey)), `${inc.number}: запись в журнале`);
+    }
+    const kept = await env.card(mall.guid);
+    assert.eq([kept.state, kept.owner && kept.owner.id], ["pending_acceptance", "petrova"], "инцидент ТЦ остался у Петровой");
+    // Группе старших хватает доступа у меня; без него — в очередь
+    const forGroup = (await env.all("all")).find((e) => e.assignmentGroup && e.assignmentGroup.id === "grp-leads" && e.site !== "Торговый центр");
+    assert.ok(!res.body.fired.some((f) => f.incidentGuid === forGroup.guid), "группе хватает доступа у одного участника");
+    const mine = await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
+    assert.ok(mine.body.fired.some((f) => f.incidentGuid === forGroup.guid && f.transitionId === "addressee_lost_access"), "в группе доступа нет ни у кого — в очередь");
+  });
+
   test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

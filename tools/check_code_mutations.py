@@ -83,6 +83,7 @@ MUTATIONS = [
     ("target-access-ignored", "engine.js", "return !target || ctx.hasAccess(target, ev) ? null : [\"У адресата нет доступа к объекту инцидента\"];", "return null;", "api"),
     ("group-access-all-members", "server.js", "if (group) return group.members.some((m) => hasAccess(m, ev));", "if (group) return group.members.every((m) => hasAccess(m, ev));", "api"),
     ("level-access-ignored", "engine.js", ".find((l) => !ctx.hasAccess || ctx.hasAccess(refToId(l.targetRef), ev)) || null;", ".find(() => true) || null;", "api"),
+    ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("stream-id-repeats", "server.js", "id: String(++seq),", "id: String(seq),", "api"),
     ("ui-required-from-ignored", "app.js", "if (!field.requiredFrom) return Boolean(field.required);", "return Boolean(field.required);", "ui"),
     ("ui-hotkeys-under-modal", "app.js", "if (modalOpen && !hotkey.worksInModal) return;", "", "ui"),

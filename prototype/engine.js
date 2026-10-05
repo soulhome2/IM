@@ -184,6 +184,11 @@
       },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
+      addresseeHasAccess: (ev, [expected]) => {
+        const who = addressee(ev);
+        if (!who) return ["У инцидента нет адресата"];
+        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["Доступ адресата не подходит"];
+      },
       escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["Нет подходящего уровня эскалации"]),
       ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
