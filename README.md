@@ -13,6 +13,7 @@
 | [prototype/server.js](prototype/server.js) | Встроенный сервер: отвечает по контракту `openapi.json`, хранит инциденты, журнал, ответы сценария и сессию, выполняет переходы машины и автоматические переходы, эмулирует коллег |
 | [prototype/api.js](prototype/api.js) | Клиент API: запросы интерфейса уходят во встроенный сервер, а с `?api=https://…` — на настоящий бэкенд |
 | [fixtures/demo.json](Specification/State_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы, сценарии. На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
+| [BACKEND.md](Specification/State_machine/BACKEND.md) | Памятка для команды бэкенда: что реализовать, как проверить на тестовом стенде, когда готово |
 | [prototype/colleagues.js](prototype/colleagues.js) | Эмуляция коллег во встроенном сервере для живости демо: коллеги действуют через те же переходы машины, со своими правами и лимитами |
 | [prototype/styles.css](prototype/styles.css) | Оформление, светлая и тёмная темы, адаптивные раскладки |
 | [prototype/bridge.css](prototype/bridge.css) | Restyle в семью ONE PSIM: маппинг на [theme/one-psim.css](theme/one-psim.css), без правок разметки и JS. Как смотреть и что подтвердить — [prototype/README.md](prototype/README.md) |

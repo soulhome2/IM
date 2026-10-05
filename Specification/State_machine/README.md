@@ -9,6 +9,7 @@
 | [`workflow.v4.json`](./workflow.v4.json) | **Единая JSON-модель workflow.** Состояния, переходы, guard'ы, эффекты, таймеры, права, лимиты, формы, горячие клавиши — как конфигурация, а не как код | Бэкенд хранит и исполняет; фронтенд читает и рисует по ней интерфейс |
 | [`openapi.json`](./openapi.json) | **OpenAPI 3.1** — 34 адреса, 37 операций, 66 схем. Контракт REST-API операторской части | Бэкенд реализует; фронтенд генерирует типы |
 | `README.md` | Этот документ: как устроен workflow и какое API за что отвечает | Обе стороны |
+| [`BACKEND.md`](./BACKEND.md) | Памятка для команды бэкенда: порядок работы, тестовый стенд, когда готово, что не решено | Бэкенд |
 
 ### Кто исполняет
 
@@ -361,6 +362,27 @@ POST /operator/incidents/transitions/close/bulk   { incidentGuids, formValues }
 8. **Идентификаторы состояний и переходов стабильны**, названия — отдельные переводимые лейблы (`labelKey`): переименование состояния не должно быть миграцией данных (§14.6).
 
 ---
+
+## Коды ошибок перехода
+
+Ошибка — `application/problem+json`: машинный `code`, текст `message` и шаблон `messageKey` с `messageVars` для перевода. Если не выполнено условие модели, в поле `guard` — его имя из `registries.guards`.
+
+| Ответ | `code` | Когда |
+|---|---|---|
+| `404` | `NOT_FOUND` | нет инцидента, справочника или перехода с таким идентификатором |
+| `409` | `TRANSITION_NOT_ALLOWED_FROM_STATE` | переход не из этого состояния (`from` модели) |
+| `403` | `PERMISSION_DENIED` | нет права: условия `hasPermission`, `hasScopedPermission`; править сценарий может только тот, кому позволяет `scenarioEdit` |
+| `403` | `LIMIT_EXCEEDED` | исчерпан лимит активных или отложенных: `withinActiveLimit`, `withinHoldLimit` |
+| `403` | `AGENT_NOT_READY` | оператор на перерыве: `agentReady` |
+| `403` | `TRANSFER_TO_SELF_FORBIDDEN` | передача себе или своей дежурной группе: `targetIsNotSelf` |
+| `403` | `REQUIRED_STEPS_NOT_FILLED` | не заполнены обязательные шаги сценария: `requiredStepsFilled` |
+| `403` | `REOPEN_WINDOW_EXPIRED` | истёк срок переоткрытия: `withinReopenWindow` |
+| `403` | `GUARD_FAILED` | не выполнено любое другое условие модели |
+| `409` | `REQUIRED_STEPS_NOT_FILLED` | курсор сценария через незаполненный обязательный шаг (`PUT …/scenario/cursor`) |
+| `412` | `VERSION_CONFLICT` | `If-Match` или `expectedState` не совпали с записью; в теле `current` — актуальная карточка |
+| `428` | `PRECONDITION_REQUIRED` | нет `If-Match` у перехода или ответов сценария |
+| `422` | `FORM_FIELD_REQUIRED` | не заполнено обязательное поле формы перехода |
+| `422` | `BULK_SELECTION_INVALID` | группа или выборка не подходит под правила §11 |
 
 ## Границы и открытые вопросы
 
