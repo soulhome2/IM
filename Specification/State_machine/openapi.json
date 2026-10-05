@@ -115,7 +115,8 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Версия схемы для условных запросов"
+                "description": "Версия схемы для условных запросов",
+                "required": true
               }
             },
             "content": {
@@ -741,10 +742,11 @@
             "description": "Карточка",
             "headers": {
               "ETag": {
+                "required": true,
                 "schema": {
                   "type": "string"
                 },
-                "description": "Версия записи для оптимистичной блокировки (§14.1)"
+                "description": "Версия записи для оптимистичной блокировки (§14.1): поле `version` в кавычках, например `\"7\"`. Её клиент посылает в `If-Match`"
               }
             },
             "content": {
@@ -859,6 +861,15 @@
         "responses": {
           "200": {
             "description": "Переход выполнен",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Новая версия записи после перехода — для следующего запроса с `If-Match`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -889,6 +900,9 @@
           },
           "412": {
             "$ref": "#/components/responses/VersionConflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
           },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
@@ -1086,6 +1100,15 @@
         "responses": {
           "200": {
             "description": "Сохранено",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Новая версия записи: ответы её меняют, следующий переход или сохранение ответов идёт с ней"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1099,6 +1122,9 @@
           },
           "412": {
             "$ref": "#/components/responses/VersionConflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1691,7 +1717,7 @@
         "name": "If-Match",
         "in": "header",
         "required": true,
-        "description": "Версия записи из `ETag` предыдущего чтения. §14.1: оптимистичная блокировка.",
+        "description": "Версия записи, которую видел клиент (§14.1): `ETag` карточки или поле `version` из очереди и карточки в кавычках, например `\"7\"`. Нет заголовка — `428`, версия не совпала — `412` с актуальной карточкой.",
         "schema": {
           "type": "string"
         }
@@ -1744,6 +1770,16 @@
           "application/problem+json": {
             "schema": {
               "$ref": "#/components/schemas/VersionConflictProblem"
+            }
+          }
+        }
+      },
+      "PreconditionRequired": {
+        "description": "Нет заголовка `If-Match`: запрос, меняющий инцидент, обязан назвать версию записи, которую видел клиент (§14.1). Код `PRECONDITION_REQUIRED`.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
             }
           }
         }
@@ -1812,6 +1848,7 @@
               "GUARD_FAILED",
               "TRANSITION_NOT_ALLOWED_FROM_STATE",
               "VERSION_CONFLICT",
+              "PRECONDITION_REQUIRED",
               "LIMIT_EXCEEDED",
               "FORM_FIELD_REQUIRED",
               "AGENT_NOT_READY",

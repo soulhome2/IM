@@ -39,11 +39,13 @@
     const hits = templates.filter((t) => t.re.test(bare)).sort((a, b) => a.params - b.params);
     return hits.length ? hits[0].path : null;
   }
-  async function raw(method, path, body) {
-    const res = await api.raw(method, path, body);
+  async function raw(method, path, body, headers) {
+    const res = await api.raw(method, path, body, headers);
     const template = templateOf(path);
     // 404 на адрес, которого нет в контракте, — правильный ответ, сверять нечего
-    if (template || res.status !== 404) recorded.push({ method, template: template || path.split("?")[0], status: res.status, body: res.body, kind: "http" });
+    if (template || res.status !== 404) {
+      recorded.push({ method, template: template || path.split("?")[0], status: res.status, body: res.body, headers: res.headers || {}, kind: "http" });
+    }
     return res;
   }
   api.subscribe((message) => recorded.push({ method: "GET", template: "/operator/stream", status: 200, body: message, kind: "stream" }));
@@ -67,7 +69,7 @@
         clock = Date.parse(res.body.now);
         return res.body.fired;
       },
-      call: (method, path, body) => raw(method, path, body),
+      call: (method, path, body, headers) => raw(method, path, body, headers),
       async ok(method, path, body) {
         const res = await raw(method, path, body);
         if (res.status >= 400) throw new Error(`${method} ${path} → ${res.status} ${res.body && res.body.message}`);
@@ -76,12 +78,31 @@
       all: async (filter) => (await env.ok("GET", `/operator/incidents?filter=${filter || "all"}&pageSize=1000`)).items,
       card: (id) => env.ok("GET", `/operator/incidents/${enc(id)}`),
       session: () => env.ok("GET", "/operator/session"),
-      act: (id, transition, formValues, surface, expectedState) =>
-        raw("POST", `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`, {
-          formValues: formValues || {},
-          surface: surface || "card",
-          expectedState,
-        }),
+      // Версия записи для If-Match (§14.1) — из ETag свежего чтения карточки, как у клиента,
+      // который только что её открыл
+      async etag(id) {
+        const res = await raw("GET", `/operator/incidents/${enc(id)}`);
+        // Нет инцидента — версии нет: запрос уйдёт без If-Match, сервер ответит 404
+        if (res.status === 404) return null;
+        if (res.status !== 200) throw new Error(`GET карточки ${id} → ${res.status}`);
+        if (!res.headers.etag) throw new Error(`GET карточки ${id}: нет заголовка ETag`);
+        return res.headers.etag;
+      },
+      // Переход. ifMatch: не задан — версия свежего чтения; null — запрос без If-Match
+      async act(id, transition, formValues, surface, expectedState, ifMatch) {
+        const version = ifMatch === undefined ? await env.etag(id) : ifMatch;
+        return raw(
+          "POST",
+          `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`,
+          { formValues: formValues || {}, surface: surface || "card", expectedState },
+          version === null ? {} : { "If-Match": version }
+        );
+      },
+      // Ответы сценария — с той же версией записи, что и переход
+      async answer(id, answers, ifMatch) {
+        const version = ifMatch === undefined ? await env.etag(id) : ifMatch;
+        return raw("PATCH", `/operator/incidents/${enc(id)}/scenario/answers`, { answers }, version === null ? {} : { "If-Match": version });
+      },
       async find(pred, filter) {
         const list = await env.all(filter);
         return list.find(pred) || null;

@@ -24,6 +24,8 @@
     const realNow = opts.now || (() => Date.now());
     const clock = { frozenAt: null, offset: 0 };
     const now = () => (clock.frozenAt != null ? clock.frozenAt : realNow() + clock.offset);
+    // Имена заголовков в HTTP не зависят от регистра: внутри — строчными
+    const lowerKeys = (headers) => Object.fromEntries(Object.entries(headers || {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
 
     /* ===== Данные: загружаются из эталонного набора (load) ===== */
 
@@ -665,6 +667,17 @@
     const find = (guid) => events.find((e) => e.id === guid) || null;
     const touch = (list) => list.forEach((e) => (e.version += 1));
 
+    // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
+    // Запрос, меняющий инцидент, несёт её в If-Match: нет заголовка — 428, версия старая — 412
+    const etag = (ev) => `"${ev.version}"`;
+    function versionProblem(ev, headers) {
+      const sent = headers["if-match"];
+      if (!sent) return problem(428, "PRECONDITION_REQUIRED", ["Нет версии записи: запрос без If-Match"]);
+      const versions = sent.split(",").map((v) => v.trim().replace(/^W\//, ""));
+      if (versions.includes("*") || versions.includes(etag(ev))) return null;
+      return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
+    }
+
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
       if (!tr) return problem(404, "NOT_FOUND", ["Неизвестное действие"]);
@@ -732,7 +745,7 @@
     }
 
     const ROUTES = [
-      ["GET", "/operator/workflow/active", () => ({ status: 200, body: W })],
+      ["GET", "/operator/workflow/active", () => ({ status: 200, body: W, headers: { ETag: `"${W.schema.id}@${W.schema.version}"` } })],
       ["GET", "/operator/session", () => ({ status: 200, body: sessionView() })],
       [
         "PUT",
@@ -797,7 +810,7 @@
         "/operator/incidents/{incidentGuid}",
         (p) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: card(ev) } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          return ev ? { status: 200, body: card(ev), headers: { ETag: etag(ev) } } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
         },
       ],
       [
@@ -811,13 +824,17 @@
       [
         "POST",
         "/operator/incidents/{incidentGuid}/transitions/{transitionId}",
-        (p, q, body) => {
+        (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          const stale = versionProblem(ev, headers);
+          if (stale) return stale;
           if (body && body.expectedState && body.expectedState !== ev.state) {
             return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
           }
-          return runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
+          const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
+          if (res.status === 200) res.headers = { ETag: etag(ev) };
+          return res;
         },
       ],
       [
@@ -867,15 +884,17 @@
       [
         "PATCH",
         "/operator/incidents/{incidentGuid}/scenario/answers",
-        (p, q, body) => {
+        (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
           // Ответы пишет только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["Карточка открыта на просмотр"]);
+          const stale = versionProblem(ev, headers);
+          if (stale) return stale;
           Object.assign(ev.answers, (body && body.answers) || {});
           if (!canOpenStep(ev, cursorOf(ev))) ev.stepIndex = firstOpenStep(ev);
           touch([ev]);
-          return { status: 200, body: scenarioView(ev) };
+          return { status: 200, body: scenarioView(ev), headers: { ETag: etag(ev) } };
         },
       ],
       [
@@ -1013,15 +1032,15 @@
     // По каждому маршруту, коду и типу события — первые несколько, чтобы покрыть все виды ответов
     const recorded = [];
     const samples = new Map();
-    function record(method, template, status, body, kind) {
+    function record(method, template, status, body, kind, headers) {
       const key = `${method} ${template} ${status} ${body && body.type ? body.type : ""}`;
       const n = samples.get(key) || 0;
       if (n >= 12) return;
       samples.set(key, n + 1);
-      recorded.push({ method, template, status, body: JSON.parse(JSON.stringify(body)), kind: kind || "http" });
+      recorded.push({ method, template, status, body: JSON.parse(JSON.stringify(body)), kind: kind || "http", headers: lowerKeys(headers) });
     }
 
-    function handle(method, url, body) {
+    function handle(method, url, body, headers) {
       const [path, query = ""] = String(url).split("?");
       const q = {};
       new URLSearchParams(query).forEach((v, k) => (q[k] = v));
@@ -1033,8 +1052,8 @@
       const m = path.match(route.re);
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));
-      const res = route.fn(params, q, body || {});
-      record(method, route.template, res.status, res.body);
+      const res = route.fn(params, q, body || {}, lowerKeys(headers));
+      record(method, route.template, res.status, res.body, "http", res.headers);
       return res;
     }
 

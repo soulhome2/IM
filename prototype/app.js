@@ -953,16 +953,19 @@
     renderStatus();
   }
 
+  // Версия записи, которую видел оператор (§14.1): изменился инцидент с тех пор — сервер ответит 412
+  const ifMatch = (ev) => ({ "If-Match": `"${ev.version}"` });
+
   // Ответ из поля шага — на сервер (автосохранение, PATCH …/scenario/answers)
   async function saveAnswers(ev, answers) {
     if (!ev || ev.readOnly) return;
     Object.assign(ev.scenario.answers, answers);
     try {
-      await api.patch(`${incPath(ev.guid)}/scenario/answers`, { answers });
+      await api.patch(`${incPath(ev.guid)}/scenario/answers`, { answers }, ifMatch(ev));
     } catch (err) {
       toast(problemText(err));
     }
-    // Ответы меняют доступность «Обработан» и прогресс — карточку заново
+    // Ответы меняют доступность «Обработан», прогресс и версию записи — карточку заново
     await loadCard();
     renderScenario();
     renderStatus();
@@ -1192,7 +1195,7 @@
     if (!ev) return false;
     let res;
     try {
-      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface });
+      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface }, ifMatch(ev));
     } catch (err) {
       toast(problemText(err));
       await reload();

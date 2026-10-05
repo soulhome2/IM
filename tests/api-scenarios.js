@@ -55,6 +55,30 @@
     assert.eq((await env.card(inc.guid)).state, "new", "состояние не изменилось");
   });
 
+  test("Версия записи (§14.1): без If-Match — 428, со старой версией — 412 и актуальная карточка", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const first = await env.etag(inc.guid);
+    assert.eq(first, `"${inc.version}"`, "ETag карточки — версия из очереди в кавычках");
+    assert.status(await env.act(inc.guid, "claim", {}, "queue", undefined, null), 428, "PRECONDITION_REQUIRED", "переход без If-Match");
+    const claimed = await env.act(inc.guid, "claim", {}, "queue", undefined, first);
+    assert.status(claimed, 200, null, "взять с версией свежего чтения");
+    assert.eq(claimed.headers.etag, `"${claimed.body.incident.version}"`, "новая версия — в ETag ответа");
+    assert.ok(claimed.headers.etag !== first, "переход меняет версию");
+    const stale = await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, first);
+    assert.status(stale, 412, "VERSION_CONFLICT", "переход со старой версией");
+    assert.eq(stale.body.current && stale.body.current.state, "in_progress", "в ответе — актуальная карточка");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "состояние не изменилось");
+    // Ответы сценария меняют версию: следующий запрос идёт с той, что пришла в их ETag
+    assert.status(await env.answer(inc.guid, {}, null), 428, "PRECONDITION_REQUIRED", "ответы без If-Match");
+    const card = await env.card(inc.guid);
+    const saved = await env.answer(inc.guid, { [card.scenario.steps[0].id]: true }, claimed.headers.etag);
+    assert.status(saved, 200, null, "ответы с версией после взятия");
+    assert.ok(saved.headers.etag && saved.headers.etag !== claimed.headers.etag, "ответы меняют версию");
+    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, claimed.headers.etag), 412, "VERSION_CONFLICT", "версия до ответов");
+    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, saved.headers.etag), 200, null, "версия из ответа на ответы");
+  });
+
   test("Переход не из этого состояния — 409 TRANSITION_NOT_ALLOWED_FROM_STATE", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
@@ -231,7 +255,7 @@
     const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
     const before = await env.card(foreign.guid);
     assert.ok(before.readOnly, "чужая карточка — просмотр");
-    const patch = await env.call("PATCH", `/operator/incidents/${enc(foreign.guid)}/scenario/answers`, { answers: { x: 1 } });
+    const patch = await env.answer(foreign.guid, { x: 1 });
     assert.status(patch, 403, "PERMISSION_DENIED", "править чужой сценарий");
     const res = await env.act(foreign.guid, "takeover", { comment: "срочно" });
     assert.status(res, 200);
@@ -253,7 +277,7 @@
     assert.ok(processed.disabled && processed.reason, "«Обработан» недоступен и объяснено почему");
     assert.eq(results.defaultValue, null, "по умолчанию ничего не выбрано");
     assert.status(await env.act(inc.guid, "close", { resultId: "processed" }), 403, null, "закрыть «Обработан» без шагов");
-    await env.ok("PATCH", `/operator/incidents/${enc(inc.guid)}/scenario/answers`, { answers: fullAnswers(card) });
+    assert.status(await env.answer(inc.guid, fullAnswers(card)), 200, null, "ответы сценария");
     card = await env.card(inc.guid);
     results = actionOf(card, "close").fieldOptions.resultId;
     assert.eq(results.defaultValue, "processed", "по умолчанию «Обработан»");
@@ -412,7 +436,7 @@
     assert.ok(group.members.every((m) => m.state === "in_progress" && m.groupGuid === group.guid), "оба в работе одной группой");
     assert.ok(group.members.every((m) => m.groupSize === 2), "размер группы у каждого — 2");
     assert.eq((await env.session()).usage.activeCount, 1, "одна единица в лимите");
-    await env.ok("PATCH", `/operator/incidents/${enc(fires[0].guid)}/scenario/answers`, { answers: { visual: true } });
+    assert.status(await env.answer(fires[0].guid, { visual: true }), 200, null, "ответ в группе");
     assert.eq((await env.card(fires[1].guid)).scenario.answers.visual, true, "ответ виден у второго");
     const c = await env.card(fires[0].guid);
     assert.ok(!c.group.exclude.enabled && /Лимит активных/.test(c.group.exclude.reason), "исключить нельзя — лимит");
@@ -467,7 +491,9 @@
     const locked = steps.findIndex((s, i) => i > 0 && steps.slice(0, i).some((p) => p.requiredFor.includes("closing")));
     const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: steps[locked].id });
     assert.status(jump, 409, "REQUIRED_STEPS_NOT_FILLED", "переход через незаполненный шаг");
-    const after = await env.ok("PATCH", `/operator/incidents/${enc(inc.guid)}/scenario/answers`, { answers: { [steps[0].id]: true } });
+    const saved = await env.answer(inc.guid, { [steps[0].id]: true });
+    assert.status(saved, 200, null, "ответ на шаг");
+    const after = saved.body;
     assert.eq(after.progress.filled, card.scenario.progress.filled + 1, "прогресс");
     const macroStep = steps.find((s) => s.type === "Macros");
     const name = macroStep.view.buttons[0];

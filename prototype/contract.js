@@ -53,7 +53,8 @@
     }
   }
 
-  // Ответы сервера {method, template, status, body, kind} → список расхождений с контрактом
+  // Ответы сервера {method, template, status, body, kind, headers} → список расхождений с контрактом.
+  // Заголовки ответа сверяются, если они записаны: обязательные по контракту должны быть
   function problems(spec, recorded) {
     const out = [];
     const seen = new Set();
@@ -71,6 +72,17 @@
         if (!res) {
           out.push(`${r.method} ${r.template}: ответа ${r.status} нет в контракте`);
           return;
+        }
+        if (r.headers) {
+          Object.entries(res.headers || {}).forEach(([name, h]) => {
+            if (h.required && !(name.toLowerCase() in r.headers)) {
+              const key = `${r.method} ${r.template} ${r.status}: нет заголовка ${name}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                out.push(key);
+              }
+            }
+          });
         }
         if (r.status === 204) return;
         // Ошибки описаны как application/problem+json — их тела тоже сверяются

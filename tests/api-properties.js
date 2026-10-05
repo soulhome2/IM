@@ -83,7 +83,7 @@
         if (mine.length) {
           const card = await env.card(pick(r, mine).guid);
           const answers = r() < 0.5 ? fullAnswers(card) : { [card.scenario.steps[0].id]: true };
-          const res = await env.call("PATCH", `/operator/incidents/${enc(card.guid)}/scenario/answers`, { answers });
+          const res = await env.answer(card.guid, answers);
           if (res.status !== 200 && !card.readOnly) fail(step, `ответы сценария отклонены: ${res.status} ${res.body && res.body.message}`);
           history.push(`ответы ${card.guid}`);
         }

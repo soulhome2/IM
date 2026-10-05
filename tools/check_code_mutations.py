@@ -53,7 +53,11 @@ MUTATIONS = [
     ("same-type-any-type", "server.js", "list = anchor ? pool.filter((e) => groupable(e) && e.typeId === anchor.typeId) : [];", "list = anchor ? pool.filter((e) => groupable(e)) : [];", "api"),
     ("device-type-filter-ignored", "server.js", "if (q.deviceTypeId && q.deviceTypeId !== \"all\") {", "if (false) {", "api"),
     ("focus-page-missing", "server.js", "const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;", "const focusPage = null;", "api"),
-    ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"Карточка открыта на просмотр\"]);\n          Object.assign", "Object.assign", "api"),
+    ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"Карточка открыта на просмотр\"]);\n          const stale", "const stale", "api"),
+    ("if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          if (body", "if (body", "api"),
+    ("answers-if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          Object.assign", "Object.assign", "api"),
+    ("if-match-optional", "server.js", "if (!sent) return problem(428,", "if (!sent) return null;\n      if (false) return problem(428,", "api"),
+    ("etag-missing", "server.js", "body: card(ev), headers: { ETag: etag(ev) } }", "body: card(ev) }", "api"),
     ("targets-include-self", "server.js", "let list = targets().filter((o) => !engine.isSelf(o.id));", "let list = targets();", "api"),
     ("limit-code-generic", "server.js", "withinActiveLimit: \"LIMIT_EXCEEDED\",", "withinActiveLimit: \"GUARD_FAILED\",", "api"),
     ("group-size-zero", "server.js", "groupSize: ev.groupId ? groupMates(ev).length : 0,", "groupSize: 0,", "api"),
@@ -64,6 +68,7 @@ MUTATIONS = [
     ("ui-hotkeys-under-modal", "app.js", "if (modalOpen && !hotkey.worksInModal) return;", "", "ui"),
     ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"));", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = field.placeholder ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
+    ("ui-no-if-match", "app.js", "const ifMatch = (ev) => ({ \"If-Match\": `\"${ev.version}\"` });", "const ifMatch = () => ({});", "ui"),
     ("ui-selection-not-checked", "app.js", "return sel && sel.enabled ? a : { ...a, disabled: true, hint: why };", "return a;", "ui"),
 ]
 
