@@ -604,9 +604,11 @@
       };
     }
 
-    // Человек на смене — по набору; дежурная группа — если на смене хотя бы один участник (§8.1)
-    const onShift = (op) =>
-      op.group ? membersOf(op).some((m) => onShift(OPERATORS.find((o) => o.id === m) || {})) : op.duty === "на смене";
+    // Состояние человека (§12.1): у оператора стенда — из сессии, у остальных — из набора.
+    // На смене — «На смене» или «Занят»; дежурная группа — если на смене хотя бы один участник (§8.1)
+    const agentStateOf = (id) => (id === ME ? session.agentState : (OPERATORS.find((o) => o.id === id) || {}).agentState || "offline");
+    const onShift = (op) => (op.group ? membersOf(op).some((m) => onShift({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
+    const stateLabel = (id) => (W.session.states.find((st) => st.id === agentStateOf(id)) || {}).label || null;
 
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
     function targets() {
@@ -617,7 +619,7 @@
         label: op.name,
         role: op.group ? "группа" : op.role,
         available: onShift(op),
-        availabilityLabel: onShift(op) ? null : op.group ? "никого нет на смене" : op.duty,
+        availabilityLabel: onShift(op) ? null : op.group ? "никого нет на смене" : stateLabel(op.id),
         memberIds: op.group ? membersOf(op) : [],
       }));
     }

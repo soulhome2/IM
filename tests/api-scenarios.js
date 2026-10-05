@@ -868,7 +868,7 @@
     const elsewhere = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
     const target = async (id) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(elsewhere.guid)}`)).find((t) => t.id === id);
     assert.ok(!(await target("grp-tc")), "вне ТЦ «Охраны ТЦ» нет: у её участников нет доступа");
-    // Группа на смене, если на смене хотя бы один участник: в «Охране ТЦ» пока только Кузнецов «по вызову»
+    // Группа на смене, если на смене хотя бы один участник: в «Охране ТЦ» пока только Кузнецов, он «Не на смене»
     const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
     const tcBefore = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "grp-tc");
     assert.eq([tcBefore.name, tcBefore.available], ["Охрана ТЦ", false], "у группы название; на смене никого");

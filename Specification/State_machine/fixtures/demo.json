@@ -13,56 +13,56 @@
         "id": "me",
         "name": "Иванов А. С.",
         "role": "оператор",
-        "duty": "на смене",
         "roles": [
           "Оператор"
-        ]
+        ],
+        "agentState": "ready"
       },
       {
         "id": "petrova",
         "name": "Петрова М.",
         "role": "старший смены",
-        "duty": "на смене",
         "roles": [
           "Оператор",
           "Старший смены"
-        ]
+        ],
+        "agentState": "ready"
       },
       {
         "id": "sidorov",
         "name": "Сидоров К.",
         "role": "оператор",
-        "duty": "на смене",
         "roles": [
           "Оператор"
-        ]
+        ],
+        "agentState": "ready"
       },
       {
         "id": "noc",
         "name": "Дежурный ЦОД",
         "role": "круглосуточный пост",
-        "duty": "на смене",
         "roles": [
           "Оператор"
-        ]
+        ],
+        "agentState": "ready"
       },
       {
         "id": "gusev",
         "name": "Гусев Р. А.",
         "role": "начальник охраны площадки",
-        "duty": "на смене",
         "roles": [
           "Оператор"
-        ]
+        ],
+        "agentState": "ready"
       },
       {
         "id": "kuznetsov",
         "name": "Кузнецов И. П.",
         "role": "инженер ТСО",
-        "duty": "по вызову",
         "roles": [
           "Оператор ТЦ"
-        ]
+        ],
+        "agentState": "offline"
       }
     ],
     "dutyGroups": [

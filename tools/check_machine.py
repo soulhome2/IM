@@ -247,7 +247,10 @@ def check_fixture(w, err):
         for d in a.get("devices", []):
             if d not in devices:
                 err.append(f"эталон: группа доступа «{a.get('name')}» — нет устройства {d}")
+    agent_states = {st["id"] for st in w["session"]["states"]}
     for o in people["operators"]:
+        if o.get("agentState") not in agent_states:
+            err.append(f"эталон: у человека {o['id']} состояние agentState «{o.get('agentState')}» — нет в session.states машины (§12.1)")
         if not isinstance(o.get("roles"), list) or not o["roles"]:
             err.append(f"эталон: у оператора {o['id']} нет ролей (roles) — ему ничего не видно (§5)")
     for kind, value in entities:
