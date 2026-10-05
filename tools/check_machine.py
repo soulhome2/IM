@@ -363,6 +363,58 @@ def check_literals(w, err):
                     err.append(f"{name}:{n}: значение справочника машины «{found}» в коде — нужное свойство берётся из машины")
 
 
+def check_rules_tables(w, err):
+    """Таблицы §6.1–§6.3 правил ссылаются на машину колонкой «В машине» (PROC-08): каждый
+    переход и действие машины есть в правилах, лишних нет, «Откуда» и «Куда» совпадают."""
+    path = os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md")
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    transitions = {t["id"]: t for t in w["transitions"]}
+    nav = {n["id"] for n in w["navActions"]["items"]}
+    states = {s["id"] for s in w["states"]}
+    extra = {"grouping", "bulk.createsGroup"}
+
+    def rows(title):
+        i = lines.index(title)
+        table = []
+        for line in lines[i + 1 :]:
+            if line.startswith("#"):
+                break
+            if line.startswith("|"):
+                table.append([c.strip() for c in line.strip("|").split("|")])
+        head = table[0]
+        if "В машине" not in head:
+            err.append(f"правила, {title[4:]}: нет колонки «В машине»")
+            return []
+        return [dict(zip(head, r)) for r in table[2:]]
+
+    found = {"transition": set(), "nav": set()}
+    for title, kind in (("### 6.1. Ручные переходы", "transition"), ("### 6.2. Автоматические переходы", "transition"), ("### 6.3. Действия без смены состояния", "nav")):
+        for row in rows(title):
+            name = re.sub(r"\*", "", next(iter(row.values())))
+            ids = re.findall(r"`([^`]+)`", row["В машине"])
+            known = transitions if kind == "transition" else nav
+            for i in ids:
+                if i in known:
+                    found[kind].add(i)
+                elif i not in extra:
+                    err.append(f"правила, «{name}»: в колонке «В машине» `{i}` — такого в машине нет")
+            mine = [i for i in ids if i in transitions]
+            if kind != "transition" or len(mine) != 1:
+                continue
+            t = transitions[mine[0]]
+            got_from = set(re.findall(r"`(\w+)`", row.get("Откуда", ""))) & states
+            if got_from != set(t["from"]):
+                err.append(f"правила, «{name}»: откуда {sorted(got_from)}, в машине `{t['id']}` — {sorted(t['from'])}")
+            got_to = set(re.findall(r"`(\w+)`", row.get("Куда", ""))) & states
+            if got_to != ({t["to"]} if t.get("to") else set()):
+                err.append(f"правила, «{name}»: куда {sorted(got_to) or 'не меняется'}, в машине `{t['id']}` — {t.get('to') or 'не меняется'}")
+    for i in sorted(set(transitions) - found["transition"]):
+        err.append(f"переход машины `{i}` не упомянут в правилах (§6.1, §6.2, колонка «В машине»)")
+    for i in sorted(nav - found["nav"]):
+        err.append(f"действие машины `{i}` не упомянуто в правилах (§6.3, колонка «В машине»)")
+
+
 def main():
     err = []
     try:
@@ -375,6 +427,7 @@ def main():
     check_engine(w, err)
     check_layers(err)
     check_literals(w, err)
+    check_rules_tables(w, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:

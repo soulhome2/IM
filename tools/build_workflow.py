@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js, openapi.js и fixture.js из Specification/State_machine/.
+"""Сборка prototype/workflow.js, openapi.js и fixture.js из Specification/State_machine/
+и таблицы переходов для человека Specification/State_machine/TRANSITIONS.md.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
 Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
@@ -15,6 +16,9 @@ window.IM_WORKFLOW, window.IM_OPENAPI и window.IM_FIXTURE. Машину исп�
 import json
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import transitions_doc  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINE = os.path.join(ROOT, "Specification", "State_machine")
@@ -36,12 +40,19 @@ def build(source, var, indent):
     return f"{header}window.{var} = {body};\n"
 
 
+def outputs():
+    """(путь от корня, текст, из чего собран) — всё, что собирает этот скрипт."""
+    for source, target, var, indent in TARGETS:
+        yield f"prototype/{target}", build(source, var, indent), source
+    with open(os.path.join(MACHINE, "workflow.v4.json"), encoding="utf-8") as f:
+        yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(json.load(f)), "workflow.v4.json"
+
+
 def main():
     check = "--check" in sys.argv
     code = 0
-    for source, target, var, indent in TARGETS:
-        text = build(source, var, indent)
-        path = os.path.join(ROOT, "prototype", target)
+    for target, text, source in outputs():
+        path = os.path.join(ROOT, target)
         if check:
             try:
                 with open(path, encoding="utf-8") as f:
@@ -49,14 +60,14 @@ def main():
             except OSError:
                 current = None
             if current != text:
-                print(f"prototype/{target} отстал от {source}: запустите python3 tools/build_workflow.py")
+                print(f"{target} отстал от {source}: запустите python3 tools/build_workflow.py")
                 code = 1
             else:
-                print(f"prototype/{target} совпадает с {source}")
+                print(f"{target} совпадает с {source}")
             continue
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
-        print(f"Собран prototype/{target}")
+        print(f"Собран {target}")
     return code
 
 
