@@ -52,7 +52,7 @@ google-chrome --headless=new --disable-gpu --no-first-run \
 
 **Тесты API:** открыть `tests/api.html` тем же способом, что самопроверку (`--virtual-time-budget=120000`); отчёт — `<pre id="apitest-log">`, итог — `data-apitest="pass|fail"`. Сценарии по правилам, случайные прогоны с инвариантами, сверка ответов с `openapi.json`, покрытие маршрутов.
 
-**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow.v4.json` и `openapi.json`, граница слоёв прототипа.
+**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow.v4.json` и `openapi.json`, граница слоёв прототипа, значения справочников машины не зашиты в код, эталонный набор данных.
 
 **Правила только в машине:** `python3 tools/check_mutations.py` — мутации машины меняют поведение прототипа. Мутация со статусом BAD — находка: правило продублировано в коде прототипа.
 

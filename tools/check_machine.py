@@ -316,6 +316,21 @@ def check_layers(err):
             err.append(f"app.js:{n}: интерфейс обращается к данным или исполнителю в обход API: {line.strip()[:80]}")
 
 
+def check_literals(w, err):
+    """Значения справочников машины (причины, результаты закрытия, причины перерыва) — данные:
+    код прототипа их по имени не знает, иначе правило продублировано в коде и разойдётся с
+    машиной при переименовании (BUG-22). Нужное свойство берётся из машины."""
+    ids = set()
+    for catalog in w["reasonCatalogs"].values():
+        ids.update(item["id"] for item in catalog.get("items", []))
+    ids.update(r["id"] for r in w["session"].get("breakReasons", []))
+    for name in ("app.js", "server.js", "engine.js"):
+        with open(os.path.join(ROOT, "prototype", name), encoding="utf-8") as f:
+            for n, line in enumerate(f, 1):
+                for found in sorted(i for i in ids if f'"{i}"' in line):
+                    err.append(f"{name}:{n}: значение справочника машины «{found}» в коде — нужное свойство берётся из машины")
+
+
 def main():
     err = []
     try:
@@ -327,6 +342,7 @@ def main():
     check_workflow(w, err)
     check_engine(w, err)
     check_layers(err)
+    check_literals(w, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:

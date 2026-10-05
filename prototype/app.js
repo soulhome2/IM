@@ -1028,6 +1028,12 @@
     return t(item ? item.label : "Причина не указана");
   };
   const resultLabel = (ev) => t(ev.closeResultLabel || "");
+  // Результат полной обработки — тот, что требует обязательных шагов сценария (requiredStepSet
+  // в справочнике close_result машины, §2.2), а не названный по имени
+  const fullyProcessed = (resultId) => {
+    const item = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === resultId);
+    return Boolean(item && item.requiredStepSet && item.requiredStepSet !== "none");
+  };
 
   /* ===== Действия: какие кнопки доступны, считает сервер (AvailableAction) ===== */
 
@@ -1187,7 +1193,7 @@
     release: (ev) => t("{id} возвращён в очередь", { id: ev.number }),
     transfer: (ev) => t("{id} передан → {who}", { id: ev.number, who: actorName(addresseeOf(ev)) }),
     takeover: (ev) => t("Перехвачен {id}", { id: ev.number }),
-    close: (ev) => t(ev.closeResultId === "processed" ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.number }),
+    close: (ev) => t(fullyProcessed(ev.closeResultId) ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.number }),
     reopen: (ev) => t("{id} переоткрыт", { id: ev.number }),
   };
 
@@ -1719,7 +1725,7 @@
     }
     if (isDone(ev)) {
       const why =
-        ev.closeResultId && ev.closeResultId !== "processed" ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) }) : t("Инцидент закрыт.");
+        ev.closeResultId && !fullyProcessed(ev.closeResultId) ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) }) : t("Инцидент закрыт.");
       const more = canDo("reopen", ev) ? t("Доступно переоткрытие.") : t("Карточка доступна только для просмотра.");
       return `<div class="work-note ok">${escapeHtml(`${why} ${more}`)}</div>`;
     }
@@ -1769,10 +1775,10 @@
     const step = steps[i];
     const last = i === steps.length - 1;
     const canNext = isStepValid(ev, step);
-    // «Закрыть инцидент» в конце сценария — когда доступен результат «Обработан» (§2.2)
+    // «Закрыть инцидент» в конце сценария — когда доступен результат полной обработки (§2.2)
     const close = actionOf(ev, "close");
     const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
-    const canClose = editable && Boolean(close && close.enabled) && results.some((r) => r.id === "processed" && !r.disabled);
+    const canClose = editable && Boolean(close && close.enabled) && results.some((r) => fullyProcessed(r.id) && !r.disabled);
     const incomplete = steps.findIndex((s) => stepRequired(s) && !isStepValid(ev, s));
 
     root.innerHTML = `

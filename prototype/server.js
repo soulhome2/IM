@@ -1145,10 +1145,12 @@
       log(ev, ev.owner, "Шаг {i}/{n} · {name}: {done}", { i: idx + 1, n: steps.length, name: stepShort(step), done });
       touch([ev]);
       emit("journal.appended", ev, ev.owner, {});
-      // Сценарий заполнен — коллега закрывает инцидент как «Обработан» и освобождается для следующего
+      // Сценарий заполнен — коллега закрывает инцидент результатом полной обработки (тем, что
+      // требует обязательных шагов, §2.2) и освобождается для следующего
       if (scenarioDone(ev)) {
         const who = ev.owner;
-        const r = colleague(who).run("close", ev, { resultId: "processed" }, { surface: "card" });
+        const full = W.reasonCatalogs.close_result.items.find((i) => i.requiredStepSet && i.requiredStepSet !== "none");
+        const r = colleague(who).run("close", ev, { resultId: full && full.id }, { surface: "card" });
         if (r.ok) {
           touch([ev]);
           emit("incident.state_changed", ev, who, { transitionId: "close" });
