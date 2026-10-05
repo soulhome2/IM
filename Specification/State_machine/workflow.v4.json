@@ -1072,7 +1072,7 @@
       { "fn": "timerExpired", "args": ["timerId"], "onFail": "hide", "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание." },
       { "fn": "flagBelow", "args": ["field", "n"], "onFail": "hide" },
       { "fn": "flagAtLeast", "args": ["field", "n"], "onFail": "hide", "extendsBaseRegistry": true },
-      { "fn": "escalationTargetAvailable", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет (как на потолке). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
+      { "fn": "escalationTargetAvailable", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "stateIs", "args": ["stateIds"], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "canReadDone", "args": [], "onFail": "hide", "extendsBaseRegistry": true },

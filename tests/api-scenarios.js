@@ -450,7 +450,7 @@
     assert.eq(top.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
   });
 
-  test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — как на потолке", async () => {
+  test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — никому не передаётся, нарушение и алерт", async () => {
     if (IMTest.external) return "пропущено: адресатов уровней задаёт машина, её меняет только встроенный сервер";
     // Своя копия машины: адресаты уровней — из targets. Ждём ровно до истечения реакции инцидента
     async function escalate(targets, pick) {
@@ -475,7 +475,7 @@
     const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
     assert.eq([keep.card.owner && keep.card.owner.id, keep.card.escalationLevel], ["kuznetsov", 1], "в ТЦ: уровень 1, Кузнецов");
     const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
-    assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — как на потолке");
+    assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и алерт");
     assert.eq([none.card.state, none.card.owner, none.card.escalationLevel], ["new", null, 0], "никому не передан");
     assert.ok(none.card.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
   });
