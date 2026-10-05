@@ -187,7 +187,54 @@ class Doc:
         for n in w["navActions"]["items"]:
             where = ", ".join(SURFACE.get(s, s) for s in n.get("surface", []))
             out.append(f"| `{n['id']}`<br>{n['label']} | {where} | {cell([self.guard(g) for g in n.get('guards', [])])} |")
+        out += [
+            "",
+            "## Права",
+            "",
+            "Каталог прав машины (`permissions`) и где каждое право проверяется. Формат ключа и смысл областей `own` и `any` — в правилах, §5.",
+            "",
+            "| Право | Что разрешает | Где проверяется |",
+            "|---|---|---|",
+        ]
+        for p in w["permissions"]:
+            used = self.permission_uses(p["key"])
+            out.append(f"| `{p['key']}` | {p['label']} | {cell(used)} |")
         return "\n".join(out) + "\n"
+
+    def permission_uses(self, key):
+        """Где машина проверяет право: условия переходов и действий, результаты закрытия,
+        групповая обработка, состояния оператора."""
+        w, uses = self.w, []
+
+        def checks(guards):
+            for g in guards or []:
+                a = g.get("args") or []
+                if g["fn"] == "hasPermission" and a and a[0] == key:
+                    return True
+                if g["fn"] == "hasScopedPermission" and a and key in (f"{a[0]}:own", f"{a[0]}:any"):
+                    return True
+                # Условие с правом внутри: «Просмотр» закрытого — свой, закрытый мной или по праву
+                if g["fn"] == "canReadDone" and key == "incident:read:any":
+                    return True
+            return False
+
+        for t in w["transitions"]:
+            if checks(t.get("guards")):
+                uses.append(f"`{t['id']}` {t['label']}")
+        for n in w["navActions"]["items"]:
+            if checks(n.get("guards")):
+                uses.append(f"`{n['id']}` {n['label']}")
+        for item in w["reasonCatalogs"]["close_result"]["items"]:
+            if item.get("permission") == key:
+                uses.append(f"`close` с результатом «{item['label']}»")
+        if key in (w.get("grouping") or {}).get("permissions", []):
+            uses.append("групповая обработка «Обработать как одно» (`grouping`)")
+        for s in w["session"]["states"]:
+            if s.get("permission") == key:
+                uses.append(f"состояние оператора «{s['label']}» (`session`)")
+        if key == "incident:schema:admin":
+            uses.append("не в машине: операции редактора схемы `/operator/workflow/schemas…` (контракт)")
+        return uses
 
 
 def render(w):
