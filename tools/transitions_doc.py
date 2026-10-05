@@ -181,7 +181,7 @@ class Doc:
         out += ["", "## Какие переходы из какого состояния", "", "| Переход | " + " | ".join(self.states.values()) + " | Куда |", "|---|" + "---|" * (len(self.states) + 1)]
         for t in w["transitions"]:
             row = ["✓" if s in t["from"] else "" for s in self.states]
-            to = self.states.get(t["to"], "не меняется") if t.get("to") else "не меняется"
+            to = f"`{t['to']}` {self.states.get(t['to'], '')}".rstrip() if t.get("to") else "не меняется"
             out.append(f"| `{t['id']}` {t['label']} | " + " | ".join(row) + f" | {to} |")
         out += ["", "## Действия без смены состояния", "", "| Действие | Где | Условия |", "|---|---|---|"]
         for n in w["navActions"]["items"]:
