@@ -819,6 +819,46 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор не отвечает"] }
       ],
       "ui": { "surface": [] }
+    },
+    {
+      "id": "target_off_shift_to_group",
+      "label": "Адресат ушёл со смены: передано его дежурной группе",
+      "$comment": "§8.1 (RULE-28). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот завершает смену. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
+      "from": ["pending_acceptance"],
+      "to": "pending_acceptance",
+      "trigger": "system",
+      "scope": "incidents_owned_by_agent",
+      "actor": "system",
+      "guards": [
+        { "fn": "agentStateIs", "args": ["offline"] },
+        { "fn": "ownerHasDutyGroup", "args": [true] }
+      ],
+      "effects": [
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["owner.dutyGroup"] },
+        { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат ушёл со смены, не приняв: передано группе {targetName}"] },
+        { "kind": "external", "fn": "notify", "args": ["newTarget"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
+      "id": "target_off_shift_to_queue",
+      "label": "Адресат ушёл со смены: возвращён в очередь",
+      "$comment": "§8.1 (RULE-28). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
+      "from": ["pending_acceptance"],
+      "to": "new",
+      "trigger": "system",
+      "scope": "incidents_owned_by_agent",
+      "actor": "system",
+      "guards": [
+        { "fn": "agentStateIs", "args": ["offline"] },
+        { "fn": "ownerHasDutyGroup", "args": [false] }
+      ],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат ушёл со смены, не приняв: возвращён в очередь"] }
+      ],
+      "ui": { "surface": [] }
     }
   ],
 
@@ -990,6 +1030,7 @@
       { "fn": "agentReady", "args": [], "onFail": "disable" },
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "agentIdleFor", "args": ["seconds"], "onFail": "disable", "extendsBaseRegistry": true },
+      { "fn": "ownerHasDutyGroup", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — значение owner.dutyGroup в эффектах." },
       {
         "fn": "withinActiveLimit",
         "args": ["extraUnits?"],

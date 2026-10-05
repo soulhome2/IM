@@ -173,6 +173,7 @@
       },
       agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
+      ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
       agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() >= setting(path) ? null : ["Оператор на связи"]),
       // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
@@ -340,6 +341,7 @@
         return v == null || v === "" ? null : v;
       }
       if (arg === "escalation.level.target") return scope.level ? refToId(scope.level.targetRef) : null;
+      if (arg === "owner.dutyGroup") return ev.owner ? ctx.dutyGroupOf(ev.owner) : null;
       return arg;
     }
 

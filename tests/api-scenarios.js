@@ -200,6 +200,40 @@
     assert.eq(res.body.incident.assignmentGroup, null, "группа очищена");
   });
 
+  test("Конец смены (§8.1, RULE-28): адресованный лично и не принятый уходит дежурной группе, норматив реакции продолжается", async () => {
+    const env = await makeEnv();
+    const personal = await env.card(await env.guidOf("INC-1843"));
+    const forGroup = await env.card(await env.guidOf("INC-1836"));
+    assert.eq([personal.state, personal.owner && personal.owner.id], ["pending_acceptance", ME], "INC-1843 адресован мне лично");
+    const myGroup = (await env.session()).operator.dutyGroupGuids[0];
+    const res = await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" });
+    assert.status(res, 200, null, "завершить смену");
+    assert.eq(res.body.session.agentState, "offline", "состояние оператора");
+    assert.ok(res.body.affectedIncidents.some((i) => i.guid === personal.guid), "INC-1843 среди изменённых");
+    const after = await env.card(personal.guid);
+    assert.eq([after.state, after.owner, after.assignmentGroup && after.assignmentGroup.id], ["pending_acceptance", null, myGroup], "передан моей дежурной группе");
+    assert.eq(after.escalationLevel, personal.escalationLevel, "уровень эскалации не меняется");
+    assert.eq(after.timer && after.timer.dueAt, personal.timer && personal.timer.dueAt, "норматив реакции продолжается, а не начинается заново");
+    const group = await env.card(forGroup.guid);
+    assert.eq([group.owner, group.assignmentGroup && group.assignmentGroup.id], [null, forGroup.assignmentGroup.id], "адресованный группе не меняется");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "снова на смене");
+  });
+
+  test("Конец смены без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
+    if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
+    // Свой набор данных: оператор стенда не состоит ни в одной группе
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
+    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
+    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
+    const res = await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
+    assert.status(res, 200, null, "завершить смену");
+    const card = await api.get(`/operator/incidents/${enc(guid)}`);
+    assert.eq([card.state, card.owner, card.assignmentGroup], ["new", null, null], "в общей очереди, ничей");
+    assert.ok(card.journal.some((j) => /ушёл со смены/.test(j.templateKey)), "запись в журнале");
+  });
+
   test("Закрытый из «Ожидает принятия» группой и переоткрытый — у человека, без группы (§8.1)", async () => {
     const env = await makeEnv();
     const inc = await env.card(await env.guidOf("INC-1836"));

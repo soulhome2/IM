@@ -70,6 +70,8 @@ class Doc:
             return "очищается"
         if v == "actor":
             return "я — кто выполнил"
+        if v == "owner.dutyGroup":
+            return "дежурная группа владельца"
         source = "адресат из формы" if v.startswith("form.") else "адресат уровня эскалации"
         return f"{source}, если это {kind}"
 
@@ -86,6 +88,7 @@ class Doc:
             "targetIsNotSelf": lambda: "адресат — не я и не моя дежурная группа",
             "agentReady": lambda: "я не на перерыве",
             "agentStateIs": lambda: f"состояние оператора — «{self.agent.get(a[0], a[0])}»",
+            "ownerHasDutyGroup": lambda: "владелец состоит в дежурной группе" if a[0] else "владелец не состоит ни в одной дежурной группе",
             "agentIdleFor": lambda: f"оператор не присылает признак активности дольше {self.setting(a[0])} с",
             "withinActiveLimit": lambda: f"лимит активных не исчерпан ({self.setting('limits.maxActive')})",
             "withinHoldLimit": lambda: f"лимит отложенных не исчерпан ({self.setting('limits.maxOnHold')})",

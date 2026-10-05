@@ -73,6 +73,8 @@ MUTATIONS = [
     ("number-is-guid", "server.js", "        number: ev.number,", "        number: ev.id,", "api"),
     ("event-type-guid-is-id", "server.js", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeGuid !== q.eventTypeGuid) return false;", "if (q.eventTypeGuid && q.eventTypeGuid !== \"all\" && e.typeId !== q.eventTypeGuid) return false;", "api"),
     ("setting-is-ignored", "engine.js", "settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : [\"Другое значение настройки\"]),", "settingIs: () => null,", "api"),
+    ("owner-group-ignored", "engine.js", "ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : [\"Дежурная группа владельца не подходит\"]),", "ownerHasDutyGroup: () => null,", "api"),
+    ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
     ("stream-id-repeats", "server.js", "id: String(++seq),", "id: String(seq),", "api"),
     ("ui-required-from-ignored", "app.js", "if (!field.requiredFrom) return Boolean(field.required);", "return Boolean(field.required);", "ui"),
     ("ui-hotkeys-under-modal", "app.js", "if (modalOpen && !hotkey.worksInModal) return;", "", "ui"),

@@ -159,6 +159,8 @@
       events: () => events,
       can,
       isGroup: (id) => GROUPS.some((g) => g.id === id),
+      // Дежурная группа человека (§8.1): первая, в которую он входит
+      dutyGroupOf: (userId) => (GROUPS.find((g) => g.members.includes(userId)) || {}).id || null,
       memberOf: (groupId, userId) => {
         const group = GROUPS.find((g) => g.id === groupId);
         return Boolean(group && group.members.includes(userId));
@@ -551,7 +553,7 @@
           dutyGroupGuids: GROUPS.filter((g) => g.members.includes(ME)).map((g) => g.id),
         },
         shift: shiftView(),
-        agentState: session.agentState === "not_ready" ? "not_ready" : usage().activeCount ? "busy" : "ready",
+        agentState: session.agentState === "not_ready" || session.agentState === "offline" ? session.agentState : usage().activeCount ? "busy" : "ready",
         agentStateReasonId: session.reasonId,
         permissions: PERMISSIONS.slice(),
         limits: Object.fromEntries(Object.entries(W.limits).filter(([key]) => !key.startsWith("$"))),
@@ -791,6 +793,14 @@
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
             const fired = runScheduler();
             emit("session.agent_state_changed", null, ME, { agentState: "not_ready" });
+            return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => summary(find(f.id), "queue")) } };
+          }
+          if (body.agentState === "offline") {
+            // Конец смены: адресованные лично и не принятые уходят дежурной группе или в очередь (§8.1)
+            session.agentState = "offline";
+            session.reasonId = null;
+            const fired = runScheduler();
+            emit("session.agent_state_changed", null, ME, { agentState: "offline" });
             return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => summary(find(f.id), "queue")) } };
           }
           session.agentState = "ready";
