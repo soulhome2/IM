@@ -90,6 +90,7 @@ class Doc:
             "targetIsNotSelf": lambda: "адресат — не я и не моя дежурная группа",
             "addresseeHasAccess": lambda: ("у владельца или адресата есть доступ" if a[0] else "у владельца или адресата нет доступа")
             + " к объекту инцидента (группе-адресату хватает одного участника)",
+            "targetCanAccept": lambda: "адресат может принять: право `incident:accept` и доступ к объекту (группе — хотя бы у одного участника)",
             "targetHasAccess": lambda: "у адресата есть доступ к объекту инцидента (группе — хотя бы у одного участника)",
             "agentReady": lambda: "я не на перерыве",
             "agentStateIs": lambda: f"состояние оператора — «{self.agent.get(a[0], a[0])}»",
@@ -104,7 +105,7 @@ class Doc:
             "flagBelow": lambda: f"`{a[0]}` меньше {self.setting(a[1])}",
             "flagAtLeast": lambda: f"`{a[0]}` не меньше {self.setting(a[1])}",
             "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")
-            + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}) с доступом адресата к объекту инцидента; уровни без доступа пропускаются",
+            + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту; остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",

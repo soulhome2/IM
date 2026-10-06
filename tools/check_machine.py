@@ -247,6 +247,19 @@ def check_fixture(w, err):
         for d in a.get("devices", []):
             if d not in devices:
                 err.append(f"эталон: группа доступа «{a.get('name')}» — нет устройства {d}")
+    # Каталог ролей (§5, §8.1): права — из каталога машины; роли людей, групп доступа и дежурных групп — из каталога
+    perms = {p["key"] for p in w["permissions"]}
+    roles = {r["name"] for r in fx.get("roles", [])}
+    for r in fx.get("roles", []):
+        for p in r.get("permissions", []):
+            if p not in perms:
+                err.append(f"эталон: у роли «{r['name']}» право {p} — нет в каталоге прав машины")
+    used = [(f"человек {o['id']}", r) for o in people["operators"] for r in o.get("roles", [])]
+    used += [(f"группа доступа «{a.get('name')}»", r) for a in fx.get("accessGroups", []) for r in a.get("roles", [])]
+    used += [(f"дежурная группа {g['id']}", r) for g in people["dutyGroups"] for r in g.get("roles", [])]
+    for where, r in used:
+        if r not in roles:
+            err.append(f"эталон: {where} — роли «{r}» нет в каталоге ролей (roles)")
     agent_states = {st["id"] for st in w["session"]["states"]}
     for o in people["operators"]:
         if o.get("agentState") not in agent_states:

@@ -40,6 +40,8 @@
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
+    // Роли и их права — как их отдаёт основная система (§5): по ним известны права всех людей
+    let ROLE_RIGHTS = {};
     let rolesOverride = null;
     let myDevices = new Set();
     // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
@@ -129,6 +131,15 @@
       const person = OPERATORS.find((o) => o.id === id);
       return Boolean(person) && accessibleDevices(person.roles || []).has(eventSource(ev));
     }
+    // Права человека: у оператора стенда — его набор, у остальных — объединение прав его ролей
+    const permsOf = (id) => (id === ME ? PERMISSIONS : [...new Set(rolesOf(id).flatMap((r) => ROLE_RIGHTS[r] || []))]);
+    // Может ли адресат принять (§8.1): право «Принимать» и доступ к объекту; группа — если хотя бы
+    // один участник может
+    function canAccept(id, ev) {
+      const group = GROUPS.find((g) => g.id === id);
+      if (group) return membersOf(group).some((m) => canAccept(m, ev));
+      return permsOf(id).includes("incident:accept") && hasAccess(id, ev);
+    }
     // Группа устройства-источника: самая глубокая, где оно стоит (первое вхождение по дереву)
     function sourceGroupOf(ev) {
       const src = eventSource(ev);
@@ -213,6 +224,7 @@
       log,
       transferTargets: () => targets(),
       hasAccess: (id, ev) => hasAccess(id, ev),
+      canAccept: (id, ev) => canAccept(id, ev),
       defaultTransferTarget: () => session.preferences.defaultTransferTargetId,
       // У членов группы ответы общие (grouping.shared): один объект ответов на всех
       shareAnswers: (ev, first) => {
@@ -250,6 +262,7 @@
       );
       PLANS = data.plans || [];
       ACCESS_GROUPS = data.accessGroups || [];
+      ROLE_RIGHTS = Object.fromEntries((data.roles || []).map((r) => [r.name, r.permissions]));
       const tree = (groups) =>
         groups.map((g) =>
           Object.assign({ id: g.id, name: g.name }, g.description ? { description: g.description } : {}, {
@@ -738,6 +751,7 @@
       agentReady: "AGENT_NOT_READY",
       targetIsNotSelf: "TRANSFER_TO_SELF_FORBIDDEN",
       targetHasAccess: "TARGET_NO_ACCESS",
+      targetCanAccept: "TARGET_CANNOT_ACCEPT",
       requiredStepsFilled: "REQUIRED_STEPS_NOT_FILLED",
       withinReopenWindow: "REOPEN_WINDOW_EXPIRED",
     };
@@ -1069,7 +1083,7 @@
         (p, q) => {
           const ev = q.incidentGuid ? find(q.incidentGuid) : null;
           let list = targets().filter((o) => !engine.isSelf(o.id));
-          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && hasAccess(o.id, ev));
+          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && hasAccess(o.id, ev) && canAccept(o.id, ev));
           return { status: 200, body: list.map(({ label, ...rest }) => rest) };
         },
       ],
@@ -1202,7 +1216,7 @@
         colleagueEngines[id] = IMEngine.create(
           Object.assign({}, engineCtx, {
             me: id,
-            can: (key) => ALL_PERMISSIONS.includes(key),
+            can: (key) => permsOf(id).includes(key),
             agentState: () => "ready",
             idleSec: () => (colleagueIdleSince[id] == null ? 0 : (now() - colleagueIdleSince[id]) / 1000),
           })

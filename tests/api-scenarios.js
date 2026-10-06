@@ -372,6 +372,45 @@
     assert.status(await env.act((await env.find((e) => e.state === "new")).guid, "close", { resultId: "false_alarm", comment: "x" }, "queue"), 403, null, "другой результат из очереди");
   });
 
+  test("Права пути в работу (§5, RULE-36, RULE-38): «Принять» — по праву «Принимать», «Перехватить» и «Переоткрыть» — ещё и по праву взятия", async () => {
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    // Без права «Принимать»: принять нельзя, взять — можно
+    let env = await makeEnv({ permissions: all.filter((k) => k !== "incident:accept") });
+    const personal = await env.guidOf("INC-1843");
+    const accept = await env.act(personal, "accept", {}, "queue");
+    assert.status(accept, 403, "PERMISSION_DENIED", "принять без права «Принимать»");
+    assert.ok(/incident:accept/.test(accept.body.message), `причина: ${accept.body.message}`);
+    assert.status(await env.act((await newFire(env)).guid, "claim", {}, "queue"), 200, null, "взять — по праву взятия");
+    // Без права взятия: перехватить и переоткрыть нельзя, даже с их собственными правами
+    env = await makeEnv({ permissions: all.filter((k) => k !== "incident:claim") });
+    const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
+    const card = await env.card(foreign.guid);
+    assert.ok(!(card.actions || []).some((x) => x.id === "takeover" && x.visible !== false && x.enabled), "«Перехватить» без права взятия недоступно");
+    assert.status(await env.act(foreign.guid, "takeover", { comment: "тест" }), 403, "PERMISSION_DENIED", "перехват без права взятия");
+    const done = await env.find((e) => e.state === "closed");
+    assert.status(await env.act(done.guid, "reopen", { comment: "тест" }), 403, "PERMISSION_DENIED", "переоткрытие без права взятия");
+  });
+
+  test("Передать можно только тому, кто может принять (§8.1, RULE-38); автоэскалация такого адресата пропускает (§8.3)", async () => {
+    const env = await makeEnv();
+    // У Петровой — только «Наблюдатель»: доступ ко всему есть, права «Принимать» нет
+    assert.status(await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Наблюдатель"] }), 200, null, "роли Петровой");
+    const inc = await newFire(env);
+    const targets = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => t.id);
+    assert.ok(!targets.includes("petrova"), `Петровой нет среди адресатов: ${targets}`);
+    const res = await env.act(inc.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue");
+    assert.status(res, 403, "TARGET_CANNOT_ACCEPT", "передача тому, кто не может принять");
+    assert.eq(res.body.guard, "targetCanAccept", "какое условие не выполнено");
+    // Адресат первого уровня эскалации — Петрова: уровень пропускается, инцидент уходит на второй
+    const first = W.escalation.levels[0].targetRef.split(":")[1];
+    const second = W.escalation.levels[1].targetRef.split(":")[1];
+    assert.eq(first, "petrova", "в машине первый уровень — Петрова");
+    const left = Math.ceil((Date.parse(inc.timer.dueAt) - env.now) / 1000) + 1;
+    await env.advance(left);
+    const c = await env.card(inc.guid);
+    assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
+  });
+
   test("Переоткрыть: в работе у меня, результат очищен, нарушения сохранены; после срока — нельзя", async () => {
     const env = await makeEnv();
     const done = await env.find((e) => e.state === "closed");

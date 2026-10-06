@@ -42,13 +42,13 @@
     const asList = (v) => (Array.isArray(v) ? v : [v]);
     const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
     const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
-    // Следующий уровень автоэскалации (§8.3): ближайший выше текущего и не выше потолка, у адресата
-    // которого есть доступ к объекту инцидента (§5); уровни без доступа пропускаются
+    // Следующий уровень автоэскалации (§8.3): ближайший выше текущего и не выше потолка, адресат
+    // которого может принять — право «Принимать» и доступ к объекту (§5, §8.1); остальные пропускаются
     const nextLevel = (ev) =>
       W.escalation.levels
         .filter((l) => l.level > ev.escalationLevel && l.level <= W.escalation.maxLevel)
         .sort((a, b) => a.level - b.level)
-        .find((l) => !ctx.hasAccess || ctx.hasAccess(refToId(l.targetRef), ev)) || null;
+        .find((l) => !ctx.canAccept || ctx.canAccept(refToId(l.targetRef), ev)) || null;
 
     /* ===== Нормативы (§4, правило 2) ===== */
 
@@ -177,6 +177,10 @@
       targetIsNotSelf: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
         return isSelf(target) ? ["Передача на себя запрещена"] : null;
+      },
+      targetCanAccept: (ev, args, opts) => {
+        const target = opts && opts.form ? opts.form.targetId : null;
+        return !target || ctx.canAccept(target, ev) ? null : ["Адресат не может принять: нет права «Принимать» или доступа к объекту"];
       },
       targetHasAccess: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
@@ -552,7 +556,8 @@
               (o) =>
                 !(excludes.includes("self") && isSelf(o.id)) &&
                 !(excludes.includes("currentOwner") && o.id === addressee(ev)) &&
-                !(excludes.includes("noAccess") && !ctx.hasAccess(o.id, ev))
+                !(excludes.includes("noAccess") && !ctx.hasAccess(o.id, ev)) &&
+                !(excludes.includes("cannotAccept") && !ctx.canAccept(o.id, ev))
             );
           if (field.defaultFrom && options.some((o) => o.id === ctx.defaultTransferTarget())) defaultValue = ctx.defaultTransferTarget();
         } else if (field.source && field.source.startsWith("reasonCatalog:")) {

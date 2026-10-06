@@ -98,6 +98,71 @@
       }
     ]
   },
+  "roles": [
+    {
+      "name": "Оператор",
+      "permissions": [
+        "incident:claim",
+        "incident:accept",
+        "incident:hold",
+        "incident:release",
+        "incident:close",
+        "incident:close:unprocessed",
+        "incident:reopen",
+        "incident:transfer:own",
+        "incident:transfer:any",
+        "incident:reassign",
+        "incident:read:any",
+        "incident:bulk",
+        "incident:run_action",
+        "agent:set_not_ready"
+      ]
+    },
+    {
+      "name": "Оператор ТЦ",
+      "permissions": [
+        "incident:claim",
+        "incident:accept",
+        "incident:hold",
+        "incident:release",
+        "incident:close",
+        "incident:close:unprocessed",
+        "incident:reopen",
+        "incident:transfer:own",
+        "incident:transfer:any",
+        "incident:reassign",
+        "incident:read:any",
+        "incident:bulk",
+        "incident:run_action",
+        "agent:set_not_ready"
+      ]
+    },
+    {
+      "name": "Старший смены",
+      "permissions": [
+        "incident:claim",
+        "incident:accept",
+        "incident:hold",
+        "incident:release",
+        "incident:close",
+        "incident:close:unprocessed",
+        "incident:reopen",
+        "incident:transfer:own",
+        "incident:transfer:any",
+        "incident:reassign",
+        "incident:read:any",
+        "incident:bulk",
+        "incident:run_action",
+        "agent:set_not_ready"
+      ]
+    },
+    {
+      "name": "Наблюдатель",
+      "permissions": [
+        "incident:read:any"
+      ]
+    }
+  ],
   "deviceTypes": [
     {
       "id": "camera",
@@ -1060,7 +1125,8 @@
       "id": "a0000000-0000-4000-8000-000000000001",
       "name": "Все объекты",
       "roles": [
-        "Оператор"
+        "Оператор",
+        "Наблюдатель"
       ],
       "sourceGroups": [
         "30000000-0000-4000-8000-000000000001",

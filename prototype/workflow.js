@@ -159,7 +159,11 @@ window.IM_WORKFLOW = {
   "permissions": [
     {
       "key": "incident:claim",
-      "label": "Взять новое, принять адресованную передачу, возобновить свой отложенный"
+      "label": "Взять новое, возобновить свой отложенный; перехватить и переоткрыть — вместе с их правами. Без него инцидент в работу не попадает"
+    },
+    {
+      "key": "incident:accept",
+      "label": "Принять переданное мне или моей дежурной группе"
     },
     {
       "key": "incident:hold",
@@ -534,7 +538,8 @@ window.IM_WORKFLOW = {
           "excludes": [
             "self",
             "currentOwner",
-            "noAccess"
+            "noAccess",
+            "cannotAccept"
           ]
         },
         {
@@ -810,7 +815,7 @@ window.IM_WORKFLOW = {
         {
           "fn": "hasPermission",
           "args": [
-            "incident:claim"
+            "incident:accept"
           ]
         },
         {
@@ -1246,6 +1251,9 @@ window.IM_WORKFLOW = {
         },
         {
           "fn": "targetHasAccess"
+        },
+        {
+          "fn": "targetCanAccept"
         }
       ],
       "effects": [
@@ -1364,6 +1372,12 @@ window.IM_WORKFLOW = {
           "fn": "hasPermission",
           "args": [
             "incident:reassign"
+          ]
+        },
+        {
+          "fn": "hasPermission",
+          "args": [
+            "incident:claim"
           ]
         },
         {
@@ -1620,6 +1634,12 @@ window.IM_WORKFLOW = {
           "fn": "hasPermission",
           "args": [
             "incident:reopen"
+          ]
+        },
+        {
+          "fn": "hasPermission",
+          "args": [
+            "incident:claim"
           ]
         },
         {
@@ -3076,6 +3096,13 @@ window.IM_WORKFLOW = {
         "extendsBaseRegistry": true
       },
       {
+        "fn": "targetCanAccept",
+        "args": [],
+        "onFail": "disable",
+        "extendsBaseRegistry": true,
+        "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим."
+      },
+      {
         "fn": "targetHasAccess",
         "args": [],
         "onFail": "disable",
@@ -3330,7 +3357,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "validation": {
-    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации. Ролей МИ не знает (§5, RULE-01): проверки, зависящие от прав, идут на типовых наборах прав из typicalPermissionSets.",
+    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации. Что разрешают роли, МИ не знает (§5, RULE-01): проверки, зависящие от прав, идут на типовых наборах прав из typicalPermissionSets.",
     "rules": [
       "unreachable_state",
       "non_terminal_state_without_outgoing",
@@ -3349,6 +3376,7 @@ window.IM_WORKFLOW = {
           "label": "Оператор",
           "permissions": [
             "incident:claim",
+            "incident:accept",
             "incident:hold",
             "incident:release",
             "incident:close",
@@ -3364,6 +3392,7 @@ window.IM_WORKFLOW = {
           "label": "Старший смены",
           "permissions": [
             "incident:claim",
+            "incident:accept",
             "incident:hold",
             "incident:release",
             "incident:close",

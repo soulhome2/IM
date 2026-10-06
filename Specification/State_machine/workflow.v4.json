@@ -92,7 +92,8 @@
   },
 
   "permissions": [
-    { "key": "incident:claim", "label": "Взять новое, принять адресованную передачу, возобновить свой отложенный" },
+    { "key": "incident:claim", "label": "Взять новое, возобновить свой отложенный; перехватить и переоткрыть — вместе с их правами. Без него инцидент в работу не попадает" },
+    { "key": "incident:accept", "label": "Принять переданное мне или моей дежурной группе" },
     { "key": "incident:hold", "label": "Отложить свой инцидент с указанием причины" },
     { "key": "incident:release", "label": "Вернуть свой инцидент в очередь; отклонить адресованную передачу" },
     { "key": "incident:close", "label": "Закрыть свой инцидент с результатом: «Обработан» — после обязательных шагов; «Ложная тревога», «Дубликат», «Плановая проверка», «Прервано» — без сценария" },
@@ -231,7 +232,7 @@
           "required": true,
           "source": "transferTargets",
           "defaultFrom": "session.preferences.defaultTransferTargetId",
-          "excludes": ["self", "currentOwner", "noAccess"]
+          "excludes": ["self", "currentOwner", "noAccess", "cannotAccept"]
         },
         { "name": "comment", "kind": "text", "label": "Причина", "required": true, "placeholder": "Почему передаёте" }
       ]
@@ -359,7 +360,7 @@
       "form": null,
       "requiredStepSet": "none",
       "guards": [
-        { "fn": "hasPermission", "args": ["incident:claim"] },
+        { "fn": "hasPermission", "args": ["incident:accept"] },
         { "fn": "isTarget" },
         { "fn": "agentReady" },
         { "fn": "withinActiveLimit" }
@@ -503,7 +504,8 @@
         },
         { "fn": "agentReady" },
         { "fn": "targetIsNotSelf" },
-        { "fn": "targetHasAccess" }
+        { "fn": "targetHasAccess" },
+        { "fn": "targetCanAccept" }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["form.targetId.ifPerson"] },
@@ -534,6 +536,7 @@
       "requiredStepSet": "none",
       "guards": [
         { "fn": "hasPermission", "args": ["incident:reassign"] },
+        { "fn": "hasPermission", "args": ["incident:claim"] },
         { "fn": "isNotOwner" },
         { "fn": "agentReady" },
         { "fn": "withinActiveLimit" }
@@ -613,6 +616,7 @@
       "requiredStepSet": "none",
       "guards": [
         { "fn": "hasPermission", "args": ["incident:reopen"] },
+        { "fn": "hasPermission", "args": ["incident:claim"] },
         { "fn": "agentReady" },
         { "fn": "withinReopenWindow" },
         { "fn": "withinActiveLimit" }
@@ -1053,6 +1057,7 @@
       { "fn": "isTarget", "args": [], "onFail": "hide" },
       { "fn": "isNotTarget", "args": [], "onFail": "hide", "extendsBaseRegistry": true },
       { "fn": "targetIsNotSelf", "args": [], "onFail": "disable", "extendsBaseRegistry": true },
+      { "fn": "targetCanAccept", "args": [], "onFail": "disable", "extendsBaseRegistry": true, "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим." },
       { "fn": "targetHasAccess", "args": [], "onFail": "disable", "extendsBaseRegistry": true, "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)." },
       { "fn": "agentReady", "args": [], "onFail": "disable" },
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },
@@ -1105,7 +1110,7 @@
   },
 
   "validation": {
-    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации. Ролей МИ не знает (§5, RULE-01): проверки, зависящие от прав, идут на типовых наборах прав из typicalPermissionSets.",
+    "$comment": "§14.7. Проверки при сохранении схемы. Бэкенд обязан выполнять их до публикации. Что разрешают роли, МИ не знает (§5, RULE-01): проверки, зависящие от прав, идут на типовых наборах прав из typicalPermissionSets.",
     "rules": [
       "unreachable_state",
       "non_terminal_state_without_outgoing",
@@ -1122,12 +1127,12 @@
         {
           "id": "operator",
           "label": "Оператор",
-          "permissions": ["incident:claim", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         },
         {
           "id": "shift_lead",
           "label": "Старший смены",
-          "permissions": ["incident:claim", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         }
       ]
     },
