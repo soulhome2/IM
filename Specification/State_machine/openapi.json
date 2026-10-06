@@ -2021,7 +2021,9 @@
           "transitions",
           "timers",
           "permissions",
-          "limits"
+          "limits",
+          "escalation",
+          "alerts"
         ],
         "properties": {
           "schema": {
@@ -2827,7 +2829,8 @@
         "description": "§9. Настраивается под правом `incident:schema:admin`. Адресаты уровней автоэскалации — не то же самое, что персональный предвыбор адресата в форме передачи (§8.2). Из каких состояний и по какому таймеру срабатывает автоэскалация, задаёт переход `auto_escalate` (RULE-42): по нормативу реакции, из «Новое» и «Ожидает принятия».",
         "properties": {
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "§9. Выключена — истёкшая реакция только нарушение и алерт (§4, правило 3). Обязательно (RULE-45)."
           },
           "levels": {
             "type": "array",
@@ -2856,12 +2859,19 @@
             "enum": [
               "alert",
               "escalate"
-            ]
+            ],
+            "description": "§9. alert — нарушение и алерт; escalate — ещё и передача на следующий уровень. Обязательно: без него истёкший норматив закрытия не оставит следа (RULE-45)."
           },
           "reason": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "enabled",
+          "levels",
+          "maxLevel",
+          "onResolutionOverdue"
+        ]
       },
       "WorkflowLimits": {
         "type": "object",

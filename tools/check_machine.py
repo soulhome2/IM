@@ -548,6 +548,20 @@ def setting_at(w, path):
     return cur
 
 
+def check_escalation_settings(w, o, err):
+    """Настройки, от которых зависит, сработает ли хоть один переход по истёкшему нормативу (RULE-45):
+    без них нарушение пропадает молча."""
+    esc = w.get("escalation") or {}
+    if not isinstance(esc.get("enabled"), bool):
+        err.append("эскалация: escalation.enabled — true или false; иначе истёкшая реакция пропадёт молча (RULE-45)")
+    allowed = o["components"]["schemas"]["EscalationPolicy"]["properties"]["onResolutionOverdue"]["enum"]
+    if esc.get("onResolutionOverdue") not in allowed:
+        err.append(f"эскалация: escalation.onResolutionOverdue — одно из {allowed}; иначе истёкший норматив закрытия пропадёт молча (RULE-45)")
+    target = (w.get("alerts") or {}).get("target")
+    if not isinstance(target, str) or not re.match(r"^(user|group):.+", target):
+        err.append("алерты: alerts.target — user:… или group:…; иначе алерты некому отправить (RULE-43, RULE-45)")
+
+
 def check_admin_settings(w, o, err):
     """Перечень настроек администратора (RULE-44): пути существуют, запросы есть в контракте,
     каждый ключ разделов-настроек — в перечне или в notSettings с причиной."""
@@ -601,6 +615,7 @@ def main():
     check_rules_diagram(w, err)
     check_doc_numbers(w, o, err)
     check_fixture_journal(w, err)
+    check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
     check_fixture(w, err)
     check_api(w, o, err)
