@@ -433,6 +433,34 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("Порядок автоматических переходов — по времени наступления (RULE-41): прыжок часов и прогон мелкими шагами дают одно и то же", async () => {
+    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
+    // Взял инцидент, связь пропала; эскалация по закрытию включена. Первой наступает потеря связи
+    // (5 минут), а не норматив закрытия — инцидент отложен, и закрытие уже не эскалируется
+    async function run(stepSec) {
+      const w = JSON.parse(JSON.stringify(W));
+      w.escalation.onResolutionOverdue = "escalate";
+      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
+      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
+      const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
+      assert.status(await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag }), 200, null, "взять");
+      await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: inc.guid });
+      const fired = [];
+      for (let left = 7200; left > 0; left -= stepSec) {
+        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
+      }
+      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+      return { fired, end: [c.state, c.owner && c.owner.id, c.escalationLevel, c.breaches.map((b) => b.kind)] };
+    }
+    const steps = await run(37);
+    const jump = await run(7200);
+    assert.eq(steps.fired.slice(0, 2), ["system_hold_idle", "system_release_idle"], "сначала потеря связи, потом возврат в очередь");
+    assert.ok(!steps.fired.includes("resolution_escalate"), "отложенный по потере связи по закрытию не эскалируется");
+    assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
+    assert.eq(jump.end, steps.end, "и тот же итог");
+  });
+
   test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {
     if (IMTest.external) return "пропущено: настройки схемы меняются только во встроенном сервере";
     for (const [why, levels] of [
@@ -609,8 +637,9 @@
       const etag = (await api.raw("GET", `/operator/incidents/${enc(fire.guid)}`)).headers.etag;
       const claimed = await api.raw("POST", `/operator/incidents/${enc(fire.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag });
       assert.status(claimed, 200, null, "взять");
-      // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat
-      let left = w.timers.find((t) => t.id === "resolution").defaultSec + 1;
+      // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat. Ровно до
+      // истечения норматива критического пожара: дальше по времени пошла бы уже реакция уровня (RULE-41)
+      let left = w.timers.find((t) => t.id === "resolution").byPriority.critical + 1;
       const fired = [];
       while (left > 0) {
         const step = Math.min(left, w.session.idleHoldSec - 1);

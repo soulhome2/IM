@@ -21,7 +21,10 @@
     const catalogs = W.reasonCatalogs;
     const states = Object.fromEntries(W.states.map((s) => [s.id, s]));
 
-    const now = () => ctx.now();
+    // Момент, «в который» выполняется автоматический переход (RULE-41): планировщик догоняет
+    // пропущенное по времени наступления, и эффекты считают время от этого момента
+    let at = null;
+    const now = () => (at != null ? at : ctx.now());
     const isGroup = (id) => Boolean(id) && ctx.isGroup(id);
     const isMine = (ev) => ev.owner === ME;
     // «Я» как адресат: сам оператор и группы, в которые он входит (§10.1)
@@ -205,7 +208,7 @@
       escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["Нет подходящего уровня эскалации"]),
       ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
-      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() >= setting(path) ? null : ["Оператор на связи"]),
+      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["Оператор на связи"]),
       // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
       withinActiveLimit: (ev, [extra = 0]) => {
         const u = units("in_progress", ev);
@@ -419,7 +422,7 @@
       setFlag: (ev, [field, arg], s) => {
         ev[FLAG_FIELD[field] || field] = value(arg, ev, s.form, s);
       },
-      appendLog: (ev, [template], s) => ctx.log(ev, s.actor, template, vars(ev, s.form, s.logVars)),
+      appendLog: (ev, [template], s) => ctx.log(ev, s.actor, template, vars(ev, s.form, s.logVars), now()),
       returnToQueue: () => {},
       evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
       setCursor: (ev) => ctx.setCursor(ev),
@@ -432,7 +435,7 @@
         if (who !== "alerts.target") return;
         s.after.push((inc) => {
           const sent = ctx.notifyAlert ? ctx.notifyAlert(inc, refToId(setting("alerts.target")), s.transitionId) : 0;
-          if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {});
+          if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {}, now());
         });
       },
       externalCommand: () => {},
@@ -514,21 +517,56 @@
     // scope: incidents_owned_by_agent — только инциденты текущего оператора (перерыв, §12.2)
     // agentOnly — только переходы, привязанные к оператору (scope: incidents_owned_by_agent):
     // так сервер проверяет состояние каждого оператора, не запуская общие таймеры повторно
+    // Порядок (RULE-41): из готовых переходов инцидента первым — тот, чьё условие наступило раньше,
+    // при равенстве — по порядку в машине; после каждого — выбор заново. Тогда результат тот же, как
+    // если бы планировщик проверял каждую секунду, — и после простоя сервиса (§9, §14.3)
+    function momentOf(ev, tr) {
+      let moment = null;
+      for (const g of tr.guards || []) {
+        if (g.fn === "timerExpired") {
+          const due = dueOf(ev, g.args[0]);
+          if (!due) return null;
+          moment = Math.max(moment || 0, due);
+        } else if (g.fn === "agentIdleFor") {
+          if (!ctx.idleSec) return null;
+          moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000);
+        }
+      }
+      return moment == null ? ctx.now() : moment;
+    }
     function tick(opts) {
       const changed = [];
       const agentOnly = Boolean(opts && opts.agentOnly);
       ctx.events().forEach((ev) => {
-        if (isDone(ev)) return;
-        W.transitions.forEach((tr) => {
-          if (tr.trigger !== "timer" && tr.trigger !== "system") return;
-          if (agentOnly && tr.scope !== "incidents_owned_by_agent") return;
-          if (!tr.from.includes(ev.state)) return;
-          if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
-          if (firstFail(ev, tr.guards)) return;
-          const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
-          if (timerGuard) markFired(ev, timerGuard.args[0]);
-          if (applyEffects(tr, ev, {}, tr.actor || "dispatcher").ok) changed.push({ id: ev.id, transition: tr.id });
-        });
+        // Один и тот же переход в один и тот же момент — не больше раза за такт: ошибка в условии
+        // не зациклит планировщик
+        const done = new Set();
+        for (let step = 0; step < 50 && !isDone(ev); step++) {
+          let next = null;
+          W.transitions.forEach((tr) => {
+            if (tr.trigger !== "timer" && tr.trigger !== "system") return;
+            if (agentOnly && tr.scope !== "incidents_owned_by_agent") return;
+            if (!tr.from.includes(ev.state)) return;
+            if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
+            const moment = momentOf(ev, tr);
+            if (moment == null || moment > ctx.now() || (next && next.moment <= moment) || done.has(`${tr.id}@${moment}`)) return;
+            at = moment;
+            const fail = firstFail(ev, tr.guards);
+            at = null;
+            if (!fail) next = { tr, moment };
+          });
+          if (!next) return;
+          done.add(`${next.tr.id}@${next.moment}`);
+          at = next.moment;
+          try {
+            const timerGuard = (next.tr.guards || []).find((g) => g.fn === "timerExpired");
+            if (timerGuard) markFired(ev, timerGuard.args[0]);
+            if (!applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher").ok) return;
+          } finally {
+            at = null;
+          }
+          changed.push({ id: ev.id, transition: next.tr.id });
+        }
       });
       return changed;
     }

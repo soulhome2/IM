@@ -193,8 +193,9 @@
 
     /* ===== Журнал ===== */
 
-    function log(ev, whoId, template, vars) {
-      ev.log.push({ at: now(), whoId, k: template, v: vars || null });
+    // when — момент, «в который» выполнен автоматический переход, если планировщик догонял (RULE-41)
+    function log(ev, whoId, template, vars, when) {
+      ev.log.push({ at: when != null ? when : now(), whoId, k: template, v: vars || null });
     }
 
     // Всё, что исполнитель знает о данных сервера. «Я» (me) у каждого исполнителя своё: у оператора
