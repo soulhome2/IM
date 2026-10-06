@@ -509,8 +509,10 @@
     // так сервер проверяет состояние каждого оператора, не запуская общие таймеры повторно
     // Порядок (RULE-41): из готовых переходов инцидента первым — тот, чьё условие наступило раньше,
     // при равенстве — по порядку в машине; после каждого — выбор заново. Тогда результат тот же, как
-    // если бы планировщик проверял каждую секунду, — и после простоя сервиса (§9, §14.3)
-    function momentOf(ev, tr) {
+    // если бы планировщик проверял каждую секунду, — и после простоя сервиса (§9, §14.3).
+    // after — момент перехода, выполненного перед этим над тем же инцидентом (RULE-48): то, что он
+    // сделал возможным, наступает не раньше него; переход без таймера — сразу после него
+    function momentOf(ev, tr, after) {
       let moment = null;
       for (const g of tr.guards || []) {
         if (g.fn === "timerExpired") {
@@ -522,7 +524,8 @@
           moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000);
         }
       }
-      return moment == null ? ctx.now() : moment;
+      if (moment == null) return after != null ? after : ctx.now();
+      return after != null ? Math.max(moment, after) : moment;
     }
     function tick(opts) {
       const changed = [];
@@ -531,6 +534,7 @@
         // Один и тот же переход в один и тот же момент — не больше раза за такт: ошибка в условии
         // не зациклит планировщик
         const done = new Set();
+        let last = null;
         for (let step = 0; step < 50 && !isDone(ev); step++) {
           let next = null;
           W.transitions.forEach((tr) => {
@@ -538,7 +542,7 @@
             if (agentOnly && tr.scope !== "incidents_owned_by_agent") return;
             if (!tr.from.includes(ev.state)) return;
             if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
-            const moment = momentOf(ev, tr);
+            const moment = momentOf(ev, tr, last);
             if (moment == null || moment > ctx.now() || (next && next.moment <= moment) || done.has(`${tr.id}@${moment}`)) return;
             at = moment;
             const fail = firstFail(ev, tr.guards);
@@ -555,6 +559,7 @@
           } finally {
             at = null;
           }
+          last = next.moment;
           changed.push({ id: ev.id, transition: next.tr.id });
         }
       });

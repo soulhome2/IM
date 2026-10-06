@@ -478,6 +478,31 @@
     assert.eq(jump.end, steps.end, "и тот же итог");
   });
 
+  test("Догон: переход без таймера — сразу после того, который сделал его возможным (RULE-48)", async () => {
+    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
+    // Я вышел; первый уровень эскалации — на меня. Эскалация на меня делает возможным «адресат
+    // вышел» — он должен сработать сразу, раньше следующего уровня, при любом шаге часов
+    async function run(stepSec) {
+      const w = JSON.parse(JSON.stringify(W));
+      w.escalation.levels[0].targetRef = `user:${ME}`;
+      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
+      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0);
+      assert.status(await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
+      const fired = [];
+      for (let left = 3600; left > 0; left -= stepSec) {
+        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
+      }
+      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+      return { fired, end: [c.state, c.owner && c.owner.id, c.assignmentGroup && c.assignmentGroup.id, c.escalationLevel] };
+    }
+    const steps = await run(37);
+    const jump = await run(3600);
+    assert.eq(steps.fired.slice(0, 2), ["auto_escalate", "target_signed_out_to_group"], "эскалация на меня — и сразу моей группе");
+    assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
+    assert.eq(jump.end, steps.end, "и тот же итог");
+  });
+
   test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {
     if (IMTest.external) return "пропущено: настройки схемы меняются только во встроенном сервере";
     for (const [why, levels] of [
