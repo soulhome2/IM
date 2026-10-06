@@ -880,6 +880,55 @@
       expect(!missing.size, `нет цвета у приоритета: ${[...missing].join(", ")}`);
     });
 
+    await step("Перевод на английский", () => checkLanguage("en"));
+    await step("Перевод на испанский", () => checkLanguage("es"));
+
+    // Уведомления о событиях потока, до которых без стенда не дойти: роли и часы — служебными
+    // операциями встроенного сервера (PROC-12)
+    const stand = window.IM_SELFTEST_API;
+    const toastWith = (re) => [...$("toasts").children].find((t) => re.test(t.textContent));
+    async function claimFromQueue(accept) {
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      const row = [...$("eventsList").querySelectorAll(".event")].find((r) => accept(r) && button(r, "claim"));
+      expect(row, "нет нового инцидента, который можно взять");
+      const number = (row.textContent.match(/INC-\d+/) || [])[0];
+      await click(button(row, "claim"));
+      return number;
+    }
+
+    await step("Потеря доступа: уведомление с номером, карточка закрыта (§5, BUG-24)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const number = await claimFromQueue((r) => !/Торговый центр/.test(r.textContent));
+      expect(mode() === "work", "карточка взятого инцидента не открылась");
+      await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
+      await wait(300);
+      const toast = toastWith(/вам больше не доступен/);
+      try {
+        expect(toast && toast.textContent.includes(number), `нет уведомления о потере доступа к ${number}`);
+        expect(mode() === "queue", "карточка недоступного инцидента не закрылась");
+      } finally {
+        await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор"] });
+        await wait(200);
+      }
+      return toast.textContent;
+    });
+
+    await step("Алерт получателю: уведомление о нарушении норматива закрытия (§9, RULE-43)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const number = await claimFromQueue(() => true);
+      let toast = null;
+      // Часы шагами короче порога «нет связи», перед каждым — признак активности
+      for (let i = 0; i < 12 && !toast; i++) {
+        await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await stand.raw("POST", "/test/clock", { advanceSec: 240 });
+        await wait(150);
+        toast = toastWith(new RegExp(`Алерт: ${number} — Норматив закрытия нарушен`));
+      }
+      expect(toast, `нет уведомления об алерте по ${number}`);
+      return toast.textContent;
+    });
+
     await step("Ответы встроенного сервера соответствуют openapi.json", async () => {
       expect(window.IM_OPENAPI, "контракт openapi.js не подключён");
       const recorded = window.IM_RECORDED || [];
@@ -889,8 +938,6 @@
       return `${recorded.length} ответов`;
     });
 
-    await step("Перевод на английский", () => checkLanguage("en"));
-    await step("Перевод на испанский", () => checkLanguage("es"));
 
     report();
   }

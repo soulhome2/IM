@@ -500,8 +500,13 @@
   // В самопроверке коллеги не эмулируются: очередь меняют только её шаги, и результат не зависит
   // от скорости машины. Эмуляцию коллег проверяют тесты API, где время идёт по /test/clock
   const selftestRun = new URLSearchParams(location.search).has("selftest");
-  const embedded = apiBase ? null : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: selftestRun ? false : window.IM_COLLEAGUES });
+  // В самопроверке у встроенного сервера есть служебные операции стенда (часы, роли): без них не
+  // дойти до алерта и потери доступа. Самопроверке — тот же клиент API (PROC-12)
+  const embedded = apiBase
+    ? null
+    : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: selftestRun ? false : window.IM_COLLEAGUES, testSupport: selftestRun });
   const api = IMApi.create(apiBase ? { baseUrl: apiBase } : { server: embedded });
+  if (selftestRun && embedded) window.IM_SELFTEST_API = api;
   // Ответы встроенного сервера — самопроверке: она сверяет их со схемами openapi.json
   if (embedded) window.IM_RECORDED = embedded.recorded;
   const enc = encodeURIComponent;
