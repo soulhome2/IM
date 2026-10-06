@@ -17,14 +17,22 @@ def at(w, path):
     return cur
 
 
+LABELS = {}
+
+
+def word(key):
+    """Машинное значение — подписью из adminSettings.valueLabels (BUG-26)."""
+    return LABELS.get(key, key)
+
+
 def duration(sec):
     if sec is None:
         return "—"
     if sec % 3600 == 0 and sec >= 3600:
-        return f"{sec // 3600} ч"
+        return f"{sec // 3600}\u00a0ч"
     if sec % 60 == 0 and sec >= 60:
-        return f"{sec // 60} мин"
-    return f"{sec} с"
+        return f"{sec // 60}\u00a0мин"
+    return f"{sec}\u00a0с"
 
 
 def value(v, key="", seconds=False):
@@ -43,7 +51,7 @@ def value(v, key="", seconds=False):
     if isinstance(v, str):
         return f"`{v}`" if ":" in v and " " not in v else v
     if isinstance(v, dict):
-        return "; ".join(f"{k}: {value(x, k, sec)}" for k, x in v.items() if not k.startswith("$")) or "нет"
+        return "; ".join(f"{word(k)}: {value(x, k, sec)}" for k, x in v.items() if not k.startswith("$")) or "нет"
     if isinstance(v, list):
         if not v:
             return "нет"
@@ -61,13 +69,15 @@ def element(x, sec):
     head = x.get("label") or x.get("id") or ""
     extra = [value(v, k, sec) for k, v in x.items() if k.endswith(("Sec", "Minutes")) and v is not None]
     if "sec" in x:
-        cond = ", ".join(f"{k} = {v}" for k, v in x.items() if k != "sec")
+        cond = ", ".join(f"{word(k)} = {word(str(v))}" for k, v in x.items() if k != "sec")
         return f"{cond}: {duration(x['sec'])}"
     return head + (f" ({', '.join(extra)})" if extra else "")
 
 
 def render(w):
     a = w["adminSettings"]
+    LABELS.clear()
+    LABELS.update({k: v for k, v in a.get("valueLabels", {}).items() if not k.startswith("$")})
     out = [
         "# Настройки администратора",
         "",
@@ -85,7 +95,10 @@ def render(w):
             for item in tab["items"]:
                 key = item["path"].split(".")[-1]
                 seconds = item["path"].startswith("timers.")
-                out.append(f"| {item['label']} | {item['what']} | {value(at(w, item['path']), key, seconds)} | `{item['path']}` |")
+                current = at(w, item["path"])
+                values = item.get("values", {})
+                shown = values[current] if isinstance(current, str) and current in values else value(current, key, seconds)
+                out.append(f"| {item['label']} | {item['what']} | {shown} | `{item['path']}` |")
         else:
             src = f"читается запросом `{tab['source']}`" if tab.get("source") else "запроса в контракте пока нет"
             out += [f"{tab['what']}. Данные МИ, не схема: {src}."]

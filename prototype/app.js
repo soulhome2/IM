@@ -2826,21 +2826,24 @@
   const adminState = { tab: null, data: {} };
   const settingAt = (path) =>
     path.split(".").reduce((cur, seg) => (cur == null ? cur : Array.isArray(cur) ? cur.find((x) => x && x.id === seg) : cur[seg]), WORKFLOW);
+  // Число и единица — неразрывно: «90 с» не переносится посередине
   function fmtDuration(sec) {
     if (sec == null) return "—";
-    if (sec >= 3600 && sec % 3600 === 0) return t("{n} ч", { n: sec / 3600 });
-    if (sec >= 60 && sec % 60 === 0) return t("{n} мин", { n: sec / 60 });
-    return t("{n} с", { n: sec });
+    const text = sec >= 3600 && sec % 3600 === 0 ? t("{n} ч", { n: sec / 3600 }) : sec >= 60 && sec % 60 === 0 ? t("{n} мин", { n: sec / 60 }) : t("{n} с", { n: sec });
+    return text.replace(/ /g, "\u00a0");
   }
+  // Машинное значение — подписью из машины (adminSettings.valueLabels), иначе как есть
+  const word = (key) => te((WORKFLOW.adminSettings.valueLabels || {})[key] || key);
   function personName(id) {
     if (store.session && id === store.session.operator.guid) return store.session.operator.name;
     const group = (adminState.data.duty || []).find((g) => g.id === id);
     const target = targetById(id);
     return (group && group.name) || (target && target.name) || id;
   }
-  function fmtSetting(v, key, seconds) {
+  function fmtSetting(v, key, seconds, values) {
     const sec = seconds || /Sec$/.test(key);
     if (v == null) return "—";
+    if (values && typeof v === "string" && values[v]) return te(values[v]);
     if (typeof v === "boolean") return te(v ? "да" : "нет");
     if (typeof v === "number") return /Min(utes)?$/.test(key) ? fmtDuration(v * 60) : sec ? fmtDuration(v) : String(v);
     if (typeof v === "string") return /^(user|group):/.test(v) ? asData(personName(v.split(":")[1])) : te(v);
@@ -2851,7 +2854,7 @@
           if (typeof x !== "object") return fmtSetting(x, key, sec);
           if (x.key && x.label) return `${kbdHtml(x.key)} ${te(x.label)}`;
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
-          if (x.sec != null) return `${escapeHtml(Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${k} = ${val}`).join(", "))}: ${fmtDuration(x.sec)}`;
+          if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
           return te(x.label || x.id) + limit;
         })
@@ -2859,7 +2862,7 @@
     }
     return Object.entries(v)
       .filter(([k]) => !k.startsWith("$"))
-      .map(([k, val]) => `${escapeHtml(k)}: ${fmtSetting(val, k, sec)}`)
+      .map(([k, val]) => `${word(k)}: ${fmtSetting(val, k, sec)}`)
       .join("<br>");
   }
   const sourcePath = (tab) => tab.source.split(" ")[1];
@@ -2884,7 +2887,7 @@
       table.innerHTML =
         `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>` +
         tab.items
-          .map((item) => `<tr><td>${te(item.label)}<span class="what">${te(item.what)}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."))}</td></tr>`)
+          .map((item) => `<tr><td>${te(item.label)}<span class="what">${te(item.what)}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values)}</td></tr>`)
           .join("") +
         "</tbody>";
       return;

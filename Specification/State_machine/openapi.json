@@ -2737,6 +2737,11 @@
             },
             "description": "Разделы схемы, в которых каждый ключ — настройка или явно не настройка"
           },
+          "valueLabels": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Подписи машинных значений в перечне (BUG-26): приоритеты, условия уточнений нормативов"
+          },
           "tabs": {
             "type": "array",
             "items": {
@@ -2774,6 +2779,13 @@
                       },
                       "what": {
                         "type": "string"
+                      },
+                      "values": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Подписи значений перечня настройки, например alert → «Нарушение и алерт»"
                       }
                     }
                   }

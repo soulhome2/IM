@@ -746,6 +746,11 @@
       await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
       const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
       expect(row && row.cells[1].textContent.trim() === String(window.IM_WORKFLOW.limits.maxActive), "лимит активных не показан или не совпадает с машиной");
+      // Значения перечня — подписями из машины, а не машинным словом (BUG-26)
+      await click($("adminTabs").querySelector('[data-admin-tab="escalation"]'));
+      const overdue = [...$("adminTable").querySelectorAll("tr")].find((r) => /Просрочка закрытия/.test(r.textContent));
+      const expected = window.IM_WORKFLOW.adminSettings.tabs.find((x) => x.id === "escalation").items.find((i) => i.path === "escalation.onResolutionOverdue").values[window.IM_WORKFLOW.escalation.onResolutionOverdue];
+      expect(overdue && overdue.cells[1].textContent.trim() === expected, `«Просрочка закрытия»: «${overdue && overdue.cells[1].textContent.trim()}» вместо «${expected}»`);
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
       expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
       await click(document.querySelector('[data-close="modalAdmin"]'));

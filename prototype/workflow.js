@@ -3621,6 +3621,16 @@ window.IM_WORKFLOW = {
       "session",
       "hotkeys"
     ],
+    "valueLabels": {
+      "$comment": "Подписи машинных значений в перечне настроек (BUG-26): приоритеты и условия уточнений нормативов. values у настройки — подписи значений её перечня.",
+      "critical": "критический",
+      "high": "высокий",
+      "medium": "средний",
+      "low": "низкий",
+      "priority": "приоритет",
+      "eventType": "тип события",
+      "sourceGroup": "группа устройств"
+    },
     "tabs": [
       {
         "id": "norms",
@@ -3709,7 +3719,11 @@ window.IM_WORKFLOW = {
           {
             "path": "escalation.onResolutionOverdue",
             "label": "Просрочка закрытия",
-            "what": "alert — нарушение и алерт; escalate — ещё и передача на следующий уровень"
+            "what": "Что делать, когда истёк норматив закрытия",
+            "values": {
+              "alert": "Нарушение и алерт",
+              "escalate": "Нарушение, алерт и передача на следующий уровень"
+            }
           },
           {
             "path": "escalation.reason",

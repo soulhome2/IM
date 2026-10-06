@@ -630,8 +630,17 @@ def check_admin_settings(w, o, err):
         if "items" in tab:
             for item in tab["items"]:
                 paths.append(item["path"])
-                if setting_at(w, item["path"]) is _MISSING:
+                current = setting_at(w, item["path"])
+                if current is _MISSING:
                     err.append(f"настройки, вкладка «{tab['label']}»: пути {item['path']} в машине нет")
+                # Подписи значений перечня (BUG-26): все значения из контракта, без лишних
+                if "values" in item:
+                    prop = item["path"].split(".")[-1]
+                    enum = next((s["properties"][prop].get("enum") for s in o["components"]["schemas"].values() if prop in s.get("properties", {}) and s["properties"][prop].get("enum")), None)
+                    if enum is not None and sorted(item["values"]) != sorted(enum):
+                        err.append(f"настройки, {item['path']}: подписи значений {sorted(item['values'])}, а в контракте {sorted(enum)}")
+                    elif current not in item["values"]:
+                        err.append(f"настройки, {item['path']}: у значения «{current}» нет подписи")
         elif tab.get("source"):
             method, url = tab["source"].split(" ", 1)
             if method.lower() not in o["paths"].get(url, {}):
