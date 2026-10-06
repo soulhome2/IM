@@ -194,6 +194,13 @@ stateDiagram-v2
     on_hold --> new: Вернуть в очередь
     in_progress --> closed: Закрыть (любой результат)
     closed --> in_progress: Переоткрыть
+    in_progress --> on_hold: Перерыв или потеря связи (система)
+    on_hold --> new: Долгое молчание оператора (система)
+    pending_acceptance --> pending_acceptance: Адресат ушёл со смены — его группе (система)
+    pending_acceptance --> new: Адресат ушёл со смены, группы нет (система)
+    pending_acceptance --> new: Потеря доступа (система)
+    in_progress --> new: Потеря доступа (система)
+    on_hold --> new: Потеря доступа (система)
     closed --> [*]
 ```
 

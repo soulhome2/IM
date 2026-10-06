@@ -441,6 +441,22 @@ def check_rules_tables(w, err):
         err.append(f"действие машины `{i}` не упомянуто в правилах (§6.3, колонка «В машине»)")
 
 
+def check_rules_diagram(w, err):
+    """Диаграмма §3 правил показывает каждую смену состояния машины (RULE-35): для перехода с
+    `to` — стрелка «откуда → куда». Переходы без смены состояния (нарушения, потолок) не рисуются."""
+    path = os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    block = text.split("```mermaid", 1)[1].split("```", 1)[0]
+    drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", block, re.M))
+    for t in w["transitions"]:
+        if not t.get("to"):
+            continue
+        for src in t["from"]:
+            if (src, t["to"]) not in drawn:
+                err.append(f"диаграмма §3 правил: нет стрелки {src} → {t['to']} (переход `{t['id']}`)")
+
+
 def main():
     err = []
     try:
@@ -454,6 +470,7 @@ def main():
     check_layers(err)
     check_literals(w, err)
     check_rules_tables(w, err)
+    check_rules_diagram(w, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:
