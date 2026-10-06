@@ -3892,13 +3892,13 @@ window.IM_WORKFLOW = {
     ]
   },
   "invariants": {
-    "$comment": "§10.1. Проверяются сервером на каждом переходе.",
+    "$comment": "§10.1. Проверяются сервером на каждом переходе. readOnlyByAgentState — в состояниях оператора с readOnly (перерыв, вышел) доступен только просмотр: переходы отклоняет условие agentReady (§10.1, правило 2).",
     "atomicServerSideTransition": true,
     "optimisticLocking": {
       "field": "version",
       "header": "If-Match"
     },
-    "readOnlyWhenNotReady": true,
+    "readOnlyByAgentState": true,
     "transferToSelfForbidden": true,
     "terminalOnlyViaReopen": true,
     "manualWinsOverTimer": true
