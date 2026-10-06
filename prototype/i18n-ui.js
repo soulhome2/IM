@@ -3,6 +3,8 @@
 // Фигурные скобки {…} подставляются во время отрисовки, их нельзя переводить.
 window.IM_DICT_UI = {
   en: {
+    "Норматив реакции нарушен": "Reaction deadline breached",
+    "Норматив реакции нарушен, алерт получателю": "Reaction deadline breached, alert sent",
     "Норматив закрытия нарушен, алерт получателю": "Resolution deadline breached, alert sent",
     "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Resolution deadline breached, escalation ceiling: alert sent",
     "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Escalation ceiling reached: reaction deadline breached, alert sent",
@@ -379,6 +381,8 @@ window.IM_DICT_UI = {
   },
 
   es: {
+    "Норматив реакции нарушен": "Plazo de reacción incumplido",
+    "Норматив реакции нарушен, алерт получателю": "Plazo de reacción incumplido, alerta enviada",
     "Норматив закрытия нарушен, алерт получателю": "Plazo de cierre incumplido, alerta enviada",
     "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Plazo de cierre incumplido, tope de escalado: alerta enviada",
     "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Tope de escalado alcanzado: plazo de reacción incumplido, alerta enviada",

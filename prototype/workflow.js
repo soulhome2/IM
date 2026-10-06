@@ -1830,6 +1830,12 @@ window.IM_WORKFLOW = {
       "actor": "dispatcher",
       "guards": [
         {
+          "fn": "settingEnabled",
+          "args": [
+            "escalation.enabled"
+          ]
+        },
+        {
           "fn": "timerExpired",
           "args": [
             "reaction"
@@ -1862,6 +1868,66 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "alerts.target"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "reaction_overdue",
+      "label": "Норматив реакции нарушен",
+      "$comment": "§4, §9 (RULE-40). Автоэскалация выключена: истёкшая реакция — нарушение и алерт получателю алертов, без передачи. Иначе просрочка реакции не оставила бы следа ни в журнале, ни в отчётах.",
+      "from": [
+        "new",
+        "pending_acceptance"
+      ],
+      "to": null,
+      "trigger": "timer",
+      "actor": "dispatcher",
+      "guards": [
+        {
+          "fn": "settingIs",
+          "args": [
+            "escalation.enabled",
+            false
+          ]
+        },
+        {
+          "fn": "timerExpired",
+          "args": [
+            "reaction"
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "recordBreach",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Норматив реакции нарушен, алерт получателю"
           ]
         },
         {

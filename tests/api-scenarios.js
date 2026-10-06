@@ -433,6 +433,40 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {
+    if (IMTest.external) return "пропущено: настройки схемы меняются только во встроенном сервере";
+    for (const [why, levels] of [
+      ["уровни настроены", null],
+      ["уровней нет", []],
+    ]) {
+      const w = JSON.parse(JSON.stringify(W));
+      w.escalation.enabled = false;
+      if (levels) w.escalation.levels = levels;
+      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
+      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+      const got = [];
+      const stop = api.subscribe((m) => got.push(m));
+      const fired = [];
+      // До конца реакции — по дедлайну карточки
+      const card = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+      const now = Date.parse((await api.raw("POST", "/test/clock", { advanceSec: 0 })).body.now);
+      for (let left = Math.ceil((Date.parse(card.timer.dueAt) - now) / 1000) + 1; left > 0; left -= 240) {
+        await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) })).body.fired);
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      stop();
+      const mine = fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+      assert.eq(mine, ["reaction_overdue"], `${why}: сработало только нарушение реакции`);
+      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+      assert.eq([c.state, c.escalationLevel, c.owner], ["new", 0, null], `${why}: никому не передан`);
+      assert.eq(c.breaches.filter((b) => b.kind === "reaction").length, 1, `${why}: нарушение реакции записано`);
+      assert.ok(c.journal.some((j) => /Норматив реакции нарушен/.test(j.templateKey)), `${why}: запись в журнале`);
+      assert.ok(got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid && m.payload.transitionId === "reaction_overdue"), `${why}: алерт получателю — мне, я в группе старших`);
+    }
+  });
+
   // Самый длинный норматив закрытия в машине: за это время он истечёт у любого инцидента
   const longestResolution = () => {
     const r = W.timers.find((x) => x.id === "resolution");
