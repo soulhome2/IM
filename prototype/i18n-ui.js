@@ -3,6 +3,10 @@
 // Фигурные скобки {…} подставляются во время отрисовки, их нельзя переводить.
 window.IM_DICT_UI = {
   en: {
+    "Эскалировать некому": "Nobody to escalate to",
+    "Норматив закрытия нарушен, эскалировать некому": "Resolution deadline breached, nobody to escalate to",
+    "Эскалировать некому: норматив реакции нарушен, алерт получателю": "Nobody to escalate to: reaction deadline breached, alert sent",
+    "Норматив закрытия нарушен, эскалировать некому: алерт получателю": "Resolution deadline breached, nobody to escalate to: alert sent",
     "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная": "Which cameras to show for a device and in what order: an incident shows the cameras of its source, the first is the main one",
     "Устройство": "Device",
     "Камеры по порядку": "Cameras in order",
@@ -108,8 +112,6 @@ window.IM_DICT_UI = {
     "Норматив реакции нарушен": "Reaction deadline breached",
     "Норматив реакции нарушен, алерт получателю": "Reaction deadline breached, alert sent",
     "Норматив закрытия нарушен, алерт получателю": "Resolution deadline breached, alert sent",
-    "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Resolution deadline breached, escalation ceiling: alert sent",
-    "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Escalation ceiling reached: reaction deadline breached, alert sent",
     "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю": "Hold limit “{holdReasonLabel}” expired, alert sent",
     "Алерт не отправлен: получателя на месте с доступом к объекту нет": "Alert not sent: no available recipient has access to the object",
     "Алерт: {id} — {what}": "Alert: {id} — {what}",
@@ -481,6 +483,10 @@ window.IM_DICT_UI = {
   },
 
   es: {
+    "Эскалировать некому": "No hay a quién escalar",
+    "Норматив закрытия нарушен, эскалировать некому": "Plazo de cierre incumplido, no hay a quién escalar",
+    "Эскалировать некому: норматив реакции нарушен, алерт получателю": "No hay a quién escalar: plazo de reacción incumplido, alerta enviada",
+    "Норматив закрытия нарушен, эскалировать некому: алерт получателю": "Plazo de cierre incumplido, no hay a quién escalar: alerta enviada",
     "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная": "Qué cámaras mostrar para un dispositivo y en qué orden: el incidente muestra las cámaras de su origen, la primera es la principal",
     "Устройство": "Dispositivo",
     "Камеры по порядку": "Cámaras en orden",
@@ -586,8 +592,6 @@ window.IM_DICT_UI = {
     "Норматив реакции нарушен": "Plazo de reacción incumplido",
     "Норматив реакции нарушен, алерт получателю": "Plazo de reacción incumplido, alerta enviada",
     "Норматив закрытия нарушен, алерт получателю": "Plazo de cierre incumplido, alerta enviada",
-    "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Plazo de cierre incumplido, tope de escalado: alerta enviada",
-    "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Tope de escalado alcanzado: plazo de reacción incumplido, alerta enviada",
     "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю": "Venció el plazo máximo de espera «{holdReasonLabel}», alerta enviada",
     "Алерт не отправлен: получателя на месте с доступом к объекту нет": "Alerta no enviada: ningún destinatario disponible tiene acceso al objeto",
     "Алерт: {id} — {what}": "Alerta: {id} — {what}",
