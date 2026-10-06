@@ -90,7 +90,7 @@
 
 Основание: [review.md](review.md), пятый проход, коммит `00a9bc3`. Решений не требует — исправления.
 
-- [ ] **RULE-45** Контракт: `enabled` и `onResolutionOverdue` — обязательные в `EscalationPolicy`, `escalation` — обязательный в `WorkflowDefinition`; `check_machine.py` проверяет, что заданы. Коммит: —
+- [x] **RULE-45** Контракт: `enabled` и `onResolutionOverdue` — обязательные в `EscalationPolicy`, `escalation` — обязательный в `WorkflowDefinition`; `check_machine.py` проверяет, что заданы. Коммит: `d3b6bfd`
 - [ ] **RULE-46** Машина: `"initial": true` у `new`; контракт — признак в `WorkflowState`; `check_machine.py` — ровно одно начальное состояние. Коммит: —
 - [ ] **DOC-15** `invariants.readOnlyWhenNotReady` → `readOnlyByAgentState` с комментарием про `session.states[].readOnly`, или убрать. Коммит: —
 - [ ] **DOC-16** Типовой набор прав `shift_lead` / «Старший смены» → `senior` / «Старший оператор»; §14.7 правил — тот же пример. Коммит: —
