@@ -646,9 +646,13 @@ def check_timer_declarations(w, err):
 def check_state_owners(w, err):
     """Владелец состояния — из перечня (DOC-23): ничей, адресат передачи, оператор, кто закрыл.
     Группа — только адресат передачи («Ожидает принятия»), у «Нового» её не бывает (§2.1, §8.1)."""
+    timers = {t["id"] for t in w["timers"]}
     for s in w["states"]:
         if s.get("owner") not in STATE_OWNERS:
             err.append(f"состояние {s['id']}: owner «{s.get('owner')}» — одно из {', '.join(STATE_OWNERS)}")
+        # Активный таймер — таймер машины или пусто (DOC-24)
+        if s.get("activeTimer") is not None and s["activeTimer"] not in timers:
+            err.append(f"состояние {s['id']}: activeTimer «{s['activeTimer']}» — не таймер машины ({', '.join(sorted(timers))})")
 
 
 def check_graph(w, err):

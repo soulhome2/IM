@@ -75,7 +75,7 @@ window.IM_WORKFLOW = {
       "category": "active",
       "terminal": false,
       "owner": "operator",
-      "activeTimer": "resolution_paused"
+      "activeTimer": "hold"
     },
     {
       "id": "closed",
