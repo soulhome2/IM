@@ -2594,10 +2594,12 @@
             "type": "string"
           },
           "labelKey": {
-            "type": "string"
+            "type": "string",
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "hint": {
-            "type": "string"
+            "type": "string",
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "from": {
             "type": "array",
@@ -2641,19 +2643,22 @@
                 ],
                 "description": "§10.1. Ручное действие выигрывает у таймера."
               }
-            }
+            },
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "form": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "requiredStepSet": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "guards": {
             "type": "array",
@@ -2692,7 +2697,8 @@
               "createsGroup": {
                 "type": "boolean"
               }
-            }
+            },
+            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
           },
           "ui": {
             "type": "object",
@@ -2739,10 +2745,6 @@
               "incidents_owned_by_agent"
             ],
             "description": "У системного перехода: к каким инцидентам применяется. incidents_owned_by_agent — только к инцидентам оператора, чьё состояние сменилось (§12.2)"
-          },
-          "bypassesPermissions": {
-            "type": "boolean",
-            "description": "Системный переход выполняется без проверки прав оператора: перерыв откладывает инцидент и без incident:hold (§12.2)"
           }
         }
       },

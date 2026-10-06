@@ -1710,8 +1710,6 @@ window.IM_WORKFLOW = {
     {
       "id": "auto_escalate",
       "label": "Автоэскалация",
-      "labelKey": "workflow.transition.auto_escalate",
-      "hint": "Системная передача по истечении норматива реакции",
       "from": [
         "new",
         "pending_acceptance"
@@ -1719,12 +1717,6 @@ window.IM_WORKFLOW = {
       "to": "pending_acceptance",
       "trigger": "timer",
       "actor": "dispatcher",
-      "concurrency": {
-        "expectedVersion": false,
-        "onTimerConflict": "manual_wins"
-      },
-      "form": null,
-      "requiredStepSet": "none",
       "guards": [
         {
           "fn": "settingEnabled",
@@ -1809,9 +1801,6 @@ window.IM_WORKFLOW = {
           ]
         }
       ],
-      "bulk": {
-        "allowed": false
-      },
       "ui": {
         "surface": [],
         "style": null,
@@ -1822,7 +1811,6 @@ window.IM_WORKFLOW = {
     {
       "id": "escalation_ceiling",
       "label": "Потолок эскалации",
-      "hint": "Норматив реакции нарушен, дальше не передаём",
       "from": [
         "new",
         "pending_acceptance"
@@ -2005,10 +1993,6 @@ window.IM_WORKFLOW = {
       "to": "pending_acceptance",
       "trigger": "timer",
       "actor": "dispatcher",
-      "concurrency": {
-        "expectedVersion": false,
-        "onTimerConflict": "manual_wins"
-      },
       "guards": [
         {
           "fn": "settingIs",
@@ -2108,9 +2092,6 @@ window.IM_WORKFLOW = {
           ]
         }
       ],
-      "bulk": {
-        "allowed": false
-      },
       "ui": {
         "surface": []
       }
@@ -2227,7 +2208,6 @@ window.IM_WORKFLOW = {
       "trigger": "system",
       "actor": "system",
       "scope": "incidents_owned_by_agent",
-      "bypassesPermissions": true,
       "guards": [
         {
           "fn": "agentStateIs",

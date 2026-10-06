@@ -637,15 +637,10 @@
     {
       "id": "auto_escalate",
       "label": "Автоэскалация",
-      "labelKey": "workflow.transition.auto_escalate",
-      "hint": "Системная передача по истечении норматива реакции",
       "from": ["new", "pending_acceptance"],
       "to": "pending_acceptance",
       "trigger": "timer",
       "actor": "dispatcher",
-      "concurrency": { "expectedVersion": false, "onTimerConflict": "manual_wins" },
-      "form": null,
-      "requiredStepSet": "none",
       "guards": [
         { "fn": "settingEnabled", "args": ["escalation.enabled"] },
         { "fn": "timerExpired", "args": ["reaction"] },
@@ -662,13 +657,11 @@
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
-      "bulk": { "allowed": false },
       "ui": { "surface": [], "style": null, "hotkey": null, "navigate": null }
     },
     {
       "id": "escalation_ceiling",
       "label": "Потолок эскалации",
-      "hint": "Норматив реакции нарушен, дальше не передаём",
       "from": ["new", "pending_acceptance"],
       "to": null,
       "trigger": "timer",
@@ -732,7 +725,6 @@
       "to": "pending_acceptance",
       "trigger": "timer",
       "actor": "dispatcher",
-      "concurrency": { "expectedVersion": false, "onTimerConflict": "manual_wins" },
       "guards": [
         { "fn": "settingIs", "args": ["escalation.onResolutionOverdue", "escalate"] },
         { "fn": "timerExpired", "args": ["resolution"] },
@@ -751,7 +743,6 @@
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
-      "bulk": { "allowed": false },
       "ui": { "surface": [] }
     },
     {
@@ -797,7 +788,6 @@
       "trigger": "system",
       "actor": "system",
       "scope": "incidents_owned_by_agent",
-      "bypassesPermissions": true,
       "guards": [{ "fn": "agentStateIs", "args": ["not_ready"] }],
       "effects": [
         { "kind": "transactional", "fn": "setHoldReason", "args": ["break"] },

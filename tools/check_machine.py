@@ -568,6 +568,19 @@ def setting_at(w, path):
     return cur
 
 
+MANUAL_ONLY = ("form", "bulk", "requiredStepSet", "labelKey", "hint", "concurrency", "bypassesPermissions")
+
+
+def check_automatic_fields(w, err):
+    """У автоматических переходов нет полей ручных (DOC-19): кнопок и форм у них нет, а «ручное
+    выигрывает у таймера» и «права не участвуют» — общие правила (invariants, §6.2)."""
+    for t in w["transitions"]:
+        if t["trigger"] != "manual":
+            for key in MANUAL_ONLY:
+                if key in t:
+                    err.append(f"переход {t['id']}: поле {key} у автоматического перехода не нужно — кнопок и форм у него нет, права не участвуют (DOC-19)")
+
+
 def check_registry_used(w, err):
     """Каждая запись реестра где-то используется (DOC-17): иначе бэкенд реализует мёртвый код.
     Ищем по всей машине, кроме самого реестра; requiredStepsFilled вызывает поле requiredStepSet."""
@@ -698,6 +711,7 @@ def main():
     check_fixture_journal(w, err)
     check_graph(w, err)
     check_registry_used(w, err)
+    check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
     check_fixture(w, err)
