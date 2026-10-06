@@ -131,6 +131,14 @@
       if (!timers[id].pausable || !f.left) return startTimer(ev, id);
       if (ev[f.due]) return;
       const left = ev[f.left] != null ? ev[f.left] : timerSec(ev, id) * 1000;
+      // Истёкший и уже сработавший норматив (RULE-50): возврат в работу не даёт нового срока —
+      // остаётся прежний дедлайн, он отработан. Новый запуск — только restartTimer (переоткрытие)
+      const fired = ev.firedTimers && ev.firedTimers[id];
+      if (left === 0 && fired) {
+        ev[f.due] = fired;
+        ev[f.left] = null;
+        return;
+      }
       ev[f.due] = now() + left;
       ev[f.left] = null;
     }

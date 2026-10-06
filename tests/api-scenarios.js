@@ -770,6 +770,31 @@
     assert.ok(none.card.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
   });
 
+  test("Истёкший норматив закрытия срабатывает один раз: возврат в работу не даёт нового срока (§4, RULE-50)", async () => {
+    // «Отложить → Возобновить» после истечения — без второго нарушения и алерта
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const res = await env.act(inc.guid, "claim", {}, "queue");
+    await env.advance(Math.ceil((Date.parse(res.body.incident.timer.dueAt) - env.now) / 1000) + 1);
+    assert.status(await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
+    assert.status(await env.act(inc.guid, "resume"), 200, null, "возобновить");
+    const again = await env.advance(5);
+    assert.ok(!again.some((f) => f.incidentGuid === inc.guid), `после возобновления ничего не сработало: ${again.map((f) => f.transitionId)}`);
+    assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия одно");
+    // Эскалация по закрытию на мою группу: принявший работает с инцидентом, его не уводят дальше
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: "group:grp-leads" }) : l));
+    const esc = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }) });
+    const fire = await newFire(esc);
+    const claimed = await esc.act(fire.guid, "claim", {}, "queue");
+    const fired = await esc.advance(Math.ceil((Date.parse(claimed.body.incident.timer.dueAt) - esc.now) / 1000) + 1);
+    assert.ok(fired.some((f) => f.incidentGuid === fire.guid && f.transitionId === "resolution_escalate"), "эскалация по закрытию — моей группе");
+    assert.status(await esc.act(fire.guid, "accept", {}, "queue"), 200, null, "принять");
+    const after = await esc.advance(5);
+    assert.ok(!after.some((f) => f.incidentGuid === fire.guid), `после «Принять» ничего не сработало: ${after.map((f) => f.transitionId)}`);
+    const c = await esc.card(fire.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel, c.breaches.filter((b) => b.kind === "resolution").length], ["in_progress", ME, 1, 1], "у меня в работе, уровень 1, нарушение одно");
+  });
+
   test("Норматив закрытия истёк — нарушение «resolution» один раз, состояние не меняется", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

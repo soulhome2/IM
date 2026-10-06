@@ -101,6 +101,7 @@ MUTATIONS = [
     ("help-links-ignore-site", "server.js", "q.site == null || l.site == null || l.site === q.site", "true", "api"),
     ("help-menu-without-site", "app.js", 'ev && ev.site ? { site: ev.site } : {}', "{}", "ui"),
     ("cameras-not-from-links", "server.js", "cameras: (CAMERA_LINKS.find((l) => l.device === inc.devices[0]) || { cameras: [] }).cameras.slice(),", "cameras: (CAMERA_LINKS[0] || { cameras: [] }).cameras.slice(),", "api"),
+    ("expired-resolution-refires", "engine.js", "if (left === 0 && fired) {", "if (false) {", "api"),
     ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"Адресат может принять — не подходит\"];", "return [\"Адресат может принять — не подходит\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
