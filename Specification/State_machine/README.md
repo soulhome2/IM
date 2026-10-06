@@ -176,7 +176,7 @@ stateDiagram-v2
 
 «Себя» в `targetIsNotSelf` и в `excludes: ["self"]` формы — смотрящий и дежурные группы, в которые он входит (§10.1). `excludes: ["currentOwner"]` — адресат инцидента.
 
-**Поля инцидента** — первый аргумент `setFlag`, `increment`, `flagBelow`, `flagAtLeast`:
+**Поля инцидента** — первый аргумент `setFlag`, `increment`:
 
 | Поле | Смысл |
 |---|---|
@@ -189,7 +189,7 @@ stateDiagram-v2
 
 В API и в прототипе те же поля в camelCase; в прототипе `close_cause` называется `massCause`, `result` — `closeComment`.
 
-**Настройки** — аргументы `settingEnabled`, `settingIs`, `flagBelow`, `flagAtLeast`, `agentIdleFor`, `restartTimer`: путь от корня машины, например `escalation.enabled`, `escalation.maxLevel`, `session.idleHoldSec`, `limits.reopenResolutionSec`. `settingIs(путь, значение)` — настройка равна значению: так три перехода по истечению норматива закрытия выбирают между `escalation.onResolutionOverdue` = `"alert"` и `"escalate"`. Вычисляемых путей нет.
+**Настройки** — аргументы `settingEnabled`, `settingIs`, `agentIdleFor`, `restartTimer`: путь от корня машины, например `escalation.enabled`, `escalation.maxLevel`, `session.idleHoldSec`, `limits.reopenResolutionSec`. `settingIs(путь, значение)` — настройка равна значению: так три перехода по истечению норматива закрытия выбирают между `escalation.onResolutionOverdue` = `"alert"` и `"escalate"`. Вычисляемых путей нет.
 
 **Длительность таймеров:**
 

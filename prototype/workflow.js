@@ -3289,14 +3289,6 @@ window.IM_WORKFLOW = {
         "extendsBaseRegistry": true
       },
       {
-        "fn": "isOwnerInStates",
-        "args": [
-          "stateIds"
-        ],
-        "onFail": "hide",
-        "extendsBaseRegistry": true
-      },
-      {
         "fn": "isTarget",
         "args": [],
         "onFail": "hide"
@@ -3420,23 +3412,6 @@ window.IM_WORKFLOW = {
         "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание."
       },
       {
-        "fn": "flagBelow",
-        "args": [
-          "field",
-          "n"
-        ],
-        "onFail": "hide"
-      },
-      {
-        "fn": "flagAtLeast",
-        "args": [
-          "field",
-          "n"
-        ],
-        "onFail": "hide",
-        "extendsBaseRegistry": true
-      },
-      {
         "fn": "escalationTargetAvailable",
         "args": [
           "expected"
@@ -3468,13 +3443,6 @@ window.IM_WORKFLOW = {
         "extendsBaseRegistry": true
       },
       {
-        "fn": "minSelected",
-        "args": [
-          "n"
-        ],
-        "onFail": "disable"
-      },
-      {
         "fn": "settingEnabled",
         "args": [
           "settingKey"
@@ -3493,10 +3461,6 @@ window.IM_WORKFLOW = {
       }
     ],
     "effects": [
-      {
-        "fn": "setState",
-        "kind": "transactional"
-      },
       {
         "fn": "setOwner",
         "kind": "transactional"

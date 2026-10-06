@@ -552,6 +552,30 @@ def setting_at(w, path):
     return cur
 
 
+def check_registry_used(w, err):
+    """Каждая запись реестра где-то используется (DOC-17): иначе бэкенд реализует мёртвый код.
+    Ищем по всей машине, кроме самого реестра; requiredStepsFilled вызывает поле requiredStepSet."""
+    used = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("fn"), str):
+                used.add(node["fn"])
+            if node.get("requiredStepSet") or node.get("requiredStepsFilled"):
+                used.add("requiredStepsFilled")
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk({k: v for k, v in w.items() if k != "registries"})
+    for kind in ("guards", "effects"):
+        for entry in w["registries"][kind]:
+            if entry["fn"] not in used:
+                err.append(f"реестр: {entry['fn']} нигде в машине не используется — убрать или использовать (DOC-17)")
+
+
 def check_graph(w, err):
     """Граф состояний (RULE-46): ровно одно начальное, оно не терминальное; каждое состояние
     достижимо из него; у каждого нетерминального есть выход в другое состояние."""
@@ -648,6 +672,7 @@ def main():
     check_doc_numbers(w, o, err)
     check_fixture_journal(w, err)
     check_graph(w, err)
+    check_registry_used(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
     check_fixture(w, err)

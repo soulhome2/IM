@@ -173,7 +173,6 @@
       },
       isOwner: (ev) => (isMine(ev) ? null : ["Вы не владелец инцидента"]),
       isNotOwner: (ev) => (isMine(ev) ? ["Инцидент уже ваш"] : null),
-      isOwnerInStates: (ev, [list]) => (!asList(list).includes(ev.state) || isMine(ev) ? null : ["Вы не владелец инцидента"]),
       isTarget: (ev) => (isTarget(ev) ? null : ["Передача адресована другому"]),
       isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["Передача адресована вам"] : null),
       // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
@@ -236,19 +235,13 @@
         return options.length ? [options[0].why] : ["Нет права: {p}", { p: "incident:close" }];
       },
       timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["Норматив не истёк"]),
-      flagBelow: (ev, [field, n]) => (flagValue(ev, field) < setting(n) ? null : ["Достигнут предел"]),
-      flagAtLeast: (ev, [field, n]) => (flagValue(ev, field) >= setting(n) ? null : ["Предел не достигнут"]),
       holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["Другая причина удержания"]),
       stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["Недоступно в текущем состоянии"]),
       canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["Нет права открывать чужие карточки"]),
-      // Сколько инцидентов отмечено для массового действия; без выборки условие выполнено
-      minSelected: (ev, [n], opts) =>
-        opts && opts.selectedCount != null && opts.selectedCount < n ? ["Выберите хотя бы {n} события", { n }] : null,
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["Выключено настройкой"]),
       settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["Другое значение настройки"]),
     };
 
-    const flagValue = (ev, field) => (field === "escalation_level" ? ev.escalationLevel : ev[field]);
     function setting(path) {
       if (typeof path !== "string") return path;
       return path.split(".").reduce((o, k) => (o == null ? o : o[k]), W);
@@ -382,9 +375,6 @@
     const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached", escalation_level: "escalationLevel" };
 
     const EFFECTS = {
-      setState: (ev, [stateId]) => {
-        ev.state = stateId;
-      },
       setOwner: (ev, [arg], s) => {
         ev.owner = value(arg, ev, s.form, s);
       },

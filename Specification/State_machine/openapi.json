@@ -2685,7 +2685,7 @@
         "properties": {
           "fn": {
             "type": "string",
-            "description": "Имя из реестра guard'ов: hasPermission, hasScopedPermission, isOwner, isNotOwner, isTarget, agentReady, withinActiveLimit, withinHoldLimit, withinReopenWindow, requiredStepsFilled, timerExpired, flagBelow, minSelected, settingEnabled и др."
+            "description": "Имя из реестра guard'ов: hasPermission, hasScopedPermission, isOwner, isNotOwner, isTarget, agentReady, withinActiveLimit, withinHoldLimit, withinReopenWindow, requiredStepsFilled, timerExpired, settingEnabled, settingIs и др. Полный перечень — registries.guards схемы"
           },
           "args": {
             "type": "array",

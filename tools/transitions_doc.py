@@ -83,7 +83,6 @@ class Doc:
             "hasScopedPermission": lambda: f"право `{a[0]}:own` — для своего, ничьего и адресованного мне; `{a[0]}:any` — для чужого",
             "isOwner": lambda: "я владелец",
             "isNotOwner": lambda: "я не владелец",
-            "isOwnerInStates": lambda: f"я владелец, если состояние {self.st(a[0])}",
             "isTarget": lambda: "адресат — я или моя дежурная группа",
             "isNotTarget": lambda: "адресат — не я и не моя дежурная группа",
             "targetIsNotSelf": lambda: "адресат — не я и не моя дежурная группа",
@@ -102,14 +101,11 @@ class Doc:
             "requiredStepsFilled": lambda: f"заполнены обязательные шаги набора `{a[0]}`",
             "closeResultAllowed": lambda: "выбранный результат разрешён по справочнику результатов: право, состояние, владение, шаги",
             "timerExpired": lambda: f"истёк таймер {self.tm(a[0])}",
-            "flagBelow": lambda: f"`{a[0]}` меньше {self.setting(a[1])}",
-            "flagAtLeast": lambda: f"`{a[0]}` не меньше {self.setting(a[1])}",
             "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")
             + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту; остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",
-            "minSelected": lambda: f"выбрано не меньше {a[0]}",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
         }
@@ -120,7 +116,6 @@ class Doc:
     def effect(self, e):
         fn, a = e["fn"], e.get("args") or []
         phrases = {
-            "setState": lambda: f"состояние = {self.st(a[0])}",
             "setOwner": lambda: f"владелец: {self.target(a[0], 'человек')}",
             "setAssignmentGroup": lambda: f"группа-адресат: {self.target(a[0], 'группа')}",
             "setHoldReason": lambda: "причина удержания: " + (self.value(a[0]) if str(a[0]).startswith("form.") else f"«{self.reasons.get(a[0], a[0])}»"),

@@ -669,7 +669,7 @@ stateDiagram-v2
 }
 ```
 
-Реестр условий: `hasPermission(key)`, `isOwner`, `isTarget`, `agentReady`, `withinActiveLimit`, `requiredStepsFilled(set)`, `timerExpired(id)`, `flagBelow(field, n)`, `minSelected(n)`, `settingEnabled(key)`.
+Реестр условий: `hasPermission(key)`, `isOwner`, `isTarget`, `agentReady`, `withinActiveLimit`, `requiredStepsFilled(set)`, `timerExpired(id)`, `settingEnabled(key)`.
 
 `closeResultAllowed` проверяет строку справочника результатов закрытия (§2.2): право, исходное состояние, владение, набор обязательных шагов. Так у одного перехода «Закрыть» условия зависят от выбранного результата.
 
@@ -677,7 +677,7 @@ stateDiagram-v2
 
 `resumeTimer` продолжает таймер с остатка, а ещё не запускавшийся — запускает с полного норматива. Так «Взять», «Принять» и «Переоткрыть» используют один эффект, и норматив закрытия не перезапускается (§4).
 
-Реестр эффектов: `setState`, `setOwner`, `setAssignmentGroup`, `setHoldReason`, `clearHoldReason`, `startTimer`, `stopTimer`, `pauseTimer`, `resumeTimer`, `increment(field)`, `setFlag(field)`, `appendLog(template)`, `returnToQueue`, `evictOpenCard`, `notify(target)`, `externalCommand(id)`.
+Реестр эффектов: `setOwner`, `setAssignmentGroup`, `setHoldReason`, `clearHoldReason`, `startTimer`, `stopTimer`, `pauseTimer`, `resumeTimer`, `increment(field)`, `setFlag(field)`, `appendLog(template)`, `returnToQueue`, `evictOpenCard`, `notify(target)`, `externalCommand(id)`.
 
 Границу расширяемости стоит зафиксировать сразу: продуктовая команда меняет схему — состояния, переходы, условия из реестра, нормативы, привязки; разработчики расширяют сам реестр условий и эффектов.
 
