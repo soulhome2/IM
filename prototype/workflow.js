@@ -2873,11 +2873,6 @@ window.IM_WORKFLOW = {
   "escalation": {
     "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3). Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
     "enabled": true,
-    "trigger": "reaction",
-    "fromStates": [
-      "new",
-      "pending_acceptance"
-    ],
     "levels": [
       {
         "level": 1,

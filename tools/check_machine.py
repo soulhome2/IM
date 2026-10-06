@@ -117,9 +117,6 @@ def check_workflow(w, err):
         for x in s["permissions"]:
             if x not in perms:
                 err.append(f"типовой набор {s['id']}: нет права {x}")
-    for x in w["escalation"]["fromStates"]:
-        if x not in states:
-            err.append(f"автоэскалация: нет состояния {x}")
     for q in w["queueFilters"]:
         for x in q.get("states", []):
             if x not in states:

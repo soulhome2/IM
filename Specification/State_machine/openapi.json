@@ -2667,23 +2667,10 @@
       },
       "EscalationPolicy": {
         "type": "object",
-        "description": "§9. Настраивается под правом `incident:schema:admin`. Адресаты уровней автоэскалации — не то же самое, что персональный предвыбор адресата в форме передачи (§8.2).",
+        "description": "§9. Настраивается под правом `incident:schema:admin`. Адресаты уровней автоэскалации — не то же самое, что персональный предвыбор адресата в форме передачи (§8.2). Из каких состояний и по какому таймеру срабатывает автоэскалация, задаёт переход `auto_escalate` (RULE-42): по нормативу реакции, из «Новое» и «Ожидает принятия».",
         "properties": {
           "enabled": {
             "type": "boolean"
-          },
-          "trigger": {
-            "type": "string",
-            "enum": [
-              "reaction",
-              "resolution"
-            ]
-          },
-          "fromStates": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StateId"
-            }
           },
           "levels": {
             "type": "array",
