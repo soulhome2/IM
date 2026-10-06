@@ -24,6 +24,42 @@
   }
   const pick = (r, list) => list[Math.floor(r() * list.length)];
 
+  // Доступ по эталонному набору (§5, §8.1): устройства ролей — по группам доступа, участники
+  // дежурной группы — люди с её ролями плюс названные. Роли тест ведёт сам: он же их и меняет
+  const FX = window.IM_FIXTURE;
+  const ME = FX.operator;
+  const ROLE_SETS = [["Оператор"], ["Оператор ТЦ"], ["Оператор", "Старший смены"]];
+  const groupIndex = {};
+  const indexGroups = (groups) => groups.forEach((g) => ((groupIndex[g.id] = g), indexGroups(g.groups || [])));
+  indexGroups(FX.sourceGroups);
+  const devicesOf = (g) => (g.devices || []).concat(...(g.groups || []).map(devicesOf));
+  const devicesFor = (roles) =>
+    new Set(FX.accessGroups.filter((a) => a.roles.some((x) => roles.includes(x))).flatMap((a) => a.sourceGroups.flatMap((id) => devicesOf(groupIndex[id])).concat(a.devices)));
+  const sourceOf = Object.fromEntries(FX.incidents.map((i) => [i.guid, i.devices[0] || i.cameras[0]]));
+  function hasAccess(roles, id, guid) {
+    const group = FX.people.dutyGroups.find((g) => g.id === id);
+    if (!group) return devicesFor(roles.get(id) || []).has(sourceOf[guid]);
+    const members = [...roles.keys()].filter((p) => (roles.get(p) || []).some((x) => (group.roles || []).includes(x))).concat(group.members || []);
+    return members.some((m) => hasAccess(roles, m, guid));
+  }
+
+  // Доступ после любого шага: видно только доступное мне; у владельца и адресата открытого есть доступ;
+  // завершив смену, я не держу адресованных лично мне
+  function accessInvariants(list, session, roles) {
+    const bad = [];
+    const mine = devicesFor(roles.get(ME));
+    list.forEach((inc) => {
+      if (!mine.has(sourceOf[inc.guid])) bad.push(`${inc.guid}: виден мне, но его объект мне не доступен (§5)`);
+      if (inc.state === "closed") return;
+      const who = (inc.owner && inc.owner.id) || (inc.assignmentGroup && inc.assignmentGroup.id);
+      if (who && !hasAccess(roles, who, inc.guid)) bad.push(`${inc.guid} (${inc.state}): у ${who} нет доступа к объекту (§5)`);
+      if (session.agentState === "offline" && inc.state === "pending_acceptance" && inc.owner && inc.owner.id === ME) {
+        bad.push(`${inc.guid}: я не на смене, а он адресован лично мне (§8.1)`);
+      }
+    });
+    return bad;
+  }
+
   // Инварианты модели по ответам API — то, что должно быть верно после любого шага
   function invariants(list, session) {
     const bad = [];
@@ -63,19 +99,28 @@
     const history = [];
     const versions = new Map();
     const journals = new Map();
+    const roles = new Map(FX.people.operators.map((o) => [o.id, o.roles.slice()]));
     let checked = 0;
     const fail = (step, msg) => {
       throw new Error(`зерно ${seed}, шаг ${step}: ${msg}. Последние шаги: ${history.slice(-6).join(" → ")}`);
     };
     for (let step = 1; step <= STEPS; step++) {
       const x = r();
-      if (x < 0.14) {
+      if (x < 0.04) {
+        const who = pick(r, FX.people.operators).id;
+        const set = pick(r, ROLE_SETS);
+        const res = await env.call("PUT", `/test/operators/${enc(who)}/roles`, { roles: set });
+        if (res.status !== 200) fail(step, `роли ${who} не сменились: ${res.status}`);
+        roles.set(who, set.slice());
+        history.push(`роли ${who}: ${set.join("+")}${res.body.fired.length ? ` (${res.body.fired.map((f) => f.transitionId).join(",")})` : ""}`);
+      } else if (x < 0.14) {
         const sec = 1 + Math.floor(r() * 900);
         const fired = await env.advance(sec);
         history.push(`+${sec} с${fired.length ? ` (${fired.map((f) => f.transitionId).join(",")})` : ""}`);
       } else if (x < 0.19) {
         const session = await env.session();
-        const to = session.agentState === "not_ready" ? "ready" : "not_ready";
+        const now = session.agentState === "busy" ? "ready" : session.agentState;
+        const to = pick(r, ["ready", "not_ready", "offline"].filter((st) => st !== now));
         await env.ok("PUT", "/operator/session/agent-state", { agentState: to, reasonId: to === "not_ready" ? "lunch" : null });
         history.push(`смена: ${to}`);
       } else if (x < 0.25) {
@@ -118,7 +163,7 @@
         }
       }
       const [list, session] = await Promise.all([env.all(), env.session()]);
-      const bad = invariants(list, session);
+      const bad = invariants(list, session).concat(accessInvariants(list, session, roles));
       list.forEach((inc) => {
         const v = Number(inc.version);
         if (v < (versions.get(inc.guid) || 0)) bad.push(`${inc.guid}: версия уменьшилась`);
