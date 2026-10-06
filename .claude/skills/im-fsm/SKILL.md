@@ -101,7 +101,7 @@ EOF
 
 ### Вспомогательный скрипт для пунктов «чтение»
 
-Слова в идентификаторах и таблица «переход — условия — подпись — запись журнала»: по ней видно, говорит ли подпись то, что проверяют условия.
+Слова в идентификаторах, таблица «переход — условия — подпись — запись журнала» (говорит ли подпись то, что проверяют условия) и таблица группы сценария (выводит ли из группы переход, который меняет владельца).
 
 ```bash
 python3 - <<'EOF'
@@ -113,6 +113,11 @@ for t in w["transitions"]:
     guards = ", ".join(g["fn"] + (str(g["args"]) if g.get("args") else "") for g in t["guards"])
     logs = [e["args"][0] for e in t["effects"] if e["fn"] == "appendLog"]
     print(f"| {t['id']} | {guards} | {t['label']} | {' / '.join(logs) or '—'} |")
+print("Группа сценария: переход | меняет владельца | clearGroup | режим выборки")
+for t in w["transitions"]:
+    fns = [e["fn"] for e in t["effects"]]
+    if "setOwner" in fns or t["to"] == "new":
+        print(f"| {t['id']} | {'да' if 'setOwner' in fns else 'нет'} | {'да' if 'clearGroup' in fns else 'НЕТ'} | {(t.get('bulk') or {}).get('mode', '—')} |")
 EOF
 ```
 
