@@ -101,7 +101,7 @@ EOF
 
 ### Вспомогательный скрипт для пунктов «чтение»
 
-Слова в идентификаторах, таблица «переход — условия — подпись — запись журнала» (говорит ли подпись то, что проверяют условия) и таблица группы сценария (выводит ли из группы переход, который меняет владельца).
+Слова в идентификаторах; таблица «переход — условия — подпись — запись журнала» (говорит ли подпись то, что проверяют условия); группа сценария (выводит ли из группы переход, который меняет владельца); значения из записи журнала, которые тот же переход меняет до записи (`→пусто` — очищает); места правил вне §4, §6, §8.1, где названа функция реестра; функции сверх базового реестра без описания.
 
 ```bash
 python3 - <<'EOF'
@@ -118,6 +118,28 @@ for t in w["transitions"]:
     fns = [e["fn"] for e in t["effects"]]
     if "setOwner" in fns or t["to"] == "new":
         print(f"| {t['id']} | {'да' if 'setOwner' in fns else 'нет'} | {'да' if 'clearGroup' in fns else 'НЕТ'} | {(t.get('bulk') or {}).get('mode', '—')} |")
+import re
+CHANGES = {"targetName": {"setOwner", "setAssignmentGroup"}, "escalationLevel": {"increment:escalation_level", "setFlag:escalation_level"},
+           "holdReasonLabel": {"setHoldReason", "clearHoldReason"}, "closeResultLabel": {"setFlag:close_result"}, "stepNumber": {"setCursor"}}
+print("Запись журнала: переход | переменная | меняется в том же переходе до записи")
+for t in w["transitions"]:
+    fx = [(e["fn"] + (":" + e["args"][0] if e["fn"] in ("setFlag", "increment") else ""),
+           e["fn"].startswith("clear") or (e["fn"] in ("setFlag", "setOwner") and e["args"][-1] is None)) for e in t["effects"]]
+    for i, e in enumerate(t["effects"]):
+        for v in re.findall(r"\{(\w+)\}", e["args"][0]) if e["fn"] == "appendLog" else []:
+            before = [f + ("→пусто" if empty else "") for f, empty in fx[:i] if f in CHANGES.get(v, ())]
+            if before:
+                print(f"| {t['id']} | {{{v}}} | {', '.join(before)} |")
+fns = {g["fn"] for g in w["registries"]["guards"]} | {e["fn"] for e in w["registries"]["effects"]}
+print("Правила вне §4, §6, §8.1: строка | раздел | функции реестра")
+sec = ""
+for n, l in enumerate(open("Specification/State_rules/States rules IM.md", encoding="utf-8"), 1):
+    if l.startswith("#"):
+        sec = l.strip("# \n").split(" ")[0]
+    named = sorted(f for f in fns if f"`{f}" in l)
+    if named and not sec.startswith(("4.", "6.", "8.1")):
+        print(f"| {n} | §{sec} | {', '.join(named)} |")
+print("Сверх базового реестра без $comment:", [e["fn"] for k in ("guards", "effects") for e in w["registries"][k] if e.get("extendsBaseRegistry") and not e.get("$comment")])
 EOF
 ```
 
