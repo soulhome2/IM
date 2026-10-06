@@ -1954,11 +1954,11 @@
           "at": "2026-10-03T12:00:00Z",
           "actor": "noc",
           "actorName": null,
-          "template": "Передано → {who} (уровень {lvl}). {why}",
+          "template": "Передано → {targetName} (уровень {escalationLevel}). {comment}",
           "vars": {
-            "who": "Иванов А. С.",
-            "lvl": 1,
-            "why": "Нужна проверка по камерам площадки"
+            "targetName": "Иванов А. С.",
+            "escalationLevel": 1,
+            "comment": "Нужна проверка по камерам площадки"
           }
         }
       ]
@@ -2379,10 +2379,11 @@
           "at": "2026-10-03T12:00:00Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Эскалация → {who}. {why}",
+          "template": "Передано → {targetName} (уровень {escalationLevel}). {comment}",
           "vars": {
-            "who": "Дежурная группа старших",
-            "why": "Нужен допуск в зону"
+            "targetName": "Дежурная группа старших",
+            "escalationLevel": 1,
+            "comment": "Нужен допуск в зону"
           }
         }
       ]
@@ -2991,10 +2992,10 @@
           "at": "2026-10-03T12:00:00Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Закрыт без обработки: {why}. {note}",
+          "template": "Закрыт: {closeResultLabel}. {comment}",
           "vars": {
-            "why": "Ложная тревога",
-            "note": "Сработка от уборщика"
+            "closeResultLabel": "Ложная тревога",
+            "comment": "Сработка от уборщика"
           }
         }
       ]

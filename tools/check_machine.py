@@ -457,6 +457,22 @@ def check_rules_diagram(w, err):
                 err.append(f"диаграмма §3 правил: нет стрелки {src} → {t['to']} (переход `{t['id']}`)")
 
 
+def check_fixture_journal(w, err):
+    """Записи журнала эталонного набора — по шаблонам, которые пишет машина или сам сервер
+    (DATA-04): история в наборе выглядит так, как её записала бы система."""
+    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    with open(os.path.join(ROOT, "prototype", "server.js"), encoding="utf-8") as f:
+        server = f.read()
+    known = {e["args"][0] for t in w["transitions"] for e in t.get("effects", []) if e["fn"] == "appendLog"}
+    known |= set(re.findall(r'log\(ev, [^,]+, "([^"]+)"', server)) | set(re.findall(r'\bk: "([^"]+)"', server))
+    for inc in fx["incidents"]:
+        for entry in inc.get("journal", []):
+            template = entry.get("template") or ""
+            if "{" in template and template not in known:
+                err.append(f"эталон: {inc['number']} — запись журнала по шаблону, которого нет ни в машине, ни в сервере: «{template}»")
+
+
 def check_doc_numbers(w, o, err):
     """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
     ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
@@ -519,6 +535,7 @@ def main():
     check_rules_tables(w, err)
     check_rules_diagram(w, err)
     check_doc_numbers(w, o, err)
+    check_fixture_journal(w, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:

@@ -78,7 +78,6 @@ window.IM_DICT_UI = {
     "Закрытие": "Resolution",
     "Закрытие инцидента": "Closing the incident",
     "закрытия": "closing",
-    "Закрыт без обработки: {why}. {note}": "Closed without processing: {why}. {note}",
     "Закрыто": "Closed",
     "Закрыто: {n}": "Closed: {n}",
     "Закрыть": "Close",
@@ -193,7 +192,6 @@ window.IM_DICT_UI = {
     "Передать выбранный": "Transfer the selected one",
     "Передать инцидент": "Transfer the incident",
     "Передать инцидент другому адресату": "Hand the incident to another recipient",
-    "Передано → {who} (уровень {lvl}). {why}": "Transferred → {who} (level {lvl}). {why}",
     "Передача адресована другому": "The handoff is addressed to someone else",
     "Передача принята, прогресс сценария сохранён": "Handoff accepted, scenario progress kept",
     "Переоткрыть": "Reopen",
@@ -269,7 +267,6 @@ window.IM_DICT_UI = {
     "Шаг {i} из {n}": "Step {i} of {n}",
     "Шаг {i}/{n} · {name}: {done}": "Step {i}/{n} · {name}: {done}",
     "Эскалация": "Escalate",
-    "Эскалация → {who}. {why}": "Escalation → {who}. {why}",
     "Язык интерфейса": "Interface language",
 
     'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
@@ -446,7 +443,6 @@ window.IM_DICT_UI = {
     "Закроются все {n} инцидентов группы.": "Se cerrarán los {n} incidentes del grupo.",
     "Закрытие инцидента": "Cierre del incidente",
     "закрытия": "el cierre",
-    "Закрыт без обработки: {why}. {note}": "Cerrado sin tramitación: {why}. {note}",
     "Закрыто": "Cerrado",
     "Закрыто: {n}": "Cerrados: {n}",
     "Закрыть": "Cerrar",
@@ -563,7 +559,6 @@ window.IM_DICT_UI = {
     "Передать выбранный": "Transferir el seleccionado",
     "Передать инцидент": "Transferir el incidente",
     "Передать инцидент другому адресату": "Transferir el incidente a otro destinatario",
-    "Передано → {who} (уровень {lvl}). {why}": "Transferido → {who} (nivel {lvl}). {why}",
     "Передача адресована другому": "La transferencia está dirigida a otra persona",
     "Передача принята, прогресс сценария сохранён": "Transferencia aceptada, progreso conservado",
     "Переоткрыть": "Reabrir",
@@ -642,7 +637,6 @@ window.IM_DICT_UI = {
     "Шаг {i} из {n}": "Paso {i} de {n}",
     "Шаг {i}/{n} · {name}: {done}": "Paso {i}/{n} · {name}: {done}",
     "Эскалация": "Escalar",
-    "Эскалация → {who}. {why}": "Escalada → {who}. {why}",
     "Язык интерфейса": "Idioma de la interfaz",
 
     'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
