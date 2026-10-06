@@ -119,6 +119,7 @@
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
       "startsOnEnter": ["new", "pending_acceptance"],
+      "continuesOn": ["addressee_signed_out_to_group", "addressee_signed_out_to_queue"],
       "stopsOnEnter": ["in_progress", "closed"],
       "pausable": false,
       "defaultSec": 300,

@@ -231,6 +231,10 @@ window.IM_WORKFLOW = {
         "new",
         "pending_acceptance"
       ],
+      "continuesOn": [
+        "addressee_signed_out_to_group",
+        "addressee_signed_out_to_queue"
+      ],
       "stopsOnEnter": [
         "in_progress",
         "closed"

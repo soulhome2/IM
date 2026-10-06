@@ -608,6 +608,41 @@ def check_registry_used(w, err):
 STATE_OWNERS = ("none", "transfer_target", "operator", "closed_by")
 
 
+def check_timer_declarations(w, err):
+    """Описание таймеров против эффектов переходов (RULE-51). Если таймер идёт в исходном состоянии,
+    а по описанию в новом он запускается, останавливается или встаёт на паузу — эффекты перехода
+    должны это делать. Исключение — переходы из continuesOn: таймер продолжается (§8.1)."""
+    timers = {t["id"]: t for t in w["timers"]}
+    transitions = {t["id"] for t in w["transitions"]}
+    start, stop, pause = {"startTimer", "restartTimer", "resumeTimer"}, {"stopTimer", "pauseTimer"}, {"pauseTimer"}
+
+    def running(timer, state):
+        return state in (timer.get("startsOnEnter") or []) and state not in (timer.get("pausedInStates") or [])
+
+    for timer in timers.values():
+        for tid in timer.get("continuesOn", []):
+            if tid not in transitions:
+                err.append(f"таймер {timer['id']}: в continuesOn нет перехода {tid}")
+    for tr in w["transitions"]:
+        if not tr.get("to"):
+            continue
+        done = {}
+        for e in tr["effects"]:
+            if e["fn"] in start | stop and e.get("args"):
+                done.setdefault(e["args"][0], set()).add(e["fn"])
+        for src in tr["from"]:
+            for tid, timer in timers.items():
+                if not running(timer, src):
+                    continue
+                got = done.get(tid, set())
+                if tr["to"] in (timer.get("startsOnEnter") or []) and not got & start and tr["id"] not in timer.get("continuesOn", []):
+                    err.append(f"таймер {tid}: по описанию запускается при входе в {tr['to']}, а {tr['id']} из {src} его не запускает и не указан в continuesOn (RULE-51)")
+                if tr["to"] in (timer.get("stopsOnEnter") or []) and not got & stop:
+                    err.append(f"таймер {tid}: по описанию останавливается при входе в {tr['to']}, а {tr['id']} из {src} его не останавливает (RULE-51)")
+                if tr["to"] in (timer.get("pausedInStates") or []) and not got & pause:
+                    err.append(f"таймер {tid}: по описанию на паузе в {tr['to']}, а {tr['id']} из {src} его не ставит на паузу (RULE-51)")
+
+
 def check_state_owners(w, err):
     """Владелец состояния — из перечня (DOC-23): ничей, адресат передачи, оператор, кто закрыл.
     Группа — только адресат передачи («Ожидает принятия»), у «Нового» её не бывает (§2.1, §8.1)."""
@@ -722,6 +757,7 @@ def main():
     check_fixture_journal(w, err)
     check_graph(w, err)
     check_state_owners(w, err)
+    check_timer_declarations(w, err)
     check_registry_used(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
