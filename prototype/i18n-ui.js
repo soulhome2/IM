@@ -3,6 +3,12 @@
 // Фигурные скобки {…} подставляются во время отрисовки, их нельзя переводить.
 window.IM_DICT_UI = {
   en: {
+    "Норматив закрытия нарушен, алерт получателю": "Resolution deadline breached, alert sent",
+    "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Resolution deadline breached, escalation ceiling: alert sent",
+    "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Escalation ceiling reached: reaction deadline breached, alert sent",
+    "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю": "Hold limit “{holdReasonLabel}” expired, alert sent",
+    "Алерт не отправлен: получателя на месте с доступом к объекту нет": "Alert not sent: no available recipient has access to the object",
+    "Алерт: {id} — {what}": "Alert: {id} — {what}",
     "Вернуться с перерыва": "Back from break",
     "Перерыв окончен": "Break is over",
     "Вы вышли из МИ": "You have signed out of IM",
@@ -139,8 +145,6 @@ window.IM_DICT_UI = {
     "Нет событий в текущем фильтре": "No events match the current filter",
     "Нет событий для выборки": "No events to select",
     "Новое": "New",
-    "Норматив закрытия нарушен, алерт старшему смены":
-      "Resolution target breached, alert sent to the shift supervisor",
     "Норматив закрытия приостанавливается и продолжится при возобновлении.":
       "The resolution timer pauses and continues when you resume.",
     "Норматив закрытия приостановлен на время удержания":
@@ -227,8 +231,6 @@ window.IM_DICT_UI = {
     "Подтверждено": "Confirmed",
     "Показать видеомонитор и карту": "Show video monitor and map",
     "Показать панель групп": "Show groups panel",
-    "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному":
-      "Escalation ceiling reached: reaction target breached, alert to the person in charge",
     "Потеря связи с площадкой": "Lost connection to the site",
     "Почему возвращаете": "Why you are returning it",
     "Почему не принимаете": "Why you are not accepting it",
@@ -321,7 +323,6 @@ window.IM_DICT_UI = {
     "Возвращён в очередь: у владельца нет доступа к объекту": "Returned to the queue: the owner has no access to the object",
     "Возвращён в очередь: у {previousOwnerName} нет доступа к объекту": "Returned to the queue: {previousOwnerName} has no access to the object",
     "Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})": "Resolution deadline breached, escalated → {targetName} (level {escalationLevel})",
-    "Норматив закрытия нарушен, потолок эскалации: алерт ответственному": "Resolution deadline breached, escalation ceiling: alert to the person in charge",
     "Выключено настройкой": "Disabled by a setting",
     "Достигнут предел": "Limit reached",
     "Другая причина удержания": "Different hold reason",
@@ -361,7 +362,6 @@ window.IM_DICT_UI = {
     "Переоткрыт после закрытия ({closeResultLabel}): {comment}": "Reopened after closing ({closeResultLabel}): {comment}",
     "Перехват у {previousOwnerName}. Прогресс сценария сохранён ({filledSteps}/{totalSteps})": "Taken over from {previousOwnerName}. Scenario progress kept ({filledSteps}/{totalSteps})",
     "Предел не достигнут": "Limit not reached",
-    "Предельный срок удержания «{holdReasonLabel}» истёк, алерт ответственному": "Hold limit “{holdReasonLabel}” expired, alert sent to the person in charge",
     "Причина сбоя": "Failure cause",
     "Причина перерыва": "Break reason",
     "Уйти на перерыв": "Go on break",
@@ -379,6 +379,12 @@ window.IM_DICT_UI = {
   },
 
   es: {
+    "Норматив закрытия нарушен, алерт получателю": "Plazo de cierre incumplido, alerta enviada",
+    "Норматив закрытия нарушен, потолок эскалации: алерт получателю": "Plazo de cierre incumplido, tope de escalado: alerta enviada",
+    "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю": "Tope de escalado alcanzado: plazo de reacción incumplido, alerta enviada",
+    "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю": "Venció el plazo máximo de espera «{holdReasonLabel}», alerta enviada",
+    "Алерт не отправлен: получателя на месте с доступом к объекту нет": "Alerta no enviada: ningún destinatario disponible tiene acceso al objeto",
+    "Алерт: {id} — {what}": "Alerta: {id} — {what}",
     "Вернуться с перерыва": "Volver de la pausa",
     "Перерыв окончен": "La pausa ha terminado",
     "Вы вышли из МИ": "Ha salido de IM",
@@ -518,8 +524,6 @@ window.IM_DICT_UI = {
     "Нет событий в текущем фильтре": "Ningún evento con el filtro actual",
     "Нет событий для выборки": "No hay eventos para seleccionar",
     "Новое": "Nuevo",
-    "Норматив закрытия нарушен, алерт старшему смены":
-      "Objetivo de resolución incumplido, aviso al supervisor de turno",
     "Норматив закрытия приостанавливается и продолжится при возобновлении.":
       "El objetivo de resolución se pausa y continuará al reanudar.",
     "Норматив закрытия приостановлен на время удержания":
@@ -607,8 +611,6 @@ window.IM_DICT_UI = {
     "Подтверждено": "Confirmado",
     "Показать видеомонитор и карту": "Mostrar monitor de vídeo y mapa",
     "Показать панель групп": "Mostrar panel de grupos",
-    "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному":
-      "Techo de escalada alcanzado: objetivo de reacción incumplido, aviso al responsable",
     "Потеря связи с площадкой": "Pérdida de conexión con el sitio",
     "Почему возвращаете": "Por qué lo devuelve",
     "Почему не принимаете": "Por qué no lo acepta",
@@ -704,7 +706,6 @@ window.IM_DICT_UI = {
     "Возвращён в очередь: у владельца нет доступа к объекту": "Devuelto a la cola: el responsable no tiene acceso al objeto",
     "Возвращён в очередь: у {previousOwnerName} нет доступа к объекту": "Devuelto a la cola: {previousOwnerName} no tiene acceso al objeto",
     "Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})": "Plazo de cierre incumplido, escalado → {targetName} (nivel {escalationLevel})",
-    "Норматив закрытия нарушен, потолок эскалации: алерт ответственному": "Plazo de cierre incumplido, tope de escalado: alerta al responsable",
     "Выключено настройкой": "Desactivado por configuración",
     "Достигнут предел": "Límite alcanzado",
     "Другая причина удержания": "Otro motivo de espera",
@@ -744,7 +745,6 @@ window.IM_DICT_UI = {
     "Переоткрыт после закрытия ({closeResultLabel}): {comment}": "Reabierto tras el cierre ({closeResultLabel}): {comment}",
     "Перехват у {previousOwnerName}. Прогресс сценария сохранён ({filledSteps}/{totalSteps})": "Tomado de {previousOwnerName}. Progreso del escenario conservado ({filledSteps}/{totalSteps})",
     "Предел не достигнут": "Límite no alcanzado",
-    "Предельный срок удержания «{holdReasonLabel}» истёк, алерт ответственному": "Venció el plazo máximo de espera «{holdReasonLabel}», alerta al responsable",
     "Причина сбоя": "Causa del fallo",
     "Причина перерыва": "Motivo de la pausa",
     "Уйти на перерыв": "Iniciar pausa",

@@ -433,6 +433,60 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  // Самый длинный норматив закрытия в машине: за это время он истечёт у любого инцидента
+  const longestResolution = () => {
+    const r = W.timers.find((x) => x.id === "resolution");
+    return Math.max(r.defaultSec, ...Object.values(r.byPriority), ...r.overrides.map((o) => o.sec));
+  };
+
+  test("Алерт получателю алертов (§9, RULE-43): я в группе старших, на месте и с доступом — приходит событие incident.alert", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await new Promise((r) => setTimeout(r, 300));
+    const fired = await env.advance(longestResolution() + 1);
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "resolution_overdue"), "норматив закрытия нарушен");
+    const alert = got.find((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid);
+    assert.ok(alert, "в поток пришёл алерт");
+    assert.eq(alert.payload.transitionId, "resolution_overdue", "алерт — о нарушении закрытия");
+    const c = await env.card(inc.guid);
+    assert.ok(!c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «алерт не отправлен» нет");
+  });
+
+  test("Алерт без получателя (§9, RULE-43): в группе старших никого на месте с доступом — запись в журнале, события нет", async () => {
+    if (IMTest.external) return "пропущено: состав и состояние людей меняются только во встроенном сервере";
+    for (const [why, patch] of [
+      ["у Петровой нет доступа к объекту", (p) => (p.roles = ["Старший смены"])],
+      ["Петровой нет на месте", (p) => (p.agentState = "offline")],
+    ]) {
+      // Свой набор: в группе старших только Петрова, меня нет
+      const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+      fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
+      patch(fixture.people.operators.find((o) => o.id === "petrova"));
+      const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
+      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+      const claim = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { expectedState: "new", surface: "queue" }, { "If-Match": `"${inc.version}"` });
+      assert.status(claim, 200, null, `${why}: взять`);
+      const got = [];
+      const stop = api.subscribe((m) => got.push(m));
+      for (let left = longestResolution() + 1; left > 0; left -= 240) {
+        await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await api.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      stop();
+      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+      assert.ok(c.journal.some((j) => /Норматив закрытия нарушен/.test(j.templateKey)), `${why}: нарушение записано`);
+      assert.ok(c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), `${why}: в журнале «алерт не отправлен»`);
+      assert.ok(!got.some((m) => m.type === "incident.alert"), `${why}: алерта в потоке нет`);
+    }
+  });
+
   test("Адресат больше не может принять (§8.1, RULE-39): отняли право «Принимать» — не принятый инцидент в очереди; в работе — не трогается", async () => {
     const env = await makeEnv();
     const inc = (await env.all("open")).find((e) => e.state === "new");

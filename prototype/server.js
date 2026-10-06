@@ -233,6 +233,14 @@
       detachAnswers: (ev) => {
         ev.answers = JSON.parse(JSON.stringify(ev.answers));
       },
+      // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
+      // объекту. Оператору стенда — событие потока; сколько получателей, столько и вернуть
+      notifyAlert: (ev, targetId, transitionId) => {
+        const group = GROUPS.find((g) => g.id === targetId);
+        const who = (group ? membersOf(group) : [targetId]).filter((id) => present({ id }) && hasAccess(id, ev));
+        if (who.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
+        return who.length;
+      },
       onEvict: (ev, who, transitionId) => {
         if (who === ME) emit("incident.card_evicted", ev, null, { transitionId });
       },

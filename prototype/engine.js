@@ -426,7 +426,15 @@
       clearGroup: (ev) => {
         ev.groupId = null;
       },
-      notify: () => {},
+      // Алерт (§9, RULE-43) — внешний эффект: уходит после того, как переход применён. Кому — решает
+      // сервер (на месте и с доступом к объекту); никому — запись в журнал из машины
+      notify: (ev, [who], s) => {
+        if (who !== "alerts.target") return;
+        s.after.push((inc) => {
+          const sent = ctx.notifyAlert ? ctx.notifyAlert(inc, refToId(setting("alerts.target")), s.transitionId) : 0;
+          if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {});
+        });
+      },
       externalCommand: () => {},
     };
 
@@ -440,6 +448,7 @@
         actor,
         form,
         transitionId: tr.id,
+        after: [],
         previousOwner: draft.owner,
         level: nextLevel(draft),
         logVars: { previousOwnerName: ctx.actorName(addressee(draft)) },
@@ -450,6 +459,7 @@
         if (!fn) throw new Error(`Эффект не реализован: ${e.fn}`);
         fn(draft, e.args || [], scope);
       });
+      return scope.after;
     }
     function applyEffects(tr, ev, form, actor) {
       return applyAll(tr, [ev], form, actor);
@@ -457,12 +467,15 @@
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
     function applyAll(tr, list, form, actor) {
       const drafts = list.map(draftOf);
+      let after;
       try {
-        drafts.forEach((d) => effectsOn(d, tr, form, actor));
+        after = drafts.map((d) => effectsOn(d, tr, form, actor));
       } catch (err) {
         return { ok: false, why: ["Переход не выполнен: {error}", { error: err.message }] };
       }
       list.forEach((ev, i) => Object.assign(ev, drafts[i]));
+      // Внешние эффекты — только после применения перехода
+      list.forEach((ev, i) => after[i].forEach((fn) => fn(ev)));
       return { ok: true };
     }
 

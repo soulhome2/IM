@@ -678,8 +678,8 @@
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному"] },
-        { "kind": "external", "fn": "notify", "args": ["escalation.alertTarget"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю"] },
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -696,8 +696,8 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, алерт старшему смены"] },
-        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, алерт получателю"] },
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -734,7 +734,7 @@
     {
       "id": "resolution_ceiling",
       "label": "Норматив закрытия нарушен, потолок эскалации",
-      "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт ответственному, состояние не меняется.",
+      "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт получателю алертов, состояние не меняется.",
       "from": ["in_progress"],
       "to": null,
       "trigger": "timer",
@@ -746,8 +746,8 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, потолок эскалации: алерт ответственному"] },
-        { "kind": "external", "fn": "notify", "args": ["escalation.alertTarget"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, потолок эскалации: алерт получателю"] },
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -761,8 +761,8 @@
       "guards": [{ "fn": "timerExpired", "args": ["hold"] }],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Предельный срок удержания «{holdReasonLabel}» истёк, алерт ответственному"] },
-        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю"] },
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -799,7 +799,7 @@
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Отложен системой: нет связи с оператором"] },
-        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -910,7 +910,7 @@
         { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: у {previousOwnerName} нет доступа к объекту"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     },
@@ -932,7 +932,7 @@
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: {previousOwnerName} не может принять"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+        { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
     }
@@ -978,7 +978,7 @@
   },
 
   "escalation": {
-    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3), получатель алерта — пользователь. Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
+    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3). Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
     "enabled": true,
     "trigger": "reaction",
     "fromStates": ["new", "pending_acceptance"],
@@ -987,9 +987,14 @@
       { "level": 2, "targetRef": "user:noc", "reactionSec": 90 }
     ],
     "maxLevel": 2,
-    "alertTarget": "user:petrova",
     "onResolutionOverdue": "alert",
     "reason": "Автоэскалация: превышен норматив реакции"
+  },
+
+  "alerts": {
+    "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
+    "target": "group:grp-leads",
+    "noRecipientLog": "Алерт не отправлен: получателя на месте с доступом к объекту нет"
   },
 
   "limits": {

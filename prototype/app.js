@@ -2910,6 +2910,10 @@
         state.selectedId = null;
         return backToQueue();
       }
+    } else if (msg.type === "incident.alert") {
+      // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
+      const tr = transitionDef(tid);
+      toast(t("Алерт: {id} — {what}", { id, what: tr ? t(tr.label) : tid }));
     } else if (msg.type === "incident.auto_escalated") {
       toast(t("Автоэскалация {id} → {who}", { id, who: who(msg.payload.addressee) }));
     } else if (tid === "claim") {

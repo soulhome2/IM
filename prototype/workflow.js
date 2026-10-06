@@ -1861,14 +1861,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Потолок эскалации достигнут: норматив реакции нарушен, алерт ответственному"
+            "Потолок эскалации достигнут: норматив реакции нарушен, алерт получателю"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "escalation.alertTarget"
+            "alerts.target"
           ]
         }
       ],
@@ -1912,14 +1912,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив закрытия нарушен, алерт старшему смены"
+            "Норматив закрытия нарушен, алерт получателю"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "shift_lead"
+            "alerts.target"
           ]
         }
       ],
@@ -2050,7 +2050,7 @@ window.IM_WORKFLOW = {
     {
       "id": "resolution_ceiling",
       "label": "Норматив закрытия нарушен, потолок эскалации",
-      "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт ответственному, состояние не меняется.",
+      "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт получателю алертов, состояние не меняется.",
       "from": [
         "in_progress"
       ],
@@ -2090,14 +2090,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив закрытия нарушен, потолок эскалации: алерт ответственному"
+            "Норматив закрытия нарушен, потолок эскалации: алерт получателю"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "escalation.alertTarget"
+            "alerts.target"
           ]
         }
       ],
@@ -2134,14 +2134,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Предельный срок удержания «{holdReasonLabel}» истёк, алерт ответственному"
+            "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "shift_lead"
+            "alerts.target"
           ]
         }
       ],
@@ -2260,7 +2260,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "shift_lead"
+            "alerts.target"
           ]
         }
       ],
@@ -2602,7 +2602,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "shift_lead"
+            "alerts.target"
           ]
         }
       ],
@@ -2674,7 +2674,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "shift_lead"
+            "alerts.target"
           ]
         }
       ],
@@ -2805,7 +2805,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "escalation": {
-    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3), получатель алерта — пользователь. Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
+    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3). Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
     "enabled": true,
     "trigger": "reaction",
     "fromStates": [
@@ -2825,9 +2825,13 @@ window.IM_WORKFLOW = {
       }
     ],
     "maxLevel": 2,
-    "alertTarget": "user:petrova",
     "onResolutionOverdue": "alert",
     "reason": "Автоэскалация: превышен норматив реакции"
+  },
+  "alerts": {
+    "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
+    "target": "group:grp-leads",
+    "noRecipientLog": "Алерт не отправлен: получателя на месте с доступом к объекту нет"
   },
   "limits": {
     "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда.",
