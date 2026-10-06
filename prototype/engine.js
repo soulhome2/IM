@@ -186,7 +186,11 @@
         const target = opts && opts.form ? opts.form.targetId : null;
         return !target || ctx.hasAccess(target, ev) ? null : ["У адресата нет доступа к объекту инцидента"];
       },
-      agentReady: () => (ctx.agentState() === "not_ready" ? ["На перерыве доступен только просмотр"] : null),
+      // На перерыве и после выхода — только просмотр (§10.4, §12.1): какие состояния такие, решает машина
+      agentReady: () => {
+        const st = W.session.states.find((s) => s.id === ctx.agentState());
+        return st && st.readOnly ? [st.readOnlyReason] : null;
+      },
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
       addresseeHasAccess: (ev, [expected]) => {
         const who = addressee(ev);

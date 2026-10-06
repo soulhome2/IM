@@ -155,11 +155,12 @@
     if (!ok) await recover();
   }
 
-  // После падения: к очереди, с перерыва на смену, свои инциденты «В работе» — обратно в очередь
+  // После падения: к очереди, с перерыва и после выхода — обратно, свои инциденты «В работе» — в очередь
   async function recover() {
     try {
       if (mode() === "work") await click($("backToQueue"));
       if (!$("breakBanner").hidden) await click($("breakBtn"));
+      if (!$("signedOutBanner").hidden) await click($("signInBtn"));
       for (let i = 0; i < 5; i++) {
         await setFilter("mine");
         const open = button($("eventsList"), "open_card");
@@ -717,13 +718,27 @@
       return `${opt.textContent}: ${rows.length} из ${before}`;
     });
 
-    await step("Перерыв и возврат на смену", async () => {
+    await step("Перерыв и возврат с перерыва", async () => {
       await click($("breakBtn"));
       expect(field("reasonId"), "перерыв не спросил причину");
       await confirmDialog();
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
       await click($("breakReturn"));
-      expect($("breakBanner").hidden, "кнопка на плашке не вернула на смену");
+      expect($("breakBanner").hidden, "кнопка на плашке не вернула с перерыва");
+    });
+
+    await step("Выход из МИ: подтверждение, дальше только просмотр, вход (§12.1)", async () => {
+      await setFilter("open");
+      await click($("signOutBtn"));
+      expect(!$("modalDialog").hidden && /вернутся в очередь/.test($("dialogNote").textContent), "выход не спросил подтверждения");
+      await confirmDialog();
+      expect(!$("signedOutBanner").hidden, "плашка «Вы вышли» не появилась");
+      expect($("dutyBadge").textContent === "Вышел", `в шапке «${$("dutyBadge").textContent}» вместо «Вышел»`);
+      const claims = [...$("eventsList").querySelectorAll('[data-do="claim"]')];
+      expect(claims.length && claims.every(off), "после выхода «Взять» доступно");
+      await click($("signInBtn"));
+      expect($("signedOutBanner").hidden, "кнопка «Войти» не вернула в МИ");
+      expect([...$("eventsList").querySelectorAll('[data-do="claim"]')].some((b) => !off(b)), "после входа «Взять» недоступно");
     });
 
     await step("Смешанная выборка: «Взять» у отмеченных недоступно с объяснением", async () => {

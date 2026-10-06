@@ -200,14 +200,14 @@
     assert.eq(res.body.incident.assignmentGroup, null, "группа очищена");
   });
 
-  test("Конец смены (§8.1, RULE-28): адресованный лично и не принятый уходит дежурной группе, норматив реакции продолжается", async () => {
+  test("Выход из МИ (§8.1, RULE-28): адресованный лично и не принятый уходит дежурной группе, норматив реакции продолжается", async () => {
     const env = await makeEnv();
     const personal = await env.card(await env.guidOf("INC-1843"));
     const forGroup = await env.card(await env.guidOf("INC-1836"));
     assert.eq([personal.state, personal.owner && personal.owner.id], ["pending_acceptance", ME], "INC-1843 адресован мне лично");
     const myGroup = (await env.session()).operator.dutyGroupGuids[0];
     const res = await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" });
-    assert.status(res, 200, null, "завершить смену");
+    assert.status(res, 200, null, "выйти");
     assert.eq(res.body.session.agentState, "offline", "состояние оператора");
     assert.ok(res.body.affectedIncidents.some((i) => i.guid === personal.guid), "INC-1843 среди изменённых");
     const after = await env.card(personal.guid);
@@ -216,10 +216,32 @@
     assert.eq(after.timer && after.timer.dueAt, personal.timer && personal.timer.dueAt, "норматив реакции продолжается, а не начинается заново");
     const group = await env.card(forGroup.guid);
     assert.eq([group.owner, group.assignmentGroup && group.assignmentGroup.id], [null, forGroup.assignmentGroup.id], "адресованный группе не меняется");
-    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "снова на смене");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "снова вошёл");
   });
 
-  test("Конец смены без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
+  test("Выход из МИ (§12.1, RULE-37): свои в работе и отложенные сразу возвращаются в очередь; дальше — только просмотр", async () => {
+    const env = await makeEnv();
+    const taken = (await env.all("open")).find((e) => e.state === "new");
+    assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "взять");
+    const mine = (await env.all("open")).filter((e) => ["in_progress", "on_hold"].includes(e.state) && e.owner && e.owner.id === ME);
+    assert.ok(mine.some((e) => e.state === "in_progress") && mine.some((e) => e.state === "on_hold"), `у меня есть и в работе, и отложенные: ${mine.map((e) => e.number)}`);
+    const res = await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" });
+    assert.status(res, 200, null, "выйти");
+    for (const inc of mine) {
+      assert.ok(res.body.affectedIncidents.some((i) => i.guid === inc.guid), `${inc.number}: среди изменённых`);
+      const c = await env.card(inc.guid);
+      assert.eq([c.state, c.owner, c.holdReasonId, c.groupGuid], ["new", null, null, null], `${inc.number}: новый, ничей, без причины и группы`);
+      assert.ok(c.journal.some((j) => /оператор вышел/.test(j.templateKey)), `${inc.number}: запись в журнале`);
+    }
+    assert.eq((await env.session()).usage.activeCount + (await env.session()).usage.onHoldCount, 0, "у меня ничего не осталось");
+    // Вышедшему — только просмотр, как на перерыве (§10.4); войти — снова «Готов»
+    assert.status(await env.act(taken.guid, "claim", {}, "queue"), 403, "AGENT_NOT_READY", "вышел — взять нельзя");
+    assert.ok((await env.card(taken.guid)).guid === taken.guid, "просмотр доступен");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "войти");
+    assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "после входа — снова можно");
+  });
+
+  test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
     if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
     // Свой набор данных: оператор стенда не состоит ни в одной группе
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
@@ -228,10 +250,10 @@
     await api.raw("POST", "/test/reset", { fixture: "demo" });
     const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
     const res = await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
-    assert.status(res, 200, null, "завершить смену");
+    assert.status(res, 200, null, "выйти");
     const card = await api.get(`/operator/incidents/${enc(guid)}`);
     assert.eq([card.state, card.owner, card.assignmentGroup], ["new", null, null], "в общей очереди, ничей");
-    assert.ok(card.journal.some((j) => /ушёл со смены/.test(j.templateKey)), "запись в журнале");
+    assert.ok(card.journal.some((j) => /Адресат вышел/.test(j.templateKey)), "запись в журнале");
   });
 
   test("Закрытый из «Ожидает принятия» группой и переоткрытый — у человека, без группы (§8.1)", async () => {
@@ -919,26 +941,26 @@
     assert.ok(notMine.length && !got.some((m) => notMine.some((e) => e.guid === m.incidentGuid)), "о чужих и ничьих, ставших недоступными, — ничего");
   });
 
-  test("Дежурная группа — по ролям и отдельным людям (§8.1); человек в нескольких группах — при конце смены первая по порядку", async () => {
+  test("Дежурная группа — по ролям и отдельным людям (§8.1); человек в нескольких группах — при выходе первая по порядку", async () => {
     const env = await makeEnv();
     assert.eq((await env.session()).operator.dutyGroupGuids, ["grp-leads"], "я в группе старших — как отдельный участник");
     const elsewhere = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
     const target = async (id) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(elsewhere.guid)}`)).find((t) => t.id === id);
     assert.ok(!(await target("grp-tc")), "вне ТЦ «Охраны ТЦ» нет: у её участников нет доступа");
-    // Группа на смене, если на смене хотя бы один участник: в «Охране ТЦ» пока только Кузнецов, он «Не на смене»
+    // Группа на месте, если на месте хотя бы один участник: в «Охране ТЦ» пока только Кузнецов, он «Вышел»
     const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
     const tcBefore = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "grp-tc");
-    assert.eq([tcBefore.name, tcBefore.available], ["Охрана ТЦ", false], "у группы название; на смене никого");
+    assert.eq([tcBefore.name, tcBefore.available], ["Охрана ТЦ", false], "у группы название; на месте никого");
     // Гусеву — роль «Оператор ТЦ»: он входит в «Охрану ТЦ» по роли, и у группы появляется доступ
     assert.status(await env.call("PUT", "/test/operators/gusev/roles", { roles: ["Оператор", "Оператор ТЦ"] }), 200, null, "роли Гусева");
     const tc = await target("grp-tc");
     assert.ok(tc && tc.memberIds.includes("gusev") && tc.memberIds.includes("kuznetsov"), `состав по роли: ${tc && tc.memberIds}`);
-    assert.eq(tc.available, true, "Гусев на смене — и группа на смене");
+    assert.eq(tc.available, true, "Гусев на месте — и группа на месте");
     // Мне — тоже «Оператор ТЦ»: я в двух группах, первая по порядку — группа старших
     assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] }), 200, null, "мои роли");
     assert.eq((await env.session()).operator.dutyGroupGuids, ["grp-leads", "grp-tc"], "я в двух группах, по порядку");
     const personal = await env.guidOf("INC-1843");
-    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "завершить смену");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
     const after = await env.card(personal);
     assert.eq(after.assignmentGroup && after.assignmentGroup.id, "grp-leads", "INC-1843 ушёл в первую по порядку группу");
   });

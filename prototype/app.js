@@ -556,6 +556,7 @@
 
   const can = (key) => Boolean(store.session && store.session.permissions.includes(key));
   const onBreak = () => Boolean(store.session && store.session.agentState === "not_ready");
+  const signedOut = () => Boolean(store.session && store.session.agentState === "offline");
   const prefs = () => (store.session ? store.session.preferences : {});
 
   // Имя участника — из ActorRef ответа или из списка адресатов передачи
@@ -1277,6 +1278,7 @@
     const bulkIds = open.bulkIds;
     closeDialog();
     if (open.id === "__break__") return goOnBreak(values.reasonId);
+    if (open.id === "__signout__") return setPresence("offline", "Вы вышли из МИ");
     if (bulkIds && bulkIds.length > 1) return runBulk(open.id, bulkIds, values, open.surface);
     return runTransition(open.id, open.ev, values, open.surface);
   }
@@ -2123,6 +2125,7 @@
     renderMap();
     renderStatus();
     $("breakBanner").hidden = !onBreak();
+    $("signedOutBanner").hidden = !signedOut();
   }
 
   function syncToggle(btn, on, iconOn, iconOff, titleOn, titleOff) {
@@ -2166,11 +2169,14 @@
     syncToggle($("mapFull"), state.full === "map", "close_fullscreen", "open_in_full", t("Свернуть карту (Esc)"), t("Развернуть карту на всю рабочую область"));
     $("videoFull").disabled = mode === "map";
     $("mapFull").disabled = mode === "video";
-    // Состояние оператора — отдельная машина состояний (§12.1), значение отдаёт сервер
+    // Состояние оператора — отдельная машина состояний (§12.1): значение отдаёт сервер, подпись — машина
     const agent = store.session ? store.session.agentState : "ready";
-    $("dutyBadge").textContent = agent === "not_ready" ? t("Перерыв") : agent === "busy" ? t("Занят") : t("На смене");
-    $("dutyBadge").classList.toggle("off", agent === "not_ready");
-    $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться на смену" : "Уйти на перерыв");
+    const agentDef = WORKFLOW.session.states.find((s) => s.id === agent) || {};
+    $("dutyBadge").textContent = t(agentDef.label || agent);
+    $("dutyBadge").classList.toggle("off", Boolean(agentDef.readOnly));
+    $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться с перерыва" : "Уйти на перерыв");
+    $("breakBtn").disabled = signedOut();
+    $("signOutBtn").hidden = signedOut();
   }
 
   // При переходе к другому инциденту показываем камеру, ближайшую к источнику события.
@@ -2224,9 +2230,40 @@
     }
     try {
       await api.put("/operator/session/agent-state", { agentState: "ready" });
-      toast(t("Вы снова на смене"));
+      toast(t("Перерыв окончен"));
     } catch (err) {
       toast(problemText(err));
+    }
+    await reload();
+  }
+
+  // Выход из МИ (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
+  // адресованные лично — дежурной группе или в очередь (owner_signed_out, target_signed_out_*)
+  const signOutForm = () => {
+    const u = (store.session && store.session.usage) || {};
+    return {
+      id: "__signout__",
+      title: "Выйти из МИ",
+      confirmLabel: "Выйти",
+      style: "danger",
+      note: t("В работе: {active}, отложено: {held} — они вернутся в очередь. Адресованные вам и не принятые уйдут вашей дежурной группе или в очередь.", {
+        active: u.activeCount || 0,
+        held: u.onHoldCount || 0,
+      }),
+      fields: [],
+    };
+  };
+
+  async function setPresence(agentState, done) {
+    try {
+      await api.put("/operator/session/agent-state", { agentState });
+      toast(t(done));
+    } catch (err) {
+      toast(problemText(err));
+    }
+    if (agentState === "offline") {
+      state.selectedId = null;
+      return backToQueue();
     }
     await reload();
   }
@@ -2589,6 +2626,11 @@
     $("breakReturn").addEventListener("click", () => {
       if (onBreak()) toggleBreak();
     });
+    $("signOutBtn").addEventListener("click", () => {
+      closeMenus();
+      showForm({ id: "__signout__" }, signOutForm());
+    });
+    $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
     $("hotkeysBtn").addEventListener("click", () => {
       closeMenus();
       $("modalHotkeys").hidden = false;

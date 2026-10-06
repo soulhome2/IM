@@ -826,9 +826,9 @@
       "ui": { "surface": [] }
     },
     {
-      "id": "target_off_shift_to_group",
-      "label": "Адресат ушёл со смены: передано его дежурной группе",
-      "$comment": "§8.1 (RULE-28). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот завершает смену. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
+      "id": "target_signed_out_to_group",
+      "label": "Адресат вышел: передано его дежурной группе",
+      "$comment": "§8.1 (RULE-28, RULE-37). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот выходит из МИ. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
       "from": ["pending_acceptance"],
       "to": "pending_acceptance",
       "trigger": "system",
@@ -841,15 +841,15 @@
       "effects": [
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["owner.dutyGroup"] },
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат ушёл со смены, не приняв: передано группе {targetName}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат вышел, не приняв: передано группе {targetName}"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
       "ui": { "surface": [] }
     },
     {
-      "id": "target_off_shift_to_queue",
-      "label": "Адресат ушёл со смены: возвращён в очередь",
-      "$comment": "§8.1 (RULE-28). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
+      "id": "target_signed_out_to_queue",
+      "label": "Адресат вышел: возвращён в очередь",
+      "$comment": "§8.1 (RULE-28, RULE-37). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
       "from": ["pending_acceptance"],
       "to": "new",
       "trigger": "system",
@@ -861,7 +861,31 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат ушёл со смены, не приняв: возвращён в очередь"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат вышел, не приняв: возвращён в очередь"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
+      "id": "owner_signed_out",
+      "label": "Оператор вышел: возвращён в очередь",
+      "$comment": "§12.1 (RULE-37). Оператор вышел из МИ — его инциденты в работе и отложенные, с любой причиной, сразу возвращаются в общую очередь, как по «Вернуть в очередь»: ждать срабатывания потери связи (§12.3) незачем, он ушёл сам. Уровень эскалации не меняется, прогресс сценария сохраняется.",
+      "from": ["in_progress", "on_hold"],
+      "to": "new",
+      "trigger": "system",
+      "scope": "incidents_owned_by_agent",
+      "actor": "system",
+      "guards": [
+        { "fn": "agentStateIs", "args": ["offline"] }
+      ],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "clearHoldReason" },
+        { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "clearGroup" },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор вышел"] },
+        { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] }
       ],
       "ui": { "surface": [] }
     },
@@ -987,12 +1011,12 @@
   },
 
   "session": {
-    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится.",
+    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится. readOnly — в этом состоянии доступен только просмотр: переходы отклоняет условие agentReady с текстом readOnlyReason.",
     "states": [
-      { "id": "ready", "label": "На смене", "assignsNewIncidents": true },
+      { "id": "ready", "label": "Готов", "assignsNewIncidents": true },
       { "id": "busy", "label": "Занят", "assignsNewIncidents": true, "derived": true },
-      { "id": "not_ready", "label": "Перерыв", "assignsNewIncidents": false, "requiresReason": true, "permission": "agent:set_not_ready" },
-      { "id": "offline", "label": "Не на смене", "assignsNewIncidents": false }
+      { "id": "not_ready", "label": "Перерыв", "assignsNewIncidents": false, "requiresReason": true, "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReason": "На перерыве доступен только просмотр" },
+      { "id": "offline", "label": "Вышел", "assignsNewIncidents": false, "readOnly": true, "readOnlyReason": "Вы вышли из МИ: доступен только просмотр" }
     ],
     "breakReasons": [
       { "id": "lunch", "label": "Обед" },
@@ -1001,8 +1025,7 @@
     ],
     "heartbeatSec": 30,
     "idleHoldSec": 300,
-    "idleReleaseSec": 1200,
-    "readOnlyWhenNotReady": true
+    "idleReleaseSec": 1200
   },
 
   "hotkeys": [
@@ -1015,7 +1038,7 @@
     { "key": "G", "action": "group:create", "label": "Обработать выделенные как одно", "worksInInput": false },
     { "key": "Shift+A", "action": "selection:same_type", "label": "Выбрать однотипные", "worksInInput": false },
     { "key": "Shift+D", "action": "selection:clear", "label": "Снять выделение", "worksInInput": false },
-    { "key": "B", "action": "session:toggle_break", "label": "Перерыв / возврат на смену", "worksInInput": false },
+    { "key": "B", "action": "session:toggle_break", "label": "Перерыв / возврат с перерыва", "worksInInput": false },
     { "key": "Enter", "action": "form:open:close", "label": "Открыть форму закрытия инцидента", "worksInInput": false },
     { "key": "ArrowLeft", "action": "media:camera_prev", "label": "Карусель камер", "worksInInput": false },
     { "key": "ArrowRight", "action": "media:camera_next", "label": "Карусель камер", "worksInInput": false },

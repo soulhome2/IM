@@ -44,7 +44,7 @@
   }
 
   // Доступ после любого шага: видно только доступное мне; у владельца и адресата открытого есть доступ;
-  // завершив смену, я не держу адресованных лично мне
+  // выйдя из МИ, я не держу ни своих в работе и отложенных, ни адресованных лично мне
   function accessInvariants(list, session, roles) {
     const bad = [];
     const mine = devicesFor(roles.get(ME));
@@ -53,8 +53,8 @@
       if (inc.state === "closed") return;
       const who = (inc.owner && inc.owner.id) || (inc.assignmentGroup && inc.assignmentGroup.id);
       if (who && !hasAccess(roles, who, inc.guid)) bad.push(`${inc.guid} (${inc.state}): у ${who} нет доступа к объекту (§5)`);
-      if (session.agentState === "offline" && inc.state === "pending_acceptance" && inc.owner && inc.owner.id === ME) {
-        bad.push(`${inc.guid}: я не на смене, а он адресован лично мне (§8.1)`);
+      if (session.agentState === "offline" && ["pending_acceptance", "in_progress", "on_hold"].includes(inc.state) && inc.owner && inc.owner.id === ME) {
+        bad.push(`${inc.guid}: я вышел, а он мой — ${inc.state} (§8.1, §12.1)`);
       }
     });
     return bad;
@@ -122,7 +122,7 @@
         const now = session.agentState === "busy" ? "ready" : session.agentState;
         const to = pick(r, ["ready", "not_ready", "offline"].filter((st) => st !== now));
         await env.ok("PUT", "/operator/session/agent-state", { agentState: to, reasonId: to === "not_ready" ? "lunch" : null });
-        history.push(`смена: ${to}`);
+        history.push(`состояние: ${to}`);
       } else if (x < 0.25) {
         const mine = (await env.all("mine")).filter((e) => e.state === "in_progress");
         if (mine.length) {

@@ -587,15 +587,6 @@
       return { activeCount: active.size, onHoldCount: held.size, blockingIncidentGuid: blocking ? blocking.id : null };
     }
 
-    function shiftView() {
-      const at = (h) => {
-        const d = new Date(now());
-        d.setHours(h, 0, 0, 0);
-        return iso(d.getTime());
-      };
-      return { from: at(8), to: at(20) };
-    }
-
     function sessionView() {
       const me = findActor(ME);
       return {
@@ -605,7 +596,6 @@
           role: me.role,
           dutyGroupGuids: GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id),
         },
-        shift: shiftView(),
         agentState: session.agentState === "not_ready" || session.agentState === "offline" ? session.agentState : usage().activeCount ? "busy" : "ready",
         agentStateReasonId: session.reasonId,
         permissions: PERMISSIONS.slice(),
@@ -618,9 +608,9 @@
     }
 
     // Состояние человека (§12.1): у оператора стенда — из сессии, у остальных — из набора.
-    // На смене — «На смене» или «Занят»; дежурная группа — если на смене хотя бы один участник (§8.1)
+    // На месте — «Готов» или «Занят»; дежурная группа — если на месте хотя бы один участник (§8.1)
     const agentStateOf = (id) => (id === ME ? session.agentState : (OPERATORS.find((o) => o.id === id) || {}).agentState || "offline");
-    const onShift = (op) => (op.group ? membersOf(op).some((m) => onShift({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
+    const present = (op) => (op.group ? membersOf(op).some((m) => present({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
     const stateLabel = (id) => (W.session.states.find((st) => st.id === agentStateOf(id)) || {}).label || null;
 
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
@@ -631,8 +621,8 @@
         name: op.name,
         label: op.name,
         role: op.group ? "группа" : op.role,
-        available: onShift(op),
-        availabilityLabel: onShift(op) ? null : op.group ? "никого нет на смене" : stateLabel(op.id),
+        available: present(op),
+        availabilityLabel: present(op) ? null : op.group ? "никого нет на месте" : stateLabel(op.id),
         memberIds: op.group ? membersOf(op) : [],
       }));
     }
@@ -873,7 +863,8 @@
             return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => find(f.id)).filter(Boolean).map((ev) => summary(ev, "queue")) } };
           }
           if (body.agentState === "offline") {
-            // Конец смены: адресованные лично и не принятые уходят дежурной группе или в очередь (§8.1)
+            // Выход из МИ: свои в работе и отложенные — в очередь (owner_signed_out), адресованные лично
+            // и не принятые — дежурной группе или в очередь (§8.1, §12.1); их выполняет машина
             session.agentState = "offline";
             session.reasonId = null;
             const fired = runScheduler();
@@ -1223,7 +1214,7 @@
 
     /* ===== Эмуляция коллег (§17): через те же переходы машины, от имени коллеги ===== */
 
-    // У каждого коллеги свой исполнитель: «я» — коллега, права — весь каталог, на смене. Признак
+    // У каждого коллеги свой исполнитель: «я» — коллега, права — по ролям, на месте. Признак
     // активности — свой: потерявший связь коллега перестаёт отвечать, и системные переходы
     // машины (system_hold_idle, затем system_release_idle) срабатывают по её же условиям
     function colleague(id) {
@@ -1250,7 +1241,7 @@
       // В верхней части очереди всегда оставляем новое событие, чтобы оператору было что взять
       if (pool.length < 2) return;
       const ev = pool[pool.length - 1];
-      // Берёт первый по очереди коллега, кому машина разрешает: свой лимит активных, права, на смене
+      // Берёт первый по очереди коллега, кому машина разрешает: свой лимит активных, права, на месте
       for (let i = 0; i < SIM.colleagues.length; i++) {
         const who = SIM.colleagues[(SIM.taken + i) % SIM.colleagues.length];
         if (colleagueIdleSince[who] != null) continue;

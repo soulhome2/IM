@@ -2341,9 +2341,9 @@ window.IM_WORKFLOW = {
       }
     },
     {
-      "id": "target_off_shift_to_group",
-      "label": "Адресат ушёл со смены: передано его дежурной группе",
-      "$comment": "§8.1 (RULE-28). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот завершает смену. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
+      "id": "target_signed_out_to_group",
+      "label": "Адресат вышел: передано его дежурной группе",
+      "$comment": "§8.1 (RULE-28, RULE-37). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот выходит из МИ. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
       "from": [
         "pending_acceptance"
       ],
@@ -2384,7 +2384,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Адресат ушёл со смены, не приняв: передано группе {targetName}"
+            "Адресат вышел, не приняв: передано группе {targetName}"
           ]
         },
         {
@@ -2400,9 +2400,9 @@ window.IM_WORKFLOW = {
       }
     },
     {
-      "id": "target_off_shift_to_queue",
-      "label": "Адресат ушёл со смены: возвращён в очередь",
-      "$comment": "§8.1 (RULE-28). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
+      "id": "target_signed_out_to_queue",
+      "label": "Адресат вышел: возвращён в очередь",
+      "$comment": "§8.1 (RULE-28, RULE-37). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
       "from": [
         "pending_acceptance"
       ],
@@ -2436,7 +2436,83 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Адресат ушёл со смены, не приняв: возвращён в очередь"
+            "Адресат вышел, не приняв: возвращён в очередь"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "owner_signed_out",
+      "label": "Оператор вышел: возвращён в очередь",
+      "$comment": "§12.1 (RULE-37). Оператор вышел из МИ — его инциденты в работе и отложенные, с любой причиной, сразу возвращаются в общую очередь, как по «Вернуть в очередь»: ждать срабатывания потери связи (§12.3) незачем, он ушёл сам. Уровень эскалации не меняется, прогресс сценария сохраняется.",
+      "from": [
+        "in_progress",
+        "on_hold"
+      ],
+      "to": "new",
+      "trigger": "system",
+      "scope": "incidents_owned_by_agent",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "agentStateIs",
+          "args": [
+            "offline"
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearHoldReason"
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Возвращён в очередь: оператор вышел"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "evictOpenCard",
+          "args": [
+            "previousOwner"
           ]
         }
       ],
@@ -2781,11 +2857,11 @@ window.IM_WORKFLOW = {
     ]
   },
   "session": {
-    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится.",
+    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится. readOnly — в этом состоянии доступен только просмотр: переходы отклоняет условие agentReady с текстом readOnlyReason.",
     "states": [
       {
         "id": "ready",
-        "label": "На смене",
+        "label": "Готов",
         "assignsNewIncidents": true
       },
       {
@@ -2799,12 +2875,16 @@ window.IM_WORKFLOW = {
         "label": "Перерыв",
         "assignsNewIncidents": false,
         "requiresReason": true,
-        "permission": "agent:set_not_ready"
+        "permission": "agent:set_not_ready",
+        "readOnly": true,
+        "readOnlyReason": "На перерыве доступен только просмотр"
       },
       {
         "id": "offline",
-        "label": "Не на смене",
-        "assignsNewIncidents": false
+        "label": "Вышел",
+        "assignsNewIncidents": false,
+        "readOnly": true,
+        "readOnlyReason": "Вы вышли из МИ: доступен только просмотр"
       }
     ],
     "breakReasons": [
@@ -2823,8 +2903,7 @@ window.IM_WORKFLOW = {
     ],
     "heartbeatSec": 30,
     "idleHoldSec": 300,
-    "idleReleaseSec": 1200,
-    "readOnlyWhenNotReady": true
+    "idleReleaseSec": 1200
   },
   "hotkeys": [
     {
@@ -2885,7 +2964,7 @@ window.IM_WORKFLOW = {
     {
       "key": "B",
       "action": "session:toggle_break",
-      "label": "Перерыв / возврат на смену",
+      "label": "Перерыв / возврат с перерыва",
       "worksInInput": false
     },
     {
