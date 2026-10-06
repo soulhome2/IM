@@ -5,6 +5,12 @@
   const { test, makeEnv, formFor, fullAnswers, actionOf, assert, enc } = IMTest;
   const ME = "me";
   const W = window.IM_WORKFLOW;
+
+  // Стенд со своей копией схемы или набора (PROC-13): отличающиеся разделы уходят в POST /test/reset
+  // как JSON Merge Patch — так тест идёт и против встроенного сервера, и против бэкенда
+  const changed = (base, copy) =>
+    copy ? Object.fromEntries(Object.keys(copy).filter((k) => JSON.stringify(copy[k]) !== JSON.stringify(base[k])).map((k) => [k, copy[k]])) : undefined;
+  const standWith = ({ workflow, fixture }) => makeEnv({ workflowPatch: changed(W, workflow), fixturePatch: changed(window.IM_FIXTURE, fixture) });
   const lastJournal = (card) => card.journal[card.journal.length - 1];
 
   // Инцидента с таким идентификатором нет: формат верный, записи нет
@@ -256,12 +262,10 @@
   });
 
   test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
-    if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
     // Свой набор данных: оператор стенда не состоит ни в одной группе
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
-    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
-    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const api = (await standWith({ fixture })).api;
     const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
     const res = await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
     assert.status(res, 200, null, "выйти");
@@ -465,14 +469,12 @@
   });
 
   test("Порядок автоматических переходов — по времени наступления (RULE-41): прыжок часов и прогон мелкими шагами дают одно и то же", async () => {
-    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
     // Взял инцидент, связь пропала; эскалация по закрытию включена. Первой наступает потеря связи
     // (5 минут), а не норматив закрытия — инцидент отложен, и закрытие уже не эскалируется
     async function run(stepSec) {
       const w = JSON.parse(JSON.stringify(W));
       w.escalation.onResolutionOverdue = "escalate";
-      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
-      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const api = (await standWith({ workflow: w })).api;
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
       const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
       assert.status(await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag }), 200, null, "взять");
@@ -492,15 +494,23 @@
     assert.eq(jump.end, steps.end, "и тот же итог");
   });
 
+  test("Стенд: изменения схемы и набора на один прогон (PROC-13) — JSON Merge Patch в POST /test/reset", async () => {
+    const env = await makeEnv({ workflowPatch: { escalation: { enabled: false } }, fixturePatch: { people: { dutyGroups: [] } } });
+    const patched = await env.ok("GET", "/operator/workflow/active");
+    assert.eq([patched.escalation.enabled, patched.escalation.maxLevel], [false, W.escalation.maxLevel], "в схеме изменено только указанное");
+    assert.ok(!(await env.ok("GET", "/operator/transfer-targets")).some((t) => t.kind === "duty_group"), "дежурных групп в наборе нет");
+    const plain = await makeEnv();
+    assert.eq((await plain.ok("GET", "/operator/workflow/active")).escalation.enabled, W.escalation.enabled, "следующий сброс без изменений — исходная схема");
+    assert.ok((await plain.ok("GET", "/operator/transfer-targets")).some((t) => t.kind === "duty_group"), "и исходный набор");
+  });
+
   test("Догон: переход без таймера — сразу после того, который сделал его возможным (RULE-48)", async () => {
-    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
     // Я вышел; первый уровень эскалации — на меня. Эскалация на меня делает возможным «адресат
     // вышел» — он должен сработать сразу, раньше следующего уровня, при любом шаге часов
     async function run(stepSec) {
       const w = JSON.parse(JSON.stringify(W));
       w.escalation.levels[0].targetRef = `user:${ME}`;
-      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
-      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const api = (await standWith({ workflow: w })).api;
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0);
       assert.status(await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
       const fired = [];
@@ -518,7 +528,6 @@
   });
 
   test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {
-    if (IMTest.external) return "пропущено: настройки схемы меняются только во встроенном сервере";
     for (const [why, levels] of [
       ["уровни настроены", null],
       ["уровней нет", []],
@@ -526,8 +535,7 @@
       const w = JSON.parse(JSON.stringify(W));
       w.escalation.enabled = false;
       if (levels) w.escalation.levels = levels;
-      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
-      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const api = (await standWith({ workflow: w })).api;
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
       const got = [];
       const stop = api.subscribe((m) => got.push(m));
@@ -576,7 +584,6 @@
   });
 
   test("Алерт без получателя (§9, RULE-43): в группе старших операторов никого на месте с доступом — запись в журнале, события нет", async () => {
-    if (IMTest.external) return "пропущено: состав и состояние людей меняются только во встроенном сервере";
     for (const [why, patch] of [
       ["у Петровой нет доступа к объекту", (p) => (p.roles = ["Старший оператор"])],
       ["Петровой нет на месте", (p) => (p.agentState = "offline")],
@@ -585,8 +592,7 @@
       const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
       fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
       patch(fixture.people.operators.find((o) => o.id === "petrova"));
-      const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
-      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const api = (await standWith({ fixture })).api;
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
       const claim = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { expectedState: "new", surface: "queue" }, { "If-Match": `"${inc.version}"` });
       assert.status(claim, 200, null, `${why}: взять`);
@@ -677,16 +683,12 @@
   });
 
   test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и алерт", async () => {
-    if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
     // Своя копия машины с другой настройкой — так правило проверяется из машины, а не из кода
     async function overdue(patch) {
       const w = JSON.parse(JSON.stringify(W));
       w.escalation.onResolutionOverdue = "escalate";
       patch(w);
-      const api = IMApi.create({
-        server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }),
-      });
-      await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const api = (await standWith({ workflow: w })).api;
       const fire = (await api.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find(
         (e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical"
       );
@@ -717,13 +719,13 @@
   });
 
   test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — никому не передаётся, нарушение и алерт", async () => {
-    if (IMTest.external) return "пропущено: адресатов уровней задаёт машина, её меняет только встроенный сервер";
     // Своя копия машины: адресаты уровней — из targets. Ждём ровно до истечения реакции инцидента
     async function escalate(targets, pick) {
       const w = JSON.parse(JSON.stringify(W));
       targets.forEach((ref, i) => (w.escalation.levels[i].targetRef = ref));
-      const api = IMApi.create({ server: IMServer.create({ workflow: w, fixture: window.IM_FIXTURE, colleagues: false, autoTick: false, testSupport: true }) });
-      const reset = await api.raw("POST", "/test/reset", { fixture: "demo" });
+      const stand = await standWith({ workflow: w });
+      const api = stand.api;
+      const reset = { body: { now: new Date(stand.now).toISOString() } };
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0 && pick(e));
       let left = Math.ceil((Date.parse(inc.timer.dueAt) - Date.parse(reset.body.now)) / 1000) + 1;
       const fired = [];
@@ -1092,12 +1094,10 @@
   });
 
   test("Передача группе: достаточно доступа хотя бы у одного участника (§8.1)", async () => {
-    if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
     // Своя копия набора: в «Охране ТЦ» ещё Гусев, у которого доступ ко всему
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.find((g) => g.id === "grp-tc").members.push("gusev");
-    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
-    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const api = (await standWith({ fixture })).api;
     const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.site !== "Торговый центр");
     const targets = (await api.get("/operator/transfer-targets", { incidentGuid: inc.guid })).map((t) => t.id);
     assert.ok(targets.includes("grp-tc") && !targets.includes("kuznetsov"), `группа есть, Кузнецова нет: ${targets}`);
@@ -1173,12 +1173,10 @@
   });
 
   test("Порядок дежурных групп задаёт администратор: при обратном порядке — в «Охрану ТЦ» (§8.1)", async () => {
-    if (IMTest.external) return "пропущено: порядок групп меняется только во встроенном сервере";
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.reverse();
     fixture.people.operators.find((o) => o.id === ME).roles.push("Оператор ТЦ");
-    const api = IMApi.create({ server: IMServer.create({ workflow: W, fixture, colleagues: false, autoTick: false, testSupport: true }) });
-    await api.raw("POST", "/test/reset", { fixture: "demo" });
+    const api = (await standWith({ fixture })).api;
     const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
     await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
     const card = await api.get(`/operator/incidents/${enc(guid)}`);

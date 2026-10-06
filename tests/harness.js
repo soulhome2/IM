@@ -69,6 +69,9 @@
       fixture: "demo",
       operatorPermissions: (opts && opts.permissions) || undefined,
       operatorRoles: (opts && opts.roles) || undefined,
+      // Изменения схемы и набора на этот прогон — JSON Merge Patch (PROC-13)
+      workflowPatch: (opts && opts.workflowPatch) || undefined,
+      fixturePatch: (opts && opts.fixturePatch) || undefined,
     });
     if (reset.status !== 200) throw new Error(`Тестовый стенд не сбросился: POST /test/reset → ${reset.status}`);
     let clock = Date.parse(reset.body.now);

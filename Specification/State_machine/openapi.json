@@ -5053,7 +5053,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Права оператора стенда на этот прогон, ключами каталога (§5). Не задано — весь каталог, кроме incident:schema:admin"
+            "description": "Права оператора стенда на этот прогон, ключами каталога (§5). Не задано — весь каталог"
           },
           "operatorRoles": {
             "type": "array",
@@ -5061,6 +5061,16 @@
               "type": "string"
             },
             "description": "Роли оператора стенда на этот прогон — по ним применяются группы доступа набора (§5): что ему видно. Не задано — роли оператора из набора"
+          },
+          "workflowPatch": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "PROC-13. Изменения схемы workflow на этот прогон — JSON Merge Patch (RFC 7396): объекты сливаются, null удаляет поле, массивы заменяются целиком. Например {\"escalation\": {\"enabled\": false}}. Так тесты проверяют правила, которым нужна другая настройка. `GET /operator/workflow/active` отдаёт изменённую схему; следующий reset без поля — исходную"
+          },
+          "fixturePatch": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "PROC-13. Изменения эталонного набора на этот прогон — JSON Merge Patch (RFC 7396), как workflowPatch. Например другой состав дежурных групп или состояние человека (`people.operators`, `people.dutyGroups` — массивы, заменяются целиком)"
           },
           "freezeClock": {
             "type": "boolean",

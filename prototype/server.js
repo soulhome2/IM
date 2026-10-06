@@ -14,8 +14,22 @@
    кроме настройки схемы); testSupport: true — служебные операции тестового стенда
    /test/reset и /test/clock (README машины, «Тестовый стенд»). */
 (() => {
+  // Изменения на один прогон стенда — JSON Merge Patch (RFC 7396): объекты сливаются, null удаляет
+  // поле, массивы и значения заменяются целиком. Исходник не меняется (PROC-13)
+  function mergePatch(target, patch) {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) return JSON.parse(JSON.stringify(patch));
+    const out = target && typeof target === "object" && !Array.isArray(target) ? JSON.parse(JSON.stringify(target)) : {};
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value === null) delete out[key];
+      else out[key] = mergePatch(out[key], value);
+    });
+    return out;
+  }
+
   function create(opts) {
-    const W = opts.workflow;
+    // Схема: исходная — из opts; тестовый стенд может подменить её на прогон (/test/reset, workflowPatch)
+    const BASE_W = opts.workflow;
+    let W = BASE_W;
     const FIXTURE = opts.fixture;
     const ME = FIXTURE.operator;
     const iso = (ms) => (ms == null ? null : new Date(ms).toISOString());
@@ -74,7 +88,7 @@
 
     // Права демо-оператора: весь каталог машины, с настройкой схемы — чтобы был виден экран
     // настроек администратора (§20). В продукте права приходят из внешней системы (§5)
-    const ALL_PERMISSIONS = W.permissions.map((p) => p.key);
+    let ALL_PERMISSIONS = W.permissions.map((p) => p.key);
     let PERMISSIONS = opts.permissions || ALL_PERMISSIONS;
     const can = (key) => PERMISSIONS.includes(key);
 
@@ -248,9 +262,18 @@
     };
     // Молчание оператора стенда (§12.3) — с последнего признака активности (heartbeat)
     let lastHeartbeat = null;
-    const engine = IMEngine.create(
-      Object.assign({}, engineCtx, { me: ME, idleSec: () => (lastHeartbeat == null ? 0 : (now() - lastHeartbeat) / 1000) })
-    );
+    const makeEngine = () =>
+      IMEngine.create(Object.assign({}, engineCtx, { me: ME, idleSec: () => (lastHeartbeat == null ? 0 : (now() - lastHeartbeat) / 1000) }));
+    let engine = makeEngine();
+    // Другая схема на прогон стенда: всё, что из неё считается, — заново (PROC-13)
+    function useWorkflow(w) {
+      W = w;
+      ALL_PERMISSIONS = W.permissions.map((p) => p.key);
+      STATES = Object.fromEntries(W.states.map((s) => [s.id, s]));
+      engineCtx.workflow = W;
+      engine = makeEngine();
+      Object.keys(colleagueEngines).forEach((id) => delete colleagueEngines[id]);
+    }
 
     // Эталонный набор → модель сервера. Набор — снимок на момент capturedAt: при загрузке все
     // времена сдвигаются на «сейчас − capturedAt», и набор выглядит свежим в любой день
@@ -368,7 +391,7 @@
     }
     const say = (why) => (why ? { text: render(why[0], why[1]), key: why[0], vars: why[1] || {} } : null);
 
-    const STATES = Object.fromEntries(W.states.map((s) => [s.id, s]));
+    let STATES = Object.fromEntries(W.states.map((s) => [s.id, s]));
     const isDone = (ev) => STATES[ev.state].category === "done";
 
     function timerState(ev) {
@@ -855,7 +878,7 @@
     }
 
     const ROUTES = [
-      ["GET", "/operator/workflow/active", () => ({ status: 200, body: W, headers: { ETag: `"${W.schema.id}@${W.schema.version}"` } })],
+      ["GET", "/operator/workflow/active", () => ({ status: 200, body: W, headers: { ETag: `"${W.schema.id}@${W.schema.version}${W === BASE_W ? "" : "+test"}"` } })],
       ["GET", "/operator/session", () => ({ status: 200, body: sessionView() })],
       [
         "PUT",
@@ -1150,9 +1173,11 @@
             if (body.fixture && body.fixture !== "demo") return problem(404, "NOT_FOUND", ["Нет эталонного набора {name}", { name: body.fixture }]);
             // Часы останавливаются: время в тестах идёт только по /test/clock
             clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
+            // Изменения схемы и набора — только на этот прогон: следующий reset без них вернёт исходные
+            useWorkflow(body.workflowPatch ? mergePatch(BASE_W, body.workflowPatch) : BASE_W);
             PERMISSIONS = body.operatorPermissions || opts.permissions || ALL_PERMISSIONS;
             rolesOverride = body.operatorRoles || null;
-            load(FIXTURE);
+            load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);
             return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
           },
         ],
