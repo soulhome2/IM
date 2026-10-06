@@ -340,6 +340,12 @@ POST /operator/incidents/{g}/transitions/transfer  formValues: { targetId, comme
 поток: incident.card_evicted                  → если карточка открыта, перевести в просмотр
 ```
 
+**Потеря доступа** — изменились роли или группы доступа (§5):
+
+```
+поток: incident.access_lost { payload.number } → уведомление «INC-N вам больше не доступен»; карточку закрыть, строку убрать
+```
+
 **Групповая обработка**
 
 ```

@@ -717,15 +717,22 @@
     function emit(type, ev, actorId, payload) {
       // Об инциденте вне групп доступа оператор не узнаёт и из потока (§5)
       if (ev && !canSee(ev)) return;
-      const message = {
-        id: String(++seq),
+      send({
         type,
         at: iso(now()),
         incidentGuid: ev ? ev.id : null,
         actor: actorRef(actorId),
         incident: ev ? summary(ev, "queue") : null,
         payload: payload || {},
-      };
+      });
+    }
+    // Доступ к объекту пропал у того, кто инцидент вёл или кому он был адресован (§5): единственное
+    // событие об инциденте вне групп доступа — только номер, данных инцидента оператор уже не видит
+    function emitAccessLost(ev) {
+      send({ type: "incident.access_lost", at: iso(now()), incidentGuid: ev.id, actor: null, incident: null, payload: { number: ev.number } });
+    }
+    function send(body) {
+      const message = Object.assign({ id: String(++seq) }, body);
       record("GET", "/operator/stream", 200, message, "stream");
       listeners.forEach((fn) => setTimeout(() => fn(JSON.parse(JSON.stringify(message))), 0));
     }
@@ -1193,11 +1200,19 @@
 
     // Автоматические переходы машины по дедлайнам (§6.2): в продукте их выполняет сервер
     function runScheduler() {
+      // Чьи инциденты были мои — владельцем или адресатом, лично или группой: если после переходов
+      // такой инцидент мне не виден, сервер сообщает об этом (§5)
+      const myGroups = GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id);
+      const wasMine = new Set(events.filter((e) => !isDone(e) && (e.owner === ME || myGroups.includes(e.assignmentGroup))).map((e) => e.id));
       const fired = engine.tick();
       fired.forEach(({ id, transition }) => {
         const ev = byId(id);
         touch([ev]);
         const tr = engine.transition(transition);
+        if (wasMine.has(id) && !canSee(ev)) {
+          wasMine.delete(id);
+          emitAccessLost(ev);
+        }
         emit(transition === "auto_escalate" ? "incident.auto_escalated" : "incident.state_changed", ev, tr.actor || "dispatcher", {
           transitionId: transition,
           addressee: actorRef(engine.addressee(ev)),

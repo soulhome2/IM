@@ -2861,7 +2861,14 @@
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     if (mine && msg.type !== "incident.card_evicted") return;
-    if (msg.type === "incident.auto_escalated") {
+    // Доступ к объекту пропал (§5): данных инцидента больше нет — только номер; карточка закрывается
+    if (msg.type === "incident.access_lost") {
+      toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));
+      if (state.selectedId === msg.incidentGuid) {
+        state.selectedId = null;
+        return backToQueue();
+      }
+    } else if (msg.type === "incident.auto_escalated") {
       toast(t("Автоэскалация {id} → {who}", { id, who: who(msg.payload.addressee) }));
     } else if (tid === "claim") {
       toast(t("{id} взял в работу {who}", { id, who: who(msg.actor) }));

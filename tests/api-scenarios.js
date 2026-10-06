@@ -830,7 +830,8 @@
     await new Promise((r) => setTimeout(r, 300));
     stop();
     assert.ok(got.length > 0, "события о доступных пришли");
-    assert.ok(got.every((m) => !m.incidentGuid || seen.some((i) => i.guid === m.incidentGuid)), "о недоступных событий нет");
+    // Кроме потери доступа к моим: в наборе есть инциденты вне ТЦ, адресованные мне (BUG-24)
+    assert.ok(got.every((m) => !m.incidentGuid || seen.some((i) => i.guid === m.incidentGuid) || (m.type === "incident.access_lost" && !m.incident)), "о недоступных событий нет");
   });
 
   test("Передача только адресату с доступом (§8.1): Кузнецов и «Охрана ТЦ» видят только «Торговый центр»", async () => {
@@ -897,8 +898,25 @@
     // Группе старших хватает доступа у меня; без него — в очередь
     const forGroup = (await env.all("all")).find((e) => e.assignmentGroup && e.assignmentGroup.id === "grp-leads" && e.site !== "Торговый центр");
     assert.ok(!res.body.fired.some((f) => f.incidentGuid === forGroup.guid), "группе хватает доступа у одного участника");
+    // Мой инцидент вне ТЦ: после смены моей роли он мне не виден — приходит только номер (BUG-24)
+    const taken = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "взять инцидент вне ТЦ");
+    const notMine = (await env.all("open")).filter((e) => e.site !== "Торговый центр" && !(e.owner && e.owner.id === "me") && !(e.assignmentGroup && e.assignmentGroup.id === "grp-leads"));
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    // По сети поток подключается не сразу
+    await new Promise((r) => setTimeout(r, 300));
     const mine = await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
     assert.ok(mine.body.fired.some((f) => f.incidentGuid === forGroup.guid && f.transitionId === "addressee_lost_access"), "в группе доступа нет ни у кого — в очередь");
+    for (let i = 0; i < 30 && got.filter((m) => m.type === "incident.access_lost").length < 2; i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    for (const inc of [taken, forGroup]) {
+      const about = got.filter((m) => m.incidentGuid === inc.guid);
+      assert.eq(about.map((m) => m.type), ["incident.access_lost"], `${inc.number}: о нём — одно событие`);
+      assert.eq([about[0].incident, about[0].payload], [null, { number: inc.number }], `${inc.number}: только номер`);
+    }
+    assert.ok(notMine.length && !got.some((m) => notMine.some((e) => e.guid === m.incidentGuid)), "о чужих и ничьих, ставших недоступными, — ничего");
   });
 
   test("Дежурная группа — по ролям и отдельным людям (§8.1); человек в нескольких группах — при конце смены первая по порядку", async () => {
