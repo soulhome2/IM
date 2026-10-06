@@ -3615,8 +3615,8 @@ window.IM_WORKFLOW = {
           ]
         },
         {
-          "id": "shift_lead",
-          "label": "Старший смены",
+          "id": "senior",
+          "label": "Старший оператор",
           "permissions": [
             "incident:claim",
             "incident:accept",

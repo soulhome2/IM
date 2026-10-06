@@ -747,7 +747,7 @@
       const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
       expect(row && row.cells[1].textContent.trim() === String(window.IM_WORKFLOW.limits.maxActive), "лимит активных не показан или не совпадает с машиной");
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
-      expect(/Дежурная группа старших/.test($("adminTable").textContent), "дежурных групп из запроса нет");
+      expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
       await click(document.querySelector('[data-close="modalAdmin"]'));
       expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });

@@ -28,7 +28,7 @@
   // дежурной группы — люди с её ролями плюс названные. Роли тест ведёт сам: он же их и меняет
   const FX = window.IM_FIXTURE;
   const ME = FX.operator;
-  const ROLE_SETS = [["Оператор"], ["Оператор ТЦ"], ["Оператор", "Старший смены"]];
+  const ROLE_SETS = [["Оператор"], ["Оператор ТЦ"], ["Оператор", "Старший оператор"]];
   const groupIndex = {};
   const indexGroups = (groups) => groups.forEach((g) => ((groupIndex[g.id] = g), indexGroups(g.groups || [])));
   indexGroups(FX.sourceGroups);

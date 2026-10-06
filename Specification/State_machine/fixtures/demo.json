@@ -21,10 +21,10 @@
       {
         "id": "petrova",
         "name": "Петрова М.",
-        "role": "старший смены",
+        "role": "старший оператор",
         "roles": [
           "Оператор",
-          "Старший смены"
+          "Старший оператор"
         ],
         "agentState": "ready"
       },
@@ -68,9 +68,9 @@
     "dutyGroups": [
       {
         "id": "grp-leads",
-        "name": "Дежурная группа старших",
+        "name": "Старшие операторы",
         "roles": [
-          "Старший смены"
+          "Старший оператор"
         ],
         "members": [
           "me"
@@ -138,7 +138,7 @@
       ]
     },
     {
-      "name": "Старший смены",
+      "name": "Старший оператор",
       "permissions": [
         "incident:claim",
         "incident:accept",
@@ -2447,7 +2447,7 @@
           "actorName": null,
           "template": "Передано → {targetName} (уровень {escalationLevel}). {comment}",
           "vars": {
-            "targetName": "Дежурная группа старших",
+            "targetName": "Старшие операторы",
             "escalationLevel": 1,
             "comment": "Нужен допуск в зону"
           }

@@ -1202,8 +1202,8 @@
           "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         },
         {
-          "id": "shift_lead",
-          "label": "Старший смены",
+          "id": "senior",
+          "label": "Старший оператор",
           "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         }
       ]

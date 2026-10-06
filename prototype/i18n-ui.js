@@ -164,7 +164,7 @@ window.IM_DICT_UI = {
     "Групповая обработка вместе с {ids}": "Group handling together with {ids}",
     "Да": "Yes",
     "Далее": "Next",
-    "Дежурная группа старших": "Shift supervisors group",
+    "Старшие операторы": "Senior operators",
     "Охрана ТЦ": "Mall security",
     "Действие «{name}» недоступно в текущем состоянии": "Action “{name}” is unavailable in the current state",
     "Для этой выборки действие недоступно": "This action is not available for the current selection",
@@ -372,8 +372,8 @@ window.IM_DICT_UI = {
     "Эскалация": "Escalate",
     "Язык интерфейса": "Interface language",
 
-    'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
-      'Auto-escalation by reaction target: <b id="autoLevels"></b>. Configured by the shift administrator.',
+    'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор схемы.':
+      'Auto-escalation by reaction target: <b id="autoLevels"></b>. Configured by the schema administrator.',
     "Вернуться к очереди, инцидент остаётся за вами (Esc)":
       "Back to the queue, the incident stays with you (Esc)",
     "Взять следующее новое": "Take the next new one",
@@ -628,7 +628,7 @@ window.IM_DICT_UI = {
     "Групповая обработка вместе с {ids}": "Tramitación en grupo junto con {ids}",
     "Да": "Sí",
     "Далее": "Siguiente",
-    "Дежурная группа старших": "Grupo de supervisores de turno",
+    "Старшие операторы": "Operadores sénior",
     "Охрана ТЦ": "Seguridad del centro comercial",
     "Действие «{name}» недоступно в текущем состоянии":
       "La acción «{name}» no está disponible en el estado actual",
@@ -842,8 +842,8 @@ window.IM_DICT_UI = {
     "Эскалация": "Escalar",
     "Язык интерфейса": "Idioma de la interfaz",
 
-    'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор смены.':
-      'Autoescalado por objetivo de reacción: <b id="autoLevels"></b>. Lo configura el administrador de turno.',
+    'Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор схемы.':
+      'Autoescalado por objetivo de reacción: <b id="autoLevels"></b>. Lo configura el administrador del esquema.',
     "Вернуться к очереди, инцидент остаётся за вами (Esc)":
       "Volver a la cola; el incidente sigue siendo suyo (Esc)",
     "Взять следующее новое": "Tomar el siguiente nuevo",
