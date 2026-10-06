@@ -457,6 +457,53 @@ def check_rules_diagram(w, err):
                 err.append(f"диаграмма §3 правил: нет стрелки {src} → {t['to']} (переход `{t['id']}`)")
 
 
+def check_doc_numbers(w, o, err):
+    """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
+    ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
+    words = {"одна": 1, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6}
+    ops = [op for item in o["paths"].values() for m, op in item.items() if m in ("get", "post", "put", "patch", "delete")]
+    test_ops = sum(1 for op in ops if "test-support" in (op.get("tags") or []))
+    manual = sum(1 for t in w["transitions"] if t["trigger"] == "manual")
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        version = int(re.search(r"Версия: \*\*v(\d+)\*\*", f.read()).group(1))
+
+    def text(*parts):
+        with open(os.path.join(ROOT, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    docs = {
+        "README машины": text("Specification", "State_machine", "README.md"),
+        "BACKEND.md": text("Specification", "State_machine", "BACKEND.md"),
+        "корневой README": text("README.md"),
+        "машина ($comment)": w.get("$comment", ""),
+        "контракт (info.description)": o["info"].get("description", ""),
+    }
+    num = lambda v: words.get(v, int(v) if v.isdigit() else -1)
+    checks = [
+        ("README машины", r"\*\*OpenAPI 3\.1\*\* — (\d+) адрес\w*, (\d+) операц\w*, (\d+) схем", [("адресов", len(o["paths"])), ("операций", len(ops)), ("схем", len(o["components"]["schemas"]))]),
+        ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w*\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(w["transitions"]) - manual), ("форм", len(w["forms"]))]),
+        ("README машины", r"описывает (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
+        ("README машины", r"Нужны (\w+) операции выше", [("служебных операций", test_ops)]),
+        ("README машины", r"приведена к v(\d+)", [("версия правил", version)]),
+        ("BACKEND.md", r"(\d+) операц\w*, плюс (\d+) служебн", [("операций", len(ops) - test_ops), ("служебных", test_ops)]),
+        ("BACKEND.md", r"(\d+) состояни\w*, (\d+) переход\w*, (\d+) услови\w*, (\d+) эффект", [("состояний", len(w["states"])), ("переходов", len(w["transitions"])), ("условий", len(w["registries"]["guards"])), ("эффектов", len(w["registries"]["effects"]))]),
+        ("BACKEND.md", r"нужны (\w+) служебные операции", [("служебных операций", test_ops)]),
+        ("корневой README", r"сейчас версия (\d+)", [("версия правил", version)]),
+        ("корневой README", r"Приведена к правилам v(\d+)", [("версия правил", version)]),
+        ("машина ($comment)", r"версия v(\d+)", [("версия правил", version)]),
+        ("контракт (info.description)", r"\(v(\d+) и изменения после неё", [("версия правил", version)]),
+    ]
+    for doc, pattern, expected in checks:
+        found = re.findall(pattern, docs[doc])
+        if len(found) != 1:
+            err.append(f"{doc}: фраза с числами не найдена или повторяется ({pattern}) — обновите текст или проверку в check_doc_numbers")
+            continue
+        values = found[0] if isinstance(found[0], tuple) else (found[0],)
+        for (name, real), got in zip(expected, values):
+            if num(got) != real:
+                err.append(f"{doc}: {name} — {got}, а на самом деле {real}")
+
+
 def main():
     err = []
     try:
@@ -471,6 +518,7 @@ def main():
     check_literals(w, err)
     check_rules_tables(w, err)
     check_rules_diagram(w, err)
+    check_doc_numbers(w, o, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:
