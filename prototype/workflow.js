@@ -311,6 +311,7 @@ window.IM_WORKFLOW = {
       "stopsOnEnter": [
         "in_progress",
         "new",
+        "pending_acceptance",
         "closed"
       ],
       "pausable": false,

@@ -609,9 +609,11 @@ STATE_OWNERS = ("none", "transfer_target", "operator", "closed_by")
 
 
 def check_timer_declarations(w, err):
-    """Описание таймеров против эффектов переходов (RULE-51). Если таймер идёт в исходном состоянии,
-    а по описанию в новом он запускается, останавливается или встаёт на паузу — эффекты перехода
-    должны это делать. Исключение — переходы из continuesOn: таймер продолжается (§8.1)."""
+    """Описание таймеров против эффектов переходов, в обе стороны (RULE-51, DOC-25). Если таймер идёт
+    в исходном состоянии, а по описанию в новом он запускается, останавливается или встаёт на паузу —
+    эффекты перехода должны это делать; исключение — переходы из continuesOn: таймер продолжается
+    (§8.1). И наоборот: эффект, который при смене состояния запускает, останавливает или ставит на
+    паузу таймер, должен быть в описании. Переходы без смены состояния — нарушения — не в счёт."""
     timers = {t["id"]: t for t in w["timers"]}
     transitions = {t["id"] for t in w["transitions"]}
     start, stop, pause = {"startTimer", "restartTimer", "resumeTimer"}, {"stopTimer", "pauseTimer"}, {"pauseTimer"}
@@ -641,6 +643,12 @@ def check_timer_declarations(w, err):
                     err.append(f"таймер {tid}: по описанию останавливается при входе в {tr['to']}, а {tr['id']} из {src} его не останавливает (RULE-51)")
                 if tr["to"] in (timer.get("pausedInStates") or []) and not got & pause:
                     err.append(f"таймер {tid}: по описанию на паузе в {tr['to']}, а {tr['id']} из {src} его не ставит на паузу (RULE-51)")
+                if got & stop and tr["to"] not in (timer.get("stopsOnEnter") or []) + (timer.get("pausedInStates") or []):
+                    err.append(f"таймер {tid}: {tr['id']} из {src} останавливает его при входе в {tr['to']}, а в описании этого нет (DOC-25)")
+        # Запуск — в описании: вход в состояние из startsOnEnter
+        for tid in done:
+            if done[tid] & start and tid in timers and tr["to"] not in (timers[tid].get("startsOnEnter") or []):
+                err.append(f"таймер {tid}: {tr['id']} запускает его при входе в {tr['to']}, а в описании этого нет (DOC-25)")
 
 
 # Условия автоматических переходов как «переменная = значение» — для перебора настроек и карты

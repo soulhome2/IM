@@ -155,7 +155,7 @@
       "deadlineField": "hold_due_at",
       "meaning": "Сколько инцидент можно держать в on_hold по выбранной причине",
       "startsOnEnter": ["on_hold"],
-      "stopsOnEnter": ["in_progress", "new", "closed"],
+      "stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed"],
       "pausable": false,
       "secFrom": "reasonCatalogs.hold[].maxMinutes",
       "onExpire": "hold_overdue"
