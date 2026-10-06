@@ -93,5 +93,5 @@
 - [x] **RULE-45** Контракт: `enabled` и `onResolutionOverdue` — обязательные в `EscalationPolicy`, `escalation` — обязательный в `WorkflowDefinition`; `check_machine.py` проверяет, что заданы. Коммит: `d3b6bfd`
 - [x] **RULE-46** Машина: `"initial": true` у `new`; контракт — признак в `WorkflowState`; `check_machine.py` — ровно одно начальное состояние. Коммит: `52b4a84`
 - [x] **DOC-15** `invariants.readOnlyWhenNotReady` → `readOnlyByAgentState` с комментарием про `session.states[].readOnly`, или убрать. Коммит: `a830b2d`
-- [ ] **DOC-16** Типовой набор прав `shift_lead` / «Старший смены» → `senior` / «Старший оператор»; §14.7 правил — тот же пример. Коммит: —
+- [x] **DOC-16** Типовой набор прав `shift_lead` / «Старший смены» → `senior` / «Старший оператор»; §14.7 правил — тот же пример. Коммит: `373a28a`
 - [ ] **DOC-17** Сверить неиспользуемые записи реестра: нужные формам, кнопкам и редактору — пометить в `$comment`, лишние — убрать; `check_machine.py` — неиспользуемая запись без пометки. Коммит: —
