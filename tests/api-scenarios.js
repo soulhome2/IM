@@ -488,32 +488,6 @@
     assert.status(await noAdmin.call("GET", "/operator/admin/duty-groups"), 403, "PERMISSION_DENIED", "дежурные группы без права");
   });
 
-  test("Порядок автоматических переходов — по времени наступления (RULE-41): прыжок часов и прогон мелкими шагами дают одно и то же", async () => {
-    // Взял инцидент, связь пропала; эскалация по закрытию включена. Первой наступает потеря связи
-    // (5 минут), а не норматив закрытия — инцидент отложен, и закрытие уже не эскалируется
-    async function run(stepSec) {
-      const w = JSON.parse(JSON.stringify(W));
-      w.escalation.onResolutionOverdue = "escalate";
-      const api = (await standWith({ workflow: w })).api;
-      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
-      const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
-      assert.status(await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag }), 200, null, "взять");
-      await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: inc.guid });
-      const fired = [];
-      for (let left = 7200; left > 0; left -= stepSec) {
-        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
-      }
-      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
-      return { fired, end: [c.state, c.owner && c.owner.id, c.escalationLevel, c.breaches.map((b) => b.kind)] };
-    }
-    const steps = await run(37);
-    const jump = await run(7200);
-    assert.eq(steps.fired.slice(0, 2), ["system_hold_idle", "system_release_idle"], "сначала потеря связи, потом возврат в очередь");
-    assert.ok(!steps.fired.includes("resolution_escalate"), "отложенный по потере связи по закрытию не эскалируется");
-    assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
-    assert.eq(jump.end, steps.end, "и тот же итог");
-  });
-
   test("Стенд: изменения схемы и набора на один прогон (PROC-13) — JSON Merge Patch в POST /test/reset", async () => {
     const env = await makeEnv({ workflowPatch: { escalation: { enabled: false } }, fixturePatch: { people: { dutyGroups: [] } } });
     const patched = await env.ok("GET", "/operator/workflow/active");
@@ -522,29 +496,6 @@
     const plain = await makeEnv();
     assert.eq((await plain.ok("GET", "/operator/workflow/active")).escalation.enabled, W.escalation.enabled, "следующий сброс без изменений — исходная схема");
     assert.ok((await plain.ok("GET", "/operator/transfer-targets")).some((t) => t.kind === "duty_group"), "и исходный набор");
-  });
-
-  test("Догон: переход без таймера — сразу после того, который сделал его возможным (RULE-48)", async () => {
-    // Я вышел; первый уровень эскалации — на меня. Эскалация на меня делает возможным «адресат
-    // вышел» — он должен сработать сразу, раньше следующего уровня, при любом шаге часов
-    async function run(stepSec) {
-      const w = JSON.parse(JSON.stringify(W));
-      w.escalation.levels[0].targetRef = `user:${ME}`;
-      const api = (await standWith({ workflow: w })).api;
-      const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0);
-      assert.status(await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
-      const fired = [];
-      for (let left = 3600; left > 0; left -= stepSec) {
-        fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
-      }
-      const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
-      return { fired, end: [c.state, c.owner && c.owner.id, c.assignmentGroup && c.assignmentGroup.id, c.escalationLevel] };
-    }
-    const steps = await run(37);
-    const jump = await run(3600);
-    assert.eq(steps.fired.slice(0, 2), ["auto_escalate", "addressee_signed_out_to_group"], "эскалация на меня — и сразу моей группе");
-    assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
-    assert.eq(jump.end, steps.end, "и тот же итог");
   });
 
   test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {

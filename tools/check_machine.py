@@ -643,6 +643,139 @@ def check_timer_declarations(w, err):
                     err.append(f"таймер {tid}: по описанию на паузе в {tr['to']}, а {tr['id']} из {src} его не ставит на паузу (RULE-51)")
 
 
+# Условия автоматических переходов как «переменная = значение» — для перебора настроек и карты
+# пересечений (im-fsm). Новое условие у автоматического перехода нужно описать здесь
+def guard_terms(g):
+    fn, a = g["fn"], g.get("args", [])
+    return {
+        "timerExpired": lambda: ("timer", a[0]),
+        "settingEnabled": lambda: (a[0], True),
+        "settingIs": lambda: (a[0], a[1]),
+        "escalationTargetAvailable": lambda: ("адресат уровня есть", a[0]),
+        "agentStateIs": lambda: ("состояние оператора", a[0]),
+        "agentIdleFor": lambda: ("молчание " + a[0], True),
+        "ownerHasDutyGroup": lambda: ("у владельца есть дежурная группа", a[0]),
+        "addresseeHasAccess": lambda: ("у адресата есть доступ", a[0]),
+        "addresseeCanAccept": lambda: ("адресат может принять", a[0]),
+        "holdReasonIn": lambda: ("причина удержания в " + ",".join(a[0]), True),
+    }.get(fn, lambda: None)()
+
+
+def automatic(w):
+    return [t for t in w["transitions"] if t["trigger"] != "manual"]
+
+
+def fsm_terms(w, err):
+    """Переменные условий каждого автоматического перехода; неизвестное условие — ошибка."""
+    out = {}
+    for t in automatic(w):
+        terms = []
+        for g in t["guards"]:
+            term = guard_terms(g)
+            if term is None:
+                err.append(f"переход {t['id']}: условие {g['fn']} не описано для перебора — добавьте его в guard_terms (im-fsm)")
+            else:
+                terms.append(term)
+        out[t["id"]] = terms
+    return out
+
+
+def compatible(a, b):
+    """Могут ли условия двух переходов выполняться одновременно: нет переменной с разными значениями.
+    Доступа нет — значит и принять нельзя."""
+    va, vb = dict(a), dict(b)
+    for k in set(va) & set(vb):
+        if k != "timer" and va[k] != vb[k]:
+            return False
+    merged = {**va, **vb}
+    if merged.get("у адресата есть доступ") is False and merged.get("адресат может принять") is True:
+        return False
+    return True
+
+
+def setting_domain(path, values, o):
+    """Значения настройки: перечень из контракта, логическое — да и нет, иначе встреченные в машине."""
+    prop = path.split(".")[-1]
+    enum = next((s["properties"][prop].get("enum") for s in o["components"]["schemas"].values() if prop in s.get("properties", {}) and s["properties"][prop].get("enum")), None)
+    if enum:
+        return enum
+    if all(isinstance(v, bool) for v in values):
+        return [True, False]
+    return sorted(set(values), key=str)
+
+
+def check_settings_matrix(w, o, err, show=False):
+    """Перебор настроек (im-fsm, RULE-40, RULE-45): для каждого состояния и таймера — при любом
+    сочетании настроек и «адресат уровня есть / нет» срабатывает ровно один переход."""
+    import itertools
+    terms = fsm_terms(w, [])
+    rows = []
+    for state in [s["id"] for s in w["states"]]:
+        groups = {}
+        for t in automatic(w):
+            if state in t["from"]:
+                timer = dict(terms[t["id"]]).get("timer")
+                if timer:
+                    groups.setdefault(timer, []).append(t)
+        for timer, group in groups.items():
+            values = {}
+            for t in group:
+                for k, v in terms[t["id"]]:
+                    if k != "timer":
+                        values.setdefault(k, []).append(v)
+            names = sorted(values)
+            domains = [setting_domain(k, values[k], o) if "." in k else [True, False] for k in names]
+            for combo in itertools.product(*domains):
+                env = dict(zip(names, combo))
+                fired = [t["id"] for t in group if all(k == "timer" or env.get(k) == v for k, v in terms[t["id"]])]
+                rows.append((state, timer, env, fired))
+                if len(fired) != 1:
+                    err.append(f"перебор настроек: {state}, истёк {timer}, {env} — срабатывает {fired or 'ничего'}, нужен ровно один (im-fsm)")
+    if show:
+        print("\nПеребор настроек: состояние | таймер | сочетание | сработает")
+        for state, timer, env, fired in rows:
+            print(f"  {state} | {timer} | {env} | {', '.join(fired) or '—'}")
+
+
+def show_overlaps(w):
+    """Карта пересечений (im-fsm): пары автоматических переходов одного состояния, которые могут быть
+    готовы одновременно. Первым по §14.3 выполняется тот, чьё условие наступило раньше; при равенстве —
+    порядок в машине. Пары с разным итогом, где оба события наступают по времени, проверяют тесты «im-fsm:» (tests/api-fsm.js)."""
+    terms = fsm_terms(w, [])
+    order = {t["id"]: i for i, t in enumerate(w["transitions"])}
+    kind = lambda t: "таймер" if dict(terms[t["id"]]).get("timer") else "молчание" if any(k.startswith("молчание") for k, _ in terms[t["id"]]) else "сразу"
+    print("\nКарта пересечений: состояние | переход A (момент) | переход B (момент) | итог A / B | при равенстве первым")
+    for state in [s["id"] for s in w["states"]]:
+        auto = [t for t in automatic(w) if state in t["from"]]
+        for a, b in itertools_pairs(auto):
+            same_timer = dict(terms[a["id"]]).get("timer") and dict(terms[a["id"]]).get("timer") == dict(terms[b["id"]]).get("timer")
+            if same_timer or not compatible(terms[a["id"]], terms[b["id"]]):
+                continue
+            first = a if order[a["id"]] < order[b["id"]] else b
+            diff = "разный" if (a["to"] or state) != (b["to"] or state) else "одинаковый"
+            print(f"  {state} | {a['id']} ({kind(a)}) | {b['id']} ({kind(b)}) | {a['to'] or '—'} / {b['to'] or '—'} ({diff}) | {first['id']}")
+
+
+def itertools_pairs(items):
+    import itertools
+    return itertools.combinations(items, 2)
+
+
+def check_work_rights(w, err):
+    """В «В работе» — только по праву взятия или принятия; у типового набора прав с ними — выход
+    из карточки (§10.3, RULE-36, RULE-38)."""
+    enter = {"incident:claim", "incident:accept"}
+    for t in w["transitions"]:
+        if t["trigger"] == "manual" and t.get("to") == "in_progress":
+            rights = {g["args"][0] for g in t["guards"] if g["fn"] == "hasPermission"}
+            if not rights & enter:
+                err.append(f"переход {t['id']}: ведёт в «В работе» без права взятия или принятия (§10.3)")
+    exits = set(w["validation"]["claimWithoutExitPermission"]["requiresAnyOf"])
+    for s in w["validation"].get("typicalPermissionSets", {}).get("items", []):
+        if set(s["permissions"]) & enter and not set(s["permissions"]) & exits:
+            err.append(f"типовой набор {s['id']}: может взять или принять, но выйти из карточки нечем (§10.3)")
+
+
 def check_state_owners(w, err):
     """Владелец состояния — из перечня (DOC-23): ничей, адресат передачи, оператор, кто закрыл.
     Группа — только адресат передачи («Ожидает принятия»), у «Нового» её не бывает (§2.1, §8.1)."""
@@ -762,6 +895,11 @@ def main():
     check_graph(w, err)
     check_state_owners(w, err)
     check_timer_declarations(w, err)
+    fsm_terms(w, err)
+    check_settings_matrix(w, o, err, show="--fsm" in sys.argv)
+    check_work_rights(w, err)
+    if "--fsm" in sys.argv:
+        show_overlaps(w)
     check_registry_used(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
