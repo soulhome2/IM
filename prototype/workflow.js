@@ -41,9 +41,11 @@ window.IM_WORKFLOW = {
   "states": [
     {
       "id": "new",
+      "$comment": "§2.1, §3 (RULE-46). Начальное: инцидент появляется в этом состоянии — событие от основной системы.",
       "label": "Новое",
       "labelKey": "workflow.state.new",
       "category": "pending",
+      "initial": true,
       "terminal": false,
       "owner": "none_or_assignment_group",
       "activeTimer": "reaction"

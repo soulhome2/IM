@@ -459,6 +459,10 @@ def check_rules_diagram(w, err):
         text = f.read()
     block = text.split("```mermaid", 1)[1].split("```", 1)[0]
     drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", block, re.M))
+    initial = [s["id"] for s in w["states"] if s.get("initial")]
+    starts = re.findall(r"^\s*\[\*\] --> (\w+)", block, re.M)
+    if initial and starts != initial[:1]:
+        err.append(f"диаграмма §3 правил: начало [*] ведёт в {starts}, а начальное состояние машины — {initial[0]} (RULE-46)")
     for t in w["transitions"]:
         if not t.get("to"):
             continue
@@ -548,6 +552,34 @@ def setting_at(w, path):
     return cur
 
 
+def check_graph(w, err):
+    """Граф состояний (RULE-46): ровно одно начальное, оно не терминальное; каждое состояние
+    достижимо из него; у каждого нетерминального есть выход в другое состояние."""
+    states = {s["id"]: s for s in w["states"]}
+    initial = [s for s in states if states[s].get("initial")]
+    if len(initial) != 1:
+        err.append(f"граф: начальных состояний {len(initial)}, нужно ровно одно (initial: true)")
+        return
+    if states[initial[0]].get("terminal"):
+        err.append(f"граф: начальное состояние {initial[0]} — терминальное")
+    edges = {}
+    for t in w["transitions"]:
+        for src in t["from"]:
+            if t.get("to") and t["to"] != src:
+                edges.setdefault(src, set()).add(t["to"])
+    seen, stack = {initial[0]}, [initial[0]]
+    while stack:
+        for nxt in edges.get(stack.pop(), ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    for s in states:
+        if s not in seen:
+            err.append(f"граф: состояние {s} недостижимо из начального {initial[0]}")
+        if not states[s].get("terminal") and not edges.get(s):
+            err.append(f"граф: из нетерминального состояния {s} нет перехода в другое состояние — тупик")
+
+
 def check_escalation_settings(w, o, err):
     """Настройки, от которых зависит, сработает ли хоть один переход по истёкшему нормативу (RULE-45):
     без них нарушение пропадает молча."""
@@ -615,6 +647,7 @@ def main():
     check_rules_diagram(w, err)
     check_doc_numbers(w, o, err)
     check_fixture_journal(w, err)
+    check_graph(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
     check_fixture(w, err)

@@ -2265,6 +2265,10 @@
           "category": {
             "$ref": "#/components/schemas/StateCategory"
           },
+          "initial": {
+            "type": "boolean",
+            "description": "§2.1 (RULE-46). Начальное состояние: новый инцидент создаётся в нём. Ровно одно в схеме."
+          },
           "terminal": {
             "type": "boolean"
           },
