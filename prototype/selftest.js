@@ -753,9 +753,20 @@
     });
 
     await step("Выход из МИ: подтверждение, дальше только просмотр, вход (§12.1)", async () => {
+      // Группа сценария из двух в работе: подтверждение считает инциденты, а не единицы лимита (BUG-25)
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
+      const sameType = (e) => open.filter((x) => x.eventType.id === e.eventType.id);
+      const pair = sameType(open.find((e) => sameType(e).length > 1)).slice(0, 2);
+      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: pair.map((e) => e.guid) });
+      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
+      const mine = (await stand.get("/operator/incidents", { filter: "mine", pageSize: 1000 })).items.filter((e) => e.state === "in_progress").length;
       await setFilter("open");
       await click($("signOutBtn"));
+      await wait(200);
       expect(!$("modalDialog").hidden && /вернутся в очередь/.test($("dialogNote").textContent), "выход не спросил подтверждения");
+      expect(mine >= 2 && $("dialogNote").textContent.includes(`: ${mine},`), `в подтверждении не ${mine} в работе: «${$("dialogNote").textContent}»`);
       await confirmDialog();
       expect(!$("signedOutBanner").hidden, "плашка «Вы вышли» не появилась");
       expect($("dutyBadge").textContent === "Вышел", `в шапке «${$("dutyBadge").textContent}» вместо «Вышел»`);

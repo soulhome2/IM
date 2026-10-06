@@ -2244,17 +2244,18 @@
   }
 
   // Выход из МИ (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
-  // адресованные лично — дежурной группе или в очередь (owner_signed_out, target_signed_out_*)
-  const signOutForm = () => {
-    const u = (store.session && store.session.usage) || {};
+  // адресованные лично — дежурной группе или в очередь (owner_signed_out, target_signed_out_*).
+  // Считаются инциденты фильтра «Мои», а не единицы лимита: группа сценария — не один (BUG-25)
+  const signOutForm = (mine) => {
+    const count = (stateId) => mine.filter((e) => e.state === stateId).length;
     return {
       id: "__signout__",
       title: "Выйти из МИ",
       confirmLabel: "Выйти",
       style: "danger",
       note: t("В работе: {active}, отложено: {held} — они вернутся в очередь. Адресованные вам и не принятые уйдут вашей дежурной группе или в очередь.", {
-        active: u.activeCount || 0,
-        held: u.onHoldCount || 0,
+        active: count("in_progress"),
+        held: count("on_hold"),
       }),
       fields: [],
     };
@@ -2634,7 +2635,10 @@
     });
     $("signOutBtn").addEventListener("click", () => {
       closeMenus();
-      showForm({ id: "__signout__" }, signOutForm());
+      api
+        .get("/operator/incidents", { filter: "mine", pageSize: 1000 })
+        .then((page) => showForm({ id: "__signout__" }, signOutForm(page.items)))
+        .catch((err) => toast(problemText(err)));
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
     $("adminBtn").addEventListener("click", () => {

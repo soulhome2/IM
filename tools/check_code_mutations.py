@@ -92,6 +92,7 @@ MUTATIONS = [
     ("tick-without-after", "engine.js", "const moment = momentOf(ev, tr, last);", "const moment = momentOf(ev, tr, null);", "api"),
     ("alert-toast-silent", "app.js", 'toast(t("Алерт: {id} — {what}", { id, what: tr ? t(tr.label) : tid }));', "", "ui"),
     ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
+    ("signout-counts-units", "app.js", 'active: count("in_progress"),', "active: (store.session.usage || {}).activeCount || 0,", "ui"),
     ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"Адресат может принять — не подходит\"];", "return [\"Адресат может принять — не подходит\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
