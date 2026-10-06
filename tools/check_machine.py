@@ -530,6 +530,61 @@ def check_doc_numbers(w, o, err):
                 err.append(f"{doc}: {name} — {got}, а на самом деле {real}")
 
 
+_MISSING = object()
+
+
+def setting_at(w, path):
+    """Значение по пути настройки: ключи через точку, у списка — элемент по id."""
+    cur = w
+    for seg in path.split("."):
+        if isinstance(cur, list):
+            cur = next((x for x in cur if isinstance(x, dict) and x.get("id") == seg), _MISSING)
+        elif isinstance(cur, dict):
+            cur = cur.get(seg, _MISSING)
+        else:
+            return _MISSING
+        if cur is _MISSING:
+            return _MISSING
+    return cur
+
+
+def check_admin_settings(w, o, err):
+    """Перечень настроек администратора (RULE-44): пути существуют, запросы есть в контракте,
+    каждый ключ разделов-настроек — в перечне или в notSettings с причиной."""
+    a = w.get("adminSettings")
+    if not a:
+        err.append("настройки: нет раздела adminSettings (RULE-44)")
+        return
+    paths = []
+    for tab in a["tabs"]:
+        if "items" in tab:
+            for item in tab["items"]:
+                paths.append(item["path"])
+                if setting_at(w, item["path"]) is _MISSING:
+                    err.append(f"настройки, вкладка «{tab['label']}»: пути {item['path']} в машине нет")
+        elif tab.get("source"):
+            method, url = tab["source"].split(" ", 1)
+            if method.lower() not in o["paths"].get(url, {}):
+                err.append(f"настройки, вкладка «{tab['label']}»: запроса {tab['source']} нет в контракте")
+    skipped = [n["path"] for n in a.get("notSettings", [])]
+    for n in a.get("notSettings", []):
+        if setting_at(w, n["path"]) is _MISSING:
+            err.append(f"настройки: в notSettings пути {n['path']} в машине нет")
+        if not n.get("why"):
+            err.append(f"настройки: в notSettings у {n['path']} нет причины")
+    for section in a["sections"]:
+        value = w.get(section)
+        if isinstance(value, list) and not all(isinstance(x, dict) and "id" in x for x in value):
+            keys = [section]
+        elif isinstance(value, list):
+            keys = [f"{section}.{x['id']}" for x in value]
+        else:
+            keys = [f"{section}.{k}" for k in value if not k.startswith("$")]
+        for key in keys:
+            if not any(p == key or p.startswith(key + ".") or key.startswith(p + ".") for p in paths + skipped):
+                err.append(f"настройки: {key} — ни в перечне adminSettings, ни в notSettings")
+
+
 def main():
     err = []
     try:
@@ -546,6 +601,7 @@ def main():
     check_rules_diagram(w, err)
     check_doc_numbers(w, o, err)
     check_fixture_journal(w, err)
+    check_admin_settings(w, o, err)
     check_fixture(w, err)
     check_api(w, o, err)
     for e in err:

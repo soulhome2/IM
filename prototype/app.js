@@ -2177,6 +2177,7 @@
     $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться с перерыва" : "Уйти на перерыв");
     $("breakBtn").disabled = signedOut();
     $("signOutBtn").hidden = signedOut();
+    $("adminBtn").hidden = !can("incident:schema:admin");
   }
 
   // При переходе к другому инциденту показываем камеру, ближайшую к источнику события.
@@ -2631,6 +2632,16 @@
       showForm({ id: "__signout__" }, signOutForm());
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
+    $("adminBtn").addEventListener("click", () => {
+      closeMenus();
+      openAdmin();
+    });
+    $("adminTabs").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-admin-tab]");
+      if (!btn) return;
+      adminState.tab = btn.dataset.adminTab;
+      renderAdmin();
+    });
     $("hotkeysBtn").addEventListener("click", () => {
       closeMenus();
       $("modalHotkeys").hidden = false;
@@ -2799,6 +2810,110 @@
       .split("+")
       .map((part) => `<kbd>${escapeHtml(KEY_GLYPH[part] || part)}</kbd>`)
       .join("+");
+  /* ===== Настройки администратора (§20, RULE-44): только просмотр ===== */
+
+  // Вкладки и пути — из машины (adminSettings); данные МИ, которых нет в схеме, — запросами
+  // из контракта. Здесь только показ: что настраивается и какое значение сейчас
+  const adminState = { tab: null, data: {} };
+  const settingAt = (path) =>
+    path.split(".").reduce((cur, seg) => (cur == null ? cur : Array.isArray(cur) ? cur.find((x) => x && x.id === seg) : cur[seg]), WORKFLOW);
+  function fmtDuration(sec) {
+    if (sec == null) return "—";
+    if (sec >= 3600 && sec % 3600 === 0) return t("{n} ч", { n: sec / 3600 });
+    if (sec >= 60 && sec % 60 === 0) return t("{n} мин", { n: sec / 60 });
+    return t("{n} с", { n: sec });
+  }
+  function personName(id) {
+    if (store.session && id === store.session.operator.guid) return store.session.operator.name;
+    const group = (adminState.data.duty || []).find((g) => g.id === id);
+    const target = targetById(id);
+    return (group && group.name) || (target && target.name) || id;
+  }
+  function fmtSetting(v, key, seconds) {
+    const sec = seconds || /Sec$/.test(key);
+    if (v == null) return "—";
+    if (typeof v === "boolean") return te(v ? "да" : "нет");
+    if (typeof v === "number") return /Min(utes)?$/.test(key) ? fmtDuration(v * 60) : sec ? fmtDuration(v) : String(v);
+    if (typeof v === "string") return /^(user|group):/.test(v) ? asData(personName(v.split(":")[1])) : te(v);
+    if (Array.isArray(v)) {
+      if (!v.length) return te("нет");
+      return v
+        .map((x) => {
+          if (typeof x !== "object") return fmtSetting(x, key, sec);
+          if (x.key && x.label) return `${kbdHtml(x.key)} ${te(x.label)}`;
+          if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
+          if (x.sec != null) return `${escapeHtml(Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${k} = ${val}`).join(", "))}: ${fmtDuration(x.sec)}`;
+          const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
+          return te(x.label || x.id) + limit;
+        })
+        .join("<br>");
+    }
+    return Object.entries(v)
+      .filter(([k]) => !k.startsWith("$"))
+      .map(([k, val]) => `${escapeHtml(k)}: ${fmtSetting(val, k, sec)}`)
+      .join("<br>");
+  }
+  const sourcePath = (tab) => tab.source.split(" ")[1];
+  // Названия и имена — данные, они не переводятся (§14.9)
+  const asData = (text) => `<span data-i18n-skip>${escapeHtml(text)}</span>`;
+  async function openAdmin() {
+    adminState.data.duty = await api.get("/operator/admin/duty-groups").catch(() => []);
+    adminState.tab = adminState.tab || WORKFLOW.adminSettings.tabs[0].id;
+    $("modalAdmin").hidden = false;
+    await renderAdmin();
+  }
+  async function renderAdmin() {
+    const tabs = WORKFLOW.adminSettings.tabs;
+    const tab = tabs.find((x) => x.id === adminState.tab) || tabs[0];
+    $("adminTabs").innerHTML = tabs
+      .map((x) => `<button type="button" role="tab" data-admin-tab="${x.id}" class="${x.id === tab.id ? "active" : ""}" aria-selected="${x.id === tab.id}">${te(x.label)}</button>`)
+      .join("");
+    $("adminNote").textContent = `${t("Правила")}: ${tab.rules}` + (tab.what ? `. ${t(tab.what)}` : "");
+    const table = $("adminTable");
+    table.className = tab.items ? "doc-table settings" : "doc-table";
+    if (tab.items) {
+      table.innerHTML =
+        `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>` +
+        tab.items
+          .map((item) => `<tr><td>${te(item.label)}<span class="what">${te(item.what)}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."))}</td></tr>`)
+          .join("") +
+        "</tbody>";
+      return;
+    }
+    if (!tab.source) {
+      table.innerHTML = `<tbody><tr><td>${te("В прототипе запроса нет: эти данные МИ ещё не вынесены в контракт")}</td></tr></tbody>`;
+      return;
+    }
+    const data = await api.get(sourcePath(tab)).catch((err) => ({ error: problemText(err) }));
+    if (data.error) {
+      table.innerHTML = `<tbody><tr><td>${escapeHtml(data.error)}</td></tr></tbody>`;
+      return;
+    }
+    const names = (list) => asData(list.map((x) => x.name).join(", ") || "—");
+    const rows = {
+      "/operator/admin/access-groups": () => [
+        ["Группа доступа", "Роли", "Объекты"],
+        data.map((a) => `<tr><td>${asData(a.name)}</td><td>${asData(a.roles.join(", "))}</td><td>${names(a.sourceGroups.concat(a.devices))}</td></tr>`),
+      ],
+      "/operator/admin/duty-groups": () => [
+        ["Дежурная группа", "Роли", "Отдельно", "Состав сейчас"],
+        data.map((g) => `<tr><td>${asData(g.name)}</td><td>${asData(g.roles.join(", ") || "—")}</td><td>${asData(g.members.map(personName).join(", ") || "—")}</td><td>${asData(g.memberIds.map(personName).join(", ") || "—")}</td></tr>`),
+      ],
+      "/operator/reference/source-groups": () => {
+        const out = [];
+        const walk = (nodes, depth) =>
+          nodes.forEach((n) => {
+            out.push(`<tr><td style="padding-left:${10 + depth * 16}px">${asData(n.name)}</td><td>${n.devices.length}</td></tr>`);
+            walk(n.children || [], depth + 1);
+          });
+        walk(data, 0);
+        return [["Группа устройств", "Устройств"], out];
+      },
+    }[sourcePath(tab)];
+    const [head, body] = rows();
+    table.innerHTML = `<thead><tr>${head.map((h) => `<th>${te(h)}</th>`).join("")}</tr></thead><tbody>${body.join("")}</tbody>`;
+  }
+
   function renderHotkeysHelp() {
     const rows = [];
     WORKFLOW.hotkeys.forEach((h) => {

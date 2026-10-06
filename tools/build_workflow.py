@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Сборка prototype/workflow.js, openapi.js и fixture.js из Specification/State_machine/
-и таблицы переходов для человека Specification/State_machine/TRANSITIONS.md.
+таблицы переходов для человека Specification/State_machine/TRANSITIONS.md и перечня настроек
+администратора Specification/State_machine/SETTINGS.md.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
 Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
@@ -18,6 +19,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import settings_doc  # noqa: E402
 import transitions_doc  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,7 +47,9 @@ def outputs():
     for source, target, var, indent in TARGETS:
         yield f"prototype/{target}", build(source, var, indent), source
     with open(os.path.join(MACHINE, "workflow.v4.json"), encoding="utf-8") as f:
-        yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(json.load(f)), "workflow.v4.json"
+        w = json.load(f)
+    yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow.v4.json"
+    yield "Specification/State_machine/SETTINGS.md", settings_doc.render(w), "workflow.v4.json"
 
 
 def main():

@@ -72,9 +72,9 @@
       return { id: actor.id, kind: actorKind(actor), name: actor.name, role: actor.role };
     }
 
-    // Права демо-оператора: весь каталог машины, кроме настройки схемы. В продукте права
-    // приходят из внешней системы (§5), здесь — один набор на всех (§17)
-    const ALL_PERMISSIONS = W.permissions.map((p) => p.key).filter((key) => key !== "incident:schema:admin");
+    // Права демо-оператора: весь каталог машины, с настройкой схемы — чтобы был виден экран
+    // настроек администратора (§20). В продукте права приходят из внешней системы (§5)
+    const ALL_PERMISSIONS = W.permissions.map((p) => p.key);
     let PERMISSIONS = opts.permissions || ALL_PERMISSIONS;
     const can = (key) => PERMISSIONS.includes(key);
 
@@ -1092,6 +1092,33 @@
           let list = targets().filter((o) => !engine.isSelf(o.id));
           if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && hasAccess(o.id, ev) && canAccept(o.id, ev));
           return { status: 200, body: list.map(({ label, ...rest }) => rest) };
+        },
+      ],
+      // Настройки администратора — данные МИ, которых нет в схеме (§20, RULE-44): только чтение
+      [
+        "GET",
+        "/operator/admin/access-groups",
+        () => {
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          const named = (id, name) => ({ guid: id, name });
+          return {
+            status: 200,
+            body: ACCESS_GROUPS.map((a) => ({
+              id: a.id,
+              name: a.name,
+              roles: a.roles.slice(),
+              sourceGroups: (a.sourceGroups || []).map((g) => named(g, (findNode(TREE, g) || {}).name || g)),
+              devices: (a.devices || []).map((d) => named(d, deviceSpec(d).name)),
+            })),
+          };
+        },
+      ],
+      [
+        "GET",
+        "/operator/admin/duty-groups",
+        () => {
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          return { status: 200, body: GROUPS.map((g) => ({ id: g.id, name: g.name, roles: (g.roles || []).slice(), members: (g.members || []).slice(), memberIds: membersOf(g) })) };
         },
       ],
       [

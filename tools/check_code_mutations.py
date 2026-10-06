@@ -88,6 +88,7 @@ MUTATIONS = [
     ("alert-no-recipient-silent", "engine.js", "if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {}, now());", "", "api"),
     ("tick-array-order", "engine.js", "(next && next.moment <= moment) ||", "next ||", "api"),
     ("tick-effects-at-now", "engine.js", "          at = next.moment;\n          try {", "          at = null;\n          try {", "api"),
+    ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"Нет права настраивать схему\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
     ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"Адресат может принять — не подходит\"];", "return [\"Адресат может принять — не подходит\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),

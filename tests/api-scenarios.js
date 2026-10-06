@@ -433,6 +433,23 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("Настройки администратора: группы доступа и дежурные группы (§20, RULE-44) — как в наборе; без права incident:schema:admin — 403", async () => {
+    const env = await makeEnv();
+    const fx = window.IM_FIXTURE;
+    const access = await env.ok("GET", "/operator/admin/access-groups");
+    assert.eq(access.map((a) => [a.name, a.roles]), fx.accessGroups.map((a) => [a.name, a.roles]), "группы доступа и их роли — из набора");
+    const mall = access.find((a) => a.roles.includes("Оператор ТЦ"));
+    assert.eq(mall.sourceGroups.map((g) => g.name), ["Торговый центр"], "группы устройств — с именами");
+    const duty = await env.ok("GET", "/operator/admin/duty-groups");
+    assert.eq(duty.map((g) => g.id), fx.people.dutyGroups.map((g) => g.id), "дежурные группы — в порядке набора");
+    const leads = duty.find((g) => g.id === "grp-leads");
+    assert.ok(leads.memberIds.includes(ME) && leads.memberIds.includes("petrova"), `состав: я — отдельно, Петрова — по роли: ${leads.memberIds}`);
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    const noAdmin = await makeEnv({ permissions: all });
+    assert.status(await noAdmin.call("GET", "/operator/admin/access-groups"), 403, "PERMISSION_DENIED", "группы доступа без права");
+    assert.status(await noAdmin.call("GET", "/operator/admin/duty-groups"), 403, "PERMISSION_DENIED", "дежурные группы без права");
+  });
+
   test("Порядок автоматических переходов — по времени наступления (RULE-41): прыжок часов и прогон мелкими шагами дают одно и то же", async () => {
     if (IMTest.external) return "пропущено: настройку схемы меняет только встроенный сервер";
     // Взял инцидент, связь пропала; эскалация по закрытию включена. Первой наступает потеря связи

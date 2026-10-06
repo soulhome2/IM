@@ -65,6 +65,10 @@
       "description": "§8.1, §19. Справочники: адресаты передачи, причины, типы событий, дерево групп устройств, приоритеты."
     },
     {
+      "name": "admin",
+      "description": "§5, §8.1, §20 (RULE-44). Данные МИ, которые настраивает администратор (`incident:schema:admin`) и которых нет в схеме: группы доступа, дежурные группы. Здесь — чтение для экрана настроек; правка — вкладка администрирования бэкенда."
+    },
+    {
       "name": "stream",
       "description": "§9, §14.3. Поток серверных событий: автоэскалация, срабатывание таймеров, чужие действия."
     },
@@ -1542,6 +1546,68 @@
         }
       }
     },
+    "/operator/admin/access-groups": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAccessGroups",
+        "summary": "Группы доступа",
+        "description": "§5. Каким ролям какие группы устройств и отдельные устройства доступны. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`.",
+        "responses": {
+          "200": {
+            "description": "Группы доступа",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccessGroup"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/duty-groups": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listDutyGroups",
+        "summary": "Дежурные группы",
+        "description": "§8.1. Дежурные группы в порядке приоритета: название, роли, отдельные люди и вычисленный состав. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`.",
+        "responses": {
+          "200": {
+            "description": "Дежурные группы",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DutyGroup"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/stream": {
       "get": {
         "tags": [
@@ -2036,6 +2102,9 @@
           },
           "alerts": {
             "$ref": "#/components/schemas/AlertsPolicy"
+          },
+          "adminSettings": {
+            "$ref": "#/components/schemas/AdminSettings"
           },
           "limits": {
             "$ref": "#/components/schemas/WorkflowLimits"
@@ -2645,6 +2714,94 @@
           "args": {
             "type": "array",
             "items": {}
+          }
+        }
+      },
+      "AdminSettings": {
+        "type": "object",
+        "description": "§20 (RULE-44). Перечень настроек администратора по вкладкам: путь к значению в этой схеме или запрос, которым читаются данные МИ. По нему клиент рисует экран настроек, из него собирается SETTINGS.md.",
+        "required": [
+          "tabs"
+        ],
+        "properties": {
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Разделы схемы, в которых каждый ключ — настройка или явно не настройка"
+          },
+          "tabs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "rules": {
+                  "type": "string",
+                  "description": "Разделы правил"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "path",
+                      "label"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "Ключи через точку; у списка — элемент по id"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "what": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Запрос для данных МИ, например `GET /operator/admin/access-groups`; null — запроса пока нет"
+                },
+                "what": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "notSettings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "why"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -4411,6 +4568,113 @@
                 }
               }
             }
+          }
+        }
+      },
+      "AccessGroup": {
+        "type": "object",
+        "description": "§5. Группа доступа: роли основной системы и доступные им объекты. Оператору видны инциденты, устройство-источник которых доступно хотя бы одной его роли.",
+        "required": [
+          "id",
+          "name",
+          "roles",
+          "sourceGroups",
+          "devices"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Названия ролей основной системы"
+          },
+          "sourceGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "guid",
+                "name"
+              ],
+              "properties": {
+                "guid": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Группы устройств (§19) — со всеми вложенными"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "guid",
+                "name"
+              ],
+              "properties": {
+                "guid": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Отдельные устройства сверх групп"
+          }
+        }
+      },
+      "DutyGroup": {
+        "type": "object",
+        "description": "§8.1. Дежурная группа: участники — все, у кого есть одна из её ролей, плюс названные люди. Порядок в списке — приоритет: человек в нескольких группах относится к первой.",
+        "required": [
+          "id",
+          "name",
+          "roles",
+          "members",
+          "memberIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Видит оператор; не переводится (§14.9)"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Люди, названные отдельно, сверх ролей"
+          },
+          "memberIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Состав сейчас: по ролям и отдельным людям"
           }
         }
       },

@@ -229,6 +229,7 @@
     const skip = (el) =>
       el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts") ||
       (el.closest("#modalDialog") && $("modalDialog").hidden) ||
+      (el.closest("#adminTable, #adminTabs, #adminNote") && $("modalAdmin").hidden) ||
       (el.closest("#panelScenario") && mode() !== "work");
     const found = new Set();
     // Одна и та же строка для разных инцидентов и номеров считается один раз
@@ -262,6 +263,15 @@
       await click(view);
       findRussian().forEach((s) => leftovers.add(s));
       await click($("backToQueue"));
+    }
+    // Настройки администратора: каждая вкладка
+    if (!$("adminBtn").hidden) {
+      await click($("adminBtn"));
+      for (const tab of [...$("adminTabs").querySelectorAll("[data-admin-tab]")].map((b) => b.dataset.adminTab)) {
+        await click($("adminTabs").querySelector(`[data-admin-tab="${tab}"]`));
+        findRussian().forEach((s) => leftovers.add(s));
+      }
+      await click(document.querySelector('[data-close="modalAdmin"]'));
     }
     await setFilter("open");
     select.value = original;
@@ -725,6 +735,21 @@
       expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
       await click($("breakReturn"));
       expect($("breakBanner").hidden, "кнопка на плашке не вернула с перерыва");
+    });
+
+    await step("Настройки администратора: вкладки из машины, значения и данные МИ (§20)", async () => {
+      expect(!$("adminBtn").hidden, "пункта «Настройки администратора» нет в меню");
+      await click($("adminBtn"));
+      expect(!$("modalAdmin").hidden, "экран настроек не открылся");
+      const tabs = [...$("adminTabs").querySelectorAll("[data-admin-tab]")];
+      expect(tabs.length === window.IM_WORKFLOW.adminSettings.tabs.length, `вкладок ${tabs.length}, в машине ${window.IM_WORKFLOW.adminSettings.tabs.length}`);
+      await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
+      const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
+      expect(row && row.cells[1].textContent.trim() === String(window.IM_WORKFLOW.limits.maxActive), "лимит активных не показан или не совпадает с машиной");
+      await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
+      expect(/Дежурная группа старших/.test($("adminTable").textContent), "дежурных групп из запроса нет");
+      await click(document.querySelector('[data-close="modalAdmin"]'));
+      expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });
 
     await step("Выход из МИ: подтверждение, дальше только просмотр, вход (§12.1)", async () => {

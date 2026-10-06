@@ -97,6 +97,10 @@
               <span id="breakBtnLabel">Уйти на перерыв</span>
               <kbd>B</kbd>
             </button>
+            <button type="button" class="menu-item" id="adminBtn" role="menuitem" hidden>
+              <span class="material-symbols-outlined">tune</span>
+              <span>Настройки администратора</span>
+            </button>
             <button type="button" class="menu-item" id="signOutBtn" role="menuitem">
               <span class="material-symbols-outlined">logout</span>
               <span>Выйти</span>
@@ -313,6 +317,22 @@
       <p class="muted" id="hotkeysNote"></p>
       <div class="modal-actions">
         <button type="button" class="btn primary" data-close="modalHotkeys">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalAdmin" hidden>
+    <div class="modal-card wide admin-card" role="dialog" aria-modal="true" aria-labelledby="modalAdminTitle">
+      <h3 id="modalAdminTitle">Настройки администратора</h3>
+      <p class="muted">Только просмотр: что настраивает администратор с правом incident:schema:admin и какое значение сейчас. В продукте — вкладка администрирования бэкенда, правка там (§20).</p>
+      <!-- Вкладки и настройки — из машины (adminSettings), данные МИ — запросами из контракта; строит app.js -->
+      <div class="seg admin-tabs" id="adminTabs" role="tablist"></div>
+      <div class="admin-body">
+        <p class="muted admin-note" id="adminNote"></p>
+        <table class="doc-table" id="adminTable"></table>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" data-close="modalAdmin">Закрыть</button>
       </div>
     </div>
   </div>

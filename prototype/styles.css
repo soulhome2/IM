@@ -667,6 +667,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   scrollbar-color: var(--scroll) transparent;
 }
 .groups-scroll::-webkit-scrollbar,
+.admin-body::-webkit-scrollbar,
 .events-list::-webkit-scrollbar,
 .work-step::-webkit-scrollbar,
 .panel-b::-webkit-scrollbar {
@@ -674,6 +675,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   height: 12px;
 }
 .groups-scroll::-webkit-scrollbar-track,
+.admin-body::-webkit-scrollbar-track,
 .events-list::-webkit-scrollbar-track,
 .work-step::-webkit-scrollbar-track,
 .panel-b::-webkit-scrollbar-track {
@@ -681,6 +683,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 }
 /* Прозрачная рамка отодвигает ползунок от края, чтобы он не сливался со сплиттером */
 .groups-scroll::-webkit-scrollbar-thumb,
+.admin-body::-webkit-scrollbar-thumb,
 .events-list::-webkit-scrollbar-thumb,
 .work-step::-webkit-scrollbar-thumb,
 .panel-b::-webkit-scrollbar-thumb {
@@ -690,6 +693,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   border-radius: 10px;
 }
 .groups-scroll::-webkit-scrollbar-thumb:hover,
+.admin-body::-webkit-scrollbar-thumb:hover,
 .events-list::-webkit-scrollbar-thumb:hover,
 .work-step::-webkit-scrollbar-thumb:hover,
 .panel-b::-webkit-scrollbar-thumb:hover {
@@ -1582,6 +1586,29 @@ select.search-input { padding-right: 36px; }
 .keys td { padding: 8px 0; border-bottom: 1px solid var(--stroke); font-size: 14px; }
 .keys td:first-child { width: 92px; }
 .modal-card.wide { width: min(720px, calc(100% - 32px)); }
+/* Окно настроек — постоянного размера: заголовок, вкладки и кнопки на месте, прокручивается содержимое вкладки */
+.modal-card.admin-card {
+  height: min(640px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.admin-card > * { flex-shrink: 0; }
+.admin-tabs { flex-wrap: wrap; gap: 2px; margin-top: 12px; }
+.admin-card > .admin-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 4px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+}
+.admin-note { margin: 12px 0 0; }
+/* Колонки не прыгают от вкладки к вкладке */
+.admin-body .doc-table { table-layout: fixed; }
+.admin-body .doc-table.settings th:first-child { width: 58%; }
+.doc-table .what { display: block; margin-top: 2px; color: var(--faint); font-size: 12px; }
 
 .doc-table {
   width: 100%;

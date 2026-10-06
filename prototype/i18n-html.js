@@ -1,6 +1,8 @@
 // Переводы статичных текстов интерфейса и справочных окон.
 window.IM_DICT_HTML = {
   en: {
+    "Настройки администратора": "Administrator settings",
+    "Только просмотр: что настраивает администратор с правом incident:schema:admin и какое значение сейчас. В продукте — вкладка администрирования бэкенда, правка там (§20).": "View only: what an administrator with the incident:schema:admin right configures and the current value. In the product — the backend administration tab, editing is done there (§20).",
     "Оператор": "Operator",
     "Выйти": "Sign out",
     "События удерживаются в очереди диспетчера. Статус: перерыв. Новые инциденты вам не назначаются.": "Events are held in the dispatcher queue. Status: break. No new incidents are assigned to you.",
@@ -150,6 +152,8 @@ window.IM_DICT_HTML = {
     "Высокий — до <b>7 минут</b>, средний — до <b>15 минут</b>.": "High — up to <b>7 minutes</b>, medium — up to <b>15 minutes</b>.",
   },
   es: {
+    "Настройки администратора": "Ajustes del administrador",
+    "Только просмотр: что настраивает администратор с правом incident:schema:admin и какое значение сейчас. В продукте — вкладка администрирования бэкенда, правка там (§20).": "Solo lectura: qué configura un administrador con el permiso incident:schema:admin y su valor actual. En el producto — la pestaña de administración del backend, la edición se hace allí (§20).",
     "Оператор": "Operador",
     "Выйти": "Salir",
     "События удерживаются в очереди диспетчера. Статус: перерыв. Новые инциденты вам не назначаются.": "Los eventos se mantienen en la cola del despachador. Estado: pausa. No se le asignan incidentes nuevos.",
