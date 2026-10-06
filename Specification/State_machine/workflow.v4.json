@@ -913,6 +913,28 @@
         { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
       ],
       "ui": { "surface": [] }
+    },
+    {
+      "id": "addressee_cannot_accept",
+      "label": "Возвращён в очередь: адресат не может принять",
+      "$comment": "§5, §8.1 (RULE-39). Права адресата изменились: доступ к объекту есть, а права «Принимать» больше нет — у группы-адресата ни у одного участника нет того и другого. Инцидент ждал бы до истечения норматива реакции, поэтому возвращается в очередь, как при потере доступа. Касается только «Ожидает принятия»: в работе право принять уже не нужно. Без доступа срабатывает addressee_lost_access.",
+      "from": ["pending_acceptance"],
+      "to": "new",
+      "trigger": "system",
+      "actor": "system",
+      "guards": [
+        { "fn": "addresseeHasAccess", "args": [true] },
+        { "fn": "addresseeCanAccept", "args": [false] }
+      ],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: {previousOwnerName} не может принять"] },
+        { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
+        { "kind": "external", "fn": "notify", "args": ["shift_lead"] }
+      ],
+      "ui": { "surface": [] }
     }
   ],
 
@@ -1086,6 +1108,7 @@
       { "fn": "agentStateIs", "args": ["agentState"], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "agentIdleFor", "args": ["seconds"], "onFail": "disable", "extendsBaseRegistry": true },
       { "fn": "addresseeHasAccess", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§5. Есть ли у владельца или адресата инцидента доступ к его объекту: человеку — по ролям, группе-адресату — хотя бы у одного участника. Инцидент без адресата условию false не отвечает." },
+      { "fn": "addresseeCanAccept", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.1. Может ли владелец или адресат инцидента принять: право incident:accept и доступ к объекту; группе-адресату — хотя бы у одного участника и то, и другое. Инцидент без адресата условию false не отвечает." },
       { "fn": "ownerHasDutyGroup", "args": ["expected"], "onFail": "hide", "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — значение owner.dutyGroup в эффектах." },
       {
         "fn": "withinActiveLimit",

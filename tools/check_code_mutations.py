@@ -83,6 +83,7 @@ MUTATIONS = [
     ("target-access-ignored", "engine.js", "return !target || ctx.hasAccess(target, ev) ? null : [\"У адресата нет доступа к объекту инцидента\"];", "return null;", "api"),
     ("group-access-all-members", "server.js", "if (group) return membersOf(group).some((m) => hasAccess(m, ev));", "if (group) return membersOf(group).every((m) => hasAccess(m, ev));", "api"),
     ("level-cannot-accept-ignored", "engine.js", ".find((l) => !ctx.canAccept || ctx.canAccept(refToId(l.targetRef), ev)) || null;", ".find(() => true) || null;", "api"),
+    ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"Адресат может принять — не подходит\"];", "return [\"Адресат может принять — не подходит\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
     ("duty-group-last", "server.js", "dutyGroupOf: (userId) => (GROUPS.find((g) => membersOf(g).includes(userId)) || {}).id || null,", "dutyGroupOf: (userId) => ([...GROUPS].reverse().find((g) => membersOf(g).includes(userId)) || {}).id || null,", "api"),

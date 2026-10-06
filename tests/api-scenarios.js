@@ -433,6 +433,38 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("Адресат больше не может принять (§8.1, RULE-39): отняли право «Принимать» — не принятый инцидент в очереди; в работе — не трогается", async () => {
+    const env = await makeEnv();
+    const inc = (await env.all("open")).find((e) => e.state === "new");
+    assert.status(await env.act(inc.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "передать Петровой");
+    const working = await env.guidOf("INC-1846");
+    // «Наблюдатель» видит всё, но принимать не может
+    const res = await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Наблюдатель"] });
+    assert.status(res, 200, null, "сменить роли Петровой");
+    assert.ok(res.body.fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "addressee_cannot_accept"), "сработал возврат: адресат не может принять");
+    const c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner, c.assignmentGroup], ["new", null, null], "снова новый, ничей");
+    assert.ok(c.journal.some((j) => /не может принять/.test(j.templateKey)), "запись в журнале");
+    const w = await env.card(working);
+    assert.eq([w.state, w.owner && w.owner.id], ["in_progress", "petrova"], "INC-1846 у Петровой в работе — не трогается");
+    // Группе старших хватает меня: я в ней отдельным участником и могу принять
+    const forGroup = await env.card(await env.guidOf("INC-1836"));
+    assert.eq([forGroup.state, forGroup.assignmentGroup && forGroup.assignmentGroup.id], ["pending_acceptance", "grp-leads"], "INC-1836 остался группе");
+  });
+
+  test("Группа больше не может принять (§8.1, RULE-39): ни у одного участника нет и права, и доступа — инцидент в очереди", async () => {
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    // Я в группе старших отдельным участником, но без права «Принимать»; Петрова — по роли «Старший смены»
+    const env = await makeEnv({ permissions: all.filter((k) => k !== "incident:accept") });
+    const guid = await env.guidOf("INC-1836");
+    const before = await env.ok("PUT", "/test/operators/petrova/roles", { roles: ["Оператор", "Старший смены"] });
+    assert.ok(!before.fired.some((f) => f.incidentGuid === guid), "пока Петрова в группе — группа может принять");
+    const res = await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Оператор"] });
+    assert.ok(res.body.fired.some((f) => f.incidentGuid === guid && f.transitionId === "addressee_cannot_accept"), "в группе остался только я, без права «Принимать»");
+    const c = await env.card(guid);
+    assert.eq([c.state, c.owner, c.assignmentGroup], ["new", null, null], "снова новый, ничей, без группы");
+  });
+
   test("Переоткрыть: в работе у меня, результат очищен, нарушения сохранены; после срока — нельзя", async () => {
     const env = await makeEnv();
     const done = await env.find((e) => e.state === "closed");
