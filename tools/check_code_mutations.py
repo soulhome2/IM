@@ -94,6 +94,8 @@ MUTATIONS = [
     ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
     ("signout-counts-units", "app.js", 'active: count("in_progress"),', "active: (store.session.usage || {}).activeCount || 0,", "ui"),
     ("admin-values-raw", "app.js", "    if (values && typeof v === \"string\" && values[v]) return te(values[v]);\n", "", "ui"),
+    ("colleagues-not-ticked", "server.js", "const others = OPERATORS.filter((op) => op.id !== ME).flatMap((op) => colleagueTick(op.id));", "const others = [];", "api"),
+    ("colleague-always-ready", "server.js", "agentState: () => agentStateOf(id),", "agentState: () => \"ready\",", "api"),
     ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"Адресат может принять — не подходит\"];", "return [\"Адресат может принять — не подходит\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"Доступ адресата не подходит\"];", "return [\"Доступ адресата не подходит\"];", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),

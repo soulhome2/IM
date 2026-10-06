@@ -241,6 +241,20 @@
     assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "после входа — снова можно");
   });
 
+  test("Передача адресату, который уже вышел, — сразу его дежурной группе (§8.1, RULE-47)", async () => {
+    const env = await makeEnv();
+    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    // Кузнецов в наборе вышел, но передать ему можно: список это показывает, но не запрещает
+    const target = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "kuznetsov");
+    assert.eq([target && target.available], [false], "Кузнецов в списке, не на месте");
+    assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову");
+    const fired = await env.advance(1);
+    assert.ok(fired.some((f) => f.incidentGuid === mall.guid && f.transitionId === "target_signed_out_to_group"), "сработало «адресат вышел»");
+    const c = await env.card(mall.guid);
+    assert.eq([c.state, c.owner, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", null, "grp-tc"], "у его группы «Охрана ТЦ»");
+    assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(j.templateKey)), "запись в журнале");
+  });
+
   test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
     if (IMTest.external) return "пропущено: состав групп меняется только во встроенном сервере";
     // Свой набор данных: оператор стенда не состоит ни в одной группе
@@ -725,7 +739,9 @@
     const skip = await escalate(["user:kuznetsov", "user:noc"], (e) => !inMall(e));
     assert.eq([skip.fired, skip.card.owner && skip.card.owner.id, skip.card.escalationLevel], [["auto_escalate"], "noc", 2], "вне ТЦ: уровень 1 без доступа пропущен — сразу уровень 2");
     const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
-    assert.eq([keep.card.owner && keep.card.owner.id, keep.card.escalationLevel], ["kuznetsov", 1], "в ТЦ: уровень 1, Кузнецов");
+    // Кузнецов в наборе вышел: эскалация на него — и сразу его группе «Охрана ТЦ» (RULE-47)
+    assert.eq(keep.fired, ["auto_escalate", "target_signed_out_to_group"], "в ТЦ: уровень 1, Кузнецов — он вышел, сразу его группе");
+    assert.eq([keep.card.owner, keep.card.assignmentGroup && keep.card.assignmentGroup.id, keep.card.escalationLevel], [null, "grp-tc", 1], "у «Охраны ТЦ», уровень 1");
     const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
     assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и алерт");
     assert.eq([none.card.state, none.card.owner, none.card.escalationLevel], ["new", null, 0], "никому не передан");

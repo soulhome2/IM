@@ -1232,6 +1232,9 @@
       const myGroups = GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id);
       const wasMine = new Set(events.filter((e) => !isDone(e) && (e.owner === ME || myGroups.includes(e.assignmentGroup))).map((e) => e.id));
       const fired = engine.tick();
+      // Системные переходы каждого человека — по его состоянию, как на бэкенде, а не только в эмуляции
+      // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь
+      const others = OPERATORS.filter((op) => op.id !== ME).flatMap((op) => colleagueTick(op.id));
       fired.forEach(({ id, transition }) => {
         const ev = byId(id);
         touch([ev]);
@@ -1245,21 +1248,21 @@
           addressee: actorRef(engine.addressee(ev)),
         });
       });
-      return fired;
+      return fired.concat(others);
     }
 
     /* ===== Эмуляция коллег (§17): через те же переходы машины, от имени коллеги ===== */
 
-    // У каждого коллеги свой исполнитель: «я» — коллега, права — по ролям, на месте. Признак
-    // активности — свой: потерявший связь коллега перестаёт отвечать, и системные переходы
-    // машины (system_hold_idle, затем system_release_idle) срабатывают по её же условиям
+    // У каждого коллеги свой исполнитель: «я» — коллега, права — по ролям, состояние — из набора
+    // (RULE-47). Признак активности — свой: потерявший связь коллега перестаёт отвечать, и системные
+    // переходы машины (system_hold_idle, затем system_release_idle) срабатывают по её же условиям
     function colleague(id) {
       if (!colleagueEngines[id]) {
         colleagueEngines[id] = IMEngine.create(
           Object.assign({}, engineCtx, {
             me: id,
             can: (key) => permsOf(id).includes(key),
-            agentState: () => "ready",
+            agentState: () => agentStateOf(id),
             idleSec: () => (colleagueIdleSince[id] == null ? 0 : (now() - colleagueIdleSince[id]) / 1000),
           })
         );
@@ -1356,13 +1359,13 @@
     // Системные переходы оператора-коллеги (scope: incidents_owned_by_agent) — по его состоянию
     function colleagueTick(id) {
       const before = Object.fromEntries(events.map((e) => [e.id, e.owner]));
-      colleague(id)
-        .tick({ agentOnly: true })
-        .forEach(({ id: guid, transition }) => {
-          const ev = byId(guid);
-          touch([ev]);
-          emit("incident.state_changed", ev, "system", { transitionId: transition, previousOwner: actorRef(before[guid]) });
-        });
+      const fired = colleague(id).tick({ agentOnly: true });
+      fired.forEach(({ id: guid, transition }) => {
+        const ev = byId(guid);
+        touch([ev]);
+        emit("incident.state_changed", ev, "system", { transitionId: transition, previousOwner: actorRef(before[guid]) });
+      });
+      return fired;
     }
 
     function simulateColleagues() {
