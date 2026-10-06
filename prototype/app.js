@@ -2641,6 +2641,8 @@
         .catch((err) => toast(problemText(err)));
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
+    // Меню справки — по открытому инциденту: ссылки его площадки (§7)
+    $("helpBtn").addEventListener("click", () => renderHelpLinks());
     $("adminBtn").addEventListener("click", () => {
       closeMenus();
       openAdmin();
@@ -2665,6 +2667,12 @@
         trigger.setAttribute("aria-expanded", String(willOpen));
       });
       menu.addEventListener("click", (e) => {
+        const link = e.target.closest("[data-url]");
+        if (link) {
+          closeMenus();
+          window.open(link.dataset.url, "_blank", "noopener");
+          return;
+        }
         const item = e.target.closest("[data-doc]");
         if (!item) return;
         e.preventDefault();
@@ -2819,6 +2827,29 @@
       .split("+")
       .map((part) => `<kbd>${escapeHtml(KEY_GLYPH[part] || part)}</kbd>`)
       .join("+");
+  /* ===== Меню справки (§7, RULE-49): справочник ссылок — общие и площадки открытого инцидента ===== */
+
+  // Демо-адреса набора открывают окна прототипа; настоящие — новой вкладкой
+  const DEMO_DOCS = { regulation: "modalRegulation", contacts: "modalContacts", evacuation: "modalEvacuation", emergency: "modalEmergency" };
+  async function renderHelpLinks() {
+    const ev = selected();
+    const links = await api.get("/operator/reference/help-links", ev && ev.site ? { site: ev.site } : {}).catch(() => []);
+    const item = (l) => {
+      const hotkey = WORKFLOW.hotkeys.find((h) => h.action === `docs:${l.id}`);
+      const demo = /^demo:doc\/(.+)$/.exec(l.url);
+      const target = demo ? `data-doc="${DEMO_DOCS[demo[1]] || ""}"` : `data-url="${escapeHtml(l.url)}"`;
+      return `<button type="button" class="menu-item" role="menuitem" ${target}>
+        <span class="material-symbols-outlined">${escapeHtml(l.icon || (l.kind === "file" ? "description" : "public"))}</span>
+        <span data-i18n-skip>${escapeHtml(l.title)}</span>${hotkey ? kbdHtml(hotkey.key) : ""}
+      </button>`;
+    };
+    const common = links.filter((l) => !l.site);
+    const site = links.filter((l) => l.site);
+    $("helpLinks").innerHTML =
+      common.map(item).join("") +
+      (site.length ? `<div class="menu-sep"></div><div class="menu-label" data-i18n-skip>${escapeHtml(site[0].site)}</div>${site.map(item).join("")}` : "");
+  }
+
   /* ===== Настройки администратора (§20, RULE-44): только просмотр ===== */
 
   // Вкладки и пути — из машины (adminSettings); данные МИ, которых нет в схеме, — запросами
@@ -2910,6 +2941,14 @@
       "/operator/admin/duty-groups": () => [
         ["Дежурная группа", "Роли", "Отдельно", "Состав сейчас"],
         data.map((g) => `<tr><td>${asData(g.name)}</td><td>${asData(g.roles.join(", ") || "—")}</td><td>${asData(g.members.map(personName).join(", ") || "—")}</td><td>${asData(g.memberIds.map(personName).join(", ") || "—")}</td></tr>`),
+      ],
+      "/operator/reference/help-links": () => [
+        ["Ссылка", "Вид", "Площадка"],
+        data.map((l) => `<tr><td>${asData(l.title)}<span class="what">${escapeHtml(l.url)}</span></td><td>${te(l.kind === "file" ? "файл" : "веб-страница")}</td><td>${l.site ? asData(l.site) : te("общая")}</td></tr>`),
+      ],
+      "/operator/admin/camera-links": () => [
+        ["Устройство", "Камеры по порядку"],
+        data.map((l) => `<tr><td>${asData(l.device.name)}</td><td>${asData(l.cameras.map((c) => c.name).join(", ") || "—")}</td></tr>`),
       ],
       "/operator/reference/source-groups": () => {
         const out = [];
@@ -3084,6 +3123,7 @@
     await reload();
     applyLang(savedLang);
     api.subscribe(onServerEvent);
+    renderHelpLinks();
   }
 
   boot();

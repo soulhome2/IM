@@ -54,25 +54,8 @@
             <span class="material-symbols-outlined">help</span>
           </button>
           <div class="menu-pop" role="menu" hidden>
-            <button type="button" class="menu-item" role="menuitem" data-doc="modalRegulation">
-              <span class="material-symbols-outlined">description</span>
-              Регламент обработки инцидента
-              <kbd>F1</kbd>
-            </button>
-            <div class="menu-sep"></div>
-            <div class="menu-label">Контакты и схемы</div>
-            <button type="button" class="menu-item" role="menuitem" data-doc="modalContacts">
-              <span class="material-symbols-outlined">contact_phone</span>
-              Телефоны ответственных
-            </button>
-            <button type="button" class="menu-item" role="menuitem" data-doc="modalEvacuation">
-              <span class="material-symbols-outlined">map</span>
-              Схема эвакуации «Мега»
-            </button>
-            <button type="button" class="menu-item" role="menuitem" data-doc="modalEmergency">
-              <span class="material-symbols-outlined">local_police</span>
-              Контакты МЧС и полиции
-            </button>
+            <!-- Справочные ссылки — из справочника (GET /operator/reference/help-links): общие и площадки открытого инцидента; строит app.js -->
+            <div id="helpLinks"></div>
             <div class="menu-sep"></div>
             <button type="button" class="menu-item" id="hotkeysBtn" role="menuitem">
               <span class="material-symbols-outlined">keyboard</span>

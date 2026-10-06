@@ -737,6 +737,30 @@
       expect($("breakBanner").hidden, "кнопка на плашке не вернула с перерыва");
     });
 
+    await step("Меню справки: ссылки из справочника, ссылка площадки — только при её инциденте (§7, RULE-49)", async () => {
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      const rows = [...$("eventsList").querySelectorAll(".event")];
+      const mall = rows.find((r) => /Торговый центр/.test(r.textContent));
+      const other = rows.find((r) => !/Торговый центр/.test(r.textContent));
+      expect(mall && other, "в очереди нет инцидентов ТЦ и других площадок");
+      // Строку ищем заново: после щелчка очередь перерисовывается
+      const linksFor = async (row) => {
+        await click($("eventsList").querySelector(`.event[data-id="${row.dataset.id}"]`));
+        await click($("helpBtn"));
+        await wait(150);
+        const text = $("helpLinks").textContent;
+        document.body.click();
+        return text;
+      };
+      const evac = window.IM_FIXTURE.helpLinks.find((l) => l.site === "Торговый центр").title;
+      const common = window.IM_FIXTURE.helpLinks.find((l) => !l.site).title;
+      const atOther = await linksFor(other);
+      expect(atOther.includes(common) && !atOther.includes(evac), `не в ТЦ: «${atOther.trim()}»`);
+      const atMall = await linksFor(mall);
+      expect(atMall.includes(evac), `в ТЦ нет ссылки «${evac}»`);
+    });
+
     await step("Настройки администратора: вкладки из машины, значения и данные МИ (§20)", async () => {
       expect(!$("adminBtn").hidden, "пункта «Настройки администратора» нет в меню");
       await click($("adminBtn"));

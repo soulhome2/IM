@@ -1518,6 +1518,44 @@
         }
       }
     },
+    "/operator/reference/help-links": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "listHelpLinks",
+        "summary": "Справочные ссылки",
+        "description": "§7 (RULE-49). Меню справки: регламент, телефоны, схемы, контакты служб — файлы и веб-страницы. Справочник ведёт администратор схемы: общие ссылки и ссылки площадки. Без `site` — все ссылки (для вкладки администрирования), с `site` — общие и ссылки этой площадки: их показывает меню, когда открыт инцидент площадки. Право не нужно.",
+        "parameters": [
+          {
+            "name": "site",
+            "in": "query",
+            "description": "Площадка открытого инцидента — как поле `site` инцидента",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ссылки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HelpLink"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/operator/reference/priorities": {
       "get": {
         "tags": [
@@ -1594,6 +1632,37 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/DutyGroup"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/camera-links": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listCameraLinks",
+        "summary": "Связи камер",
+        "description": "§19.1 (RULE-49). Связи «устройство → камеры» с порядком показа: инцидент показывает камеры своего устройства-источника, первая — главная. Связь — свойство места: настраивается один раз на устройство. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`.",
+        "responses": {
+          "200": {
+            "description": "Связи камер",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CameraLink"
                   }
                 }
               }
@@ -4701,6 +4770,95 @@
               "type": "string"
             },
             "description": "Состав сейчас: по ролям и отдельным людям"
+          }
+        }
+      },
+      "CameraLink": {
+        "type": "object",
+        "description": "§19.1. Связь «устройство → камеры»: камеры по порядку показа, первая — главная.",
+        "required": [
+          "device",
+          "cameras"
+        ],
+        "properties": {
+          "device": {
+            "type": "object",
+            "required": [
+              "guid",
+              "name"
+            ],
+            "properties": {
+              "guid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "cameras": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "guid",
+                "name"
+              ],
+              "properties": {
+                "guid": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HelpLink": {
+        "type": "object",
+        "description": "§7. Справочная ссылка: файл или веб-страница. Название вводит администратор — не переводится (§14.9).",
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "url",
+          "site"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "web"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "Адрес файла или страницы. В эталонном наборе — `demo:doc/…`: прототип открывает своё окно"
+          },
+          "site": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Площадка — как поле `site` инцидента; null — общая ссылка"
+          },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Значок в меню — имя из Material Symbols"
           }
         }
       },

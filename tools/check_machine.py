@@ -218,6 +218,7 @@ def check_fixture(w, err):
         err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}
     devices = {d["id"] for d in fx["devices"]}
+    fx_devices = {d["id"]: d for d in fx["devices"]}
     # Сущности МИ и Axxon — UUID, как в контракте; люди и группы людей — строки внешней системы (§5)
     uuid = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -244,6 +245,21 @@ def check_fixture(w, err):
         for d in a.get("devices", []):
             if d not in devices:
                 err.append(f"эталон: группа доступа «{a.get('name')}» — нет устройства {d}")
+    # Связи камер (§19.1, RULE-49): устройство и камеры существуют, в связи — только камеры, у
+    # устройства связь одна; у инцидента своих камер нет — они из связи его источника
+    linked = [l["device"] for l in fx.get("cameraLinks", [])]
+    for link in fx.get("cameraLinks", []):
+        if link["device"] not in devices:
+            err.append(f"эталон: связь камер — нет устройства {link['device']}")
+        for cam in link["cameras"]:
+            if cam not in devices or fx_devices[cam].get("type") != "camera":
+                err.append(f"эталон: связь камер устройства {link['device']} — {cam} не камера набора")
+    for dev in set(linked):
+        if linked.count(dev) > 1:
+            err.append(f"эталон: у устройства {dev} несколько связей камер")
+    for inc in fx["incidents"]:
+        if "cameras" in inc:
+            err.append(f"эталон: {inc['number']} — камеры инцидента берутся из связей источника (cameraLinks), а не задаются у инцидента")
     # Каталог ролей (§5, §8.1): права — из каталога машины; роли людей, групп доступа и дежурных групп — из каталога
     perms = {p["key"] for p in w["permissions"]}
     roles = {r["name"] for r in fx.get("roles", [])}
@@ -315,7 +331,7 @@ def check_fixture(w, err):
             for key in inc["scenario"]["answers"]:
                 if key not in ids:
                     err.append(f"{where}: ответ на несуществующий шаг {key}")
-        for dev in inc["devices"] + inc["cameras"]:
+        for dev in inc["devices"]:
             if dev not in devices:
                 err.append(f"{where}: неизвестное устройство {dev}")
         if inc["owner"] is not None and inc["owner"] not in humans:

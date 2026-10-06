@@ -35,7 +35,7 @@
   const devicesOf = (g) => (g.devices || []).concat(...(g.groups || []).map(devicesOf));
   const devicesFor = (roles) =>
     new Set(FX.accessGroups.filter((a) => a.roles.some((x) => roles.includes(x))).flatMap((a) => a.sourceGroups.flatMap((id) => devicesOf(groupIndex[id])).concat(a.devices)));
-  const sourceOf = Object.fromEntries(FX.incidents.map((i) => [i.guid, i.devices[0] || i.cameras[0]]));
+  const sourceOf = Object.fromEntries(FX.incidents.map((i) => [i.guid, i.devices[0]]));
   function hasAccess(roles, id, guid) {
     const group = FX.people.dutyGroups.find((g) => g.id === id);
     if (!group) return devicesFor(roles.get(id) || []).has(sourceOf[guid]);

@@ -54,6 +54,10 @@
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
+    // Справочные ссылки меню справки (§7): общие и ссылки площадки — справочник администратора
+    let HELP_LINKS = [];
+    // Связи камер (§19.1): устройство → камеры по порядку показа. Камеры инцидента — связь его источника
+    let CAMERA_LINKS = [];
     // Роли и их права — как их отдаёт основная система (§5): по ним известны права всех людей
     let ROLE_RIGHTS = {};
     let rolesOverride = null;
@@ -294,6 +298,8 @@
       );
       PLANS = data.plans || [];
       ACCESS_GROUPS = data.accessGroups || [];
+      HELP_LINKS = data.helpLinks || [];
+      CAMERA_LINKS = data.cameraLinks || [];
       ROLE_RIGHTS = Object.fromEntries((data.roles || []).map((r) => [r.name, r.permissions]));
       const tree = (groups) =>
         groups.map((g) =>
@@ -317,7 +323,7 @@
         location: inc.location,
         occurredAt: abs(inc.occurredAt),
         deviceIds: inc.devices,
-        cameras: inc.cameras,
+        cameras: (CAMERA_LINKS.find((l) => l.device === inc.devices[0]) || { cameras: [] }).cameras.slice(),
         media: inc.media,
         state: inc.state,
         owner: inc.owner,
@@ -1146,6 +1152,15 @@
       ],
       [
         "GET",
+        "/operator/admin/camera-links",
+        () => {
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          const named = (id) => ({ guid: id, name: deviceSpec(id).name });
+          return { status: 200, body: CAMERA_LINKS.map((l) => ({ device: named(l.device), cameras: l.cameras.map(named) })) };
+        },
+      ],
+      [
+        "GET",
         "/operator/reference/reasons/{catalogId}",
         (p) => {
           const catalog = W.reasonCatalogs[p.catalogId];
@@ -1159,6 +1174,12 @@
         () => ({ status: 200, body: Object.entries(DEVICE_TYPES).map(([id, d]) => ({ id, label: d.label })) }),
       ],
       ["GET", "/operator/reference/source-groups", () => ({ status: 200, body: treeView(TREE) })],
+      // Без площадки — все ссылки; с площадкой — общие и этой площадки (§7)
+      [
+        "GET",
+        "/operator/reference/help-links",
+        (p, q) => ({ status: 200, body: HELP_LINKS.filter((l) => q.site == null || l.site == null || l.site === q.site).map((l) => Object.assign({ icon: null }, l)) }),
+      ],
       ["GET", "/operator/reference/priorities", () => ({ status: 200, body: ["critical", "high", "medium", "low"].map((id) => ({ id })) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 

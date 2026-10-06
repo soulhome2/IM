@@ -451,6 +451,26 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("Связи камер (§19.1, RULE-49): устройство → камеры по порядку, как в наборе; без права incident:schema:admin — 403", async () => {
+    const env = await makeEnv();
+    const links = await env.ok("GET", "/operator/admin/camera-links");
+    assert.eq(links.map((l) => [l.device.guid, l.cameras.map((c) => c.guid)]), window.IM_FIXTURE.cameraLinks.map((l) => [l.device, l.cameras]), "связи и порядок камер — из набора");
+    assert.ok(links.every((l) => l.device.name && l.cameras.every((c) => c.name)), "с именами устройств и камер");
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    assert.status(await (await makeEnv({ permissions: all })).call("GET", "/operator/admin/camera-links"), 403, "PERMISSION_DENIED", "без права");
+  });
+
+  test("Справочные ссылки (§7, RULE-49): без площадки — все, с площадкой — общие и этой площадки", async () => {
+    const env = await makeEnv();
+    const fx = window.IM_FIXTURE.helpLinks;
+    const all = await env.ok("GET", "/operator/reference/help-links");
+    assert.eq(all.map((l) => l.id), fx.map((l) => l.id), "без площадки — весь справочник");
+    const mall = await env.ok("GET", `/operator/reference/help-links?site=${enc("Торговый центр")}`);
+    assert.eq(mall.map((l) => l.id), fx.filter((l) => !l.site || l.site === "Торговый центр").map((l) => l.id), "в ТЦ — общие и ссылки ТЦ");
+    const office = await env.ok("GET", `/operator/reference/help-links?site=${enc("Главный офис")}`);
+    assert.ok(office.length && office.every((l) => l.site == null), "на другой площадке — только общие");
+  });
+
   test("Настройки администратора: группы доступа и дежурные группы (§20, RULE-44) — как в наборе; без права incident:schema:admin — 403", async () => {
     const env = await makeEnv();
     const fx = window.IM_FIXTURE;
@@ -991,14 +1011,16 @@
     const fx = window.IM_FIXTURE;
     const dev = Object.fromEntries(fx.devices.map((d) => [d.guid || d.id, d]));
     let markers = 0;
+    // Камеры инцидента — из связи его источника (§19.1, RULE-49), первая — главная
+    const camerasOf = (inc) => (fx.cameraLinks.find((l) => l.device === inc.devices[0]) || { cameras: [] }).cameras;
     for (const inc of fx.incidents) {
       const media = await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/media`);
-      const ids = [...new Set([...inc.devices, ...inc.cameras])];
-      const source = inc.devices[0] || inc.cameras[0];
+      const ids = [...new Set([...inc.devices, ...camerasOf(inc)])];
+      const source = inc.devices[0];
       assert.eq(
         media.cameras.map((c) => [c.guid, c.thumbnailUrl, c.isSource]),
-        inc.cameras.map((id) => [id, dev[id].thumbnailUrl || null, id === source]),
-        `${inc.number}: камеры`
+        camerasOf(inc).map((id) => [id, dev[id].thumbnailUrl || null, id === source]),
+        `${inc.number}: камеры из связи источника`
       );
       // План — там, где источник или первое устройство с положением, иначе план площадки
       const placed = [source, ...ids].map((id) => dev[id] && dev[id].position).find(Boolean);
@@ -1029,7 +1051,7 @@
     const allowed = new Set(
       fx.accessGroups.filter((a) => a.roles.includes(role)).flatMap((a) => a.sourceGroups.flatMap((id) => devicesOf(byId[id])).concat(a.devices))
     );
-    const sourceOf = (i) => i.devices[0] || i.cameras[0];
+    const sourceOf = (i) => i.devices[0];
     const seen = fx.incidents.filter((i) => allowed.has(sourceOf(i)));
     const hidden = fx.incidents.filter((i) => !allowed.has(sourceOf(i)));
     assert.ok(seen.length && hidden.length, "в наборе есть и доступные роли инциденты, и недоступные");
