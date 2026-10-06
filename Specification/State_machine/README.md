@@ -50,7 +50,7 @@
 
 | Код | Название | Категория | Владелец | Активный таймер |
 |---|---|---|---|---|
-| `new` | Новое | pending | нет либо дежурная группа | `reaction` |
+| `new` | Новое | pending | нет | `reaction` |
 | `pending_acceptance` | Ожидает принятия | pending | адресат передачи | `reaction` |
 | `in_progress` | В работе | active | оператор | `resolution` |
 | `on_hold` | Отложен | active | оператор | `resolution` приостановлен |

@@ -605,6 +605,17 @@ def check_registry_used(w, err):
                 err.append(f"реестр: {entry['fn']} нигде в машине не используется — убрать или использовать (DOC-17)")
 
 
+STATE_OWNERS = ("none", "transfer_target", "operator", "closed_by")
+
+
+def check_state_owners(w, err):
+    """Владелец состояния — из перечня (DOC-23): ничей, адресат передачи, оператор, кто закрыл.
+    Группа — только адресат передачи («Ожидает принятия»), у «Нового» её не бывает (§2.1, §8.1)."""
+    for s in w["states"]:
+        if s.get("owner") not in STATE_OWNERS:
+            err.append(f"состояние {s['id']}: owner «{s.get('owner')}» — одно из {', '.join(STATE_OWNERS)}")
+
+
 def check_graph(w, err):
     """Граф состояний (RULE-46): ровно одно начальное, оно не терминальное; каждое состояние
     достижимо из него; у каждого нетерминального есть выход в другое состояние."""
@@ -710,6 +721,7 @@ def main():
     check_doc_numbers(w, o, err)
     check_fixture_journal(w, err)
     check_graph(w, err)
+    check_state_owners(w, err)
     check_registry_used(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)

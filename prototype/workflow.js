@@ -47,7 +47,7 @@ window.IM_WORKFLOW = {
       "category": "pending",
       "initial": true,
       "terminal": false,
-      "owner": "none_or_assignment_group",
+      "owner": "none",
       "activeTimer": "reaction"
     },
     {
