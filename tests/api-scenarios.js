@@ -255,7 +255,7 @@
     assert.eq([target && target.available], [false], "Кузнецов в списке, не на месте");
     assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову");
     const fired = await env.advance(1);
-    assert.ok(fired.some((f) => f.incidentGuid === mall.guid && f.transitionId === "target_signed_out_to_group"), "сработало «адресат вышел»");
+    assert.ok(fired.some((f) => f.incidentGuid === mall.guid && f.transitionId === "addressee_signed_out_to_group"), "сработало «адресат вышел»");
     const c = await env.card(mall.guid);
     assert.eq([c.state, c.owner, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", null, "grp-tc"], "у его группы «Охрана ТЦ»");
     assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(j.templateKey)), "запись в журнале");
@@ -542,7 +542,7 @@
     }
     const steps = await run(37);
     const jump = await run(3600);
-    assert.eq(steps.fired.slice(0, 2), ["auto_escalate", "target_signed_out_to_group"], "эскалация на меня — и сразу моей группе");
+    assert.eq(steps.fired.slice(0, 2), ["auto_escalate", "addressee_signed_out_to_group"], "эскалация на меня — и сразу моей группе");
     assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
     assert.eq(jump.end, steps.end, "и тот же итог");
   });
@@ -762,7 +762,7 @@
     assert.eq([skip.fired, skip.card.owner && skip.card.owner.id, skip.card.escalationLevel], [["auto_escalate"], "noc", 2], "вне ТЦ: уровень 1 без доступа пропущен — сразу уровень 2");
     const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
     // Кузнецов в наборе вышел: эскалация на него — и сразу его группе «Охрана ТЦ» (RULE-47)
-    assert.eq(keep.fired, ["auto_escalate", "target_signed_out_to_group"], "в ТЦ: уровень 1, Кузнецов — он вышел, сразу его группе");
+    assert.eq(keep.fired, ["auto_escalate", "addressee_signed_out_to_group"], "в ТЦ: уровень 1, Кузнецов — он вышел, сразу его группе");
     assert.eq([keep.card.owner, keep.card.assignmentGroup && keep.card.assignmentGroup.id, keep.card.escalationLevel], [null, "grp-tc", 1], "у «Охраны ТЦ», уровень 1");
     const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
     assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и алерт");
