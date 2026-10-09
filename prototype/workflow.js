@@ -3531,7 +3531,7 @@ window.IM_WORKFLOW = {
       {
         "fn": "resumeTimer",
         "kind": "transactional",
-        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept и reopen используют один эффект."
+        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer."
       },
       {
         "fn": "increment",

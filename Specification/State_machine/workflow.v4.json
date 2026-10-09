@@ -1161,7 +1161,7 @@
       { "fn": "pauseTimer", "kind": "transactional" },
       { "fn": "restartTimer", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — путь к настройке длительности; не задана (null) — обычный норматив по §4. Переоткрытие запускает так норматив закрытия." },
       { "fn": "recordBreach", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
-      { "fn": "resumeTimer", "kind": "transactional", "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept и reopen используют один эффект." },
+      { "fn": "resumeTimer", "kind": "transactional", "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer." },
       { "fn": "increment", "kind": "transactional" },
       { "fn": "setFlag", "kind": "transactional" },
       { "fn": "appendLog", "kind": "transactional" },
