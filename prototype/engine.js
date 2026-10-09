@@ -424,9 +424,7 @@
       returnToQueue: () => {},
       evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
       setCursor: (ev) => ctx.setCursor(ev),
-      clearGroup: (ev) => {
-        ev.groupId = null;
-      },
+      clearGroup: (ev) => leaveGroup(ev),
       // Алерт (§9, RULE-43) — внешний эффект: уходит после того, как переход применён. Кому — решает
       // сервер (на месте и с доступом к объекту); никому — запись в журнал из машины
       notify: (ev, [who], s) => {
@@ -703,14 +701,20 @@
     // Почему исключить нельзя — для подсказки на кнопке
     const excludeBlock = (ev) => (ev && ev.groupId ? (firstFail(ev, W.grouping.excludeGuards) || {}).why || null : null);
 
+    // Выход из группы сценария (§11): признак снят, ответы — своя копия, дальше меняются отдельно
+    function leaveGroup(ev) {
+      if (!ev.groupId) return;
+      ev.groupId = null;
+      ctx.detachAnswers(ev);
+    }
+
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
     function excludeFromGroup(ev) {
       if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
       const fail = firstFail(ev, W.grouping.excludeGuards);
       if (fail) return { ok: false, why: fail.why, guard: fail.guard };
-      ev.groupId = null;
-      ctx.detachAnswers(ev);
+      leaveGroup(ev);
       ctx.log(ev, ME, "Исключён из групповой обработки");
       return { ok: true };
     }

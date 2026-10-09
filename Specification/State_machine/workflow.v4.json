@@ -1161,7 +1161,7 @@
       { "fn": "returnToQueue", "kind": "transactional" },
       { "fn": "evictOpenCard", "kind": "transactional", "$comment": "§9, §14.8. Открытая у человека карточка переходит в режим просмотра с уведомлением (incident.card_evicted в потоке); карточка не закрывается." },
       { "fn": "setCursor", "kind": "transactional", "extendsBaseRegistry": true },
-      { "fn": "clearGroup", "kind": "transactional", "extendsBaseRegistry": true },
+      { "fn": "clearGroup", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11 (BUG-27). Инцидент выходит из группы сценария: group_id снимается, ответы сценария остаются у него своей копией и дальше меняются отдельно от группы." },
       { "fn": "notify", "kind": "external" },
       { "fn": "externalCommand", "kind": "external" }
     ]

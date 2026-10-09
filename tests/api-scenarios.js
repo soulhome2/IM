@@ -834,6 +834,17 @@
     assert.status(await env.call("DELETE", `/operator/incident-groups/${enc(group.guid)}/members/${enc(fires[0].guid)}`), 403, "LIMIT_EXCEEDED");
   });
 
+  test("Выход из группы — своя копия ответов: «Вернуть в очередь» один, ответ во втором его не меняет (BUG-27)", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: fires.map((e) => e.guid) }), 201);
+    assert.status(await env.act(fires[0].guid, "release", { comment: "не моё" }), 200, null, "вернуть один");
+    assert.status(await env.answer(fires[1].guid, { visual: true }), 200, null, "ответ во втором");
+    const back = await env.card(fires[0].guid);
+    assert.eq(back.groupGuid, null, "вернувшийся — не в группе");
+    assert.ok(!back.scenario.answers.visual, "ответ второго у вернувшегося не появился");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

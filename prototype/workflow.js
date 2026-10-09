@@ -3520,7 +3520,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "clearGroup",
         "kind": "transactional",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (BUG-27). Инцидент выходит из группы сценария: group_id снимается, ответы сценария остаются у него своей копией и дальше меняются отдельно от группы."
       },
       {
         "fn": "notify",
