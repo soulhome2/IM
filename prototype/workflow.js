@@ -1698,6 +1698,13 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "Переоткрыт после закрытия ({closeResultLabel}): {comment}"
+          ]
+        },
+        {
+          "kind": "transactional",
           "fn": "setFlag",
           "args": [
             "close_result",
@@ -1723,13 +1730,6 @@ window.IM_WORKFLOW = {
         {
           "kind": "transactional",
           "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
-          "fn": "appendLog",
-          "args": [
-            "Переоткрыт после закрытия ({closeResultLabel}): {comment}"
-          ]
         }
       ],
       "bulk": {

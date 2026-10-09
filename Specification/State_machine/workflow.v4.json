@@ -630,11 +630,11 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
         { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
-        { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] }
+        { "kind": "transactional", "fn": "clearGroup" }
       ],
       "bulk": { "allowed": false },
       "ui": { "surface": ["queue", "card"], "style": "outline", "hotkey": null, "navigate": "card" }

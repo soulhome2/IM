@@ -167,6 +167,11 @@
           const card = res.body.incident;
           const before = journals.get(card.guid) || 0;
           if (card.journal.length <= before) fail(step, `переход «${action.id}» не записан в журнал ${card.guid}`);
+          // В новой записи журнала нет пустых подстановок, кроме комментария (RULE-54)
+          card.journal.slice(before).forEach((j) => {
+            const empty = (j.templateKey.match(/\{(\w+)\}/g) || []).map((m) => m.slice(1, -1)).filter((k) => k !== "comment" && (j.vars[k] == null || j.vars[k] === ""));
+            if (empty.length) fail(step, `«${action.id}»: в записи «${j.templateKey}» пусто: ${empty.join(", ")}`);
+          });
           journals.set(card.guid, card.journal.length);
         }
       }

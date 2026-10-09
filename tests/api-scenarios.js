@@ -285,6 +285,8 @@
     assert.status(again, 200);
     assert.eq(again.body.incident.owner.id, ME, "в работе у меня");
     assert.eq(again.body.incident.assignmentGroup, null, "и не у группы");
+    const entry = again.body.incident.journal[again.body.incident.journal.length - 1];
+    assert.ok(entry.vars.closeResultLabel, `в записи о переоткрытии — прежний результат: ${entry.text}`);
   });
 
   test("Отклонить: инцидент снова новый, ничей, уровень эскалации сохранён", async () => {
