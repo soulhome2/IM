@@ -373,6 +373,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Передача принята, прогресс сценария сохранён"] }
       ],
       "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
@@ -452,6 +453,7 @@
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Обработка возобновлена на шаге {stepNumber}"] }
       ],
       "bulk": { "allowed": false },
@@ -552,6 +554,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Перехват у {previousOwnerName}. Прогресс сценария сохранён ({filledSteps}/{totalSteps})"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] }

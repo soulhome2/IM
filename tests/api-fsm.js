@@ -118,17 +118,24 @@
       },
     },
   };
+  // Курсор сценария (§14.5, RULE-53): шаг 1 заполнен, курсор возвращён на него — после входа в работу
+  // он на первом незаполненном
+  const cursorOf = async (env, guid) => (await env.call("GET", `/operator/incidents/${enc(guid)}/scenario`)).body.cursorStepId;
   Object.entries(REENTRY).forEach(([id, c]) => {
-    test(`im-fsm: повторный вход в работу не даёт нового срока: ${c.name}`, async () => {
+    test(`im-fsm: повторный вход в работу не даёт нового срока, курсор — на первый незаполненный шаг: ${c.name}`, async () => {
       const env = await standWith({ workflow: c.workflow || W });
       const inc = await newFire(env);
       const claimed = await env.act(inc.guid, "claim", {}, "queue");
+      const [first, second] = (await env.call("GET", `/operator/incidents/${enc(inc.guid)}/scenario`)).body.steps.map((s) => s.id);
+      assert.status(await env.answer(inc.guid, { [first]: true }), 200, null, "ответ на шаг 1");
+      assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: first }), 200, null, "курсор на шаг 1");
       const expired = firedFor(await env.advance(untilDue(env, claimed.body.incident)), inc.guid);
       assert.ok(expired.some((t) => t.startsWith("resolution_")), `норматив закрытия истёк: ${expired}`);
       await c.run(env, inc.guid);
       const again = firedFor(await env.advance(5), inc.guid);
       assert.eq(again, [], `после «${id}» ничего не сработало`);
       assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия одно");
+      assert.eq(await cursorOf(env, inc.guid), second, `после «${id}» курсор на первом незаполненном шаге`);
     });
   });
 

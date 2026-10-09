@@ -866,6 +866,13 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "setCursor",
+          "args": [
+            "firstOpenStep"
+          ]
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "Передача принята, прогресс сценария сохранён"
@@ -1097,6 +1104,13 @@ window.IM_WORKFLOW = {
           "fn": "resumeTimer",
           "args": [
             "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setCursor",
+          "args": [
+            "firstOpenStep"
           ]
         },
         {
@@ -1441,6 +1455,13 @@ window.IM_WORKFLOW = {
           "fn": "resumeTimer",
           "args": [
             "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setCursor",
+          "args": [
+            "firstOpenStep"
           ]
         },
         {
