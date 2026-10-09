@@ -796,6 +796,31 @@ def check_state_owners(w, err):
             err.append(f"состояние {s['id']}: activeTimer «{s['activeTimer']}» — не таймер машины ({', '.join(sorted(timers))})")
 
 
+def check_grouping(w, err):
+    """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
+    Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
+    ручной переход со сменой владельца, который не идёт на группу (кроме создающего группу и перехода
+    в терминальное). Лишний clearGroup: в остальных переходах — группа уходит вместе, а кто отстал,
+    выходит по owner_diverges."""
+    if "owner_diverges" not in w["grouping"].get("memberLeavesGroupOn", []):
+        return
+    states = {s["id"]: s for s in w["states"]}
+    for t in w["transitions"]:
+        fns = [e["fn"] for e in t["effects"]]
+        bulk = t.get("bulk") or {}
+        clears = "clearGroup" in fns
+        to = states.get(t.get("to")) or {}
+        ownerless = to.get("owner") == "none"
+        manual_alone = t["trigger"] == "manual" and "setOwner" in fns and not bulk.get("allowed")
+        exempt = bulk.get("createsGroup") or to.get("terminal")
+        if ownerless and not clears:
+            err.append(f"группа: {t['id']} ведёт в {t['to']} без владельца, но не выводит из группы (clearGroup, §11)")
+        elif manual_alone and not exempt and not clears:
+            err.append(f"группа: {t['id']} меняет владельца одного инцидента — нужен режим группы (bulk) или clearGroup (RULE-52)")
+        elif clears and not ownerless and not manual_alone:
+            err.append(f"группа: {t['id']} с clearGroup, а группа должна уходить вместе — лишний clearGroup (RULE-52, owner_diverges)")
+
+
 def check_graph(w, err):
     """Граф состояний (RULE-46): ровно одно начальное, оно не терминальное; каждое состояние
     достижимо из него; у каждого нетерминального есть выход в другое состояние."""
@@ -902,6 +927,7 @@ def main():
     check_fixture_journal(w, err)
     check_graph(w, err)
     check_state_owners(w, err)
+    check_grouping(w, err)
     check_timer_declarations(w, err)
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)

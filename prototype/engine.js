@@ -708,6 +708,30 @@
       ctx.detachAnswers(ev);
     }
 
+    // Группа следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges):
+    // после операции целиком члены, разошедшиеся с самой большой частью группы по владельцу или
+    // адресату, выходят со своей копией ответов; группа из одного снимается. При равенстве частей
+    // остаётся та, где первый член. Возвращает вышедших
+    function settleGroups() {
+      if (!W.grouping.memberLeavesGroupOn.includes("owner_diverges")) return [];
+      const groups = new Map();
+      ctx.events().filter((e) => e.groupId).forEach((e) => groups.set(e.groupId, (groups.get(e.groupId) || []).concat(e)));
+      const left = [];
+      groups.forEach((members) => {
+        const parts = new Map();
+        members.forEach((e) => {
+          const key = `${e.owner || ""}|${e.assignmentGroup || ""}`;
+          parts.set(key, (parts.get(key) || []).concat(e));
+        });
+        const keep = [...parts.values()].reduce((a, b) => (b.length > a.length ? b : a));
+        members.filter((e) => keep.length < 2 || !keep.includes(e)).forEach((e) => {
+          leaveGroup(e);
+          left.push(e);
+        });
+      });
+      return left;
+    }
+
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
     function excludeFromGroup(ev) {
@@ -750,6 +774,7 @@
       closeResultLabel,
       createGroup,
       excludeFromGroup,
+      settleGroups,
       canExcludeFromGroup,
       excludeBlock,
       units,

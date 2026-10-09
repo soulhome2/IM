@@ -556,6 +556,7 @@
         guid: ev.groupId,
         createdAt: iso(ev.groupCreatedAt || now()),
         owner: actorRef(ev.owner),
+        assignmentGroup: actorRef(ev.assignmentGroup),
         eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
         members: mates.map((m) => summary(m, "card")),
         sharedAnswers: JSON.parse(JSON.stringify(ev.answers)),
@@ -817,6 +818,15 @@
       return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
     }
 
+    // Группа следует за владельцем (RULE-52): после операции целиком — запроса или такта планировщика —
+    // разошедшиеся с группой выходят из неё; об этом — событие потока, как при ручном исключении
+    function settleGroups() {
+      engine.settleGroups().forEach((ev) => {
+        touch([ev]);
+        emit("incident.group_changed", ev, "dispatcher", { groupGuid: null });
+      });
+    }
+
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
       if (!tr) return problem(404, "NOT_FOUND", ["Неизвестное действие"]);
@@ -946,13 +956,17 @@
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["Инцидент не найден"]).body }));
           let navigate = null;
+          const done = [];
           list.forEach((ev) => {
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
             if (r.status === 200) {
-              succeeded.push(summary(ev, "queue"));
+              done.push(ev);
               navigate = r.body.navigate || navigate;
             } else failed.push({ incidentGuid: ev.id, problem: r.body });
           });
+          // Группа проверяется после всей выборки, а не после каждого члена (RULE-52)
+          settleGroups();
+          done.forEach((ev) => succeeded.push(summary(ev, "queue")));
           return { status: 200, body: { succeeded, failed, navigate } };
         },
       ],
@@ -984,7 +998,11 @@
             return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
           }
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
-          if (res.status === 200) res.headers = { ETag: etag(ev) };
+          if (res.status === 200) {
+            settleGroups();
+            res.body.incident = card(ev);
+            res.headers = { ETag: etag(ev) };
+          }
           return res;
         },
       ],
@@ -1020,6 +1038,7 @@
           if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
           touch([ev]);
           emit("incident.group_changed", ev, ME, { groupGuid: null });
+          settleGroups();
           return { status: 200, body: card(ev) };
         },
       ],
@@ -1294,6 +1313,7 @@
           addressee: actorRef(engine.addressee(ev)),
         });
       });
+      settleGroups();
       return fired.concat(others);
     }
 
@@ -1443,6 +1463,7 @@
       const fired = runScheduler();
       Object.keys(colleagueIdleSince).forEach(colleagueTick);
       if (!fired.length) simulateColleagues();
+      settleGroups();
     }
 
     if (opts.autoTick !== false) setInterval(second, 1000);

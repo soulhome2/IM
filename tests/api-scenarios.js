@@ -845,6 +845,31 @@
     assert.ok(!back.scenario.answers.visual, "ответ второго у вернувшегося не появился");
   });
 
+  test("Группа следует за владельцем: передана и эскалирована целиком; «Принять» одного из очереди — он выходит, двое остаются группой; «Принять» из карточки — оба у меня одной группой (RULE-52)", async () => {
+    const W = window.IM_WORKFLOW;
+    const escalation = Object.assign({}, W.escalation, { levels: W.escalation.levels.map((l) => Object.assign({}, l, { targetRef: "group:grp-leads" })) });
+    const env = await makeEnv({ workflowPatch: { escalation } });
+    const news = (await env.all("open")).filter((e) => e.state === "new");
+    const type = news.find((e) => news.filter((x) => x.eventType.id === e.eventType.id).length >= 3).eventType.id;
+    const three = news.filter((e) => e.eventType.id === type).slice(0, 3).map((e) => e.guid);
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: three }), 201);
+    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: three, formValues: { targetId: "sidorov", comment: "тест" }, surface: "card" });
+    assert.eq(sent.succeeded.length, 3, "группа передана");
+    const leads = async () => (await Promise.all(three.map((g) => env.card(g)))).every((c) => c.assignmentGroup && c.assignmentGroup.id === "grp-leads");
+    for (let i = 0; i < 30 && !(await leads()); i++) await env.advance(120);
+    const before = await Promise.all(three.map((g) => env.card(g)));
+    assert.ok(before.every((c) => c.groupGuid && c.groupGuid === before[0].groupGuid && c.groupSize === 3), "эскалация увела группу целиком");
+    assert.status(await env.act(three[0], "accept", {}, "queue"), 200, null, "принять одного из очереди");
+    const [one, ...rest] = await Promise.all(three.map((g) => env.card(g)));
+    assert.eq([one.state, one.groupGuid], ["in_progress", null], "принятый отдельно — вне группы");
+    assert.ok(rest.every((c) => c.groupGuid === before[0].groupGuid && c.groupSize === 2 && c.state === "pending_acceptance"), "двое остались группой");
+    assert.status(await env.act(three[0], "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть первого, чтобы был лимит");
+    const both = await env.ok("POST", "/operator/incidents/transitions/accept/bulk", { incidentGuids: three.slice(1), formValues: {}, surface: "card" });
+    assert.eq(both.succeeded.length, 2, "приняты оба");
+    const after = await Promise.all(three.slice(1).map((g) => env.card(g)));
+    assert.ok(after.every((c) => c.state === "in_progress" && c.groupGuid === before[0].groupGuid && c.groupSize === 2), "оба у меня одной группой");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

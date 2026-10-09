@@ -873,7 +873,9 @@ window.IM_WORKFLOW = {
         }
       ],
       "bulk": {
-        "allowed": false
+        "allowed": true,
+        "mode": "group",
+        "minItems": 2
       },
       "ui": {
         "surface": [
@@ -936,6 +938,10 @@ window.IM_WORKFLOW = {
           "args": [
             "reaction"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
         },
         {
           "kind": "transactional",
@@ -1460,7 +1466,9 @@ window.IM_WORKFLOW = {
         }
       ],
       "bulk": {
-        "allowed": false
+        "allowed": true,
+        "mode": "group",
+        "minItems": 2
       },
       "ui": {
         "surface": [
@@ -1690,6 +1698,10 @@ window.IM_WORKFLOW = {
             "resolution",
             "limits.reopenResolutionSec"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
         },
         {
           "kind": "transactional",
@@ -2066,10 +2078,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})"
@@ -2383,6 +2391,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "clearGroup"
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "Возвращён в очередь: оператор не отвечает"
@@ -2484,6 +2496,10 @@ window.IM_WORKFLOW = {
           "args": [
             null
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearGroup"
         },
         {
           "kind": "transactional",
@@ -2711,6 +2727,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "clearGroup"
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "Возвращён в очередь: {previousOwnerName} не может принять"
@@ -2910,7 +2930,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "grouping": {
-    "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся.",
+    "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся. memberLeavesGroupOn: owner_diverges — после операции целиком (действие на группу, такт планировщика) члены с другим владельцем или адресатом, чем у самой большой части группы, выходят со своей копией ответов; группа из одного снимается. Переходы в очередь выводят из группы эффектом clearGroup (RULE-52).",
     "enabled": true,
     "permissions": [
       "incident:bulk",
@@ -2935,7 +2955,8 @@ window.IM_WORKFLOW = {
       "journal"
     ],
     "memberLeavesGroupOn": [
-      "manual_exclude"
+      "manual_exclude",
+      "owner_diverges"
     ],
     "excludeGuards": [
       {

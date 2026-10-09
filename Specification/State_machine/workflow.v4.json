@@ -375,7 +375,7 @@
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["Передача принята, прогресс сценария сохранён"] }
       ],
-      "bulk": { "allowed": false },
+      "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
       "ui": { "surface": ["queue", "card"], "style": "primary", "hotkey": "A", "navigate": "card" }
     },
     {
@@ -398,6 +398,7 @@
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Передача отклонена: {comment}"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
@@ -555,7 +556,7 @@
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] }
       ],
-      "bulk": { "allowed": false },
+      "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
       "ui": {
         "surface": ["card"],
         "style": "danger",
@@ -629,6 +630,7 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
         { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
+        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] }
       ],
       "bulk": { "allowed": false },
@@ -738,7 +740,6 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", "escalation.level.number"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
-        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
@@ -835,6 +836,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор не отвечает"] }
       ],
       "ui": { "surface": [] }
@@ -875,6 +877,7 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Адресат вышел, не приняв: возвращён в очередь"] }
       ],
       "ui": { "surface": [] }
@@ -944,6 +947,7 @@
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "clearGroup" },
         { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: {previousOwnerName} не может принять"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
@@ -1029,13 +1033,13 @@
   },
 
   "grouping": {
-    "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся.",
+    "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся. memberLeavesGroupOn: owner_diverges — после операции целиком (действие на группу, такт планировщика) члены с другим владельцем или адресатом, чем у самой большой части группы, выходят со своей копией ответов; группа из одного снимается. Переходы в очередь выводят из группы эффектом clearGroup (RULE-52).",
     "enabled": true,
     "permissions": ["incident:bulk", "incident:claim"],
     "createFrom": { "states": ["new"], "sameEventType": true, "minItems": 2, "maxItems": 10 },
     "shared": ["group_id", "owner", "scenarioAnswers"],
     "notShared": ["state", "timers", "journal"],
-    "memberLeavesGroupOn": ["manual_exclude"],
+    "memberLeavesGroupOn": ["manual_exclude", "owner_diverges"],
     "excludeGuards": [
       { "fn": "stateIs", "args": [["in_progress"]] },
       { "fn": "isOwner" },

@@ -109,6 +109,8 @@ MUTATIONS = [
     ("group-shift-ignored", "server.js", "(op.group ? membersOf(op).some((m) => present({ id: m })) :", "(op.group ? true :", "api"),
     ("agent-state-ignored", "server.js", ": ![\"not_ready\", \"offline\"].includes(agentStateOf(op.id)));", ": true);", "api"),
     ("clear-group-shares-answers", "engine.js", "      ev.groupId = null;\n      ctx.detachAnswers(ev);\n    }", "      ev.groupId = null;\n    }", "api"),
+    ("groups-not-settled", "engine.js", "if (!W.grouping.memberLeavesGroupOn.includes(\"owner_diverges\")) return [];", "return [];", "api"),
+    ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),
     ("target-can-accept-ignored", "engine.js", "return !target || ctx.canAccept(target, ev) ? null : [\"Адресат не может принять: нет права «Принимать» или доступа к объекту\"];", "return null;", "api"),
     ("accept-right-ignored", "server.js", "return permsOf(id).includes(\"incident:accept\") && hasAccess(id, ev);", "return hasAccess(id, ev);", "api"),

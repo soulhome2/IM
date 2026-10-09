@@ -4274,7 +4274,26 @@
             "format": "date-time"
           },
           "owner": {
-            "$ref": "#/components/schemas/ActorRef"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§11, RULE-52. Владелец — общий у членов группы, только человек. Пока группа ждёт принятия у дежурной группы, owner = null, адресат — assignmentGroup."
+          },
+          "assignmentGroup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§11, §8.1, RULE-52. Группа-адресат — общая у членов группы: группа сценария ждёт принятия у дежурной группы. После «Принять» — null."
           },
           "eventType": {
             "$ref": "#/components/schemas/EventType"
