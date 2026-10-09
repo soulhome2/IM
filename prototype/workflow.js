@@ -3302,7 +3302,8 @@ window.IM_WORKFLOW = {
           "resourceAction"
         ],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§5. Право с областью: ключ <действие>:own, если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе <действие>:any. Сейчас — у «Передать»."
       },
       {
         "fn": "isOwner",
@@ -3313,7 +3314,8 @@ window.IM_WORKFLOW = {
         "fn": "isNotOwner",
         "args": [],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§6.1, §6.3. Смотрящий не владелец инцидента: «Перехватить» и «Открыть на просмотр» — только для чужого."
       },
       {
         "fn": "isTarget",
@@ -3324,13 +3326,15 @@ window.IM_WORKFLOW = {
         "fn": "isNotTarget",
         "args": [],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3. Смотрящий не адресат передачи — или адресат, уже ставший владельцем. Адресату вместо «Открыть на просмотр» — «Принять»."
       },
       {
         "fn": "targetIsNotSelf",
         "args": [],
         "onFail": "disable",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено."
       },
       {
         "fn": "targetCanAccept",
@@ -3357,7 +3361,8 @@ window.IM_WORKFLOW = {
           "agentState"
         ],
         "onFail": "disable",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§10.4, §12.1. Состояние оператора равно аргументу. У системных переходов со scope — состояние того оператора, чьи инциденты проверяются."
       },
       {
         "fn": "agentIdleFor",
@@ -3365,7 +3370,8 @@ window.IM_WORKFLOW = {
           "seconds"
         ],
         "onFail": "disable",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§12.3. Сессия оператора не присылает признак активности не меньше заданного; аргумент — путь к настройке в секундах."
       },
       {
         "fn": "addresseeHasAccess",
@@ -3406,13 +3412,15 @@ window.IM_WORKFLOW = {
         "fn": "withinHoldLimit",
         "args": [],
         "onFail": "disable",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold, группа сценария — одна единица. Только у ручного «Отложить»."
       },
       {
         "fn": "withinReopenWindow",
         "args": [],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут."
       },
       {
         "fn": "requiredStepsFilled",
@@ -3453,7 +3461,8 @@ window.IM_WORKFLOW = {
           "reasonIds"
         ],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§12.3. Причина удержания из списка: возврат в очередь по долгому молчанию касается только отложенных системой."
       },
       {
         "fn": "stateIs",
@@ -3461,13 +3470,15 @@ window.IM_WORKFLOW = {
           "stateIds"
         ],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]."
       },
       {
         "fn": "canReadDone",
         "args": [],
         "onFail": "hide",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3. Закрытую карточку открывает владелец, закрывший или тот, у кого есть incident:read:any."
       },
       {
         "fn": "settingEnabled",
@@ -3557,7 +3568,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "setCursor",
         "kind": "transactional",
-        "extendsBaseRegistry": true
+        "extendsBaseRegistry": true,
+        "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep). У «Взять», «Принять», «Возобновить», «Перехватить»."
       },
       {
         "fn": "clearGroup",

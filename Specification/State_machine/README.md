@@ -122,7 +122,7 @@ stateDiagram-v2
 }
 ```
 
-Реестры лежат в `workflow.v4.json` → `registries`. Позиции с `"extendsBaseRegistry": true` — то, что добавлено сверх списка из §14.8 и требует реализации: `hasScopedPermission`, `isNotOwner`, `withinHoldLimit`, `withinReopenWindow`, `setCursor`, `clearGroup` и др.
+Реестры лежат в `workflow.v4.json` → `registries`. Позиции с `"extendsBaseRegistry": true` — то, что добавлено сверх списка из §14.8 и требует реализации: `hasScopedPermission`, `isNotOwner`, `withinHoldLimit`, `withinReopenWindow`, `setCursor`, `clearGroup` и др.; что делает каждая — `$comment` в реестре
 
 Эффекты делятся на два класса (§14.2), и это влияет на ответ API:
 

@@ -605,6 +605,14 @@ def check_registry_used(w, err):
                 err.append(f"реестр: {entry['fn']} нигде в машине не используется — убрать или использовать (DOC-17)")
 
 
+def check_registry_comments(w, err):
+    """Функции сверх базового реестра §14.8 реализует бэкенд: у каждой — описание в $comment (DOC-26)."""
+    for kind in ("guards", "effects"):
+        for entry in w["registries"][kind]:
+            if entry.get("extendsBaseRegistry") and not str(entry.get("$comment", "")).strip():
+                err.append(f"реестр: {entry['fn']} сверх базового реестра без $comment — бэкенду нечего реализовать (DOC-26)")
+
+
 STATE_OWNERS = ("none", "transfer_target", "operator", "closed_by")
 
 
@@ -935,6 +943,7 @@ def main():
     if "--fsm" in sys.argv:
         show_overlaps(w)
     check_registry_used(w, err)
+    check_registry_comments(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
