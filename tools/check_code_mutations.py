@@ -110,6 +110,7 @@ MUTATIONS = [
     ("agent-state-ignored", "server.js", ": ![\"not_ready\", \"offline\"].includes(agentStateOf(op.id)));", ": true);", "api"),
     ("clear-group-shares-answers", "engine.js", "      ev.groupId = null;\n      ctx.detachAnswers(ev);\n    }", "      ev.groupId = null;\n    }", "api"),
     ("groups-not-settled", "engine.js", "if (!W.grouping.memberLeavesGroupOn.includes(\"owner_diverges\")) return [];", "return [];", "api"),
+    ("group-leave-not-logged", "server.js", 'log(ev, "dispatcher", "Вышел из групповой обработки: у остальных инцидентов группы другой владелец");', "", "api"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),

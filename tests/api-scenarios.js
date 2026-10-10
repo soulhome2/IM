@@ -864,6 +864,7 @@
     assert.status(await env.act(three[0], "accept", {}, "queue"), 200, null, "принять одного из очереди");
     const [one, ...rest] = await Promise.all(three.map((g) => env.card(g)));
     assert.eq([one.state, one.groupGuid], ["in_progress", null], "принятый отдельно — вне группы");
+    assert.eq(one.journal[one.journal.length - 1].templateKey, "Вышел из групповой обработки: у остальных инцидентов группы другой владелец", "выход из группы записан в журнал (RULE-57)");
     assert.ok(rest.every((c) => c.groupGuid === before[0].groupGuid && c.groupSize === 2 && c.state === "pending_acceptance"), "двое остались группой");
     assert.status(await env.act(three[0], "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть первого, чтобы был лимит");
     const both = await env.ok("POST", "/operator/incidents/transitions/accept/bulk", { incidentGuids: three.slice(1), formValues: {}, surface: "card" });

@@ -3097,6 +3097,9 @@
       toast(t("{who} передал {id} вам", { who: who(msg.actor), id }));
     } else if (tid === "system_hold_idle") {
       toast(t("Нет связи с {who} — {id} отложен системой", { who: who(msg.payload.previousOwner), id }));
+    } else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {
+      // Система вывела мой инцидент из группы: владелец разошёлся с группой (§11, RULE-57)
+      toast(t("{id} вышел из групповой обработки", { id }));
     }
     reload();
   }

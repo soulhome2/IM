@@ -822,7 +822,7 @@
 
     // Группа следует за владельцем (RULE-52, RULE-56): после операции целиком — запроса или такта
     // планировщика — группа делится по владельцу. Новой группе — дата и запись в журнал, как при
-    // создании; обо всех изменённых — событие потока, как при ручном исключении
+    // создании; вышедшему — запись о выходе (RULE-57); обо всех изменённых — событие потока
     function settleGroups() {
       const changed = engine.settleGroups();
       changed.forEach(({ ev, groupId }) => {
@@ -830,6 +830,8 @@
           ev.groupCreatedAt = now();
           const ids = changed.filter((c) => c.groupId === groupId && c.ev !== ev).map((c) => c.ev.number);
           log(ev, "dispatcher", "Групповая обработка вместе с {ids}", { ids: ids.join(", ") });
+        } else {
+          log(ev, "dispatcher", "Вышел из групповой обработки: у остальных инцидентов группы другой владелец");
         }
         touch([ev]);
         emit("incident.group_changed", ev, "dispatcher", { groupGuid: groupId });
