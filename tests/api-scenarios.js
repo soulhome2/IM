@@ -872,6 +872,34 @@
     assert.ok(after.every((c) => c.state === "in_progress" && c.groupGuid === before[0].groupGuid && c.groupSize === 2), "оба у меня одной группой");
   });
 
+  test("Группа поделилась при передаче: каждая часть из двух и более — группа, лимит не превышен; при равных частях прежняя группа — у части с наименьшим номером (RULE-56)", async () => {
+    // Кузнецов — доступ только к ТЦ (группа доступа «Торговый центр»); на стенде он на месте
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
+    const env = await makeEnv({ fixturePatch: { people } });
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const mall = fires.filter((e) => e.site === "Торговый центр").slice(0, 2);
+    const rest = fires.filter((e) => e.site !== "Торговый центр").slice(0, 2);
+    assert.eq([mall.length, rest.length], [2, 2], "два пожара в ТЦ и два вне его");
+    const four = mall.concat(rest).map((e) => e.guid);
+    const group = await env.ok("POST", "/operator/incident-groups", { incidentGuids: four });
+    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: four, formValues: { targetId: "kuznetsov", comment: "тест" }, surface: "card" });
+    assert.eq(sent.succeeded.length, 2, "переданы двое из ТЦ");
+    assert.ok(sent.failed.length === 2 && sent.failed.every((f) => f.problem.code === "TARGET_NO_ACCESS"), "двое не переданы: нет доступа");
+    const cards = async (list) => Promise.all(list.map((e) => env.card(e.guid)));
+    const [mine, his] = [await cards(rest), await cards(mall)];
+    assert.ok(mine.every((c) => c.state === "in_progress" && c.groupGuid && c.groupGuid === mine[0].groupGuid && c.groupSize === 2), "у меня двое одной группой");
+    assert.ok(his.every((c) => c.state === "pending_acceptance" && c.groupGuid && c.groupGuid === his[0].groupGuid && c.groupSize === 2), "у Кузнецова двое другой группой");
+    assert.ok(mine[0].groupGuid !== his[0].groupGuid, "группы разные");
+    const num = (c) => Number(c.number.replace(/\D/g, ""));
+    const keeper = Math.min(...mine.map(num)) < Math.min(...his.map(num)) ? mine : his;
+    assert.eq(keeper[0].groupGuid, group.guid, "прежняя группа — у части с наименьшим номером");
+    assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
+    assert.status(await env.answer(rest[0].guid, { visual: true }), 200, null, "ответ в моей части");
+    assert.ok((await env.card(rest[1].guid)).scenario.answers.visual, "ответ общий в моей части");
+    assert.ok(!(await env.card(mall[0].guid)).scenario.answers.visual, "в другой части его нет");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

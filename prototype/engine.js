@@ -708,28 +708,42 @@
       ctx.detachAnswers(ev);
     }
 
-    // Группа следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges):
-    // после операции целиком члены, разошедшиеся с самой большой частью группы по владельцу или
-    // адресату, выходят со своей копией ответов; группа из одного снимается. При равенстве частей
-    // остаётся та, где первый член. Возвращает вышедших
+    // Группа следует за владельцем (§11, RULE-52, RULE-56; grouping.memberLeavesGroupOn: owner_diverges):
+    // после операции целиком группа делится по владельцу или адресату. Самая большая часть сохраняет
+    // группу, при равенстве — та, где инцидент с наименьшим номером; другая часть из двух и более —
+    // новая группа с копией общих ответов; одиночный выходит со своей копией. Так у оператора не
+    // становится больше единиц лимита активных. Возвращает изменённых: инцидент и его новую группу
+    // (null — вышел)
     function settleGroups() {
       if (!W.grouping.memberLeavesGroupOn.includes("owner_diverges")) return [];
       const groups = new Map();
       ctx.events().filter((e) => e.groupId).forEach((e) => groups.set(e.groupId, (groups.get(e.groupId) || []).concat(e)));
-      const left = [];
+      const changed = [];
+      const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
       groups.forEach((members) => {
         const parts = new Map();
         members.forEach((e) => {
           const key = `${e.owner || ""}|${e.assignmentGroup || ""}`;
           parts.set(key, (parts.get(key) || []).concat(e));
         });
-        const keep = [...parts.values()].reduce((a, b) => (b.length > a.length ? b : a));
-        members.filter((e) => keep.length < 2 || !keep.includes(e)).forEach((e) => {
-          leaveGroup(e);
-          left.push(e);
+        const sorted = [...parts.values()].map((p) => p.sort(byNumber)).sort((a, b) => b.length - a.length || byNumber(a[0], b[0]));
+        sorted.forEach((part, i) => {
+          if (i === 0 && part.length > 1) return;
+          if (part.length === 1) {
+            leaveGroup(part[0]);
+            changed.push({ ev: part[0], groupId: null });
+            return;
+          }
+          const groupId = ctx.newGroupId();
+          ctx.detachAnswers(part[0]);
+          part.forEach((e) => {
+            e.groupId = groupId;
+            ctx.shareAnswers(e, part[0]);
+            changed.push({ ev: e, groupId });
+          });
         });
       });
-      return left;
+      return changed;
     }
 
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):

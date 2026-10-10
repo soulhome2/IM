@@ -252,6 +252,8 @@
       detachAnswers: (ev) => {
         ev.answers = JSON.parse(JSON.stringify(ev.answers));
       },
+      // Новая группа, когда группа делится по владельцу (RULE-56) — номер как у «Обработать как одно»
+      newGroupId: () => uuid(8, ++serial.group),
       // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
       // объекту. Оператору стенда — событие потока; сколько получателей, столько и вернуть
       notifyAlert: (ev, targetId, transitionId) => {
@@ -818,12 +820,19 @@
       return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
     }
 
-    // Группа следует за владельцем (RULE-52): после операции целиком — запроса или такта планировщика —
-    // разошедшиеся с группой выходят из неё; об этом — событие потока, как при ручном исключении
+    // Группа следует за владельцем (RULE-52, RULE-56): после операции целиком — запроса или такта
+    // планировщика — группа делится по владельцу. Новой группе — дата и запись в журнал, как при
+    // создании; обо всех изменённых — событие потока, как при ручном исключении
     function settleGroups() {
-      engine.settleGroups().forEach((ev) => {
+      const changed = engine.settleGroups();
+      changed.forEach(({ ev, groupId }) => {
+        if (groupId) {
+          ev.groupCreatedAt = now();
+          const ids = changed.filter((c) => c.groupId === groupId && c.ev !== ev).map((c) => c.ev.number);
+          log(ev, "dispatcher", "Групповая обработка вместе с {ids}", { ids: ids.join(", ") });
+        }
         touch([ev]);
-        emit("incident.group_changed", ev, "dispatcher", { groupGuid: null });
+        emit("incident.group_changed", ev, "dispatcher", { groupGuid: groupId });
       });
     }
 
