@@ -2968,6 +2968,7 @@ window.IM_WORKFLOW = {
     "shared": [
       "group_id",
       "owner",
+      "assignment_group",
       "scenarioAnswers"
     ],
     "notShared": [

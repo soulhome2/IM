@@ -1040,7 +1040,7 @@
     "enabled": true,
     "permissions": ["incident:bulk", "incident:claim"],
     "createFrom": { "states": ["new"], "sameEventType": true, "minItems": 2, "maxItems": 10 },
-    "shared": ["group_id", "owner", "scenarioAnswers"],
+    "shared": ["group_id", "owner", "assignment_group", "scenarioAnswers"],
     "notShared": ["state", "timers", "journal"],
     "memberLeavesGroupOn": ["manual_exclude", "owner_diverges"],
     "wholeGroupOnly": ["close"],
