@@ -945,6 +945,19 @@
     assert.eq([after.state, after.version, after.groupGuid, after.journal.length], ["closed", before.version, before.groupGuid, before.journal.length], "второй закрытый не изменился");
   });
 
+  test("Перехватить группу из карточки: оба мои одной группой, в лимите — одна единица (RULE-52, PROC-14)", async () => {
+    const env = await makeEnv();
+    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    const group = await env.ok("POST", "/operator/incident-groups", { incidentGuids: pair });
+    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: pair, formValues: { targetId: "petrova", comment: "тест" }, surface: "card" });
+    assert.eq(sent.succeeded.length, 2, "группа передана Петровой");
+    const taken = await env.ok("POST", "/operator/incidents/transitions/takeover/bulk", { incidentGuids: pair, formValues: { comment: "беру" }, surface: "card" });
+    assert.eq(taken.succeeded.length, 2, "перехвачены оба");
+    const cards = await Promise.all(pair.map((g) => env.card(g)));
+    assert.ok(cards.every((c) => c.state === "in_progress" && c.owner.id === ME && c.groupGuid === group.guid && c.groupSize === 2), "оба мои одной группой");
+    assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

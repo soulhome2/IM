@@ -841,6 +841,67 @@
       }
     });
 
+    // Группа сценария из двух новых однотипных — у оператора в работе (служебной операцией стенда)
+    async function standGroup(stand) {
+      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
+      const sameType = (e) => open.filter((x) => x.eventType.id === e.eventType.id);
+      const pair = sameType(open.find((e) => sameType(e).length > 1)).slice(0, 2);
+      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: pair.map((e) => e.guid) });
+      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
+      return pair;
+    }
+    const standTransfer = (stand, list) =>
+      stand.raw("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: list.map((e) => e.guid), formValues: { targetId: "petrova", comment: NOTE }, surface: "card" });
+    const standRelease = (stand, list) =>
+      stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: list.map((e) => e.guid), formValues: { comment: NOTE }, surface: "card" });
+
+    await step("Перехват группы из карточки: диалог на всю группу, оба мои одной группой (RULE-52, PROC-14)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const pair = await standGroup(stand);
+      await standTransfer(stand, pair);
+      try {
+        await setFilter("all");
+        const row = await rowOnPages(pair[0].guid);
+        expect(row, `${pair[0].number} нет в очереди`);
+        await click(button($("eventsList"), "open_readonly", pair[0].guid));
+        expect(mode() === "work", "чужая карточка не открылась");
+        const take = button(root(), "takeover", pair[0].guid);
+        expect(take, "в карточке группы нет кнопки «Перехватить»");
+        await click(take);
+        const title = $("dialogTitle").textContent;
+        expect(title === "Перехватить 2 инцидентов", `заголовок диалога: «${title}»`);
+        await confirmDialog(NOTE);
+        await wait(200);
+        const note = [...$("toasts").children].find((x) => /Перехвачено/.test(x.textContent));
+        expect(note && note.textContent.includes("Перехвачено: 2"), `уведомление: «${note ? note.textContent : "нет"}»`);
+        const cards = await Promise.all(pair.map((e) => stand.get(`/operator/incidents/${encodeURIComponent(e.guid)}`)));
+        expect(cards.every((c) => c.owner && c.owner.id === "me" && c.groupGuid && c.groupGuid === cards[0].groupGuid), "после перехвата не оба мои одной группой");
+        return title;
+      } finally {
+        await standRelease(stand, pair);
+        if (mode() === "work") await click($("backToQueue"));
+        await setFilter("open");
+      }
+    });
+
+    await step("Выход из группы: уведомление владельцу (§11, RULE-57)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const [moved, left] = await standGroup(stand);
+      await standTransfer(stand, [moved]);
+      try {
+        await wait(300);
+        // На экране могут оставаться уведомления прошлых шагов — ищем с номером этого инцидента
+        const note = [...$("toasts").children].find((x) => x.textContent.includes(`${left.number} вышел из групповой обработки`));
+        expect(note, `нет уведомления о выходе ${left.number} из группы`);
+        return note.textContent;
+      } finally {
+        await standRelease(stand, [left]);
+        await setFilter("open");
+      }
+    });
+
     await step("Смешанная выборка: «Взять» у отмеченных недоступно с объяснением", async () => {
       await setFilter("open");
       const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));

@@ -115,6 +115,8 @@ MUTATIONS = [
     ("group-close-not-all-or-nothing", "engine.js", "const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);", "const stuck = null;", "api"),
     ("closed-groups-settled", "engine.js", "ctx.events().filter((e) => e.groupId && !states[e.state].terminal).forEach(", "ctx.events().filter((e) => e.groupId).forEach(", "api"),
     ("ui-bulk-failures-hidden", "app.js", "toast(res.failed.length ? `${okText} ", "toast(false ? `${okText} ", "ui"),
+    ("ui-group-takeover-copy", "app.js", 'title: t("Перехватить {n} инцидентов", { n }),', 'title: t("Перехватить"),', "ui"),
+    ("ui-group-leave-silent", "app.js", '} else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {', "} else if (false) {", "ui"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),
