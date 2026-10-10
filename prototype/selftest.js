@@ -806,6 +806,41 @@
       expect([...$("eventsList").querySelectorAll('[data-do="claim"]')].some((b) => !off(b)), "после входа «Взять» недоступно");
     });
 
+    await step("Частичная передача группы: уведомление называет не переданные (§11, BUG-28)", async () => {
+      // После входа в работе ничего: группа из однотипных новых в ТЦ и вне его, у Петровой на время —
+      // доступ только к ТЦ. Не переданные остаются у оператора группой — в конце они возвращаются в очередь
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
+      const mall = (e) => e.site === "Торговый центр";
+      const anchor = open.find((e) => mall(e) && open.some((x) => !mall(x) && x.eventType.id === e.eventType.id));
+      expect(anchor, "нет однотипных новых в ТЦ и вне его");
+      const same = open.filter((e) => e.eventType.id === anchor.eventType.id);
+      const sent = same.filter(mall).slice(0, 2);
+      const kept = same.filter((e) => !mall(e)).slice(0, 2);
+      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: sent.concat(kept).map((e) => e.guid) });
+      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
+      const roles = window.IM_FIXTURE.people.operators.find((o) => o.id === "petrova").roles;
+      await stand.raw("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] });
+      try {
+        await openOwn(sent[0].guid);
+        const b = button(root(), "transfer");
+        expect(b, "в карточке нет кнопки «Передать»");
+        await click(b);
+        await setField("targetId", "petrova");
+        await confirmDialog(NOTE);
+        await wait(200);
+        const note = [...$("toasts").children].find((x) => /Передано/.test(x.textContent));
+        const text = note ? note.textContent : "нет";
+        expect(text.includes(`Передано: ${sent.length}`) && text.includes(`Не выполнено: ${kept.length}`), `уведомление: «${text}»`);
+        return text;
+      } finally {
+        await stand.raw("PUT", "/test/operators/petrova/roles", { roles });
+        await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: kept.map((e) => e.guid), formValues: { comment: NOTE }, surface: "card" });
+        await setFilter("open");
+      }
+    });
+
     await step("Смешанная выборка: «Взять» у отмеченных недоступно с объяснением", async () => {
       await setFilter("open");
       const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));

@@ -1065,6 +1065,16 @@
     return true;
   }
 
+  // Главная причина отказа выборки (§11, BUG-28): первый отказ самого инцидента, а не «группа не
+  // закрыта из-за соседа»; номер — если инцидент есть в загруженном списке или в группе карточки
+  function failureText(failed) {
+    const main = failed.find((f) => f.problem.code !== "BULK_SELECTION_INVALID") || failed[0];
+    const why = problemText({ problem: main.problem });
+    const known = store.page.items.concat(...store.page.items.map((e) => (e.group ? e.group.members : [])));
+    const ev = known.find((e) => e.guid === main.incidentGuid);
+    return ev ? `${ev.number}: ${why}` : why;
+  }
+
   async function runBulk(id, guids, form, surface) {
     let res;
     try {
@@ -1074,14 +1084,16 @@
       return false;
     }
     if (!res.succeeded.length) {
-      toast(res.failed.length ? problemText({ problem: res.failed[0].problem }) : t("Действие недоступно"));
+      toast(res.failed.length ? failureText(res.failed) : t("Действие недоступно"));
       return false;
     }
     state.checked.clear();
     store.selection = null;
     const done = res.succeeded.map((e) => ({ id: e.guid, groupId: e.groupGuid }));
     const copy = bulkCopy(id, done);
-    toast(copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length }));
+    const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
+    // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
+    toast(res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText);
     state.selectedId = done[0].id;
     navigate(res.navigate);
     await reload();
