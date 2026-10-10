@@ -746,6 +746,17 @@
       return changed;
     }
 
+    // Переход только на всю группу (§11, BUG-29; grouping.wholeGroupOnly): на инциденте группы — вместе
+    // со всеми её открытыми инцидентами в одном запросе, и всё или ничего: если кого-то из них нельзя,
+    // нельзя никого. Закрытые члены — история, не считаются. Возвращает причину отказа или null
+    function groupBlock(id, ev, guids, opts) {
+      if (!ev.groupId || !(W.grouping.wholeGroupOnly || []).includes(id)) return null;
+      const open = ctx.events().filter((e) => e.groupId === ev.groupId && !states[e.state].terminal);
+      if (!open.every((e) => guids.includes(e.id))) return { why: ["Инцидент в группе: закройте всю группу или сначала исключите его из группы"] };
+      const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);
+      return stuck ? { why: ["Группа не закрыта: {id} закрыть нельзя", { id: stuck.number }] } : null;
+    }
+
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
     function excludeFromGroup(ev) {
@@ -789,6 +800,7 @@
       createGroup,
       excludeFromGroup,
       settleGroups,
+      groupBlock,
       canExcludeFromGroup,
       excludeBlock,
       units,

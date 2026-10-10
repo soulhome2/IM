@@ -901,6 +901,38 @@
     assert.ok(!(await env.card(mall[0].guid)).scenario.answers.visual, "в другой части его нет");
   });
 
+  test("Закрыть инцидент группы — только всю группу и всё или ничего; один — после «Исключить из группы» (§11, BUG-29)", async () => {
+    // Две группы и исключённый — три единицы лимита активных
+    const limits = Object.assign({}, W.limits, { maxActive: 3 });
+    const env = await makeEnv({ workflowPatch: { limits } });
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const [a, b] = [fires.slice(0, 2).map((e) => e.guid), fires.slice(2, 4).map((e) => e.guid)];
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: a }), 201, null, "группа A");
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: b }), 201, null, "группа B");
+    const form = { resultId: "false_alarm", comment: "тест" };
+    const one = await env.act(a[0], "close", form, "card");
+    assert.status(one, 422, "BULK_SELECTION_INVALID", "закрыть один из группы");
+    assert.ok(/закройте всю группу/.test(one.body.message), `причина: ${one.body.message}`);
+    const part = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: [a[0]], formValues: form, surface: "card" });
+    assert.eq([part.succeeded.length, part.failed.map((f) => f.problem.code)], [0, ["BULK_SELECTION_INVALID"]], "групповой запрос с одним из группы");
+    const other = fires[4].guid;
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [a[0], other] });
+    const close = sel.actions.find((x) => x.id === "close");
+    assert.ok(close && !close.enabled && /часть группы/.test(close.reason), `«Закрыть» на выборке с частью группы: ${JSON.stringify(close)}`);
+    // Всё или ничего: отложенного «Ложная тревога» не закрывает — не закрывается и второй
+    assert.status(await env.act(b[1], "hold", { reasonId: "third_party", comment: "тест" }, "card"), 200, null, "отложить второго в B");
+    const stuck = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: b, formValues: form, surface: "card" });
+    assert.eq(stuck.succeeded.length, 0, "группа B не закрыта");
+    assert.ok((await Promise.all(b.map((g) => env.card(g)))).every((c) => c.state !== "closed"), "оба в B открыты");
+    // Один — после исключения из группы
+    const groupB = (await env.card(b[0])).groupGuid;
+    assert.status(await env.act(b[1], "resume", {}, "card"), 200, null, "возобновить второго в B");
+    assert.status(await env.call("DELETE", `/operator/incident-groups/${enc(groupB)}/members/${enc(b[0])}`), 200, null, "исключить первого из B");
+    assert.status(await env.act(b[0], "close", form, "card"), 200, null, "исключённый закрывается один");
+    const whole = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: a, formValues: form, surface: "card" });
+    assert.eq(whole.succeeded.length, 2, "группа A закрыта целиком");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

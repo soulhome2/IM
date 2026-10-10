@@ -865,7 +865,10 @@
         if (list.length < 2) ok = each;
         else if (mode.allowed && mode.mode === "same_type_new") ok = sameTypeNew && each;
         else if (mode.allowed && (mode.mode === "each_allowed" || mode.mode === "group_or_each_allowed")) ok = each;
-        const why = ok ? null : say(["Для этой выборки действие недоступно"]);
+        // Часть группы сценария — переход только на всю группу (BUG-29)
+        const partial = ok && list.some((e) => engine.groupBlock(tr.id, e, list.map((x) => x.id)));
+        const why = partial ? say(["В выборке часть группы сценария: закрыть можно только всю группу"]) : ok ? null : say(["Для этой выборки действие недоступно"]);
+        if (partial) ok = false;
         return {
           id: tr.id,
           kind: "transition",
@@ -968,7 +971,12 @@
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["Инцидент не найден"]).body }));
           let navigate = null;
           const done = [];
+          // Всё или ничего внутри группы (BUG-29): проверка — до первого перехода, пока группа цела
+          const opts = { form: body.formValues || {}, surface: body.surface };
+          const blocks = new Map(list.map((ev) => [ev, engine.groupBlock(p.transitionId, ev, list.map((e) => e.id), opts)]));
           list.forEach((ev) => {
+            const block = blocks.get(ev);
+            if (block) return failed.push({ incidentGuid: ev.id, problem: problem(422, "BULK_SELECTION_INVALID", block.why).body });
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
             if (r.status === 200) {
               done.push(ev);
@@ -1008,6 +1016,9 @@
           if (body && body.expectedState && body.expectedState !== ev.state) {
             return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
           }
+          // Один инцидент группы — только вместе с группой (BUG-29)
+          const block = engine.groupBlock(p.transitionId, ev, [ev.id], { form: (body && body.formValues) || {}, surface: body && body.surface });
+          if (block) return problem(422, "BULK_SELECTION_INVALID", block.why);
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
           if (res.status === 200) {
             settleGroups();
