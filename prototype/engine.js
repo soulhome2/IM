@@ -712,12 +712,12 @@
     // после операции целиком группа делится по владельцу или адресату. Самая большая часть сохраняет
     // группу, при равенстве — та, где инцидент с наименьшим номером; другая часть из двух и более —
     // новая группа с копией общих ответов; одиночный выходит со своей копией. Так у оператора не
-    // становится больше единиц лимита активных. Возвращает изменённых: инцидент и его новую группу
-    // (null — вышел)
+    // становится больше единиц лимита активных. Закрытые — история, не делятся (RULE-59). Возвращает
+    // изменённых: инцидент и его новую группу (null — вышел)
     function settleGroups() {
       if (!W.grouping.memberLeavesGroupOn.includes("owner_diverges")) return [];
       const groups = new Map();
-      ctx.events().filter((e) => e.groupId).forEach((e) => groups.set(e.groupId, (groups.get(e.groupId) || []).concat(e)));
+      ctx.events().filter((e) => e.groupId && !states[e.state].terminal).forEach((e) => groups.set(e.groupId, (groups.get(e.groupId) || []).concat(e)));
       const changed = [];
       const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
       groups.forEach((members) => {

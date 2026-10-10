@@ -933,6 +933,18 @@
     assert.eq(whole.succeeded.length, 2, "группа A закрыта целиком");
   });
 
+  test("Переоткрыть один из закрытой группы: второй закрытый не меняется — признак группы как история (§11, RULE-59)", async () => {
+    const env = await makeEnv();
+    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: pair }), 201, null, "группа");
+    const closed = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: pair, formValues: { resultId: "false_alarm", comment: "тест" }, surface: "card" });
+    assert.eq(closed.succeeded.length, 2, "группа закрыта");
+    const before = await env.card(pair[1]);
+    assert.status(await env.act(pair[0], "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть первого");
+    const after = await env.card(pair[1]);
+    assert.eq([after.state, after.version, after.groupGuid, after.journal.length], ["closed", before.version, before.groupGuid, before.journal.length], "второй закрытый не изменился");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

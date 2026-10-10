@@ -113,6 +113,7 @@ MUTATIONS = [
     ("group-leave-not-logged", "server.js", 'log(ev, "dispatcher", "Вышел из групповой обработки: у остальных инцидентов группы другой владелец");', "", "api"),
     ("group-whole-close-off", "engine.js", "if (!ev.groupId || !(W.grouping.wholeGroupOnly || []).includes(id)) return null;", "return null;", "api"),
     ("group-close-not-all-or-nothing", "engine.js", "const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);", "const stuck = null;", "api"),
+    ("closed-groups-settled", "engine.js", "ctx.events().filter((e) => e.groupId && !states[e.state].terminal).forEach(", "ctx.events().filter((e) => e.groupId).forEach(", "api"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),

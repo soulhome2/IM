@@ -86,13 +86,14 @@
       if (inc.owner && inc.owner.id === session.operator.guid && inc.state !== "pending_acceptance" && inc.state !== "closed" && inc.ownership !== "owner") {
         say(inc, `мой, а отношение «${inc.ownership}»`);
       }
-      if (inc.groupGuid && inc.groupSize < 2) say(inc, "группа из одного (RULE-52)");
+      // Закрытые хранят признак группы как историю (RULE-59): группа из одного — только среди открытых
+      if (inc.groupGuid && inc.groupSize < 2 && inc.state !== "closed") say(inc, "группа из одного (RULE-52)");
       if (inc.groupGuid && !inc.owner && !inc.assignmentGroup) say(inc, "ничейный в группе (RULE-52)");
       if (!inc.groupGuid && inc.groupSize) say(inc, "не в группе, а размер группы задан");
     });
     // Группа следует за владельцем (RULE-52): у членов один владелец и один адресат
     const groups = new Map();
-    list.filter((inc) => inc.groupGuid).forEach((inc) => groups.set(inc.groupGuid, (groups.get(inc.groupGuid) || []).concat(inc)));
+    list.filter((inc) => inc.groupGuid && inc.state !== "closed").forEach((inc) => groups.set(inc.groupGuid, (groups.get(inc.groupGuid) || []).concat(inc)));
     groups.forEach((members, g) => {
       const keys = new Set(members.map((m) => `${m.owner ? m.owner.id : ""}|${m.assignmentGroup ? m.assignmentGroup.id : ""}`));
       if (keys.size > 1) bad.push(`группа ${g}: у членов разные владельцы или адресаты (RULE-52)`);
