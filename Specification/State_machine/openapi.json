@@ -576,6 +576,7 @@
           {
             "name": "priority",
             "in": "query",
+            "description": "Только инциденты этого приоритета.",
             "schema": {
               "$ref": "#/components/schemas/Priority"
             }
@@ -583,6 +584,7 @@
           {
             "name": "state",
             "in": "query",
+            "description": "Только инциденты в этих состояниях, через запятую.",
             "schema": {
               "type": "array",
               "items": {
@@ -595,9 +597,15 @@
           {
             "name": "sort",
             "in": "query",
+            "description": "§7, RULE-62. Порядок очереди из queueSort.options схемы. Учитывается, только если queueSort.operatorMayChange; иначе — queueSort.default. Без параметра — preferences.queueSort оператора, если менять можно, иначе queueSort.default. Что значит каждый порядок — queueSort схемы и правила §7.",
             "schema": {
               "type": "string",
-              "default": "priority,-occurredAt"
+              "enum": [
+                "priority_then_oldest",
+                "priority_then_newest",
+                "oldest_first",
+                "reaction_deadline"
+              ]
             }
           },
           {
@@ -2176,6 +2184,11 @@
             "type": "object",
             "additionalProperties": true
           },
+          "queueSort": {
+            "type": "object",
+            "description": "§7, RULE-62. Порядок очереди: default — по умолчанию, options — из чего можно выбрать, operatorMayChange — может ли оператор выбрать другой.",
+            "additionalProperties": true
+          },
           "registries": {
             "type": "object",
             "description": "§14.8. Реестры guard'ов и эффектов — из них редактор схемы собирает выпадающие списки.",
@@ -3196,6 +3209,13 @@
               "light",
               "dark"
             ]
+          },
+          "queueSort": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "§7, RULE-62. Порядок очереди, который выбрал оператор, из queueSort.options схемы. Учитывается, только если queueSort.operatorMayChange."
           },
           "panels": {
             "type": "object",

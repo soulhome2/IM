@@ -670,6 +670,27 @@
 
     /* ===== Очередь: фильтр, группа, типы, поиск, страница ===== */
 
+    // Порядок очереди (§7, RULE-62): из queueSort схемы; свой порядок оператор выбирает, только если
+    // администратор разрешил. При равенстве — по номеру инцидента
+    function sortOf(q) {
+      const s = W.queueSort;
+      const asked = q.sort || session.preferences.queueSort;
+      return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;
+    }
+    const rank = (ev) => W.priorities.items.findIndex((p) => p.id === ev.priority);
+    const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
+    // Норматив реакции идёт: дедлайн есть и ещё не сработал (на потолке эскалации — уже сработал)
+    const reactionRunning = (e) => Boolean(e.reactionDueAt) && !(e.firedTimers && e.firedTimers.reaction === e.reactionDueAt);
+    const ORDERS = {
+      priority_then_oldest: (a, b) => rank(a) - rank(b) || a.occurredAt - b.occurredAt,
+      priority_then_newest: (a, b) => rank(a) - rank(b) || b.occurredAt - a.occurredAt,
+      oldest_first: (a, b) => a.occurredAt - b.occurredAt,
+      // Кто без идущего норматива реакции — после тех, у кого он идёт, по времени появления
+      reaction_deadline: (a, b) =>
+        Number(!reactionRunning(a)) - Number(!reactionRunning(b)) ||
+        (reactionRunning(a) ? a.reactionDueAt - b.reactionDueAt : a.occurredAt - b.occurredAt),
+    };
+
     function visible(q) {
       let list = events.filter(canSee);
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
@@ -680,6 +701,8 @@
       return list.filter((e) => {
         if (q.filter && !engine.inQueueFilter(e, q.filter)) return false;
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && e.typeGuid !== q.eventTypeGuid) return false;
+        if (q.priority && e.priority !== q.priority) return false;
+        if (q.state && !String(q.state).split(",").includes(e.state)) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
           const src = eventSource(e);
           if (!src || deviceSpec(src).type !== q.deviceTypeId) return false;
@@ -689,7 +712,7 @@
           if (!`${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle)) return false;
         }
         return true;
-      });
+      }).sort((a, b) => ORDERS[sortOf(q)](a, b) || byNumber(a, b));
     }
 
     function page(q) {

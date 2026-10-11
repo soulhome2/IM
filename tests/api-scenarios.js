@@ -991,6 +991,52 @@
     assert.status(await env.act(b.guid, "reopen", { comment: "поздно" }, "card"), 403, "REOPEN_WINDOW_EXPIRED", "срок плюс 20 секунд — нельзя");
   });
 
+  /* ===== Порядок очереди (§7, RULE-62) ===== */
+
+  const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;
+  const rankOf = (inc) => W.priorities.items.findIndex((p) => p.id === inc.priority);
+  const num = (inc) => Number(inc.number.replace(/\D/g, ""));
+  const at = (inc) => Date.parse(inc.occurredAt);
+  const running = (inc) => Boolean(inc.timer && inc.timer.id === "reaction" && inc.timer.running);
+  const ORDER = {
+    priority_then_oldest: (a, b) => rankOf(a) - rankOf(b) || at(a) - at(b),
+    priority_then_newest: (a, b) => rankOf(a) - rankOf(b) || at(b) - at(a),
+    oldest_first: (a, b) => at(a) - at(b),
+    reaction_deadline: (a, b) =>
+      Number(!running(a)) - Number(!running(b)) || (running(a) ? Date.parse(a.timer.dueAt) - Date.parse(b.timer.dueAt) : at(a) - at(b)),
+  };
+  const sortedBy = (list, id) => list.slice().sort((a, b) => ORDER[id](a, b) || num(a) - num(b)).map((i) => i.number);
+
+  test("Порядок очереди по умолчанию — приоритет, внутри старые выше; свой порядок оператору без разрешения не дан (§7, RULE-62)", async () => {
+    const env = await makeEnv();
+    const list = await queueOf(env);
+    assert.eq(list.map((i) => i.number), sortedBy(list, "priority_then_oldest"), "по умолчанию");
+    assert.eq((await queueOf(env, "&sort=oldest_first")).map((i) => i.number), sortedBy(list, "priority_then_oldest"), "sort без разрешения не учитывается");
+    assert.status(await env.call("PATCH", "/operator/session/preferences", { queueSort: "oldest_first" }), 200, null, "выбор оператора");
+    assert.eq((await queueOf(env)).map((i) => i.number), sortedBy(list, "priority_then_oldest"), "выбор оператора без разрешения не учитывается");
+  });
+
+  test("Порядок очереди: каждый из четырёх, если оператору разрешено выбирать; выбор из настроек — без параметра (§7, RULE-62)", async () => {
+    const queueSort = Object.assign({}, W.queueSort, { operatorMayChange: true });
+    const env = await makeEnv({ workflowPatch: { queueSort } });
+    const list = await queueOf(env);
+    for (const id of W.queueSort.options) {
+      assert.eq((await queueOf(env, `&sort=${id}`)).map((i) => i.number), sortedBy(list, id), id);
+    }
+    assert.ok(list.some(running) && list.some((i) => !running(i)), "в наборе есть и с идущим нормативом реакции, и без");
+    assert.status(await env.call("PATCH", "/operator/session/preferences", { queueSort: "oldest_first" }), 200, null, "выбор оператора");
+    assert.eq((await queueOf(env)).map((i) => i.number), sortedBy(list, "oldest_first"), "без параметра — выбор оператора");
+  });
+
+  test("Фильтры очереди по приоритету и состоянию (RULE-62)", async () => {
+    const env = await makeEnv();
+    const all = await queueOf(env);
+    const high = await queueOf(env, "&priority=high");
+    assert.ok(high.length && high.every((i) => i.priority === "high") && high.length === all.filter((i) => i.priority === "high").length, "только высокий");
+    const states = await queueOf(env, "&state=new,on_hold");
+    assert.ok(states.length && states.every((i) => ["new", "on_hold"].includes(i.state)) && states.length === all.filter((i) => ["new", "on_hold"].includes(i.state)).length, "только новые и отложенные");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

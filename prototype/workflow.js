@@ -3311,6 +3311,17 @@ window.IM_WORKFLOW = {
       }
     ]
   },
+  "queueSort": {
+    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (порядок справочника priorities), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
+    "default": "priority_then_oldest",
+    "options": [
+      "priority_then_oldest",
+      "priority_then_newest",
+      "oldest_first",
+      "reaction_deadline"
+    ],
+    "operatorMayChange": false
+  },
   "registries": {
     "$comment": "§14.8. Фиксированные реестры: продуктовая команда собирает схему из этих функций, разработчики расширяют сами реестры. Отмеченные extendsBaseRegistry добавлены в v4 сверх списка из §14.8 — их нужно реализовать.",
     "guards": [
@@ -3684,7 +3695,8 @@ window.IM_WORKFLOW = {
       "alerts",
       "limits",
       "session",
-      "hotkeys"
+      "hotkeys",
+      "queueSort"
     ],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): приоритеты и условия уточнений нормативов. values у настройки — подписи значений её перечня.",
@@ -3864,6 +3876,29 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "id": "queue",
+        "label": "Очередь",
+        "rules": "§7",
+        "items": [
+          {
+            "path": "queueSort.default",
+            "label": "Порядок очереди",
+            "what": "Какой инцидент оператор видит первым",
+            "values": {
+              "priority_then_oldest": "Приоритет, внутри — старые выше",
+              "priority_then_newest": "Приоритет, внутри — новые выше",
+              "oldest_first": "По времени появления, старые выше",
+              "reaction_deadline": "По времени до нарушения норматива реакции"
+            }
+          },
+          {
+            "path": "queueSort.operatorMayChange",
+            "label": "Оператор может менять порядок",
+            "what": "Выбрать себе другой порядок из списка"
+          }
+        ]
+      },
+      {
         "id": "access_groups",
         "label": "Группы доступа",
         "rules": "§5",
@@ -3911,6 +3946,10 @@ window.IM_WORKFLOW = {
       {
         "path": "timers.hold",
         "why": "срок удержания задаёт причина — вкладка «Причины»"
+      },
+      {
+        "path": "queueSort.options",
+        "why": "список порядков — модель: каждый порядок реализует сервер, администратор выбирает из него (§7)"
       },
       {
         "path": "reasonCatalogs.close_result",
