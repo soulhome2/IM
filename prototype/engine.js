@@ -25,6 +25,8 @@
     // пропущенное по времени наступления, и эффекты считают время от этого момента
     let at = null;
     const now = () => (at != null ? at : ctx.now());
+    // Окно после дедлайна (§10.1, правило 5; RULE-63): переход по таймеру — через graceSec после дедлайна
+    const GRACE_MS = (((W.invariants || {}).manualWinsOverTimer || {}).graceSec || 0) * 1000;
     const isGroup = (id) => Boolean(id) && ctx.isGroup(id);
     const isMine = (ev) => ev.owner === ME;
     // «Я» как адресат: сам оператор и группы, в которые он входит (§10.1)
@@ -410,9 +412,10 @@
         if (f.left) ev[f.left] = null;
       },
       // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
-      recordBreach: (ev, [kind]) => {
+      // Нарушение по таймеру датируется дедлайном, а не моментом выполнения после окна (RULE-63)
+      recordBreach: (ev, [kind], s) => {
         ev.breaches = ev.breaches || [];
-        ev.breaches.push({ kind, at: now(), owner: addressee(ev) });
+        ev.breaches.push({ kind, at: s.deadline != null ? s.deadline : now(), owner: addressee(ev) });
         ev.slaBreached = true;
       },
       increment: (ev, [field]) => {
@@ -444,9 +447,10 @@
     function draftOf(ev) {
       return Object.assign({}, ev, { log: ev.log.slice(), breaches: (ev.breaches || []).slice() });
     }
-    function effectsOn(draft, tr, form, actor) {
+    function effectsOn(draft, tr, form, actor, extra) {
       const scope = {
         actor,
+        deadline: extra && extra.deadline != null ? extra.deadline : null,
         form,
         transitionId: tr.id,
         after: [],
@@ -473,8 +477,8 @@
         .filter((x) => x.target && x.target !== actor);
       return { after: scope.after, external };
     }
-    function applyEffects(tr, ev, form, actor) {
-      return applyAll(tr, [ev], form, actor);
+    function applyEffects(tr, ev, form, actor, extra) {
+      return applyAll(tr, [ev], form, actor, extra);
     }
     // Что было и что стало — для события потока (§9, RULE-60): состояние, владелец, адресат, новое нарушение
     const snap = (ev) => ({ state: ev.state, owner: ev.owner, addressee: addressee(ev), breaches: (ev.breaches || []).length });
@@ -484,12 +488,12 @@
     }
 
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
-    function applyAll(tr, list, form, actor) {
+    function applyAll(tr, list, form, actor, extra) {
       const before = list.map(snap);
       const drafts = list.map(draftOf);
       let done;
       try {
-        done = drafts.map((d) => effectsOn(d, tr, form, actor));
+        done = drafts.map((d) => effectsOn(d, tr, form, actor, extra));
       } catch (err) {
         return { ok: false, why: ["workflow.error.transition_failed", { error: err.why || err.message }] };
       }
@@ -522,9 +526,42 @@
       if (!a.ok) return { ok: false, why: a.why };
       const bad = validateForm(tr, ev, form);
       if (bad) return { ok: false, why: bad };
+      // Ручное действие в окне после дедлайна выигрывает у таймера (§10.1, правило 5; RULE-63)
+      const canceled = overridden(ev);
+      const owner = addressee(ev);
+      const before = ev.log.length;
+      if (canceled) ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
       const applied = applyEffects(tr, ev, form, ME);
       if (!applied.ok) return applied;
-      return { ok: true, navigate: tr.ui.navigate, external: applied.external[0], facts: applied.facts[0] };
+      const facts = applied.facts[0];
+      if (canceled) {
+        // Нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал
+        canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
+          ev.breaches = (ev.breaches || []).concat({ kind: x.args[0], at: canceled.due, owner });
+          ev.slaBreached = true;
+          facts.breach = x.args[0];
+        });
+        ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
+        ev.log.splice(before, 0, ev.log.pop());
+      }
+      return { ok: true, navigate: tr.ui.navigate, external: applied.external[0], facts, canceled: canceled ? canceled.tr.id : null };
+    }
+
+    // Переход по таймеру, чей дедлайн наступил, а окно ещё не кончилось: ручное действие его отменяет (RULE-63)
+    function overridden(ev) {
+      if (!GRACE_MS) return null;
+      let found = null;
+      W.transitions.forEach((tr) => {
+        if (tr.trigger !== "timer" || !tr.from.includes(ev.state)) return;
+        const g = (tr.guards || []).find((x) => x.fn === "timerExpired");
+        const due = g ? dueOf(ev, g.args[0]) : null;
+        if (!due || due > now() || due + GRACE_MS <= now() || (ev.firedTimers || {})[g.args[0]] === due) return;
+        at = due;
+        const fail = firstFail(ev, tr.guards);
+        at = null;
+        if (!fail && (!found || due < found.due)) found = { tr, timer: g.args[0], due };
+      });
+      return found;
     }
 
     // Появление инцидента (§6.2, RULE-61): переход машины с trigger: event — без исходного состояния,
@@ -554,7 +591,7 @@
         if (g.fn === "timerExpired") {
           const due = dueOf(ev, g.args[0]);
           if (!due) return null;
-          moment = Math.max(moment || 0, due);
+          moment = Math.max(moment || 0, due + GRACE_MS);
         } else if (g.fn === "agentIdleFor") {
           if (!ctx.idleSec) return null;
           moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000);
@@ -591,8 +628,9 @@
           let facts = null;
           try {
             const timerGuard = (next.tr.guards || []).find((g) => g.fn === "timerExpired");
+            const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
             if (timerGuard) markFired(ev, timerGuard.args[0]);
-            const applied = applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher");
+            const applied = applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher", { deadline });
             if (!applied.ok) return;
             facts = applied.facts[0];
           } finally {

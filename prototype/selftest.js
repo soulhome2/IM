@@ -1117,7 +1117,8 @@
       const number = created.body.number;
       const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
       await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
-      await stand.raw("POST", "/test/clock", { advanceSec: norm + 1 });
+      const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
+      await stand.raw("POST", "/test/clock", { advanceSec: norm + grace + 1 });
       await wait(200);
       const toast = toastWith(new RegExp(`Автоэскалация ${number} → `));
       expect(toast, `нет уведомления об автоэскалации ${number}`);

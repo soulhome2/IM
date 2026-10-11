@@ -931,7 +931,7 @@
       emitTransition(ev, id, ME, r.facts);
       const journal = journalView(ev).slice(before);
       const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
-      return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: null } };
+      return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
     }
 
     function selectionActions(list) {

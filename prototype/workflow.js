@@ -3624,6 +3624,12 @@ window.IM_WORKFLOW = {
     "workflow.error.test.bad_incident": {
       "vars": []
     },
+    "workflow.journal.timer_overridden": {
+      "vars": [
+        "timer",
+        "transition"
+      ]
+    },
     "workflow.label.unassigned": {
       "vars": []
     },
@@ -4122,6 +4128,11 @@ window.IM_WORKFLOW = {
         "rules": "§4",
         "items": [
           {
+            "path": "invariants.manualWinsOverTimer.graceSec",
+            "labelKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec",
+            "whatKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec.what"
+          },
+          {
             "path": "timers.reaction.defaultSec",
             "labelKey": "workflow.settings.timers.reaction.defaultSec",
             "whatKey": "workflow.settings.timers.reaction.defaultSec.what"
@@ -4390,6 +4401,9 @@ window.IM_WORKFLOW = {
     "readOnlyByAgentState": true,
     "transferToSelfForbidden": true,
     "terminalOnlyViaReopen": true,
-    "manualWinsOverTimer": true
+    "manualWinsOverTimer": {
+      "graceSec": 3,
+      "$comment": "§10.1, правило 5 (RULE-63). Переход по таймеру выполняется через graceSec после дедлайна; ручное действие в это окно выигрывает: срабатывание отменяется, нарушение, которое записал бы отменённый переход, записывается на момент дедлайна, в журнал — workflow.journal.timer_overridden; в ответе — canceledTimerTrigger. 0 — окна нет."
+    }
   }
 };

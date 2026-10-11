@@ -5,6 +5,8 @@
   const { test, makeEnv, formFor, fullAnswers, actionOf, assert, enc } = IMTest;
   const ME = "me";
   const W = window.IM_WORKFLOW;
+  // Окно после дедлайна (RULE-63): переход по таймеру — через graceSec после дедлайна
+  const GRACE = ((W.invariants || {}).manualWinsOverTimer || {}).graceSec || 0;
 
   // Стенд со своей копией схемы или набора (PROC-13): отличающиеся разделы уходят в POST /test/reset
   // как JSON Merge Patch — так тест идёт и против встроенного сервера, и против бэкенда
@@ -138,7 +140,7 @@
     const inc = await newFire(env);
     await env.act(inc.guid, "claim", {}, "queue");
     await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" });
-    await env.advance(30 * 60 + 1);
+    await env.advance(30 * 60 + GRACE + 1);
     const c = await env.card(inc.guid);
     assert.eq(c.state, "on_hold", "состояние");
     assert.ok(c.slaBreached, "отметка нарушения");
@@ -449,7 +451,7 @@
     const first = W.escalation.levels[0].targetRef.split(":")[1];
     const second = W.escalation.levels[1].targetRef.split(":")[1];
     assert.eq(first, "petrova", "в машине первый уровень — Петрова");
-    const left = Math.ceil((Date.parse(inc.timer.dueAt) - env.now) / 1000) + 1;
+    const left = Math.ceil((Date.parse(inc.timer.dueAt) - env.now) / 1000) + GRACE + 1;
     await env.advance(left);
     const c = await env.card(inc.guid);
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
@@ -518,7 +520,7 @@
       // До конца реакции — по дедлайну карточки
       const card = await api.get(`/operator/incidents/${enc(inc.guid)}`);
       const now = Date.parse((await api.raw("POST", "/test/clock", { advanceSec: 0 })).body.now);
-      for (let left = Math.ceil((Date.parse(card.timer.dueAt) - now) / 1000) + 1; left > 0; left -= 240) {
+      for (let left = Math.ceil((Date.parse(card.timer.dueAt) - now) / 1000) + GRACE + 1; left > 0; left -= 240) {
         await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
         fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) })).body.fired);
       }
@@ -547,7 +549,7 @@
     const got = [];
     const stop = env.api.subscribe((m) => got.push(m));
     await new Promise((r) => setTimeout(r, 300));
-    const fired = await env.advance(longestResolution() + 1);
+    const fired = await env.advance(longestResolution() + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "resolution_overdue"), "норматив закрытия нарушен");
@@ -573,7 +575,7 @@
       assert.status(claim, 200, null, `${why}: взять`);
       const got = [];
       const stop = api.subscribe((m) => got.push(m));
-      for (let left = longestResolution() + 1; left > 0; left -= 240) {
+      for (let left = longestResolution() + GRACE + 1; left > 0; left -= 240) {
         await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
         await api.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
       }
@@ -640,17 +642,17 @@
     const env = await makeEnv();
     const inc = await newFire(env);
     const reactionSec = W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
-    await env.advance(reactionSec + 1);
+    await env.advance(reactionSec + GRACE + 1);
     let c = await env.card(inc.guid);
     const levels = W.escalation.levels;
     assert.eq(c.state, "pending_acceptance", "после реакции");
     assert.eq(c.escalationLevel, 1, "уровень");
     assert.eq(c.owner && c.owner.id, levels[0].targetRef.split(":")[1], "адресат уровня 1");
-    await env.advance(levels[0].reactionSec + 1);
+    await env.advance(levels[0].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, 2, "уровень 2");
     assert.eq(c.owner && c.owner.id, levels[1].targetRef.split(":")[1], "адресат уровня 2");
-    await env.advance(levels[1].reactionSec + 1);
+    await env.advance(levels[1].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");
     assert.ok(c.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
@@ -672,7 +674,7 @@
       assert.status(claimed, 200, null, "взять");
       // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat. Ровно до
       // истечения норматива критического пожара: дальше по времени пошла бы уже реакция уровня (RULE-41)
-      let left = w.timers.find((t) => t.id === "resolution").byPriority.critical + 1;
+      let left = w.timers.find((t) => t.id === "resolution").byPriority.critical + GRACE + 1;
       const fired = [];
       while (left > 0) {
         const step = Math.min(left, w.session.idleHoldSec - 1);
@@ -702,7 +704,7 @@
       const api = stand.api;
       const reset = { body: { now: new Date(stand.now).toISOString() } };
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.escalationLevel === 0 && pick(e));
-      let left = Math.ceil((Date.parse(inc.timer.dueAt) - Date.parse(reset.body.now)) / 1000) + 1;
+      let left = Math.ceil((Date.parse(inc.timer.dueAt) - Date.parse(reset.body.now)) / 1000) + GRACE + 1;
       const fired = [];
       while (left > 0) {
         const step = Math.min(left, w.session.idleHoldSec - 1);
@@ -730,7 +732,7 @@
     const env = await makeEnv();
     const inc = await newFire(env);
     const res = await env.act(inc.guid, "claim", {}, "queue");
-    await env.advance(Math.ceil((Date.parse(res.body.incident.timer.dueAt) - env.now) / 1000) + 1);
+    await env.advance(Math.ceil((Date.parse(res.body.incident.timer.dueAt) - env.now) / 1000) + GRACE + 1);
     assert.status(await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
     assert.status(await env.act(inc.guid, "resume"), 200, null, "возобновить");
     const again = await env.advance(5);
@@ -741,7 +743,7 @@
     const esc = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }) });
     const fire = await newFire(esc);
     const claimed = await esc.act(fire.guid, "claim", {}, "queue");
-    const fired = await esc.advance(Math.ceil((Date.parse(claimed.body.incident.timer.dueAt) - esc.now) / 1000) + 1);
+    const fired = await esc.advance(Math.ceil((Date.parse(claimed.body.incident.timer.dueAt) - esc.now) / 1000) + GRACE + 1);
     assert.ok(fired.some((f) => f.incidentGuid === fire.guid && f.transitionId === "resolution_escalate"), "эскалация по закрытию — моей группе");
     assert.status(await esc.act(fire.guid, "accept", {}, "queue"), 200, null, "принять");
     const after = await esc.advance(5);
@@ -755,7 +757,7 @@
     const inc = await newFire(env);
     const res = await env.act(inc.guid, "claim", {}, "queue");
     const left = Date.parse(res.body.incident.timer.dueAt) - env.now;
-    await env.advance(Math.ceil(left / 1000) + 1);
+    await env.advance(Math.ceil(left / 1000) + GRACE + 1);
     let c = await env.card(inc.guid);
     assert.eq(c.state, "in_progress", "состояние");
     assert.eq(c.breaches.filter((b) => b.kind === "resolution").length, 1, "одно нарушение");
@@ -1043,7 +1045,7 @@
     assert.status(await env.answer(a.guid, { visual: true }), 200, null, "ответ сценария");
     const macro = (await env.call("GET", `/operator/incidents/${enc(a.guid)}/scenario`)).body.steps.find((s) => s.type === "Macros");
     if (macro) assert.status(await env.call("POST", `/operator/incidents/${enc(a.guid)}/macros/${enc(macro.view.buttons[0])}`), 202, null, "макрос");
-    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === b.priority).sec + 1);
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === b.priority).sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     const of = (type, guid, tid) => got.find((m) => m.type === type && m.incidentGuid === guid && (!tid || m.payload.transitionId === tid));
@@ -1056,6 +1058,37 @@
     if (macro) assert.ok(of("macro.completed", a.guid), "макрос — macro.completed");
     const old = got.filter((m) => ["incident.state_changed", "incident.owner_changed", "incident.auto_escalated", "incident.sla_breached"].includes(m.type));
     assert.eq(old.map((m) => m.type), [], "старых типов событий нет");
+  });
+
+  test("Окно после дедлайна: «Взять» в окне выигрывает у таймера, после окна — нет (§10.1, правило 5; RULE-63)", async () => {
+    assert.ok(GRACE > 0, "окно задано в машине");
+    const norm = (inc) => W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === inc.priority).sec;
+    // Автоэскалация включена: отменённая эскалация — запись в журнале, без нарушения (эскалация его и не пишет)
+    let env = await makeEnv();
+    let inc = await newFire(env);
+    let due = Date.parse(inc.timer.dueAt);
+    await env.advance(norm(inc) + 1);
+    let res = await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(res, 200, null, "«Взять» через секунду после дедлайна");
+    let c = res.body.incident;
+    assert.eq([res.body.canceledTimerTrigger, c.state, c.escalationLevel, c.breaches.length], ["auto_escalate", "in_progress", 0, 0], "эскалация отменена, нарушения нет");
+    assert.ok(c.journal.some((j) => j.templateKey === "workflow.journal.timer_overridden"), "отмена — в журнале");
+    // Автоэскалация выключена: отменённое «Норматив реакции нарушен» — нарушение на момент дедлайна
+    env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { enabled: false }) } });
+    inc = await newFire(env);
+    due = Date.parse(inc.timer.dueAt);
+    await env.advance(norm(inc) + 1);
+    res = await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(res, 200, null, "«Взять» в окне при выключенной эскалации");
+    c = res.body.incident;
+    assert.eq(res.body.canceledTimerTrigger, "reaction_overdue", "отменено «норматив реакции нарушен»");
+    assert.ok(c.breaches.length === 1 && c.breaches[0].kind === "reaction" && Date.parse(c.breaches[0].at) === due, `нарушение реакции на момент дедлайна: ${JSON.stringify(c.breaches)}`);
+    // После окна таймер уже сработал: инцидент ушёл по эскалации, «Взять» не из этого состояния
+    env = await makeEnv();
+    inc = await newFire(env);
+    await env.advance(norm(inc) + GRACE + 1);
+    assert.eq((await env.card(inc.guid)).state, "pending_acceptance", "после окна — автоэскалация");
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "«Взять» после окна");
   });
 
   /* ===== Порядок очереди (§7, RULE-62) ===== */
@@ -1325,7 +1358,7 @@
     walk(tree);
     assert.ok(tree.length > 0 && treeDevices.every((d) => allowed.has(d)), `дерево групп — только доступные устройства: ${tree.map((n) => n.name)}`);
     // Время идёт: недоступные новые эскалируются, но в поток о них ничего не приходит
-    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     assert.ok(got.length > 0, "события о доступных пришли");
@@ -1521,7 +1554,7 @@
     const got = [];
     const stop = env.api.subscribe((m, meta) => got.push({ m, meta }));
     const inc = await newFire(env);
-    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     const found = got.find(({ m }) => m.type === "incident.transitioned" && m.incidentGuid === inc.guid && m.payload.transitionId === "auto_escalate");

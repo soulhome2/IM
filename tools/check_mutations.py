@@ -37,19 +37,27 @@ def hold_without_pause(w):
     hold["effects"] = [e for e in hold["effects"] if e["fn"] != "pauseTimer"]
 
 
+def no_grace(w):
+    """Пробы с нормативом в секунды ждут срабатывания сразу: окно после дедлайна (RULE-63) — 0"""
+    w["invariants"]["manualWinsOverTimer"]["graceSec"] = 0
+
+
 def short_resolution(w):
+    no_grace(w)
     timer = next(t for t in w["timers"] if t["id"] == "resolution")
     timer["byPriority"] = {k: 2 for k in timer["byPriority"]}
     timer["overrides"] = []
 
 
 def reaction_ceiling(w):
+    no_grace(w)
     timer = next(t for t in w["timers"] if t["id"] == "reaction")
     timer["overrides"] = [{"sec": 2}]
     w["escalation"]["maxLevel"] = 0
 
 
 def short_hold(w):
+    no_grace(w)
     for item in w["reasonCatalogs"]["hold"]["items"]:
         item["maxMinutes"] = 0.03
 
@@ -62,6 +70,7 @@ def transfer_to_self(w):
 
 
 def escalate_to_my_group(w):
+    no_grace(w)
     for lvl in w["escalation"]["levels"]:
         lvl["reactionSec"] = 2
     w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
@@ -147,7 +156,7 @@ MUTATIONS = [
     (
         "autoEscalation",
         "норматив реакции уровней 2 с — автоэскалация, открытая карточка остаётся просмотром",
-        lambda w: [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]],
+        lambda w: (no_grace(w), [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]]),
     ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
     (

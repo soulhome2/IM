@@ -9,6 +9,8 @@
   const { test, makeEnv, assert, enc } = IMTest;
   const ME = "me";
   const W = window.IM_WORKFLOW;
+  // Окно после дедлайна (RULE-63): переход по таймеру — через graceSec после дедлайна
+  const GRACE = ((W.invariants || {}).manualWinsOverTimer || {}).graceSec || 0;
 
   const changed = (base, copy) =>
     copy ? Object.fromEntries(Object.keys(copy).filter((k) => JSON.stringify(copy[k]) !== JSON.stringify(base[k])).map((k) => [k, copy[k]])) : undefined;
@@ -19,7 +21,7 @@
   const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
   const firedFor = (fired, guid) => fired.filter((f) => f.incidentGuid === guid).map((f) => f.transitionId);
   // До дедлайна норматива из карточки — плюс секунда
-  const untilDue = (env, card) => Math.ceil((Date.parse(card.timer.dueAt) - env.now) / 1000) + 1;
+  const untilDue = (env, card) => Math.ceil((Date.parse(card.timer.dueAt) - env.now) / 1000) + GRACE + 1;
 
   /* ===== Прыжок часов против шагов (§14.3, RULE-41, RULE-48) ===== */
 

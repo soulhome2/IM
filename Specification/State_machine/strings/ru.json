@@ -361,5 +361,8 @@
   "workflow.notice.claim": "{id} взял в работу {who}",
   "workflow.notice.transfer": "{who} передал {id} вам",
   "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
-  "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой"
+  "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой",
+  "workflow.journal.timer_overridden": "Норматив «{timer}» истёк — действие оператора успело раньше, чем «{transition}»",
+  "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Окно после дедлайна",
+  "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "Сколько после дедлайна ждать действия оператора, прежде чем сработает переход по таймеру; действие в это окно выигрывает (§10.1)"
 }

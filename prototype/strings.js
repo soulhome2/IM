@@ -363,7 +363,10 @@ window.IM_STRINGS = {
     "workflow.notice.claim": "{who} took {id}",
     "workflow.notice.transfer": "{who} transferred {id} to you",
     "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
-    "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold"
+    "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold",
+    "workflow.journal.timer_overridden": "Target «{timer}» expired — the operator acted before «{transition}»",
+    "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Window after the deadline",
+    "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "How long after a deadline to wait for the operator before the timer transition fires; an action in this window wins (§10.1)"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -727,6 +730,9 @@ window.IM_STRINGS = {
     "workflow.notice.claim": "{id} взял в работу {who}",
     "workflow.notice.transfer": "{who} передал {id} вам",
     "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
-    "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой"
+    "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой",
+    "workflow.journal.timer_overridden": "Норматив «{timer}» истёк — действие оператора успело раньше, чем «{transition}»",
+    "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Окно после дедлайна",
+    "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "Сколько после дедлайна ждать действия оператора, прежде чем сработает переход по таймеру; действие в это окно выигрывает (§10.1)"
   }
 };
