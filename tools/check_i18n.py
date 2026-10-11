@@ -40,11 +40,14 @@ def main():
         path = os.path.join(PROTO, name)
         with open(path, encoding="utf-8") as f:
             text = f.read()
-        en, es = set(keys_of(text, "en")), set(keys_of(text, "es"))
-        for key in sorted(en ^ es):
-            print(f"{name}: «{key}» есть только в {'en' if key in en else 'es'}")
-            problems += 1
-        unused = sorted(k for k in en | es if k.replace('\\"', '"') not in code)
+        # Языки словаря — все разделы; каждый сверяется с английским
+        langs = re.findall(r"^  ([a-z]{2}): \{$", text, re.M)
+        sets = {lang: set(keys_of(text, lang)) for lang in langs}
+        for lang in langs:
+            for key in sorted(sets["en"] ^ sets[lang]):
+                print(f"{name}: «{key}» есть только в {'en' if key in sets['en'] else lang}")
+                problems += 1
+        unused = sorted(k for k in set().union(*sets.values()) if k.replace('\\"', '"') not in code)
         for key in unused:
             print(f"{name}: лишний ключ «{key}»")
         problems += 0 if fix else len(unused)

@@ -8,7 +8,6 @@
   const LANGS = [
     { id: "ru", label: "Русский", short: "RU", locale: "ru-RU" },
     { id: "en", label: "English", short: "EN", locale: "en-GB" },
-    { id: "es", label: "Español", short: "ES", locale: "es-ES" },
   ];
 
   const DICT = {};
