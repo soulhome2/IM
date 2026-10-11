@@ -1866,10 +1866,11 @@ kbd {
     line-height: 18px;
   }
 
-  .statusbar { gap: 12px; padding: 0 12px; }
+  /* Строка и её части сжимаются: длинный текст обрезается многоточием, а не расширяет страницу (BUG-35) */
+  .statusbar { gap: 12px; padding: 0 12px; min-width: 0; }
   #statusSteps,
   #statusQueue { display: none; }
-  .statusbar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .statusbar span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .icon-btn { width: 44px; height: 44px; }
   .btn { padding: 10px 14px; }
