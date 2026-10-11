@@ -804,7 +804,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Взято в работу"
+            "workflow.journal.claim"
           ]
         }
       ],
@@ -896,7 +896,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Передача принята, прогресс сценария сохранён"
+            "workflow.journal.accept"
           ]
         }
       ],
@@ -975,7 +975,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Передача отклонена: {comment}"
+            "workflow.journal.reject"
           ]
         }
       ],
@@ -1053,7 +1053,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Отложен на шаге {stepNumber}: {holdReasonLabel}. {comment}"
+            "workflow.journal.hold"
           ]
         },
         {
@@ -1138,7 +1138,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Обработка возобновлена на шаге {stepNumber}"
+            "workflow.journal.resume"
           ]
         }
       ],
@@ -1227,7 +1227,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Возвращён в очередь: {comment}"
+            "workflow.journal.release"
           ]
         },
         {
@@ -1356,7 +1356,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Передано → {targetName} (уровень {escalationLevel}). {comment}"
+            "workflow.journal.transfer"
           ]
         },
         {
@@ -1489,7 +1489,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Перехват у {previousOwnerName}. Прогресс сценария сохранён ({filledSteps}/{totalSteps})"
+            "workflow.journal.takeover"
           ]
         },
         {
@@ -1637,7 +1637,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Закрыт: {closeResultLabel}. {comment}"
+            "workflow.journal.close"
           ]
         },
         {
@@ -1721,7 +1721,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Переоткрыт после закрытия ({closeResultLabel}): {comment}"
+            "workflow.journal.reopen"
           ]
         },
         {
@@ -1842,7 +1842,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Автоэскалация → {targetName} (уровень {escalationLevel}). {escalationReason}"
+            "workflow.journal.auto_escalate"
           ]
         },
         {
@@ -1916,7 +1916,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Эскалировать некому: норматив реакции нарушен, алерт получателю"
+            "workflow.journal.escalation_ceiling"
           ]
         },
         {
@@ -1976,7 +1976,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив реакции нарушен, алерт получателю"
+            "workflow.journal.reaction_overdue"
           ]
         },
         {
@@ -2027,7 +2027,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив закрытия нарушен, алерт получателю"
+            "workflow.journal.resolution_overdue"
           ]
         },
         {
@@ -2122,7 +2122,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})"
+            "workflow.journal.resolution_escalate"
           ]
         },
         {
@@ -2194,7 +2194,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Норматив закрытия нарушен, эскалировать некому: алерт получателю"
+            "workflow.journal.resolution_ceiling"
           ]
         },
         {
@@ -2238,7 +2238,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю"
+            "workflow.journal.hold_overdue"
           ]
         },
         {
@@ -2297,7 +2297,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Отложен системой: {holdReasonLabel}"
+            "workflow.journal.system_hold_break"
           ]
         },
         {
@@ -2356,7 +2356,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Отложен системой: нет связи с оператором"
+            "workflow.journal.system_hold_idle"
           ]
         },
         {
@@ -2439,7 +2439,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Возвращён в очередь: оператор не отвечает"
+            "workflow.journal.system_release_idle"
           ]
         }
       ],
@@ -2491,7 +2491,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Адресат вышел, не приняв: передано группе {targetName}"
+            "workflow.journal.addressee_signed_out_to_group"
           ]
         },
         {
@@ -2547,7 +2547,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Адресат вышел, не приняв: возвращён в очередь"
+            "workflow.journal.addressee_signed_out_to_queue"
           ]
         }
       ],
@@ -2616,7 +2616,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Возвращён в очередь: оператор вышел"
+            "workflow.journal.owner_signed_out"
           ]
         },
         {
@@ -2699,7 +2699,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Возвращён в очередь: у {previousOwnerName} нет доступа к объекту"
+            "workflow.journal.addressee_lost_access"
           ]
         },
         {
@@ -2775,7 +2775,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "appendLog",
           "args": [
-            "Возвращён в очередь: {previousOwnerName} не может принять"
+            "workflow.journal.addressee_cannot_accept"
           ]
         },
         {
@@ -2941,7 +2941,7 @@ window.IM_WORKFLOW = {
   "alerts": {
     "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
     "target": "group:grp-leads",
-    "noRecipientLog": "Алерт не отправлен: получателя на месте с доступом к объекту нет"
+    "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
   "limits": {
     "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда.",
@@ -3321,6 +3321,58 @@ window.IM_WORKFLOW = {
       "reaction_deadline"
     ],
     "operatorMayChange": false
+  },
+  "messages": {
+    "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины, и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
+    "workflow.journal.create": {
+      "vars": [],
+      "$comment": "Появление инцидента (RULE-61)"
+    },
+    "workflow.journal.source": {
+      "vars": [
+        "text"
+      ],
+      "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)"
+    },
+    "workflow.journal.group.created": {
+      "vars": [
+        "ids"
+      ],
+      "$comment": "§11. Группа сценария создана; ids — номера остальных её инцидентов"
+    },
+    "workflow.journal.group.excluded": {
+      "vars": [],
+      "$comment": "§11. Ручное исключение из группы"
+    },
+    "workflow.journal.group.left": {
+      "vars": [],
+      "$comment": "§11 (RULE-57). Вышел из группы: владелец разошёлся с группой"
+    },
+    "workflow.journal.macro.launched": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5. Запущен макрос сценария"
+    },
+    "workflow.journal.scenario.step": {
+      "vars": [
+        "i",
+        "n",
+        "name",
+        "done"
+      ],
+      "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ или ключ ниже"
+    },
+    "workflow.journal.scenario.confirmed": {
+      "vars": [],
+      "$comment": "Значение done: подтверждение"
+    },
+    "workflow.journal.scenario.macro": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "Значение done: запущен макрос"
+    }
   },
   "registries": {
     "$comment": "§14.8. Фиксированные реестры: продуктовая команда собирает схему из этих функций, разработчики расширяют сами реестры. Отмеченные extendsBaseRegistry добавлены в v4 сверх списка из §14.8 — их нужно реализовать.",

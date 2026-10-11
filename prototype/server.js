@@ -393,11 +393,40 @@
 
     /* ===== Ответы API: представление для смотрящего оператора ===== */
 
-    // Подстановка [шаблон, переменные] → русский текст. Клиент получает и шаблон, и переменные,
-    // чтобы перевести их на язык интерфейса
+    // Строка ICU MessageFormat (§14.9): {name} — подстановка, {n, plural, one {…} few {…} other {…}} —
+    // форма после числа, # — само число. Неизвестная подстановка остаётся как есть
+    function icu(text, vars, locale, number) {
+      let out = "";
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === "#" && number != null) out += String(number);
+        else if (c !== "{") out += c;
+        else {
+          let depth = 0;
+          let j = i;
+          for (; j < text.length; j++) if (text[j] === "{") depth++; else if (text[j] === "}" && --depth === 0) break;
+          const m = text.slice(i + 1, j).match(/^\s*(\w+)\s*(?:,\s*plural\s*,([\s\S]*))?$/);
+          const v = m && vars ? vars[m[1]] : undefined;
+          if (!m || v === undefined) out += text.slice(i, j + 1);
+          else if (!m[2]) out += String(v);
+          else {
+            const forms = {};
+            m[2].replace(/([=\w]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (all, k, form) => (forms[k] = form));
+            const form = forms[`=${v}`] || forms[new Intl.PluralRules(locale).select(Number(v))] || forms.other || "";
+            out += icu(form, vars, locale, v);
+          }
+          i = j;
+        }
+      }
+      return out;
+    }
+    // Ключ каталога (§14.9) → строка на языке оператора, иначе русская; не ключ — сам текст.
+    // Подстановка [ключ, подстановки] переводится так же. Клиент получает и ключ, и подстановки
     function render(template, vars) {
-      const value = (v) => (Array.isArray(v) ? render(v[0], v[1]) : v);
-      return String(template || "").replace(/\{(\w+)\}/g, (m, key) => (vars && key in vars ? String(value(vars[key])) : m));
+      const locale = (session && session.preferences.locale) || "ru";
+      const text = (STRINGS[locale] || {})[template] || (STRINGS.ru || {})[template] || String(template || "");
+      const values = Object.fromEntries(Object.entries(vars || {}).map(([k, v]) => [k, Array.isArray(v) ? render(v[0], v[1]) : v]));
+      return icu(text, values, locale);
     }
     const say = (why) => (why ? { text: render(why[0], why[1]), key: why[0], vars: why[1] || {} } : null);
 
@@ -854,9 +883,9 @@
         if (groupId) {
           ev.groupCreatedAt = now();
           const ids = changed.filter((c) => c.groupId === groupId && c.ev !== ev).map((c) => c.ev.number);
-          log(ev, "dispatcher", "Групповая обработка вместе с {ids}", { ids: ids.join(", ") });
+          log(ev, "dispatcher", "workflow.journal.group.created", { ids: ids.join(", ") });
         } else {
-          log(ev, "dispatcher", "Вышел из групповой обработки: у остальных инцидентов группы другой владелец");
+          log(ev, "dispatcher", "workflow.journal.group.left");
         }
         touch([ev]);
         emit("incident.group_changed", ev, "dispatcher", { groupGuid: groupId });
@@ -1064,7 +1093,7 @@
           if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
           list.forEach((ev) => {
             ev.groupCreatedAt = now();
-            log(ev, ME, "Групповая обработка вместе с {ids}", {
+            log(ev, ME, "workflow.journal.group.created", {
               ids: list
                 .filter((x) => x.id !== ev.id)
                 .map((x) => x.number)
@@ -1141,7 +1170,7 @@
           const check = engine.availability("run_macro", ev);
           if (!check.ok) return guardProblem(check);
           if (!ev.launched.includes(p.macroId)) ev.launched.push(p.macroId);
-          log(ev, ME, "Запущен макрос «{name}»", { name: p.macroId });
+          log(ev, ME, "workflow.journal.macro.launched", { name: p.macroId });
           touch([ev]);
           return { status: 202, body: { executionGuid: uuid(9, ++serial.macro), macroId: p.macroId, status: "delivered", queuedAt: iso(now()) } };
         },
@@ -1415,11 +1444,11 @@
       let done = "";
       if (step.type === "checkbox") {
         ev.answers[step.id] = true;
-        done = "подтверждено";
+        done = ["workflow.journal.scenario.confirmed"];
       } else if (step.type === "macros") {
         if (!colleague(ev.owner).availability("run_macro", ev).ok) return;
         ev.launched.push(step.buttons[0]);
-        done = ["запущен макрос «{name}»", { name: step.buttons[0] }];
+        done = ["workflow.journal.scenario.macro", { name: step.buttons[0] }];
       } else if (step.options) {
         ev.answers[step.id] = step.options[Math.floor(Math.random() * step.options.length)];
         done = ev.answers[step.id];
@@ -1429,7 +1458,7 @@
         done = ev.answers[step.id];
       }
       ev.stepIndex = Math.min(idx + 1, steps.length - 1);
-      log(ev, ev.owner, "Шаг {i}/{n} · {name}: {done}", { i: idx + 1, n: steps.length, name: stepShort(step), done });
+      log(ev, ev.owner, "workflow.journal.scenario.step", { i: idx + 1, n: steps.length, name: stepShort(step), done });
       touch([ev]);
       emit("journal.appended", ev, ev.owner, {});
       // Сценарий заполнен — коллега закрывает инцидент результатом полной обработки (тем, что

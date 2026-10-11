@@ -6,6 +6,11 @@
 что сделано — здесь.
 """
 import json
+import os
+
+# Тексты записей журнала — из русского каталога строк (§14.9): в машине только ключи
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
+    RU = json.load(_f)
 
 TRIGGER = {"manual": "кнопка", "timer": "таймер", "system": "система"}
 SURFACE = {"queue": "очередь", "card": "карточка"}
@@ -129,7 +134,7 @@ class Doc:
             "recordBreach": lambda: f"нарушение `{a[0]}` в `breaches`",
             "increment": lambda: f"`{a[0]}` +1",
             "setFlag": lambda: f"`{a[0]}`: {self.value(a[1])}",
-            "appendLog": lambda: f"журнал: «{a[0]}»",
+            "appendLog": lambda: f"журнал: «{RU.get(a[0], a[0])}»",
             "returnToQueue": lambda: "оператор возвращается к очереди",
             "evictOpenCard": lambda: f"открытая карточка ({WHO.get(a[0], a[0])}) — в режим просмотра",
             "setCursor": lambda: "сценарий открывается на первом незаполненном шаге" if a[0] == "firstOpenStep" else f"курсор сценария: `{a[0]}`",

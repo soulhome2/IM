@@ -312,6 +312,19 @@
       "Взять новое событие"
     );
 
+    await step(
+      "Журнал карточки — текстом из каталога строк, а не ключами (§14.9, RULE-66)",
+      async () => {
+        await openOwn(closedId);
+        const items = [...document.querySelectorAll(".log li")].map((li) => li.textContent);
+        expect(items.length, "в карточке нет журнала");
+        expect(!items.some((x) => /workflow\./.test(x)), `в журнале ключ вместо текста: «${items.find((x) => /workflow\./.test(x))}»`);
+        expect(/Взято в работу/.test(items[items.length - 1]), `последняя запись: «${items[items.length - 1]}»`);
+        return items[items.length - 1];
+      },
+      "Взять новое событие"
+    );
+
     await step("Ответ с вариантами сохраняется после «Далее»", async () => {
       await openOwn(closedId);
       for (let i = 0; i < 6; i++) {

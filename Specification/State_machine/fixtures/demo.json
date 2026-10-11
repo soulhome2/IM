@@ -1688,7 +1688,7 @@
           "at": "2026-10-03T11:59:00Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Событие поставлено в очередь",
+          "template": "workflow.journal.create",
           "vars": {}
         }
       ]
@@ -1739,7 +1739,7 @@
           "at": "2026-10-03T11:58:43Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Событие поставлено в очередь",
+          "template": "workflow.journal.create",
           "vars": {}
         }
       ]
@@ -1791,8 +1791,10 @@
           "at": "2026-10-03T11:58:04Z",
           "actor": null,
           "actorName": "Аудиодетекция",
-          "template": "Микрофон «Витрина у входа»: спектр разбития стекла, 87 дБ",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Микрофон «Витрина у входа»: спектр разбития стекла, 87 дБ"
+          }
         }
       ]
     },
@@ -1843,8 +1845,10 @@
           "at": "2026-10-03T11:57:27Z",
           "actor": null,
           "actorName": "Точка прохода",
-          "template": "Алкорамка на турникете №2: показание выше порога, проход заблокирован",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Алкорамка на турникете №2: показание выше порога, проход заблокирован"
+          }
         }
       ]
     },
@@ -1898,14 +1902,14 @@
           "at": "2026-10-03T11:56:33Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Событие поставлено в очередь",
+          "template": "workflow.journal.create",
           "vars": {}
         },
         {
           "at": "2026-10-03T11:56:54Z",
           "actor": "petrova",
           "actorName": null,
-          "template": "Взято в работу · шаг 2/5",
+          "template": "workflow.journal.claim",
           "vars": {}
         }
       ]
@@ -1961,21 +1965,16 @@
           "at": "2026-10-03T11:54:06Z",
           "actor": null,
           "actorName": "Детектор СИЗ",
-          "template": "Зона рампы: человек без защитной каски, достоверность 0,93",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Зона рампы: человек без защитной каски, достоверность 0,93"
+          }
         },
         {
           "at": "2026-10-03T11:54:50Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Взято в работу",
-          "vars": {}
-        },
-        {
-          "at": "2026-10-03T11:55:32Z",
-          "actor": "sidorov",
-          "actorName": null,
-          "template": "Нарушение подтверждено, ищу табельный номер",
+          "template": "workflow.journal.claim",
           "vars": {}
         }
       ]
@@ -2030,22 +2029,28 @@
           "at": "2026-10-03T11:50:09Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Потеря видеопотока «Коридор примерочных»",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Потеря видеопотока «Коридор примерочных»"
+          }
         },
         {
           "at": "2026-10-03T11:50:57Z",
           "actor": "me",
           "actorName": null,
-          "template": "Взято в работу",
+          "template": "workflow.journal.claim",
           "vars": {}
         },
         {
           "at": "2026-10-03T11:52:32Z",
           "actor": "me",
           "actorName": null,
-          "template": "Обработка приостановлена на шаге 2",
-          "vars": {}
+          "template": "workflow.journal.hold",
+          "vars": {
+            "stepNumber": 2,
+            "holdReasonLabel": "Ожидание третьей стороны",
+            "comment": ""
+          }
         }
       ]
     },
@@ -2098,14 +2103,16 @@
           "at": "2026-10-03T11:46:55Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Детектор скопления",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Детектор скопления"
+          }
         },
         {
           "at": "2026-10-03T11:47:40Z",
           "actor": "gusev",
           "actorName": null,
-          "template": "Взято в работу · смотрю по камерам входной группы",
+          "template": "workflow.journal.claim",
           "vars": {}
         }
       ]
@@ -2158,17 +2165,10 @@
       },
       "journal": [
         {
-          "at": "2026-10-03T11:40:12Z",
-          "actor": "sidorov",
-          "actorName": null,
-          "template": "Эскалация в ЦОД: нет доступа к площадке",
-          "vars": {}
-        },
-        {
           "at": "2026-10-03T12:00:00Z",
           "actor": "noc",
           "actorName": null,
-          "template": "Передано → {targetName} (уровень {escalationLevel}). {comment}",
+          "template": "workflow.journal.transfer",
           "vars": {
             "targetName": "Иванов А. С.",
             "escalationLevel": 1,
@@ -2224,8 +2224,10 @@
           "at": "2026-10-03T11:34:04Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Сработка пожарного датчика",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Сработка пожарного датчика"
+          }
         }
       ]
     },
@@ -2275,8 +2277,10 @@
           "at": "2026-10-03T11:26:36Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Превышение плотности людей в зоне",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Превышение плотности людей в зоне"
+          }
         }
       ]
     },
@@ -2330,21 +2334,23 @@
           "at": "2026-10-03T11:19:01Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Потеря видеопотока",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Потеря видеопотока"
+          }
         },
         {
           "at": "2026-10-03T11:20:23Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Взято в работу · шаг 1/4",
+          "template": "workflow.journal.claim",
           "vars": {}
         },
         {
           "at": "2026-10-03T11:40:00Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Отложен на шаге {stepNumber}: {holdReasonLabel}. {comment}",
+          "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 2,
             "holdReasonLabel": "Ожидание третьей стороны",
@@ -2399,7 +2405,7 @@
           "at": "2026-10-03T11:12:49Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Событие поставлено в очередь",
+          "template": "workflow.journal.create",
           "vars": {}
         }
       ]
@@ -2451,8 +2457,10 @@
           "at": "2026-10-03T11:05:04Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Сработка пожарного датчика",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Сработка пожарного датчика"
+          }
         }
       ]
     },
@@ -2504,15 +2512,20 @@
           "at": "2026-10-03T10:57:30Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Скопление в зоне ожидания",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Скопление в зоне ожидания"
+          }
         },
         {
           "at": "2026-10-03T11:02:54Z",
           "actor": "me",
           "actorName": null,
-          "template": "Инцидент закрыт",
-          "vars": {}
+          "template": "workflow.journal.close",
+          "vars": {
+            "closeResultLabel": "Обработан",
+            "comment": ""
+          }
         }
       ]
     },
@@ -2562,17 +2575,10 @@
       },
       "journal": [
         {
-          "at": "2026-10-03T10:52:03Z",
-          "actor": "petrova",
-          "actorName": null,
-          "template": "Эскалация: требуется допуск в чистую зону",
-          "vars": {}
-        },
-        {
           "at": "2026-10-03T12:00:00Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Передано → {targetName} (уровень {escalationLevel}). {comment}",
+          "template": "workflow.journal.transfer",
           "vars": {
             "targetName": "Старшие операторы",
             "escalationLevel": 1,
@@ -2626,8 +2632,10 @@
           "at": "2026-10-03T10:42:41Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Резкое падение освещённости кадра",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Резкое падение освещённости кадра"
+          }
         }
       ]
     },
@@ -2684,15 +2692,21 @@
           "at": "2026-10-03T10:34:23Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Задымление на кухне",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Задымление на кухне"
+          }
         },
         {
           "at": "2026-10-03T10:36:36Z",
           "actor": "me",
           "actorName": null,
-          "template": "Обработка приостановлена на шаге 3",
-          "vars": {}
+          "template": "workflow.journal.hold",
+          "vars": {
+            "stepNumber": 3,
+            "holdReasonLabel": "Ожидание третьей стороны",
+            "comment": ""
+          }
         }
       ]
     },
@@ -2742,8 +2756,10 @@
           "at": "2026-10-03T10:26:09Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Группа людей у рампы дольше 10 минут",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Группа людей у рампы дольше 10 минут"
+          }
         }
       ]
     },
@@ -2796,21 +2812,23 @@
           "at": "2026-10-03T10:17:45Z",
           "actor": null,
           "actorName": "СКУД",
-          "template": "Проход без карты в нерабочее время",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Проход без карты в нерабочее время"
+          }
         },
         {
           "at": "2026-10-03T10:18:54Z",
           "actor": "petrova",
           "actorName": null,
-          "template": "Взято в работу · шаг 1/5",
+          "template": "workflow.journal.claim",
           "vars": {}
         },
         {
           "at": "2026-10-03T11:30:00Z",
           "actor": "petrova",
           "actorName": null,
-          "template": "Отложен на шаге {stepNumber}: {holdReasonLabel}. {comment}",
+          "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 2,
             "holdReasonLabel": "Выезд наряда",
@@ -2845,7 +2863,7 @@
       "holdReason": null,
       "closeResult": "drill",
       "closeCause": null,
-      "result": null,
+      "result": "плановый тест",
       "closedBy": "sidorov",
       "closedAt": "2026-10-03T09:00:00Z",
       "timers": {
@@ -2869,15 +2887,20 @@
           "at": "2026-10-03T10:09:18Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Сработка пожарного датчика",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Сработка пожарного датчика"
+          }
         },
         {
           "at": "2026-10-03T10:15:02Z",
           "actor": "sidorov",
           "actorName": null,
-          "template": "Инцидент закрыт: плановый тест",
-          "vars": {}
+          "template": "workflow.journal.close",
+          "vars": {
+            "closeResultLabel": "Плановая проверка",
+            "comment": "плановый тест"
+          }
         }
       ]
     },
@@ -2926,8 +2949,10 @@
           "at": "2026-10-03T10:00:56Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Камера смещена с сектора обзора",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Камера смещена с сектора обзора"
+          }
         }
       ]
     },
@@ -2978,15 +3003,20 @@
           "at": "2026-10-03T09:53:32Z",
           "actor": null,
           "actorName": "СКУД",
-          "template": "Открытие двери без карты",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Открытие двери без карты"
+          }
         },
         {
           "at": "2026-10-03T09:56:47Z",
           "actor": "me",
           "actorName": null,
-          "template": "Инцидент закрыт",
-          "vars": {}
+          "template": "workflow.journal.close",
+          "vars": {
+            "closeResultLabel": "Обработан",
+            "comment": ""
+          }
         }
       ]
     },
@@ -3036,8 +3066,10 @@
           "at": "2026-10-03T09:45:04Z",
           "actor": null,
           "actorName": "Диспетчер",
-          "template": "Сработка датчика дыма в зоне ожидания",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Сработка датчика дыма в зоне ожидания"
+          }
         }
       ]
     },
@@ -3086,8 +3118,10 @@
           "at": "2026-10-03T09:36:27Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Очередь на кассах дольше норматива",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Очередь на кассах дольше норматива"
+          }
         }
       ]
     },
@@ -3116,7 +3150,7 @@
       "holdReason": null,
       "closeResult": "false_alarm",
       "closeCause": null,
-      "result": null,
+      "result": "Сработка от уборщика",
       "closedBy": "petrova",
       "closedAt": "2026-10-03T11:35:00Z",
       "timers": {
@@ -3139,21 +3173,16 @@
           "at": "2026-10-03T09:27:40Z",
           "actor": null,
           "actorName": "Видеоаналитика",
-          "template": "Движение в закрытой зоне",
-          "vars": {}
-        },
-        {
-          "at": "2026-10-03T09:32:11Z",
-          "actor": "petrova",
-          "actorName": null,
-          "template": "Инцидент закрыт",
-          "vars": {}
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Движение в закрытой зоне"
+          }
         },
         {
           "at": "2026-10-03T12:00:00Z",
-          "actor": "sidorov",
+          "actor": "petrova",
           "actorName": null,
-          "template": "Закрыт: {closeResultLabel}. {comment}",
+          "template": "workflow.journal.close",
           "vars": {
             "closeResultLabel": "Ложная тревога",
             "comment": "Сработка от уборщика"

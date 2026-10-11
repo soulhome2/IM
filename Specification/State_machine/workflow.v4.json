@@ -356,7 +356,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Взято в работу"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.claim"] }
       ],
       "bulk": { "allowed": true, "mode": "same_type_new", "minItems": 2, "createsGroup": true },
       "ui": { "surface": ["queue"], "style": "primary", "hotkey": "N", "navigate": "card" }
@@ -384,7 +384,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Передача принята, прогресс сценария сохранён"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
       ],
       "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
       "ui": { "surface": ["queue", "card"], "style": "primary", "hotkey": "A", "navigate": "card" }
@@ -410,7 +410,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Передача отклонена: {comment}"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reject"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
       "ui": { "surface": ["queue", "card"], "style": "outline", "hotkey": null, "navigate": "queue" }
@@ -436,7 +436,7 @@
         { "kind": "transactional", "fn": "setHoldReason", "args": ["form.reasonId"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Отложен на шаге {stepNumber}: {holdReasonLabel}. {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.hold"] },
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
@@ -464,7 +464,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Обработка возобновлена на шаге {stepNumber}"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resume"] }
       ],
       "bulk": { "allowed": false },
       "ui": { "surface": ["queue", "card"], "style": "primary", "hotkey": "R", "navigate": "card" }
@@ -492,7 +492,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.release"] },
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "group", "minItems": 2 },
@@ -531,7 +531,7 @@
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "byEscalationLevel"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Передано → {targetName} (уровень {escalationLevel}). {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.transfer"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
@@ -565,7 +565,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Перехват у {previousOwnerName}. Прогресс сценария сохранён ({filledSteps}/{totalSteps})"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.takeover"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] }
       ],
@@ -606,7 +606,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Закрыт: {closeResultLabel}. {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.close"] },
         { "kind": "transactional", "fn": "returnToQueue" },
         { "kind": "external", "fn": "externalCommand", "args": ["axxondata.export_incident"] }
       ],
@@ -640,7 +640,7 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Переоткрыт после закрытия ({closeResultLabel}): {comment}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reopen"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
         { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
@@ -669,7 +669,7 @@
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Автоэскалация → {targetName} (уровень {escalationLevel}). {escalationReason}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.auto_escalate"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
@@ -690,7 +690,7 @@
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Эскалировать некому: норматив реакции нарушен, алерт получателю"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.escalation_ceiling"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -710,7 +710,7 @@
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив реакции нарушен, алерт получателю"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reaction_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -728,7 +728,7 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, алерт получателю"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -753,7 +753,7 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", "escalation.level.number"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "escalation.level.reactionSec"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, эскалация → {targetName} (уровень {escalationLevel})"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_escalate"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
@@ -775,7 +775,7 @@
       ],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Норматив закрытия нарушен, эскалировать некому: алерт получателю"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_ceiling"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -790,7 +790,7 @@
       "guards": [{ "fn": "timerExpired", "args": ["hold"] }],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Предельный срок удержания «{holdReasonLabel}» истёк, алерт получателю"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.hold_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -808,7 +808,7 @@
         { "kind": "transactional", "fn": "setHoldReason", "args": ["break"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Отложен системой: {holdReasonLabel}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_hold_break"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["owner"] }
       ],
       "ui": { "surface": [] }
@@ -826,7 +826,7 @@
         { "kind": "transactional", "fn": "setHoldReason", "args": ["no_link"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Отложен системой: нет связи с оператором"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_hold_idle"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
       "ui": { "surface": [] }
@@ -850,7 +850,7 @@
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор не отвечает"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_release_idle"] }
       ],
       "ui": { "surface": [] }
     },
@@ -870,7 +870,7 @@
       "effects": [
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["owner.dutyGroup"] },
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат вышел, не приняв: передано группе {targetName}"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_signed_out_to_group"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
       "ui": { "surface": [] }
@@ -891,7 +891,7 @@
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Адресат вышел, не приняв: возвращён в очередь"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_signed_out_to_queue"] }
       ],
       "ui": { "surface": [] }
     },
@@ -914,7 +914,7 @@
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: оператор вышел"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.owner_signed_out"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] }
       ],
       "ui": { "surface": [] }
@@ -938,7 +938,7 @@
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: у {previousOwnerName} нет доступа к объекту"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_lost_access"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
@@ -961,7 +961,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "clearGroup" },
-        { "kind": "transactional", "fn": "appendLog", "args": ["Возвращён в очередь: {previousOwnerName} не может принять"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
@@ -1023,7 +1023,7 @@
   "alerts": {
     "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
     "target": "group:grp-leads",
-    "noRecipientLog": "Алерт не отправлен: получателя на месте с доступом к объекту нет"
+    "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
 
   "limits": {
@@ -1131,6 +1131,19 @@
     "default": "priority_then_oldest",
     "options": ["priority_then_oldest", "priority_then_newest", "oldest_first", "reaction_deadline"],
     "operatorMayChange": false
+  },
+
+  "messages": {
+    "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины, и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
+    "workflow.journal.create": { "vars": [], "$comment": "Появление инцидента (RULE-61)" },
+    "workflow.journal.source": { "vars": ["text"], "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)" },
+    "workflow.journal.group.created": { "vars": ["ids"], "$comment": "§11. Группа сценария создана; ids — номера остальных её инцидентов" },
+    "workflow.journal.group.excluded": { "vars": [], "$comment": "§11. Ручное исключение из группы" },
+    "workflow.journal.group.left": { "vars": [], "$comment": "§11 (RULE-57). Вышел из группы: владелец разошёлся с группой" },
+    "workflow.journal.macro.launched": { "vars": ["name"], "$comment": "§14.5. Запущен макрос сценария" },
+    "workflow.journal.scenario.step": { "vars": ["i", "n", "name", "done"], "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ или ключ ниже" },
+    "workflow.journal.scenario.confirmed": { "vars": [], "$comment": "Значение done: подтверждение" },
+    "workflow.journal.scenario.macro": { "vars": ["name"], "$comment": "Значение done: запущен макрос" }
   },
 
   "registries": {

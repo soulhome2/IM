@@ -23,8 +23,41 @@
   });
 
   let LANG = "ru";
+  // Каталоги строк по языкам (§14.9): ключ → строка ICU MessageFormat; получает boot() у сервера
+  const CATALOGS = {};
 
+  // Строка ICU MessageFormat: {name} — подстановка, {n, plural, one {…} few {…} other {…}} — форма
+  // после числа, # — само число. Неизвестная подстановка остаётся как есть
+  function icu(text, vars, number) {
+    let out = "";
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === "#" && number != null) out += String(number);
+      else if (c !== "{") out += c;
+      else {
+        let depth = 0;
+        let j = i;
+        for (; j < text.length; j++) if (text[j] === "{") depth++; else if (text[j] === "}" && --depth === 0) break;
+        const m = text.slice(i + 1, j).match(/^\s*(\w+)\s*(?:,\s*plural\s*,([\s\S]*))?$/);
+        const v = m && vars ? vars[m[1]] : undefined;
+        if (!m || v === undefined) out += text.slice(i, j + 1);
+        else if (!m[2]) out += String(v);
+        else {
+          const forms = {};
+          m[2].replace(/([=\w]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (all, k, form) => (forms[k] = form));
+          out += icu(forms[`=${v}`] || forms[new Intl.PluralRules(LANG).select(Number(v))] || forms.other || "", vars, v);
+        }
+        i = j;
+      }
+    }
+    return out;
+  }
+
+  // Ключ каталога — строка каталога на языке интерфейса; русская фраза — по словарю (её ключами
+  // станут на следующих шагах RULE-66)
   function t(ru, vars) {
+    const catalog = CATALOGS[LANG] || {};
+    if (catalog[ru] != null) return icu(catalog[ru], vars || {});
     const table = DICT[LANG];
     let out = (table && table[ru]) || ru;
     if (vars) out = out.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
@@ -3128,6 +3161,9 @@
       api.get("/operator/transfer-targets"),
     ]);
     Object.assign(store, { eventTypes, deviceTypes, targets });
+    // Каталоги строк всех языков интерфейса (§14.9): язык переключается без новых запросов
+    const catalogs = await Promise.all(LANGS.map((l) => api.get(`/operator/strings?locale=${enc(l.id)}`)));
+    LANGS.forEach((l, i) => (CATALOGS[l.id] = catalogs[i].strings));
     collectStatic();
     bind();
     let savedTheme = "dark";

@@ -12,6 +12,8 @@
     copy ? Object.fromEntries(Object.keys(copy).filter((k) => JSON.stringify(copy[k]) !== JSON.stringify(base[k])).map((k) => [k, copy[k]])) : undefined;
   const standWith = ({ workflow, fixture }) => makeEnv({ workflowPatch: changed(W, workflow), fixturePatch: changed(window.IM_FIXTURE, fixture) });
   const lastJournal = (card) => card.journal[card.journal.length - 1];
+  // Запись журнала — ключ каталога (§14.9, RULE-66): для проверок по смыслу — её русская строка
+  const jt = (entry) => window.IM_STRINGS.ru[entry.templateKey] || entry.templateKey;
 
   // Инцидента с таким идентификатором нет: формат верный, записи нет
   const UNKNOWN = "10000000-0000-4000-8000-000000000000";
@@ -35,7 +37,7 @@
     assert.eq(c.ownership, "owner", "отношение ко мне");
     assert.eq(c.timer.id, "resolution", "идёт норматив");
     assert.ok(c.timer.running, "норматив закрытия идёт");
-    assert.eq(lastJournal(c).templateKey, "Взято в работу", "журнал");
+    assert.eq(lastJournal(c).templateKey, "workflow.journal.claim", "журнал");
     assert.eq(res.body.navigate, "card", "переход в карточку");
     assert.eq((await env.session()).usage.activeCount, 1, "активных у меня");
   });
@@ -237,7 +239,7 @@
       assert.ok(res.body.affectedIncidents.some((i) => i.guid === inc.guid), `${inc.number}: среди изменённых`);
       const c = await env.card(inc.guid);
       assert.eq([c.state, c.owner, c.holdReasonId, c.groupGuid], ["new", null, null, null], `${inc.number}: новый, ничей, без причины и группы`);
-      assert.ok(c.journal.some((j) => /оператор вышел/.test(j.templateKey)), `${inc.number}: запись в журнале`);
+      assert.ok(c.journal.some((j) => /оператор вышел/.test(jt(j))), `${inc.number}: запись в журнале`);
     }
     assert.eq((await env.session()).usage.activeCount + (await env.session()).usage.onHoldCount, 0, "у меня ничего не осталось");
     // Вышедшему — только просмотр, как на перерыве (§10.4); войти — снова «Готов»
@@ -258,7 +260,7 @@
     assert.ok(fired.some((f) => f.incidentGuid === mall.guid && f.transitionId === "addressee_signed_out_to_group"), "сработало «адресат вышел»");
     const c = await env.card(mall.guid);
     assert.eq([c.state, c.owner, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", null, "grp-tc"], "у его группы «Охрана ТЦ»");
-    assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(j.templateKey)), "запись в журнале");
+    assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(jt(j))), "запись в журнале");
   });
 
   test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
@@ -271,7 +273,7 @@
     assert.status(res, 200, null, "выйти");
     const card = await api.get(`/operator/incidents/${enc(guid)}`);
     assert.eq([card.state, card.owner, card.assignmentGroup], ["new", null, null], "в общей очереди, ничей");
-    assert.ok(card.journal.some((j) => /Адресат вышел/.test(j.templateKey)), "запись в журнале");
+    assert.ok(card.journal.some((j) => /Адресат вышел/.test(jt(j))), "запись в журнале");
   });
 
   test("Закрытый из «Ожидает принятия» группой и переоткрытый — у человека, без группы (§8.1)", async () => {
@@ -527,7 +529,7 @@
       const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
       assert.eq([c.state, c.escalationLevel, c.owner], ["new", 0, null], `${why}: никому не передан`);
       assert.eq(c.breaches.filter((b) => b.kind === "reaction").length, 1, `${why}: нарушение реакции записано`);
-      assert.ok(c.journal.some((j) => /Норматив реакции нарушен/.test(j.templateKey)), `${why}: запись в журнале`);
+      assert.ok(c.journal.some((j) => /Норматив реакции нарушен/.test(jt(j))), `${why}: запись в журнале`);
       assert.ok(got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid && m.payload.transitionId === "reaction_overdue"), `${why}: алерт получателю — мне, я в группе старших операторов`);
     }
   });
@@ -578,7 +580,7 @@
       await new Promise((r) => setTimeout(r, 300));
       stop();
       const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
-      assert.ok(c.journal.some((j) => /Норматив закрытия нарушен/.test(j.templateKey)), `${why}: нарушение записано`);
+      assert.ok(c.journal.some((j) => /Норматив закрытия нарушен/.test(jt(j))), `${why}: нарушение записано`);
       assert.ok(c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), `${why}: в журнале «алерт не отправлен»`);
       assert.ok(!got.some((m) => m.type === "incident.alert"), `${why}: алерта в потоке нет`);
     }
@@ -595,7 +597,7 @@
     assert.ok(res.body.fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "addressee_cannot_accept"), "сработал возврат: адресат не может принять");
     const c = await env.card(inc.guid);
     assert.eq([c.state, c.owner, c.assignmentGroup], ["new", null, null], "снова новый, ничей");
-    assert.ok(c.journal.some((j) => /не может принять/.test(j.templateKey)), "запись в журнале");
+    assert.ok(c.journal.some((j) => /не может принять/.test(jt(j))), "запись в журнале");
     const w = await env.card(working);
     assert.eq([w.state, w.owner && w.owner.id], ["in_progress", "petrova"], "INC-1846 у Петровой в работе — не трогается");
     // Группе старших операторов хватает меня: я в ней отдельным участником и могу принять
@@ -652,7 +654,7 @@
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");
     assert.ok(c.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
-    assert.ok(c.journal.some((j) => /Автоэскалация/.test(j.templateKey)), "автоэскалация в журнале");
+    assert.ok(c.journal.some((j) => /Автоэскалация/.test(jt(j))), "автоэскалация в журнале");
   });
 
   test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и алерт", async () => {
@@ -864,7 +866,7 @@
     assert.status(await env.act(three[0], "accept", {}, "queue"), 200, null, "принять одного из очереди");
     const [one, ...rest] = await Promise.all(three.map((g) => env.card(g)));
     assert.eq([one.state, one.groupGuid], ["in_progress", null], "принятый отдельно — вне группы");
-    assert.eq(one.journal[one.journal.length - 1].templateKey, "Вышел из групповой обработки: у остальных инцидентов группы другой владелец", "выход из группы записан в журнал (RULE-57)");
+    assert.eq(one.journal[one.journal.length - 1].templateKey, "workflow.journal.group.left", "выход из группы записан в журнал (RULE-57)");
     assert.ok(rest.every((c) => c.groupGuid === before[0].groupGuid && c.groupSize === 2 && c.state === "pending_acceptance"), "двое остались группой");
     assert.status(await env.act(three[0], "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть первого, чтобы был лимит");
     const both = await env.ok("POST", "/operator/incidents/transitions/accept/bulk", { incidentGuids: three.slice(1), formValues: {}, surface: "card" });
@@ -1109,7 +1111,7 @@
     assert.status(run, 202);
     const c = await env.card(inc.guid);
     assert.ok(c.scenario.launchedMacros.includes(name), "макрос отмечен запущенным");
-    assert.ok(c.journal.some((j) => j.templateKey === "Запущен макрос «{name}»" && j.vars.name === name), "макрос в журнале");
+    assert.ok(c.journal.some((j) => j.templateKey === "workflow.journal.macro.launched" && j.vars.name === name), "макрос в журнале");
   });
 
   /* ===== Очередь: фильтры, счётчики, страницы (§7, §19) ===== */
@@ -1335,7 +1337,7 @@
       assert.ok(res.body.fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "addressee_lost_access"), `${inc.number}: сработала потеря доступа`);
       const c = await env.card(inc.guid);
       assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], `${inc.number}: снова новый, ничей`);
-      assert.ok(c.journal.some((j) => /нет доступа к объекту/.test(j.templateKey)), `${inc.number}: запись в журнале`);
+      assert.ok(c.journal.some((j) => /нет доступа к объекту/.test(jt(j))), `${inc.number}: запись в журнале`);
     }
     const kept = await env.card(mall.guid);
     assert.eq([kept.state, kept.owner && kept.owner.id], ["pending_acceptance", "petrova"], "инцидент ТЦ остался у Петровой");
@@ -1419,9 +1421,9 @@
     const entry = (c, template) => c.journal.find((j) => j.templateKey === template);
 
     // Взятые коллегами: были новыми, теперь в работе у коллеги, в журнале — переход «Взять» от его имени
-    const taken = cards.filter((c) => before.get(c.guid).state === "new" && entry(c, "Взято в работу"));
+    const taken = cards.filter((c) => before.get(c.guid).state === "new" && entry(c, "workflow.journal.claim"));
     assert.ok(taken.length > 0, "коллеги ничего не взяли");
-    taken.forEach((c) => assert.ok(colleagues.has(entry(c, "Взято в работу").actor.id), `${c.guid}: взял не коллега`));
+    taken.forEach((c) => assert.ok(colleagues.has(entry(c, "workflow.journal.claim").actor.id), `${c.guid}: взял не коллега`));
     // Лимит активных — у каждого коллеги свой (§10.2)
     const active = {};
     cards.filter((c) => c.state === "in_progress" && c.owner && colleagues.has(c.owner.id)).forEach((c) => {
@@ -1433,7 +1435,7 @@
     const handed = cards.filter((c) => c.state === "pending_acceptance" && c.ownership === "target" && before.get(c.guid).state === "in_progress");
     assert.eq(handed.length, 1, "передано мне коллегой");
     const transfer = handed[0].journal[handed[0].journal.length - 1];
-    assert.ok(/^Передано →/.test(transfer.templateKey) && colleagues.has(transfer.actor.id), `запись о передаче: ${transfer.templateKey}`);
+    assert.ok(transfer.templateKey === "workflow.journal.transfer" && colleagues.has(transfer.actor.id), `запись о передаче: ${transfer.templateKey}`);
 
     // Потеря связи: системный переход машины откладывает инциденты именно этого коллеги
     const dropped = cards.filter((c) => c.state === "on_hold" && c.holdReasonId === "no_link");

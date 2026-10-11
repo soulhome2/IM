@@ -488,19 +488,24 @@ def check_rules_diagram(w, err):
 
 
 def check_fixture_journal(w, err):
-    """Записи журнала эталонного набора — по шаблонам, которые пишет машина или сам сервер
-    (DATA-04): история в наборе выглядит так, как её записала бы система."""
+    """Записи журнала эталонного набора — те, что пишут машина и сервер (DATA-04, DATA-05): ключ
+    записи журнала из машины (appendLog, messages, alerts.noRecipientLog) и ровно его подстановки
+    по русской строке каталога (§14.9). История в наборе выглядит так, как её записала бы система."""
     with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
-    with open(os.path.join(ROOT, "prototype", "server.js"), encoding="utf-8") as f:
-        server = f.read()
+    with open(os.path.join(DIR, "strings", "ru.json"), encoding="utf-8") as f:
+        ru = json.load(f)
     known = {e["args"][0] for t in w["transitions"] for e in t.get("effects", []) if e["fn"] == "appendLog"}
-    known |= set(re.findall(r'log\(ev, [^,]+, "([^"]+)"', server)) | set(re.findall(r'\bk: "([^"]+)"', server))
+    known |= {k for k in w.get("messages", {}) if k.startswith("workflow.journal.")} | {w["alerts"]["noRecipientLog"]}
     for inc in fx["incidents"]:
         for entry in inc.get("journal", []):
-            template = entry.get("template") or ""
-            if "{" in template and template not in known:
-                err.append(f"эталон: {inc['number']} — запись журнала по шаблону, которого нет ни в машине, ни в сервере: «{template}»")
+            key = entry.get("template") or ""
+            if key not in known:
+                err.append(f"эталон: {inc['number']} — запись журнала «{key}», которой машина и сервер не пишут (DATA-05)")
+                continue
+            need = set(re.findall(r"\{\s*(\w+)\s*[,}]", ru.get(key, "")))
+            if set(entry.get("vars") or {}) != need:
+                err.append(f"эталон: {inc['number']} — у записи {key} подстановки {sorted(entry.get('vars') or {})}, а нужны {sorted(need)}")
 
 
 def check_doc_numbers(w, o, err):
@@ -857,6 +862,12 @@ def check_strings(w, err):
             for v in node:
                 walk(v)
     walk(w)
+    # Ключи записей журнала: аргументы appendLog, alerts.noRecipientLog, раздел messages
+    used |= {e["args"][0] for t in w["transitions"] for e in t["effects"] if e["fn"] == "appendLog"}
+    used |= {w["alerts"]["noRecipientLog"]} | {k for k in w.get("messages", {}) if k.startswith("workflow.")}
+    for key, spec in w.get("messages", {}).items():
+        if key.startswith("workflow.") and key in langs["ru"] and sorted(spec.get("vars", [])) != args(langs["ru"][key]):
+            err.append(f"каталог строк: {key} — подстановки в машине {sorted(spec.get('vars', []))}, а в ru {args(langs['ru'][key])} (§14.9)")
     for src in ("engine.js", "server.js"):
         with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
             used |= set(re.findall(r'"(workflow\.[\w.]+)"', f.read()))

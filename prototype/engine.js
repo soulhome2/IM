@@ -776,7 +776,7 @@
       const fail = firstFail(ev, W.grouping.excludeGuards);
       if (fail) return { ok: false, why: fail.why, guard: fail.guard };
       leaveGroup(ev);
-      ctx.log(ev, ME, "Исключён из групповой обработки");
+      ctx.log(ev, ME, "workflow.journal.group.excluded");
       return { ok: true };
     }
 
