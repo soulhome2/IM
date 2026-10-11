@@ -319,6 +319,27 @@ window.IM_WORKFLOW = {
       "onExpire": "hold_overdue"
     }
   ],
+  "priorities": {
+    "$comment": "§1, §4 (DOC-29). Порядок — по важности, первый — самый важный: по нему строится очередь. Нормативы по приоритету — у таймеров: reaction.overrides, resolution.byPriority.",
+    "items": [
+      {
+        "id": "critical",
+        "label": "Критический"
+      },
+      {
+        "id": "high",
+        "label": "Высокий"
+      },
+      {
+        "id": "medium",
+        "label": "Средний"
+      },
+      {
+        "id": "low",
+        "label": "Низкий"
+      }
+    ]
+  },
   "reasonCatalogs": {
     "hold": {
       "field": "hold_reason",

@@ -1524,7 +1524,7 @@
         ],
         "operationId": "listPriorities",
         "summary": "Приоритеты",
-        "description": "Приоритет влияет на норматив закрытия и порядок в очереди (§4).",
+        "description": "Приоритеты из справочника машины (`priorities`) в порядке важности, первый — самый важный. Влияют на нормативы реакции и закрытия (таймеры машины, §4) и на порядок очереди.",
         "responses": {
           "200": {
             "description": "Приоритеты",
@@ -2099,6 +2099,10 @@
             "items": {
               "$ref": "#/components/schemas/TimerPolicy"
             }
+          },
+          "priorities": {
+            "type": "object",
+            "description": "§1, §4. Справочник приоритетов: items — { id, label } в порядке важности, первый — самый важный."
           },
           "reasonCatalogs": {
             "type": "object",
@@ -5036,18 +5040,16 @@
       },
       "PriorityRef": {
         "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Priority"
           },
-          "name": {
+          "label": {
             "type": "string"
-          },
-          "value": {
-            "type": "integer"
-          },
-          "resolutionSec": {
-            "type": "integer"
           }
         }
       },

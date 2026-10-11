@@ -804,6 +804,28 @@ def check_state_owners(w, err):
             err.append(f"состояние {s['id']}: activeTimer «{s['activeTimer']}» — не таймер машины ({', '.join(sorted(timers))})")
 
 
+def check_priorities(w, o, err):
+    """Приоритеты — справочник машины (DOC-29): нормативы таймеров, инциденты эталонного набора и
+    перечень Priority контракта берут значения только из него."""
+    ids = [p["id"] for p in w.get("priorities", {}).get("items", [])]
+    if not ids:
+        err.append("приоритеты: в машине нет справочника priorities (DOC-29)")
+        return
+    for t in w["timers"]:
+        used = [o_["priority"] for o_ in t.get("overrides") or [] if "priority" in o_] + list((t.get("byPriority") or {}).keys())
+        for pr in used:
+            if pr not in ids:
+                err.append(f"приоритеты: таймер {t['id']} — норматив для «{pr}», которого нет в справочнике (DOC-29)")
+    enum = o["components"]["schemas"]["Priority"].get("enum", [])
+    if enum != ids:
+        err.append(f"приоритеты: Priority в контракте {enum} ≠ справочник машины {ids} (DOC-29)")
+    with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    for inc in fx["incidents"]:
+        if inc["priority"] not in ids:
+            err.append(f"приоритеты: {inc['number']} — приоритет «{inc['priority']}», которого нет в справочнике (DOC-29)")
+
+
 def check_grouping(w, err):
     """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
     Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
@@ -936,6 +958,7 @@ def main():
     check_graph(w, err)
     check_state_owners(w, err)
     check_grouping(w, err)
+    check_priorities(w, o, err)
     check_timer_declarations(w, err)
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)

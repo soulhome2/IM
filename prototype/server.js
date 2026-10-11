@@ -1206,7 +1206,8 @@
         "/operator/reference/help-links",
         (p, q) => ({ status: 200, body: HELP_LINKS.filter((l) => q.site == null || l.site == null || l.site === q.site).map((l) => Object.assign({ icon: null }, l)) }),
       ],
-      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: ["critical", "high", "medium", "low"].map((id) => ({ id })) })],
+      // Приоритеты — справочник машины в порядке важности (DOC-29)
+      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, label }) => ({ id, label })) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
