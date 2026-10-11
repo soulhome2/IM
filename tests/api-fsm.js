@@ -26,8 +26,8 @@
   /* ===== Прыжок часов против шагов (§14.3, RULE-41, RULE-48) ===== */
 
   // Пары из карты пересечений (check_machine.py --fsm), где оба события наступают по времени или одно
-  // открывает дорогу другому. Пары с действием человека (вышел, сменили роли) по времени не совпадают:
-  // сервер обрабатывает их в момент действия, при любом шаге планировщика одинаково
+  // открывает дорогу другому. Пары с действием человека (вышел, сменили роли) сервер обрабатывает в
+  // момент действия; с таймером они совпадают в окне после дедлайна — набор WINDOW ниже
   const ORDER = [
     {
       name: "закрытие × молчание: первой наступает потеря связи, отложенный по закрытию не эскалируется",
@@ -171,6 +171,88 @@
       // закрытие критического пожара — 10, удержание «Ожидание третьей стороны» — 30
       const fired = firedFor(await env.advance(c.windowSec), guid);
       assert.eq(fired.filter((t) => t === id).length, 1, `${id} — один раз: ${fired}`);
+    });
+  });
+
+  /* ===== Системный переход в окне после дедлайна (§10.1, правило 5; RULE-67) ===== */
+
+  // Окно ждёт только действия человека: если в окне готов системный переход, сначала выполняется
+  // переход по таймеру, как без окна, — нарушение на момент дедлайна, потом системный.
+  // По одному на каждый таймер и каждый вид системного перехода: выход, перерыв, права адресата
+  const logKey = (id) => W.transitions.find((t) => t.id === id).effects.find((e) => e.fn === "appendLog").args[0];
+  const signOut = async (env) => assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
+  const claimFire = async (env) => {
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    await env.heartbeat(inc.guid);
+    return inc.guid;
+  };
+  const WINDOW = [
+    {
+      name: "норматив закрытия × оператор вышел: нарушение и алерт, потом в очередь",
+      workflow: W,
+      setup: claimFire,
+      system: signOut,
+      order: ["resolution_overdue", "owner_signed_out"],
+      end: "new",
+      breach: "resolution",
+    },
+    {
+      name: "норматив закрытия с эскалацией × перерыв: эскалация, инцидент не отложен",
+      workflow: withEscalation({ onResolutionOverdue: "escalate", levels: levelsTo(["group:grp-leads"]) }),
+      setup: claimFire,
+      system: async (env) => assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready" }), 200, null, "перерыв"),
+      order: ["resolution_escalate"],
+      end: "pending_acceptance",
+      breach: "resolution",
+    },
+    {
+      name: "срок удержания × оператор вышел: нарушение удержания, потом в очередь",
+      workflow: W,
+      async setup(env) {
+        const guid = await claimFire(env);
+        assert.status(await env.act(guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
+        return guid;
+      },
+      system: signOut,
+      order: ["hold_overdue", "owner_signed_out"],
+      end: "new",
+      breach: "hold",
+    },
+    {
+      name: "норматив реакции, эскалировать некому × адресат не может принять: нарушение реакции, потом в очередь",
+      workflow: withEscalation({ maxLevel: 0 }),
+      async setup(env) {
+        const inc = await newFire(env);
+        assert.status(await env.act(inc.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "передать Петровой");
+        return inc.guid;
+      },
+      system: async (env) => assert.status(await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Наблюдатель"] }), 200, null, "Петрова не может принять"),
+      order: ["escalation_ceiling", "addressee_cannot_accept"],
+      end: "new",
+      breach: "reaction",
+    },
+  ];
+  WINDOW.forEach((c) => {
+    test(`im-fsm: системный переход в окне после дедлайна — нарушение не теряется: ${c.name}`, async () => {
+      const env = await standWith({ workflow: c.workflow });
+      const guid = await c.setup(env);
+      // Идущий таймер: у отложенного — срок удержания, норматив закрытия на паузе
+      const before = await env.card(guid);
+      const due = Date.parse((before.state === "on_hold" ? before.holdTimer : before.timer).dueAt);
+      // Дедлайн прошёл, окно ещё идёт
+      const early = firedFor(await env.advance(Math.ceil((due - env.now) / 1000) + 1), guid);
+      assert.ok(GRACE > 1, "окно после дедлайна больше секунды");
+      assert.eq(early, [], "в окне переход по таймеру ждёт");
+      await c.system(env);
+      const card = await env.card(guid);
+      const keys = card.journal.map((j) => j.templateKey);
+      const seen = c.order.map((id) => keys.indexOf(logKey(id)));
+      assert.ok(seen.every((i) => i >= 0) && seen.every((i, n) => !n || seen[n - 1] < i), `в журнале по порядку: ${c.order.join(" → ")}`);
+      assert.eq(card.state, c.end, "итоговое состояние");
+      const breach = card.breaches.find((b) => b.kind === c.breach);
+      assert.ok(breach, `нарушение ${c.breach} записано`);
+      assert.eq(Date.parse(breach.at), due, "на момент дедлайна");
     });
   });
 

@@ -584,14 +584,15 @@
     // при равенстве — по порядку в машине; после каждого — выбор заново. Тогда результат тот же, как
     // если бы планировщик проверял каждую секунду, — и после простоя сервиса (§9, §14.3).
     // after — момент перехода, выполненного перед этим над тем же инцидентом (RULE-48): то, что он
-    // сделал возможным, наступает не раньше него; переход без таймера — сразу после него
+    // сделал возможным, наступает не раньше него; переход без таймера — сразу после него.
+    // Момент перехода по таймеру — дедлайн; окно после него (RULE-63) ждёт только действия человека
     function momentOf(ev, tr, after) {
       let moment = null;
       for (const g of tr.guards || []) {
         if (g.fn === "timerExpired") {
           const due = dueOf(ev, g.args[0]);
           if (!due) return null;
-          moment = Math.max(moment || 0, due + GRACE_MS);
+          moment = Math.max(moment || 0, due);
         } else if (g.fn === "agentIdleFor") {
           if (!ctx.idleSec) return null;
           moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000);
@@ -609,22 +610,33 @@
         const done = new Set();
         let last = null;
         for (let step = 0; step < 50 && !isDone(ev); step++) {
-          let next = null;
+          const ready = [];
           W.transitions.forEach((tr) => {
             if (tr.trigger !== "timer" && tr.trigger !== "system") return;
-            if (agentOnly && tr.scope !== "incidents_owned_by_agent") return;
+            if (agentOnly && tr.trigger === "system" && tr.scope !== "incidents_owned_by_agent") return;
             if (!tr.from.includes(ev.state)) return;
             if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
             const moment = momentOf(ev, tr, last);
-            if (moment == null || moment > ctx.now() || (next && next.moment <= moment) || done.has(`${tr.id}@${moment}`)) return;
+            if (moment == null || moment > ctx.now() || done.has(`${tr.id}@${moment}`)) return;
             at = moment;
             const fail = firstFail(ev, tr.guards);
             at = null;
-            if (!fail) next = { tr, moment };
+            if (!fail) ready.push({ tr, moment });
+          });
+          // Переход по таймеру ждёт окна после дедлайна (RULE-63), но только действия человека: готов
+          // системный — переход по таймеру первым, как без окна, и нарушение не теряется (RULE-67).
+          // Без системного проверка оператора (agentOnly) общих таймеров не запускает
+          const system = ready.some((c) => c.tr.trigger === "system");
+          let next = null;
+          ready.forEach((c) => {
+            if (c.tr.trigger === "timer" && !system && (agentOnly || c.moment + GRACE_MS > ctx.now())) return;
+            if (!next || c.moment < next.moment) next = c;
           });
           if (!next) return;
           done.add(`${next.tr.id}@${next.moment}`);
-          at = next.moment;
+          // Выполняется по таймеру — после окна, а если его опередил бы системный — сейчас
+          const runAt = next.tr.trigger === "timer" ? Math.min(Math.max(next.moment + GRACE_MS, last || 0), ctx.now()) : next.moment;
+          at = runAt;
           let facts = null;
           try {
             const timerGuard = (next.tr.guards || []).find((g) => g.fn === "timerExpired");
@@ -636,7 +648,7 @@
           } finally {
             at = null;
           }
-          last = next.moment;
+          last = runAt;
           changed.push({ id: ev.id, transition: next.tr.id, facts });
         }
       });
