@@ -135,6 +135,8 @@ MUTATIONS = [
     ("transition-facts-missing", "server.js", "state: { from: f.from.state || null, to: ev.state },", "state: { from: null, to: ev.state },", "api"),
     ("grace-ignored", "engine.js", "(agentOnly || c.moment + GRACE_MS > ctx.now())", "agentOnly", "api"),
     # Системный переход в окне после дедлайна (RULE-67): переход по таймеру — первым
+    # При прыжке часов переход по таймеру — не позже готового системного (BUG-38)
+    ("timer-after-system-in-jump", "engine.js", "Math.max(next.moment + GRACE_MS, last || 0), sysAt)", "Math.max(next.moment + GRACE_MS, last || 0), ctx.now())", "api"),
     ("system-waits-for-grace", "engine.js", 'c.tr.trigger === "timer" && !system && (agentOnly', 'c.tr.trigger === "timer" && (agentOnly', "api"),
     ("override-ignored", "engine.js", "      const canceled = overridden(ev);", "      const canceled = null;", "api"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),

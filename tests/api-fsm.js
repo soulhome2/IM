@@ -64,26 +64,52 @@
       },
       first: ["system_hold_idle", "system_release_idle"],
     },
+    {
+      // Потеря связи через секунду после дедлайна — внутри окна: переход по таймеру первым, и оба — в
+      // момент потери связи, при любом шаге (RULE-67, BUG-38). Шаг — секунда, иначе в окно не попасть
+      name: "закрытие × молчание внутри окна: нарушение и «нет связи» в одну секунду",
+      workflow: W,
+      windowSec: W.session.idleHoldSec + 10,
+      stepSec: 1,
+      async setup(env) {
+        const inc = await newFire(env);
+        const claimed = await env.act(inc.guid, "claim", {}, "queue");
+        assert.status(claimed, 200, null, "взять");
+        await env.advance(Math.round((Date.parse(claimed.body.incident.timer.dueAt) - env.now) / 1000) - W.session.idleHoldSec + 1);
+        await env.heartbeat(inc.guid);
+        return inc.guid;
+      },
+      first: ["resolution_overdue", "system_hold_idle"],
+    },
   ];
   ORDER.forEach((c) => {
     test(`im-fsm: прыжок часов и шаги — один итог: ${c.name}`, async () => {
       async function run(stepSec) {
         const env = await standWith({ workflow: c.workflow });
         const guid = await c.setup(env);
+        const start = env.now;
         const fired = [];
         // Без признака активности: молчание оператора идёт, как во время простоя
         for (let left = c.windowSec; left > 0; left -= stepSec) {
           fired.push(...firedFor((await env.call("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) })).body.fired, guid));
         }
         const card = await env.card(guid);
-        return { fired, end: [card.state, card.owner && card.owner.id, card.assignmentGroup && card.assignmentGroup.id, card.escalationLevel, card.breaches.map((b) => b.kind)] };
+        // Время — в секундах от начала прогона: записи журнала, нарушения и идущие сроки (PROC-19)
+        const sec = (iso) => (iso ? (Date.parse(iso) - start) / 1000 : null);
+        const times = {
+          journal: card.journal.map((j) => `${j.templateKey}@${sec(j.at)}`),
+          breaches: card.breaches.map((b) => `${b.kind}@${sec(b.at)}`),
+          timers: [card.timer && sec(card.timer.dueAt), card.holdTimer && sec(card.holdTimer.dueAt)],
+        };
+        return { fired, end: [card.state, card.owner && card.owner.id, card.assignmentGroup && card.assignmentGroup.id, card.escalationLevel, card.breaches.map((b) => b.kind)], times };
       }
       // Шаг короче любого порога (молчание — 5 минут), но не мельче нужного: итог тот же, вызовов меньше
-      const steps = await run(120);
+      const steps = await run(c.stepSec || 120);
       const jump = await run(c.windowSec);
       assert.eq(steps.fired.slice(0, c.first.length), c.first, "порядок при шагах");
       assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
       assert.eq(jump.end, steps.end, "и тот же итог");
+      assert.eq(jump.times, steps.times, "и то же время записей, нарушений и сроков");
     });
   });
 

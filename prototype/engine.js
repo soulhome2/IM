@@ -634,8 +634,10 @@
           });
           if (!next) return;
           done.add(`${next.tr.id}@${next.moment}`);
-          // Выполняется по таймеру — после окна, а если его опередил бы системный — сейчас
-          const runAt = next.tr.trigger === "timer" ? Math.min(Math.max(next.moment + GRACE_MS, last || 0), ctx.now()) : next.moment;
+          // Выполняется по таймеру — после окна, но не позже готового системного: тогда и при прыжке
+          // часов оба — в момент системного, как при шагах (BUG-38)
+          const sysAt = Math.min(ctx.now(), ...ready.filter((c) => c.tr.trigger === "system").map((c) => c.moment));
+          const runAt = next.tr.trigger === "timer" ? Math.min(Math.max(next.moment + GRACE_MS, last || 0), sysAt) : next.moment;
           at = runAt;
           let facts = null;
           try {
