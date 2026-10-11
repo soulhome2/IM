@@ -914,7 +914,7 @@
         expect(take, "в карточке группы нет кнопки «Перехватить»");
         await click(take);
         const title = $("dialogTitle").textContent;
-        expect(title === "Перехватить 2 инцидентов", `заголовок диалога: «${title}»`);
+        expect(title === "Перехватить 2 инцидента", `заголовок диалога: «${title}»`);
         await confirmDialog(NOTE);
         await wait(200);
         const note = [...$("toasts").children].find((x) => /Перехвачено/.test(x.textContent));

@@ -890,11 +890,27 @@ def check_fail_keys(w, err):
         for key in keys or []:
             if key not in messages:
                 err.append(f"реестр: {g['fn']} — причина {key}, которой нет в messages (DOC-28)")
+    # Строки кода сервера и исполнителя — ключи каталога (§14.9): русский текст в строке допустим только
+    # в данных, помеченных «// данные» (например, комментарий эмулированного коллеги)
+    literal = re.compile(r"([\"'`])(?:(?!\1).)*[А-Яа-яЁё](?:(?!\1).)*\1")
     for src in ("engine.js", "server.js"):
         with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
             for n, line in enumerate(f, 1):
-                if re.search(r'\[\s*"[^"]*[А-Яа-яЁё]', line) and not line.lstrip().startswith("//"):
-                    err.append(f"{src}:{n}: причина или ошибка русской фразой, а не ключом каталога (DOC-28)")
+                code = line.split("//")[0]
+                if literal.search(code) and not line.rstrip().endswith("// данные"):
+                    err.append(f"{src}:{n}: текст для человека русской фразой, а не ключом каталога (DOC-28, RULE-66)")
+    # В машине русский текст — только в пояснениях для разработчика
+    doc = lambda path: path[-1] in ("why", "meaning") or any(isinstance(x, str) and x.startswith("$") for x in path)
+    def walk(node, path):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, path + (k,))
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, path + (i,))
+        elif isinstance(node, str) and re.search("[А-Яа-яЁё]", node) and not doc(path):
+            err.append(f"машина: {'.'.join(map(str, path))} — русский текст вместо ключа каталога (§14.9, RULE-66)")
+    walk(w, ())
 
 
 def check_grouping(w, err):

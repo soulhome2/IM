@@ -349,5 +349,11 @@
   "workflow.settings.tab.links": "Справочные ссылки",
   "workflow.settings.tab.links.what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие ссылки и ссылки площадки",
   "workflow.settings.tab.camera_links": "Связи камер",
-  "workflow.settings.tab.camera_links.what": "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная"
+  "workflow.settings.tab.camera_links.what": "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная",
+  "workflow.label.unassigned": "Не назначен",
+  "workflow.label.role.system": "система",
+  "workflow.label.role.group": "группа",
+  "workflow.label.nobody_present": "никого нет на месте",
+  "workflow.scenario.confirmation": "Подтверждение",
+  "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}"
 }

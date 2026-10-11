@@ -58,10 +58,9 @@
   function t(ru, vars) {
     const catalog = CATALOGS[LANG] || {};
     if (catalog[ru] != null) return icu(catalog[ru], vars || {});
+    // Фраза словаря интерфейса — тоже ICU MessageFormat: подстановки и формы после чисел
     const table = DICT[LANG];
-    let out = (table && table[ru]) || ru;
-    if (vars) out = out.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
-    return out;
+    return icu((table && table[ru]) || ru, vars || {});
   }
 
   const te = (ru, vars) => escapeHtml(t(ru, vars));
@@ -1053,28 +1052,28 @@
     const oneGroup = list.every((e) => e.groupId && e.groupId === list[0].groupId);
     const table = {
       transfer: {
-        title: t("Передать {n} инцидентов", { n }),
-        note: t("Будут переданы {n} событий одному адресату. Одна причина на всю выборку.", { n }),
+        title: t("Передать {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
+        note: t("{n, plural, one {Будет передано # событие} few {Будут переданы # события} other {Будут переданы # событий}} одному адресату. Одна причина на всю выборку.", { n }),
         confirm: t("Передать {n}", { n }),
         toast: (form) => t("Передано: {n} → {who}", { n, who: actorName(form.targetId) }),
       },
       close: {
-        title: t("Закрыть {n} инцидентов", { n }),
+        title: t("Закрыть {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
         note: oneGroup
-          ? t("Закроются все {n} инцидентов группы.", { n })
-          : t("Будут закрыты {n} событий без сценария. Одна причина на всю выборку.", { n }),
+          ? t("{n, plural, one {Закроется # инцидент} few {Закроются все # инцидента} other {Закроются все # инцидентов}} группы.", { n })
+          : t("{n, plural, one {Будет закрыто # событие} few {Будут закрыты # события} other {Будут закрыты # событий}} без сценария. Одна причина на всю выборку.", { n }),
         confirm: t("Закрыть {n}", { n }),
         toast: () => t("Закрыто: {n}", { n }),
       },
       hold: {
-        title: t("Отложить {n} инцидентов", { n }),
-        note: t("Будут отложены {n} инцидентов группы. Одна причина на всех.", { n }),
+        title: t("Отложить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
+        note: t("{n, plural, one {Будет отложен # инцидент} few {Будут отложены # инцидента} other {Будут отложены # инцидентов}} группы. Одна причина на всех.", { n }),
         confirm: t("Отложить {n}", { n }),
         toast: () => t("Отложено: {n}", { n }),
       },
       takeover: {
-        title: t("Перехватить {n} инцидентов", { n }),
-        note: t("Будут перехвачены все {n} инцидентов группы.", { n }),
+        title: t("Перехватить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
+        note: t("{n, plural, one {Будет перехвачен # инцидент} few {Будут перехвачены все # инцидента} other {Будут перехвачены все # инцидентов}} группы.", { n }),
         confirm: t("Перехватить {n}", { n }),
         toast: () => t("Перехвачено: {n}", { n }),
       },
@@ -1082,14 +1081,14 @@
         toast: () => t("Принято: {n}", { n }),
       },
       release: {
-        title: t("Вернуть в очередь {n} инцидентов", { n }),
-        note: t("В очередь вернутся {n} инцидентов группы.", { n }),
+        title: t("Вернуть в очередь {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
+        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}} группы.", { n }),
         confirm: t("Вернуть {n}", { n }),
         toast: () => t("Возвращено в очередь: {n}", { n }),
       },
       reject: {
-        title: t("Отклонить {n} передач", { n }),
-        note: t("В очередь вернутся {n} инцидентов. Одна причина на всех.", { n }),
+        title: t("Отклонить {n, plural, one {# передачу} few {# передачи} other {# передач}}", { n }),
+        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}}. Одна причина на всех.", { n }),
         confirm: t("Отклонить {n}", { n }),
         toast: () => t("Отклонено: {n}", { n }),
       },
@@ -1632,7 +1631,7 @@
   const bulkEligible = (ev) => state.checked.has(ev.guid) || state.checked.size < LIMITS.maxBulk;
   const groupChip = (ev) =>
     ev.groupGuid
-      ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", { n: ev.groupSize })}">${te("группа")}</span>`
+      ? `<span class="chip grp" title="${te("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: ev.groupSize })}">${te("группа")}</span>`
       : "";
 
   function renderEvents() {
@@ -1880,7 +1879,7 @@
           ${holdChip(ev, "sla")}
           ${
             ev.groupGuid
-              ? `<span class="chip grp" title="${te("Группа из {n} событий в одной карточке", { n: ev.groupSize })}">${te("группа {n}", {
+              ? `<span class="chip grp" title="${te("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: ev.groupSize })}">${te("группа {n}", {
                   n: ev.groupSize,
                 })}</span>`
               : ""
@@ -2167,7 +2166,7 @@
   function statusTimerText(ev) {
     const view = timerView(ev.timer);
     if (!view) return ev.slaBreached ? t("Норматив нарушен") : "";
-    if (!view.running) return t("{label} приостановлен: {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
+    if (!view.running) return t("{label}: на паузе, {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
     return t("{label}: осталось {time}", { label: t(view.label), time: fmtSla(view.leftMs) });
   }
 
@@ -2831,7 +2830,7 @@
     state.selectedId = group.members[0].guid;
     state.checked.clear();
     store.selection = null;
-    toast(t("Группа из {n} событий в одной карточке", { n: group.members.length }));
+    toast(t("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: group.members.length }));
     state.mode = "work";
     state.mobileView = "card";
     await reload();

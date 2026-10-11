@@ -351,7 +351,13 @@ window.IM_STRINGS = {
     "workflow.settings.tab.links": "Reference links",
     "workflow.settings.tab.links.what": "Help menu: regulations, phones, plans, emergency contacts — common and site links",
     "workflow.settings.tab.camera_links": "Camera links",
-    "workflow.settings.tab.camera_links.what": "Which cameras to show for a device and in what order: an incident shows the cameras of its source, the first is the main one"
+    "workflow.settings.tab.camera_links.what": "Which cameras to show for a device and in what order: an incident shows the cameras of its source, the first is the main one",
+    "workflow.label.unassigned": "Unassigned",
+    "workflow.label.role.system": "system",
+    "workflow.label.role.group": "group",
+    "workflow.label.nobody_present": "nobody is available",
+    "workflow.scenario.confirmation": "Confirmation",
+    "workflow.error.effect_not_implemented": "Effect not implemented: {fn}"
   },
   "es": {
     "workflow.state.new": "Nuevo",
@@ -703,7 +709,13 @@ window.IM_STRINGS = {
     "workflow.settings.tab.links": "Enlaces de referencia",
     "workflow.settings.tab.links.what": "Menú de ayuda: reglamento, teléfonos, planos, contactos de emergencia — enlaces comunes y del sitio",
     "workflow.settings.tab.camera_links": "Vínculos de cámaras",
-    "workflow.settings.tab.camera_links.what": "Qué cámaras mostrar para un dispositivo y en qué orden: el incidente muestra las cámaras de su origen, la primera es la principal"
+    "workflow.settings.tab.camera_links.what": "Qué cámaras mostrar para un dispositivo y en qué orden: el incidente muestra las cámaras de su origen, la primera es la principal",
+    "workflow.label.unassigned": "Sin asignar",
+    "workflow.label.role.system": "sistema",
+    "workflow.label.role.group": "grupo",
+    "workflow.label.nobody_present": "no hay nadie disponible",
+    "workflow.scenario.confirmation": "Confirmación",
+    "workflow.error.effect_not_implemented": "Efecto no implementado: {fn}"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -1055,6 +1067,12 @@ window.IM_STRINGS = {
     "workflow.settings.tab.links": "Справочные ссылки",
     "workflow.settings.tab.links.what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие ссылки и ссылки площадки",
     "workflow.settings.tab.camera_links": "Связи камер",
-    "workflow.settings.tab.camera_links.what": "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная"
+    "workflow.settings.tab.camera_links.what": "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная",
+    "workflow.label.unassigned": "Не назначен",
+    "workflow.label.role.system": "система",
+    "workflow.label.role.group": "группа",
+    "workflow.label.nobody_present": "никого нет на месте",
+    "workflow.scenario.confirmation": "Подтверждение",
+    "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}"
   }
 };

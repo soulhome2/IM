@@ -3557,6 +3557,26 @@ window.IM_WORKFLOW = {
     },
     "workflow.error.test.clock_backwards": {
       "vars": []
+    },
+    "workflow.label.unassigned": {
+      "vars": []
+    },
+    "workflow.label.role.system": {
+      "vars": []
+    },
+    "workflow.label.role.group": {
+      "vars": []
+    },
+    "workflow.label.nobody_present": {
+      "vars": []
+    },
+    "workflow.scenario.confirmation": {
+      "vars": []
+    },
+    "workflow.error.effect_not_implemented": {
+      "vars": [
+        "fn"
+      ]
     }
   },
   "registries": {

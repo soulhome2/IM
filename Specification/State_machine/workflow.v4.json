@@ -1184,7 +1184,13 @@
     "workflow.error.no_route": { "vars": ["method", "path"] },
     "workflow.error.test.no_fixture": { "vars": ["name"] },
     "workflow.error.test.no_operator": { "vars": ["id"] },
-    "workflow.error.test.clock_backwards": { "vars": [] }
+    "workflow.error.test.clock_backwards": { "vars": [] },
+    "workflow.label.unassigned": { "vars": [] },
+    "workflow.label.role.system": { "vars": [] },
+    "workflow.label.role.group": { "vars": [] },
+    "workflow.label.nobody_present": { "vars": [] },
+    "workflow.scenario.confirmation": { "vars": [] },
+    "workflow.error.effect_not_implemented": { "vars": ["fn"] }
   },
 
   "registries": {

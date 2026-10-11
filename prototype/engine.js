@@ -457,7 +457,7 @@
       if (tr.to) draft.state = tr.to;
       tr.effects.forEach((e) => {
         const fn = EFFECTS[e.fn];
-        if (!fn) throw new Error(`Эффект не реализован: ${e.fn}`);
+        if (!fn) throw Object.assign(new Error(e.fn), { why: ["workflow.error.effect_not_implemented", { fn: e.fn }] });
         fn(draft, e.args || [], scope);
       });
       // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects): кому или какая
@@ -483,7 +483,7 @@
       try {
         done = drafts.map((d) => effectsOn(d, tr, form, actor));
       } catch (err) {
-        return { ok: false, why: ["workflow.error.transition_failed", { error: err.message }] };
+        return { ok: false, why: ["workflow.error.transition_failed", { error: err.why || err.message }] };
       }
       list.forEach((ev, i) => Object.assign(ev, drafts[i]));
       // Внешние эффекты — только после применения перехода

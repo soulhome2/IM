@@ -115,7 +115,7 @@ MUTATIONS = [
     ("group-close-not-all-or-nothing", "engine.js", "const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);", "const stuck = null;", "api"),
     ("closed-groups-settled", "engine.js", "ctx.events().filter((e) => e.groupId && !states[e.state].terminal).forEach(", "ctx.events().filter((e) => e.groupId).forEach(", "api"),
     ("ui-bulk-failures-hidden", "app.js", "toast(res.failed.length ? `${okText} ", "toast(false ? `${okText} ", "ui"),
-    ("ui-group-takeover-copy", "app.js", 'title: t("Перехватить {n} инцидентов", { n }),', 'title: t("Перехватить"),', "ui"),
+    ("ui-group-takeover-copy", "app.js", 'title: t("Перехватить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),', 'title: t("Перехватить"),', "ui"),
     ("ui-group-leave-silent", "app.js", '} else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {', "} else if (false) {", "ui"),
     ("external-effects-dropped", "server.js", "journalEntries: journal, externalEffects, canceledTimerTrigger", "journalEntries: journal, externalEffects: [], canceledTimerTrigger", "api"),
     ("reopen-window-rounded", "engine.js", "now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000", "Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin", "api"),

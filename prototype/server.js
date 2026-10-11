@@ -81,12 +81,13 @@
     const findActor = (id) => ACTORS.find((a) => a.id === id) || null;
     const rawName = (id) => {
       const actor = findActor(id);
-      return actor ? actor.name : "Не назначен";
+      // Нет человека — подпись-ключ (§14.9): переводится там, где показывается
+      return actor ? actor.name : ["workflow.label.unassigned"];
     };
     const actorKind = (actor) =>
       actor.group ? "duty_group" : actor.id === "dispatcher" ? "dispatcher" : actor.system ? "system" : "operator";
     function actorRef(id, fallbackName) {
-      if (!id) return fallbackName ? { id: null, kind: "system", name: fallbackName, role: "система" } : null;
+      if (!id) return fallbackName ? { id: null, kind: "system", name: fallbackName, role: render("workflow.label.role.system") } : null;
       const actor = findActor(id);
       if (!actor) return { id, kind: "operator", name: id, role: "" };
       return { id: actor.id, kind: actorKind(actor), name: actor.name, role: actor.role };
@@ -180,10 +181,12 @@
 
     const scenarioOf = (ev) => SCENARIOS[ev.typeId];
     const scenarioSteps = (ev) => scenarioOf(ev).steps;
-    const stepShort = (step) => (step.type === "checkbox" ? "Подтверждение" : step.label);
+    // Короткое имя шага: у подтверждения — подпись-ключ (§14.9), у остальных — название из сценария
+    const stepShort = (step) => (step.type === "checkbox" ? ["workflow.scenario.confirmation"] : step.label);
+    // Заполнен ли шаг: подтверждён, запущен макрос или есть ответ
     function stepAnswerText(ev, step) {
-      if (step.type === "checkbox") return ev.answers[step.id] ? "Да" : "";
-      if (step.type === "macros") return ev.launched.length ? `${ev.launched.length} макрос` : "";
+      if (step.type === "checkbox") return Boolean(ev.answers[step.id]);
+      if (step.type === "macros") return ev.launched.length > 0;
       return ev.answers[step.id] || "";
     }
     function isStepValid(ev, step) {
@@ -561,7 +564,7 @@
           title: s.label,
           description: "",
           requiredFor: s.required ? ["closing"] : [],
-          view: { short: stepShort(s), options: s.options || null, placeholder: s.placeholder || null, buttons: s.buttons || null },
+          view: { short: Array.isArray(stepShort(s)) ? render(stepShort(s)[0]) : stepShort(s), options: s.options || null, placeholder: s.placeholder || null, buttons: s.buttons || null },
         })),
         answers: JSON.parse(JSON.stringify(ev.answers)),
         launchedMacros: ev.launched.slice(),
@@ -697,9 +700,9 @@
         kind: op.group ? "duty_group" : "operator",
         name: op.name,
         label: op.name,
-        role: op.group ? "группа" : op.role,
+        role: op.group ? render("workflow.label.role.group") : op.role,
         available: present(op),
-        availabilityLabel: present(op) ? null : op.group ? "никого нет на месте" : stateLabel(op.id),
+        availabilityLabel: present(op) ? null : op.group ? render("workflow.label.nobody_present") : stateLabel(op.id),
         memberIds: op.group ? membersOf(op) : [],
       }));
     }
@@ -1484,7 +1487,8 @@
     function simHandoff() {
       for (const ev of foreignActive()) {
         const from = ev.owner;
-        const r = colleague(from).run("transfer", ev, { targetId: ME, comment: "Нужен оператор с доступом к архиву площадки" }, { surface: "card" });
+        // Комментарий пишет человек (эмулированный коллега) — данные, не текст системы
+        const r = colleague(from).run("transfer", ev, { targetId: ME, comment: "Нужен оператор с доступом к архиву площадки" }, { surface: "card" }); // данные
         if (!r.ok) continue;
         touch([ev]);
         emit("incident.owner_changed", ev, from, { transitionId: "transfer", addressee: actorRef(ME) });

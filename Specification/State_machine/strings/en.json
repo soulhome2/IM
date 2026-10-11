@@ -349,5 +349,11 @@
   "workflow.settings.tab.links": "Reference links",
   "workflow.settings.tab.links.what": "Help menu: regulations, phones, plans, emergency contacts — common and site links",
   "workflow.settings.tab.camera_links": "Camera links",
-  "workflow.settings.tab.camera_links.what": "Which cameras to show for a device and in what order: an incident shows the cameras of its source, the first is the main one"
+  "workflow.settings.tab.camera_links.what": "Which cameras to show for a device and in what order: an incident shows the cameras of its source, the first is the main one",
+  "workflow.label.unassigned": "Unassigned",
+  "workflow.label.role.system": "system",
+  "workflow.label.role.group": "group",
+  "workflow.label.nobody_present": "nobody is available",
+  "workflow.scenario.confirmation": "Confirmation",
+  "workflow.error.effect_not_implemented": "Effect not implemented: {fn}"
 }
