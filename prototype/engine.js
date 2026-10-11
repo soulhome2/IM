@@ -171,84 +171,84 @@
     /* ===== Условия: реестр машины (§14.8) ===== */
 
     const GUARDS = {
-      hasPermission: (ev, [key]) => (ctx.can(key) ? null : ["Нет права: {p}", { p: key }]),
+      hasPermission: (ev, [key]) => (ctx.can(key) ? null : ["workflow.guard.no_permission", { p: key }]),
       // Область права — по scopeRule условия: own, если выполнено хоть одно из anyOf (§5)
       hasScopedPermission: (ev, [prefix], opts, guard) => {
         const rule = (guard && guard.scopeRule && guard.scopeRule.own) || { anyOf: [] };
         const own = rule.anyOf.some((c) => (c.state ? ev.state === c.state : c.ownership ? matchesOwnership(ev, c.ownership) : false));
         const key = `${prefix}:${own ? "own" : "any"}`;
-        return ctx.can(key) ? null : ["Нет права: {p}", { p: key }];
+        return ctx.can(key) ? null : ["workflow.guard.no_permission", { p: key }];
       },
-      isOwner: (ev) => (isMine(ev) ? null : ["Вы не владелец инцидента"]),
-      isNotOwner: (ev) => (isMine(ev) ? ["Инцидент уже ваш"] : null),
-      isTarget: (ev) => (isTarget(ev) ? null : ["Передача адресована другому"]),
-      isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["Передача адресована вам"] : null),
+      isOwner: (ev) => (isMine(ev) ? null : ["workflow.guard.not_owner"]),
+      isNotOwner: (ev) => (isMine(ev) ? ["workflow.guard.already_owner"] : null),
+      isTarget: (ev) => (isTarget(ev) ? null : ["workflow.guard.not_target"]),
+      isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["workflow.guard.is_target"] : null),
       // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
       targetIsNotSelf: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
-        return isSelf(target) ? ["Передача на себя запрещена"] : null;
+        return isSelf(target) ? ["workflow.guard.transfer_to_self"] : null;
       },
       targetCanAccept: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
-        return !target || ctx.canAccept(target, ev) ? null : ["Адресат не может принять: нет права «Принимать» или доступа к объекту"];
+        return !target || ctx.canAccept(target, ev) ? null : ["workflow.guard.target_cannot_accept"];
       },
       targetHasAccess: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
-        return !target || ctx.hasAccess(target, ev) ? null : ["У адресата нет доступа к объекту инцидента"];
+        return !target || ctx.hasAccess(target, ev) ? null : ["workflow.guard.target_no_access"];
       },
       // На перерыве и после выхода — только просмотр (§10.4, §12.1): какие состояния такие, решает машина
       agentReady: () => {
         const st = W.session.states.find((s) => s.id === ctx.agentState());
         return st && st.readOnly ? [st.readOnlyReason] : null;
       },
-      agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["Неподходящее состояние оператора"]),
+      agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["workflow.guard.agent_state"]),
       addresseeHasAccess: (ev, [expected]) => {
         const who = addressee(ev);
-        if (!who) return ["У инцидента нет адресата"];
-        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["Доступ адресата не подходит"];
+        if (!who) return ["workflow.guard.no_addressee"];
+        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["workflow.guard.addressee_access"];
       },
       addresseeCanAccept: (ev, [expected]) => {
         const who = addressee(ev);
-        if (!who) return ["У инцидента нет адресата"];
-        return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : ["Адресат может принять — не подходит"];
+        if (!who) return ["workflow.guard.no_addressee"];
+        return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : ["workflow.guard.addressee_can_accept"];
       },
-      escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["Нет подходящего уровня эскалации"]),
-      ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["Дежурная группа владельца не подходит"]),
+      escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["workflow.guard.no_escalation_level"]),
+      ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["workflow.guard.owner_duty_group"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
-      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["Оператор на связи"]),
+      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["workflow.guard.agent_online"]),
       // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
       withinActiveLimit: (ev, [extra = 0]) => {
         const u = units("in_progress", ev);
         if (u.size + extra < W.limits.maxActive) return null;
-        if (extra) return ["Лимит активных ({n}): после исключения в работе станет больше", { n: W.limits.maxActive }];
+        if (extra) return ["workflow.guard.active_limit_extra", { n: W.limits.maxActive }];
         // В подсказке — номер инцидента, который держит лимит (у группы — номер первого из неё)
         const busy = ctx.events().find((e) => e.state === "in_progress" && isMine(e) && u.has(e.groupId || e.id));
-        return ["Лимит активных ({n}). Сначала закройте или отложите {id}", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
+        return ["workflow.guard.active_limit", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
       },
       withinHoldLimit: (ev) =>
-        units("on_hold", ev).size < W.limits.maxOnHold ? null : ["Больше {n} отложенных держать нельзя", { n: W.limits.maxOnHold }],
+        units("on_hold", ev).size < W.limits.maxOnHold ? null : ["workflow.guard.hold_limit", { n: W.limits.maxOnHold }],
       // Точно, без округления до минуты (BUG-31): «не больше reopenWindowMin минут»
       withinReopenWindow: (ev) =>
         now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000
           ? null
-          : ["Срок переоткрытия истёк: {n} мин", { n: W.limits.reopenWindowMin }],
-      requiredStepsFilled: (ev, [setId]) => (ctx.stepsFilled(ev, setId) ? null : ["Заполните обязательные шаги закрытия"]),
+          : ["workflow.guard.reopen_window", { n: W.limits.reopenWindowMin }],
+      requiredStepsFilled: (ev, [setId]) => (ctx.stepsFilled(ev, setId) ? null : ["workflow.guard.required_steps"]),
       closeResultAllowed: (ev, [resultId], opts) => {
         const options = closeResults(ev, opts && opts.surface);
         if (resultId) {
           const o = options.find((x) => x.id === resultId);
-          if (!o) return ["Результат недоступен"];
+          if (!o) return ["workflow.guard.result_unavailable"];
           return o.disabled ? [o.why] : null;
         }
         if (options.some((o) => !o.disabled)) return null;
-        return options.length ? [options[0].why] : ["Нет права: {p}", { p: "incident:close" }];
+        return options.length ? [options[0].why] : ["workflow.guard.no_permission", { p: "incident:close" }];
       },
-      timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["Норматив не истёк"]),
-      holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["Другая причина удержания"]),
-      stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["Недоступно в текущем состоянии"]),
-      canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["Нет права открывать чужие карточки"]),
-      settingEnabled: (ev, [key]) => (setting(key) ? null : ["Выключено настройкой"]),
-      settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["Другое значение настройки"]),
+      timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["workflow.guard.timer_not_expired"]),
+      holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["workflow.guard.other_hold_reason"]),
+      stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["workflow.guard.wrong_state"]),
+      canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_done"]),
+      settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
+      settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
     };
 
     function setting(path) {
@@ -265,7 +265,7 @@
         if (item.ownerOnlyInStates.includes(ev.state) && !isMine(ev)) return;
         if (surface && item.surfaces && !item.surfaces.includes(surface)) return;
         const stepsOk = item.requiredStepSet === "none" || ctx.stepsFilled(ev, item.requiredStepSet);
-        out.push({ id: item.id, label: item.label, disabled: !stepsOk, why: stepsOk ? null : "Заполните обязательные шаги закрытия" });
+        out.push({ id: item.id, label: item.label, disabled: !stepsOk, why: stepsOk ? null : "workflow.guard.required_steps" });
       });
       return out;
     }
@@ -274,7 +274,7 @@
     function firstFail(ev, guards, opts) {
       for (const g of guards || []) {
         const fn = GUARDS[g.fn];
-        if (!fn) return { why: [`Условие не реализовано: ${g.fn}`], hidden: false, guard: g.fn };
+        if (!fn) return { why: ["workflow.error.guard_not_implemented", { fn: g.fn }], hidden: false, guard: g.fn };
         const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
         const why = fn(ev, args, opts, g);
         if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide", guard: g.fn };
@@ -288,7 +288,7 @@
       const tr = transitions[id];
       const nav = navActions[id];
       if (!ev || (!tr && !nav)) return { hidden: true };
-      if (tr && !tr.from.includes(ev.state)) return { hidden: true, notFrom: true, why: ["Недоступно в текущем состоянии"] };
+      if (tr && !tr.from.includes(ev.state)) return { hidden: true, notFrom: true, why: ["workflow.guard.wrong_state"] };
       const fail = firstFail(ev, tr ? tr.guards : nav.guards, opts);
       // guard — какое условие не выполнено: по нему сервер выбирает код ошибки
       if (fail) return { hidden: fail.hidden, disabled: true, why: fail.why, guard: fail.guard };
@@ -482,7 +482,7 @@
       try {
         done = drafts.map((d) => effectsOn(d, tr, form, actor));
       } catch (err) {
-        return { ok: false, why: ["Переход не выполнен: {error}", { error: err.message }] };
+        return { ok: false, why: ["workflow.error.transition_failed", { error: err.message }] };
       }
       list.forEach((ev, i) => Object.assign(ev, drafts[i]));
       // Внешние эффекты — только после применения перехода
@@ -499,7 +499,7 @@
         const required = fieldRequired(f, field, form);
         const v = form[field.name];
         if (required && (v == null || String(v).trim() === "")) {
-          return field.kind === "text" ? ["Укажите причину — поле обязательно"] : ["Заполните поле «{name}»", { name: field.label }];
+          return field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: field.label }];
         }
       }
       return null;
@@ -507,7 +507,7 @@
 
     function run(id, ev, form, opts) {
       const tr = transitions[id];
-      if (!tr) return { ok: false, why: ["Неизвестное действие"] };
+      if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
       form = form || {};
       const a = availability(id, ev, { form, surface: opts && opts.surface });
       if (!a.ok) return { ok: false, why: a.why };
@@ -685,13 +685,13 @@
     function createGroup(list, groupId) {
       const g = W.grouping;
       const claim = W.transitions.find((t) => t.bulk && t.bulk.createsGroup);
-      if (!g.enabled || !claim) return { ok: false, why: ["Групповая обработка выключена"] };
-      if (!g.permissions.every(ctx.can)) return { ok: false, why: ["Нет права на групповую обработку"] };
-      if (list.length < g.createFrom.minItems) return { ok: false, why: ["Выберите хотя бы {n} события", { n: g.createFrom.minItems }] };
-      if (list.length > g.createFrom.maxItems) return { ok: false, why: ["Не больше {max} событий в группе", { max: g.createFrom.maxItems }] };
-      if (!list.every((e) => g.createFrom.states.includes(e.state))) return { ok: false, why: ["В группу берутся только новые события"] };
+      if (!g.enabled || !claim) return { ok: false, why: ["workflow.error.group.disabled"] };
+      if (!g.permissions.every(ctx.can)) return { ok: false, why: ["workflow.error.group.no_permission"] };
+      if (list.length < g.createFrom.minItems) return { ok: false, why: ["workflow.error.group.too_few", { n: g.createFrom.minItems }] };
+      if (list.length > g.createFrom.maxItems) return { ok: false, why: ["workflow.error.group.too_many", { max: g.createFrom.maxItems }] };
+      if (!list.every((e) => g.createFrom.states.includes(e.state))) return { ok: false, why: ["workflow.error.group.new_only"] };
       if (g.createFrom.sameEventType && list.some((e) => e.typeId !== list[0].typeId)) {
-        return { ok: false, why: ["В группе должен быть один тип события"] };
+        return { ok: false, why: ["workflow.error.group.same_type"] };
       }
       list.forEach((ev) => (ev.groupId = groupId));
       const blocked = list.find((ev) => !availability(claim.id, ev).ok);
@@ -764,15 +764,15 @@
     function groupBlock(id, ev, guids, opts) {
       if (!ev.groupId || !(W.grouping.wholeGroupOnly || []).includes(id)) return null;
       const open = ctx.events().filter((e) => e.groupId === ev.groupId && !states[e.state].terminal);
-      if (!open.every((e) => guids.includes(e.id))) return { why: ["Инцидент в группе: закройте всю группу или сначала исключите его из группы"] };
+      if (!open.every((e) => guids.includes(e.id))) return { why: ["workflow.error.group.whole_only"] };
       const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);
-      return stuck ? { why: ["Группа не закрыта: {id} закрыть нельзя", { id: stuck.number }] } : null;
+      return stuck ? { why: ["workflow.error.group.not_closed", { id: stuck.number }] } : null;
     }
 
     // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
     // инцидент остаётся в работе со своей копией ответов
     function excludeFromGroup(ev) {
-      if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["Инцидент не в группе"] };
+      if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["workflow.error.group.not_member"] };
       const fail = firstFail(ev, W.grouping.excludeGuards);
       if (fail) return { ok: false, why: fail.why, guard: fail.guard };
       leaveGroup(ev);

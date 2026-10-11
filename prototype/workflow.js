@@ -3323,7 +3323,7 @@ window.IM_WORKFLOW = {
     "operatorMayChange": false
   },
   "messages": {
-    "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины, и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
+    "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
     "workflow.journal.create": {
       "vars": [],
       "$comment": "Появление инцидента (RULE-61)"
@@ -3372,6 +3372,206 @@ window.IM_WORKFLOW = {
         "name"
       ],
       "$comment": "Значение done: запущен макрос"
+    },
+    "workflow.guard.no_permission": {
+      "vars": [
+        "p"
+      ]
+    },
+    "workflow.guard.not_owner": {
+      "vars": []
+    },
+    "workflow.guard.already_owner": {
+      "vars": []
+    },
+    "workflow.guard.not_target": {
+      "vars": []
+    },
+    "workflow.guard.is_target": {
+      "vars": []
+    },
+    "workflow.guard.transfer_to_self": {
+      "vars": []
+    },
+    "workflow.guard.target_cannot_accept": {
+      "vars": []
+    },
+    "workflow.guard.target_no_access": {
+      "vars": []
+    },
+    "workflow.guard.agent_state": {
+      "vars": []
+    },
+    "workflow.guard.no_addressee": {
+      "vars": []
+    },
+    "workflow.guard.addressee_access": {
+      "vars": []
+    },
+    "workflow.guard.addressee_can_accept": {
+      "vars": []
+    },
+    "workflow.guard.no_escalation_level": {
+      "vars": []
+    },
+    "workflow.guard.owner_duty_group": {
+      "vars": []
+    },
+    "workflow.guard.agent_online": {
+      "vars": []
+    },
+    "workflow.guard.active_limit": {
+      "vars": [
+        "n",
+        "id"
+      ]
+    },
+    "workflow.guard.active_limit_extra": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.guard.hold_limit": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.guard.reopen_window": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.guard.required_steps": {
+      "vars": []
+    },
+    "workflow.guard.result_unavailable": {
+      "vars": []
+    },
+    "workflow.guard.timer_not_expired": {
+      "vars": []
+    },
+    "workflow.guard.other_hold_reason": {
+      "vars": []
+    },
+    "workflow.guard.wrong_state": {
+      "vars": []
+    },
+    "workflow.guard.no_read_done": {
+      "vars": []
+    },
+    "workflow.guard.setting_off": {
+      "vars": []
+    },
+    "workflow.guard.setting_other": {
+      "vars": []
+    },
+    "workflow.error.guard_not_implemented": {
+      "vars": [
+        "fn"
+      ]
+    },
+    "workflow.error.transition_failed": {
+      "vars": [
+        "error"
+      ]
+    },
+    "workflow.error.reason_required": {
+      "vars": []
+    },
+    "workflow.error.field_required": {
+      "vars": [
+        "name"
+      ]
+    },
+    "workflow.error.unknown_action": {
+      "vars": []
+    },
+    "workflow.error.group.disabled": {
+      "vars": []
+    },
+    "workflow.error.group.no_permission": {
+      "vars": []
+    },
+    "workflow.error.group.too_few": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.error.group.too_many": {
+      "vars": [
+        "max"
+      ]
+    },
+    "workflow.error.group.new_only": {
+      "vars": []
+    },
+    "workflow.error.group.same_type": {
+      "vars": []
+    },
+    "workflow.error.group.whole_only": {
+      "vars": []
+    },
+    "workflow.error.group.not_closed": {
+      "vars": [
+        "id"
+      ]
+    },
+    "workflow.error.group.not_member": {
+      "vars": []
+    },
+    "workflow.error.precondition_required": {
+      "vars": []
+    },
+    "workflow.error.version_conflict": {
+      "vars": [
+        "state"
+      ]
+    },
+    "workflow.error.selection_partial_group": {
+      "vars": []
+    },
+    "workflow.error.selection_unavailable": {
+      "vars": []
+    },
+    "workflow.error.break_no_permission": {
+      "vars": []
+    },
+    "workflow.error.selection_empty": {
+      "vars": []
+    },
+    "workflow.error.not_found": {
+      "vars": []
+    },
+    "workflow.error.read_only": {
+      "vars": []
+    },
+    "workflow.error.previous_steps": {
+      "vars": []
+    },
+    "workflow.error.no_schema_admin": {
+      "vars": []
+    },
+    "workflow.error.catalog_not_found": {
+      "vars": []
+    },
+    "workflow.error.no_route": {
+      "vars": [
+        "method",
+        "path"
+      ]
+    },
+    "workflow.error.test.no_fixture": {
+      "vars": [
+        "name"
+      ]
+    },
+    "workflow.error.test.no_operator": {
+      "vars": [
+        "id"
+      ]
+    },
+    "workflow.error.test.clock_backwards": {
+      "vars": []
     }
   },
   "registries": {
@@ -3382,7 +3582,10 @@ window.IM_WORKFLOW = {
         "args": [
           "permissionKey"
         ],
-        "onFail": "hide"
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_permission"
+        ]
       },
       {
         "fn": "hasScopedPermission",
@@ -3390,30 +3593,45 @@ window.IM_WORKFLOW = {
           "resourceAction"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_permission"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§5. Право с областью: ключ <действие>:own, если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе <действие>:any. Сейчас — у «Передать»."
       },
       {
         "fn": "isOwner",
         "args": [],
-        "onFail": "hide"
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.not_owner"
+        ]
       },
       {
         "fn": "isNotOwner",
         "args": [],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.already_owner"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§6.1, §6.3. Смотрящий не владелец инцидента: «Перехватить» и «Открыть на просмотр» — только для чужого."
       },
       {
         "fn": "isTarget",
         "args": [],
-        "onFail": "hide"
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.not_target"
+        ]
       },
       {
         "fn": "isNotTarget",
         "args": [],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.is_target"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§6.3. Смотрящий не адресат передачи — или адресат, уже ставший владельцем. Адресату вместо «Открыть на просмотр» — «Принять»."
       },
@@ -3421,6 +3639,9 @@ window.IM_WORKFLOW = {
         "fn": "targetIsNotSelf",
         "args": [],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.transfer_to_self"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено."
       },
@@ -3428,6 +3649,9 @@ window.IM_WORKFLOW = {
         "fn": "targetCanAccept",
         "args": [],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.target_cannot_accept"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим."
       },
@@ -3435,13 +3659,17 @@ window.IM_WORKFLOW = {
         "fn": "targetHasAccess",
         "args": [],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.target_no_access"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)."
       },
       {
         "fn": "agentReady",
         "args": [],
-        "onFail": "disable"
+        "onFail": "disable",
+        "failFrom": "session.states[].readOnlyReason"
       },
       {
         "fn": "agentStateIs",
@@ -3449,6 +3677,9 @@ window.IM_WORKFLOW = {
           "agentState"
         ],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.agent_state"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§10.4, §12.1. Состояние оператора равно аргументу. У системных переходов со scope — состояние того оператора, чьи инциденты проверяются."
       },
@@ -3458,6 +3689,9 @@ window.IM_WORKFLOW = {
           "seconds"
         ],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.agent_online"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§12.3. Сессия оператора не присылает признак активности не меньше заданного; аргумент — путь к настройке в секундах."
       },
@@ -3467,6 +3701,10 @@ window.IM_WORKFLOW = {
           "expected"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_addressee",
+          "workflow.guard.addressee_access"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§5. Есть ли у владельца или адресата инцидента доступ к его объекту: человеку — по ролям, группе-адресату — хотя бы у одного участника. Инцидент без адресата условию false не отвечает."
       },
@@ -3476,6 +3714,10 @@ window.IM_WORKFLOW = {
           "expected"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_addressee",
+          "workflow.guard.addressee_can_accept"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§8.1. Может ли владелец или адресат инцидента принять: право incident:accept и доступ к объекту; группе-адресату — хотя бы у одного участника и то, и другое. Инцидент без адресата условию false не отвечает."
       },
@@ -3485,6 +3727,9 @@ window.IM_WORKFLOW = {
           "expected"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.owner_duty_group"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — значение owner.dutyGroup в эффектах."
       },
@@ -3494,12 +3739,19 @@ window.IM_WORKFLOW = {
           "extraUnits?"
         ],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.active_limit",
+          "workflow.guard.active_limit_extra"
+        ],
         "$comment": "§10.2. Сколько единиц уже в работе, не считая единицы самого инцидента (группа — одна единица). extraUnits — сколько единиц добавит действие сверх неё: исключение из группы делает её двумя (RULE-13)."
       },
       {
         "fn": "withinHoldLimit",
         "args": [],
         "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.hold_limit"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold, группа сценария — одна единица. Только у ручного «Отложить»."
       },
@@ -3507,6 +3759,9 @@ window.IM_WORKFLOW = {
         "fn": "withinReopenWindow",
         "args": [],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.reopen_window"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут."
       },
@@ -3515,7 +3770,10 @@ window.IM_WORKFLOW = {
         "args": [
           "stepSetId"
         ],
-        "onFail": "disable"
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.required_steps"
+        ]
       },
       {
         "fn": "closeResultAllowed",
@@ -3523,6 +3781,11 @@ window.IM_WORKFLOW = {
           "resultId"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.result_unavailable",
+          "workflow.guard.required_steps",
+          "workflow.guard.no_permission"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без resultId — доступен ли хоть один результат: так решается, показывать ли кнопку."
       },
@@ -3532,6 +3795,9 @@ window.IM_WORKFLOW = {
           "timerId"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.timer_not_expired"
+        ],
         "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание."
       },
       {
@@ -3540,6 +3806,9 @@ window.IM_WORKFLOW = {
           "expected"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_escalation_level"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах."
       },
@@ -3549,6 +3818,9 @@ window.IM_WORKFLOW = {
           "reasonIds"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.other_hold_reason"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§12.3. Причина удержания из списка: возврат в очередь по долгому молчанию касается только отложенных системой."
       },
@@ -3558,6 +3830,9 @@ window.IM_WORKFLOW = {
           "stateIds"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.wrong_state"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]."
       },
@@ -3565,6 +3840,9 @@ window.IM_WORKFLOW = {
         "fn": "canReadDone",
         "args": [],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_read_done"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§6.3. Закрытую карточку открывает владелец, закрывший или тот, у кого есть incident:read:any."
       },
@@ -3573,7 +3851,10 @@ window.IM_WORKFLOW = {
         "args": [
           "settingKey"
         ],
-        "onFail": "hide"
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.setting_off"
+        ]
       },
       {
         "fn": "settingIs",
@@ -3582,6 +3863,9 @@ window.IM_WORKFLOW = {
           "value"
         ],
         "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.setting_other"
+        ],
         "extendsBaseRegistry": true,
         "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)."
       }

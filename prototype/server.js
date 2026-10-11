@@ -868,10 +868,10 @@
     const etag = (ev) => `"${ev.version}"`;
     function versionProblem(ev, headers) {
       const sent = headers["if-match"];
-      if (!sent) return problem(428, "PRECONDITION_REQUIRED", ["Нет версии записи: запрос без If-Match"]);
+      if (!sent) return problem(428, "PRECONDITION_REQUIRED", ["workflow.error.precondition_required"]);
       const versions = sent.split(",").map((v) => v.trim().replace(/^W\//, ""));
       if (versions.includes("*") || versions.includes(etag(ev))) return null;
-      return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
+      return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
     }
 
     // Группа следует за владельцем (RULE-52, RULE-56): после операции целиком — запроса или такта
@@ -894,7 +894,7 @@
 
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
-      if (!tr) return problem(404, "NOT_FOUND", ["Неизвестное действие"]);
+      if (!tr) return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
       const check = engine.availability(id, ev, { form: formValues, surface });
       if (!check.ok) return guardProblem(check);
       const before = ev.log.length;
@@ -922,7 +922,7 @@
         else if (mode.allowed && (mode.mode === "each_allowed" || mode.mode === "group_or_each_allowed")) ok = each;
         // Часть группы сценария — переход только на всю группу (BUG-29)
         const partial = ok && list.some((e) => engine.groupBlock(tr.id, e, list.map((x) => x.id)));
-        const why = partial ? say(["В выборке часть группы сценария: закрыть можно только всю группу"]) : ok ? null : say(["Для этой выборки действие недоступно"]);
+        const why = partial ? say(["workflow.error.selection_partial_group"]) : ok ? null : say(["workflow.error.selection_unavailable"]);
         if (partial) ok = false;
         return {
           id: tr.id,
@@ -971,7 +971,7 @@
         (p, q, body) => {
           if (body.agentState === "not_ready") {
             const notReady = W.session.states.find((s) => s.id === "not_ready");
-            if (notReady.permission && !can(notReady.permission)) return problem(403, "PERMISSION_DENIED", ["Нет права уходить на перерыв"]);
+            if (notReady.permission && !can(notReady.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
             session.agentState = "not_ready";
             session.reasonId = body.reasonId || null;
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
@@ -1020,10 +1020,10 @@
         (p, q, body) => {
           const guids = body.incidentGuids || [];
           const list = guids.map(find).filter(Boolean);
-          if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["Выборка пуста"]);
+          if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_empty"]);
           const succeeded = [];
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
-          const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["Инцидент не найден"]).body }));
+          const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
           let navigate = null;
           const done = [];
           // Всё или ничего внутри группы (BUG-29): проверка — до первого перехода, пока группа цела
@@ -1049,7 +1049,7 @@
         "/operator/incidents/{incidentGuid}",
         (p) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: card(ev), headers: { ETag: etag(ev) } } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          return ev ? { status: 200, body: card(ev), headers: { ETag: etag(ev) } } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
       ],
       [
@@ -1057,7 +1057,7 @@
         "/operator/incidents/{incidentGuid}/actions",
         (p, q) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: actionsFor(ev, q.surface || "card") } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          return ev ? { status: 200, body: actionsFor(ev, q.surface || "card") } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
       ],
       [
@@ -1065,11 +1065,11 @@
         "/operator/incidents/{incidentGuid}/transitions/{transitionId}",
         (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           const stale = versionProblem(ev, headers);
           if (stale) return stale;
           if (body && body.expectedState && body.expectedState !== ev.state) {
-            return problem(412, "VERSION_CONFLICT", ["Инцидент уже изменён: {state}", { state: STATES[ev.state].label }], { current: card(ev) });
+            return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
           }
           // Один инцидент группы — только вместе с группой (BUG-29)
           const block = engine.groupBlock(p.transitionId, ev, [ev.id], { form: (body && body.formValues) || {}, surface: body && body.surface });
@@ -1110,7 +1110,7 @@
         "/operator/incident-groups/{groupGuid}/members/{incidentGuid}",
         (p) => {
           const ev = find(p.incidentGuid);
-          if (!ev || ev.groupId !== p.groupGuid) return problem(404, "NOT_FOUND", ["Инцидент не в группе"]);
+          if (!ev || ev.groupId !== p.groupGuid) return problem(404, "NOT_FOUND", ["workflow.error.group.not_member"]);
           const r = engine.excludeFromGroup(ev);
           if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
           touch([ev]);
@@ -1124,7 +1124,7 @@
         "/operator/incidents/{incidentGuid}/scenario",
         (p) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: scenarioView(ev) } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          return ev ? { status: 200, body: scenarioView(ev) } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
       ],
       [
@@ -1132,9 +1132,9 @@
         "/operator/incidents/{incidentGuid}/scenario/answers",
         (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // Ответы пишет только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
-          if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["Карточка открыта на просмотр"]);
+          if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
           const stale = versionProblem(ev, headers);
           if (stale) return stale;
           Object.assign(ev.answers, (body && body.answers) || {});
@@ -1148,15 +1148,15 @@
         "/operator/incidents/{incidentGuid}/scenario/cursor",
         (p, q, body) => {
           const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
-          if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["Карточка открыта на просмотр"]);
+          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
           const steps = scenarioSteps(ev);
           let index = cursorOf(ev);
           if (body && body.stepId) index = steps.findIndex((s) => s.id === body.stepId);
           else if (body && body.move === "next") index += 1;
           else if (body && body.move === "prev") index -= 1;
           else if (body && body.move === "first_open") index = firstOpenStep(ev);
-          if (!canOpenStep(ev, index)) return problem(409, "REQUIRED_STEPS_NOT_FILLED", ["Сначала заполните предыдущие шаги"]);
+          if (!canOpenStep(ev, index)) return problem(409, "REQUIRED_STEPS_NOT_FILLED", ["workflow.error.previous_steps"]);
           ev.stepIndex = index;
           return { status: 200, body: scenarioView(ev) };
         },
@@ -1166,7 +1166,7 @@
         "/operator/incidents/{incidentGuid}/macros/{macroId}",
         (p) => {
           const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           const check = engine.availability("run_macro", ev);
           if (!check.ok) return guardProblem(check);
           if (!ev.launched.includes(p.macroId)) ev.launched.push(p.macroId);
@@ -1180,7 +1180,7 @@
         "/operator/incidents/{incidentGuid}/journal",
         (p) => {
           const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           const items = journalView(ev);
           return { status: 200, body: { items, total: items.length } };
         },
@@ -1190,7 +1190,7 @@
         "/operator/incidents/{incidentGuid}/media",
         (p) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: mediaView(ev) } : problem(404, "NOT_FOUND", ["Инцидент не найден"]);
+          return ev ? { status: 200, body: mediaView(ev) } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
       ],
       [
@@ -1208,7 +1208,7 @@
         "GET",
         "/operator/admin/access-groups",
         () => {
-          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
           const named = (id, name) => ({ guid: id, name });
           return {
             status: 200,
@@ -1226,7 +1226,7 @@
         "GET",
         "/operator/admin/duty-groups",
         () => {
-          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
           return { status: 200, body: GROUPS.map((g) => ({ id: g.id, name: g.name, roles: (g.roles || []).slice(), members: (g.members || []).slice(), memberIds: membersOf(g) })) };
         },
       ],
@@ -1234,7 +1234,7 @@
         "GET",
         "/operator/admin/camera-links",
         () => {
-          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["Нет права настраивать схему"]);
+          if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
           const named = (id) => ({ guid: id, name: deviceSpec(id).name });
           return { status: 200, body: CAMERA_LINKS.map((l) => ({ device: named(l.device), cameras: l.cameras.map(named) })) };
         },
@@ -1244,7 +1244,7 @@
         "/operator/reference/reasons/{catalogId}",
         (p) => {
           const catalog = W.reasonCatalogs[p.catalogId];
-          return catalog ? { status: 200, body: catalog.items } : problem(404, "NOT_FOUND", ["Справочник не найден"]);
+          return catalog ? { status: 200, body: catalog.items } : problem(404, "NOT_FOUND", ["workflow.error.catalog_not_found"]);
         },
       ],
       ["GET", "/operator/reference/event-types", () => ({ status: 200, body: eventTypes() })],
@@ -1283,7 +1283,7 @@
           "POST",
           "/test/reset",
           (p, q, body) => {
-            if (body.fixture && body.fixture !== "demo") return problem(404, "NOT_FOUND", ["Нет эталонного набора {name}", { name: body.fixture }]);
+            if (body.fixture && body.fixture !== "demo") return problem(404, "NOT_FOUND", ["workflow.error.test.no_fixture", { name: body.fixture }]);
             // Часы останавливаются: время в тестах идёт только по /test/clock
             clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
             // Изменения схемы и набора — только на этот прогон: следующий reset без них вернёт исходные
@@ -1301,7 +1301,7 @@
             // Роли изменились (в продукте — роли или группы доступа): сервер сразу проверяет, у кого
             // из владельцев и адресатов пропал доступ (addressee_lost_access, §5)
             const person = OPERATORS.find((o) => o.id === p.operatorId);
-            if (!person) return problem(404, "NOT_FOUND", ["Нет оператора {id}", { id: p.operatorId }]);
+            if (!person) return problem(404, "NOT_FOUND", ["workflow.error.test.no_operator", { id: p.operatorId }]);
             person.roles = (body && body.roles) || [];
             if (person.id === ME) {
               rolesOverride = person.roles;
@@ -1316,7 +1316,7 @@
           "/test/clock",
           (p, q, body) => {
             const sec = Number(body.advanceSec) || 0;
-            if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["Время назад не идёт"]);
+            if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.clock_backwards"]);
             if (clock.frozenAt != null) clock.frozenAt += sec * 1000;
             else clock.offset += sec * 1000;
             const fired = runScheduler();
@@ -1352,7 +1352,7 @@
       const route =
         compiled.find((r) => r.method === method && !r.names.length && r.re.test(path)) ||
         compiled.find((r) => r.method === method && r.re.test(path));
-      if (!route) return { status: 404, body: { code: "NOT_FOUND", message: `Нет маршрута ${method} ${path}` } };
+      if (!route) return problem(404, "NOT_FOUND", ["workflow.error.no_route", { method, path }]);
       const m = path.match(route.re);
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));

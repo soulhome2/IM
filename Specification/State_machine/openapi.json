@@ -2221,7 +2221,7 @@
           },
           "messages": {
             "type": "object",
-            "description": "§14.9, RULE-66. Ключи текстов, которые сервер пишет вне переходов (записи журнала, позже — ошибки), и их подстановки: { ключ: { vars } }. Сами тексты — в каталоге строк (GET /operator/strings).",
+            "description": "§14.9, RULE-66. Ключи текстов, которые сервер пишет вне переходов — записи журнала, причины недоступности (workflow.guard.*; у условий реестра — failKeys), ошибки (workflow.error.*), — и их подстановки: { ключ: { vars } }. Сами тексты — в каталоге строк (GET /operator/strings).",
             "additionalProperties": true
           },
           "queueSort": {

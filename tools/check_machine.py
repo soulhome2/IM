@@ -877,6 +877,25 @@ def check_strings(w, err):
         err.append(f"каталог строк: ключ {key} нигде не используется (§14.9)")
 
 
+def check_fail_keys(w, err):
+    """Причины недоступности (§14.9, DOC-28): у каждого условия реестра — ключи причин failKeys из
+    раздела messages (или failFrom — поле машины с причиной); в коде исполнителя и сервера причины
+    и ошибки — ключами, а не русскими фразами."""
+    messages = w.get("messages", {})
+    for g in w["registries"]["guards"]:
+        keys = g.get("failKeys")
+        if keys is None and not g.get("failFrom"):
+            err.append(f"реестр: у условия {g['fn']} нет failKeys — какую причину оно даёт, неизвестно (DOC-28)")
+        for key in keys or []:
+            if key not in messages:
+                err.append(f"реестр: {g['fn']} — причина {key}, которой нет в messages (DOC-28)")
+    for src in ("engine.js", "server.js"):
+        with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
+            for n, line in enumerate(f, 1):
+                if re.search(r'\[\s*"[^"]*[А-Яа-яЁё]', line) and not line.lstrip().startswith("//"):
+                    err.append(f"{src}:{n}: причина или ошибка русской фразой, а не ключом каталога (DOC-28)")
+
+
 def check_grouping(w, err):
     """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
     Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
@@ -1011,6 +1030,7 @@ def main():
     check_grouping(w, err)
     check_priorities(w, o, err)
     check_strings(w, err)
+    check_fail_keys(w, err)
     check_timer_declarations(w, err)
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)
