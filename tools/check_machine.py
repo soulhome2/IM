@@ -870,9 +870,10 @@ def check_strings(w, err):
     for key, spec in w.get("messages", {}).items():
         if key.startswith("workflow.") and key in langs["ru"] and sorted(spec.get("vars", [])) != args(langs["ru"][key]):
             err.append(f"каталог строк: {key} — подстановки в машине {sorted(spec.get('vars', []))}, а в ru {args(langs['ru'][key])} (§14.9)")
+    # Типы событий потока (workflow.schema_published) — не ключи каталога
     for src in ("engine.js", "server.js"):
         with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
-            used |= set(re.findall(r'"(workflow\.[\w.]+)"', f.read()))
+            used |= set(re.findall(r'(?<!emit\()"(workflow\.[\w.]+)"', f.read()))
     for key in sorted(used - set(langs["ru"])):
         err.append(f"каталог строк: ключа {key} нет в strings/ru.json (§14.9)")
     for key in sorted(set(langs["ru"]) - used):

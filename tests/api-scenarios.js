@@ -1562,6 +1562,28 @@
     assert.status(await env.call("GET", "/operator/nothing"), 404, "NOT_FOUND");
   });
 
+  test("Поток событий: workflow.schema_published — стенд сменил схему, клиент её перечитывает (§14.10, BUG-34)", async () => {
+    const env = await makeEnv();
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    // По сети поток подключается не сразу
+    await new Promise((r) => setTimeout(r, 300));
+    const published = async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      return got.splice(0).filter((m) => m.type === "workflow.schema_published");
+    };
+    await makeEnv({ workflowPatch: { queueSort: { operatorMayChange: true } } });
+    const first = await published();
+    assert.eq(first.length, 1, "схему подменили — одно событие");
+    assert.eq([first[0].incidentGuid, first[0].payload.schemaVersion], [null, W.schema.version], "не об инциденте, версия схемы");
+    assert.eq((await env.api.get("/operator/workflow/active")).queueSort.operatorMayChange, true, "схема — уже новая");
+    await makeEnv();
+    assert.eq((await published()).length, 1, "вернули исходную — снова событие");
+    await makeEnv();
+    assert.eq((await published()).length, 0, "схема та же — события нет");
+    stop();
+  });
+
   test("Поток событий: автоэскалация — incident.transitioned по таймеру, было → стало и адресат; id: сообщения — его id (§9, RULE-60)", async () => {
     const env = await makeEnv();
     const got = [];

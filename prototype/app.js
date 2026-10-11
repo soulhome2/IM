@@ -1454,6 +1454,21 @@
       .concat(store.deviceTypes.map((d) => `<option value="${escapeHtml(d.id)}">${te(d.label)}</option>`))
       .join("");
     $("deviceTypeFilter").value = state.deviceType;
+    renderQueueSort();
+  }
+
+  // Порядок очереди (§7, BUG-34): список — только если администратор разрешил оператору выбирать;
+  // выбор — в настройках оператора, сортирует сервер. Подписи — те же, что в настройках администратора
+  function renderQueueSort() {
+    const s = WORKFLOW.queueSort;
+    const select = $("queueSortSelect");
+    select.hidden = !s.operatorMayChange;
+    if (select.hidden) return;
+    const item = WORKFLOW.adminSettings.tabs.flatMap((tab) => tab.items || []).find((i) => i.path === "queueSort.default");
+    select.innerHTML = s.options.map((id) => `<option value="${escapeHtml(id)}">${te(item.values[id])}</option>`).join("");
+    select.value = s.options.includes(prefs().queueSort) ? prefs().queueSort : s.default;
+    select.title = lbl(item);
+    select.setAttribute("aria-label", lbl(item));
   }
 
   function treeItemHtml(item, isDevice, level, trace, q) {
@@ -2506,6 +2521,10 @@
       state.filter = e.target.value;
       requery();
     });
+    $("queueSortSelect").addEventListener("change", async (e) => {
+      await api.patch("/operator/session/preferences", { queueSort: e.target.value });
+      requery();
+    });
     [
       ["eventTypeFilter", "eventType"],
       ["deviceTypeFilter", "deviceType"],
@@ -3135,6 +3154,15 @@
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     if (mine && msg.type !== "incident.card_evicted") return;
+    // Опубликована новая схема: подписи, кнопки, фильтры и порядок очереди — по ней (§14.6)
+    if (msg.type === "workflow.schema_published") {
+      return loadWorkflow().then(() => {
+        renderEscalateDefault();
+        renderTypeFilters();
+        renderHotkeysHelp();
+        reload();
+      });
+    }
     // Доступ к объекту пропал (§5): данных инцидента больше нет — только номер; карточка закрывается
     if (msg.type === "incident.access_lost") {
       toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));
@@ -3164,10 +3192,14 @@
   }
 
   // Загрузка: схема, сессия, справочники — потом первая отрисовка
-  async function boot() {
+  async function loadWorkflow() {
     WORKFLOW = await api.get("/operator/workflow/active");
     STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
     LIMITS = WORKFLOW.limits;
+  }
+
+  async function boot() {
+    await loadWorkflow();
     setInterval(() => heartbeat(true), WORKFLOW.session.heartbeatSec * 1000);
     const [eventTypes, deviceTypes, targets] = await Promise.all([
       api.get("/operator/reference/event-types"),

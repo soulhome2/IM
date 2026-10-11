@@ -1132,6 +1132,39 @@
       return toast.textContent;
     });
 
+    await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const select = $("queueSortSelect");
+      expect(select.hidden, "список порядков виден без разрешения администратора");
+      // Администратор разрешил: стенд подменяет схему, клиент перечитывает её по workflow.schema_published
+      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: true } } });
+      await wait(300);
+      try {
+        expect(!select.hidden, "разрешили менять порядок — список не появился: схема не перечитана");
+        const options = [...select.options].map((o) => o.value);
+        expect(JSON.stringify(options) === JSON.stringify(window.IM_WORKFLOW.queueSort.options), `варианты не из схемы: ${options.join(", ")}`);
+        const other = options.find((v) => v !== select.value);
+        // Очередь после выбора — заново с сервера: считаем запросы интерфейса к очереди
+        const get = stand.get;
+        let asked = 0;
+        stand.get = (path, ...rest) => ((asked += path === "/operator/incidents"), get.call(stand, path, ...rest));
+        try {
+          select.value = other;
+          select.dispatchEvent(new Event("change"));
+          await wait(300);
+        } finally {
+          stand.get = get;
+        }
+        expect((await stand.get("/operator/session")).preferences.queueSort === other, "выбор не сохранён в настройках оператора");
+        expect(asked > 0, "после выбора очередь не перечитана");
+        return `порядков: ${options.length}, выбран «${select.selectedOptions[0].textContent}»`;
+      } finally {
+        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await wait(300);
+        expect(select.hidden, "разрешение сняли — список не скрылся");
+      }
+    });
+
     await step("Ответы встроенного сервера соответствуют openapi.json", async () => {
       expect(window.IM_OPENAPI, "контракт openapi.js не подключён");
       const recorded = window.IM_RECORDED || [];

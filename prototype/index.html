@@ -183,6 +183,8 @@
                 <select id="eventTypeFilter" class="search-input" aria-label="Тип события"></select>
                 <select id="deviceTypeFilter" class="search-input" aria-label="Тип устройства"></select>
               </div>
+              <!-- Порядок очереди — только если администратор разрешил оператору его менять (§7, BUG-34) -->
+              <select id="queueSortSelect" class="search-input events-sort" hidden></select>
             </div>
             <div class="events-list" id="eventsList"></div>
             <nav class="events-pager" id="eventsPager" aria-label="Страницы очереди" hidden></nav>

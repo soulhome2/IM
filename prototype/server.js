@@ -1383,10 +1383,13 @@
             // Часы останавливаются: время в тестах идёт только по /test/clock
             clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
             // Изменения схемы и набора — только на этот прогон: следующий reset без них вернёт исходные
+            const before = W;
             useWorkflow(body.workflowPatch ? mergePatch(BASE_W, body.workflowPatch) : BASE_W);
             PERMISSIONS = body.operatorPermissions || opts.permissions || ALL_PERMISSIONS;
             rolesOverride = body.operatorRoles || null;
             load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);
+            // Схема сменилась — для клиентов это новая схема: пусть перечитают (BUG-34)
+            if (W !== before) emit("workflow.schema_published", null, null, { schemaVersion: W.schema.version });
             return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
           },
         ],
