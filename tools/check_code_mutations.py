@@ -130,6 +130,8 @@ MUTATIONS = [
     ("transition-facts-missing", "server.js", "state: { from: f.from.state || null, to: ev.state },", "state: { from: null, to: ev.state },", "api"),
     ("grace-ignored", "engine.js", "moment = Math.max(moment || 0, due + GRACE_MS);", "moment = Math.max(moment || 0, due);", "api"),
     ("override-ignored", "engine.js", "      const canceled = overridden(ev);", "      const canceled = null;", "api"),
+    ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
+    ("journal-not-paged", "server.js", "items: all.slice((n - 1) * size, n * size)", "items: all", "api"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),

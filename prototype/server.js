@@ -776,7 +776,8 @@
     }
 
     // Дерево групп — только группы, где есть доступные оператору устройства, и только они (§5)
-    function treeView(nodes) {
+    // Счётчики открытых инцидентов — только по запросу (withCounters=true, BUG-37)
+    function treeView(nodes, withCounters) {
       return nodes
         .filter((n) => !n.isDevice && collectDeviceIds(n).some((id) => myDevices.has(id)))
         .map((n) => {
@@ -786,15 +787,15 @@
             .filter((c) => c.isDevice && myDevices.has(c.id))
             .map((c) => {
               const evs = events.filter((e) => canSee(e) && !isDone(e) && touches(e, [c.id]));
-              return Object.assign(deviceRef(c.id), { counters: { open: evs.length, critical: evs.filter((e) => e.priority === "critical").length } });
+              return withCounters ? Object.assign(deviceRef(c.id), { counters: { open: evs.length, critical: evs.filter((e) => e.priority === "critical").length } }) : deviceRef(c.id);
             });
           return {
             guid: n.id,
             name: n.name,
             description: n.description || null,
-            children: treeView(n.children || []),
+            children: treeView(n.children || [], withCounters),
             devices,
-            counters: { open: open.length, critical: open.filter((e) => e.priority === "critical").length },
+            counters: withCounters ? { open: open.length, critical: open.filter((e) => e.priority === "critical").length } : null,
           };
         });
     }
@@ -1210,11 +1211,14 @@
       [
         "GET",
         "/operator/incidents/{incidentGuid}/journal",
-        (p) => {
+        (p, q) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          const items = journalView(ev);
-          return { status: 200, body: { items, total: items.length } };
+          // Постранично, как очередь (BUG-37); без pageSize — весь журнал одной страницей
+          const all = journalView(ev);
+          const size = Math.max(1, Number(q.pageSize) || all.length || 1);
+          const n = Math.max(1, Number(q.page) || 1);
+          return { status: 200, body: { items: all.slice((n - 1) * size, n * size), total: all.length } };
         },
       ],
       [
@@ -1286,7 +1290,7 @@
         "/operator/reference/device-types",
         () => ({ status: 200, body: Object.entries(DEVICE_TYPES).map(([id, d]) => ({ id, label: d.label })) }),
       ],
-      ["GET", "/operator/reference/source-groups", () => ({ status: 200, body: treeView(TREE) })],
+      ["GET", "/operator/reference/source-groups", (p, q) => ({ status: 200, body: treeView(TREE, q.withCounters === "true") })],
       // Без площадки — все ссылки; с площадкой — общие и этой площадки (§7)
       [
         "GET",

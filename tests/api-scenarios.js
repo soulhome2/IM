@@ -1091,6 +1091,19 @@
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "«Взять» после окна");
   });
 
+  test("Параметры контракта работают: счётчики дерева групп — только по запросу, журнал постранично (BUG-37)", async () => {
+    const env = await makeEnv();
+    const plain = await env.ok("GET", "/operator/reference/source-groups");
+    const counted = await env.ok("GET", "/operator/reference/source-groups?withCounters=true");
+    assert.ok(plain.length && plain.every((n) => n.counters == null), "без withCounters счётчиков нет");
+    assert.ok(counted.every((n) => n.counters && typeof n.counters.open === "number"), "с withCounters — счётчики");
+    const inc = (await env.all("all")).find((e) => e.state === "closed");
+    const all = await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/journal`);
+    assert.ok(all.total >= 2 && all.items.length === all.total, `без pageSize — весь журнал: ${all.items.length} из ${all.total}`);
+    const second = await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/journal?page=2&pageSize=1`);
+    assert.eq([second.items.length, second.total, second.items[0].guid], [1, all.total, all.items[1].guid], "вторая страница по одной записи");
+  });
+
   /* ===== Порядок очереди (§7, RULE-62) ===== */
 
   const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;
@@ -1225,7 +1238,7 @@
 
   test("Фильтры группы, типа события, типа устройства и поиск сужают очередь", async () => {
     const env = await makeEnv();
-    const tree = await env.ok("GET", "/operator/reference/source-groups");
+    const tree = await env.ok("GET", "/operator/reference/source-groups?withCounters=true");
     const all = await env.all();
     const byGroup = await env.ok("GET", `/operator/incidents?filter=all&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`);
     assert.ok(byGroup.total > 0 && byGroup.total < all.length, `группа «${tree[0].name}»: ${byGroup.total} из ${all.length}`);

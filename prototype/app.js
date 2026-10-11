@@ -792,7 +792,7 @@
         api.get("/operator/session"),
         api.get("/operator/incidents", queueQuery()),
         api.get("/operator/incidents/counters"),
-        api.get("/operator/reference/source-groups"),
+        api.get("/operator/reference/source-groups", { withCounters: true }),
       ]);
       // После действия очередь открывается на странице с выбранным инцидентом
       if (jump && page.focusPage && page.focusPage !== page.page) {
