@@ -849,7 +849,8 @@
       touch([ev]);
       emit(id === "transfer" ? "incident.owner_changed" : "incident.state_changed", ev, ME, { transitionId: id });
       const journal = journalView(ev).slice(before);
-      return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects: [], canceledTimerTrigger: null } };
+      const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
+      return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: null } };
     }
 
     function selectionActions(list) {

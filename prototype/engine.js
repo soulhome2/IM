@@ -458,7 +458,18 @@
         if (!fn) throw new Error(`Эффект не реализован: ${e.fn}`);
         fn(draft, e.args || [], scope);
       });
-      return scope.after;
+      // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects): кому или какая
+      // команда. Нет получателя или это сам выполняющий — уведомления нет (BUG-30)
+      const recipient = { owner: draft.owner, previousOwner: scope.previousOwner, newTarget: addressee(draft) };
+      const external = tr.effects
+        .filter((e) => e.kind === "external")
+        .map((e) => {
+          const [arg] = e.args || [];
+          const target = e.fn !== "notify" ? arg : arg === "alerts.target" ? refToId(setting(arg)) : recipient[arg] || null;
+          return { fn: e.fn, target };
+        })
+        .filter((x) => x.target && x.target !== actor);
+      return { after: scope.after, external };
     }
     function applyEffects(tr, ev, form, actor) {
       return applyAll(tr, [ev], form, actor);
@@ -466,16 +477,16 @@
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
     function applyAll(tr, list, form, actor) {
       const drafts = list.map(draftOf);
-      let after;
+      let done;
       try {
-        after = drafts.map((d) => effectsOn(d, tr, form, actor));
+        done = drafts.map((d) => effectsOn(d, tr, form, actor));
       } catch (err) {
         return { ok: false, why: ["Переход не выполнен: {error}", { error: err.message }] };
       }
       list.forEach((ev, i) => Object.assign(ev, drafts[i]));
       // Внешние эффекты — только после применения перехода
-      list.forEach((ev, i) => after[i].forEach((fn) => fn(ev)));
-      return { ok: true };
+      list.forEach((ev, i) => done[i].after.forEach((fn) => fn(ev)));
+      return { ok: true, external: done.map((d) => d.external) };
     }
 
     // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
@@ -503,7 +514,7 @@
       if (bad) return { ok: false, why: bad };
       const applied = applyEffects(tr, ev, form, ME);
       if (!applied.ok) return applied;
-      return { ok: true, navigate: tr.ui.navigate };
+      return { ok: true, navigate: tr.ui.navigate, external: applied.external[0] };
     }
 
     /* ===== Автоматические переходы (§6.2): планировщик ===== */

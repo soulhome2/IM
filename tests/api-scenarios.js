@@ -958,6 +958,24 @@
     assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
   });
 
+  test("Внешние эффекты перехода — в ответе со статусом queued; себе и некому уведомления нет (§14.2, BUG-30)", async () => {
+    const env = await makeEnv();
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+    const effects = (res) => res.body.externalEffects.map((x) => [x.fn, x.target, x.status]);
+    const sent = await env.act(a.guid, "transfer", { targetId: "petrova", comment: "тест" }, "card");
+    assert.status(sent, 200, null, "передать новый");
+    assert.eq(effects(sent), [["notify", "petrova", "queued"]], "«Передать» новый: только новому адресату — прежнего владельца нет");
+    const taken = await env.act(a.guid, "takeover", { comment: "беру" }, "card");
+    assert.status(taken, 200, null, "перехватить у Петровой");
+    assert.eq(effects(taken), [["notify", "petrova", "queued"]], "«Перехватить»: прежнему владельцу");
+    const closed = await env.act(a.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
+    assert.status(closed, 200, null, "закрыть");
+    assert.eq(effects(closed), [["externalCommand", "axxondata.export_incident", "queued"]], "«Закрыть»: выгрузка в AxxonData");
+    assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять второй");
+    const own = await env.act(b.guid, "transfer", { targetId: "petrova", comment: "тест" }, "card");
+    assert.eq(effects(own), [["notify", "petrova", "queued"]], "«Передать» свой: себе уведомления нет");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");
