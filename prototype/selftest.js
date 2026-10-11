@@ -127,7 +127,14 @@
   const status = {};
   const cause = {};
 
+  // ?selftest&failfast — после первого падения остальные шаги не выполняются (PROC-17: мутации кода)
+  const FAILFAST = new URLSearchParams(location.search).has("failfast");
   async function step(name, fn, after) {
+    if (FAILFAST && results.some((r) => !r.ok)) {
+      status[name] = "skip";
+      results.push({ ok: true, skipped: true, name, note: "пропущен: failfast" });
+      return;
+    }
     if (after && status[after] !== "ok") {
       cause[name] = status[after] === "skip" ? cause[after] : after;
       status[name] = "skip";

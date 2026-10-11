@@ -11,9 +11,14 @@
 что прототип ведёт себя по-новому (правила только в машине). Здесь меняется код
 и проверяется, что тесты замечают поломку.
 
+Быстро (PROC-17): чтобы поймать порчу, хватает одного упавшего теста. Поэтому тесты идут до
+первого падения (failfast), а копия прототипа одна на все мутации. Вердикт тот же: выжившая
+мутация всегда проходит полный набор тестов.
+
 Запуск из корня репозитория:
-  python3 tools/check_code_mutations.py            — все мутации, около двух минут
+  python3 tools/check_code_mutations.py            — все мутации, около четырёх минут
   python3 tools/check_code_mutations.py hold-limit — только названные
+  python3 tools/check_code_mutations.py --full     — без ускорения: полные прогоны, около десяти минут
 Код выхода 1, если хоть одна мутация выжила.
 """
 import os
@@ -167,14 +172,14 @@ def chrome(url, profile, budget):
     return out.stdout
 
 
-def run_tests(site, kind, profile):
+def run_tests(site, kind, profile, failfast=False):
     shutil.rmtree(profile, ignore_errors=True)
     if kind == "api":
-        page = chrome(f"file://{site}/tests/api.html", profile, 120000)
+        page = chrome(f"file://{site}/tests/api.html" + ("?failfast" if failfast else ""), profile, 120000)
         passed = 'data-apitest="pass"' in page
         log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
     else:
-        page = chrome(f"file://{site}/prototype/index.html?selftest", profile, 30000)
+        page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 30000)
         passed = 'data-selftest="pass"' in page
         log = re.search(r'<pre id="selftest-log"[^>]*>(.*?)</pre>', page, re.S)
     fails = [line for line in (log.group(1).splitlines() if log else []) if line.startswith("FAIL")]
@@ -183,17 +188,18 @@ def run_tests(site, kind, profile):
 
 def main():
     wanted = [a for a in sys.argv[1:] if not a.startswith("-")]
+    full = "--full" in sys.argv
     work = tempfile.mkdtemp(prefix="im-code-mut-")
     profile = os.path.join(work, "profile")
     site = os.path.join(work, "site")
     survived = 0
+    # Одна копия прототипа и тестов: портится и восстанавливается по одному файлу
+    for sub in ("prototype", "tests", "theme"):
+        shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
     try:
         for name, file, old, new, kind in MUTATIONS:
             if wanted and name not in wanted:
                 continue
-            shutil.rmtree(site, ignore_errors=True)
-            for sub in ("prototype", "tests", "theme"):
-                shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
             path = os.path.join(site, "prototype", file)
             with open(path, encoding="utf-8") as f:
                 code = f.read()
@@ -203,7 +209,10 @@ def main():
                 continue
             with open(path, "w", encoding="utf-8") as f:
                 f.write(code.replace(old, new))
-            passed, fails, ran = run_tests(site, kind, profile)
+            # До первого падения: не упало ничего — значит, пройден весь набор
+            passed, fails, ran = run_tests(site, kind, profile, failfast=not full)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(code)
             if not ran:
                 print(f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)")
             elif passed:
@@ -211,11 +220,8 @@ def main():
                 print(f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}")
             else:
                 print(f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}")
-        # Контроль: без порчи тесты проходят
+        # Контроль: без порчи тесты проходят — полный прогон
         if not wanted:
-            shutil.rmtree(site, ignore_errors=True)
-            for sub in ("prototype", "tests", "theme"):
-                shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
             for kind in ("api", "ui"):
                 passed, fails, _ = run_tests(site, kind, profile)
                 if not passed:

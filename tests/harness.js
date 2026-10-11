@@ -243,7 +243,14 @@
       lines.push(`FAIL  Тестовый стенд доступен — ${why}`);
       return finish(lines, "Тесты API не запущены: стенд недоступен", true);
     }
+    // ?only=<имя теста> — только он; ?failfast — до первого падения (так мутации кода проверяются
+    // быстрее: чтобы поймать порчу, хватает одного упавшего теста, PROC-17)
+    const params = new URLSearchParams(location.search);
+    const only = params.get("only");
+    const failfast = params.has("failfast");
     for (const t of tests) {
+      if (only && t.name !== only) continue;
+      if (failfast && failed) break;
       const started = Date.now();
       try {
         const note = await t.fn();
@@ -260,6 +267,10 @@
       failed += 1;
       lines.push(`FAIL  Ответы соответствуют openapi.json — расхождений ${problems.length}: ${problems.slice(0, 12).join("; ")}`);
     } else lines.push(`PASS  Ответы соответствуют openapi.json — ${recorded.length} ответов`);
+    if (only || (failfast && failed)) {
+      const total = only ? 1 : tests.length;
+      return finish(lines, failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: ${total} прошли`, failed);
+    }
     // Покрытие: каждая операция контракта вызвана хоть одним тестом
     const called = new Set(recorded.map((r) => `${r.method} ${r.template}`));
     const ops = Object.entries(spec.paths).flatMap(([path, item]) =>
