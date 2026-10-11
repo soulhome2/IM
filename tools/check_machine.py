@@ -927,6 +927,61 @@ def check_observer_notice(w, err):
             err.append(f"переход {t['id']}: ключ уведомления «{n.get('key')}» не из области workflow.notice (RULE-60)")
 
 
+# Параметры, которые встроенный сервер прототипа сознательно не учитывает, — с причиной (ARCH-04)
+UNREAD_PARAMS = {
+    ("/operator/workflow/active", "eventTypeGuid"): "у прототипа одна схема (§14.4)",
+    ("/operator/workflow/active", "sourceGroupGuid"): "у прототипа одна схема (§14.4)",
+    ("/operator/workflow/active", "priority"): "у прототипа одна схема (§14.4)",
+}
+
+
+def check_served(o, err):
+    """Описано ли то, что делает сервер (ARCH-04). Параметры запросов: у каждого есть описание, и
+    встроенный сервер читает его в своём маршруте (или в функции, куда передаёт параметры целиком);
+    исключения — UNREAD_PARAMS с причиной. Поток событий: каждый тип, который шлёт сервер, есть в
+    перечне контракта, и у каждого типа перечня есть строка в таблице событий."""
+    with open(os.path.join(ROOT, "prototype", "server.js"), encoding="utf-8") as f:
+        srv = f.read()
+    start = re.compile(r'\[\s*"(GET|POST|PUT|PATCH|DELETE)",\s*"(/[^"]+)",')
+    marks = [(m.start(), m.group(1), m.group(2)) for m in start.finditer(srv)]
+    bodies = {(meth, path): srv[a:(marks[i + 1][0] if i + 1 < len(marks) else len(srv))] for i, (a, meth, path) in enumerate(marks)}
+
+    def reads(text, name, seen):
+        if re.search(r"\bq\.%s\b" % name, text):
+            return True
+        for fn in re.findall(r"\b(\w+)\(q\)", text):
+            if fn in seen:
+                continue
+            seen.add(fn)
+            m = re.search(r"function %s\(q\) \{" % fn, srv)
+            if m and reads(srv[m.end():srv.find("\n    }\n", m.end())], name, seen):
+                return True
+        return False
+
+    for path, item in o["paths"].items():
+        for meth, op in item.items():
+            if meth not in ("get", "post", "put", "patch", "delete"):
+                continue
+            body = bodies.get((meth.upper(), path))
+            for p in item.get("parameters", []) + op.get("parameters", []):
+                if "$ref" in p:
+                    p = o["components"]["parameters"][p["$ref"].split("/")[-1]]
+                if p.get("in") != "query":
+                    continue
+                if not str(p.get("description", "")).strip():
+                    err.append(f"контракт: {meth.upper()} {path} — у параметра {p['name']} нет описания (ARCH-04)")
+                if body is not None and (path, p["name"]) not in UNREAD_PARAMS and not reads(body, p["name"], set()):
+                    err.append(f"встроенный сервер: {meth.upper()} {path} не читает параметр {p['name']} — сделать или записать в UNREAD_PARAMS с причиной (ARCH-04)")
+    ev = o["components"]["schemas"]["IncidentStreamEvent"]
+    enum = set(ev["properties"]["type"]["enum"])
+    table = set(re.findall(r"^\| `([a-z_.]+)` \|", ev.get("description", ""), re.M))
+    sent = set(re.findall(r'emit\("([a-z_.]+)"', srv)) | set(re.findall(r'send\(\{ type: "([a-z_.]+)"', srv))
+    for t in sorted(sent - enum):
+        err.append(f"поток событий: сервер шлёт {t}, а в перечне контракта его нет (ARCH-04)")
+    for t in sorted(enum ^ table):
+        err.append(f"поток событий: тип {t} — {'нет строки в таблице событий' if t in enum else 'в таблице, но не в перечне'} (ARCH-04)")
+
+
 def check_grouping(w, err):
     """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
     Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
@@ -1057,6 +1112,7 @@ def main():
     check_rules_tables(w, err)
     check_rules_diagram(w, err)
     check_doc_numbers(w, o, err)
+    check_served(o, err)
     check_fixture_journal(w, err)
     check_graph(w, err)
     check_state_owners(w, err)
