@@ -357,5 +357,9 @@
   "workflow.scenario.confirmation": "Confirmation",
   "workflow.error.effect_not_implemented": "Effect not implemented: {fn}",
   "workflow.transition.create": "Appeared",
-  "workflow.error.test.bad_incident": "A known event type, a priority from the catalog and at least one device are required"
+  "workflow.error.test.bad_incident": "A known event type, a priority from the catalog and at least one device are required",
+  "workflow.notice.claim": "{who} took {id}",
+  "workflow.notice.transfer": "{who} transferred {id} to you",
+  "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
+  "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold"
 }

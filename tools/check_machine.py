@@ -914,6 +914,19 @@ def check_fail_keys(w, err):
     walk(w, ())
 
 
+def check_observer_notice(w, err):
+    """Уведомление наблюдателям о переходе (§9, RULE-60, BUG-32) — в машине: ключ workflow.notice.*,
+    кому — observers или newAddressee. Клиент не знает переходы по именам."""
+    for t in w["transitions"]:
+        n = (t.get("ui") or {}).get("observerNotice")
+        if not n:
+            continue
+        if n.get("audience") not in ("observers", "newAddressee"):
+            err.append(f"переход {t['id']}: observerNotice.audience «{n.get('audience')}» — не observers и не newAddressee (RULE-60)")
+        if not str(n.get("key", "")).startswith("workflow.notice."):
+            err.append(f"переход {t['id']}: ключ уведомления «{n.get('key')}» не из области workflow.notice (RULE-60)")
+
+
 def check_grouping(w, err):
     """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
     Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
@@ -1051,6 +1064,7 @@ def main():
     check_priorities(w, o, err)
     check_strings(w, err)
     check_fail_keys(w, err)
+    check_observer_notice(w, err)
     check_timer_declarations(w, err)
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)

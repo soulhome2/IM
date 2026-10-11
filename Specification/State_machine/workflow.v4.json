@@ -371,7 +371,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.claim"] }
       ],
       "bulk": { "allowed": true, "mode": "same_type_new", "minItems": 2, "createsGroup": true },
-      "ui": { "surface": ["queue"], "style": "primary", "hotkey": "N", "navigate": "card" }
+      "ui": { "surface": ["queue"], "style": "primary", "hotkey": "N", "navigate": "card", "observerNotice": { "key": "workflow.notice.claim", "audience": "observers" } }
     },
     {
       "id": "accept",
@@ -543,7 +543,7 @@
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "sharedForm": true },
-      "ui": { "surface": ["queue", "card"], "style": "warn", "hotkey": "E", "navigate": "queue" }
+      "ui": { "surface": ["queue", "card"], "style": "warn", "hotkey": "E", "navigate": "queue", "observerNotice": { "key": "workflow.notice.transfer", "audience": "newAddressee" } }
     },
     {
       "id": "takeover",
@@ -676,7 +676,7 @@
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["newTarget"] }
       ],
-      "ui": { "surface": [], "style": null, "hotkey": null, "navigate": null }
+      "ui": { "surface": [], "style": null, "hotkey": null, "navigate": null, "observerNotice": { "key": "workflow.notice.auto_escalate", "audience": "observers" } }
     },
     {
       "id": "escalation_ceiling",
@@ -832,7 +832,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_hold_idle"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
-      "ui": { "surface": [] }
+      "ui": { "surface": [], "observerNotice": { "key": "workflow.notice.system_hold_idle", "audience": "observers" } }
     },
     {
       "id": "system_release_idle",

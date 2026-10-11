@@ -476,8 +476,16 @@
     function applyEffects(tr, ev, form, actor) {
       return applyAll(tr, [ev], form, actor);
     }
+    // Что было и что стало — для события потока (§9, RULE-60): состояние, владелец, адресат, новое нарушение
+    const snap = (ev) => ({ state: ev.state, owner: ev.owner, addressee: addressee(ev), breaches: (ev.breaches || []).length });
+    function factsOf(before, ev) {
+      const added = (ev.breaches || []).slice(before.breaches);
+      return { from: before, to: snap(ev), breach: added.length ? added[added.length - 1].kind : null };
+    }
+
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
     function applyAll(tr, list, form, actor) {
+      const before = list.map(snap);
       const drafts = list.map(draftOf);
       let done;
       try {
@@ -488,7 +496,7 @@
       list.forEach((ev, i) => Object.assign(ev, drafts[i]));
       // Внешние эффекты — только после применения перехода
       list.forEach((ev, i) => done[i].after.forEach((fn) => fn(ev)));
-      return { ok: true, external: done.map((d) => d.external) };
+      return { ok: true, external: done.map((d) => d.external), facts: list.map((ev, i) => factsOf(before[i], ev)) };
     }
 
     // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
@@ -516,7 +524,7 @@
       if (bad) return { ok: false, why: bad };
       const applied = applyEffects(tr, ev, form, ME);
       if (!applied.ok) return applied;
-      return { ok: true, navigate: tr.ui.navigate, external: applied.external[0] };
+      return { ok: true, navigate: tr.ui.navigate, external: applied.external[0], facts: applied.facts[0] };
     }
 
     // Появление инцидента (§6.2, RULE-61): переход машины с trigger: event — без исходного состояния,
@@ -524,7 +532,8 @@
     function create(ev) {
       const tr = W.transitions.find((t) => t.trigger === "event");
       if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
-      return applyEffects(tr, ev, {}, tr.actor || "dispatcher");
+      const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");
+      return applied.ok ? Object.assign(applied, { facts: applied.facts[0] }) : applied;
     }
 
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
@@ -579,15 +588,18 @@
           if (!next) return;
           done.add(`${next.tr.id}@${next.moment}`);
           at = next.moment;
+          let facts = null;
           try {
             const timerGuard = (next.tr.guards || []).find((g) => g.fn === "timerExpired");
             if (timerGuard) markFired(ev, timerGuard.args[0]);
-            if (!applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher").ok) return;
+            const applied = applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher");
+            if (!applied.ok) return;
+            facts = applied.facts[0];
           } finally {
             at = null;
           }
           last = next.moment;
-          changed.push({ id: ev.id, transition: next.tr.id });
+          changed.push({ id: ev.id, transition: next.tr.id, facts });
         }
       });
       return changed;

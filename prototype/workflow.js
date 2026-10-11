@@ -865,7 +865,11 @@ window.IM_WORKFLOW = {
         ],
         "style": "primary",
         "hotkey": "N",
-        "navigate": "card"
+        "navigate": "card",
+        "observerNotice": {
+          "key": "workflow.notice.claim",
+          "audience": "observers"
+        }
       }
     },
     {
@@ -1433,7 +1437,11 @@ window.IM_WORKFLOW = {
         ],
         "style": "warn",
         "hotkey": "E",
-        "navigate": "queue"
+        "navigate": "queue",
+        "observerNotice": {
+          "key": "workflow.notice.transfer",
+          "audience": "newAddressee"
+        }
       }
     },
     {
@@ -1900,7 +1908,11 @@ window.IM_WORKFLOW = {
         "surface": [],
         "style": null,
         "hotkey": null,
-        "navigate": null
+        "navigate": null,
+        "observerNotice": {
+          "key": "workflow.notice.auto_escalate",
+          "audience": "observers"
+        }
       }
     },
     {
@@ -2404,7 +2416,11 @@ window.IM_WORKFLOW = {
         }
       ],
       "ui": {
-        "surface": []
+        "surface": [],
+        "observerNotice": {
+          "key": "workflow.notice.system_hold_idle",
+          "audience": "observers"
+        }
       }
     },
     {

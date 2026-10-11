@@ -357,5 +357,9 @@
   "workflow.scenario.confirmation": "Подтверждение",
   "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}",
   "workflow.transition.create": "Появился",
-  "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство"
+  "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство",
+  "workflow.notice.claim": "{id} взял в работу {who}",
+  "workflow.notice.transfer": "{who} передал {id} вам",
+  "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
+  "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой"
 }

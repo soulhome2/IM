@@ -904,6 +904,21 @@
       });
     }
 
+    // Переход — одно событие потока (§9, RULE-60): какой, чем вызван и что было → стало. Что сказать
+    // наблюдателям, клиент берёт из машины (ui.observerNotice), а не из имени перехода
+    function emitTransition(ev, transitionId, actorId, facts) {
+      const tr = engine.transition(transitionId);
+      const f = facts || { from: {}, to: {} };
+      emit("incident.transitioned", ev, actorId, {
+        transitionId,
+        trigger: tr ? tr.trigger : null,
+        state: { from: f.from.state || null, to: ev.state },
+        owner: { from: actorRef(f.from.owner), to: actorRef(ev.owner) },
+        addressee: actorRef(engine.addressee(ev)),
+        breach: f.breach || null,
+      });
+    }
+
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
       if (!tr) return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
@@ -913,7 +928,7 @@
       const r = engine.run(id, ev, formValues, { surface });
       if (!r.ok) return problem(422, "FORM_FIELD_REQUIRED", r.why);
       touch([ev]);
-      emit(id === "transfer" ? "incident.owner_changed" : "incident.state_changed", ev, ME, { transitionId: id });
+      emitTransition(ev, id, ME, r.facts);
       const journal = journalView(ev).slice(before);
       const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
       return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: null } };
@@ -1152,6 +1167,8 @@
           Object.assign(ev.answers, (body && body.answers) || {});
           if (!canOpenStep(ev, cursorOf(ev))) ev.stepIndex = firstOpenStep(ev);
           touch([ev]);
+          // Ответы сценария изменились — тем, кто видит инцидент (§9, RULE-60)
+          emit("incident.updated", ev, ME, { stepIds: Object.keys((body && body.answers) || {}) });
           return { status: 200, body: scenarioView(ev), headers: { ETag: etag(ev) } };
         },
       ],
@@ -1184,7 +1201,10 @@
           if (!ev.launched.includes(p.macroId)) ev.launched.push(p.macroId);
           log(ev, ME, "workflow.journal.macro.launched", { name: p.macroId });
           touch([ev]);
-          return { status: 202, body: { executionGuid: uuid(9, ++serial.macro), macroId: p.macroId, status: "delivered", queuedAt: iso(now()) } };
+          // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен»
+          const execution = { executionGuid: uuid(9, ++serial.macro), macroId: p.macroId, status: "delivered", queuedAt: iso(now()) };
+          emit("macro.completed", ev, ME, { macroId: execution.macroId, executionGuid: execution.executionGuid, status: execution.status });
+          return { status: 202, body: execution };
         },
       ],
       [
@@ -1445,7 +1465,7 @@
       // Системные переходы каждого человека — по его состоянию, как на бэкенде, а не только в эмуляции
       // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь
       const others = OPERATORS.filter((op) => op.id !== ME).flatMap((op) => colleagueTick(op.id));
-      fired.forEach(({ id, transition }) => {
+      fired.forEach(({ id, transition, facts }) => {
         const ev = byId(id);
         touch([ev]);
         const tr = engine.transition(transition);
@@ -1453,10 +1473,7 @@
           wasMine.delete(id);
           emitAccessLost(ev);
         }
-        emit(transition === "auto_escalate" ? "incident.auto_escalated" : "incident.state_changed", ev, tr.actor || "dispatcher", {
-          transitionId: transition,
-          addressee: actorRef(engine.addressee(ev)),
-        });
+        emitTransition(ev, transition, tr.actor || "dispatcher", facts);
       });
       settleGroups();
       return fired.concat(others);
@@ -1499,7 +1516,7 @@
         if (!r.ok) continue;
         SIM.taken += 1;
         touch([ev]);
-        emit("incident.state_changed", ev, who, { transitionId: "claim" });
+        emitTransition(ev, "claim", who, r.facts);
         return;
       }
     }
@@ -1541,7 +1558,7 @@
         const r = colleague(who).run("close", ev, { resultId: full && full.id }, { surface: "card" });
         if (r.ok) {
           touch([ev]);
-          emit("incident.state_changed", ev, who, { transitionId: "close" });
+          emitTransition(ev, "close", who, r.facts);
         }
       }
     }
@@ -1554,7 +1571,7 @@
         const r = colleague(from).run("transfer", ev, { targetId: ME, comment: "Нужен оператор с доступом к архиву площадки" }, { surface: "card" }); // данные
         if (!r.ok) continue;
         touch([ev]);
-        emit("incident.owner_changed", ev, from, { transitionId: "transfer", addressee: actorRef(ME) });
+        emitTransition(ev, "transfer", from, r.facts);
         return;
       }
     }
@@ -1570,12 +1587,11 @@
 
     // Системные переходы оператора-коллеги (scope: incidents_owned_by_agent) — по его состоянию
     function colleagueTick(id) {
-      const before = Object.fromEntries(events.map((e) => [e.id, e.owner]));
       const fired = colleague(id).tick({ agentOnly: true });
-      fired.forEach(({ id: guid, transition }) => {
+      fired.forEach(({ id: guid, transition, facts }) => {
         const ev = byId(guid);
         touch([ev]);
-        emit("incident.state_changed", ev, "system", { transitionId: transition, previousOwner: actorRef(before[guid]) });
+        emitTransition(ev, transition, "system", facts);
       });
       return fired;
     }

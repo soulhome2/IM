@@ -2835,6 +2835,26 @@
                   null
                 ],
                 "description": "Куда уходит интерфейс после успеха"
+              },
+              "observerNotice": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "audience"
+                ],
+                "description": "§9, RULE-60, BUG-32. Что показать наблюдателям о переходе по событию incident.transitioned: key — ключ каталога строк (подстановки id, who, addressee, previousOwner); audience — observers (всем, кто видит инцидент, кроме выполнившего) или newAddressee (новому адресату, лично или его дежурной группе).",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "observers",
+                      "newAddressee"
+                    ]
+                  }
+                }
               }
             }
           },
@@ -5262,11 +5282,8 @@
             "type": "string",
             "enum": [
               "incident.created",
+              "incident.transitioned",
               "incident.updated",
-              "incident.state_changed",
-              "incident.owner_changed",
-              "incident.auto_escalated",
-              "incident.sla_breached",
               "incident.card_evicted",
               "incident.access_lost",
               "incident.alert",
@@ -5310,11 +5327,39 @@
             "description": "Новое состояние записи — клиент обновляет очередь без перезапроса."
           },
           "payload": {
-            "type": "object",
-            "additionalProperties": true
+            "description": "Схема — по типу события, см. таблицу в описании.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamTransitionedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamGroupChangedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamUpdatedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamMacroPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamTransitionIdPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamAccessLostPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamAgentStatePayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamSchemaPublishedPayload"
+              },
+              {
+                "$ref": "#/components/schemas/StreamEmptyPayload"
+              }
+            ]
           }
         },
-        "description": "`incident.card_evicted` — §9.3: инцидент увели (автоэскалация, перехват, передача чужого), открытая карточка должна немедленно перейти в режим просмотра с уведомлением. `incident.access_lost` — §5: изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, ему больше не виден; `incident` — `null`, в `payload.number` — номер для показа, других данных нет. Клиент закрывает карточку и показывает уведомление. `incident.alert` — §9: алерт получателю алертов (RULE-43) — нарушение норматива, потолок эскалации, потеря связи или доступа; в `payload.transitionId` — какой переход его вызвал. Приходит только тем, кто входит в получателей, на месте и с доступом к объекту."
+        "description": "§9, RULE-60. Событие потока: что случилось помимо действий этого клиента. `incident` — инцидент глазами получателя (бейдж, кнопки); `actor` — кто сделал. Об инцидентах вне групп доступа получателя событий нет (§5), кроме `incident.access_lost`.\n\n| Тип | Когда | Кому | `payload` |\n|---|---|---|---|\n| `incident.created` | появился инцидент (переход `create`, RULE-61) | всем, кому он виден | пусто |\n| `incident.transitioned` | выполнен любой переход, ручной или автоматический | всем, кому инцидент виден | `StreamTransitionedPayload`: `transitionId`, `trigger`, `state` и `owner` (было → стало), `addressee`, `breach`. Что показать наблюдателям — `ui.observerNotice` перехода в машине |\n| `incident.updated` | изменились ответы сценария | всем, кому инцидент виден | `StreamUpdatedPayload`: `stepIds` |\n| `incident.group_changed` | создана группа, инцидент вышел из неё или перешёл в новую (§11) | всем, кому инцидент виден | `StreamGroupChangedPayload`: `groupGuid` |\n| `journal.appended` | запись в журнале не от перехода: шаг сценария | всем, кому инцидент виден | пусто |\n| `incident.card_evicted` | карточку увели (§9.3): автоэскалация, перехват, передача чужого | тому, у кого она открыта | `StreamTransitionIdPayload` |\n| `incident.alert` | алерт (§9, RULE-43): нарушение, потолок эскалации, потеря связи или доступа | получателям алертов на месте с доступом к объекту | `StreamTransitionIdPayload` |\n| `incident.access_lost` | изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, больше не виден (§5); `incident` — `null` | прежнему владельцу или адресату | `StreamAccessLostPayload`: `number` |\n| `macro.completed` | известен результат макроса | всем, кому инцидент виден | `StreamMacroPayload` |\n| `session.agent_state_changed` | сменилось состояние оператора | самому оператору (другим его вкладкам) | `StreamAgentStatePayload` |\n| `workflow.schema_published` | опубликована новая схема; прототип не шлёт — редактора схемы нет | всем | `StreamSchemaPublishedPayload` |"
       },
       "FieldOption": {
         "type": "object",
@@ -5552,6 +5597,190 @@
             "description": "Время события у источника; без него — «сейчас»"
           }
         }
+      },
+      "StreamTransitionedPayload": {
+        "type": "object",
+        "required": [
+          "transitionId",
+          "trigger",
+          "state",
+          "owner"
+        ],
+        "description": "incident.transitioned (RULE-60): какой переход, чем вызван, что было → стало.",
+        "properties": {
+          "transitionId": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "timer",
+              "system",
+              "event"
+            ]
+          },
+          "state": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "to": {
+                "type": "string"
+              }
+            }
+          },
+          "owner": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActorRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActorRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "addressee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Адресат после перехода: владелец или группа-адресат"
+          },
+          "breach": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "reaction",
+              "resolution",
+              "hold",
+              null
+            ],
+            "description": "Вид нарушения, если переход его записал"
+          }
+        }
+      },
+      "StreamGroupChangedPayload": {
+        "type": "object",
+        "required": [
+          "groupGuid"
+        ],
+        "properties": {
+          "groupGuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Новая группа; null — инцидент вне группы"
+          }
+        }
+      },
+      "StreamUpdatedPayload": {
+        "type": "object",
+        "required": [
+          "stepIds"
+        ],
+        "properties": {
+          "stepIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Какие ответы сценария изменились"
+          }
+        }
+      },
+      "StreamMacroPayload": {
+        "type": "object",
+        "required": [
+          "macroId",
+          "executionGuid",
+          "status"
+        ],
+        "properties": {
+          "macroId": {
+            "type": "string"
+          },
+          "executionGuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Результат исполнения; в прототипе исполнения нет — delivered"
+          }
+        }
+      },
+      "StreamTransitionIdPayload": {
+        "type": "object",
+        "required": [
+          "transitionId"
+        ],
+        "properties": {
+          "transitionId": {
+            "type": "string"
+          }
+        }
+      },
+      "StreamAccessLostPayload": {
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "number": {
+            "type": "string"
+          }
+        }
+      },
+      "StreamAgentStatePayload": {
+        "type": "object",
+        "required": [
+          "agentState"
+        ],
+        "properties": {
+          "agentState": {
+            "type": "string"
+          }
+        }
+      },
+      "StreamSchemaPublishedPayload": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "integer"
+          }
+        }
+      },
+      "StreamEmptyPayload": {
+        "type": "object",
+        "maxProperties": 0
       }
     }
   }

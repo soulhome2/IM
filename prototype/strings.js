@@ -359,7 +359,11 @@ window.IM_STRINGS = {
     "workflow.scenario.confirmation": "Confirmation",
     "workflow.error.effect_not_implemented": "Effect not implemented: {fn}",
     "workflow.transition.create": "Appeared",
-    "workflow.error.test.bad_incident": "A known event type, a priority from the catalog and at least one device are required"
+    "workflow.error.test.bad_incident": "A known event type, a priority from the catalog and at least one device are required",
+    "workflow.notice.claim": "{who} took {id}",
+    "workflow.notice.transfer": "{who} transferred {id} to you",
+    "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
+    "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -719,6 +723,10 @@ window.IM_STRINGS = {
     "workflow.scenario.confirmation": "Подтверждение",
     "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}",
     "workflow.transition.create": "Появился",
-    "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство"
+    "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство",
+    "workflow.notice.claim": "{id} взял в работу {who}",
+    "workflow.notice.transfer": "{who} передал {id} вам",
+    "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
+    "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой"
   }
 };

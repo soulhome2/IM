@@ -1108,6 +1108,22 @@
       return toast.textContent;
     });
 
+    await step("Уведомление о переходе — из машины: появился инцидент, автоэскалация (§9, RULE-60, BUG-32)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+      const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+      const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: "critical", deviceIds: [source], site: fire.site, location: "selftest" });
+      expect(created.status === 201, `инцидент не появился: ${created.status}`);
+      const number = created.body.number;
+      const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+      await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+      await stand.raw("POST", "/test/clock", { advanceSec: norm + 1 });
+      await wait(200);
+      const toast = toastWith(new RegExp(`Автоэскалация ${number} → `));
+      expect(toast, `нет уведомления об автоэскалации ${number}`);
+      return toast.textContent;
+    });
+
     await step("Ответы встроенного сервера соответствуют openapi.json", async () => {
       expect(window.IM_OPENAPI, "контракт openapi.js не подключён");
       const recorded = window.IM_RECORDED || [];

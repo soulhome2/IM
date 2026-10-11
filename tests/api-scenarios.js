@@ -1032,6 +1032,32 @@
     stop();
   });
 
+  test("Поток событий: ручной переход, нарушение, ответы сценария, макрос — каждый своим событием (§9, RULE-60)", async () => {
+    const escalation = Object.assign({}, W.escalation, { enabled: false });
+    const env = await makeEnv({ workflowPatch: { escalation } });
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await new Promise((r) => setTimeout(r, 300));
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять");
+    assert.status(await env.answer(a.guid, { visual: true }), 200, null, "ответ сценария");
+    const macro = (await env.call("GET", `/operator/incidents/${enc(a.guid)}/scenario`)).body.steps.find((s) => s.type === "Macros");
+    if (macro) assert.status(await env.call("POST", `/operator/incidents/${enc(a.guid)}/macros/${enc(macro.view.buttons[0])}`), 202, null, "макрос");
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === b.priority).sec + 1);
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    const of = (type, guid, tid) => got.find((m) => m.type === type && m.incidentGuid === guid && (!tid || m.payload.transitionId === tid));
+    const claim = of("incident.transitioned", a.guid, "claim");
+    assert.ok(claim, `«Взять»: ${got.map((m) => m.type).join(", ")}`);
+    assert.eq([claim.payload.trigger, claim.payload.state.from, claim.payload.state.to, claim.payload.owner.from, claim.payload.owner.to.id, claim.payload.breach], ["manual", "new", "in_progress", null, ME, null], "«Взять»: было → стало");
+    const overdue = of("incident.transitioned", b.guid, "reaction_overdue");
+    assert.ok(overdue && overdue.payload.breach === "reaction" && overdue.payload.state.from === overdue.payload.state.to, "нарушение реакции: breach, состояние не меняется");
+    assert.ok(of("incident.updated", a.guid) && of("incident.updated", a.guid).payload.stepIds.includes("visual"), "ответы сценария — incident.updated");
+    if (macro) assert.ok(of("macro.completed", a.guid), "макрос — macro.completed");
+    const old = got.filter((m) => ["incident.state_changed", "incident.owner_changed", "incident.auto_escalated", "incident.sla_breached"].includes(m.type));
+    assert.eq(old.map((m) => m.type), [], "старых типов событий нет");
+  });
+
   /* ===== Порядок очереди (§7, RULE-62) ===== */
 
   const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;
@@ -1490,7 +1516,7 @@
     assert.status(await env.call("GET", "/operator/nothing"), 404, "NOT_FOUND");
   });
 
-  test("Поток событий: автоэскалация приходит событием incident.auto_escalated с адресатом; id: сообщения — его id", async () => {
+  test("Поток событий: автоэскалация — incident.transitioned по таймеру, было → стало и адресат; id: сообщения — его id (§9, RULE-60)", async () => {
     const env = await makeEnv();
     const got = [];
     const stop = env.api.subscribe((m, meta) => got.push({ m, meta }));
@@ -1498,9 +1524,11 @@
     await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
-    const found = got.find(({ m }) => m.type === "incident.auto_escalated" && m.incidentGuid === inc.guid);
+    const found = got.find(({ m }) => m.type === "incident.transitioned" && m.incidentGuid === inc.guid && m.payload.transitionId === "auto_escalate");
     assert.ok(found, `событие пришло: ${got.map(({ m }) => m.type).join(", ")}`);
-    assert.eq(found.m.payload.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
+    const p = found.m.payload;
+    assert.eq([p.trigger, p.state.from, p.state.to], ["timer", "new", "pending_acceptance"], "по таймеру: новое → ожидает принятия");
+    assert.eq(p.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
     // Сообщение SSE: id: совпадает с id в data — по нему переподключение с Last-Event-ID
     got.forEach(({ m, meta }) => assert.eq(meta && meta.lastEventId, m.id, `id: сообщения ${m.type}`));
     assert.eq(new Set(got.map(({ m }) => m.id)).size, got.length, "id сообщений не повторяются");

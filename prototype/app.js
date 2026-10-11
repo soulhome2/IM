@@ -3146,14 +3146,16 @@
       // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
       const tr = transitionDef(tid);
       toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
-    } else if (msg.type === "incident.auto_escalated") {
-      toast(t("Автоэскалация {id} → {who}", { id, who: who(msg.payload.addressee) }));
-    } else if (tid === "claim") {
-      toast(t("{id} взял в работу {who}", { id, who: who(msg.actor) }));
-    } else if (tid === "transfer" && msg.payload.addressee && msg.payload.addressee.id === store.session.operator.guid) {
-      toast(t("{who} передал {id} вам", { who: who(msg.actor), id }));
-    } else if (tid === "system_hold_idle") {
-      toast(t("Нет связи с {who} — {id} отложен системой", { who: who(msg.payload.previousOwner), id }));
+    } else if (msg.type === "incident.transitioned") {
+      // Что сказать о чужом или автоматическом переходе — в машине (ui.observerNotice, RULE-60, BUG-32):
+      // observers — всем, кто видит инцидент; newAddressee — новому адресату, лично или его группе
+      const tr = transitionDef(tid);
+      const notice = tr && tr.ui && tr.ui.observerNotice;
+      const p = msg.payload;
+      const toMe = p.addressee && (p.addressee.id === store.session.operator.guid || store.session.operator.dutyGroupGuids.includes(p.addressee.id));
+      if (notice && (notice.audience === "observers" || (notice.audience === "newAddressee" && toMe))) {
+        toast(t(notice.key, { id, who: who(msg.actor), addressee: who(p.addressee), previousOwner: who(p.owner && p.owner.from) }));
+      }
     } else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {
       // Система вывела мой инцидент из группы: владелец разошёлся с группой (§11, RULE-57)
       toast(t("{id} вышел из групповой обработки", { id }));
