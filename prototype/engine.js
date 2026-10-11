@@ -227,8 +227,9 @@
       },
       withinHoldLimit: (ev) =>
         units("on_hold", ev).size < W.limits.maxOnHold ? null : ["Больше {n} отложенных держать нельзя", { n: W.limits.maxOnHold }],
+      // Точно, без округления до минуты (BUG-31): «не больше reopenWindowMin минут»
       withinReopenWindow: (ev) =>
-        Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin
+        now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000
           ? null
           : ["Срок переоткрытия истёк: {n} мин", { n: W.limits.reopenWindowMin }],
       requiredStepsFilled: (ev, [setId]) => (ctx.stepsFilled(ev, setId) ? null : ["Заполните обязательные шаги закрытия"]),

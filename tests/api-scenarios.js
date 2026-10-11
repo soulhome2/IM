@@ -976,6 +976,21 @@
     assert.eq(effects(own), [["notify", "petrova", "queued"]], "«Передать» свой: себе уведомления нет");
   });
 
+  test("Переоткрыть на границе срока: ровно срок — можно, на 20 секунд больше — нельзя (§6.1, BUG-31)", async () => {
+    const env = await makeEnv();
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+    const form = { resultId: "false_alarm", comment: "тест" };
+    for (const inc of [a, b]) {
+      assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, `взять ${inc.number}`);
+      assert.status(await env.act(inc.guid, "close", form, "card"), 200, null, `закрыть ${inc.number}`);
+    }
+    await env.advance(W.limits.reopenWindowMin * 60);
+    assert.status(await env.act(a.guid, "reopen", { comment: "ровно срок" }, "card"), 200, null, "ровно срок — можно");
+    assert.status(await env.act(a.guid, "close", form, "card"), 200, null, "закрыть снова — освободить лимит");
+    await env.advance(20);
+    assert.status(await env.act(b.guid, "reopen", { comment: "поздно" }, "card"), 403, "REOPEN_WINDOW_EXPIRED", "срок плюс 20 секунд — нельзя");
+  });
+
   test("Группа из разных типов событий не создаётся", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");

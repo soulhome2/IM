@@ -118,6 +118,7 @@ MUTATIONS = [
     ("ui-group-takeover-copy", "app.js", 'title: t("Перехватить {n} инцидентов", { n }),', 'title: t("Перехватить"),', "ui"),
     ("ui-group-leave-silent", "app.js", '} else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {', "} else if (false) {", "ui"),
     ("external-effects-dropped", "server.js", "journalEntries: journal, externalEffects, canceledTimerTrigger", "journalEntries: journal, externalEffects: [], canceledTimerTrigger", "api"),
+    ("reopen-window-rounded", "engine.js", "now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000", "Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin", "api"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),
