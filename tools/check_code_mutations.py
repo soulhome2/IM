@@ -39,7 +39,7 @@ MUTATIONS = [
     ("form-not-validated", "engine.js", "if (required && (v == null || String(v).trim() === \"\")) {", "if (false) {", "api"),
     ("close-result-any-owner", "engine.js", "if (item.ownerOnlyInStates.includes(ev.state) && !isMine(ev)) return;", "", "api"),
     ("close-result-any-surface", "engine.js", "if (surface && item.surfaces && !item.surfaces.includes(surface)) return;", "", "api"),
-    ("reopen-window-ignored", "engine.js", "Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin", "true", "api"),
+    ("reopen-window-ignored", "engine.js", "now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000", "true", "api"),
     ("breach-no-flag", "engine.js", "        ev.slaBreached = true;\n", "", "api"),
     ("pending-target-as-owner", "engine.js", "if (ev.state === \"pending_acceptance\" && isTarget(ev)) return \"target\";", "", "api"),
     ("scope-always-own", "engine.js", "const key = `${prefix}:${own ? \"own\" : \"any\"}`;", "const key = `${prefix}:own`;", "api"),
