@@ -2133,6 +2133,10 @@
                 },
                 "label": {
                   "type": "string"
+                },
+                "labelKey": {
+                  "type": "string",
+                  "description": "§14.9. Ключ подписи права, например `workflow.permission.incident.claim`."
                 }
               }
             }
@@ -2328,6 +2332,10 @@
               "type": "string"
             },
             "description": "§14.6. Сопоставление состояний предыдущей версии при публикации: старое → новое. Пусто — состояния не переименовывались"
+          },
+          "nameKey": {
+            "type": "string",
+            "description": "§14.9. Ключ названия схемы в каталоге строк (`workflow.schema.name`)."
           }
         }
       },
@@ -2869,7 +2877,7 @@
           "valueLabels": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Подписи машинных значений в перечне (BUG-26): приоритеты, условия уточнений нормативов"
+            "description": "Подписи машинных значений в перечне (BUG-26): значение → ключ каталога строк (§14.9); подписи приоритетов — ключи справочника приоритетов"
           },
           "tabs": {
             "type": "array",
@@ -2877,7 +2885,7 @@
               "type": "object",
               "required": [
                 "id",
-                "label"
+                "labelKey"
               ],
               "properties": {
                 "id": {
@@ -2896,7 +2904,7 @@
                     "type": "object",
                     "required": [
                       "path",
-                      "label"
+                      "labelKey"
                     ],
                     "properties": {
                       "path": {
@@ -2914,7 +2922,15 @@
                         "additionalProperties": {
                           "type": "string"
                         },
-                        "description": "Подписи значений перечня настройки, например alert → «Нарушение и алерт»"
+                        "description": "Подписи значений перечня настройки: значение → ключ каталога строк (§14.9), например alert → `workflow.settings.escalation.onResolutionOverdue.value.alert`"
+                      },
+                      "labelKey": {
+                        "type": "string",
+                        "description": "§14.9. Ключ подписи настройки, например `workflow.settings.limits.maxActive`."
+                      },
+                      "whatKey": {
+                        "type": "string",
+                        "description": "§14.9. Ключ пояснения, что задаёт настройка."
                       }
                     }
                   }
@@ -2928,6 +2944,14 @@
                 },
                 "what": {
                   "type": "string"
+                },
+                "labelKey": {
+                  "type": "string",
+                  "description": "§14.9. Ключ подписи вкладки, например `workflow.settings.tab.limits`."
+                },
+                "whatKey": {
+                  "type": "string",
+                  "description": "§14.9. Ключ пояснения вкладки с данными МИ."
                 }
               }
             }

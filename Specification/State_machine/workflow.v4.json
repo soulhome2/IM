@@ -5,7 +5,7 @@
     "id": "im.operator.incident",
     "version": 4,
     "status": "published",
-    "name": "Обработка инцидента оператором",
+    "nameKey": "workflow.schema.name",
     "publishedAt": "2026-09-28T07:00:00Z",
     "publishedBy": null,
     "appliesTo": {
@@ -89,21 +89,21 @@
   },
 
   "permissions": [
-    { "key": "incident:claim", "label": "Взять новое, возобновить свой отложенный; перехватить и переоткрыть — вместе с их правами. Без него инцидент в работу не попадает" },
-    { "key": "incident:accept", "label": "Принять переданное мне или моей дежурной группе" },
-    { "key": "incident:hold", "label": "Отложить свой инцидент с указанием причины" },
-    { "key": "incident:release", "label": "Вернуть свой инцидент в очередь; отклонить адресованную передачу" },
-    { "key": "incident:close", "label": "Закрыть свой инцидент с результатом: «Обработан» — после обязательных шагов; «Ложная тревога», «Дубликат», «Плановая проверка», «Прервано» — без сценария" },
-    { "key": "incident:close:unprocessed", "label": "Закрыть с результатом «Массовый сбой» без сценария, в том числе не беря в работу" },
-    { "key": "incident:reopen", "label": "Вернуть в работу закрытый инцидент" },
-    { "key": "incident:transfer:own", "label": "Передать своё, ничьё или адресованное мне" },
-    { "key": "incident:transfer:any", "label": "Передать инцидент, занятый другим оператором" },
-    { "key": "incident:reassign", "label": "Перехватить инцидент у работающего оператора" },
-    { "key": "incident:read:any", "label": "Открыть карточку чужого инцидента только для чтения" },
-    { "key": "incident:bulk", "label": "Обработать несколько инцидентов как один" },
-    { "key": "incident:run_action", "label": "Запускать макросы и команды из карточки" },
-    { "key": "incident:schema:admin", "label": "Менять схему, нормативы и настройки автоэскалации" },
-    { "key": "agent:set_not_ready", "label": "Переводить себя в перерыв" }
+    { "key": "incident:claim", "labelKey": "workflow.permission.incident.claim" },
+    { "key": "incident:accept", "labelKey": "workflow.permission.incident.accept" },
+    { "key": "incident:hold", "labelKey": "workflow.permission.incident.hold" },
+    { "key": "incident:release", "labelKey": "workflow.permission.incident.release" },
+    { "key": "incident:close", "labelKey": "workflow.permission.incident.close" },
+    { "key": "incident:close:unprocessed", "labelKey": "workflow.permission.incident.close.unprocessed" },
+    { "key": "incident:reopen", "labelKey": "workflow.permission.incident.reopen" },
+    { "key": "incident:transfer:own", "labelKey": "workflow.permission.incident.transfer.own" },
+    { "key": "incident:transfer:any", "labelKey": "workflow.permission.incident.transfer.any" },
+    { "key": "incident:reassign", "labelKey": "workflow.permission.incident.reassign" },
+    { "key": "incident:read:any", "labelKey": "workflow.permission.incident.read.any" },
+    { "key": "incident:bulk", "labelKey": "workflow.permission.incident.bulk" },
+    { "key": "incident:run_action", "labelKey": "workflow.permission.incident.run_action" },
+    { "key": "incident:schema:admin", "labelKey": "workflow.permission.incident.schema.admin" },
+    { "key": "agent:set_not_ready", "labelKey": "workflow.permission.agent.set_not_ready" }
   ],
 
   "timers": [
@@ -1263,12 +1263,12 @@
       "items": [
         {
           "id": "operator",
-          "label": "Оператор",
+          "labelKey": "workflow.validation.set.operator",
           "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         },
         {
           "id": "senior",
-          "label": "Старший оператор",
+          "labelKey": "workflow.validation.set.senior",
           "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         }
       ]
@@ -1285,124 +1285,124 @@
     "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "limits", "session", "hotkeys", "queueSort"],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): приоритеты и условия уточнений нормативов. values у настройки — подписи значений её перечня.",
-      "critical": "критический",
-      "high": "высокий",
-      "medium": "средний",
-      "low": "низкий",
-      "priority": "приоритет",
-      "eventType": "тип события",
-      "sourceGroup": "группа устройств"
+      "critical": "workflow.priority.critical",
+      "high": "workflow.priority.high",
+      "medium": "workflow.priority.medium",
+      "low": "workflow.priority.low",
+      "priority": "workflow.settings.word.priority",
+      "eventType": "workflow.settings.word.eventType",
+      "sourceGroup": "workflow.settings.word.sourceGroup"
     },
     "tabs": [
       {
         "id": "norms",
-        "label": "Нормативы",
+        "labelKey": "workflow.settings.tab.norms",
         "rules": "§4",
         "items": [
-          { "path": "timers.reaction.defaultSec", "label": "Реакция по умолчанию", "what": "Сколько ждать взятия в работу, если не задано точнее" },
-          { "path": "timers.reaction.overrides", "label": "Реакция: уточнения", "what": "Норматив реакции по типу события, приоритету и группе устройств; самая точная строка важнее" },
-          { "path": "timers.resolution.defaultSec", "label": "Закрытие по умолчанию", "what": "Сколько можно вести инцидент от первого взятия до закрытия" },
-          { "path": "timers.resolution.byPriority", "label": "Закрытие по приоритету", "what": "Норматив закрытия для каждого приоритета" },
-          { "path": "timers.resolution.overrides", "label": "Закрытие: уточнения", "what": "Норматив закрытия по типу события, приоритету и группе устройств" },
-          { "path": "limits.reopenWindowMin", "label": "Срок переоткрытия", "what": "Сколько после закрытия инцидент можно переоткрыть (§6.1)" },
-          { "path": "limits.reopenResolutionSec", "label": "Закрытие после переоткрытия", "what": "Норматив закрытия переоткрытого инцидента; пусто — обычный (§4, правило 6)" }
+          { "path": "timers.reaction.defaultSec", "labelKey": "workflow.settings.timers.reaction.defaultSec", "whatKey": "workflow.settings.timers.reaction.defaultSec.what" },
+          { "path": "timers.reaction.overrides", "labelKey": "workflow.settings.timers.reaction.overrides", "whatKey": "workflow.settings.timers.reaction.overrides.what" },
+          { "path": "timers.resolution.defaultSec", "labelKey": "workflow.settings.timers.resolution.defaultSec", "whatKey": "workflow.settings.timers.resolution.defaultSec.what" },
+          { "path": "timers.resolution.byPriority", "labelKey": "workflow.settings.timers.resolution.byPriority", "whatKey": "workflow.settings.timers.resolution.byPriority.what" },
+          { "path": "timers.resolution.overrides", "labelKey": "workflow.settings.timers.resolution.overrides", "whatKey": "workflow.settings.timers.resolution.overrides.what" },
+          { "path": "limits.reopenWindowMin", "labelKey": "workflow.settings.limits.reopenWindowMin", "whatKey": "workflow.settings.limits.reopenWindowMin.what" },
+          { "path": "limits.reopenResolutionSec", "labelKey": "workflow.settings.limits.reopenResolutionSec", "whatKey": "workflow.settings.limits.reopenResolutionSec.what" }
         ]
       },
       {
         "id": "reasons",
-        "label": "Причины",
+        "labelKey": "workflow.settings.tab.reasons",
         "rules": "§2.2, §4, §12.1",
         "items": [
-          { "path": "reasonCatalogs.hold.items", "label": "Причины удержания", "what": "Из чего выбирает оператор при «Отложить» и предельный срок каждой причины; системные — перерыв и нет связи" },
-          { "path": "reasonCatalogs.mass_fault.items", "label": "Причины массового сбоя", "what": "Из чего выбирают при закрытии «Массовым сбоем»" },
-          { "path": "session.breakReasons", "label": "Причины перерыва", "what": "Из чего выбирает оператор, уходя на перерыв" }
+          { "path": "reasonCatalogs.hold.items", "labelKey": "workflow.settings.reasonCatalogs.hold.items", "whatKey": "workflow.settings.reasonCatalogs.hold.items.what" },
+          { "path": "reasonCatalogs.mass_fault.items", "labelKey": "workflow.settings.reasonCatalogs.mass_fault.items", "whatKey": "workflow.settings.reasonCatalogs.mass_fault.items.what" },
+          { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what" }
         ]
       },
       {
         "id": "escalation",
-        "label": "Автоэскалация и алерты",
+        "labelKey": "workflow.settings.tab.escalation",
         "rules": "§8.3, §9",
         "items": [
-          { "path": "escalation.enabled", "label": "Автоэскалация", "what": "Передавать ли не взятый вовремя инцидент по уровням; выключена — только нарушение и алерт" },
-          { "path": "escalation.levels", "label": "Уровни", "what": "Адресат каждого уровня — пользователь или дежурная группа — и его норматив реакции" },
-          { "path": "escalation.maxLevel", "label": "Потолок", "what": "Выше этого уровня инцидент не передаётся" },
-          { "path": "escalation.onResolutionOverdue", "label": "Просрочка закрытия", "what": "Что делать, когда истёк норматив закрытия", "values": { "alert": "Нарушение и алерт", "escalate": "Нарушение, алерт и передача на следующий уровень" } },
-          { "path": "escalation.reasonKey", "label": "Запись журнала", "what": "Текст записи об автоэскалации" },
-          { "path": "alerts.target", "label": "Получатель алертов", "what": "Пользователь или дежурная группа; получают те, кто на месте и с доступом к объекту" },
-          { "path": "alerts.noRecipientLog", "label": "Если получателя нет", "what": "Запись журнала, когда алерт отправить некому" }
+          { "path": "escalation.enabled", "labelKey": "workflow.settings.escalation.enabled", "whatKey": "workflow.settings.escalation.enabled.what" },
+          { "path": "escalation.levels", "labelKey": "workflow.settings.escalation.levels", "whatKey": "workflow.settings.escalation.levels.what" },
+          { "path": "escalation.maxLevel", "labelKey": "workflow.settings.escalation.maxLevel", "whatKey": "workflow.settings.escalation.maxLevel.what" },
+          { "path": "escalation.onResolutionOverdue", "labelKey": "workflow.settings.escalation.onResolutionOverdue", "whatKey": "workflow.settings.escalation.onResolutionOverdue.what", "values": { "alert": "workflow.settings.escalation.onResolutionOverdue.value.alert", "escalate": "workflow.settings.escalation.onResolutionOverdue.value.escalate" } },
+          { "path": "escalation.reasonKey", "labelKey": "workflow.settings.escalation.reasonKey", "whatKey": "workflow.settings.escalation.reasonKey.what" },
+          { "path": "alerts.target", "labelKey": "workflow.settings.alerts.target", "whatKey": "workflow.settings.alerts.target.what" },
+          { "path": "alerts.noRecipientLog", "labelKey": "workflow.settings.alerts.noRecipientLog", "whatKey": "workflow.settings.alerts.noRecipientLog.what" }
         ]
       },
       {
         "id": "limits",
-        "label": "Лимиты",
+        "labelKey": "workflow.settings.tab.limits",
         "rules": "§10.2, §11",
         "items": [
-          { "path": "limits.maxActive", "label": "В работе одновременно", "what": "Сколько инцидентов оператор может вести сразу; группа сценария — один" },
-          { "path": "limits.maxOnHold", "label": "Отложенных", "what": "Сколько оператор может отложить вручную" },
-          { "path": "limits.maxBulk", "label": "В выборке", "what": "Сколько инцидентов можно отметить для группового действия" }
+          { "path": "limits.maxActive", "labelKey": "workflow.settings.limits.maxActive", "whatKey": "workflow.settings.limits.maxActive.what" },
+          { "path": "limits.maxOnHold", "labelKey": "workflow.settings.limits.maxOnHold", "whatKey": "workflow.settings.limits.maxOnHold.what" },
+          { "path": "limits.maxBulk", "labelKey": "workflow.settings.limits.maxBulk", "whatKey": "workflow.settings.limits.maxBulk.what" }
         ]
       },
       {
         "id": "session",
-        "label": "Связь с оператором",
+        "labelKey": "workflow.settings.tab.session",
         "rules": "§12.3",
         "items": [
-          { "path": "session.heartbeatSec", "label": "Признак активности", "what": "Как часто рабочее место сообщает, что оператор на связи" },
-          { "path": "session.idleHoldSec", "label": "Нет связи — отложить", "what": "Через сколько молчания инцидент оператора уходит в «Отложен — нет связи»" },
-          { "path": "session.idleReleaseSec", "label": "Нет связи — в очередь", "what": "Через сколько молчания отложенный по системной причине возвращается в очередь" }
+          { "path": "session.heartbeatSec", "labelKey": "workflow.settings.session.heartbeatSec", "whatKey": "workflow.settings.session.heartbeatSec.what" },
+          { "path": "session.idleHoldSec", "labelKey": "workflow.settings.session.idleHoldSec", "whatKey": "workflow.settings.session.idleHoldSec.what" },
+          { "path": "session.idleReleaseSec", "labelKey": "workflow.settings.session.idleReleaseSec", "whatKey": "workflow.settings.session.idleReleaseSec.what" }
         ]
       },
       {
         "id": "hotkeys",
-        "label": "Горячие клавиши",
+        "labelKey": "workflow.settings.tab.hotkeys",
         "rules": "§13",
         "items": [
-          { "path": "hotkeys", "label": "Набор по умолчанию", "what": "Клавиши для всех операторов; оператор может переназначить их себе" }
+          { "path": "hotkeys", "labelKey": "workflow.settings.hotkeys", "whatKey": "workflow.settings.hotkeys.what" }
         ]
       },
       {
         "id": "queue",
-        "label": "Очередь",
+        "labelKey": "workflow.settings.tab.queue",
         "rules": "§7",
         "items": [
-          { "path": "queueSort.default", "label": "Порядок очереди", "what": "Какой инцидент оператор видит первым", "values": { "priority_then_oldest": "Приоритет, внутри — старые выше", "priority_then_newest": "Приоритет, внутри — новые выше", "oldest_first": "По времени появления, старые выше", "reaction_deadline": "По времени до нарушения норматива реакции" } },
-          { "path": "queueSort.operatorMayChange", "label": "Оператор может менять порядок", "what": "Выбрать себе другой порядок из списка" }
+          { "path": "queueSort.default", "labelKey": "workflow.settings.queueSort.default", "whatKey": "workflow.settings.queueSort.default.what", "values": { "priority_then_oldest": "workflow.settings.queueSort.default.value.priority_then_oldest", "priority_then_newest": "workflow.settings.queueSort.default.value.priority_then_newest", "oldest_first": "workflow.settings.queueSort.default.value.oldest_first", "reaction_deadline": "workflow.settings.queueSort.default.value.reaction_deadline" } },
+          { "path": "queueSort.operatorMayChange", "labelKey": "workflow.settings.queueSort.operatorMayChange", "whatKey": "workflow.settings.queueSort.operatorMayChange.what" }
         ]
       },
       {
         "id": "access_groups",
-        "label": "Группы доступа",
+        "labelKey": "workflow.settings.tab.access_groups",
         "rules": "§5",
         "source": "GET /operator/admin/access-groups",
-        "what": "Каким ролям какие группы устройств и устройства доступны: оператор видит только инциденты доступных объектов"
+        "whatKey": "workflow.settings.tab.access_groups.what"
       },
       {
         "id": "duty_groups",
-        "label": "Дежурные группы",
+        "labelKey": "workflow.settings.tab.duty_groups",
         "rules": "§8.1",
         "source": "GET /operator/admin/duty-groups",
-        "what": "Кому можно адресовать инцидент вместо одного человека: название, роли, отдельные люди; порядок групп — приоритет"
+        "whatKey": "workflow.settings.tab.duty_groups.what"
       },
       {
         "id": "source_groups",
-        "label": "Группы устройств",
+        "labelKey": "workflow.settings.tab.source_groups",
         "rules": "§19",
         "source": "GET /operator/reference/source-groups",
-        "what": "Дерево групп устройств: по нему строятся группы доступа и фильтры очереди"
+        "whatKey": "workflow.settings.tab.source_groups.what"
       },
       {
         "id": "links",
-        "label": "Справочные ссылки",
+        "labelKey": "workflow.settings.tab.links",
         "rules": "§7",
         "source": "GET /operator/reference/help-links",
-        "what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие ссылки и ссылки площадки"
+        "whatKey": "workflow.settings.tab.links.what"
       },
       {
         "id": "camera_links",
-        "label": "Связи камер",
+        "labelKey": "workflow.settings.tab.camera_links",
         "rules": "§19.1",
         "source": "GET /operator/admin/camera-links",
-        "what": "Какие камеры показывать для устройства и в каком порядке: инцидент показывает камеры своего источника, первая — главная"
+        "whatKey": "workflow.settings.tab.camera_links.what"
       }
     ],
     "notSettings": [

@@ -85,7 +85,7 @@ def element(x, sec):
 def render(w):
     a = w["adminSettings"]
     LABELS.clear()
-    LABELS.update({k: v for k, v in a.get("valueLabels", {}).items() if not k.startswith("$")})
+    LABELS.update({k: RU.get(v, v) for k, v in a.get("valueLabels", {}).items() if not k.startswith("$")})
     out = [
         "# Настройки администратора",
         "",
@@ -97,7 +97,7 @@ def render(w):
         "",
     ]
     for tab in a["tabs"]:
-        out += [f"## {tab['label']}", "", f"Правила: {tab['rules']}.", ""]
+        out += [f"## {RU.get(tab.get('labelKey'), tab.get('label'))}", "", f"Правила: {tab['rules']}.", ""]
         if "items" in tab:
             out += ["| Настройка | Что задаёт | Сейчас | В машине |", "|---|---|---|---|"]
             for item in tab["items"]:
@@ -105,11 +105,11 @@ def render(w):
                 seconds = item["path"].startswith("timers.")
                 current = at(w, item["path"])
                 values = item.get("values", {})
-                shown = values[current] if isinstance(current, str) and current in values else value(current, key, seconds)
-                out.append(f"| {item['label']} | {item['what']} | {shown} | `{item['path']}` |")
+                shown = RU.get(values[current], values[current]) if isinstance(current, str) and current in values else value(current, key, seconds)
+                out.append(f"| {RU.get(item.get('labelKey'), item.get('label'))} | {RU.get(item.get('whatKey'), item.get('what'))} | {shown} | `{item['path']}` |")
         else:
             src = f"читается запросом `{tab['source']}`" if tab.get("source") else "запроса в контракте пока нет"
-            out += [f"{tab['what']}. Данные МИ, не схема: {src}."]
+            out += [f"{RU.get(tab.get('whatKey'), tab.get('what'))}. Данные МИ, не схема: {src}."]
         out.append("")
     out += ["## Не настройки", "", "Ключи разделов-настроек машины, которые администратор не меняет, и почему.", "", "| В машине | Почему не настройка |", "|---|---|"]
     out += [f"| `{n['path']}` | {n['why']} |" for n in a["notSettings"]]

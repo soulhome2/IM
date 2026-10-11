@@ -852,15 +852,16 @@ def check_strings(w, err):
             if args(cat[key]) != args(langs["ru"][key]):
                 err.append(f"каталог строк: {lang} {key} — подстановки {args(cat[key])}, а в ru {args(langs['ru'][key])} (§14.9)")
     used = set()
+    # Ключ — любая строка вида workflow.<область>.… в машине: поля …Key, значения values и valueLabels
     def walk(node):
         if isinstance(node, dict):
-            for k, v in node.items():
-                if k.endswith("Key") and isinstance(v, str) and v.startswith("workflow."):
-                    used.add(v)
+            for v in node.values():
                 walk(v)
         elif isinstance(node, list):
             for v in node:
                 walk(v)
+        elif isinstance(node, str) and re.fullmatch(r"workflow\.[\w.]+", node):
+            used.add(node)
     walk(w)
     # Ключи записей журнала: аргументы appendLog, alerts.noRecipientLog, раздел messages
     used |= {e["args"][0] for t in w["transitions"] for e in t["effects"] if e["fn"] == "appendLog"}
@@ -977,7 +978,7 @@ def check_admin_settings(w, o, err):
                 paths.append(item["path"])
                 current = setting_at(w, item["path"])
                 if current is _MISSING:
-                    err.append(f"настройки, вкладка «{tab['label']}»: пути {item['path']} в машине нет")
+                    err.append(f"настройки, вкладка «{tab['id']}»: пути {item['path']} в машине нет")
                 # Подписи значений перечня (BUG-26): все значения из контракта, без лишних
                 if "values" in item:
                     prop = item["path"].split(".")[-1]
@@ -989,7 +990,7 @@ def check_admin_settings(w, o, err):
         elif tab.get("source"):
             method, url = tab["source"].split(" ", 1)
             if method.lower() not in o["paths"].get(url, {}):
-                err.append(f"настройки, вкладка «{tab['label']}»: запроса {tab['source']} нет в контракте")
+                err.append(f"настройки, вкладка «{tab['id']}»: запроса {tab['source']} нет в контракте")
     skipped = [n["path"] for n in a.get("notSettings", [])]
     for n in a.get("notSettings", []):
         if setting_at(w, n["path"]) is _MISSING:

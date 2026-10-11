@@ -212,7 +212,7 @@ class Doc:
         ]
         for p in w["permissions"]:
             used = self.permission_uses(p["key"])
-            out.append(f"| `{p['key']}` | {p['label']} | {cell(used)} |")
+            out.append(f"| `{p['key']}` | {lab(p)} | {cell(used)} |")
         return "\n".join(out) + "\n"
 
     def permission_uses(self, key):

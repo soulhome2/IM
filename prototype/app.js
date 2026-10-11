@@ -67,7 +67,7 @@
   const te = (ru, vars) => escapeHtml(t(ru, vars));
 
   // Подпись из машины по ключу каталога (§14.9): labelKey, hintKey, titleKey…; нет ключа — сам текст
-  const KEY_OF = { label: "labelKey", hint: "hintKey", title: "titleKey", confirmLabel: "confirmKey", placeholder: "placeholderKey", readOnlyReason: "readOnlyReasonKey" };
+  const KEY_OF = { label: "labelKey", hint: "hintKey", title: "titleKey", confirmLabel: "confirmKey", placeholder: "placeholderKey", readOnlyReason: "readOnlyReasonKey", what: "whatKey" };
   const lbl = (o, field = "label") => (o ? t(o[KEY_OF[field]] || o[field] || "") : "");
   const hasLbl = (o, field) => Boolean(o && (o[KEY_OF[field]] || o[field]));
 
@@ -2931,7 +2931,7 @@
     const text = sec >= 3600 && sec % 3600 === 0 ? t("{n} ч", { n: sec / 3600 }) : sec >= 60 && sec % 60 === 0 ? t("{n} мин", { n: sec / 60 }) : t("{n} с", { n: sec });
     return text.replace(/ /g, "\u00a0");
   }
-  // Машинное значение — подписью из машины (adminSettings.valueLabels), иначе как есть
+  // Машинное значение — подписью из машины (adminSettings.valueLabels — ключи каталога, §14.9), иначе как есть
   const word = (key) => te((WORKFLOW.adminSettings.valueLabels || {})[key] || key);
   function personName(id) {
     if (store.session && id === store.session.operator.guid) return store.session.operator.name;
@@ -2977,16 +2977,16 @@
     const tabs = WORKFLOW.adminSettings.tabs;
     const tab = tabs.find((x) => x.id === adminState.tab) || tabs[0];
     $("adminTabs").innerHTML = tabs
-      .map((x) => `<button type="button" role="tab" data-admin-tab="${x.id}" class="${x.id === tab.id ? "active" : ""}" aria-selected="${x.id === tab.id}">${te(x.label)}</button>`)
+      .map((x) => `<button type="button" role="tab" data-admin-tab="${x.id}" class="${x.id === tab.id ? "active" : ""}" aria-selected="${x.id === tab.id}">${escapeHtml(lbl(x))}</button>`)
       .join("");
-    $("adminNote").textContent = `${t("Правила")}: ${tab.rules}` + (tab.what ? `. ${t(tab.what)}` : "");
+    $("adminNote").textContent = `${t("Правила")}: ${tab.rules}` + (hasLbl(tab, "what") ? `. ${lbl(tab, "what")}` : "");
     const table = $("adminTable");
     table.className = tab.items ? "doc-table settings" : "doc-table";
     if (tab.items) {
       table.innerHTML =
         `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>` +
         tab.items
-          .map((item) => `<tr><td>${te(item.label)}<span class="what">${te(item.what)}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values)}</td></tr>`)
+          .map((item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values)}</td></tr>`)
           .join("") +
         "</tbody>";
       return;
