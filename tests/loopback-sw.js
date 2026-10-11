@@ -10,6 +10,7 @@ importScripts(
   "../prototype/openapi.js",
   "../prototype/engine.js",
   "../prototype/fixture.js",
+  "../prototype/strings.js",
   "../prototype/server.js"
 );
 
@@ -18,6 +19,7 @@ const PREFIX = new URL("loopback-api", self.location).pathname;
 const server = IMServer.create({
   workflow: self.IM_WORKFLOW,
   fixture: self.IM_FIXTURE,
+  strings: self.IM_STRINGS,
   colleagues: false,
   autoTick: false,
   testSupport: true,

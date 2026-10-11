@@ -1525,6 +1525,41 @@
         }
       }
     },
+    "/operator/strings": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "getStrings",
+        "summary": "Каталог строк",
+        "description": "§14.9. Каталог строк на языке оператора: ключ → строка в формате ICU MessageFormat. Клиент переводит по нему ключи из машины и ответов (`labelKey`, `reasonKey`, `messageKey`, `templateKey`). Без `locale` — язык из `preferences.locale`. Ключа нет на этом языке или язык неизвестен — русская строка.",
+        "parameters": [
+          {
+            "name": "locale",
+            "in": "query",
+            "description": "Код языка BCP 47 (`ru`, `en`, `es`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Каталог",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/operator/reference/priorities": {
       "get": {
         "tags": [
@@ -5055,6 +5090,26 @@
                 "type": "integer",
                 "description": "Сколько из открытых — критического приоритета"
               }
+            }
+          }
+        }
+      },
+      "StringCatalog": {
+        "type": "object",
+        "required": [
+          "locale",
+          "strings"
+        ],
+        "properties": {
+          "locale": {
+            "type": "string",
+            "description": "Язык, на котором отдан каталог."
+          },
+          "strings": {
+            "type": "object",
+            "description": "Ключ каталога → строка ICU MessageFormat.",
+            "additionalProperties": {
+              "type": "string"
             }
           }
         }

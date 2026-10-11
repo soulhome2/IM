@@ -122,6 +122,7 @@ MUTATIONS = [
     ("queue-not-sorted", "server.js", "}).sort((a, b) => ORDERS[sortOf(q)](a, b) || byNumber(a, b));", "});", "api"),
     ("queue-sort-always-open", "server.js", "return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;", "return s.options.includes(asked) ? asked : s.default;", "api"),
     ("queue-filters-ignored", "server.js", "if (q.priority && e.priority !== q.priority) return false;", "", "api"),
+    ("strings-no-fallback", "server.js", "const strings = Object.assign({}, STRINGS.ru || {}, STRINGS[locale] || {});", "const strings = STRINGS[locale] || {};", "api"),
     ("group-split-not-regrouped", "engine.js", "if (part.length === 1) {", "if (true) {", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),

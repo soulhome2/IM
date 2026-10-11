@@ -504,7 +504,7 @@
   // дойти до алерта и потери доступа. Самопроверке — тот же клиент API (PROC-12)
   const embedded = apiBase
     ? null
-    : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, colleagues: selftestRun ? false : window.IM_COLLEAGUES, testSupport: selftestRun });
+    : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: selftestRun ? false : window.IM_COLLEAGUES, testSupport: selftestRun });
   const api = IMApi.create(apiBase ? { baseUrl: apiBase } : { server: embedded });
   if (selftestRun && embedded) window.IM_SELFTEST_API = api;
   // Ответы встроенного сервера — самопроверке: она сверяет их со схемами openapi.json

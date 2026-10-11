@@ -35,6 +35,7 @@
       server: IMServer.create({
         workflow: window.IM_WORKFLOW,
         fixture: window.IM_FIXTURE,
+        strings: window.IM_STRINGS,
         colleagues: false,
         autoTick: false,
         testSupport: true,

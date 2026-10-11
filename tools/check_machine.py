@@ -826,6 +826,46 @@ def check_priorities(w, o, err):
             err.append(f"приоритеты: {inc['number']} — приоритет «{inc['priority']}», которого нет в справочнике (DOC-29)")
 
 
+def check_strings(w, err):
+    """Каталог строк (§14.9, RULE-66): во всех языках одни ключи и одни подстановки; каждый ключ,
+    который упоминают машина (поля *Key) и код сервера и исполнителя, есть в каталоге; ключей,
+    которых нигде нет, в каталоге нет."""
+    folder = os.path.join(DIR, "strings")
+    langs = {}
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                langs[name[:-5]] = {k: v for k, v in json.load(f).items() if not k.startswith("$")}
+    if "ru" not in langs:
+        err.append("каталог строк: нет strings/ru.json (§14.9)")
+        return
+    args = lambda text: sorted(set(re.findall(r"\{\s*(\w+)\s*[,}]", text)))
+    for lang, cat in langs.items():
+        for key in sorted(set(langs["ru"]) ^ set(cat)):
+            err.append(f"каталог строк: ключ {key} есть только в одном из языков ru, {lang} (§14.9)")
+        for key in sorted(set(langs["ru"]) & set(cat)):
+            if args(cat[key]) != args(langs["ru"][key]):
+                err.append(f"каталог строк: {lang} {key} — подстановки {args(cat[key])}, а в ru {args(langs['ru'][key])} (§14.9)")
+    used = set()
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k.endswith("Key") and isinstance(v, str) and v.startswith("workflow."):
+                    used.add(v)
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(w)
+    for src in ("engine.js", "server.js"):
+        with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
+            used |= set(re.findall(r'"(workflow\.[\w.]+)"', f.read()))
+    for key in sorted(used - set(langs["ru"])):
+        err.append(f"каталог строк: ключа {key} нет в strings/ru.json (§14.9)")
+    for key in sorted(set(langs["ru"]) - used):
+        err.append(f"каталог строк: ключ {key} нигде не используется (§14.9)")
+
+
 def check_grouping(w, err):
     """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
     Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
@@ -959,6 +999,7 @@ def main():
     check_state_owners(w, err)
     check_grouping(w, err)
     check_priorities(w, o, err)
+    check_strings(w, err)
     check_timer_declarations(w, err)
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)

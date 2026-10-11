@@ -1,0 +1,18 @@
+{
+  "$comment": "§14.9. Каталог строк, испанский. Ключи — из машины, строки — ICU MessageFormat. Собирается в prototype/strings.js скриптом tools/build_workflow.py.",
+  "workflow.state.new": "Nuevo",
+  "workflow.state.pending_acceptance": "Pendiente de aceptación",
+  "workflow.state.in_progress": "En curso",
+  "workflow.state.on_hold": "En espera",
+  "workflow.state.closed": "Cerrado",
+  "workflow.transition.claim": "Tomar",
+  "workflow.transition.accept": "Aceptar",
+  "workflow.transition.reject": "Rechazar",
+  "workflow.transition.hold": "Poner en espera",
+  "workflow.transition.resume": "Reanudar",
+  "workflow.transition.release": "Devolver a la cola",
+  "workflow.transition.transfer": "Transferir",
+  "workflow.transition.takeover": "Apropiarse",
+  "workflow.transition.close": "Cerrar",
+  "workflow.transition.reopen": "Reabrir"
+}

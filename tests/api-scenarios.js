@@ -991,6 +991,20 @@
     assert.status(await env.act(b.guid, "reopen", { comment: "поздно" }, "card"), 403, "REOPEN_WINDOW_EXPIRED", "срок плюс 20 секунд — нельзя");
   });
 
+  test("Каталог строк: язык из запроса или настроек оператора, неизвестный язык — русский (§14.9, RULE-66)", async () => {
+    const env = await makeEnv();
+    const S = window.IM_STRINGS;
+    const en = await env.ok("GET", "/operator/strings?locale=en");
+    assert.eq(en.locale, "en", "язык");
+    assert.eq(Object.keys(en.strings).sort(), Object.keys(S.ru).sort(), "все ключи каталога");
+    assert.eq(en.strings["workflow.state.new"], S.en["workflow.state.new"], "строка на английском");
+    assert.status(await env.call("PATCH", "/operator/session/preferences", { locale: "es" }), 200, null, "язык оператора");
+    const es = await env.ok("GET", "/operator/strings");
+    assert.eq([es.locale, es.strings["workflow.transition.claim"]], ["es", S.es["workflow.transition.claim"]], "без locale — язык из настроек");
+    const xx = await env.ok("GET", "/operator/strings?locale=xx");
+    assert.eq(xx.strings, S.ru, "неизвестный язык — русские строки");
+  });
+
   /* ===== Порядок очереди (§7, RULE-62) ===== */
 
   const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;

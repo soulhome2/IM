@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js, openapi.js и fixture.js из Specification/State_machine/
+"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/State_machine/
 таблицы переходов для человека Specification/State_machine/TRANSITIONS.md и перечня настроек
 администратора Specification/State_machine/SETTINGS.md.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
 Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
-window.IM_WORKFLOW, window.IM_OPENAPI и window.IM_FIXTURE. Машину исполняет встроенный
+window.IM_WORKFLOW, window.IM_OPENAPI, window.IM_FIXTURE и каталог строк window.IM_STRINGS
+(§14.9: strings/<язык>.json → { язык: { ключ: строка } }). Машину исполняет встроенный
 сервер прототипа на эталонных данных, по контракту самопроверка и тесты сверяют его ответы.
 Руками эти файлы не правятся — только исходники и затем эта сборка.
 
@@ -42,10 +43,26 @@ def build(source, var, indent):
     return f"{header}window.{var} = {body};\n"
 
 
+def build_strings():
+    """Каталог строк (§14.9): все strings/<язык>.json в один объект { язык: { ключ: строка } }."""
+    folder = os.path.join(MACHINE, "strings")
+    catalog = {}
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                catalog[name[:-5]] = {k: v for k, v in json.load(f).items() if not k.startswith("$")}
+    header = (
+        "// Собрано из Specification/State_machine/strings/*.json скриптом tools/build_workflow.py.\n"
+        "// Руками не править: правится исходник, затем сборка.\n"
+    )
+    return f"{header}window.IM_STRINGS = {json.dumps(catalog, ensure_ascii=False, indent=2)};\n"
+
+
 def outputs():
     """(путь от корня, текст, из чего собран) — всё, что собирает этот скрипт."""
     for source, target, var, indent in TARGETS:
         yield f"prototype/{target}", build(source, var, indent), source
+    yield "prototype/strings.js", build_strings(), "strings/*.json"
     with open(os.path.join(MACHINE, "workflow.v4.json"), encoding="utf-8") as f:
         w = json.load(f)
     yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow.v4.json"

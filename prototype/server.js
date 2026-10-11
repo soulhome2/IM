@@ -8,7 +8,8 @@
    его же загружает бэкенд на тестовом стенде. Демо: один оператор, права — весь каталог,
    эмуляция коллег (§17).
 
-   Параметры create(): workflow — машина; fixture — эталонный набор; colleagues — настройки
+   Параметры create(): workflow — машина; fixture — эталонный набор; strings — каталог строк по
+   языкам (§14.9, prototype/strings.js); colleagues — настройки
    эмуляции коллег (colleagues.js) или false; now — часы; autoTick: false — планировщик не
    запускается сам; permissions — права оператора списком ключей (по умолчанию — весь каталог,
    кроме настройки схемы); testSupport: true — служебные операции тестового стенда
@@ -31,6 +32,7 @@
     const BASE_W = opts.workflow;
     let W = BASE_W;
     const FIXTURE = opts.fixture;
+    const STRINGS = opts.strings || {};
     const ME = FIXTURE.operator;
     const iso = (ms) => (ms == null ? null : new Date(ms).toISOString());
 
@@ -1230,6 +1232,17 @@
         (p, q) => ({ status: 200, body: HELP_LINKS.filter((l) => q.site == null || l.site == null || l.site === q.site).map((l) => Object.assign({ icon: null }, l)) }),
       ],
       // Приоритеты — справочник машины в порядке важности (DOC-29)
+      // Каталог строк (§14.9): язык — из запроса, иначе из настроек оператора; ключа нет на этом
+      // языке или язык неизвестен — русская строка
+      [
+        "GET",
+        "/operator/strings",
+        (p, q) => {
+          const locale = q.locale || session.preferences.locale || "ru";
+          const strings = Object.assign({}, STRINGS.ru || {}, STRINGS[locale] || {});
+          return { status: 200, body: { locale, strings } };
+        },
+      ],
       ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, label }) => ({ id, label })) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 
