@@ -1859,6 +1859,41 @@
           }
         }
       }
+    },
+    "/test/incidents": {
+      "post": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testCreateIncident",
+        "summary": "Тестовый стенд: появился инцидент",
+        "description": "§6.2, RULE-61. Как будто источник прислал событие: сервер выполняет переход машины `create` — инцидент новый, без владельца и адресата, уровень эскалации 0, норматив реакции от появления, запись журнала, событие потока `incident.created` тем, кому инцидент виден (§5). Ответ — карточка нового инцидента.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestIncidentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Инцидент появился",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentCard"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2685,8 +2720,10 @@
             "enum": [
               "manual",
               "timer",
-              "system"
-            ]
+              "system",
+              "event"
+            ],
+            "description": "manual — кнопка оператора; timer, system — планировщик; event — появление инцидента от источника (`create`, RULE-61)"
           },
           "actor": {
             "type": "string",
@@ -3710,6 +3747,11 @@
           "groupSize": {
             "type": "integer",
             "description": "§11. Сколько инцидентов в группе сценария, 0 — не в группе"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "§4, RULE-61. Время появления инцидента в МИ (переход `create`): от него считается норматив реакции. `occurredAt` — время события у источника."
           }
         }
       },
@@ -5472,6 +5514,42 @@
                 }
               }
             }
+          }
+        }
+      },
+      "TestIncidentRequest": {
+        "type": "object",
+        "required": [
+          "eventTypeId",
+          "priority",
+          "deviceIds"
+        ],
+        "properties": {
+          "eventTypeId": {
+            "type": "string",
+            "description": "Тип события из эталонного набора, например `fire`"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/Priority"
+          },
+          "deviceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Устройства события; первое — источник (§5: по нему решается видимость)"
+          },
+          "site": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Время события у источника; без него — «сейчас»"
           }
         }
       }

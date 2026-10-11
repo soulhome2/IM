@@ -355,5 +355,7 @@
   "workflow.label.role.group": "группа",
   "workflow.label.nobody_present": "никого нет на месте",
   "workflow.scenario.confirmation": "Подтверждение",
-  "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}"
+  "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}",
+  "workflow.transition.create": "Появился",
+  "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство"
 }

@@ -331,6 +331,24 @@
 
   "transitions": [
     {
+      "id": "create",
+      "labelKey": "workflow.transition.create",
+      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент. Единственный переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно.",
+      "from": [],
+      "to": "new",
+      "trigger": "event",
+      "actor": "dispatcher",
+      "guards": [],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": [null] },
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", 0] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.create"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
       "id": "claim",
       "labelKey": "workflow.transition.claim",
       "hintKey": "workflow.transition.claim.hint",
@@ -1120,7 +1138,6 @@
 
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
-    "workflow.journal.create": { "vars": [], "$comment": "Появление инцидента (RULE-61)" },
     "workflow.journal.source": { "vars": ["text"], "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)" },
     "workflow.journal.group.created": { "vars": ["ids"], "$comment": "§11. Группа сценария создана; ids — номера остальных её инцидентов" },
     "workflow.journal.group.excluded": { "vars": [], "$comment": "§11. Ручное исключение из группы" },
@@ -1185,6 +1202,7 @@
     "workflow.error.test.no_fixture": { "vars": ["name"] },
     "workflow.error.test.no_operator": { "vars": ["id"] },
     "workflow.error.test.clock_backwards": { "vars": [] },
+    "workflow.error.test.bad_incident": { "vars": [] },
     "workflow.label.unassigned": { "vars": [] },
     "workflow.label.role.system": { "vars": [] },
     "workflow.label.role.group": { "vars": [] },

@@ -1007,6 +1007,31 @@
     assert.eq(xx.strings, S.ru, "неизвестный язык — русские строки");
   });
 
+  test("Появление инцидента: новый, ничей, уровень 0, норматив реакции от появления, запись журнала, событие потока (§6.2, RULE-61)", async () => {
+    const env = await makeEnv();
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await new Promise((r) => setTimeout(r, 300));
+    const fire = (await env.all("open")).find((e) => e.eventType.id === "fire");
+    const source = (await env.card(fire.guid)).source.guid;
+    // Событие у источника — час назад: норматив реакции всё равно от появления в МИ
+    const occurredAt = new Date(Date.parse(fire.occurredAt) - 3600 * 1000).toISOString();
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: "critical", deviceIds: [source], site: fire.site, location: "тест", occurredAt });
+    assert.status(res, 201, null, "появился");
+    const c = res.body;
+    assert.eq([c.state, c.owner, c.assignmentGroup, c.escalationLevel], ["new", null, null, 0], "новый, ничей, уровень 0");
+    assert.ok(Date.parse(c.createdAt) > Date.parse(c.occurredAt), "время появления позже времени события");
+    const norm = W.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+    assert.ok(c.timer && c.timer.id === "reaction" && c.timer.running, "идёт норматив реакции");
+    assert.eq(Date.parse(c.timer.dueAt) - Date.parse(c.createdAt), norm * 1000, "норматив реакции — от появления, а не от времени события");
+    assert.eq(lastJournal(c).templateKey, "workflow.journal.create", "запись в журнале");
+    assert.ok((await env.all("open")).some((e) => e.guid === c.guid), "в очереди");
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === c.guid), "событие потока incident.created");
+    assert.status(await env.call("POST", "/test/incidents", { eventTypeId: "nope", priority: "critical", deviceIds: [source] }), 422, null, "неизвестный тип");
+    stop();
+  });
+
   /* ===== Порядок очереди (§7, RULE-62) ===== */
 
   const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;

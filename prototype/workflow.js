@@ -737,6 +737,57 @@ window.IM_WORKFLOW = {
   ],
   "transitions": [
     {
+      "id": "create",
+      "labelKey": "workflow.transition.create",
+      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент. Единственный переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно.",
+      "from": [],
+      "to": "new",
+      "trigger": "event",
+      "actor": "dispatcher",
+      "guards": [],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setAssignmentGroup",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "escalation_level",
+            0
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.create"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
       "id": "claim",
       "labelKey": "workflow.transition.claim",
       "hintKey": "workflow.transition.claim.hint",
@@ -3309,10 +3360,6 @@ window.IM_WORKFLOW = {
   },
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
-    "workflow.journal.create": {
-      "vars": [],
-      "$comment": "Появление инцидента (RULE-61)"
-    },
     "workflow.journal.source": {
       "vars": [
         "text"
@@ -3556,6 +3603,9 @@ window.IM_WORKFLOW = {
       ]
     },
     "workflow.error.test.clock_backwards": {
+      "vars": []
+    },
+    "workflow.error.test.bad_incident": {
       "vars": []
     },
     "workflow.label.unassigned": {

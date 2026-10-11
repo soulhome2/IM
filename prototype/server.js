@@ -67,7 +67,7 @@
     // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
     // (7 — запись журнала, 8 — группа обработки, 9 — запуск макроса), дальше — номер
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
-    const serial = { group: 0, macro: 0 };
+    const serial = { group: 0, macro: 0, incident: 0 };
     let events = [];
     let SIM = { enabled: false };
     let session = null;
@@ -292,6 +292,7 @@
       // Сброс — вход оператора: молчание считается с этого момента
       lastHeartbeat = now();
       serial.group = 0;
+      serial.incident = 0;
       serial.macro = 0;
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
@@ -357,6 +358,8 @@
         // Шаг, на котором остановился владелец; нет — первый незаполненный
         stepIndex: inc.scenario.cursorStepId ? SCENARIOS[inc.eventType.id].steps.findIndex((s) => s.id === inc.scenario.cursorStepId) : undefined,
         version: 1,
+        // Набор — снимок: время появления в МИ неизвестно, берётся время события
+        createdAt: abs(inc.occurredAt),
       }));
       // Таймеры: в наборе — с какого момента идут, длительность — норматив машины (§4).
       // Запуск в прошлом сдвигает дедлайн: «удержание началось 4 минуты назад»
@@ -517,6 +520,7 @@
         guid: ev.id,
         number: ev.number,
         occurredAt: iso(ev.occurredAt),
+        createdAt: iso(ev.createdAt),
         eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
         priority: ev.priority,
         sourceGroup: sourceGroupOf(ev),
@@ -1286,8 +1290,67 @@
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
 
+    // Появился инцидент (§6.2, RULE-61): запись из события источника, затем переход машины create —
+    // он ставит владельца, уровень, норматив реакции и запись журнала. В продукте его вызывает
+    // приход события от источника, на стенде — POST /test/incidents
+    function createIncident(spec) {
+      const type = eventTypes().find((t) => t.id === spec.eventTypeId);
+      const devices = spec.deviceIds || [];
+      if (!type || !SCENARIOS[spec.eventTypeId] || !devices.length || !W.priorities.items.some((p) => p.id === spec.priority)) return null;
+      const last = Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0));
+      const ev = {
+        id: uuid(6, ++serial.incident),
+        number: `INC-${last + 1}`,
+        typeId: type.id,
+        typeGuid: type.guid,
+        type: type.name,
+        priority: spec.priority,
+        site: spec.site || null,
+        location: spec.location || null,
+        occurredAt: spec.occurredAt ? Date.parse(spec.occurredAt) : now(),
+        createdAt: now(),
+        deviceIds: devices.slice(),
+        cameras: (CAMERA_LINKS.find((l) => l.device === devices[0]) || { cameras: [] }).cameras.slice(),
+        state: null,
+        owner: null,
+        assignmentGroup: null,
+        escalationLevel: 0,
+        holdReason: null,
+        closeResult: null,
+        massCause: null,
+        closeComment: null,
+        closedBy: null,
+        closedAt: null,
+        reactionDueAt: null,
+        resolutionDueAt: null,
+        resolutionLeftMs: null,
+        holdSince: null,
+        holdDueAt: null,
+        slaBreached: false,
+        breaches: [],
+        groupId: null,
+        answers: {},
+        launched: [],
+        log: [],
+        version: 1,
+      };
+      if (!engine.create(ev).ok) return null;
+      events.unshift(ev);
+      emit("incident.created", ev, "dispatcher", {});
+      return ev;
+    }
+
     function TEST_ROUTES() {
       return [
+        [
+          "POST",
+          "/test/incidents",
+          (p, q, body) => {
+            const ev = createIncident(body || {});
+            if (!ev) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.bad_incident"]);
+            return { status: 201, body: card(ev), headers: { ETag: etag(ev) } };
+          },
+        ],
         [
           "POST",
           "/test/reset",

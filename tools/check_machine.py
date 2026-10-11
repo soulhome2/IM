@@ -532,7 +532,7 @@ def check_doc_numbers(w, o, err):
     num = lambda v: words.get(v, int(v) if v.isdigit() else -1)
     checks = [
         ("README машины", r"\*\*OpenAPI 3\.1\*\* — (\d+) адрес\w*, (\d+) операц\w*, (\d+) схем", [("адресов", len(o["paths"])), ("операций", len(ops)), ("схем", len(o["components"]["schemas"]))]),
-        ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w*\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(w["transitions"]) - manual), ("форм", len(w["forms"]))]),
+        ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w* \+ появление\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(automatic(w))), ("форм", len(w["forms"]))]),
         ("README машины", r"описывает (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
         ("README машины", r"Нужны (\w+) операции выше", [("служебных операций", test_ops)]),
         ("README машины", r"приведена к v(\d+)", [("версия правил", version)]),
@@ -683,7 +683,8 @@ def guard_terms(g):
 
 
 def automatic(w):
-    return [t for t in w["transitions"] if t["trigger"] != "manual"]
+    """Переходы планировщика (timer, system); появление (trigger: event) выполняет не он (RULE-61)."""
+    return [t for t in w["transitions"] if t["trigger"] in ("timer", "system")]
 
 
 def fsm_terms(w, err):
@@ -923,6 +924,8 @@ def check_grouping(w, err):
         return
     states = {s["id"]: s for s in w["states"]}
     for t in w["transitions"]:
+        if t["trigger"] == "event":
+            continue  # появление: группы у нового инцидента ещё нет (RULE-61)
         fns = [e["fn"] for e in t["effects"]]
         bulk = t.get("bulk") or {}
         clears = "clearGroup" in fns

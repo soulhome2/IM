@@ -357,7 +357,9 @@ window.IM_STRINGS = {
     "workflow.label.role.group": "group",
     "workflow.label.nobody_present": "nobody is available",
     "workflow.scenario.confirmation": "Confirmation",
-    "workflow.error.effect_not_implemented": "Effect not implemented: {fn}"
+    "workflow.error.effect_not_implemented": "Effect not implemented: {fn}",
+    "workflow.transition.create": "Appeared",
+    "workflow.error.test.bad_incident": "A known event type, a priority from the catalog and at least one device are required"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -715,6 +717,8 @@ window.IM_STRINGS = {
     "workflow.label.role.group": "группа",
     "workflow.label.nobody_present": "никого нет на месте",
     "workflow.scenario.confirmation": "Подтверждение",
-    "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}"
+    "workflow.error.effect_not_implemented": "Эффект не реализован: {fn}",
+    "workflow.transition.create": "Появился",
+    "workflow.error.test.bad_incident": "Нужны известный тип события, приоритет из справочника и хотя бы одно устройство"
   }
 };

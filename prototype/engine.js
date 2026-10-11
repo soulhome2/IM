@@ -519,6 +519,14 @@
       return { ok: true, navigate: tr.ui.navigate, external: applied.external[0] };
     }
 
+    // Появление инцидента (§6.2, RULE-61): переход машины с trigger: event — без исходного состояния,
+    // от имени его actor. Его выполняет появление, а не кнопка и не планировщик
+    function create(ev) {
+      const tr = W.transitions.find((t) => t.trigger === "event");
+      if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
+      return applyEffects(tr, ev, {}, tr.actor || "dispatcher");
+    }
+
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
 
     // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
@@ -798,6 +806,7 @@
       actions,
       session: W.session,
       run,
+      create,
       form,
       badge,
       bulk,

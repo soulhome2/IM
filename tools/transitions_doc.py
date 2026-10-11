@@ -18,7 +18,7 @@ def lab(o, field="label"):
     key = o.get({"label": "labelKey", "title": "titleKey", "hint": "hintKey"}[field])
     return RU.get(key, key) if key else o.get(field, "")
 
-TRIGGER = {"manual": "кнопка", "timer": "таймер", "system": "система"}
+TRIGGER = {"manual": "кнопка", "timer": "таймер", "system": "система", "event": "событие источника"}
 SURFACE = {"queue": "очередь", "card": "карточка"}
 WHO = {
     "actor": "я — кто выполнил",
@@ -188,7 +188,7 @@ class Doc:
             if steps and steps not in ("none", None):
                 form += f"; шаги: {'по результату' if steps == 'byCloseResult' else steps}"
             out.append(
-                f"| `{t['id']}`<br>{lab(t)} | {self.st(t['from'])} → {to} | {self.started(t)} "
+                f"| `{t['id']}`<br>{lab(t)} | {self.st(t['from']) or '—'} → {to} | {self.started(t)} "
                 f"| {cell([self.guard(g) for g in t.get('guards', [])])} | {cell([self.effect(e) for e in t.get('effects', [])])} "
                 f"| {form} | {self.bulk(t) or '—'} |"
             )
