@@ -573,7 +573,7 @@ def setting_at(w, path):
     return cur
 
 
-MANUAL_ONLY = ("form", "bulk", "requiredStepSet", "labelKey", "hint", "concurrency", "bypassesPermissions")
+MANUAL_ONLY = ("form", "bulk", "requiredStepSet", "hintKey", "concurrency", "bypassesPermissions")
 
 
 def check_automatic_fields(w, err):

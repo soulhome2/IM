@@ -3,6 +3,12 @@
 Собирается из раздела adminSettings машины workflow.v4.json вместе с текущими значениями.
 Вызывается из tools/build_workflow.py; руками SETTINGS.md не правится.
 """
+import json
+import os
+
+# Подписи из машины — ключами (§14.9): текст берётся из русского каталога строк
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
+    RU = json.load(_f)
 
 
 def at(w, path):
@@ -49,6 +55,8 @@ def value(v, key="", seconds=False):
             return duration(int(v) * 60)
         return duration(int(v)) if sec else str(v)
     if isinstance(v, str):
+        if v in RU:
+            return RU[v]
         return f"`{v}`" if ":" in v and " " not in v else v
     if isinstance(v, dict):
         return "; ".join(f"{word(k)}: {value(x, k, sec)}" for k, x in v.items() if not k.startswith("$")) or "нет"
@@ -62,11 +70,11 @@ def value(v, key="", seconds=False):
 def element(x, sec):
     if not isinstance(x, dict):
         return value(x, seconds=sec)
-    if "key" in x and "label" in x:
-        return f"`{x['key']}` — {x['label']}"
+    if "key" in x and ("label" in x or "labelKey" in x):
+        return f"`{x['key']}` — {x.get('label') or RU.get(x.get('labelKey'), x.get('labelKey'))}"
     if "level" in x:
         return f"уровень {x['level']}: `{x.get('targetRef')}`, реакция {duration(x.get('reactionSec'))}"
-    head = x.get("label") or x.get("id") or ""
+    head = x.get("label") or RU.get(x.get("labelKey"), x.get("labelKey")) or x.get("id") or ""
     extra = [value(v, k, sec) for k, v in x.items() if k.endswith(("Sec", "Minutes")) and v is not None]
     if "sec" in x:
         cond = ", ".join(f"{word(k)} = {word(str(v))}" for k, v in x.items() if k != "sec")

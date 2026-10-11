@@ -224,8 +224,14 @@
   // Непереведённые строки: текст и подсказки с кириллицей, включая скрытые справочные окна.
   // Не считаются: уведомления, созданные до смены языка, и карточка, оставшаяся
   // от прошлого инцидента, пока открыта очередь, — они не перерисовываются.
-  function findRussian() {
-    const cyr = /[Ѐ-ӿ]/;
+  // Ключ каталога строк на экране вместо текста (§14.9): workflow.<область>.…
+  const KEY_ON_SCREEN = /\bworkflow\.[a-z_]+\./;
+
+  // Русский текст или ключ каталога вместо текста — на другом языке интерфейса ни того ни другого быть не должно
+  const findRussian = () => findText(/[Ѐ-ӿ]|\bworkflow\.[a-z_]+\./);
+  const findKeys = () => findText(KEY_ON_SCREEN);
+
+  function findText(cyr) {
     const skip = (el) =>
       el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts") ||
       (el.closest("#modalDialog") && $("modalDialog").hidden) ||
@@ -321,6 +327,29 @@
         expect(!items.some((x) => /workflow\./.test(x)), `в журнале ключ вместо текста: «${items.find((x) => /workflow\./.test(x))}»`);
         expect(/Взято в работу/.test(items[items.length - 1]), `последняя запись: «${items[items.length - 1]}»`);
         return items[items.length - 1];
+      },
+      "Взять новое событие"
+    );
+
+    await step(
+      "На экране нет ключей каталога вместо текста: очередь, карточка, настройки (§14.9, RULE-66)",
+      async () => {
+        const found = new Set(findKeys());
+        if (mode() === "work") await click($("backToQueue"));
+        findKeys().forEach((x) => found.add(x));
+        await openOwn(closedId);
+        findKeys().forEach((x) => found.add(x));
+        if (!$("adminBtn").hidden) {
+          await click($("adminBtn"));
+          for (const tab of [...$("adminTabs").querySelectorAll("[data-admin-tab]")].map((b) => b.dataset.adminTab)) {
+            await click($("adminTabs").querySelector(`[data-admin-tab="${tab}"]`));
+            findKeys().forEach((x) => found.add(x));
+          }
+          await click(document.querySelector('[data-close="modalAdmin"]'));
+        }
+        const list = [...found];
+        expect(!list.length, `ключи вместо текста: «${list.slice(0, 6).join("», «")}»`);
+        return "нет";
       },
       "Взять новое событие"
     );

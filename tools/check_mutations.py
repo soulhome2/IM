@@ -73,12 +73,19 @@ def key_in_modal(w):
 
 def close_without_placeholder(w):
     form = next(f for f in w["forms"] if f["id"] == "close")
-    del next(f for f in form["fields"] if f["name"] == "resultId")["placeholder"]
+    del next(f for f in form["fields"] if f["name"] == "resultId")["placeholderKey"]
+
+
+# Подписи — ключами, тексты — в каталоге строк (§14.9): мутация подписи меняет строку каталога
+# (w["$strings"] — каталоги по языкам; run_probe пишет их в strings.js копии)
+def ru(w, key, text):
+    for lang in w["$strings"].values():
+        lang[key] = text
 
 
 def group_badge(w):
     rule = next(r for r in w["badges"]["rules"] if r.get("when", {}).get("addressee") == "group")
-    rule["label"] = "Группе на принятие"
+    ru(w, rule["labelKey"], "Группе на принятие")
 
 
 def hold_with_unknown_effect(w):
@@ -93,7 +100,7 @@ def without_manual_transitions(w):
 
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
-    ("label", "название «Взять» → «Забрать»", lambda w: transition(w, "claim").update(label="Забрать")),
+    ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
     ("from", "«Отложить» ни из какого состояния", lambda w: transition(w, "hold").update({"from": []})),
     ("limit", "лимит активных 1 → 2", lambda w: w["limits"].update(maxActive=2)),
     ("norm", "норматив реакции критического 4 → 10 мин", lambda w: reaction_override(w, "critical").update(sec=600)),
@@ -106,7 +113,7 @@ MUTATIONS = [
     ),
     ("hotkey", "клавиша «Взять» N → M", lambda w: next(h for h in w["hotkeys"] if h["key"] == "N").update(key="M")),
     ("filter", "фильтр «Мои» включает закрытые", lambda w: next(q for q in w["queueFilters"] if q["id"] == "mine")["states"].append("closed")),
-    ("badge", "бейдж «Новое» → «Свежее»", lambda w: next(b for b in w["badges"]["rules"] if b["state"] == "new").update(label="Свежее")),
+    ("badge", "бейдж «Новое» → «Свежее»", lambda w: ru(w, next(b for b in w["badges"]["rules"] if b["state"] == "new")["labelKey"], "Свежее")),
     (
         "form",
         "причина «Вернуть в очередь» не обязательна",
@@ -117,7 +124,7 @@ MUTATIONS = [
     (
         "catalog",
         "новая причина удержания",
-        lambda w: w["reasonCatalogs"]["hold"]["items"].append({"id": "probe", "label": "Проба", "maxMinutes": 5, "setBy": "operator"}),
+        lambda w: (w["reasonCatalogs"]["hold"]["items"].append({"id": "probe", "labelKey": "workflow.catalog.hold.probe", "maxMinutes": 5, "setBy": "operator"}), ru(w, "workflow.catalog.hold.probe", "Проба")),
     ),
     ("grouping", "группа сценария из разных типов событий", lambda w: w["grouping"]["createFrom"].update(sameEventType=False)),
     ("scenario", "править сценарий можно только в «Отложен»", lambda w: w["scenarioEdit"]["guards"].append({"fn": "stateIs", "args": [["on_hold"]]})),
@@ -125,7 +132,7 @@ MUTATIONS = [
     ("reopen", "срок переоткрытия 24 ч → 1 мин", lambda w: w["limits"].update(reopenWindowMin=1)),
     ("escalation", "норматив реакции уровня 1: 120 → 30 с", lambda w: w["escalation"]["levels"][0].update(reactionSec=30)),
     ("escape", "Esc без шага «к очереди»", lambda w: next(h for h in w["hotkeys"] if h["key"] == "Esc")["chain"].remove("back_to_queue")),
-    ("breakReason", "новая причина перерыва", lambda w: w["session"]["breakReasons"].append({"id": "probe", "label": "Проба"})),
+    ("breakReason", "новая причина перерыва", lambda w: (w["session"]["breakReasons"].append({"id": "probe", "labelKey": "workflow.session.break.probe"}), ru(w, "workflow.session.break.probe", "Проба"))),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
     ("ceiling", "норматив реакции 2 с, потолок эскалации 0 — нарушение реакции", reaction_ceiling),
@@ -163,8 +170,12 @@ def run_probe(work, probe, workflow):
     html = html.replace('<script src="selftest.js"></script>', '<script src="selftest.js"></script>\n  <script src="probe.js"></script>')
     with open(page, "w", encoding="utf-8") as f:
         f.write(html)
+    workflow = dict(workflow)
+    strings = workflow.pop("$strings")
     with open(os.path.join(site, "workflow.js"), "w", encoding="utf-8") as f:
         f.write("window.IM_WORKFLOW = " + json.dumps(workflow, ensure_ascii=False) + ";\n")
+    with open(os.path.join(site, "strings.js"), "w", encoding="utf-8") as f:
+        f.write("window.IM_STRINGS = " + json.dumps(strings, ensure_ascii=False) + ";\n")
     profile = os.path.join(work, "chrome")
     shutil.rmtree(profile, ignore_errors=True)
     out = subprocess.run(
@@ -190,6 +201,12 @@ def main():
     only = sys.argv[1:]
     with open(MACHINE, encoding="utf-8") as f:
         base = json.load(f)
+    folder = os.path.join(os.path.dirname(MACHINE), "strings")
+    base["$strings"] = {}
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                base["$strings"][name[:-5]] = {k: v for k, v in json.load(f).items() if not k.startswith("$")}
     failed = 0
     total = 0
     with tempfile.TemporaryDirectory() as work:

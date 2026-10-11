@@ -2386,7 +2386,8 @@
             ]
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
           "deadlineField": {
             "type": "string",
@@ -2481,6 +2482,10 @@
           "secFrom": {
             "type": "string",
             "description": "Длительность из справочника: reasonCatalogs.<справочник>[].<поле>, например reasonCatalogs.hold[].maxMinutes (README машины, «Язык значений»)"
+          },
+          "labelKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подписи таймера в каталоге строк, например `workflow.timer.reaction`."
           }
         }
       },
@@ -2496,10 +2501,12 @@
             "type": "string"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
           "confirmLabel": {
-            "type": "string"
+            "type": "string",
+            "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
           "style": {
             "type": "string",
@@ -2521,6 +2528,10 @@
                 },
                 "text": {
                   "type": "string"
+                },
+                "textKey": {
+                  "type": "string",
+                  "description": "§14.9. Ключ пояснения формы, например `workflow.form.transfer.note.0`; подстановки — README машины."
                 }
               }
             }
@@ -2530,6 +2541,14 @@
             "items": {
               "$ref": "#/components/schemas/FormField"
             }
+          },
+          "titleKey": {
+            "type": "string",
+            "description": "§14.9. Ключ заголовка формы в каталоге строк, например `workflow.form.close.title`."
+          },
+          "confirmKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подписи кнопки подтверждения, например `workflow.form.close.confirm`."
           }
         }
       },
@@ -2553,13 +2572,15 @@
             ]
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
           "required": {
             "type": "boolean"
           },
           "placeholder": {
-            "type": "string"
+            "type": "string",
+            "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
           "source": {
             "type": "string",
@@ -2598,6 +2619,14 @@
           "excludeSystemItems": {
             "type": "boolean",
             "description": "Не показывать позиции справочника, которые ставит только система (setBy: system), например «Перерыв оператора»"
+          },
+          "labelKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подписи поля, например `workflow.form.close.field.comment`."
+          },
+          "placeholderKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подсказки в пустом поле, например `workflow.form.close.field.comment.placeholder`."
           }
         }
       },
@@ -2620,7 +2649,7 @@
           },
           "labelKey": {
             "type": "string",
-            "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
+            "description": "§14.9. Ключ подписи перехода в каталоге строк, например `workflow.transition.claim`. У всех переходов: подпись автоматического видна в журнале и алерте."
           },
           "hint": {
             "type": "string",
@@ -2770,6 +2799,10 @@
               "incidents_owned_by_agent"
             ],
             "description": "У системного перехода: к каким инцидентам применяется. incidents_owned_by_agent — только к инцидентам оператора, чьё состояние сменилось (§12.2)"
+          },
+          "hintKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подсказки кнопки, например `workflow.transition.claim.hint`. Только у ручных переходов (`trigger: manual`): у автоматических кнопок нет (DOC-19)."
           }
         }
       },
@@ -2976,6 +3009,10 @@
           },
           "reason": {
             "type": "string"
+          },
+          "reasonKey": {
+            "type": "string",
+            "description": "§14.9. Ключ текста причины автоэскалации в каталоге строк (`workflow.escalation.reason`); подстановка `{escalationReason}` записи журнала."
           }
         },
         "required": [
@@ -4952,7 +4989,8 @@
             "type": "string"
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "description": "Подпись на языке оператора (§14.9)."
           },
           "maxMinutes": {
             "type": [
@@ -5011,6 +5049,10 @@
               ]
             },
             "description": "Для `close_result`: где результат предлагается. Из очереди — только «Массовый сбой» (§7)"
+          },
+          "labelKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подписи позиции справочника, например `workflow.catalog.hold.third_party`; `label` — она же на языке оператора."
           }
         }
       },
@@ -5131,6 +5173,10 @@
           },
           "label": {
             "type": "string"
+          },
+          "labelKey": {
+            "type": "string",
+            "description": "§14.9. Ключ подписи приоритета, например `workflow.priority.critical`; `label` — она же на языке оператора."
           }
         }
       },

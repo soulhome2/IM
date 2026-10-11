@@ -199,7 +199,7 @@
       // На перерыве и после выхода — только просмотр (§10.4, §12.1): какие состояния такие, решает машина
       agentReady: () => {
         const st = W.session.states.find((s) => s.id === ctx.agentState());
-        return st && st.readOnly ? [st.readOnlyReason] : null;
+        return st && st.readOnly ? [st.readOnlyReasonKey] : null;
       },
       agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["workflow.guard.agent_state"]),
       addresseeHasAccess: (ev, [expected]) => {
@@ -265,7 +265,7 @@
         if (item.ownerOnlyInStates.includes(ev.state) && !isMine(ev)) return;
         if (surface && item.surfaces && !item.surfaces.includes(surface)) return;
         const stepsOk = item.requiredStepSet === "none" || ctx.stepsFilled(ev, item.requiredStepSet);
-        out.push({ id: item.id, label: item.label, disabled: !stepsOk, why: stepsOk ? null : "workflow.guard.required_steps" });
+        out.push({ id: item.id, label: item.labelKey, disabled: !stepsOk, why: stepsOk ? null : "workflow.guard.required_steps" });
       });
       return out;
     }
@@ -304,8 +304,8 @@
         out.push({
           id: tr.id,
           kind: "transition",
-          label: tr.label,
-          hint: a.why || tr.hint || tr.label,
+          label: tr.labelKey,
+          hint: a.why || tr.hintKey || tr.labelKey,
           style: tr.ui.style || "outline",
           enabled: Boolean(a.ok),
           formId: tr.form,
@@ -317,7 +317,7 @@
         if (!nav.surface.includes(surface)) return;
         const a = availability(nav.id, ev);
         if (a.hidden || !a.ok) return;
-        out.push({ id: nav.id, kind: "nav", label: nav.label, hint: nav.hint || nav.label, style: nav.style, enabled: true });
+        out.push({ id: nav.id, kind: "nav", label: nav.labelKey, hint: nav.hintKey || nav.labelKey, style: nav.style, enabled: true });
       });
       // Навигация — первой: «Продолжить», «Открыть», «Просмотр» стоят во главе колонки
       return out.filter((a) => a.kind === "nav").concat(out.filter((a) => a.kind === "transition"));
@@ -332,13 +332,14 @@
         {
           comment: (form && form.comment) || "",
           stepNumber: ctx.stepNumber(ev),
-          holdReasonLabel: hold ? hold.label : "",
+          // Подстановки, которые сами переводятся, — ключом каталога (§14.9)
+          holdReasonLabel: hold ? [hold.labelKey] : "",
           targetName: ctx.actorName(addressee(ev)),
           escalationLevel: ev.escalationLevel,
-          closeResultLabel: closeResultLabel(ev),
+          closeResultLabel: closeResultLabel(ev) ? [closeResultLabel(ev)] : "",
           filledSteps: prog.filled,
           totalSteps: prog.total,
-          escalationReason: W.escalation.reason,
+          escalationReason: [W.escalation.reasonKey],
         },
         extra || {}
       );
@@ -354,12 +355,12 @@
       return Boolean(item && item[attr]);
     }
 
-    // Подпись результата; если у результата есть справочник причин и причина выбрана — подпись причины
+    // Ключ подписи результата; если у результата есть справочник причин и причина выбрана — подписи причины
     function closeResultLabel(ev) {
       const item = catalogItem("close_result", ev.closeResult);
       if (!item) return "";
       const cause = item.causeCatalog && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
-      return cause ? cause.label : item.label;
+      return cause ? cause.labelKey : item.labelKey;
     }
 
     function value(arg, ev, form, scope) {
@@ -499,7 +500,7 @@
         const required = fieldRequired(f, field, form);
         const v = form[field.name];
         if (required && (v == null || String(v).trim() === "")) {
-          return field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: field.label }];
+          return field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: [field.labelKey] }];
         }
       }
       return null;
@@ -601,7 +602,7 @@
       if (!note) return null;
       const prog = ctx.progress(ev);
       return [
-        note.text,
+        note.textKey,
         Object.assign(
           {
             nextEscalationLevel: ev.escalationLevel + 1,
@@ -640,13 +641,13 @@
           } else {
             options = catalogs[catalog].items
               .filter((i) => !(field.excludeSystemItems && i.setBy === "system"))
-              .map((i) => ({ id: i.id, label: i.label }));
+              .map((i) => ({ id: i.id, label: i.labelKey }));
           }
           if (field.defaultWhen && ctx.stepsFilled(ev, field.defaultWhen.requiredStepsFilled)) defaultValue = field.defaultWhen.value;
         }
         return Object.assign({}, field, { options, defaultValue });
       });
-      return { id: f.id, title: f.title, confirmLabel: f.confirmLabel, style: f.style, note: noteFor(f, ev, opts && opts.noteVars), fields };
+      return { id: f.id, title: f.titleKey, confirmLabel: f.confirmKey, style: f.style, note: noteFor(f, ev, opts && opts.noteVars), fields };
     }
 
     // Бейдж под смотрящего оператора (§2.4)
@@ -659,10 +660,10 @@
         if (r.when && r.when.addressee && r.when.addressee !== (isGroup(addressee(ev)) ? "group" : "person")) return false;
         return r.viewerRole === "any" || r.viewerRole === role;
       });
-      if (!rule) return { label: [states[ev.state].label], style: ev.state };
+      if (!rule) return { label: [states[ev.state].labelKey], style: ev.state };
       const hold = catalogItem("hold", ev.holdReason);
       return {
-        label: [rule.label, { ownerName: ctx.actorName(addressee(ev)), holdReasonLabel: hold ? hold.label : "", closeResultLabel: closeResultLabel(ev) }],
+        label: [rule.labelKey, { ownerName: ctx.actorName(addressee(ev)), holdReasonLabel: hold ? [hold.labelKey] : "", closeResultLabel: closeResultLabel(ev) ? [closeResultLabel(ev)] : "" }],
         style: rule.style,
       };
     }

@@ -12,6 +12,12 @@ import os
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
     RU = json.load(_f)
 
+
+def lab(o, field="label"):
+    """Подпись из машины по-русски: ключ поля (labelKey, titleKey, hintKey) — строка каталога (§14.9)."""
+    key = o.get({"label": "labelKey", "title": "titleKey", "hint": "hintKey"}[field])
+    return RU.get(key, key) if key else o.get(field, "")
+
 TRIGGER = {"manual": "кнопка", "timer": "таймер", "system": "система"}
 SURFACE = {"queue": "очередь", "card": "карточка"}
 WHO = {
@@ -32,11 +38,11 @@ BULK = {
 class Doc:
     def __init__(self, w):
         self.w = w
-        self.states = {s["id"]: s["label"] for s in w["states"]}
-        self.timers = {t["id"]: t["label"] for t in w["timers"]}
-        self.forms = {f["id"]: f["title"] for f in w["forms"]}
-        self.reasons = {i["id"]: i["label"] for c in w["reasonCatalogs"].values() for i in c.get("items", [])}
-        self.agent = {s["id"]: s["label"] for s in w["session"]["states"]}
+        self.states = {s["id"]: lab(s) for s in w["states"]}
+        self.timers = {t["id"]: lab(t) for t in w["timers"]}
+        self.forms = {f["id"]: lab(f, "title") for f in w["forms"]}
+        self.reasons = {i["id"]: lab(i) for c in w["reasonCatalogs"].values() for i in c.get("items", [])}
+        self.agent = {s["id"]: lab(s) for s in w["session"]["states"]}
 
     def setting(self, path):
         """Путь к настройке машины → «`путь` = значение»."""
@@ -182,7 +188,7 @@ class Doc:
             if steps and steps not in ("none", None):
                 form += f"; шаги: {'по результату' if steps == 'byCloseResult' else steps}"
             out.append(
-                f"| `{t['id']}`<br>{t['label']} | {self.st(t['from'])} → {to} | {self.started(t)} "
+                f"| `{t['id']}`<br>{lab(t)} | {self.st(t['from'])} → {to} | {self.started(t)} "
                 f"| {cell([self.guard(g) for g in t.get('guards', [])])} | {cell([self.effect(e) for e in t.get('effects', [])])} "
                 f"| {form} | {self.bulk(t) or '—'} |"
             )
@@ -190,11 +196,11 @@ class Doc:
         for t in w["transitions"]:
             row = ["✓" if s in t["from"] else "" for s in self.states]
             to = f"`{t['to']}` {self.states.get(t['to'], '')}".rstrip() if t.get("to") else "не меняется"
-            out.append(f"| `{t['id']}` {t['label']} | " + " | ".join(row) + f" | {to} |")
+            out.append(f"| `{t['id']}` {lab(t)} | " + " | ".join(row) + f" | {to} |")
         out += ["", "## Действия без смены состояния", "", "| Действие | Где | Условия |", "|---|---|---|"]
         for n in w["navActions"]["items"]:
             where = ", ".join(SURFACE.get(s, s) for s in n.get("surface", []))
-            out.append(f"| `{n['id']}`<br>{n['label']} | {where} | {cell([self.guard(g) for g in n.get('guards', [])])} |")
+            out.append(f"| `{n['id']}`<br>{lab(n)} | {where} | {cell([self.guard(g) for g in n.get('guards', [])])} |")
         out += [
             "",
             "## Права",
@@ -228,18 +234,18 @@ class Doc:
 
         for t in w["transitions"]:
             if checks(t.get("guards")):
-                uses.append(f"`{t['id']}` {t['label']}")
+                uses.append(f"`{t['id']}` {lab(t)}")
         for n in w["navActions"]["items"]:
             if checks(n.get("guards")):
-                uses.append(f"`{n['id']}` {n['label']}")
+                uses.append(f"`{n['id']}` {lab(n)}")
         for item in w["reasonCatalogs"]["close_result"]["items"]:
             if item.get("permission") == key:
-                uses.append(f"`close` с результатом «{item['label']}»")
+                uses.append(f"`close` с результатом «{lab(item)}»")
         if key in (w.get("grouping") or {}).get("permissions", []):
             uses.append("групповая обработка «Обработать как одно» (`grouping`)")
         for s in w["session"]["states"]:
             if s.get("permission") == key:
-                uses.append(f"состояние оператора «{s['label']}» (`session`)")
+                uses.append(f"состояние оператора «{lab(s)}» (`session`)")
         if key == "incident:schema:admin":
             uses.append("не в машине: операции редактора схемы `/operator/workflow/schemas…` (контракт)")
         return uses

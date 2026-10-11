@@ -66,6 +66,11 @@
 
   const te = (ru, vars) => escapeHtml(t(ru, vars));
 
+  // Подпись из машины по ключу каталога (§14.9): labelKey, hintKey, titleKey…; нет ключа — сам текст
+  const KEY_OF = { label: "labelKey", hint: "hintKey", title: "titleKey", confirmLabel: "confirmKey", placeholder: "placeholderKey", readOnlyReason: "readOnlyReasonKey" };
+  const lbl = (o, field = "label") => (o ? t(o[KEY_OF[field]] || o[field] || "") : "");
+  const hasLbl = (o, field) => Boolean(o && (o[KEY_OF[field]] || o[field]));
+
 
   // Кадры видеомонитора: инлайновые SVG-сцены, viewBox 320x180, растягиваются по кадру.
   const SCENES = {
@@ -719,6 +724,15 @@
     renderTypeFilters();
     renderHotkeysHelp();
     renderAll();
+    syncLocale().catch(() => {});
+  }
+
+  // Язык интерфейса — серверу (§14.9, preferences.locale): готовые тексты ответов — подписи кнопок,
+  // причины, бейджи — приходят на нём
+  async function syncLocale() {
+    if (!store.session || prefs().locale === LANG) return;
+    await api.patch("/operator/session/preferences", { locale: LANG });
+    await reload();
   }
 
   function showModal(id) {
@@ -982,7 +996,7 @@
 
   const holdLabel = (id) => {
     const item = WORKFLOW.reasonCatalogs.hold.items.find((r) => r.id === id);
-    return t(item ? item.label : "Причина не указана");
+    return item ? lbl(item) : t("Причина не указана");
   };
   const resultLabel = (ev) => t(ev.closeResultLabel || "");
   // Результат полной обработки — тот, что требует обязательных шагов сценария (requiredStepSet
@@ -1006,7 +1020,7 @@
     return {
       id: a.id,
       label: t(a.label),
-      hint: a.enabled ? t((def && def.hint) || a.label) : actionWhy(a),
+      hint: a.enabled ? (hasLbl(def, "hint") ? lbl(def, "hint") : t(a.label)) : actionWhy(a),
       style: a.style || "outline",
       disabled: !a.enabled,
       nav: a.kind === "nav",
@@ -1209,7 +1223,7 @@
         kind: "select",
         label: "Причина перерыва",
         required: true,
-        options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: r.label })),
+        options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: lbl(r) })),
       },
     ],
   });
@@ -1238,13 +1252,13 @@
 
   function fieldHtml(field) {
     const box = `class="field" data-field-box="${field.name}"`;
-    const label = `<span data-label-for="${field.name}">${escapeHtml(t(field.label))}</span>`;
+    const label = `<span data-label-for="${field.name}">${escapeHtml(lbl(field))}</span>`;
     if (field.kind === "select") {
       const options = (field.options || [])
         .map((o) => `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(optionLabel(field, o))}</option>`)
         .join("");
       // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
-      const empty = field.placeholder ? `<option value="" disabled>${te(field.placeholder)}</option>` : "";
+      const empty = hasLbl(field, "placeholder") ? `<option value="" disabled>${escapeHtml(lbl(field, "placeholder"))}</option>` : "";
       const hint =
         field.source === "transferTargets"
           ? `<p class="field-hint">${te("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() })}</p>`
@@ -1252,7 +1266,7 @@
       return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select></label>${hint}`;
     }
     return `<label ${box}>${label}<textarea rows="3" data-field="${field.name}" placeholder="${escapeHtml(
-      t(field.placeholder || "")
+      lbl(field, "placeholder")
     )}"></textarea></label>`;
   }
 
@@ -1274,13 +1288,13 @@
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
-      if (label) label.textContent = t(field.label) + (visible && fieldRequired(open.form, field, values) ? " *" : "");
+      if (label) label.textContent = lbl(field) + (visible && fieldRequired(open.form, field, values) ? " *" : "");
     });
   }
 
   function showForm(open, form) {
     state.dialog = Object.assign(open, { form });
-    $("dialogTitle").textContent = t(form.title);
+    $("dialogTitle").textContent = lbl(form, "title");
     $("dialogNote").textContent = form.note || "";
     $("dialogNote").hidden = !form.note;
     $("dialogFields").innerHTML = form.fields.map(fieldHtml).join("");
@@ -1288,14 +1302,14 @@
       if (field.kind !== "select") return;
       const enabled = (field.options || []).filter((o) => !o.disabled);
       // Список с placeholder заполняется сам, только если выбирать не из чего или значение задала схема
-      const fallback = field.placeholder ? (enabled.length === 1 ? enabled[0].id : "") : enabled[0] && enabled[0].id;
+      const fallback = hasLbl(field, "placeholder") ? (enabled.length === 1 ? enabled[0].id : "") : enabled[0] && enabled[0].id;
       const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : fallback;
       const el = $("dialogFields").querySelector(`[data-field="${field.name}"]`);
       if (el) el.value = pick || "";
     });
     refreshDialogFields();
     const confirm = $("dialogConfirm");
-    confirm.textContent = t(form.confirmLabel);
+    confirm.textContent = lbl(form, "confirmLabel");
     confirm.className = `btn ${form.style || "primary"}`;
     $("modalDialog").hidden = false;
     ($("dialogFields").querySelector("[data-field]") || confirm).focus();
@@ -1307,7 +1321,7 @@
     if (!tr || !tr.form || !ev) return;
     const a = actionOf(ev, id);
     if (!a || !a.enabled) {
-      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
       return;
     }
     const def = WORKFLOW.forms.find((f) => f.id === tr.form);
@@ -1365,7 +1379,7 @@
     }
     const a = actionOf(ev, id);
     if (!a || !a.enabled) {
-      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: t(tr.label) }));
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
       return;
     }
     if (tr.form) return openDialog(id, ev, surface);
@@ -1431,7 +1445,7 @@
   // Списки фильтров: по состоянию — из машины, типы событий и устройств — справочники сервера
   function renderTypeFilters() {
     $("eventFilter").innerHTML = WORKFLOW.queueFilters
-      .map((f) => `<option value="${escapeHtml(f.id)}">${te(f.label)}</option>`)
+      .map((f) => `<option value="${escapeHtml(f.id)}">${escapeHtml(lbl(f))}</option>`)
       .join("");
     $("eventFilter").value = state.filter;
     $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
@@ -2231,7 +2245,7 @@
     // Состояние оператора — отдельная машина состояний (§12.1): значение отдаёт сервер, подпись — машина
     const agent = store.session ? store.session.agentState : "ready";
     const agentDef = WORKFLOW.session.states.find((s) => s.id === agent) || {};
-    $("dutyBadge").textContent = t(agentDef.label || agent);
+    $("dutyBadge").textContent = agentDef.id ? lbl(agentDef) : t(agent);
     $("dutyBadge").classList.toggle("off", Boolean(agentDef.readOnly));
     $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться с перерыва" : "Уйти на перерыв");
     $("breakBtn").disabled = signedOut();
@@ -2937,11 +2951,11 @@
       return v
         .map((x) => {
           if (typeof x !== "object") return fmtSetting(x, key, sec);
-          if (x.key && x.label) return `${kbdHtml(x.key)} ${te(x.label)}`;
+          if (x.key && hasLbl(x, "label")) return `${kbdHtml(x.key)} ${escapeHtml(lbl(x))}`;
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
-          return te(x.label || x.id) + limit;
+          return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit;
         })
         .join("<br>");
     }
@@ -3023,8 +3037,8 @@
     const rows = [];
     WORKFLOW.hotkeys.forEach((h) => {
       const last = rows[rows.length - 1];
-      if (last && last.label === h.label) last.keys.push(h.key);
-      else rows.push({ label: h.label, keys: [h.key] });
+      if (last && last.label === lbl(h)) last.keys.push(h.key);
+      else rows.push({ label: lbl(h), keys: [h.key] });
     });
     $("hotkeysTable").innerHTML = rows
       .map((r) => {
@@ -3133,7 +3147,7 @@
     } else if (msg.type === "incident.alert") {
       // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
       const tr = transitionDef(tid);
-      toast(t("Алерт: {id} — {what}", { id, what: tr ? t(tr.label) : tid }));
+      toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
     } else if (msg.type === "incident.auto_escalated") {
       toast(t("Автоэскалация {id} → {who}", { id, who: who(msg.payload.addressee) }));
     } else if (tid === "claim") {

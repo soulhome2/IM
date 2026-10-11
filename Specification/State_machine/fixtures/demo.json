@@ -2048,7 +2048,9 @@
           "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 2,
-            "holdReasonLabel": "Ожидание третьей стороны",
+            "holdReasonLabel": [
+              "workflow.catalog.hold.third_party"
+            ],
             "comment": ""
           }
         }
@@ -2353,7 +2355,9 @@
           "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 2,
-            "holdReasonLabel": "Ожидание третьей стороны",
+            "holdReasonLabel": [
+              "workflow.catalog.hold.third_party"
+            ],
             "comment": "Вызван инженер ТСО"
           }
         }
@@ -2523,7 +2527,9 @@
           "actorName": null,
           "template": "workflow.journal.close",
           "vars": {
-            "closeResultLabel": "Обработан",
+            "closeResultLabel": [
+              "workflow.catalog.close_result.processed"
+            ],
             "comment": ""
           }
         }
@@ -2704,7 +2710,9 @@
           "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 3,
-            "holdReasonLabel": "Ожидание третьей стороны",
+            "holdReasonLabel": [
+              "workflow.catalog.hold.third_party"
+            ],
             "comment": ""
           }
         }
@@ -2831,7 +2839,9 @@
           "template": "workflow.journal.hold",
           "vars": {
             "stepNumber": 2,
-            "holdReasonLabel": "Выезд наряда",
+            "holdReasonLabel": [
+              "workflow.catalog.hold.patrol"
+            ],
             "comment": "Наряд выехал на проверку"
           }
         }
@@ -2898,7 +2908,9 @@
           "actorName": null,
           "template": "workflow.journal.close",
           "vars": {
-            "closeResultLabel": "Плановая проверка",
+            "closeResultLabel": [
+              "workflow.catalog.close_result.drill"
+            ],
             "comment": "плановый тест"
           }
         }
@@ -3014,7 +3026,9 @@
           "actorName": null,
           "template": "workflow.journal.close",
           "vars": {
-            "closeResultLabel": "Обработан",
+            "closeResultLabel": [
+              "workflow.catalog.close_result.processed"
+            ],
             "comment": ""
           }
         }
@@ -3184,7 +3198,9 @@
           "actorName": null,
           "template": "workflow.journal.close",
           "vars": {
-            "closeResultLabel": "Ложная тревога",
+            "closeResultLabel": [
+              "workflow.catalog.close_result.false_alarm"
+            ],
             "comment": "Сработка от уборщика"
           }
         }

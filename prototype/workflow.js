@@ -24,17 +24,17 @@ window.IM_WORKFLOW = {
   "stateCategories": [
     {
       "id": "pending",
-      "label": "Ожидают",
+      "labelKey": "workflow.category.pending",
       "countsAsOpen": true
     },
     {
       "id": "active",
-      "label": "В работе",
+      "labelKey": "workflow.category.active",
       "countsAsOpen": true
     },
     {
       "id": "done",
-      "label": "Завершены",
+      "labelKey": "workflow.category.done",
       "countsAsOpen": false
     }
   ],
@@ -42,7 +42,6 @@ window.IM_WORKFLOW = {
     {
       "id": "new",
       "$comment": "§2.1, §3 (RULE-46). Начальное: инцидент появляется в этом состоянии — событие от основной системы.",
-      "label": "Новое",
       "labelKey": "workflow.state.new",
       "category": "pending",
       "initial": true,
@@ -52,7 +51,6 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "pending_acceptance",
-      "label": "Ожидает принятия",
       "labelKey": "workflow.state.pending_acceptance",
       "category": "pending",
       "terminal": false,
@@ -61,7 +59,6 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "in_progress",
-      "label": "В работе",
       "labelKey": "workflow.state.in_progress",
       "category": "active",
       "terminal": false,
@@ -70,7 +67,6 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "on_hold",
-      "label": "Отложен",
       "labelKey": "workflow.state.on_hold",
       "category": "active",
       "terminal": false,
@@ -79,7 +75,6 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "closed",
-      "label": "Закрыто",
       "labelKey": "workflow.state.closed",
       "category": "done",
       "terminal": true,
@@ -93,7 +88,7 @@ window.IM_WORKFLOW = {
       {
         "state": "new",
         "viewerRole": "any",
-        "label": "Новое",
+        "labelKey": "workflow.badge.new.any",
         "style": "new"
       },
       {
@@ -102,25 +97,25 @@ window.IM_WORKFLOW = {
         "when": {
           "addressee": "group"
         },
-        "label": "Вашей группе · {ownerName}",
+        "labelKey": "workflow.badge.pending_acceptance.target.group",
         "style": "inbox"
       },
       {
         "state": "pending_acceptance",
         "viewerRole": "target",
-        "label": "Вам на принятие",
+        "labelKey": "workflow.badge.pending_acceptance.target",
         "style": "inbox"
       },
       {
         "state": "pending_acceptance",
         "viewerRole": "other",
-        "label": "Ожидает принятия · {ownerName}",
+        "labelKey": "workflow.badge.pending_acceptance.other",
         "style": "escalated"
       },
       {
         "state": "in_progress",
         "viewerRole": "owner",
-        "label": "В работе",
+        "labelKey": "workflow.badge.in_progress.owner",
         "style": "mine"
       },
       {
@@ -132,13 +127,13 @@ window.IM_WORKFLOW = {
       {
         "state": "on_hold",
         "viewerRole": "owner",
-        "label": "Отложен · {holdReasonLabel}",
+        "labelKey": "workflow.badge.on_hold.owner",
         "style": "paused"
       },
       {
         "state": "on_hold",
         "viewerRole": "other",
-        "label": "Отложен · {ownerName}",
+        "labelKey": "workflow.badge.on_hold.other",
         "style": "paused"
       },
       {
@@ -147,13 +142,13 @@ window.IM_WORKFLOW = {
         "when": {
           "closeResult": "processed"
         },
-        "label": "Закрыто",
+        "labelKey": "workflow.badge.closed.any.processed",
         "style": "done"
       },
       {
         "state": "closed",
         "viewerRole": "any",
-        "label": "Закрыто · {closeResultLabel}",
+        "labelKey": "workflow.badge.closed.any",
         "style": "done_unprocessed"
       }
     ]
@@ -223,7 +218,7 @@ window.IM_WORKFLOW = {
   "timers": [
     {
       "id": "reaction",
-      "label": "Реакция",
+      "labelKey": "workflow.timer.reaction",
       "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет и группу устройств; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, sec }. У реакции дополнительно escalationLevel — норматив уровня автоэскалации (§8.3).",
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
@@ -269,7 +264,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "resolution",
-      "label": "Закрытие",
+      "labelKey": "workflow.timer.resolution",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
       "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches.",
@@ -302,7 +297,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "hold",
-      "label": "Предельный срок удержания",
+      "labelKey": "workflow.timer.hold",
       "deadlineField": "hold_due_at",
       "meaning": "Сколько инцидент можно держать в on_hold по выбранной причине",
       "startsOnEnter": [
@@ -324,19 +319,19 @@ window.IM_WORKFLOW = {
     "items": [
       {
         "id": "critical",
-        "label": "Критический"
+        "labelKey": "workflow.priority.critical"
       },
       {
         "id": "high",
-        "label": "Высокий"
+        "labelKey": "workflow.priority.high"
       },
       {
         "id": "medium",
-        "label": "Средний"
+        "labelKey": "workflow.priority.medium"
       },
       {
         "id": "low",
-        "label": "Низкий"
+        "labelKey": "workflow.priority.low"
       }
     ]
   },
@@ -349,31 +344,31 @@ window.IM_WORKFLOW = {
       "items": [
         {
           "id": "third_party",
-          "label": "Ожидание третьей стороны",
+          "labelKey": "workflow.catalog.hold.third_party",
           "maxMinutes": 30,
           "setBy": "operator"
         },
         {
           "id": "patrol",
-          "label": "Выезд наряда",
+          "labelKey": "workflow.catalog.hold.patrol",
           "maxMinutes": 45,
           "setBy": "operator"
         },
         {
           "id": "no_data",
-          "label": "Нет данных, вернуться позже",
+          "labelKey": "workflow.catalog.hold.no_data",
           "maxMinutes": 60,
           "setBy": "operator"
         },
         {
           "id": "break",
-          "label": "Перерыв оператора",
+          "labelKey": "workflow.catalog.hold.break",
           "maxMinutes": 30,
           "setBy": "system"
         },
         {
           "id": "no_link",
-          "label": "Нет связи с оператором",
+          "labelKey": "workflow.catalog.hold.no_link",
           "maxMinutes": 20,
           "setBy": "system"
         }
@@ -388,7 +383,7 @@ window.IM_WORKFLOW = {
       "items": [
         {
           "id": "processed",
-          "label": "Обработан",
+          "labelKey": "workflow.catalog.close_result.processed",
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -404,7 +399,7 @@ window.IM_WORKFLOW = {
         },
         {
           "id": "false_alarm",
-          "label": "Ложная тревога",
+          "labelKey": "workflow.catalog.close_result.false_alarm",
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -420,7 +415,7 @@ window.IM_WORKFLOW = {
         },
         {
           "id": "duplicate",
-          "label": "Дубликат",
+          "labelKey": "workflow.catalog.close_result.duplicate",
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -436,7 +431,7 @@ window.IM_WORKFLOW = {
         },
         {
           "id": "drill",
-          "label": "Плановая проверка",
+          "labelKey": "workflow.catalog.close_result.drill",
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -452,7 +447,7 @@ window.IM_WORKFLOW = {
         },
         {
           "id": "impossible",
-          "label": "Прервано: обработка невозможна",
+          "labelKey": "workflow.catalog.close_result.impossible",
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -468,7 +463,7 @@ window.IM_WORKFLOW = {
         },
         {
           "id": "mass",
-          "label": "Массовый сбой",
+          "labelKey": "workflow.catalog.close_result.mass",
           "permission": "incident:close:unprocessed",
           "fromStates": [
             "new",
@@ -497,22 +492,22 @@ window.IM_WORKFLOW = {
       "items": [
         {
           "id": "power",
-          "label": "Отключение электричества на площадке",
+          "labelKey": "workflow.catalog.mass_fault.power",
           "setBy": "operator"
         },
         {
           "id": "link",
-          "label": "Потеря связи с площадкой",
+          "labelKey": "workflow.catalog.mass_fault.link",
           "setBy": "operator"
         },
         {
           "id": "mass_fault",
-          "label": "Массовый сбой оборудования",
+          "labelKey": "workflow.catalog.mass_fault.mass_fault",
           "setBy": "operator"
         },
         {
           "id": "known",
-          "label": "Известная неисправность, работы ведутся",
+          "labelKey": "workflow.catalog.mass_fault.known",
           "setBy": "operator"
         }
       ]
@@ -522,44 +517,44 @@ window.IM_WORKFLOW = {
     "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан заполнить оператор перед закрытием с результатом «Обработан». Состав шагов задаёт отдельная машина сценариев (§14.5), здесь только ссылка на набор.",
     "closing": {
       "id": "closing",
-      "label": "Закрытие",
+      "labelKey": "workflow.stepset.closing",
       "rule": "all_required_steps_answered"
     },
     "none": {
       "id": "none",
-      "label": "Без проверки",
+      "labelKey": "workflow.stepset.none",
       "rule": "always_true"
     }
   },
   "forms": [
     {
       "id": "transfer",
-      "title": "Передать инцидент",
-      "confirmLabel": "Передать",
+      "titleKey": "workflow.form.transfer.title",
+      "confirmKey": "workflow.form.transfer.confirm",
       "style": "warn",
       "notes": [
         {
           "when": {
             "state": "new"
           },
-          "text": "Инцидент передаётся без взятия в работу. Уровень станет {nextEscalationLevel}."
+          "textKey": "workflow.form.transfer.note.0"
         },
         {
           "when": {
             "ownership": "other"
           },
-          "text": "Инцидент занят: {ownerName}. Передача другому адресату без перехвата."
+          "textKey": "workflow.form.transfer.note.1"
         },
         {
           "when": {},
-          "text": "Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {nextEscalationLevel}."
+          "textKey": "workflow.form.transfer.note.2"
         }
       ],
       "fields": [
         {
           "name": "targetId",
           "kind": "select",
-          "label": "Кому передать",
+          "labelKey": "workflow.form.transfer.field.targetId",
           "required": true,
           "source": "transferTargets",
           "defaultFrom": "session.preferences.defaultTransferTargetId",
@@ -573,28 +568,28 @@ window.IM_WORKFLOW = {
         {
           "name": "comment",
           "kind": "text",
-          "label": "Причина",
+          "labelKey": "workflow.form.transfer.field.comment",
           "required": true,
-          "placeholder": "Почему передаёте"
+          "placeholderKey": "workflow.form.transfer.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "hold",
-      "title": "Отложить инцидент",
-      "confirmLabel": "Отложить",
+      "titleKey": "workflow.form.hold.title",
+      "confirmKey": "workflow.form.hold.confirm",
       "style": "primary",
       "notes": [
         {
           "when": {},
-          "text": "Норматив закрытия приостанавливается и продолжится при возобновлении."
+          "textKey": "workflow.form.hold.note.0"
         }
       ],
       "fields": [
         {
           "name": "reasonId",
           "kind": "select",
-          "label": "Причина удержания",
+          "labelKey": "workflow.form.hold.field.reasonId",
           "required": true,
           "source": "reasonCatalog:hold",
           "excludeSystemItems": true
@@ -602,76 +597,76 @@ window.IM_WORKFLOW = {
         {
           "name": "comment",
           "kind": "text",
-          "label": "Комментарий",
+          "labelKey": "workflow.form.hold.field.comment",
           "required": false,
-          "placeholder": "Чего ждём"
+          "placeholderKey": "workflow.form.hold.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "release",
-      "title": "Вернуть в очередь",
-      "confirmLabel": "Вернуть",
+      "titleKey": "workflow.form.release.title",
+      "confirmKey": "workflow.form.release.confirm",
       "style": "primary",
       "notes": [
         {
           "when": {},
-          "text": "Инцидент станет ничьим, норматив реакции запустится заново, норматив закрытия приостановится. Прогресс сценария сохранится."
+          "textKey": "workflow.form.release.note.0"
         }
       ],
       "fields": [
         {
           "name": "comment",
           "kind": "text",
-          "label": "Причина",
+          "labelKey": "workflow.form.release.field.comment",
           "required": true,
-          "placeholder": "Почему возвращаете"
+          "placeholderKey": "workflow.form.release.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "reject",
-      "title": "Отклонить передачу",
-      "confirmLabel": "Отклонить",
+      "titleKey": "workflow.form.reject.title",
+      "confirmKey": "workflow.form.reject.confirm",
       "style": "primary",
       "notes": [
         {
           "when": {},
-          "text": "Инцидент вернётся в общую очередь, уровень эскалации сохранится."
+          "textKey": "workflow.form.reject.note.0"
         }
       ],
       "fields": [
         {
           "name": "comment",
           "kind": "text",
-          "label": "Причина",
+          "labelKey": "workflow.form.reject.field.comment",
           "required": true,
-          "placeholder": "Почему не принимаете"
+          "placeholderKey": "workflow.form.reject.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "close",
-      "title": "Закрытие инцидента",
-      "confirmLabel": "Закрыть инцидент",
+      "titleKey": "workflow.form.close.title",
+      "confirmKey": "workflow.form.close.confirm",
       "style": "primary",
       "notes": [
         {
           "when": {
             "grouped": true
           },
-          "text": "Сценарий заполнен: {filledSteps} из {totalSteps}. Закроются все {groupSize} инцидентов группы."
+          "textKey": "workflow.form.close.note.0"
         },
         {
           "when": {},
-          "text": "Сценарий заполнен: {filledSteps} из {totalSteps}. Результат уйдёт в AxxonData."
+          "textKey": "workflow.form.close.note.1"
         }
       ],
       "fields": [
         {
           "name": "resultId",
           "kind": "select",
-          "label": "Результат",
+          "labelKey": "workflow.form.close.field.resultId",
           "required": true,
           "source": "reasonCatalog:close_result",
           "optionsFrom": "actions",
@@ -679,13 +674,13 @@ window.IM_WORKFLOW = {
             "requiredStepsFilled": "closing",
             "value": "processed"
           },
-          "placeholder": "Выберите результат",
+          "placeholderKey": "workflow.form.close.field.resultId.placeholder",
           "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultWhen или вариант один"
         },
         {
           "name": "causeId",
           "kind": "select",
-          "label": "Причина сбоя",
+          "labelKey": "workflow.form.close.field.causeId",
           "required": true,
           "source": "reasonCatalog:mass_fault",
           "visibleWhen": {
@@ -698,43 +693,43 @@ window.IM_WORKFLOW = {
         {
           "name": "comment",
           "kind": "text",
-          "label": "Комментарий",
+          "labelKey": "workflow.form.close.field.comment",
           "required": false,
           "requiredFrom": "reasonCatalog:close_result.commentRequired",
-          "placeholder": "Итог обработки для отчёта"
+          "placeholderKey": "workflow.form.close.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "reopen",
-      "title": "Переоткрыть инцидент",
-      "confirmLabel": "Переоткрыть",
+      "titleKey": "workflow.form.reopen.title",
+      "confirmKey": "workflow.form.reopen.confirm",
       "style": "primary",
       "notes": [
         {
           "when": {},
-          "text": "Завершён {minutesSinceClose} мин назад. Норматив закрытия начнётся заново, прежние нарушения останутся."
+          "textKey": "workflow.form.reopen.note.0"
         }
       ],
       "fields": [
         {
           "name": "comment",
           "kind": "text",
-          "label": "Основание",
+          "labelKey": "workflow.form.reopen.field.comment",
           "required": true,
-          "placeholder": "Почему требуется вернуть в работу"
+          "placeholderKey": "workflow.form.reopen.field.comment.placeholder"
         }
       ]
     },
     {
       "id": "takeover",
-      "title": "Перехватить инцидент",
-      "confirmLabel": "Перехватить",
+      "titleKey": "workflow.form.takeover.title",
+      "confirmKey": "workflow.form.takeover.confirm",
       "style": "danger",
       "notes": [
         {
           "when": {},
-          "text": "Инцидент занят: {ownerName}. Прогресс сценария {filledSteps}/{totalSteps} сохранится, его карточка перейдёт в просмотр."
+          "textKey": "workflow.form.takeover.note.0"
         }
       ],
       "fields": []
@@ -743,9 +738,8 @@ window.IM_WORKFLOW = {
   "transitions": [
     {
       "id": "claim",
-      "label": "Взять",
       "labelKey": "workflow.transition.claim",
-      "hint": "Взять инцидент в работу",
+      "hintKey": "workflow.transition.claim.hint",
       "from": [
         "new"
       ],
@@ -825,9 +819,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "accept",
-      "label": "Принять",
       "labelKey": "workflow.transition.accept",
-      "hint": "Принять адресованную вам передачу",
+      "hintKey": "workflow.transition.accept.hint",
       "from": [
         "pending_acceptance"
       ],
@@ -917,9 +910,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "reject",
-      "label": "Отклонить",
       "labelKey": "workflow.transition.reject",
-      "hint": "Вернуть передачу в общую очередь",
+      "hintKey": "workflow.transition.reject.hint",
       "from": [
         "pending_acceptance"
       ],
@@ -996,9 +988,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "hold",
-      "label": "Отложить",
       "labelKey": "workflow.transition.hold",
-      "hint": "Отложить с указанием причины",
+      "hintKey": "workflow.transition.hold.hint",
       "from": [
         "in_progress"
       ],
@@ -1077,9 +1068,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "resume",
-      "label": "Возобновить",
       "labelKey": "workflow.transition.resume",
-      "hint": "Продолжить обработку с того же остатка норматива",
+      "hintKey": "workflow.transition.resume.hint",
       "from": [
         "on_hold"
       ],
@@ -1157,9 +1147,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "release",
-      "label": "Вернуть в очередь",
       "labelKey": "workflow.transition.release",
-      "hint": "Снять с себя и вернуть инцидент в общую очередь",
+      "hintKey": "workflow.transition.release.hint",
       "from": [
         "in_progress",
         "on_hold"
@@ -1251,9 +1240,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "transfer",
-      "label": "Передать",
       "labelKey": "workflow.transition.transfer",
-      "hint": "Передать инцидент другому адресату",
+      "hintKey": "workflow.transition.transfer.hint",
       "from": [
         "new",
         "pending_acceptance",
@@ -1399,9 +1387,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "takeover",
-      "label": "Перехватить",
       "labelKey": "workflow.transition.takeover",
-      "hint": "Забрать инцидент у работающего оператора",
+      "hintKey": "workflow.transition.takeover.hint",
       "from": [
         "pending_acceptance",
         "in_progress",
@@ -1524,9 +1511,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "close",
-      "label": "Закрыть",
       "labelKey": "workflow.transition.close",
-      "hint": "Закрыть с результатом",
+      "hintKey": "workflow.transition.close.hint",
       "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты.",
       "from": [
         "new",
@@ -1672,9 +1658,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "reopen",
-      "label": "Переоткрыть",
       "labelKey": "workflow.transition.reopen",
-      "hint": "Вернуть завершённый инцидент в работу",
+      "hintKey": "workflow.transition.reopen.hint",
       "from": [
         "closed"
       ],
@@ -1768,7 +1753,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "auto_escalate",
-      "label": "Автоэскалация",
+      "labelKey": "workflow.transition.auto_escalate",
       "from": [
         "new",
         "pending_acceptance"
@@ -1869,7 +1854,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "escalation_ceiling",
-      "label": "Эскалировать некому",
+      "labelKey": "workflow.transition.escalation_ceiling",
       "from": [
         "new",
         "pending_acceptance"
@@ -1933,7 +1918,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "reaction_overdue",
-      "label": "Норматив реакции нарушен",
+      "labelKey": "workflow.transition.reaction_overdue",
       "$comment": "§4, §9 (RULE-40). Автоэскалация выключена: истёкшая реакция — нарушение и алерт получателю алертов, без передачи. Иначе просрочка реакции не оставила бы следа ни в журнале, ни в отчётах.",
       "from": [
         "new",
@@ -1993,7 +1978,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "resolution_overdue",
-      "label": "Норматив закрытия нарушен",
+      "labelKey": "workflow.transition.resolution_overdue",
       "from": [
         "in_progress"
       ],
@@ -2044,7 +2029,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "resolution_escalate",
-      "label": "Эскалация по нормативу закрытия",
+      "labelKey": "workflow.transition.resolution_escalate",
       "$comment": "§4, правило 4; §9 (RULE-27). Включается настройкой escalation.onResolutionOverdue = escalate: истёк норматив закрытия — нарушение и передача адресату следующего уровня, как автоэскалация по реакции. Три перехода по этому таймеру — алерт, эскалация, потолок — взаимоисключающие по условиям.",
       "from": [
         "in_progress"
@@ -2153,7 +2138,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "resolution_ceiling",
-      "label": "Норматив закрытия нарушен, эскалировать некому",
+      "labelKey": "workflow.transition.resolution_ceiling",
       "$comment": "§9 (RULE-27). Эскалация по нормативу закрытия включена, но уровень уже на потолке: нарушение и алерт получателю алертов, состояние не меняется.",
       "from": [
         "in_progress"
@@ -2211,7 +2196,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "hold_overdue",
-      "label": "Предельный срок удержания истёк",
+      "labelKey": "workflow.transition.hold_overdue",
       "from": [
         "on_hold"
       ],
@@ -2255,7 +2240,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "system_hold_break",
-      "label": "Отложен: перерыв оператора",
+      "labelKey": "workflow.transition.system_hold_break",
       "from": [
         "in_progress"
       ],
@@ -2314,7 +2299,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "system_hold_idle",
-      "label": "Отложен: нет связи с оператором",
+      "labelKey": "workflow.transition.system_hold_idle",
       "from": [
         "in_progress"
       ],
@@ -2373,7 +2358,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "system_release_idle",
-      "label": "Возвращён в очередь: оператор не отвечает",
+      "labelKey": "workflow.transition.system_release_idle",
       "from": [
         "on_hold"
       ],
@@ -2449,7 +2434,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "addressee_signed_out_to_group",
-      "label": "Адресат вышел: передано его дежурной группе",
+      "labelKey": "workflow.transition.addressee_signed_out_to_group",
       "$comment": "§8.1 (RULE-28, RULE-37). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот выходит из МИ. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
       "from": [
         "pending_acceptance"
@@ -2508,7 +2493,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "addressee_signed_out_to_queue",
-      "label": "Адресат вышел: возвращён в очередь",
+      "labelKey": "workflow.transition.addressee_signed_out_to_queue",
       "$comment": "§8.1 (RULE-28, RULE-37). У адресата нет дежурной группы — инцидент возвращается в общую очередь ничейным. Норматив реакции продолжается.",
       "from": [
         "pending_acceptance"
@@ -2557,7 +2542,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "owner_signed_out",
-      "label": "Оператор вышел: возвращён в очередь",
+      "labelKey": "workflow.transition.owner_signed_out",
       "$comment": "§12.1 (RULE-37). Оператор вышел из МИ — его инциденты в работе и отложенные, с любой причиной, сразу возвращаются в общую очередь, как по «Вернуть в очередь»: ждать срабатывания потери связи (§12.3) незачем, он ушёл сам. Уровень эскалации не меняется, прогресс сценария сохраняется.",
       "from": [
         "in_progress",
@@ -2633,7 +2618,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "addressee_lost_access",
-      "label": "Возвращён в очередь: у владельца или адресата нет доступа к объекту",
+      "labelKey": "workflow.transition.addressee_lost_access",
       "$comment": "§5, §6.2 (RULE-33). Группы доступа или роли изменились, и у владельца или адресата больше нет доступа к объекту инцидента — инцидент ему не виден, поэтому возвращается в очередь. Группе-адресату хватает доступа у одного участника. Уровень эскалации не меняется, прогресс сценария сохраняется.",
       "from": [
         "pending_acceptance",
@@ -2723,7 +2708,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "addressee_cannot_accept",
-      "label": "Возвращён в очередь: адресат не может принять",
+      "labelKey": "workflow.transition.addressee_cannot_accept",
       "$comment": "§5, §8.1 (RULE-39). Права адресата изменились: доступ к объекту есть, а права «Принимать» больше нет — у группы-адресата ни у одного участника нет того и другого. Инцидент ждал бы до истечения норматива реакции, поэтому возвращается в очередь, как при потере доступа. Касается только «Ожидает принятия»: в работе право принять уже не нужно. Без доступа срабатывает addressee_lost_access.",
       "from": [
         "pending_acceptance"
@@ -2803,8 +2788,8 @@ window.IM_WORKFLOW = {
     "items": [
       {
         "id": "open_card",
-        "label": "Продолжить",
-        "hint": "Вернуться к своей карточке",
+        "labelKey": "workflow.nav.open_card",
+        "hintKey": "workflow.nav.open_card.hint",
         "style": "primary",
         "guards": [
           {
@@ -2826,8 +2811,8 @@ window.IM_WORKFLOW = {
       },
       {
         "id": "open_readonly",
-        "label": "Открыть",
-        "hint": "Просмотр без изменений",
+        "labelKey": "workflow.nav.open_readonly",
+        "hintKey": "workflow.nav.open_readonly.hint",
         "style": "outline",
         "guards": [
           {
@@ -2860,8 +2845,8 @@ window.IM_WORKFLOW = {
       },
       {
         "id": "open_done",
-        "label": "Просмотр",
-        "hint": "Открыть карточку завершённого инцидента",
+        "labelKey": "workflow.nav.open_done",
+        "hintKey": "workflow.nav.open_done.hint",
         "style": "outline",
         "guards": [
           {
@@ -2882,7 +2867,7 @@ window.IM_WORKFLOW = {
       },
       {
         "id": "back_to_queue",
-        "label": "К очереди",
+        "labelKey": "workflow.nav.back_to_queue",
         "style": "ghost",
         "guards": [],
         "surface": [
@@ -2891,7 +2876,7 @@ window.IM_WORKFLOW = {
       },
       {
         "id": "run_macro",
-        "label": "Запустить макрос",
+        "labelKey": "workflow.nav.run_macro",
         "style": "outline",
         "guards": [
           {
@@ -2936,7 +2921,7 @@ window.IM_WORKFLOW = {
     ],
     "maxLevel": 2,
     "onResolutionOverdue": "alert",
-    "reason": "Автоэскалация: превышен норматив реакции"
+    "reasonKey": "workflow.escalation.reason"
   },
   "alerts": {
     "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
@@ -3030,19 +3015,19 @@ window.IM_WORKFLOW = {
     "selectionHelpers": [
       {
         "id": "select_all",
-        "label": "Выбрать все",
+        "labelKey": "workflow.selection.select_all",
         "scope": "current_filter",
         "limit": "maxBulk"
       },
       {
         "id": "select_same_type",
-        "label": "Однотипные",
+        "labelKey": "workflow.selection.select_same_type",
         "scope": "state:new + same_event_type",
         "hotkey": "Shift+A"
       },
       {
         "id": "clear_selection",
-        "label": "Снять",
+        "labelKey": "workflow.selection.clear_selection",
         "hotkey": "Shift+D"
       }
     ]
@@ -3052,44 +3037,44 @@ window.IM_WORKFLOW = {
     "states": [
       {
         "id": "ready",
-        "label": "Готов",
+        "labelKey": "workflow.session.state.ready",
         "assignsNewIncidents": true
       },
       {
         "id": "busy",
-        "label": "Занят",
+        "labelKey": "workflow.session.state.busy",
         "assignsNewIncidents": true,
         "derived": true
       },
       {
         "id": "not_ready",
-        "label": "Перерыв",
+        "labelKey": "workflow.session.state.not_ready",
         "assignsNewIncidents": false,
         "requiresReason": true,
         "permission": "agent:set_not_ready",
         "readOnly": true,
-        "readOnlyReason": "На перерыве доступен только просмотр"
+        "readOnlyReasonKey": "workflow.session.readonly.not_ready"
       },
       {
         "id": "offline",
-        "label": "Вышел",
+        "labelKey": "workflow.session.state.offline",
         "assignsNewIncidents": false,
         "readOnly": true,
-        "readOnlyReason": "Вы вышли из МИ: доступен только просмотр"
+        "readOnlyReasonKey": "workflow.session.readonly.offline"
       }
     ],
     "breakReasons": [
       {
         "id": "lunch",
-        "label": "Обед"
+        "labelKey": "workflow.session.break.lunch"
       },
       {
         "id": "briefing",
-        "label": "Инструктаж"
+        "labelKey": "workflow.session.break.briefing"
       },
       {
         "id": "patrol",
-        "label": "Обход"
+        "labelKey": "workflow.session.break.patrol"
       }
     ],
     "heartbeatSec": 30,
@@ -3100,86 +3085,86 @@ window.IM_WORKFLOW = {
     {
       "key": "N",
       "action": "transition:claim",
-      "label": "Взять следующее новое",
+      "labelKey": "workflow.hotkey.transition.claim",
       "scope": "next_new",
       "worksInInput": false
     },
     {
       "key": "A",
       "action": "transition:accept",
-      "label": "Принять адресованную передачу",
+      "labelKey": "workflow.hotkey.transition.accept",
       "worksInInput": false
     },
     {
       "key": "R",
       "action": "transition:resume",
-      "label": "Возобновить свой отложенный",
+      "labelKey": "workflow.hotkey.transition.resume",
       "worksInInput": false
     },
     {
       "key": "E",
       "action": "transition:transfer",
-      "label": "Передать выбранный",
+      "labelKey": "workflow.hotkey.transition.transfer",
       "worksInInput": false
     },
     {
       "key": "T",
       "action": "transition:takeover",
-      "label": "Перехватить (по праву, из карточки)",
+      "labelKey": "workflow.hotkey.transition.takeover",
       "worksInInput": false
     },
     {
       "key": "H",
       "action": "transition:hold",
-      "label": "Отложить с указанием причины",
+      "labelKey": "workflow.hotkey.transition.hold",
       "worksInInput": false
     },
     {
       "key": "G",
       "action": "group:create",
-      "label": "Обработать выделенные как одно",
+      "labelKey": "workflow.hotkey.group.create",
       "worksInInput": false
     },
     {
       "key": "Shift+A",
       "action": "selection:same_type",
-      "label": "Выбрать однотипные",
+      "labelKey": "workflow.hotkey.selection.same_type",
       "worksInInput": false
     },
     {
       "key": "Shift+D",
       "action": "selection:clear",
-      "label": "Снять выделение",
+      "labelKey": "workflow.hotkey.selection.clear",
       "worksInInput": false
     },
     {
       "key": "B",
       "action": "session:toggle_break",
-      "label": "Перерыв / возврат с перерыва",
+      "labelKey": "workflow.hotkey.session.toggle_break",
       "worksInInput": false
     },
     {
       "key": "Enter",
       "action": "form:open:close",
-      "label": "Открыть форму закрытия инцидента",
+      "labelKey": "workflow.hotkey.form.open.close",
       "worksInInput": false
     },
     {
       "key": "ArrowLeft",
       "action": "media:camera_prev",
-      "label": "Карусель камер",
+      "labelKey": "workflow.hotkey.media.camera_prev",
       "worksInInput": false
     },
     {
       "key": "ArrowRight",
       "action": "media:camera_next",
-      "label": "Карусель камер",
+      "labelKey": "workflow.hotkey.media.camera_next",
       "worksInInput": false
     },
     {
       "key": "1",
       "action": "media:camera_select",
-      "label": "Камера по номеру",
+      "labelKey": "workflow.hotkey.media.camera_select",
       "args": [
         1
       ],
@@ -3188,7 +3173,7 @@ window.IM_WORKFLOW = {
     {
       "key": "2",
       "action": "media:camera_select",
-      "label": "Камера по номеру",
+      "labelKey": "workflow.hotkey.media.camera_select",
       "args": [
         2
       ],
@@ -3197,7 +3182,7 @@ window.IM_WORKFLOW = {
     {
       "key": "3",
       "action": "media:camera_select",
-      "label": "Камера по номеру",
+      "labelKey": "workflow.hotkey.media.camera_select",
       "args": [
         3
       ],
@@ -3206,7 +3191,7 @@ window.IM_WORKFLOW = {
     {
       "key": "4",
       "action": "media:camera_select",
-      "label": "Камера по номеру",
+      "labelKey": "workflow.hotkey.media.camera_select",
       "args": [
         4
       ],
@@ -3215,7 +3200,7 @@ window.IM_WORKFLOW = {
     {
       "key": "F1",
       "action": "docs:regulation",
-      "label": "Регламент обработки инцидента — из любого места",
+      "labelKey": "workflow.hotkey.docs.regulation",
       "worksInInput": true,
       "worksInModal": true,
       "reassignable": false
@@ -3223,7 +3208,7 @@ window.IM_WORKFLOW = {
     {
       "key": "?",
       "action": "docs:hotkeys",
-      "label": "Эта справка",
+      "labelKey": "workflow.hotkey.docs.hotkeys",
       "worksInInput": false,
       "worksInModal": true,
       "reassignable": false
@@ -3231,7 +3216,7 @@ window.IM_WORKFLOW = {
     {
       "key": "Esc",
       "action": "escape_chain",
-      "label": "Форма → полный экран → панель групп → возврат к очереди",
+      "labelKey": "workflow.hotkey.escape_chain",
       "worksInInput": true,
       "worksInModal": true,
       "reassignable": false,
@@ -3246,7 +3231,7 @@ window.IM_WORKFLOW = {
   "queueFilters": [
     {
       "id": "open",
-      "label": "Открытые",
+      "labelKey": "workflow.filter.open",
       "stateCategories": [
         "pending",
         "active"
@@ -3254,7 +3239,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "inbox",
-      "label": "Мне на принятие",
+      "labelKey": "workflow.filter.inbox",
       "states": [
         "pending_acceptance"
       ],
@@ -3262,7 +3247,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "mine",
-      "label": "Мои",
+      "labelKey": "workflow.filter.mine",
       "states": [
         "in_progress",
         "on_hold"
@@ -3271,7 +3256,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "foreign",
-      "label": "Чужие",
+      "labelKey": "workflow.filter.foreign",
       "states": [
         "pending_acceptance",
         "in_progress",
@@ -3281,14 +3266,14 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "done",
-      "label": "Завершённые",
+      "labelKey": "workflow.filter.done",
       "stateCategories": [
         "done"
       ]
     },
     {
       "id": "all",
-      "label": "Все"
+      "labelKey": "workflow.filter.all"
     }
   ],
   "queueGrouping": {
@@ -3301,12 +3286,12 @@ window.IM_WORKFLOW = {
     "filters": [
       {
         "id": "eventType",
-        "label": "Тип события",
+        "labelKey": "workflow.queue.filter.eventType",
         "field": "eventType"
       },
       {
         "id": "deviceType",
-        "label": "Тип устройства",
+        "labelKey": "workflow.queue.filter.deviceType",
         "field": "source.typeId"
       }
     ]
@@ -4139,7 +4124,7 @@ window.IM_WORKFLOW = {
             }
           },
           {
-            "path": "escalation.reason",
+            "path": "escalation.reasonKey",
             "label": "Запись журнала",
             "what": "Текст записи об автоэскалации"
           },

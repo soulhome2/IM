@@ -433,23 +433,25 @@
     let STATES = Object.fromEntries(W.states.map((s) => [s.id, s]));
     const isDone = (ev) => STATES[ev.state].category === "done";
 
+    // Подпись таймера — из машины, на языке оператора (§14.9)
+    const timerLabel = (id) => render((W.timers.find((t) => t.id === id) || {}).labelKey || id);
     function timerState(ev) {
       if (isDone(ev)) return null;
       const base = { serverTime: iso(now()) };
       if (ev.reactionDueAt) {
-        return Object.assign(base, { id: "reaction", label: "Реакция", dueAt: iso(ev.reactionDueAt), remainingMs: ev.reactionDueAt - now(), running: true });
+        return Object.assign(base, { id: "reaction", label: timerLabel("reaction"), dueAt: iso(ev.reactionDueAt), remainingMs: ev.reactionDueAt - now(), running: true });
       }
       if (ev.resolutionDueAt) {
-        return Object.assign(base, { id: "resolution", label: "Закрытие", dueAt: iso(ev.resolutionDueAt), remainingMs: ev.resolutionDueAt - now(), running: true });
+        return Object.assign(base, { id: "resolution", label: timerLabel("resolution"), dueAt: iso(ev.resolutionDueAt), remainingMs: ev.resolutionDueAt - now(), running: true });
       }
       if (ev.resolutionLeftMs != null) {
-        return Object.assign(base, { id: "resolution", label: "Закрытие", dueAt: null, remainingMs: ev.resolutionLeftMs, running: false });
+        return Object.assign(base, { id: "resolution", label: timerLabel("resolution"), dueAt: null, remainingMs: ev.resolutionLeftMs, running: false });
       }
       return null;
     }
     function holdTimerState(ev) {
       if (ev.state !== "on_hold" || !ev.holdDueAt) return null;
-      return { id: "hold", label: "Удержание", dueAt: iso(ev.holdDueAt), remainingMs: ev.holdDueAt - now(), running: true, serverTime: iso(now()) };
+      return { id: "hold", label: timerLabel("hold"), dueAt: iso(ev.holdDueAt), remainingMs: ev.holdDueAt - now(), running: true, serverTime: iso(now()) };
     }
 
     const groupMates = (ev) => (ev.groupId ? events.filter((e) => e.groupId === ev.groupId) : [ev]);
@@ -465,7 +467,7 @@
           options: field.options.map((o) => {
             const reason = o.why ? say([o.why]) : null;
             return Object.assign(
-              { id: o.id, label: o.label, disabled: Boolean(o.disabled), reason: reason ? reason.text : null },
+              { id: o.id, label: render(o.label), disabled: Boolean(o.disabled), reason: reason ? reason.text : null },
               o.role != null ? { role: o.role, available: o.available !== false, availabilityLabel: o.availabilityLabel || null } : {}
             );
           }),
@@ -484,7 +486,7 @@
           {
             id: a.id,
             kind: a.kind,
-            label: a.label,
+            label: render(a.label),
             style: a.style,
             visible: true,
             enabled: a.enabled,
@@ -529,7 +531,7 @@
         holdReasonId: ev.holdReason,
         closeResultId: ev.closeResult,
         closeCauseId: ev.massCause,
-        closeResultLabel: ev.closeResult ? engine.closeResultLabel(ev) : null,
+        closeResultLabel: ev.closeResult ? render(engine.closeResultLabel(ev)) : null,
         closedAt: iso(ev.closedAt),
         timer: timerState(ev),
         holdTimer: holdTimerState(ev),
@@ -683,7 +685,10 @@
     // На месте — «Готов» или «Занят»; дежурная группа — если на месте хотя бы один участник (§8.1)
     const agentStateOf = (id) => (id === ME ? session.agentState : (OPERATORS.find((o) => o.id === id) || {}).agentState || "offline");
     const present = (op) => (op.group ? membersOf(op).some((m) => present({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
-    const stateLabel = (id) => (W.session.states.find((st) => st.id === agentStateOf(id)) || {}).label || null;
+    const stateLabel = (id) => {
+      const st = W.session.states.find((x) => x.id === agentStateOf(id));
+      return st ? render(st.labelKey) : null;
+    };
 
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
     function targets() {
@@ -927,7 +932,7 @@
         return {
           id: tr.id,
           kind: "transition",
-          label: tr.label,
+          label: render(tr.labelKey),
           style: tr.ui.style || "outline",
           visible: true,
           enabled: ok,
@@ -1244,7 +1249,8 @@
         "/operator/reference/reasons/{catalogId}",
         (p) => {
           const catalog = W.reasonCatalogs[p.catalogId];
-          return catalog ? { status: 200, body: catalog.items } : problem(404, "NOT_FOUND", ["workflow.error.catalog_not_found"]);
+          // Подпись позиции — на языке оператора, ключ — для клиента, который переводит сам (§14.9)
+          return catalog ? { status: 200, body: catalog.items.map((i) => Object.assign({}, i, { label: render(i.labelKey) })) } : problem(404, "NOT_FOUND", ["workflow.error.catalog_not_found"]);
         },
       ],
       ["GET", "/operator/reference/event-types", () => ({ status: 200, body: eventTypes() })],
@@ -1272,7 +1278,7 @@
           return { status: 200, body: { locale, strings } };
         },
       ],
-      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, label }) => ({ id, label })) })],
+      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, labelKey }) => ({ id, label: render(labelKey), labelKey })) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
