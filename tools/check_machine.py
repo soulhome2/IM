@@ -767,6 +767,7 @@ def show_overlaps(w):
     order = {t["id"]: i for i, t in enumerate(w["transitions"])}
     kind = lambda t: "таймер" if dict(terms[t["id"]]).get("timer") else "молчание" if any(k.startswith("молчание") for k, _ in terms[t["id"]]) else "сразу"
     print("\nКарта пересечений: состояние | переход A (момент) | переход B (момент) | итог A / B | при равенстве первым")
+    print("  момент таймера — дедлайн; окно после него ждёт только действия человека (§10.1, правило 5; RULE-67)")
     for state in [s["id"] for s in w["states"]]:
         auto = [t for t in automatic(w) if state in t["from"]]
         for a, b in itertools_pairs(auto):

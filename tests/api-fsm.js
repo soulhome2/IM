@@ -258,10 +258,14 @@
 
   /* ===== Покрытие: наборы сценариев перечисляют всё, что есть в машине ===== */
 
-  test("im-fsm: покрытие — у каждого перехода без смены состояния и каждого входа в «В работе» есть сценарий", async () => {
+  test("im-fsm: покрытие — у каждого перехода без смены состояния, каждого входа в «В работе» и каждого таймера с нарушением есть сценарий", async () => {
     const noChange = W.transitions.filter((t) => t.trigger !== "manual" && t.to === null).map((t) => t.id).sort();
     assert.eq(Object.keys(ONCE).sort(), noChange, "переходы без смены состояния — в наборе ONCE");
     const intoWork = W.transitions.filter((t) => t.trigger === "manual" && t.to === "in_progress" && t.id !== "reopen").map((t) => t.id).sort();
     assert.eq(Object.keys(REENTRY).sort(), intoWork, "входы в «В работе» (кроме переоткрытия) — в наборе REENTRY");
+    // Таймеры, по которым переход пишет нарушение, — у каждого сценарий системного перехода в окне (RULE-67)
+    const breachTimers = [...new Set(W.transitions.filter((t) => t.trigger === "timer" && t.effects.some((e) => e.fn === "recordBreach")).map((t) => t.guards.find((g) => g.fn === "timerExpired").args[0]))].sort();
+    const inWindow = [...new Set(WINDOW.map((c) => c.breach))].sort();
+    assert.eq(inWindow, breachTimers, "таймеры с нарушением — в наборе WINDOW");
   });
 })();
