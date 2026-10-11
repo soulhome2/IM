@@ -1131,22 +1131,6 @@
         },
       ],
       [
-        "POST",
-        "/operator/incidents/{incidentGuid}/journal",
-        (p, q, body) => {
-          const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["Инцидент не найден"]);
-          const text = String((body && body.text) || "").trim();
-          if (!text) return problem(422, "FORM_FIELD_REQUIRED", ["Пустой комментарий"]);
-          // Заметка оператора: состояние не меняется, текст не переводится — шаблон «{text}»
-          ev.log.push({ at: now(), whoId: ME, k: "{text}", v: { text }, kind: "note" });
-          touch([ev]);
-          emit("journal.appended", ev, ME, {});
-          const items = journalView(ev);
-          return { status: 201, body: items[items.length - 1] };
-        },
-      ],
-      [
         "GET",
         "/operator/incidents/{incidentGuid}/media",
         (p) => {

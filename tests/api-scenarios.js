@@ -1305,18 +1305,6 @@
     assert.eq(card.assignmentGroup && card.assignmentGroup.id, "grp-tc", "первая по порядку — теперь «Охрана ТЦ»");
   });
 
-  test("Комментарий оператора в журнале: состояние не меняется, пустой не принимается", async () => {
-    const env = await makeEnv();
-    const inc = await newFire(env);
-    assert.status(await env.call("POST", `/operator/incidents/${enc(inc.guid)}/journal`, { text: "  " }), 422, "FORM_FIELD_REQUIRED");
-    const res = await env.call("POST", `/operator/incidents/${enc(inc.guid)}/journal`, { text: "Позвонил на пост" });
-    assert.status(res, 201);
-    assert.eq([res.body.kind, res.body.text, res.body.actor.id], ["note", "Позвонил на пост", ME], "запись");
-    const c = await env.card(inc.guid);
-    assert.eq(c.state, "new", "состояние не изменилось");
-    assert.eq(lastJournal(c).text, "Позвонил на пост", "в журнале карточки");
-  });
-
   /* ===== Эмуляция коллег во встроенном сервере (§17) ===== */
 
   test("Коллеги действуют через переходы машины: взять, передать мне, потеря связи и возврат в очередь (§12.3)", async () => {

@@ -1292,45 +1292,6 @@
             "$ref": "#/components/responses/NotFound"
           }
         }
-      },
-      "post": {
-        "tags": [
-          "journal"
-        ],
-        "operationId": "appendJournalNote",
-        "summary": "Добавить комментарий оператора",
-        "description": "Свободная заметка от оператора. Состояние инцидента не меняется.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JournalNoteRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Запись добавлена",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JournalEntry"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationFailed"
-          }
-        }
       }
     },
     "/operator/incidents/{incidentGuid}/media": {
@@ -4568,7 +4529,6 @@
             "enum": [
               "transition",
               "system",
-              "note",
               "macro",
               "external"
             ]
@@ -4590,18 +4550,6 @@
           "text": {
             "type": "string",
             "description": "Отрендеренный текст на языке запроса."
-          }
-        }
-      },
-      "JournalNoteRequest": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string",
-            "minLength": 1
           }
         }
       },
