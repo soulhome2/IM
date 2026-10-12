@@ -315,24 +315,34 @@ window.IM_WORKFLOW = {
     }
   ],
   "priorities": {
-    "$comment": "§1, §4 (DOC-29). Порядок — по важности, первый — самый важный: по нему строится очередь. Нормативы по приоритету — у таймеров: reaction.overrides, resolution.byPriority.",
+    "$comment": "§1, §4 (DOC-29). Порядок — по важности, первый — самый важный: по нему строится очередь. Нормативы по приоритету — у таймеров: reaction.overrides, resolution.byPriority. Цвет полоски очереди (BUG-39) — из фиксированной палитры palette, каждый уже проверен на контраст в обеих темах (styles.css); свободный цвет не допускается.",
     "items": [
       {
         "id": "critical",
-        "labelKey": "workflow.priority.critical"
+        "labelKey": "workflow.priority.critical",
+        "color": "red"
       },
       {
         "id": "high",
-        "labelKey": "workflow.priority.high"
+        "labelKey": "workflow.priority.high",
+        "color": "amber"
       },
       {
         "id": "medium",
-        "labelKey": "workflow.priority.medium"
+        "labelKey": "workflow.priority.medium",
+        "color": "blue"
       },
       {
         "id": "low",
-        "labelKey": "workflow.priority.low"
+        "labelKey": "workflow.priority.low",
+        "color": "grey"
       }
+    ],
+    "palette": [
+      "red",
+      "amber",
+      "blue",
+      "grey"
     ]
   },
   "reasonCatalogs": {
@@ -4119,7 +4129,11 @@ window.IM_WORKFLOW = {
       "low": "workflow.priority.low",
       "priority": "workflow.settings.word.priority",
       "eventType": "workflow.settings.word.eventType",
-      "sourceGroup": "workflow.settings.word.sourceGroup"
+      "sourceGroup": "workflow.settings.word.sourceGroup",
+      "red": "workflow.priority.color.red",
+      "amber": "workflow.priority.color.amber",
+      "blue": "workflow.priority.color.blue",
+      "grey": "workflow.priority.color.grey"
     },
     "tabs": [
       {
@@ -4127,6 +4141,11 @@ window.IM_WORKFLOW = {
         "labelKey": "workflow.settings.tab.norms",
         "rules": "§4",
         "items": [
+          {
+            "path": "priorities.items",
+            "labelKey": "workflow.settings.priorities.items",
+            "whatKey": "workflow.settings.priorities.items.what"
+          },
           {
             "path": "invariants.manualWinsOverTimer.graceSec",
             "labelKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec",

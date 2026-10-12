@@ -5239,6 +5239,16 @@
           "labelKey": {
             "type": "string",
             "description": "§14.9. Ключ подписи приоритета, например `workflow.priority.critical`; `label` — она же на языке оператора."
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "red",
+              "amber",
+              "blue",
+              "grey"
+            ],
+            "description": "§1, §4 (BUG-39). Цвет полоски очереди — из фиксированной палитры `priorities.palette` машины; свободный цвет не допускается."
           }
         }
       },

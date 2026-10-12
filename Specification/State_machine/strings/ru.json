@@ -125,6 +125,10 @@
   "workflow.priority.high": "Высокий",
   "workflow.priority.medium": "Средний",
   "workflow.priority.low": "Низкий",
+  "workflow.priority.color.red": "Красный",
+  "workflow.priority.color.amber": "Янтарный",
+  "workflow.priority.color.blue": "Синий",
+  "workflow.priority.color.grey": "Серый",
   "workflow.catalog.hold.third_party": "Ожидание третьей стороны",
   "workflow.catalog.hold.patrol": "Выезд наряда",
   "workflow.catalog.hold.no_data": "Нет данных, вернуться позже",
@@ -363,6 +367,8 @@
   "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
   "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой",
   "workflow.journal.timer_overridden": "Норматив «{timer}» истёк — действие оператора успело раньше, чем «{transition}»",
+  "workflow.settings.priorities.items": "Приоритеты",
+  "workflow.settings.priorities.items.what": "Порядок важности и цвет полоски очереди для каждого приоритета (BUG-39)",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Окно после дедлайна",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "Сколько после дедлайна ждать действия оператора, прежде чем сработает переход по таймеру; действие в это окно выигрывает (§10.1)"
 }

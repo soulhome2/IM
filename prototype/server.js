@@ -1309,7 +1309,7 @@
           return { status: 200, body: { locale, strings } };
         },
       ],
-      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, labelKey }) => ({ id, label: render(labelKey), labelKey })) })],
+      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, labelKey, color }) => ({ id, label: render(labelKey), labelKey, color })) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */

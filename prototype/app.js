@@ -552,6 +552,7 @@
   let WORKFLOW = null;
   let STATES = {};
   let LIMITS = {};
+  let PRIORITIES = {};
 
   // Последние ответы сервера. Своих данных у интерфейса нет: всё — из этих ответов
   const store = {
@@ -1668,7 +1669,9 @@
             <input class="pick" type="checkbox" data-check="${escapeHtml(e.guid)}" aria-label="${te("Выбрать {id}", {
               id: e.number,
             })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
-            <div class="event-pri ${e.priority}"></div>
+            <div class="event-pri" data-color="${escapeHtml(PRIORITIES[e.priority].color)}" role="img" aria-label="${te("Приоритет: {label}", {
+              label: lbl(PRIORITIES[e.priority]),
+            })}"></div>
             <div class="event-main">
               <div class="event-title">
                 <strong>${te(e.eventType.name)}</strong>
@@ -2972,7 +2975,11 @@
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
-          return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit;
+          // Приоритет с цветом полоски (BUG-39): «Критический — цвет: красный»
+          // Квадратик — тот же цвет, что у полоски очереди (общие правила event-pri), слово остаётся
+          // текстом: цвет — не единственный способ его узнать (BUG-39)
+          const color = x.color ? ` — ${te("цвет")}: <span class="event-pri swatch" data-color="${escapeHtml(x.color)}"></span> ${word(x.color)}` : "";
+          return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit + color;
         })
         .join("<br>");
     }
@@ -3196,6 +3203,7 @@
     WORKFLOW = await api.get("/operator/workflow/active");
     STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
     LIMITS = WORKFLOW.limits;
+    PRIORITIES = Object.fromEntries(WORKFLOW.priorities.items.map((p) => [p.id, p]));
   }
 
   async function boot() {

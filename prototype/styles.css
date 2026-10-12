@@ -883,11 +883,15 @@ select.search-input { padding-right: 36px; }
   z-index: 1;
 }
 .event.selected { background: var(--accent-dim); }
+/* Цвет — из палитры приоритета (data-color), не из его id: приоритет может переименоваться
+   редактором схемы, цвет остаётся тем же (BUG-39, priorities.palette в машине) */
 .event-pri { width: 4px; border-radius: 4px; align-self: stretch; }
-.event-pri.critical { background: var(--crit); }
-.event-pri.high { background: var(--warn); }
-.event-pri.medium { background: var(--info); }
-.event-pri.low { background: var(--muted); }
+.event-pri[data-color="red"] { background: var(--crit); }
+.event-pri[data-color="amber"] { background: var(--warn); }
+.event-pri[data-color="blue"] { background: var(--info); }
+.event-pri[data-color="grey"] { background: var(--muted); }
+/* Квадратик цвета в настройках администратора — те же правила фона, другая форма (BUG-39) */
+.event-pri.swatch { display: inline-block; width: 12px; height: 12px; align-self: auto; vertical-align: -1px; }
 .event-main { min-width: 0; display: grid; gap: 4px; }
 .event-title { display: flex; justify-content: space-between; gap: 8px; }
 .event-title strong { font-size: 14px; font-weight: 600; }

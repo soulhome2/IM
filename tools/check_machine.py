@@ -813,11 +813,19 @@ def check_state_owners(w, err):
 
 def check_priorities(w, o, err):
     """Приоритеты — справочник машины (DOC-29): нормативы таймеров, инциденты эталонного набора и
-    перечень Priority контракта берут значения только из него."""
+    перечень Priority контракта берут значения только из него. Цвет полоски очереди — из фиксированной
+    палитры priorities.palette, а не свободный (BUG-39)."""
     ids = [p["id"] for p in w.get("priorities", {}).get("items", [])]
     if not ids:
         err.append("приоритеты: в машине нет справочника priorities (DOC-29)")
         return
+    palette = w["priorities"].get("palette", [])
+    for p in w["priorities"]["items"]:
+        if p.get("color") not in palette:
+            err.append(f"приоритеты: {p['id']} — цвет «{p.get('color')}», которого нет в priorities.palette (BUG-39)")
+    color_enum = o["components"]["schemas"]["PriorityRef"]["properties"].get("color", {}).get("enum", [])
+    if color_enum != palette:
+        err.append(f"приоритеты: PriorityRef.color в контракте {color_enum} ≠ priorities.palette машины {palette} (BUG-39)")
     for t in w["timers"]:
         used = [o_["priority"] for o_ in t.get("overrides") or [] if "priority" in o_] + list((t.get("byPriority") or {}).keys())
         for pr in used:

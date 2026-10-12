@@ -159,6 +159,9 @@ MUTATIONS = [
     ("ui-sort-no-requery", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });\n      requery();', 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "ui"),
     ("ui-schema-not-reloaded", "app.js", 'if (msg.type === "workflow.schema_published") {', "if (false) {", "ui"),
     ("schema-published-silent", "server.js", 'if (W !== before) emit("workflow.schema_published"', 'if (false) emit("workflow.schema_published"', "api"),
+    # Цвет полоски очереди — из настройки приоритета, не свой в коде (§1, §4, BUG-39)
+    ("ui-priority-color-ignored", "app.js", 'data-color="${escapeHtml(PRIORITIES[e.priority].color)}"', 'data-color="red"', "ui"),
+    ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n              label: lbl(PRIORITIES[e.priority]),\n            })}"', "", "ui"),
 ]
 
 

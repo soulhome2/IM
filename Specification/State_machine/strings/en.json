@@ -125,6 +125,10 @@
   "workflow.priority.high": "High",
   "workflow.priority.medium": "Medium",
   "workflow.priority.low": "Low",
+  "workflow.priority.color.red": "Red",
+  "workflow.priority.color.amber": "Amber",
+  "workflow.priority.color.blue": "Blue",
+  "workflow.priority.color.grey": "Grey",
   "workflow.catalog.hold.third_party": "Waiting for a third party",
   "workflow.catalog.hold.patrol": "Patrol dispatched",
   "workflow.catalog.hold.no_data": "No data, come back later",
@@ -363,6 +367,8 @@
   "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
   "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold",
   "workflow.journal.timer_overridden": "Target «{timer}» expired — the operator acted before «{transition}»",
+  "workflow.settings.priorities.items": "Priorities",
+  "workflow.settings.priorities.items.what": "Importance order and queue-stripe color for each priority",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Window after the deadline",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "How long after a deadline to wait for the operator before the timer transition fires; an action in this window wins (§10.1)"
 }

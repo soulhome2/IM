@@ -79,7 +79,11 @@ def element(x, sec):
     if "sec" in x:
         cond = ", ".join(f"{word(k)} = {word(str(v))}" for k, v in x.items() if k != "sec")
         return f"{cond}: {duration(x['sec'])}"
-    return head + (f" ({', '.join(extra)})" if extra else "")
+    # Приоритет с цветом полоски очереди (BUG-39): «Критический — цвет: красный»
+    # Markdown не рисует произвольный цвет — квадратик-эмодзи того же оттенка рядом со словом
+    SWATCH = {"red": "🟥", "amber": "🟧", "blue": "🟦", "grey": "⬜"}
+    color = f" — цвет: {SWATCH.get(x['color'], '')} {word(x['color'])}" if "color" in x else ""
+    return head + (f" ({', '.join(extra)})" if extra else "") + color
 
 
 def render(w):

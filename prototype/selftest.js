@@ -1051,20 +1051,33 @@
       expect(!late.length, `события из будущего: ${late.join(", ")}`);
     });
 
-    await step("Цвет полоски у каждого приоритета", async () => {
+    await step("Цвет полоски очереди — из приоритета инцидента (§1, §4, BUG-39), с подписью для скринридера", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const byGuid = Object.fromEntries((await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.map((e) => [e.guid, e.priority]));
+      const byPriority = Object.fromEntries(window.IM_WORKFLOW.priorities.items.map((p) => [p.id, p]));
       await setFilter("all");
       const missing = new Set();
+      const wrongColor = new Set();
+      const noLabel = new Set();
       for (let page = 1; page <= 20; page++) {
         const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
         if (page > 1 && (!nav || nav.disabled)) break;
         if (nav && page > 1) await click(nav);
-        $("eventsList").querySelectorAll(".event-pri").forEach((el) => {
+        $("eventsList").querySelectorAll(".event").forEach((row) => {
+          const el = row.querySelector(".event-pri");
+          const priority = byPriority[byGuid[row.dataset.id]];
           const bg = getComputedStyle(el).backgroundColor;
-          if (bg === "transparent" || bg === "rgba(0, 0, 0, 0)") missing.add(el.className.replace("event-pri", "").trim());
+          if (bg === "transparent" || bg === "rgba(0, 0, 0, 0)") missing.add(priority.id);
+          // Цвет строки — тот, что настроен для её приоритета в машине, не свой в коде интерфейса
+          if (el.dataset.color !== priority.color) wrongColor.add(`${priority.id}: ${el.dataset.color} ≠ ${priority.color}`);
+          if (!el.getAttribute("aria-label")) noLabel.add(priority.id);
         });
       }
       await setFilter("open");
       expect(!missing.size, `нет цвета у приоритета: ${[...missing].join(", ")}`);
+      expect(!wrongColor.size, `цвет полоски не из настройки приоритета: ${[...wrongColor].join(", ")}`);
+      expect(!noLabel.size, `нет aria-label у полоски приоритета: ${[...noLabel].join(", ")}`);
     });
 
     await step("Перевод на английский", () => checkLanguage("en"));
