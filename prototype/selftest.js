@@ -1180,6 +1180,51 @@
       }
     });
 
+    await step("Плашка сценария в очереди — у каждого события со сценарием, название без счёта шагов; нет названия — «Без названия» (§14.5)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const byGuid = Object.fromEntries((await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.map((e) => [e.guid, e]));
+      await setFilter("all");
+      const seen = [];
+      for (let page = 1; page <= 20; page++) {
+        const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+        if (page > 1 && (!nav || nav.disabled)) break;
+        if (nav && page > 1) await click(nav);
+        $("eventsList").querySelectorAll(".event").forEach((row) => {
+          const chip = row.querySelector(".event-prog");
+          const inc = byGuid[row.dataset.id];
+          // Плашка — у каждого события со сценарием, есть ли уже ответы или нет
+          if (inc.scenarioProgress.total) seen.push([chip ? chip.textContent.trim() : "(нет плашки)", inc.scenarioTitle || "Без названия"]);
+        });
+      }
+      await setFilter("open");
+      expect(seen.length, "в очереди нет событий со сценарием — плашку не проверить");
+      const wrong = seen.filter(([shown, title]) => shown !== title);
+      expect(!wrong.length, `плашка не название сценария: ${wrong.map(([a, b]) => `«${a}» вместо «${b}»`).join(", ")}`);
+      // Нет названия — «Без названия»: стенд убирает его у сценария пожара (в Merge Patch null удаляет поле)
+      if (mode() !== "queue") await click($("backToQueue"));
+      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { scenarios: { fire: { title: null } } } });
+      // Смена фильтра перечитывает очередь с сервера
+      await setFilter("all");
+      let untitled = 0;
+      try {
+        for (let page = 1; page <= 20; page++) {
+          const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+          if (page > 1 && (!nav || nav.disabled)) break;
+          if (nav && page > 1) await click(nav);
+          $("eventsList").querySelectorAll(".event").forEach((row) => {
+            const chip = row.querySelector(".event-prog");
+            if (chip && /Пожар/.test(row.querySelector(".event-title").textContent)) untitled += chip.textContent.trim() === "Без названия" ? 1 : -1000;
+          });
+        }
+      } finally {
+        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await setFilter("open");
+      }
+      expect(untitled > 0, "у сценария без названия плашка не «Без названия»");
+      return `плашек: ${seen.length}, например «${seen[0][0]}»; без названия — «Без названия»`;
+    });
+
     await step("Лимиты без ограничения: строка состояния без «из N», в настройках — «без ограничения», выборка не обрезается (§10.2, §11, RULE-69)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));

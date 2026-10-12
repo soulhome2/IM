@@ -171,6 +171,10 @@ MUTATIONS = [
     ("selection-truncated-on-null", "server.js", "const max = W.limits.maxBulk;", "const max = W.limits.maxBulk ?? 0;", "api"),
     ("ui-status-always-of-n", "app.js", 'LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t(', "t(", "ui"),
     ("ui-null-key-ignored", "app.js", 'if (v == null) return nullKey ? te(nullKey) : "—";', 'if (v == null) return "—";', "ui"),
+    # Плашка сценария в очереди — название, не счёт шагов (§14.5)
+    ("ui-scenario-chip-count", "app.js", '<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>', '<span class="event-prog">${prog.filled}/${prog.total}</span>', "ui"),
+    ("ui-scenario-chip-only-answered", "app.js", "${prog.total ? `<span class=\"event-prog\">", "${prog.filled ? `<span class=\"event-prog\">", "ui"),
+    ("ui-scenario-untitled-empty", "app.js", 't(ev.scenarioTitle || "Без названия")', 't(ev.scenarioTitle || "")', "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n              label: inLang(PRIORITIES[e.priority].name),\n            })}"', "", "ui"),
 ]
 

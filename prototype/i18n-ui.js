@@ -249,7 +249,7 @@ window.IM_DICT_UI = {
     "Следующая камера (→)": "Next camera (→)",
     "Следующая страница": "Next page",
     "Сначала шаг {n}: {name}": "Step {n} first: {name}",
-    "Сценарий {a}/{b}": "Scenario {a}/{b}",
+    "Без названия": "Untitled",
     "Укажите причину — поле обязательно": "Give a reason — the field is mandatory",
     "ур. {lvl}": "lvl {lvl}",
     "ур. {lvl} — {who}": "lvl {lvl} — {who}",

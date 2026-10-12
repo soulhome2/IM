@@ -562,6 +562,7 @@
         groupGuid: ev.groupId || null,
         groupSize: ev.groupId ? groupMates(ev).length : 0,
         scenarioProgress: stepProgress(ev),
+        scenarioTitle: (scenarioOf(ev) && scenarioOf(ev).title) || null,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
         schemaVersion: 4,
         version: String(ev.version),

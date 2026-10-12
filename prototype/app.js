@@ -901,6 +901,9 @@
     return i === -1 ? firstOpenStep(ev) : i;
   }
 
+  // Название сценария; нет названия — «Без названия». Демо-названия переводит словарь данных, как типы событий
+  const scenarioTitle = (ev) => t(ev.scenarioTitle || "Без названия");
+
   function stepProgress(ev) {
     if (!ev) return { filled: 0, total: 0 };
     return scenarioOf(ev) ? ev.scenario.progress : ev.scenarioProgress;
@@ -1689,7 +1692,7 @@
                 ${timerChip(e)}
                 ${holdChip(e)}
                 ${groupChip(e)}
-                ${prog.filled ? `<span class="event-prog">${te("Сценарий {a}/{b}", { a: prog.filled, b: prog.total })}</span>` : ""}
+                ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}
               </div>
             </div>
             <div class="event-acts">
@@ -2175,7 +2178,7 @@
     $("statusSteps").textContent =
       state.mode === "work" && ev.scenario
         ? t("Шаг {i} из {n}", { i: cursorOf(ev) + 1, n: prog.total })
-        : t("Сценарий {a}/{b}", { a: prog.filled, b: prog.total });
+        : scenarioTitle(ev);
     $("statusSla").textContent = statusTimerText(ev);
   }
 
