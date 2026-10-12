@@ -1542,7 +1542,7 @@
         ],
         "operationId": "listPriorities",
         "summary": "Приоритеты",
-        "description": "Приоритеты из справочника машины (`priorities`) в порядке важности, первый — самый важный. Влияют на нормативы реакции и закрытия (таймеры машины, §4) и на порядок очереди.",
+        "description": "§2.5 (RULE-68). Справочник приоритетов, по убыванию числа: первым — самый срочный. Общий для всех схем; администратор меняет его на ходу, без публикации схемы, и тогда всем приходит `reference.priorities_changed`. Нормативы по приоритету — в таймерах схемы (§4).",
         "responses": {
           "200": {
             "description": "Приоритеты",
@@ -1726,7 +1726,7 @@
         ],
         "operationId": "testReset",
         "summary": "Тестовый стенд: сбросить данные к эталонному набору",
-        "description": "Загружает fixtures/demo.json: время в наборе абсолютное, в UTC, и при загрузке сдвигается на «сейчас − `capturedAt`» — набор выглядит так, будто снят только что. Сбрасывает сессию оператора и настройки, по умолчанию останавливает часы. Если схема сменилась — подменена `workflowPatch` или возвращена к исходной, — всем подписчикам потока уходит `workflow.schema_published`: так клиент на стенде перечитывает схему, как после публикации.",
+        "description": "Загружает fixtures/demo.json: время в наборе абсолютное, в UTC, и при загрузке сдвигается на «сейчас − `capturedAt`» — набор выглядит так, будто снят только что. Сбрасывает сессию оператора и настройки, по умолчанию останавливает часы. Если схема сменилась — подменена `workflowPatch` или возвращена к исходной, — всем подписчикам потока уходит `workflow.schema_published`: так клиент на стенде перечитывает схему, как после публикации. Если в наборе другой справочник приоритетов — уходит `reference.priorities_changed`.",
         "requestBody": {
           "required": false,
           "content": {
@@ -1869,6 +1869,155 @@
           }
         }
       }
+    },
+    "/operator/admin/priorities": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "createPriority",
+        "summary": "Добавить приоритет",
+        "description": "§2.5. Новый уровень: число 0–100, свободное в справочнике; название (`ru` обязательно), описание, цвет из палитры. Сразу виден в очереди; норматив — по умолчанию, пока в схеме не задан свой. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriorityRef"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Добавлен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriorityRef"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`PRIORITY_EXISTS` — уровень с таким числом уже есть",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/operator/admin/priorities/{value}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "updatePriority",
+        "summary": "Изменить приоритет",
+        "description": "§2.5. Название, описание, цвет — меняются сразу. Число не меняется. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Priority"
+            },
+            "description": "Число уровня"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriorityChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Изменён",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriorityRef"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "deletePriority",
+        "summary": "Удалить приоритет",
+        "description": "§2.5. Нельзя, пока на уровень ссылается норматив опубликованной схемы или его носят открытые инциденты. У закрытых число остаётся; при переоткрытии приводится по правилу поступления. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Priority"
+            },
+            "description": "Число уровня"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалён"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`PRIORITY_IN_USE` — на уровень ссылается норматив схемы или его носят открытые инциденты",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2001,13 +2150,10 @@
         ]
       },
       "Priority": {
-        "type": "string",
-        "enum": [
-          "critical",
-          "high",
-          "medium",
-          "low"
-        ]
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "§2.5 (RULE-68). Число уровня срочности, больше — срочнее. Допустимые значения — уровни справочника `GET /operator/reference/priorities`; перечня в контракте нет: справочник настраивает администратор."
       },
       "Ownership": {
         "type": "string",
@@ -2054,7 +2200,9 @@
               "REOPEN_WINDOW_EXPIRED",
               "BULK_SELECTION_INVALID",
               "SCHEMA_VALIDATION_FAILED",
-              "NOT_FOUND"
+              "NOT_FOUND",
+              "PRIORITY_EXISTS",
+              "PRIORITY_IN_USE"
             ]
           },
           "message": {
@@ -2451,7 +2599,8 @@
             "type": "object",
             "additionalProperties": {
               "type": "integer"
-            }
+            },
+            "description": "§4, правило 2. Норматив по приоритету: ключ — число уровня (§2.5) строкой, как у любого ключа JSON. Уровень без строки получает defaultSec."
           },
           "overridesBy": {
             "type": "array",
@@ -4112,8 +4261,9 @@
               "open": {
                 "type": "integer"
               },
-              "critical": {
-                "type": "integer"
+              "topPriority": {
+                "type": "integer",
+                "description": "Сколько из открытых — самого срочного уровня: с наибольшим числом справочника (§2.5)"
               }
             }
           }
@@ -5195,9 +5345,9 @@
               "mine": {
                 "type": "integer"
               },
-              "critical": {
+              "topPriority": {
                 "type": "integer",
-                "description": "Сколько из открытых — критического приоритета"
+                "description": "Сколько из открытых — самого срочного уровня: с наибольшим числом справочника (§2.5)"
               }
             }
           }
@@ -5226,29 +5376,23 @@
       "PriorityRef": {
         "type": "object",
         "required": [
-          "id",
-          "label"
+          "value",
+          "name",
+          "color"
         ],
+        "description": "§2.5. Уровень справочника приоритетов.",
         "properties": {
-          "id": {
+          "value": {
             "$ref": "#/components/schemas/Priority"
           },
-          "label": {
-            "type": "string"
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
           },
-          "labelKey": {
-            "type": "string",
-            "description": "§14.9. Ключ подписи приоритета, например `workflow.priority.critical`; `label` — она же на языке оператора."
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
           },
           "color": {
-            "type": "string",
-            "enum": [
-              "red",
-              "amber",
-              "blue",
-              "grey"
-            ],
-            "description": "§1, §4 (BUG-39). Цвет полоски очереди — из фиксированной палитры `priorities.palette` машины; свободный цвет не допускается."
+            "$ref": "#/components/schemas/PriorityColor"
           }
         }
       },
@@ -5277,7 +5421,8 @@
               "journal.appended",
               "macro.completed",
               "session.agent_state_changed",
-              "workflow.schema_published"
+              "workflow.schema_published",
+              "reference.priorities_changed"
             ]
           },
           "at": {
@@ -5345,7 +5490,7 @@
             ]
           }
         },
-        "description": "§9, RULE-60. Событие потока: что случилось помимо действий этого клиента. `incident` — инцидент глазами получателя (бейдж, кнопки); `actor` — кто сделал. Об инцидентах вне групп доступа получателя событий нет (§5), кроме `incident.access_lost`.\n\n| Тип | Когда | Кому | `payload` |\n|---|---|---|---|\n| `incident.created` | появился инцидент (переход `create`, RULE-61) | всем, кому он виден | пусто |\n| `incident.transitioned` | выполнен любой переход, ручной или автоматический | всем, кому инцидент виден | `StreamTransitionedPayload`: `transitionId`, `trigger`, `state` и `owner` (было → стало), `addressee`, `breach`. Что показать наблюдателям — `ui.observerNotice` перехода в машине |\n| `incident.updated` | изменились ответы сценария | всем, кому инцидент виден | `StreamUpdatedPayload`: `stepIds` |\n| `incident.group_changed` | создана группа, инцидент вышел из неё или перешёл в новую (§11) | всем, кому инцидент виден | `StreamGroupChangedPayload`: `groupGuid` |\n| `journal.appended` | запись в журнале не от перехода: шаг сценария | всем, кому инцидент виден | пусто |\n| `incident.card_evicted` | карточку увели (§9.3): автоэскалация, перехват, передача чужого | тому, у кого она открыта | `StreamTransitionIdPayload` |\n| `incident.alert` | алерт (§9, RULE-43): нарушение, потолок эскалации, потеря связи или доступа | получателям алертов на месте с доступом к объекту | `StreamTransitionIdPayload` |\n| `incident.access_lost` | изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, больше не виден (§5); `incident` — `null` | прежнему владельцу или адресату | `StreamAccessLostPayload`: `number` |\n| `macro.completed` | известен результат макроса | всем, кому инцидент виден | `StreamMacroPayload` |\n| `session.agent_state_changed` | сменилось состояние оператора | самому оператору (другим его вкладкам) | `StreamAgentStatePayload` |\n| `workflow.schema_published` | опубликована новая схема; клиент перечитывает `GET /operator/workflow/active` и перерисовывает экран. Встроенный сервер шлёт, когда тестовый стенд сменил схему (`POST /test/reset`): редактора схемы в прототипе нет | всем | `StreamSchemaPublishedPayload` |"
+        "description": "§9, RULE-60. Событие потока: что случилось помимо действий этого клиента. `incident` — инцидент глазами получателя (бейдж, кнопки); `actor` — кто сделал. Об инцидентах вне групп доступа получателя событий нет (§5), кроме `incident.access_lost`.\n\n| Тип | Когда | Кому | `payload` |\n|---|---|---|---|\n| `incident.created` | появился инцидент (переход `create`, RULE-61) | всем, кому он виден | пусто |\n| `incident.transitioned` | выполнен любой переход, ручной или автоматический | всем, кому инцидент виден | `StreamTransitionedPayload`: `transitionId`, `trigger`, `state` и `owner` (было → стало), `addressee`, `breach`. Что показать наблюдателям — `ui.observerNotice` перехода в машине |\n| `incident.updated` | изменились ответы сценария | всем, кому инцидент виден | `StreamUpdatedPayload`: `stepIds` |\n| `incident.group_changed` | создана группа, инцидент вышел из неё или перешёл в новую (§11) | всем, кому инцидент виден | `StreamGroupChangedPayload`: `groupGuid` |\n| `journal.appended` | запись в журнале не от перехода: шаг сценария | всем, кому инцидент виден | пусто |\n| `incident.card_evicted` | карточку увели (§9.3): автоэскалация, перехват, передача чужого | тому, у кого она открыта | `StreamTransitionIdPayload` |\n| `incident.alert` | алерт (§9, RULE-43): нарушение, потолок эскалации, потеря связи или доступа | получателям алертов на месте с доступом к объекту | `StreamTransitionIdPayload` |\n| `incident.access_lost` | изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, больше не виден (§5); `incident` — `null` | прежнему владельцу или адресату | `StreamAccessLostPayload`: `number` |\n| `macro.completed` | известен результат макроса | всем, кому инцидент виден | `StreamMacroPayload` |\n| `session.agent_state_changed` | сменилось состояние оператора | самому оператору (другим его вкладкам) | `StreamAgentStatePayload` |\n| `workflow.schema_published` | опубликована новая схема; клиент перечитывает `GET /operator/workflow/active` и перерисовывает экран. Встроенный сервер шлёт, когда тестовый стенд сменил схему (`POST /test/reset`): редактора схемы в прототипе нет | всем | `StreamSchemaPublishedPayload` |\n| `reference.priorities_changed` | изменился справочник приоритетов (§2.5); клиент перечитывает `GET /operator/reference/priorities` и перерисовывает очередь. Встроенный сервер шлёт, когда тестовый стенд сменил справочник (`POST /test/reset`): правки справочника в прототипе нет | всем | пусто |"
       },
       "FieldOption": {
         "type": "object",
@@ -5552,7 +5697,6 @@
         "type": "object",
         "required": [
           "eventTypeId",
-          "priority",
           "deviceIds"
         ],
         "properties": {
@@ -5561,7 +5705,10 @@
             "description": "Тип события из эталонного набора, например `fire`"
           },
           "priority": {
-            "$ref": "#/components/schemas/Priority"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "§2.5. Число от источника. Есть в справочнике — как есть; нет — ближайший уровень не выше (83 → 75); ниже самого низкого или без поля — самый низкий."
           },
           "deviceIds": {
             "type": "array",
@@ -5767,6 +5914,45 @@
       "StreamEmptyPayload": {
         "type": "object",
         "maxProperties": 0
+      },
+      "LocalizedText": {
+        "type": "object",
+        "required": [
+          "ru"
+        ],
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "§2.5, §14.9. Текст на языках интерфейса: ключ — код языка (`ru`, `en`). `ru` обязателен; без перевода клиент показывает русский."
+      },
+      "PriorityColor": {
+        "type": "string",
+        "enum": [
+          "red",
+          "amber",
+          "blue",
+          "grey"
+        ],
+        "description": "§2.5 (BUG-39, RULE-68). Цвет полоски в очереди — из фиксированной палитры, проверенной на контраст в обеих темах. У разных уровней цвет может совпадать."
+      },
+      "PriorityChange": {
+        "type": "object",
+        "required": [
+          "name",
+          "color"
+        ],
+        "description": "§2.5. Правка уровня: название, описание, цвет. Число у используемого уровня не меняется — оно хранится в инцидентах и нормативах.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "color": {
+            "$ref": "#/components/schemas/PriorityColor"
+          }
+        }
       }
     }
   }

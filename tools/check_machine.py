@@ -812,33 +812,39 @@ def check_state_owners(w, err):
 
 
 def check_priorities(w, o, err):
-    """Приоритеты — справочник машины (DOC-29): нормативы таймеров, инциденты эталонного набора и
-    перечень Priority контракта берут значения только из него. Цвет полоски очереди — из фиксированной
-    палитры priorities.palette, а не свободный (BUG-39)."""
-    ids = [p["id"] for p in w.get("priorities", {}).get("items", [])]
-    if not ids:
-        err.append("приоритеты: в машине нет справочника priorities (DOC-29)")
-        return
-    palette = w["priorities"].get("palette", [])
-    for p in w["priorities"]["items"]:
-        if p.get("color") not in palette:
-            err.append(f"приоритеты: {p['id']} — цвет «{p.get('color')}», которого нет в priorities.palette (BUG-39)")
-    color_enum = o["components"]["schemas"]["PriorityRef"]["properties"].get("color", {}).get("enum", [])
-    if color_enum != palette:
-        err.append(f"приоритеты: PriorityRef.color в контракте {color_enum} ≠ priorities.palette машины {palette} (BUG-39)")
-    for t in w["timers"]:
-        used = [o_["priority"] for o_ in t.get("overrides") or [] if "priority" in o_] + list((t.get("byPriority") or {}).keys())
-        for pr in used:
-            if pr not in ids:
-                err.append(f"приоритеты: таймер {t['id']} — норматив для «{pr}», которого нет в справочнике (DOC-29)")
-    enum = o["components"]["schemas"]["Priority"].get("enum", [])
-    if enum != ids:
-        err.append(f"приоритеты: Priority в контракте {enum} ≠ справочник машины {ids} (DOC-29)")
+    """Приоритеты — справочник МИ, общий для всех схем (§2.5, RULE-68), в эталонном наборе: числа
+    уникальны и в 0–100, у названия есть ru, цвет — из палитры PriorityColor контракта (BUG-39).
+    Нормативы таймеров и инциденты набора ссылаются только на числа справочника; Priority в
+    контракте — целое 0–100 без перечня: значения настраивает администратор."""
     with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
+    levels = fx.get("priorities") or []
+    if not levels:
+        err.append("приоритеты: в эталонном наборе нет справочника priorities (§2.5)")
+        return
+    values = [p.get("value") for p in levels]
+    palette = o["components"]["schemas"]["PriorityColor"].get("enum", [])
+    for p in levels:
+        v = p.get("value")
+        if not (isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100):
+            err.append(f"приоритеты: число «{v}» — не целое от 0 до 100 (§2.5)")
+        if values.count(v) > 1:
+            err.append(f"приоритеты: число {v} у нескольких уровней — числа уникальны (§2.5)")
+        if not (p.get("name") or {}).get("ru"):
+            err.append(f"приоритеты: у уровня {v} нет названия ru (§2.5)")
+        if p.get("color") not in palette:
+            err.append(f"приоритеты: у уровня {v} цвет «{p.get('color')}», которого нет в PriorityColor контракта (BUG-39)")
+    for t in w["timers"]:
+        used = [o_["priority"] for o_ in t.get("overrides") or [] if "priority" in o_] + [int(k) for k in (t.get("byPriority") or {})]
+        for pr in used:
+            if pr not in values:
+                err.append(f"приоритеты: таймер {t['id']} — норматив для «{pr}», которого нет в справочнике (§2.5)")
+    pr_schema = o["components"]["schemas"]["Priority"]
+    if pr_schema.get("type") != "integer" or pr_schema.get("minimum") != 0 or pr_schema.get("maximum") != 100 or "enum" in pr_schema:
+        err.append("приоритеты: Priority в контракте — целое 0–100 без перечня (§2.5)")
     for inc in fx["incidents"]:
-        if inc["priority"] not in ids:
-            err.append(f"приоритеты: {inc['number']} — приоритет «{inc['priority']}», которого нет в справочнике (DOC-29)")
+        if inc["priority"] not in values:
+            err.append(f"приоритеты: {inc['number']} — приоритет «{inc['priority']}», которого нет в справочнике (§2.5)")
 
 
 def check_strings(w, err):

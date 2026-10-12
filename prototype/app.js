@@ -1482,7 +1482,7 @@
     const open = forceOpen || state.openGroups.has(item.guid);
     const title = t(item.description || item.name);
     const traced = trace.ids.has(item.guid) ? (item.guid === trace.leaf ? "trace trace-leaf" : "trace") : "";
-    const crit = counters.critical > 0;
+    const crit = counters.topPriority > 0;
     return `
           <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
             state.groupId === item.guid ? "active" : ""
@@ -1500,7 +1500,7 @@
               ${
                 counters.open
                   ? `<span class="tree-ev ${crit ? "crit" : ""}" title="${te("Открытых инцидентов{crit}", {
-                      crit: crit ? t(", есть критический") : "",
+                      crit: crit ? t(", есть «{name}»", { name: inLang(store.priorities[0].name) }) : "",
                     })}">${counters.open}</span>`
                   : ""
               }
@@ -1543,7 +1543,7 @@
     collapseBtn.title = t(expanded ? "Свернуть все группы" : "Развернуть все группы");
 
     const open = store.counters.open || 0;
-    const crit = store.tree.some((n) => n.counters && n.counters.critical > 0);
+    const crit = store.tree.some((n) => n.counters && n.counters.topPriority > 0);
     $("groupsList").innerHTML = `
       <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group">
         <div class="node-content">
@@ -1670,8 +1670,8 @@
               id: e.number,
             })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
             <div class="event-pri" data-color="${escapeHtml(PRIORITIES[e.priority].color)}" role="img" aria-label="${te("Приоритет: {label}", {
-              label: lbl(PRIORITIES[e.priority]),
-            })}"></div>
+              label: inLang(PRIORITIES[e.priority].name),
+            })}" title="${escapeHtml(inLang(PRIORITIES[e.priority].description))}"></div>
             <div class="event-main">
               <div class="event-title">
                 <strong>${te(e.eventType.name)}</strong>
@@ -2952,7 +2952,8 @@
     return text.replace(/ /g, "\u00a0");
   }
   // Машинное значение — подписью из машины (adminSettings.valueLabels — ключи каталога, §14.9), иначе как есть
-  const word = (key) => te((WORKFLOW.adminSettings.valueLabels || {})[key] || key);
+  // Ключ — число уровня приоритета (нормативы по приоритету, §4): его название из справочника
+  const word = (key) => (PRIORITIES[key] ? asData(inLang(PRIORITIES[key].name)) : te((WORKFLOW.adminSettings.valueLabels || {})[key] || key));
   function personName(id) {
     if (store.session && id === store.session.operator.guid) return store.session.operator.name;
     const group = (adminState.data.duty || []).find((g) => g.id === id);
@@ -2975,11 +2976,7 @@
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
-          // Приоритет с цветом полоски (BUG-39): «Критический — цвет: красный»
-          // Квадратик — тот же цвет, что у полоски очереди (общие правила event-pri), слово остаётся
-          // текстом: цвет — не единственный способ его узнать (BUG-39)
-          const color = x.color ? ` — ${te("цвет")}: <span class="event-pri swatch" data-color="${escapeHtml(x.color)}"></span> ${word(x.color)}` : "";
-          return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit + color;
+          return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit;
         })
         .join("<br>");
     }
@@ -3037,6 +3034,12 @@
       "/operator/reference/help-links": () => [
         ["Ссылка", "Вид", "Площадка"],
         data.map((l) => `<tr><td>${asData(l.title)}<span class="what">${escapeHtml(l.url)}</span></td><td>${te(l.kind === "file" ? "файл" : "веб-страница")}</td><td>${l.site ? asData(l.site) : te("общая")}</td></tr>`),
+      ],
+      // Приоритеты (§2.5): число, название и описание на языке оператора, цвет — квадратиком того же
+      // цвета, что полоска очереди, и словом: цвет — не единственный способ его узнать (BUG-39)
+      "/operator/reference/priorities": () => [
+        ["Число", "Приоритет", "Цвет"],
+        data.map((p) => `<tr><td>${p.value}</td><td>${asData(inLang(p.name))}<span class="what">${asData(inLang(p.description))}</span></td><td><span class="event-pri swatch" data-color="${escapeHtml(p.color)}"></span> ${word(p.color)}</td></tr>`),
       ],
       "/operator/admin/camera-links": () => [
         ["Устройство", "Камеры по порядку"],
@@ -3161,6 +3164,10 @@
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     if (mine && msg.type !== "incident.card_evicted") return;
+    // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)
+    if (msg.type === "reference.priorities_changed") {
+      return loadPriorities().then(() => reload());
+    }
     // Опубликована новая схема: подписи, кнопки, фильтры и порядок очереди — по ней (§14.6)
     if (msg.type === "workflow.schema_published") {
       return loadWorkflow().then(() => {
@@ -3203,11 +3210,20 @@
     WORKFLOW = await api.get("/operator/workflow/active");
     STATES = Object.fromEntries(WORKFLOW.states.map((s) => [s.id, s]));
     LIMITS = WORKFLOW.limits;
-    PRIORITIES = Object.fromEntries(WORKFLOW.priorities.items.map((p) => [p.id, p]));
   }
+
+  // Справочник приоритетов (§2.5, RULE-68): справочник МИ, не схема. Уровни — по числу; первым —
+  // самый срочный. Интерфейс не знает уровни ни по имени, ни по числу
+  async function loadPriorities() {
+    store.priorities = await api.get("/operator/reference/priorities");
+    PRIORITIES = Object.fromEntries(store.priorities.map((p) => [p.value, p]));
+  }
+  // Название и описание — на языке оператора, без перевода — русские (§2.5, §14.9)
+  const inLang = (text) => (text ? text[LANG] || text.ru || "" : "");
 
   async function boot() {
     await loadWorkflow();
+    await loadPriorities();
     setInterval(() => heartbeat(true), WORKFLOW.session.heartbeatSec * 1000);
     const [eventTypes, deviceTypes, targets] = await Promise.all([
       api.get("/operator/reference/event-types"),

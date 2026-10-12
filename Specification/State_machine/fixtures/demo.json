@@ -1120,6 +1120,56 @@
       "devices": []
     }
   ],
+  "priorities": [
+    {
+      "value": 100,
+      "name": {
+        "ru": "Критический",
+        "en": "Critical"
+      },
+      "description": {
+        "ru": "Угроза жизни или имуществу — реагировать немедленно",
+        "en": "Threat to life or property — respond immediately"
+      },
+      "color": "red"
+    },
+    {
+      "value": 75,
+      "name": {
+        "ru": "Высокий",
+        "en": "High"
+      },
+      "description": {
+        "ru": "Возможная угроза — реагировать в первую очередь после критических",
+        "en": "Possible threat — respond right after critical ones"
+      },
+      "color": "amber"
+    },
+    {
+      "value": 50,
+      "name": {
+        "ru": "Средний",
+        "en": "Medium"
+      },
+      "description": {
+        "ru": "Требует проверки, угрозы пока нет",
+        "en": "Needs checking, no threat so far"
+      },
+      "color": "blue"
+    },
+    {
+      "value": 25,
+      "name": {
+        "ru": "Низкий",
+        "en": "Low"
+      },
+      "description": {
+        "ru": "Неисправность или служебное событие",
+        "en": "Equipment fault or service event"
+      },
+      "color": "grey"
+    }
+  ],
   "accessGroups": [
     {
       "id": "a0000000-0000-4000-8000-000000000001",
@@ -1649,7 +1699,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "critical",
+      "priority": 100,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "Магазин 1, торговый зал",
@@ -1701,7 +1751,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "critical",
+      "priority": 100,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "Магазин 2, коридор примерочных",
@@ -1752,7 +1802,7 @@
         "id": "glass",
         "name": "Детекция звука разбития стекла"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "Магазин 2, витрина у входа",
@@ -1806,7 +1856,7 @@
         "id": "alcohol",
         "name": "Детекция превышения уровня алкоголя"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Складской комплекс",
       "siteType": "КПП",
       "location": "КПП, проходная — турникет №2",
@@ -1860,7 +1910,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №1, ворота погрузки А",
@@ -1922,7 +1972,7 @@
         "id": "ppe",
         "name": "Отсутствие каски"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №2, разгрузочная рампа",
@@ -1987,7 +2037,7 @@
         "id": "sabotage",
         "name": "Саботаж камеры"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "Магазин 2, коридор примерочных",
@@ -2064,7 +2114,7 @@
         "id": "loiter",
         "name": "Скопление людей"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "1-й этаж, витрина у входа",
@@ -2127,7 +2177,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Главный офис",
       "siteType": "Офис",
       "location": "Приемная, пост охраны",
@@ -2187,7 +2237,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №1, датчик дыма 3",
@@ -2241,7 +2291,7 @@
         "id": "loiter",
         "name": "Скопление людей"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "2-й этаж, фойе кинотеатра",
@@ -2294,7 +2344,7 @@
         "id": "sabotage",
         "name": "Саботаж камеры"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Технопарк",
       "siteType": "Лаборатория",
       "location": "Корпус А, лаборатория 2",
@@ -2371,7 +2421,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №2, центральный проход",
@@ -2422,7 +2472,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "critical",
+      "priority": 100,
       "site": "Главный офис",
       "siteType": "Офис",
       "location": "1-й этаж, конференц-зал",
@@ -2476,7 +2526,7 @@
         "id": "loiter",
         "name": "Скопление людей"
       },
-      "priority": "low",
+      "priority": 25,
       "site": "Главный офис",
       "siteType": "Офис",
       "location": "Приемная, зона ожидания",
@@ -2543,7 +2593,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Технопарк",
       "siteType": "Лаборатория",
       "location": "Корпус А, вход в чистую зону",
@@ -2601,7 +2651,7 @@
         "id": "sabotage",
         "name": "Саботаж камеры"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №3, холодильная камера",
@@ -2653,7 +2703,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "critical",
+      "priority": 100,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "2-й этаж, кухня ресторана",
@@ -2726,7 +2776,7 @@
         "id": "loiter",
         "name": "Скопление людей"
       },
-      "priority": "low",
+      "priority": 25,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Этаж А, разгрузочная рампа",
@@ -2779,7 +2829,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Главный офис",
       "siteType": "Офис",
       "location": "2-й этаж, отдел разработки",
@@ -2855,7 +2905,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Технопарк",
       "siteType": "Лаборатория",
       "location": "Корпус А, лаборатория 1",
@@ -2924,7 +2974,7 @@
         "id": "sabotage",
         "name": "Саботаж камеры"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "1-й этаж, витрина у входа",
@@ -2976,7 +3026,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "low",
+      "priority": 25,
       "site": "Технопарк",
       "siteType": "Офис",
       "location": "Корпус Б, коридор",
@@ -3042,7 +3092,7 @@
         "id": "fire",
         "name": "Пожарная тревога"
       },
-      "priority": "high",
+      "priority": 75,
       "site": "Главный офис",
       "siteType": "Офис",
       "location": "Приемная, зона ожидания",
@@ -3095,7 +3145,7 @@
         "id": "loiter",
         "name": "Скопление людей"
       },
-      "priority": "low",
+      "priority": 25,
       "site": "Торговый центр",
       "siteType": "Торговый центр",
       "location": "1-й этаж, кассовая зона",
@@ -3147,7 +3197,7 @@
         "id": "intrusion",
         "name": "Проникновение"
       },
-      "priority": "medium",
+      "priority": 50,
       "site": "Складской комплекс",
       "siteType": "Склад",
       "location": "Склад №1, стеллажи А1–А8",

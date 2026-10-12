@@ -219,7 +219,7 @@ window.IM_WORKFLOW = {
     {
       "id": "reaction",
       "labelKey": "workflow.timer.reaction",
-      "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет и группу устройств; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, sec }. У реакции дополнительно escalationLevel — норматив уровня автоэскалации (§8.3).",
+      "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет и группу устройств; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, sec }. Приоритет — число уровня из справочника приоритетов МИ (§2.5, RULE-68), в byPriority — тем же числом, строкой ключа; уровень без своего норматива получает defaultSec. У реакции дополнительно escalationLevel — норматив уровня автоэскалации (§8.3).",
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
       "startsOnEnter": [
@@ -244,19 +244,19 @@ window.IM_WORKFLOW = {
       ],
       "overrides": [
         {
-          "priority": "critical",
+          "priority": 100,
           "sec": 240
         },
         {
-          "priority": "high",
+          "priority": 75,
           "sec": 420
         },
         {
-          "priority": "medium",
+          "priority": 50,
           "sec": 900
         },
         {
-          "priority": "low",
+          "priority": 25,
           "sec": 1800
         }
       ],
@@ -282,10 +282,10 @@ window.IM_WORKFLOW = {
       ],
       "defaultSec": 900,
       "byPriority": {
-        "critical": 600,
-        "high": 900,
-        "medium": 1500,
-        "low": 1800
+        "100": 600,
+        "75": 900,
+        "50": 1500,
+        "25": 1800
       },
       "overridesBy": [
         "eventType",
@@ -314,37 +314,6 @@ window.IM_WORKFLOW = {
       "onExpire": "hold_overdue"
     }
   ],
-  "priorities": {
-    "$comment": "§1, §4 (DOC-29). Порядок — по важности, первый — самый важный: по нему строится очередь. Нормативы по приоритету — у таймеров: reaction.overrides, resolution.byPriority. Цвет полоски очереди (BUG-39) — из фиксированной палитры palette, каждый уже проверен на контраст в обеих темах (styles.css); свободный цвет не допускается.",
-    "items": [
-      {
-        "id": "critical",
-        "labelKey": "workflow.priority.critical",
-        "color": "red"
-      },
-      {
-        "id": "high",
-        "labelKey": "workflow.priority.high",
-        "color": "amber"
-      },
-      {
-        "id": "medium",
-        "labelKey": "workflow.priority.medium",
-        "color": "blue"
-      },
-      {
-        "id": "low",
-        "labelKey": "workflow.priority.low",
-        "color": "grey"
-      }
-    ],
-    "palette": [
-      "red",
-      "amber",
-      "blue",
-      "grey"
-    ]
-  },
   "reasonCatalogs": {
     "hold": {
       "field": "hold_reason",
@@ -3374,7 +3343,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "queueSort": {
-    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (порядок справочника priorities), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
+    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
     "default": "priority_then_oldest",
     "options": [
       "priority_then_oldest",
@@ -4122,11 +4091,7 @@ window.IM_WORKFLOW = {
       "queueSort"
     ],
     "valueLabels": {
-      "$comment": "Подписи машинных значений в перечне настроек (BUG-26): приоритеты и условия уточнений нормативов. values у настройки — подписи значений её перечня.",
-      "critical": "workflow.priority.critical",
-      "high": "workflow.priority.high",
-      "medium": "workflow.priority.medium",
-      "low": "workflow.priority.low",
+      "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
       "priority": "workflow.settings.word.priority",
       "eventType": "workflow.settings.word.eventType",
       "sourceGroup": "workflow.settings.word.sourceGroup",
@@ -4141,11 +4106,6 @@ window.IM_WORKFLOW = {
         "labelKey": "workflow.settings.tab.norms",
         "rules": "§4",
         "items": [
-          {
-            "path": "priorities.items",
-            "labelKey": "workflow.settings.priorities.items",
-            "whatKey": "workflow.settings.priorities.items.what"
-          },
           {
             "path": "invariants.manualWinsOverTimer.graceSec",
             "labelKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec",
@@ -4334,6 +4294,13 @@ window.IM_WORKFLOW = {
             "whatKey": "workflow.settings.queueSort.operatorMayChange.what"
           }
         ]
+      },
+      {
+        "id": "priorities",
+        "labelKey": "workflow.settings.tab.priorities",
+        "rules": "§2.5",
+        "source": "GET /operator/reference/priorities",
+        "whatKey": "workflow.settings.tab.priorities.what"
       },
       {
         "id": "access_groups",

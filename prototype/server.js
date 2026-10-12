@@ -56,6 +56,18 @@
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
+    // Справочник приоритетов (§2.5, RULE-68): уровни по убыванию числа — справочник МИ, общий для
+    // всех схем. Код не знает уровни ни по имени, ни по числу
+    let PRIORITIES = [];
+    const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);
+    // Число от источника → уровень справочника: есть — как есть; нет — ближайший не выше; ниже самого
+    // низкого или без числа — самый низкий. Инцидент не кажется срочнее, чем по настройке
+    function priorityLevel(n) {
+      const lowest = PRIORITIES[PRIORITIES.length - 1];
+      if (typeof n !== "number") return lowest.value;
+      const level = PRIORITIES.find((p) => p.value <= n);
+      return (level || lowest).value;
+    }
     // Справочные ссылки меню справки (§7): общие и ссылки площадки — справочник администратора
     let HELP_LINKS = [];
     // Связи камер (§19.1): устройство → камеры по порядку показа. Камеры инцидента — связь его источника
@@ -306,6 +318,7 @@
       );
       PLANS = data.plans || [];
       ACCESS_GROUPS = data.accessGroups || [];
+      PRIORITIES = (data.priorities || []).slice().sort((a, b) => b.value - a.value);
       HELP_LINKS = data.helpLinks || [];
       CAMERA_LINKS = data.cameraLinks || [];
       ROLE_RIGHTS = Object.fromEntries((data.roles || []).map((r) => [r.name, r.permissions]));
@@ -720,7 +733,8 @@
       const asked = q.sort || session.preferences.queueSort;
       return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;
     }
-    const rank = (ev) => W.priorities.items.findIndex((p) => p.id === ev.priority);
+    // Больше число — выше в очереди (§2.5, §7)
+    const rank = (ev) => -ev.priority;
     const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
     // Норматив реакции идёт: дедлайн есть и ещё не сработал (на потолке эскалации — уже сработал)
     const reactionRunning = (e) => Boolean(e.reactionDueAt) && !(e.firedTimers && e.firedTimers.reaction === e.reactionDueAt);
@@ -744,7 +758,7 @@
       return list.filter((e) => {
         if (q.filter && !engine.inQueueFilter(e, q.filter)) return false;
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && e.typeGuid !== q.eventTypeGuid) return false;
-        if (q.priority && e.priority !== q.priority) return false;
+        if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;
         if (q.state && !String(q.state).split(",").includes(e.state)) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
           const src = eventSource(e);
@@ -787,7 +801,7 @@
             .filter((c) => c.isDevice && myDevices.has(c.id))
             .map((c) => {
               const evs = events.filter((e) => canSee(e) && !isDone(e) && touches(e, [c.id]));
-              return withCounters ? Object.assign(deviceRef(c.id), { counters: { open: evs.length, critical: evs.filter((e) => e.priority === "critical").length } }) : deviceRef(c.id);
+              return withCounters ? Object.assign(deviceRef(c.id), { counters: { open: evs.length, topPriority: evs.filter((e) => e.priority === topPriority()).length } }) : deviceRef(c.id);
             });
           return {
             guid: n.id,
@@ -795,7 +809,7 @@
             description: n.description || null,
             children: treeView(n.children || [], withCounters),
             devices,
-            counters: withCounters ? { open: open.length, critical: open.filter((e) => e.priority === "critical").length } : null,
+            counters: withCounters ? { open: open.length, topPriority: open.filter((e) => e.priority === topPriority()).length } : null,
           };
         });
     }
@@ -803,7 +817,7 @@
     function eventTypes() {
       const seen = new Map();
       events.forEach((e) => {
-        if (!seen.has(e.typeId)) seen.set(e.typeId, { guid: e.typeGuid, id: e.typeId, name: e.type, defaultReactionSec: engine.norm({ typeId: e.typeId, priority: "medium" }, "reaction") });
+        if (!seen.has(e.typeId)) seen.set(e.typeId, { guid: e.typeGuid, id: e.typeId, name: e.type, defaultReactionSec: engine.norm({ typeId: e.typeId }, "reaction") });
       });
       return [...seen.values()];
     }
@@ -1309,7 +1323,7 @@
           return { status: 200, body: { locale, strings } };
         },
       ],
-      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: W.priorities.items.map(({ id, labelKey, color }) => ({ id, label: render(labelKey), labelKey, color })) })],
+      ["GET", "/operator/reference/priorities", () => ({ status: 200, body: JSON.parse(JSON.stringify(PRIORITIES)) })],
     ].concat(opts.testSupport ? TEST_ROUTES() : []);
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
@@ -1320,7 +1334,8 @@
     function createIncident(spec) {
       const type = eventTypes().find((t) => t.id === spec.eventTypeId);
       const devices = spec.deviceIds || [];
-      if (!type || !SCENARIOS[spec.eventTypeId] || !devices.length || !W.priorities.items.some((p) => p.id === spec.priority)) return null;
+      const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= 0 && spec.priority <= 100);
+      if (!type || !SCENARIOS[spec.eventTypeId] || !devices.length || badPriority) return null;
       const last = Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0));
       const ev = {
         id: uuid(6, ++serial.incident),
@@ -1328,7 +1343,7 @@
         typeId: type.id,
         typeGuid: type.guid,
         type: type.name,
-        priority: spec.priority,
+        priority: priorityLevel(spec.priority),
         site: spec.site || null,
         location: spec.location || null,
         occurredAt: spec.occurredAt ? Date.parse(spec.occurredAt) : now(),
@@ -1384,12 +1399,15 @@
             clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
             // Изменения схемы и набора — только на этот прогон: следующий reset без них вернёт исходные
             const before = W;
+            const prioritiesBefore = JSON.stringify(PRIORITIES);
             useWorkflow(body.workflowPatch ? mergePatch(BASE_W, body.workflowPatch) : BASE_W);
             PERMISSIONS = body.operatorPermissions || opts.permissions || ALL_PERMISSIONS;
             rolesOverride = body.operatorRoles || null;
             load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);
             // Схема сменилась — для клиентов это новая схема: пусть перечитают (BUG-34)
             if (W !== before) emit("workflow.schema_published", null, null, { schemaVersion: W.schema.version });
+            // Справочник приоритетов сменился — так же (§2.5, RULE-68)
+            if (JSON.stringify(PRIORITIES) !== prioritiesBefore) emit("reference.priorities_changed", null, null, {});
             return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
           },
         ],

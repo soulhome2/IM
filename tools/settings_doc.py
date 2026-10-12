@@ -9,6 +9,9 @@ import os
 # Подписи из машины — ключами (§14.9): текст берётся из русского каталога строк
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
     RU = json.load(_f)
+# Приоритеты — справочник МИ, не схема (§2.5, RULE-68): названия уровней для нормативов по приоритету
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as _f:
+    PRIORITY_NAMES = {str(p["value"]): p["name"]["ru"] for p in json.load(_f).get("priorities", [])}
 
 
 def at(w, path):
@@ -79,17 +82,14 @@ def element(x, sec):
     if "sec" in x:
         cond = ", ".join(f"{word(k)} = {word(str(v))}" for k, v in x.items() if k != "sec")
         return f"{cond}: {duration(x['sec'])}"
-    # Приоритет с цветом полоски очереди (BUG-39): «Критический — цвет: красный»
-    # Markdown не рисует произвольный цвет — квадратик-эмодзи того же оттенка рядом со словом
-    SWATCH = {"red": "🟥", "amber": "🟧", "blue": "🟦", "grey": "⬜"}
-    color = f" — цвет: {SWATCH.get(x['color'], '')} {word(x['color'])}" if "color" in x else ""
-    return head + (f" ({', '.join(extra)})" if extra else "") + color
+    return head + (f" ({', '.join(extra)})" if extra else "")
 
 
 def render(w):
     a = w["adminSettings"]
     LABELS.clear()
     LABELS.update({k: RU.get(v, v) for k, v in a.get("valueLabels", {}).items() if not k.startswith("$")})
+    LABELS.update(PRIORITY_NAMES)
     out = [
         "# Настройки администратора",
         "",

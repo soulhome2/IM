@@ -121,10 +121,6 @@
   "workflow.timer.reaction": "Reaction",
   "workflow.timer.resolution": "Resolution",
   "workflow.timer.hold": "Hold time limit",
-  "workflow.priority.critical": "Critical",
-  "workflow.priority.high": "High",
-  "workflow.priority.medium": "Medium",
-  "workflow.priority.low": "Low",
   "workflow.priority.color.red": "Red",
   "workflow.priority.color.amber": "Amber",
   "workflow.priority.color.blue": "Blue",
@@ -344,6 +340,8 @@
   "workflow.settings.queueSort.default.value.reaction_deadline": "By time left before the reaction target is breached",
   "workflow.settings.queueSort.operatorMayChange": "Operator may change the order",
   "workflow.settings.queueSort.operatorMayChange.what": "Choose a different order from the list",
+  "workflow.settings.tab.priorities": "Priorities",
+  "workflow.settings.tab.priorities.what": "Urgency levels: a number from 0 to 100 (higher is more urgent), name, description and queue stripe color. An IM reference shared by all schemas",
   "workflow.settings.tab.access_groups": "Access groups",
   "workflow.settings.tab.access_groups.what": "Which device groups and devices are available to which roles: an operator sees only incidents of available objects",
   "workflow.settings.tab.duty_groups": "Duty groups",
@@ -367,8 +365,6 @@
   "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
   "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold",
   "workflow.journal.timer_overridden": "Target «{timer}» expired — the operator acted before «{transition}»",
-  "workflow.settings.priorities.items": "Priorities",
-  "workflow.settings.priorities.items.what": "Importance order and queue-stripe color for each priority",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Window after the deadline",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "How long after a deadline to wait for the operator before the timer transition fires; an action in this window wins (§10.1)"
 }

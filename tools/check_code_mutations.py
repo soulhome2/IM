@@ -126,7 +126,7 @@ MUTATIONS = [
     ("reopen-window-rounded", "engine.js", "now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000", "Math.round((now() - (ev.closedAt || 0)) / 60000) <= W.limits.reopenWindowMin", "api"),
     ("queue-not-sorted", "server.js", "}).sort((a, b) => ORDERS[sortOf(q)](a, b) || byNumber(a, b));", "});", "api"),
     ("queue-sort-always-open", "server.js", "return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;", "return s.options.includes(asked) ? asked : s.default;", "api"),
-    ("queue-filters-ignored", "server.js", "if (q.priority && e.priority !== q.priority) return false;", "", "api"),
+    ("queue-filters-ignored", "server.js", 'if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;', "", "api"),
     ("strings-no-fallback", "server.js", "const strings = Object.assign({}, STRINGS.ru || {}, STRINGS[locale] || {});", "const strings = STRINGS[locale] || {};", "api"),
     ("ui-catalog-ignored", "app.js", "if (catalog[ru] != null) return icu(catalog[ru], vars || {});", "", "ui"),
     ("journal-left-phrase", "server.js", 'log(ev, "dispatcher", "workflow.journal.group.left");', 'log(ev, "dispatcher", "Вышел из групповой обработки");', "api"),
@@ -161,7 +161,7 @@ MUTATIONS = [
     ("schema-published-silent", "server.js", 'if (W !== before) emit("workflow.schema_published"', 'if (false) emit("workflow.schema_published"', "api"),
     # Цвет полоски очереди — из настройки приоритета, не свой в коде (§1, §4, BUG-39)
     ("ui-priority-color-ignored", "app.js", 'data-color="${escapeHtml(PRIORITIES[e.priority].color)}"', 'data-color="red"', "ui"),
-    ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n              label: lbl(PRIORITIES[e.priority]),\n            })}"', "", "ui"),
+    ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n              label: inLang(PRIORITIES[e.priority].name),\n            })}"', "", "ui"),
 ]
 
 

@@ -121,10 +121,6 @@
   "workflow.timer.reaction": "Реакция",
   "workflow.timer.resolution": "Закрытие",
   "workflow.timer.hold": "Предельный срок удержания",
-  "workflow.priority.critical": "Критический",
-  "workflow.priority.high": "Высокий",
-  "workflow.priority.medium": "Средний",
-  "workflow.priority.low": "Низкий",
   "workflow.priority.color.red": "Красный",
   "workflow.priority.color.amber": "Янтарный",
   "workflow.priority.color.blue": "Синий",
@@ -344,6 +340,8 @@
   "workflow.settings.queueSort.default.value.reaction_deadline": "По времени до нарушения норматива реакции",
   "workflow.settings.queueSort.operatorMayChange": "Оператор может менять порядок",
   "workflow.settings.queueSort.operatorMayChange.what": "Выбрать себе другой порядок из списка",
+  "workflow.settings.tab.priorities": "Приоритеты",
+  "workflow.settings.tab.priorities.what": "Уровни срочности: число от 0 до 100 (больше — срочнее), название, описание и цвет полоски в очереди. Справочник МИ, общий для всех схем",
   "workflow.settings.tab.access_groups": "Группы доступа",
   "workflow.settings.tab.access_groups.what": "Каким ролям какие группы устройств и устройства доступны: оператор видит только инциденты доступных объектов",
   "workflow.settings.tab.duty_groups": "Дежурные группы",
@@ -367,8 +365,6 @@
   "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
   "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой",
   "workflow.journal.timer_overridden": "Норматив «{timer}» истёк — действие оператора успело раньше, чем «{transition}»",
-  "workflow.settings.priorities.items": "Приоритеты",
-  "workflow.settings.priorities.items.what": "Порядок важности и цвет полоски очереди для каждого приоритета (BUG-39)",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Окно после дедлайна",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "Сколько после дедлайна ждать действия оператора, прежде чем сработает переход по таймеру; действие в это окно выигрывает (§10.1)"
 }

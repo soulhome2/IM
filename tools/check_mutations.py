@@ -112,7 +112,7 @@ MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
     ("from", "«Отложить» ни из какого состояния", lambda w: transition(w, "hold").update({"from": []})),
     ("limit", "лимит активных 1 → 2", lambda w: w["limits"].update(maxActive=2)),
-    ("norm", "норматив реакции критического 4 → 10 мин", lambda w: reaction_override(w, "critical").update(sec=600)),
+    ("norm", "норматив реакции критического 4 → 10 мин", lambda w: reaction_override(w, 100).update(sec=600)),
     (
         "surfaces",
         "«Ложная тревога» предлагается и из очереди",

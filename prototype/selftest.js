@@ -1055,7 +1055,8 @@
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const byGuid = Object.fromEntries((await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.map((e) => [e.guid, e.priority]));
-      const byPriority = Object.fromEntries(window.IM_WORKFLOW.priorities.items.map((p) => [p.id, p]));
+      // Справочник приоритетов — справочник МИ, не схема (§2.5, RULE-68)
+      const byPriority = Object.fromEntries((await stand.get("/operator/reference/priorities")).map((p) => [p.value, p]));
       await setFilter("all");
       const missing = new Set();
       const wrongColor = new Set();
@@ -1068,10 +1069,10 @@
           const el = row.querySelector(".event-pri");
           const priority = byPriority[byGuid[row.dataset.id]];
           const bg = getComputedStyle(el).backgroundColor;
-          if (bg === "transparent" || bg === "rgba(0, 0, 0, 0)") missing.add(priority.id);
+          if (bg === "transparent" || bg === "rgba(0, 0, 0, 0)") missing.add(priority.value);
           // Цвет строки — тот, что настроен для её приоритета в машине, не свой в коде интерфейса
-          if (el.dataset.color !== priority.color) wrongColor.add(`${priority.id}: ${el.dataset.color} ≠ ${priority.color}`);
-          if (!el.getAttribute("aria-label")) noLabel.add(priority.id);
+          if (el.dataset.color !== priority.color) wrongColor.add(`${priority.value}: ${el.dataset.color} ≠ ${priority.color}`);
+          if (!el.getAttribute("aria-label")) noLabel.add(priority.value);
         });
       }
       await setFilter("open");
@@ -1132,10 +1133,11 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
       const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
-      const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: "critical", deviceIds: [source], site: fire.site, location: "selftest" });
+      const top = Math.max(...window.IM_FIXTURE.priorities.map((p) => p.value));
+      const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source], site: fire.site, location: "selftest" });
       expect(created.status === 201, `инцидент не появился: ${created.status}`);
       const number = created.body.number;
-      const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+      const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === top).sec;
       await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
       const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
       await stand.raw("POST", "/test/clock", { advanceSec: norm + grace + 1 });

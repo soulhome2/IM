@@ -206,7 +206,8 @@
   }
 
   // Операции контракта, которые тесты не обязаны вызывать: редактор схемы — вне прототипа
-  const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas/;
+  // Редактор схемы и правка справочника приоритетов — вне прототипа (§14.8, §2.5)
+  const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/priorities/;
 
   // Отчёт: строки в <pre id="apitest-log"> и в консоль, итог — атрибут data-apitest.
   // С ?report=/адрес — ещё и POST туда: так его забирает tools/check_loopback.py
@@ -283,7 +284,7 @@
       failed += 1;
       lines.push(`FAIL  Каждая операция контракта покрыта тестами — без тестов: ${uncovered.join(", ")}`);
     } else lines.push(`PASS  Каждая операция контракта покрыта тестами — ${ops.length - ops.filter((op) => NOT_COVERED.test(op)).length} операций`);
-    lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы вне прототипа`);
+    lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы и правка справочника приоритетов вне прототипа`);
     const total = tests.length + 2;
     const summary = failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`;
     finish(lines, summary, failed);

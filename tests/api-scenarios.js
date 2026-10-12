@@ -20,8 +20,12 @@
   // Инцидента с таким идентификатором нет: формат верный, записи нет
   const UNKNOWN = "10000000-0000-4000-8000-000000000000";
 
-  // Новое критическое событие пожара — их в демо два, однотипная пара для группы (§11)
-  const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical");
+  // Справочник приоритетов (§2.5) — данные набора: уровни по числу, первым — самый срочный. Тесты не
+  // знают уровни по имени: берут их из справочника
+  const LEVELS = window.IM_FIXTURE.priorities.map((p) => p.value).sort((a, b) => b - a);
+  const TOP = LEVELS[0];
+  // Новое событие пожара самого срочного уровня — их в демо два, однотипная пара для группы (§11)
+  const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP);
 
   /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
 
@@ -163,7 +167,7 @@
     assert.eq(res.body.incident.timer.id, "reaction", "снова идёт реакция");
     const again = await env.act(inc.guid, "claim", {}, "queue");
     const left = Date.parse(again.body.incident.timer.dueAt) - env.now;
-    const full = W.timers.find((x) => x.id === "resolution").byPriority.critical * 1000;
+    const full = W.timers.find((x) => x.id === "resolution").byPriority[TOP] * 1000;
     assert.ok(left <= full - 119000, `норматив закрытия продолжен: осталось ${left} из ${full}`);
   });
 
@@ -641,7 +645,7 @@
   test("Автоэскалация по уровням и потолок: адресаты уровней, затем нарушение реакции без новой передачи", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
-    const reactionSec = W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+    const reactionSec = W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === TOP).sec;
     await env.advance(reactionSec + GRACE + 1);
     let c = await env.card(inc.guid);
     const levels = W.escalation.levels;
@@ -667,14 +671,14 @@
       patch(w);
       const api = (await standWith({ workflow: w })).api;
       const fire = (await api.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find(
-        (e) => e.state === "new" && e.eventType.id === "fire" && e.priority === "critical"
+        (e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP
       );
       const etag = (await api.raw("GET", `/operator/incidents/${enc(fire.guid)}`)).headers.etag;
       const claimed = await api.raw("POST", `/operator/incidents/${enc(fire.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag });
       assert.status(claimed, 200, null, "взять");
       // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat. Ровно до
       // истечения норматива критического пожара: дальше по времени пошла бы уже реакция уровня (RULE-41)
-      let left = w.timers.find((t) => t.id === "resolution").byPriority.critical + GRACE + 1;
+      let left = w.timers.find((t) => t.id === "resolution").byPriority[TOP] + GRACE + 1;
       const fired = [];
       while (left > 0) {
         const step = Math.min(left, w.session.idleHoldSec - 1);
@@ -1018,19 +1022,19 @@
     const source = (await env.card(fire.guid)).source.guid;
     // Событие у источника — час назад: норматив реакции всё равно от появления в МИ
     const occurredAt = new Date(Date.parse(fire.occurredAt) - 3600 * 1000).toISOString();
-    const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: "critical", deviceIds: [source], site: fire.site, location: "тест", occurredAt });
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: fire.site, location: "тест", occurredAt });
     assert.status(res, 201, null, "появился");
     const c = res.body;
     assert.eq([c.state, c.owner, c.assignmentGroup, c.escalationLevel], ["new", null, null, 0], "новый, ничей, уровень 0");
     assert.ok(Date.parse(c.createdAt) > Date.parse(c.occurredAt), "время появления позже времени события");
-    const norm = W.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === "critical").sec;
+    const norm = W.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === TOP).sec;
     assert.ok(c.timer && c.timer.id === "reaction" && c.timer.running, "идёт норматив реакции");
     assert.eq(Date.parse(c.timer.dueAt) - Date.parse(c.createdAt), norm * 1000, "норматив реакции — от появления, а не от времени события");
     assert.eq(lastJournal(c).templateKey, "workflow.journal.create", "запись в журнале");
     assert.ok((await env.all("open")).some((e) => e.guid === c.guid), "в очереди");
     await new Promise((r) => setTimeout(r, 300));
     assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === c.guid), "событие потока incident.created");
-    assert.status(await env.call("POST", "/test/incidents", { eventTypeId: "nope", priority: "critical", deviceIds: [source] }), 422, null, "неизвестный тип");
+    assert.status(await env.call("POST", "/test/incidents", { eventTypeId: "nope", priority: TOP, deviceIds: [source] }), 422, null, "неизвестный тип");
     stop();
   });
 
@@ -1107,7 +1111,8 @@
   /* ===== Порядок очереди (§7, RULE-62) ===== */
 
   const queueOf = async (env, query) => (await env.ok("GET", `/operator/incidents?filter=all&pageSize=1000${query || ""}`)).items;
-  const rankOf = (inc) => W.priorities.items.findIndex((p) => p.id === inc.priority);
+  // Больше число — выше (§2.5, §7)
+  const rankOf = (inc) => -inc.priority;
   const num = (inc) => Number(inc.number.replace(/\D/g, ""));
   const at = (inc) => Date.parse(inc.occurredAt);
   const running = (inc) => Boolean(inc.timer && inc.timer.id === "reaction" && inc.timer.running);
@@ -1144,8 +1149,8 @@
   test("Фильтры очереди по приоритету и состоянию (RULE-62)", async () => {
     const env = await makeEnv();
     const all = await queueOf(env);
-    const high = await queueOf(env, "&priority=high");
-    assert.ok(high.length && high.every((i) => i.priority === "high") && high.length === all.filter((i) => i.priority === "high").length, "только высокий");
+    const high = await queueOf(env, `&priority=${LEVELS[1]}`);
+    assert.ok(high.length && high.every((i) => i.priority === LEVELS[1]) && high.length === all.filter((i) => i.priority === LEVELS[1]).length, "только второй по срочности");
     const states = await queueOf(env, "&state=new,on_hold");
     assert.ok(states.length && states.every((i) => ["new", "on_hold"].includes(i.state)) && states.length === all.filter((i) => ["new", "on_hold"].includes(i.state)).length, "только новые и отложенные");
   });
@@ -1268,7 +1273,8 @@
     const devices = await env.ok("GET", "/operator/reference/device-types");
     assert.ok(devices.some((x) => x.id === "camera") && devices.every((x) => x.label), "типы устройств");
     const priorities = await env.ok("GET", "/operator/reference/priorities");
-    assert.eq(priorities.map((x) => x.id), ["critical", "high", "medium", "low"], "приоритеты");
+    assert.eq(priorities.map((x) => x.value), LEVELS, "приоритеты — по убыванию числа");
+    assert.ok(priorities.every((x) => x.name.ru && x.color), "у каждого — название и цвет");
   });
 
   test("Настройки оператора: предвыбор адресата меняет значение по умолчанию в форме передачи (§8.2)", async () => {
@@ -1371,7 +1377,7 @@
     walk(tree);
     assert.ok(tree.length > 0 && treeDevices.every((d) => allowed.has(d)), `дерево групп — только доступные устройства: ${tree.map((n) => n.name)}`);
     // Время идёт: недоступные новые эскалируются, но в поток о них ничего не приходит
-    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + GRACE + 1);
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === TOP).sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     assert.ok(got.length > 0, "события о доступных пришли");
@@ -1589,7 +1595,7 @@
     const got = [];
     const stop = env.api.subscribe((m, meta) => got.push({ m, meta }));
     const inc = await newFire(env);
-    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === "critical").sec + GRACE + 1);
+    await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === TOP).sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
     const found = got.find(({ m }) => m.type === "incident.transitioned" && m.incidentGuid === inc.guid && m.payload.transitionId === "auto_escalate");
