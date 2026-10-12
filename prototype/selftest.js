@@ -828,6 +828,12 @@
       expect(overdue && overdue.cells[1].textContent.trim() === expected, `«Просрочка закрытия»: «${overdue && overdue.cells[1].textContent.trim()}» вместо «${expected}»`);
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
       expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
+      // Связи камер многие-ко-многим (§19.1, RULE-70): название, устройства, камеры — как в наборе
+      await click($("adminTabs").querySelector('[data-admin-tab="camera_links"]'));
+      const multi = window.IM_FIXTURE.cameraLinks.find((l) => l.devices.length > 1);
+      const linkRow = [...$("adminTable").querySelectorAll("tbody tr")].find((r) => r.cells[0].textContent.trim() === multi.name);
+      expect(linkRow, `связи «${multi.name}» нет во вкладке`);
+      expect(linkRow.cells.length === 3 && linkRow.cells[1].textContent.split(", ").length === multi.devices.length, `у связи «${multi.name}» не ${multi.devices.length} устройства`);
       await click(document.querySelector('[data-close="modalAdmin"]'));
       expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });

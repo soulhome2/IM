@@ -474,6 +474,37 @@
     assert.status(await (await makeEnv({ permissions: all })).call("GET", "/operator/admin/camera-links"), 403, "PERMISSION_DENIED", "без права");
   });
 
+  test("Связи камер многие-ко-многим (§19.1, RULE-70): камеры инцидента — из всех связей источника без повторов, по порядку связей; связи других устройств события не добавляют", async () => {
+    const fx = window.IM_FIXTURE;
+    // Камеры, доступные оператору стенда, — из ответов …/media эталонного набора
+    const base = await makeEnv();
+    const cams = [];
+    for (const i of fx.incidents) {
+      for (const c of (await base.ok("GET", `/operator/incidents/${enc(i.guid)}/media`)).cameras) if (!cams.includes(c.guid)) cams.push(c.guid);
+      if (cams.length >= 4) break;
+    }
+    const [A, B, C, D] = cams;
+    // Инцидент с источником и ещё одним устройством события
+    const inc = fx.incidents.find((i) => i.devices.length > 1);
+    const [S, O] = inc.devices;
+    const other = fx.incidents.find((i) => i.devices[0] !== S && i.devices[0] !== O);
+    const link = (n, devices, cameras) => ({ id: `b0000000-0000-4000-8000-0000000000a${n}`, name: `Связь ${n}`, devices, cameras });
+    const X = link(1, [S], [A, B]);
+    const Y = link(2, [S], [B, C]);
+    const Z = link(3, [O], [D]);
+    const camerasOf = async (env, guid) => (await env.ok("GET", `/operator/incidents/${enc(guid)}/media`)).cameras.map((c) => c.guid);
+
+    const env = await makeEnv({ fixturePatch: { cameraLinks: [X, Y, Z] } });
+    assert.eq(await camerasOf(env, inc.guid), [A, B, C], "две связи источника: общая камера — один раз, главная — первая камера первой связи; связь другого устройства события — не добавляет");
+    assert.eq(await camerasOf(env, other.guid), [], "источник ни в одной связи — без камер");
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: inc.eventType.id, priority: TOP, deviceIds: [S, O], site: inc.site, location: "тест" });
+    assert.status(res, 201, null, "появился");
+    assert.eq(await camerasOf(env, res.body.guid), [A, B, C], "появившийся инцидент — камеры из связей источника");
+
+    const swapped = await makeEnv({ fixturePatch: { cameraLinks: [Y, X, Z] } });
+    assert.eq(await camerasOf(swapped, inc.guid), [B, C, A], "порядок связей в списке задаёт порядок камер и главную");
+  });
+
   test("Справочные ссылки (§7, RULE-49): без площадки — все, с площадкой — общие и этой площадки", async () => {
     const env = await makeEnv();
     const fx = window.IM_FIXTURE.helpLinks;
