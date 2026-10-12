@@ -1001,8 +1001,9 @@
         const anchor = find(body.anchorIncidentGuid) || pool.find(groupable);
         list = anchor ? pool.filter((e) => groupable(e) && e.typeId === anchor.typeId) : [];
       }
-      const truncated = body.mode !== "explicit" && list.length > max;
-      if (body.mode !== "explicit") list = list.slice(0, max);
+      // null — без ограничения (§11, RULE-69)
+      const truncated = body.mode !== "explicit" && max != null && list.length > max;
+      if (truncated) list = list.slice(0, max);
       return { incidentGuids: list.map((e) => e.id), truncated, actions: selectionActions(list) };
     }
 
@@ -1063,6 +1064,8 @@
         "/operator/incidents/transitions/{transitionId}/bulk",
         (p, q, body) => {
           const guids = body.incidentGuids || [];
+          // Лимит выборки проверяет сервер, а не только интерфейс (§11, BUG-40); null — без ограничения
+          if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
           const list = guids.map(find).filter(Boolean);
           if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_empty"]);
           const succeeded = [];

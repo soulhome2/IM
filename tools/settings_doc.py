@@ -109,7 +109,8 @@ def render(w):
                 seconds = item["path"].startswith("timers.")
                 current = at(w, item["path"])
                 values = item.get("values", {})
-                shown = RU.get(values[current], values[current]) if isinstance(current, str) and current in values else value(current, key, seconds)
+                # nullKey — подпись пустого значения, например «без ограничения» (RULE-69)
+                shown = RU.get(item["nullKey"], item["nullKey"]) if current is None and item.get("nullKey") else RU.get(values[current], values[current]) if isinstance(current, str) and current in values else value(current, key, seconds)
                 out.append(f"| {RU.get(item.get('labelKey'), item.get('label'))} | {RU.get(item.get('whatKey'), item.get('what'))} | {shown} | `{item['path']}` |")
         else:
             src = f"читается запросом `{tab['source']}`" if tab.get("source") else "запроса в контракте пока нет"

@@ -75,6 +75,7 @@ window.IM_DICT_UI = {
     "АРХИВ": "ARCHIVE",
     "{n, plural, one {Будет закрыто # событие} few {Будут закрыты # события} other {Будут закрыты # событий}} без сценария. Одна причина на всю выборку.": "{n, plural, one {# event will be closed} other {# events will be closed}} without the scenario. One reason for the whole selection.",
     "В очереди: {n} · у меня: {a} из {max}, отложено: {h}": "Queue: {n} · mine: {a} of {max}, on hold: {h}",
+    "В очереди: {n} · у меня: {a}, отложено: {h}": "Queue: {n} · mine: {a}, on hold: {h}",
     "В работе": "In progress",
     "Вам на принятие": "For you to accept",
     "Вернуть": "Return",

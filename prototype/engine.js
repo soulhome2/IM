@@ -219,7 +219,9 @@
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
       agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["workflow.guard.agent_online"]),
       // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
+      // Лимит null — без ограничения (§10.2, RULE-69)
       withinActiveLimit: (ev, [extra = 0]) => {
+        if (W.limits.maxActive == null) return null;
         const u = units("in_progress", ev);
         if (u.size + extra < W.limits.maxActive) return null;
         if (extra) return ["workflow.guard.active_limit_extra", { n: W.limits.maxActive }];
@@ -228,7 +230,7 @@
         return ["workflow.guard.active_limit", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
       },
       withinHoldLimit: (ev) =>
-        units("on_hold", ev).size < W.limits.maxOnHold ? null : ["workflow.guard.hold_limit", { n: W.limits.maxOnHold }],
+        W.limits.maxOnHold == null || units("on_hold", ev).size < W.limits.maxOnHold ? null : ["workflow.guard.hold_limit", { n: W.limits.maxOnHold }],
       // Точно, без округления до минуты (BUG-31): «не больше reopenWindowMin минут»
       withinReopenWindow: (ev) =>
         now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000

@@ -2975,7 +2975,7 @@ window.IM_WORKFLOW = {
     "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
   "limits": {
-    "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда.",
+    "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1.",
     "maxActive": 1,
     "maxOnHold": 5,
     "maxBulk": 10,
@@ -3565,6 +3565,11 @@ window.IM_WORKFLOW = {
     },
     "workflow.error.selection_empty": {
       "vars": []
+    },
+    "workflow.error.selection_too_large": {
+      "vars": [
+        "n"
+      ]
     },
     "workflow.error.not_found": {
       "vars": []
@@ -4224,17 +4229,20 @@ window.IM_WORKFLOW = {
           {
             "path": "limits.maxActive",
             "labelKey": "workflow.settings.limits.maxActive",
-            "whatKey": "workflow.settings.limits.maxActive.what"
+            "whatKey": "workflow.settings.limits.maxActive.what",
+            "nullKey": "workflow.settings.unlimited"
           },
           {
             "path": "limits.maxOnHold",
             "labelKey": "workflow.settings.limits.maxOnHold",
-            "whatKey": "workflow.settings.limits.maxOnHold.what"
+            "whatKey": "workflow.settings.limits.maxOnHold.what",
+            "nullKey": "workflow.settings.unlimited"
           },
           {
             "path": "limits.maxBulk",
             "labelKey": "workflow.settings.limits.maxBulk",
-            "whatKey": "workflow.settings.limits.maxBulk.what"
+            "whatKey": "workflow.settings.limits.maxBulk.what",
+            "nullKey": "workflow.settings.unlimited"
           }
         ]
       },

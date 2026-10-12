@@ -1643,7 +1643,8 @@
   }
 
   // Чекбокс на любом событии очереди; смешанные типы можно набирать вручную (§11)
-  const bulkEligible = (ev) => state.checked.has(ev.guid) || state.checked.size < LIMITS.maxBulk;
+  // Лимит выборки null — без ограничения (§11, RULE-69)
+  const bulkEligible = (ev) => state.checked.has(ev.guid) || LIMITS.maxBulk == null || state.checked.size < LIMITS.maxBulk;
   const groupChip = (ev) =>
     ev.groupGuid
       ? `<span class="chip grp" title="${te("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: ev.groupSize })}">${te("группа")}</span>`
@@ -2157,12 +2158,10 @@
   function renderStatus() {
     const ev = selected();
     const usage = store.session ? store.session.usage : { activeCount: 0, onHoldCount: 0 };
-    $("statusQueue").textContent = t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", {
-      n: store.counters.open || 0,
-      a: usage.activeCount,
-      max: LIMITS.maxActive,
-      h: usage.onHoldCount,
-    });
+    // Лимит «в работе» снят — без «из N» (§10.2, RULE-69)
+    const queueVars = { n: store.counters.open || 0, a: usage.activeCount, max: LIMITS.maxActive, h: usage.onHoldCount };
+    $("statusQueue").textContent =
+      LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", queueVars);
     if (!ev) {
       $("statusIncident").textContent = t("Очередь ожидает выбора события");
       $("statusSteps").textContent = "";
@@ -2582,7 +2581,7 @@
       if (check) {
         const id = check.dataset.check;
         if (state.checked.has(id)) state.checked.delete(id);
-        else if (state.checked.size >= LIMITS.maxBulk) {
+        else if (LIMITS.maxBulk != null && state.checked.size >= LIMITS.maxBulk) {
           toast(t("Не больше {max} событий в выборке", { max: LIMITS.maxBulk }));
           return;
         } else state.checked.add(id);
@@ -2960,9 +2959,10 @@
     const target = targetById(id);
     return (group && group.name) || (target && target.name) || id;
   }
-  function fmtSetting(v, key, seconds, values) {
+  // nullKey — подпись пустого значения у строки настроек, например «без ограничения» (RULE-69)
+  function fmtSetting(v, key, seconds, values, nullKey) {
     const sec = seconds || /Sec$/.test(key);
-    if (v == null) return "—";
+    if (v == null) return nullKey ? te(nullKey) : "—";
     if (values && typeof v === "string" && values[v]) return te(values[v]);
     if (typeof v === "boolean") return te(v ? "да" : "нет");
     if (typeof v === "number") return /Min(utes)?$/.test(key) ? fmtDuration(v * 60) : sec ? fmtDuration(v) : String(v);
@@ -3007,7 +3007,7 @@
       table.innerHTML =
         `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>` +
         tab.items
-          .map((item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values)}</td></tr>`)
+          .map((item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`)
           .join("") +
         "</tbody>";
       return;
