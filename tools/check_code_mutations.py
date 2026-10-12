@@ -105,7 +105,7 @@ MUTATIONS = [
     ("reset-ignores-fixture-patch", "server.js", "load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);", "load(FIXTURE);", "api"),
     ("help-links-ignore-site", "server.js", "q.site == null || l.site == null || l.site === q.site", "true", "api"),
     ("help-menu-without-site", "app.js", 'ev && ev.site ? { site: ev.site } : {}', "{}", "ui"),
-    ("cameras-not-from-links", "server.js", "cameras: (CAMERA_LINKS.find((l) => l.device === inc.devices[0]) || { cameras: [] }).cameras.slice(),", "cameras: (CAMERA_LINKS[0] || { cameras: [] }).cameras.slice(),", "api"),
+    ("cameras-not-from-links", "server.js", "cameras: camerasOf(inc.devices[0]),", "cameras: CAMERA_LINKS[0].cameras.slice(),", "api"),
     ("expired-resolution-refires", "engine.js", "if (left === 0 && fired) {", "if (false) {", "api"),
     ("cannot-accept-ignored", "engine.js", "return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : [\"workflow.guard.addressee_can_accept\"];", "return [\"workflow.guard.addressee_can_accept\"];", "api"),
     ("lost-access-ignored", "engine.js", "return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"workflow.guard.addressee_access\"];", "return [\"workflow.guard.addressee_access\"];", "api"),

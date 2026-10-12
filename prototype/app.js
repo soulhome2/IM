@@ -3045,8 +3045,8 @@
         data.map((p) => `<tr><td>${p.value}</td><td>${asData(inLang(p.name))}<span class="what">${asData(inLang(p.description))}</span></td><td><span class="event-pri swatch" data-color="${escapeHtml(p.color)}"></span> ${word(p.color)}</td></tr>`),
       ],
       "/operator/admin/camera-links": () => [
-        ["Устройство", "Камеры по порядку"],
-        data.map((l) => `<tr><td>${asData(l.device.name)}</td><td>${asData(l.cameras.map((c) => c.name).join(", ") || "—")}</td></tr>`),
+        ["Связь", "Устройства", "Камеры по порядку"],
+        data.map((l) => `<tr><td>${asData(l.name)}</td><td>${names(l.devices)}</td><td>${names(l.cameras)}</td></tr>`),
       ],
       "/operator/reference/source-groups": () => {
         const out = [];

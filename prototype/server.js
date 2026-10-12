@@ -72,8 +72,11 @@
     }
     // Справочные ссылки меню справки (§7): общие и ссылки площадки — справочник администратора
     let HELP_LINKS = [];
-    // Связи камер (§19.1): устройство → камеры по порядку показа. Камеры инцидента — связь его источника
+    // Связи камер (§19.1, RULE-70): многие-ко-многим — название, устройства, камеры по порядку показа
     let CAMERA_LINKS = [];
+    // Камеры источника: из всех связей, где он есть, — связи по порядку списка, камеры по порядку
+    // связи, без повторов; первая — главная
+    const camerasOf = (source) => [...new Set(CAMERA_LINKS.filter((l) => l.devices.includes(source)).flatMap((l) => l.cameras))];
     // Роли и их права — как их отдаёт основная система (§5): по ним известны права всех людей
     let ROLE_RIGHTS = {};
     let rolesOverride = null;
@@ -346,7 +349,7 @@
         location: inc.location,
         occurredAt: abs(inc.occurredAt),
         deviceIds: inc.devices,
-        cameras: (CAMERA_LINKS.find((l) => l.device === inc.devices[0]) || { cameras: [] }).cameras.slice(),
+        cameras: camerasOf(inc.devices[0]),
         media: inc.media,
         state: inc.state,
         owner: inc.owner,
@@ -1292,7 +1295,7 @@
         () => {
           if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
           const named = (id) => ({ guid: id, name: deviceSpec(id).name });
-          return { status: 200, body: CAMERA_LINKS.map((l) => ({ device: named(l.device), cameras: l.cameras.map(named) })) };
+          return { status: 200, body: CAMERA_LINKS.map((l) => ({ guid: l.id, name: l.name, devices: l.devices.map(named), cameras: l.cameras.map(named) })) };
         },
       ],
       [
@@ -1355,7 +1358,7 @@
         occurredAt: spec.occurredAt ? Date.parse(spec.occurredAt) : now(),
         createdAt: now(),
         deviceIds: devices.slice(),
-        cameras: (CAMERA_LINKS.find((l) => l.device === devices[0]) || { cameras: [] }).cameras.slice(),
+        cameras: camerasOf(devices[0]),
         state: null,
         owner: null,
         assignmentGroup: null,

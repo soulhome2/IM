@@ -234,6 +234,7 @@ def check_fixture(w, err):
     entities += [("план", p["id"]) for p in fx.get("plans", [])]
     entities += [("сценарий", v.get("guid")) for k, v in fx["scenarios"].items() if not k.startswith("$")]
     entities += [("группа доступа", a.get("id")) for a in fx.get("accessGroups", [])]
+    entities += [("связь камер", l.get("id")) for l in fx.get("cameraLinks", [])]
     # Группы доступа (§5): роли, группы устройств и устройства существуют
     group_ids = set(node_ids(fx["sourceGroups"]))
     for a in fx.get("accessGroups", []):
@@ -245,18 +246,24 @@ def check_fixture(w, err):
         for d in a.get("devices", []):
             if d not in devices:
                 err.append(f"эталон: группа доступа «{a.get('name')}» — нет устройства {d}")
-    # Связи камер (§19.1, RULE-49): устройство и камеры существуют, в связи — только камеры, у
-    # устройства связь одна; у инцидента своих камер нет — они из связи его источника
-    linked = [l["device"] for l in fx.get("cameraLinks", [])]
+    # Связи камер (§19.1, RULE-49, RULE-70): многие-ко-многим — у связи название, хотя бы одно устройство
+    # и одна камера, устройства существуют, в cameras — только камеры набора, без повторов внутри связи;
+    # у инцидента своих камер нет — они из связей его источника
     for link in fx.get("cameraLinks", []):
-        if link["device"] not in devices:
-            err.append(f"эталон: связь камер — нет устройства {link['device']}")
-        for cam in link["cameras"]:
+        name = link.get("name") or link.get("id")
+        if not link.get("name"):
+            err.append(f"эталон: связь камер {link.get('id')} — без названия")
+        if not link.get("devices") or not link.get("cameras"):
+            err.append(f"эталон: связь камер «{name}» — пустая: нужны хотя бы одно устройство и одна камера")
+        for dev in link.get("devices", []):
+            if dev not in devices:
+                err.append(f"эталон: связь камер «{name}» — нет устройства {dev}")
+        for cam in link.get("cameras", []):
             if cam not in devices or fx_devices[cam].get("type") != "camera":
-                err.append(f"эталон: связь камер устройства {link['device']} — {cam} не камера набора")
-    for dev in set(linked):
-        if linked.count(dev) > 1:
-            err.append(f"эталон: у устройства {dev} несколько связей камер")
+                err.append(f"эталон: связь камер «{name}» — {cam} не камера набора")
+        for key in ("devices", "cameras"):
+            if len(set(link.get(key, []))) != len(link.get(key, [])):
+                err.append(f"эталон: связь камер «{name}» — повтор в {key}")
     for inc in fx["incidents"]:
         if "cameras" in inc:
             err.append(f"эталон: {inc['number']} — камеры инцидента берутся из связей источника (cameraLinks), а не задаются у инцидента")
@@ -282,6 +289,12 @@ def check_fixture(w, err):
     for kind, value in entities:
         if not isinstance(value, str) or not uuid.match(value):
             err.append(f"эталон: {kind} «{value}» — идентификатор не UUID")
+    # Идентификатор связи камер — свой: не повторяется и не совпадает с другой сущностью набора
+    link_ids = [l.get("id") for l in fx.get("cameraLinks", [])]
+    others = {v for k, v in entities if k != "связь камер"}
+    for lid in set(link_ids):
+        if link_ids.count(lid) > 1 or lid in others:
+            err.append(f"эталон: связь камер {lid} — идентификатор не уникален")
     plans = {p["id"] for p in fx.get("plans", [])}
     sites = {i.get("site") for i in fx["incidents"]}
     for p in fx.get("plans", []):
