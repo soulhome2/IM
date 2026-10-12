@@ -2975,7 +2975,7 @@ window.IM_WORKFLOW = {
     "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
   "limits": {
-    "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1.",
+    "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
     "maxActive": 1,
     "maxOnHold": 5,
     "maxBulk": 10,

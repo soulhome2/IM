@@ -848,6 +848,27 @@ def check_priorities(w, o, err):
 
 
 
+
+LIMITS = ("maxActive", "maxOnHold", "maxBulk")
+
+
+def check_limits(w, err):
+    """Лимиты (§10.2, §11, RULE-69): целое от 1 или null — «без ограничения»; 0, отрицательное и дробное —
+    ошибка. Поле записано явно: нет поля тоже значит «без ограничения», и опечатка в имени тихо сняла бы лимит. У их строк в настройках администратора есть nullKey: подпись пустого значения."""
+    for k in LIMITS:
+        if k not in w["limits"]:
+            err.append(f"лимиты: limits.{k} не записан — нет поля значит «без ограничения»; записать явно числом или null (RULE-69)")
+            continue
+        v = w["limits"][k]
+        if not (v is None or (isinstance(v, int) and not isinstance(v, bool) and v >= 1)):
+            err.append(f"лимиты: limits.{k} = {v!r} — нужно целое от 1 или null, «без ограничения» (RULE-69)")
+    items = {i["path"]: i for t in w["adminSettings"]["tabs"] for i in t.get("items", [])}
+    for k in LIMITS:
+        item = items.get(f"limits.{k}")
+        if item is not None and not item.get("nullKey"):
+            err.append(f"лимиты: у настройки limits.{k} нет nullKey — пустое значение покажется «—», а не «без ограничения» (RULE-69)")
+
+
 # Уровень приоритета по имени или сравнение приоритета с числом в коде прототипа (§2.5, RULE-68)
 PRIORITY_NAMES = re.compile(r'"(?:critical|high|medium|low)"')
 PRIORITY_NUMBER = re.compile(r'priority\w*\s*(?:[!=]==?|[<>]=?)\s*\d|\d\s*(?:[!=]==?|[<>]=?)\s*[\w.]*priority\b|\bpriority\s*:\s*\d')
@@ -1153,6 +1174,7 @@ def main():
     check_grouping(w, err)
     check_priorities(w, o, err)
     check_priority_literals(err)
+    check_limits(w, err)
     check_strings(w, err)
     check_fail_keys(w, err)
     check_observer_notice(w, err)

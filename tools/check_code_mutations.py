@@ -165,6 +165,12 @@ MUTATIONS = [
     ("priority-coercion-off", "server.js", "priority: priorityLevel(spec.priority),", "priority: spec.priority,", "api"),
     ("top-priority-fixed", "server.js", "const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);", "const topPriority = () => 100;", "api"),
     ("ui-priorities-not-reloaded", "app.js", 'if (msg.type === "reference.priorities_changed") {', "if (false) {", "ui"),
+    # Лимиты без ограничения (§10.2, §11, RULE-69) и проверка лимита выборки на сервере (BUG-40)
+    ("active-limit-null-blocks", "engine.js", "        if (W.limits.maxActive == null) return null;\n", "", "api"),
+    ("bulk-limit-unchecked", "server.js", "if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(", "if (false) return problem(", "api"),
+    ("selection-truncated-on-null", "server.js", "const max = W.limits.maxBulk;", "const max = W.limits.maxBulk ?? 0;", "api"),
+    ("ui-status-always-of-n", "app.js", 'LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t(', "t(", "ui"),
+    ("ui-null-key-ignored", "app.js", 'if (v == null) return nullKey ? te(nullKey) : "—";', 'if (v == null) return "—";', "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n              label: inLang(PRIORITIES[e.priority].name),\n            })}"', "", "ui"),
 ]
 

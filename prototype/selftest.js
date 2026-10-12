@@ -1180,6 +1180,34 @@
       }
     });
 
+    await step("Лимиты без ограничения: строка состояния без «из N», в настройках — «без ограничения», выборка не обрезается (§10.2, §11, RULE-69)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      // Стенд снимает лимиты — клиент перечитывает схему по workflow.schema_published
+      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { limits: { maxActive: null, maxOnHold: null, maxBulk: null } } });
+      await wait(400);
+      try {
+        const status = $("statusQueue").textContent;
+        expect(/у меня: \d+,/.test(status), `в строке состояния осталось «из N»: ${status}`);
+        await click($("adminBtn"));
+        await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
+        const shown = [...$("adminTable").querySelectorAll("tbody tr")].map((r) => r.cells[1].textContent.trim());
+        await click(document.querySelector('[data-close="modalAdmin"]'));
+        expect(shown.length === 3 && shown.every((v) => v === "без ограничения"), `в настройках: ${shown.join(", ")}`);
+        await click($("selectAllBtn"));
+        await wait(200);
+        const toast = [...$("toasts").children].map((t) => t.textContent).reverse().find((t) => /Выбрано/.test(t)) || "";
+        const n = Number((toast.match(/\d+/) || [0])[0]);
+        expect(n > 10 && !/ из /.test(toast), `«Выбрать все» обрезано лимитом: ${toast}`);
+        await click($("clearSelectionBtn"));
+        return `${status}; настройки: ${shown.join(", ")}; ${toast}`;
+      } finally {
+        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await wait(400);
+        expect(/ из /.test($("statusQueue").textContent), "лимиты вернули — «из N» не вернулось");
+      }
+    });
+
     await step("Другой справочник приоритетов — интерфейс перерисовывается без перезагрузки (§2.5, RULE-68)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const fx = JSON.parse(JSON.stringify(window.IM_FIXTURE));

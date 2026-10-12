@@ -825,6 +825,43 @@
     assert.eq((await env.card(inc.guid)).state, "on_hold", "перерыв отложил сверх лимита");
   });
 
+  test("Лимиты без ограничения (null или нет поля): взять больше одного, отложить больше пяти, выбрать и закрыть больше десяти (§10.2, §11, RULE-69)", async () => {
+    const workflow = JSON.parse(JSON.stringify(W));
+    Object.assign(workflow.limits, { maxActive: null, maxOnHold: null, maxBulk: null });
+    const env = await standWith({ workflow });
+    const news = (await env.all("open")).filter((e) => e.state === "new").slice(0, 3);
+    for (const inc of news) assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, `взять ${inc.number}`);
+    assert.ok((await env.session()).usage.activeCount >= 3, "в работе больше одного");
+    // Отложить сверх прежних пяти: берём и откладываем, пока отложенных не станет на одно больше
+    const target = (W.limits.maxOnHold || 5) + 1;
+    for (let held = (await env.session()).usage.onHoldCount, guard = 0; held < target && guard < 10; guard++) {
+      const inc = await env.find((e) => e.state === "new" || (e.state === "in_progress" && e.ownership === "mine"));
+      if (inc.state === "new") assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+      assert.status(await env.act(inc.guid, "hold", { reasonId: "no_data", comment: "x" }), 200, null, `отложить ${held + 1}-й`);
+      held = (await env.session()).usage.onHoldCount;
+    }
+    assert.ok((await env.session()).usage.onHoldCount >= target, `отложено ${target} и больше`);
+    const all = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
+    assert.ok(all.incidentGuids.length > (W.limits.maxBulk || 10) && !all.truncated, `«Выбрать все» — все ${all.incidentGuids.length}, без обрезки`);
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    const bulk = await env.call("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: all.incidentGuids, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
+    assert.status(bulk, 200, null, "массовое действие на всю выборку");
+    assert.eq(bulk.body.succeeded.length + bulk.body.failed.length, all.incidentGuids.length, "каждый инцидент выборки — в итоге");
+  });
+
+  test("Сервер проверяет лимит выборки: в массовом действии больше maxBulk — 422 целиком (§11, BUG-40)", async () => {
+    const env = await makeEnv();
+    const max = W.limits.maxBulk;
+    const guids = (await env.all("open")).map((e) => e.guid);
+    assert.ok(guids.length > max, "открытых больше лимита");
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    const body = (list) => ({ incidentGuids: list, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
+    const over = await env.call("POST", "/operator/incidents/transitions/close/bulk", body(guids.slice(0, max + 1)));
+    assert.status(over, 422, "BULK_SELECTION_INVALID", `${max + 1} — больше лимита`);
+    assert.eq(over.body.messageKey, "workflow.error.selection_too_large", "причина — размер выборки");
+    assert.status(await env.call("POST", "/operator/incidents/transitions/close/bulk", body(guids.slice(0, max))), 200, null, `${max} — в пределах лимита`);
+  });
+
   /* ===== Группа сценария и выборка (§11) ===== */
 
   test("«Обработать как одно»: оба в работе одной группой, в лимите — одна единица, ответы общие", async () => {
