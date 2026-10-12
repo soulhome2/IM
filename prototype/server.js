@@ -59,6 +59,8 @@
     // Справочник приоритетов (§2.5, RULE-68): уровни по убыванию числа — справочник МИ, общий для
     // всех схем. Код не знает уровни ни по имени, ни по числу
     let PRIORITIES = [];
+    // Шкала приоритета из контракта (Priority: целое 0–100) — границы, а не уровни справочника
+    const SCALE = { min: 0, max: 100 };
     const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);
     // Число от источника → уровень справочника: есть — как есть; нет — ближайший не выше; ниже самого
     // низкого или без числа — самый низкий. Инцидент не кажется срочнее, чем по настройке
@@ -1334,7 +1336,7 @@
     function createIncident(spec) {
       const type = eventTypes().find((t) => t.id === spec.eventTypeId);
       const devices = spec.deviceIds || [];
-      const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= 0 && spec.priority <= 100);
+      const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= SCALE.min && spec.priority <= SCALE.max);
       if (!type || !SCENARIOS[spec.eventTypeId] || !devices.length || badPriority) return null;
       const last = Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0));
       const ev = {

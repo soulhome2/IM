@@ -1180,6 +1180,39 @@
       }
     });
 
+    await step("Другой справочник приоритетов — интерфейс перерисовывается без перезагрузки (§2.5, RULE-68)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const fx = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+      const old = fx.priorities.map((p) => p.value).sort((a, b) => b - a);
+      const levels = [
+        { value: 95, name: { ru: "Угроза", en: "Threat" }, color: "red" },
+        { value: 80, name: { ru: "Повышенный", en: "Elevated" }, color: "red" },
+        { value: 60, name: { ru: "Обычный", en: "Regular" }, color: "amber" },
+        { value: 10, name: { ru: "Информация", en: "Info" }, color: "grey" },
+      ];
+      const remap = Object.fromEntries(old.map((v, i) => [v, levels[i].value]));
+      fx.incidents.forEach((inc) => (inc.priority = remap[inc.priority]));
+      const labels = () => [...$("eventsList").querySelectorAll(".event-pri")].map((el) => el.getAttribute("aria-label"));
+      // Полоски — в очереди: в режиме карточки она скрыта и перерисуется при возврате
+      if (mode() !== "queue") await click($("backToQueue"));
+      const before = labels();
+      // Справочник сменился — клиент получает reference.priorities_changed и перечитывает его
+      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { priorities: levels, incidents: fx.incidents } });
+      await wait(400);
+      try {
+        const names = levels.map((p) => `Приоритет: ${p.name.ru}`);
+        const after = labels();
+        expect(after.length && after.every((l) => names.includes(l)), `подписи полосок не из нового справочника: ${[...new Set(after)].join(", ")}`);
+        const top = document.querySelector(".tree-ev.crit");
+        expect(!top || !top.title || top.title.includes("«Угроза»"), `метка дерева не по самому срочному уровню нового справочника: ${top && top.title}`);
+        return `было: ${[...new Set(before)].join(", ")}; стало: ${[...new Set(after)].join(", ")}`;
+      } finally {
+        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await wait(400);
+        expect(labels().every((l) => before.includes(l)), "справочник вернули — подписи не вернулись");
+      }
+    });
+
     await step("Ответы встроенного сервера соответствуют openapi.json", async () => {
       expect(window.IM_OPENAPI, "контракт openapi.js не подключён");
       const recorded = window.IM_RECORDED || [];

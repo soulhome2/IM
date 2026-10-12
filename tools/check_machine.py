@@ -847,6 +847,24 @@ def check_priorities(w, o, err):
             err.append(f"приоритеты: {inc['number']} — приоритет «{inc['priority']}», которого нет в справочнике (§2.5)")
 
 
+
+# Уровень приоритета по имени или сравнение приоритета с числом в коде прототипа (§2.5, RULE-68)
+PRIORITY_NAMES = re.compile(r'"(?:critical|high|medium|low)"')
+PRIORITY_NUMBER = re.compile(r'priority\w*\s*(?:[!=]==?|[<>]=?)\s*\d|\d\s*(?:[!=]==?|[<>]=?)\s*[\w.]*priority\b|\bpriority\s*:\s*\d')
+
+
+def check_priority_literals(err):
+    """Код прототипа не знает уровни приоритета (§2.5, RULE-68): ни по имени («critical»), ни по числу
+    (priority === 100) — уровни, их порядок и самый срочный берутся из справочника. Иначе после правки
+    справочника администратором прототип тихо разойдётся с ним."""
+    for src in ("engine.js", "server.js", "app.js", "colleagues.js"):
+        with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
+            for n, line in enumerate(f, 1):
+                code = line.split("//")[0]
+                if PRIORITY_NAMES.search(code) or PRIORITY_NUMBER.search(code):
+                    err.append(f"приоритеты: {src}:{n} — уровень приоритета в коде, а не из справочника (§2.5): {line.strip()[:90]}")
+
+
 def check_strings(w, err):
     """Каталог строк (§14.9, RULE-66): во всех языках одни ключи и одни подстановки; каждый ключ,
     который упоминают машина (поля *Key) и код сервера и исполнителя, есть в каталоге; ключей,
@@ -1134,6 +1152,7 @@ def main():
     check_state_owners(w, err)
     check_grouping(w, err)
     check_priorities(w, o, err)
+    check_priority_literals(err)
     check_strings(w, err)
     check_fail_keys(w, err)
     check_observer_notice(w, err)

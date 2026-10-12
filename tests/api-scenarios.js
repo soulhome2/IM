@@ -1038,6 +1038,77 @@
     stop();
   });
 
+  /* ===== Приоритеты — настраиваемый справочник (§2.5, RULE-68) ===== */
+
+  // Появился инцидент пожара с этим приоритетом от источника; ответ — его карточка
+  async function fireWith(env, priority) {
+    const fire = (await env.all("open")).find((e) => e.eventType.id === "fire");
+    const source = (await env.card(fire.guid)).source.guid;
+    return env.call("POST", "/test/incidents", Object.assign({ eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "тест" }, priority === undefined ? {} : { priority }));
+  }
+  const reactionSec = (card) => (Date.parse(card.timer.dueAt) - Date.parse(card.createdAt)) / 1000;
+
+  test("Приоритет от источника приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого или без числа — самый низкий (§2.5)", async () => {
+    const env = await makeEnv();
+    const lowest = LEVELS[LEVELS.length - 1];
+    // Число между уровнями — ближайший не выше: инцидент не кажется срочнее, чем по настройке
+    const between = LEVELS[1] + 1;
+    for (const [sent, expected] of [[TOP, TOP], [between, LEVELS[1]], [lowest - 1, lowest], [undefined, lowest]]) {
+      const res = await fireWith(env, sent);
+      assert.status(res, 201, null, `приоритет ${sent}`);
+      assert.eq(res.body.priority, expected, `${sent} → ${expected}`);
+    }
+    for (const bad of [101, -1, 50.5, "high"]) assert.status(await fireWith(env, bad), 422, null, `приоритет ${JSON.stringify(bad)} — не целое 0–100`);
+  });
+
+  test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {
+    // Пять уровней, ни одного прежнего числа; у двух — один цвет; свои нормативы — только у двух
+    const levels = [
+      { value: 95, name: { ru: "Угроза", en: "Threat" }, color: "red" },
+      { value: 80, name: { ru: "Повышенный", en: "Elevated" }, color: "red" },
+      { value: 60, name: { ru: "Обычный", en: "Regular" }, color: "amber" },
+      { value: 40, name: { ru: "Пониженный", en: "Reduced" }, color: "blue" },
+      { value: 10, name: { ru: "Информация", en: "Info" }, color: "grey" },
+    ];
+    const remap = Object.fromEntries(LEVELS.map((v, i) => [v, [95, 80, 60, 10][i]]));
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.priorities = levels;
+    fixture.incidents.forEach((inc) => (inc.priority = remap[inc.priority]));
+    const workflow = JSON.parse(JSON.stringify(W));
+    const reaction = workflow.timers.find((t) => t.id === "reaction");
+    reaction.overrides = [{ priority: 95, sec: 120 }, { priority: 60, sec: 600 }];
+    workflow.timers.find((t) => t.id === "resolution").byPriority = { 95: 600, 60: 1500 };
+
+    const base = await makeEnv();
+    const got = [];
+    const stop = base.api.subscribe((m) => got.push(m));
+    await new Promise((r) => setTimeout(r, 300));
+    const env = await standWith({ workflow, fixture });
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.ok(got.some((m) => m.type === "reference.priorities_changed"), "событие reference.priorities_changed");
+
+    const ref = await env.ok("GET", "/operator/reference/priorities");
+    assert.eq(ref.map((p) => p.value), [95, 80, 60, 40, 10], "справочник — новый, по убыванию числа");
+    const all = await queueOf(env);
+    assert.ok(all.every((i, n) => !n || all[n - 1].priority >= i.priority), "очередь — по числу, большее выше");
+    const elevated = await queueOf(env, "&priority=80");
+    assert.ok(elevated.length && elevated.length === all.filter((i) => i.priority === 80).length, "фильтр по новому уровню");
+
+    // Самый срочный — наибольшее число нового справочника, а не прежний «критический»
+    const tree = await env.ok("GET", "/operator/reference/source-groups?withCounters=true");
+    const nodes = [];
+    const walk = (list) => list.forEach((n) => (nodes.push(n), n.devices.forEach((d) => d.counters && nodes.push(d)), walk(n.children || [])));
+    walk(tree);
+    assert.ok(nodes.some((n) => n.counters.topPriority > 0), "в дереве есть инциденты самого срочного уровня 95");
+    assert.ok(nodes.every((n) => n.counters.topPriority <= n.counters.open), "срочных не больше открытых");
+
+    // Нормативы: у уровня со своей строкой — она, без строки — по умолчанию (§4, правило 2)
+    assert.eq(reactionSec((await fireWith(env, 95)).body), 120, "95 — своя строка норматива");
+    const plain = (await fireWith(env, 85)).body;
+    assert.eq([plain.priority, reactionSec(plain)], [80, reaction.defaultSec], "85 → 80, без своей строки — норматив по умолчанию");
+  });
+
   test("Поток событий: ручной переход, нарушение, ответы сценария, макрос — каждый своим событием (§9, RULE-60)", async () => {
     const escalation = Object.assign({}, W.escalation, { enabled: false });
     const env = await makeEnv({ workflowPatch: { escalation } });
@@ -1261,7 +1332,7 @@
 
   /* ===== Справочники, схема, сессия, карточка по частям ===== */
 
-  test("Схема workflow, справочники и приоритеты — те, что в машине", async () => {
+  test("Схема workflow и справочники — те, что в машине; приоритеты — из справочника набора (§2.5)", async () => {
     const env = await makeEnv();
     const wf = await env.ok("GET", "/operator/workflow/active");
     assert.eq(wf.transitions.map((t) => t.id), W.transitions.map((t) => t.id), "переходы схемы");
