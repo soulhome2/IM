@@ -165,6 +165,7 @@
   "workflow.form.transfer.note.1": "Инцидент занят: {ownerName}. Передача другому адресату без перехвата.",
   "workflow.form.transfer.note.2": "Обработка прерывается, прогресс сценария передаётся адресату. Уровень станет {nextEscalationLevel}.",
   "workflow.form.transfer.field.targetId": "Кому передать",
+  "workflow.form.transfer.field.targetId.placeholder": "Выберите адресата",
   "workflow.form.transfer.field.comment": "Причина",
   "workflow.form.transfer.field.comment.placeholder": "Почему передаёте",
   "workflow.form.hold.title": "Отложить инцидент",

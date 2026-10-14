@@ -189,6 +189,7 @@ MUTATIONS = [
     ("ui-linked-due-chip-hidden", "app.js", "    if (!e.linkedDueAt) return \"\";\n    const due = Date.parse(e.linkedDueAt);", "    return \"\";\n    const due = Date.parse(e.linkedDueAt);", "ui"),
     ("ui-select-by-filter-menu-dead", "app.js", "      openFilter(state.groupId || \"all\");\n", "", "ui"),
     ("ui-absence-hidden", "app.js", 'o.available === false && o.availabilityLabel ? t(o.availabilityLabel) : ""', '""', "ui"),
+    ("ui-target-typing-keeps-pick", "app.js", '      input.parentElement.querySelector("[data-field]").value = "";\n', "", "ui"),
     ("ui-target-menu-in-flow", "styles.css", ".target-combo .mselect-menu { position: absolute;", ".target-combo .mselect-menu { position: static;", "ui"),
     ("ui-target-sections-swapped", "app.js", 'section("На месте", all.filter((o) => o.available !== false)) +\n      section("Нет на месте", all.filter((o) => o.available === false))', 'section("Нет на месте", all.filter((o) => o.available === false)) +\n      section("На месте", all.filter((o) => o.available !== false))', "ui"),
     ("ui-target-prefix-search", "app.js", "const targetHit = (o, q) => comboHit(`${t(o.label)} ${t(o.role || \"\")}`, q);", "const targetHit = (o, q) => !q || t(o.label).toLowerCase().startsWith(q.toLowerCase());", "ui"),

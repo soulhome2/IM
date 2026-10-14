@@ -1444,8 +1444,8 @@
     });
     const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(open.form, f, values) && !values[f.name]);
     if (missing) {
-      toast(t("Укажите причину — поле обязательно"));
-      const el = $("dialogFields").querySelector(`[data-field="${missing.name}"]`);
+      toast(t("Заполните поле «{name}»", { name: lbl(missing) }));
+      const el = $("dialogFields").querySelector(`[data-target-input="${missing.name}"], [data-field="${missing.name}"]:not([type='hidden'])`);
       if (el) el.focus();
       return;
     }
@@ -3103,6 +3103,8 @@
     $("dialogFields").addEventListener("input", (e) => {
       const input = e.target.closest("[data-target-input]");
       if (!input) return;
+      // Набранный текст — не выбор (BUG-43): набор снимает выбор, адресат — только щелчком или Enter
+      input.parentElement.querySelector("[data-field]").value = "";
       if (!state.dialog.combo.open) return openTargetCombo(input.dataset.targetInput, input.value);
       narrowTargets(input);
     });

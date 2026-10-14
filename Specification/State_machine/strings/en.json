@@ -165,6 +165,7 @@
   "workflow.form.transfer.note.1": "The incident is taken by {ownerName}. Transfer to another recipient without taking over.",
   "workflow.form.transfer.note.2": "Handling stops, scenario progress goes to the recipient. The level will become {nextEscalationLevel}.",
   "workflow.form.transfer.field.targetId": "Hand over to",
+  "workflow.form.transfer.field.targetId.placeholder": "Choose an addressee",
   "workflow.form.transfer.field.comment": "Reason",
   "workflow.form.transfer.field.comment.placeholder": "Why you are transferring it",
   "workflow.form.hold.title": "Put the incident on hold",

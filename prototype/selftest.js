@@ -441,6 +441,15 @@
       expect(rows.length, "нет чужих инцидентов, которые можно передать");
       foreignTransferred = rows[0].dataset.id;
       await click(button($("eventsList"), "transfer", foreignTransferred));
+      // Прошлой передачи нет — адресата форма не выбирает (BUG-45): поле пустое, «Передать» без него не отправляет
+      const input = $("dialogFields").querySelector('[data-target-input="targetId"]');
+      expect(field("targetId").value === "" && input.placeholder === "Выберите адресата", `без прошлой передачи в поле «${field("targetId").value || input.placeholder}»`);
+      await confirmDialog(NOTE);
+      expect(!$("modalDialog").hidden, "«Передать» без адресата закрыла форму");
+      const warn = $("toasts").lastElementChild;
+      expect(warn && warn.textContent.includes("Заполните поле «Кому передать»"), `уведомление: «${warn ? warn.textContent : "нет"}»`);
+      await click(input);
+      await click($("dialogFields").querySelector('[data-target-pick="sidorov"]'));
       await confirmDialog(NOTE);
       await setFilter("all");
       const row = await rowOnPages(foreignTransferred);
@@ -529,6 +538,7 @@
       const input = () => $("dialogFields").querySelector('[data-target-input="targetId"]');
       const menu = () => $("dialogFields").querySelector('[data-target-combo="targetId"] .mselect-menu');
       expect(input(), "«Кому передать» — не поле с поиском");
+      expect(field("targetId").value === "sidorov", `прошлый адресат не подставлен: «${field("targetId").value}»`);
       // Окно передачи постоянного размера: список — поверх формы, и при открытии, и при наборе
       const card = $("modalDialog").querySelector(".modal-card");
       const size = () => `${card.offsetWidth}×${card.offsetHeight}`;
@@ -557,10 +567,15 @@
       expect(size() === closedSize, `окно изменило размер при наборе: ${closedSize} → ${size()}`);
       const left = [...menu().querySelectorAll(".mselect-head:not([hidden])")].map((h) => h.textContent);
       expect(left.join() === "Нет на месте", `видны разделы: ${left.join(", ")}`);
-      // Esc закрывает список, а не форму; выбор — щелчком
+      // Набранный текст — не выбор (BUG-43): набор снял прежний выбор
+      expect(field("targetId").value === "", `после набора в поле осталось «${field("targetId").value}»`);
+      // Esc закрывает список, а не форму; поле пустое, «Передать» без выбора не отправляет; выбор — щелчком
       input().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await wait();
       expect(!menu() && !$("modalDialog").hidden, "Esc закрыл форму, а не только список");
+      expect(input().placeholder === "Выберите адресата", `после набора без выбора в поле «${input().placeholder}»`);
+      await confirmDialog(NOTE);
+      expect(!$("modalDialog").hidden, "«Передать» с набранным, но не выбранным адресатом закрыла форму");
       await click(input());
       await click(menu().querySelector('[data-target-pick="petrova"]'));
       expect(!menu() && field("targetId").value === "petrova", "Петрова не выбрана");

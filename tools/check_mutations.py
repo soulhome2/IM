@@ -69,6 +69,11 @@ def transfer_to_self(w):
     transition(w, "transfer")["guards"] = [g for g in transition(w, "transfer")["guards"] if g["fn"] != "targetIsNotSelf"]
 
 
+def transfer_without_placeholder(w):
+    form = next(f for f in w["forms"] if f["id"] == "transfer")
+    del next(f for f in form["fields"] if f["name"] == "targetId")["placeholderKey"]
+
+
 def escalate_to_my_group(w):
     no_grace(w)
     for lvl in w["escalation"]["levels"]:
@@ -146,6 +151,7 @@ MUTATIONS = [
     ("holdBreach", "предельный срок удержания ~2 с — нарушение удержания", short_hold),
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
+    ("transferEmpty", "у адресата передачи нет placeholder — форма выбирает первого сама", transfer_without_placeholder),
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),

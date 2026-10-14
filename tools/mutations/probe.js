@@ -47,6 +47,12 @@
       const text = badge ? badge.textContent : "";
       return [text.includes("Группе на принятие"), "бейдж INC-1836: " + text];
     },
+    async transferEmpty() {
+      await setFilter("open");
+      await click(btn($("eventsList"), "transfer"));
+      const value = field("targetId").value;
+      return [value !== "", "адресат в форме выбран заранее: «" + value + "»"];
+    },
     async closeEmpty() {
       await claimFirst();
       await click(anyBtn(root(), "close"));

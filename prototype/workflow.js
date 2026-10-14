@@ -561,6 +561,7 @@ window.IM_WORKFLOW = {
           "kind": "select",
           "labelKey": "workflow.form.transfer.field.targetId",
           "required": true,
+          "placeholderKey": "workflow.form.transfer.field.targetId.placeholder",
           "source": "transferTargets",
           "defaultFrom": "session.lastTransferTargetId",
           "excludes": [

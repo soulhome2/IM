@@ -275,7 +275,7 @@ window.IM_DICT_UI = {
     "Следующая страница": "Next page",
     "Сначала шаг {n}: {name}": "Step {n} first: {name}",
     "Без названия": "Untitled",
-    "Укажите причину — поле обязательно": "Give a reason — the field is mandatory",
+    "Заполните поле «{name}»": "Fill in “{name}”",
     "ур. {lvl}": "lvl {lvl}",
     "ур. {lvl} — {who}": "lvl {lvl} — {who}",
     "Уточняю по архиву, свидетелей нет": "Checking the archive, no witnesses",
