@@ -2090,6 +2090,18 @@ select.search-input { padding-right: 36px; }
 .mselect-opt.off { opacity: 0.5; cursor: not-allowed; }
 .mselect-menu > .btn { justify-self: start; margin-top: 4px; }
 .mselect-empty { padding: 4px 6px; font-size: 13px; }
+/* «Кому передать» (§8.1): разделы «На месте» и «Нет на месте»; вариант — имя слева, роль и причина справа */
+/* Список поверх формы: окно передачи не меняет размер, пока список открыт или отбирается набором */
+.target-combo .mselect-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent); }
+.modal-card:has(.target-combo.open) { overflow: visible; }
+.mselect-head { padding: 6px 6px 2px; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.mselect-head[hidden] { display: none; }
+.target-opt { grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding-left: 18px; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; }
+/* Имя — цветом списка, а не бледной подписью поля формы (.field span) */
+.field .target-opt span { overflow: hidden; color: inherit; font-size: inherit; font-weight: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.target-opt:focus-visible { outline: none; background: var(--hover); box-shadow: inset 0 0 0 2px var(--accent); }
+.target-opt[aria-selected="true"] { background: var(--accent-dim); color: var(--accent); }
+.target-opt.away span { opacity: 0.6; }
 .filter-same { display: flex; width: fit-content; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .filter-same + .filter-row { margin-bottom: 8px; }
 .filter-cond { padding: 8px 12px; border: 1px solid var(--stroke-2); border-radius: var(--radius-sm); background: var(--panel); }

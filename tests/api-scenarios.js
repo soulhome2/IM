@@ -1891,16 +1891,16 @@
     assert.eq(after.assignmentGroup && after.assignmentGroup.id, "grp-leads", "INC-1843 ушёл в первую по порядку группу");
   });
 
-  test("Адресат не на месте — почему: перерыв с причиной, вне МИ — «оффлайн», у группы — «никого нет на месте» (§8.1)", async () => {
+  test("Адресат не на месте — почему: «перерыв: обед», вне МИ — «оффлайн», у группы — «никого нет на месте» (§8.1)", async () => {
     const env = await makeEnv();
     const open = await env.all("open");
     const labels = async (inc) =>
       Object.fromEntries((await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => [t.id, [t.available, t.availabilityLabel]]));
     const office = await labels(open.find((e) => e.state === "new" && e.site !== "Торговый центр"));
-    assert.eq(office.orlova, [false, "нет на месте — перерыв: Обед"], "Орлова на обеде");
+    assert.eq(office.orlova, [false, "перерыв: Обед"], "Орлова на обеде");
     assert.eq(office.sidorov, [true, null], "Сидоров на месте — без подписи");
     const mall = await labels(open.find((e) => e.state === "new" && e.site === "Торговый центр"));
-    assert.eq(mall.kuznetsov, [false, "нет на месте — оффлайн"], "Кузнецов вне МИ");
+    assert.eq(mall.kuznetsov, [false, "оффлайн"], "Кузнецов вне МИ");
     assert.eq(mall["grp-tc"], [false, "никого нет на месте"], "в «Охране ТЦ» никого");
   });
 

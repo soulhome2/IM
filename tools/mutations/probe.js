@@ -56,9 +56,12 @@
     async selfTarget() {
       const id = await claimFirst();
       await click(anyBtn(root(), "transfer"));
-      const target = field("targetId");
-      const has = Boolean(target && target.querySelector('option[value="grp-leads"]'));
-      if (has) target.value = "grp-leads";
+      // «Кому передать» — поле с поиском: открыть список и выбрать вариант
+      const input = $("dialogFields").querySelector('[data-target-input="targetId"]');
+      if (input) await click(input);
+      const pick = $("dialogFields").querySelector('[data-target-pick="grp-leads"]');
+      const has = Boolean(pick);
+      if (has) await click(pick);
       await confirm("проба");
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("inbox");

@@ -521,17 +521,50 @@
       expect(mode() === "work", "карточка не открылась");
     }, "Отложить");
 
-    await step("Передать; себя и своей группы нет среди адресатов; кого нет на месте — почему", async () => {
+    await step("Передать: поле с поиском по подстроке; «На месте», потом «Нет на месте» с причиной; себя и своей группы нет", async () => {
       await openOwn(workId);
       const b = button(root(), "transfer");
       expect(b, "в карточке нет кнопки «Передать»");
       await click(b);
-      const offered = [...field("targetId").options].map((o) => o.value);
+      const input = () => $("dialogFields").querySelector('[data-target-input="targetId"]');
+      const menu = () => $("dialogFields").querySelector('[data-target-combo="targetId"] .mselect-menu');
+      expect(input(), "«Кому передать» — не поле с поиском");
+      // Окно передачи постоянного размера: список — поверх формы, и при открытии, и при наборе
+      const card = $("modalDialog").querySelector(".modal-card");
+      const size = () => `${card.offsetWidth}×${card.offsetHeight}`;
+      const closedSize = size();
+      await click(input());
+      expect(menu(), "щелчок по полю не открыл список");
+      expect(size() === closedSize, `окно изменило размер при открытии списка: ${closedSize} → ${size()}`);
+      const offered = [...menu().querySelectorAll("[data-target-pick]")].map((o) => o.dataset.targetPick);
       const self = offered.filter((id) => id === "me" || id === "grp-leads");
       expect(!self.length, `среди адресатов есть сам оператор или его группа: ${self.join(", ")}`);
-      const text = (id) => ([...field("targetId").options].find((o) => o.value === id) || {}).textContent || "";
-      expect(text("orlova").endsWith("· нет на месте — перерыв: Обед"), `у Орловой «${text("orlova")}»`);
-      expect(text("sidorov") && !text("sidorov").includes("нет на месте"), `у Сидорова «${text("sidorov")}»`);
+      const heads = [...menu().querySelectorAll(".mselect-head")].map((h) => h.textContent);
+      expect(heads.join(" | ") === "На месте | Нет на месте", `разделы: ${heads.join(" | ")}`);
+      const items = [...menu().children];
+      const awayAt = items.findIndex((el) => el.textContent === "Нет на месте");
+      const at = (id) => items.findIndex((el) => el.dataset.targetPick === id);
+      expect(at("sidorov") < awayAt && at("grp-response") < awayAt && at("orlova") > awayAt, "Сидоров и «Группа реагирования» — на месте, Орлова — нет");
+      const note = (id) => menu().querySelector(`[data-target-pick="${id}"] em`).textContent;
+      expect(note("orlova") === "оператор · перерыв: Обед", `у Орловой «${note("orlova")}»`);
+      expect(note("sidorov") === "оператор", `у Сидорова «${note("sidorov")}»`);
+      // Поиск по подстроке: «рлов» — только Орлова; раздел, где никого не осталось, скрыт
+      input().value = "рлов";
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+      await wait();
+      const shown = [...menu().querySelectorAll("[data-target-pick]:not([hidden])")].map((o) => o.dataset.targetPick);
+      expect(shown.join() === "orlova", `по «рлов» найдены: ${shown.join(", ")}`);
+      expect(size() === closedSize, `окно изменило размер при наборе: ${closedSize} → ${size()}`);
+      const left = [...menu().querySelectorAll(".mselect-head:not([hidden])")].map((h) => h.textContent);
+      expect(left.join() === "Нет на месте", `видны разделы: ${left.join(", ")}`);
+      // Esc закрывает список, а не форму; выбор — щелчком
+      input().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await wait();
+      expect(!menu() && !$("modalDialog").hidden, "Esc закрыл форму, а не только список");
+      await click(input());
+      await click(menu().querySelector('[data-target-pick="petrova"]'));
+      expect(!menu() && field("targetId").value === "petrova", "Петрова не выбрана");
+      expect(input().placeholder === "Петрова М.", `в поле «${input().placeholder}»`);
       await confirmDialog(NOTE);
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
     }, "Возобновить");

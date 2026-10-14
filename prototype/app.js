@@ -1267,20 +1267,99 @@
 
   const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
 
-  // Подпись адресата передачи: ФИО · роль · не на смене (§8.1)
-  function optionLabel(field, o) {
-    if (field.source !== "transferTargets") return o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label);
-    const parts = [`${t(o.label)} · ${t(o.role || "")}`];
-    if (o.availabilityLabel) parts.push(t(o.availabilityLabel));
-    return parts.join(" · ");
+  const optionLabel = (o) => (o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label));
+
+  // «Кому передать» (§8.1): поле с поиском по подстроке имени и роли. Сначала кто на месте, потом кого
+  // нет — с причиной; в каждом разделе люди, потом дежурные группы, как их прислал сервер. Значение —
+  // в скрытом поле формы, как у обычного списка
+  const targetHit = (o, q) => comboHit(`${t(o.label)} ${t(o.role || "")}`, q);
+  const targetsOf = (field) => (field.options || []).filter((o) => !o.disabled);
+  function targetMenu(field, q, value) {
+    const opt = (o) =>
+      `<button type="button" class="mselect-opt target-opt ${o.available === false ? "away" : ""}" role="option" data-target-pick="${escapeHtml(o.id)}"
+        aria-selected="${o.id === value}" ${targetHit(o, q) ? "" : "hidden"}><span>${escapeHtml(t(o.label))}</span><em>${escapeHtml(
+        [t(o.role || ""), o.available === false && o.availabilityLabel ? t(o.availabilityLabel) : ""].filter(Boolean).join(" · ")
+      )}</em></button>`;
+    const section = (title, list) =>
+      list.length ? `<div class="mselect-head" ${list.some((o) => targetHit(o, q)) ? "" : "hidden"}>${te(title)}</div>${list.map(opt).join("")}` : "";
+    const all = targetsOf(field);
+    return (
+      section("На месте", all.filter((o) => o.available !== false)) +
+      section("Нет на месте", all.filter((o) => o.available === false)) +
+      `<div class="muted mselect-empty" data-combo-none ${all.some((o) => targetHit(o, q)) ? "hidden" : ""}>${te("Никого не найдено")}</div>`
+    );
+  }
+  function renderTargetCombo(name) {
+    const open = state.dialog;
+    const box = $("dialogFields").querySelector(`[data-target-combo="${name}"]`);
+    const field = open && open.form.fields.find((f) => f.name === name);
+    if (!box || !field) return;
+    const c = open.combo;
+    const value = box.querySelector("[data-field]").value;
+    const picked = targetsOf(field).find((o) => o.id === value);
+    box.classList.toggle("open", c.open);
+    box.querySelectorAll(".mselect-input, .mselect-menu").forEach((el) => el.remove());
+    const hint = hasLbl(field, "placeholder") ? lbl(field, "placeholder") : "";
+    box.insertAdjacentHTML(
+      "beforeend",
+      comboField("data-target-input", name, c.open, c.q, picked ? [value] : [], () => (picked ? t(picked.label) : ""), hint) +
+        (c.open ? `<div class="mselect-menu" role="listbox">${targetMenu(field, c.q, value)}</div>` : "")
+    );
+  }
+  function openTargetCombo(name, q) {
+    Object.assign(state.dialog.combo, { open: true, q: q || "" });
+    renderTargetCombo(name);
+    comboFocus($("dialogFields").querySelector(`[data-target-input="${name}"]`));
+  }
+  function closeTargetCombo(name, focus) {
+    Object.assign(state.dialog.combo, { open: false, q: "" });
+    renderTargetCombo(name);
+    if (focus) $("dialogFields").querySelector(`[data-target-input="${name}"]`).focus();
+  }
+  function pickTarget(name, id) {
+    $("dialogFields").querySelector(`[data-target-combo="${name}"] [data-field]`).value = id;
+    closeTargetCombo(name, true);
+    refreshDialogFields();
+  }
+  // Набор — без перерисовки: прячет неподходящих и пустые разделы
+  function narrowTargets(input) {
+    const menu = input.parentElement.querySelector(".mselect-menu");
+    const field = state.dialog.form.fields.find((f) => f.name === input.dataset.targetInput);
+    state.dialog.combo.q = input.value;
+    if (menu && field) menu.innerHTML = targetMenu(field, input.value, input.parentElement.querySelector("[data-field]").value);
+  }
+  // Клавиши: ↓ — открыть и к вариантам, ↑/↓ — по вариантам, Enter — выбрать, Esc — закрыть список, не форму
+  function targetKey(e) {
+    const combo = e.target.closest("[data-target-combo]");
+    if (!combo) return;
+    const name = combo.dataset.targetCombo;
+    const opts = [...combo.querySelectorAll(".target-opt:not([hidden])")];
+    const at = opts.indexOf(e.target.closest(".target-opt"));
+    if (e.key === "Escape" && state.dialog.combo.open) {
+      e.stopPropagation();
+      closeTargetCombo(name, true);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!state.dialog.combo.open) return openTargetCombo(name);
+      if (opts.length) opts[Math.min(at + 1, opts.length - 1)].focus();
+    } else if (e.key === "ArrowUp" && at >= 0) {
+      e.preventDefault();
+      (at > 0 ? opts[at - 1] : combo.querySelector("[data-target-input]")).focus();
+    } else if (e.key === "Enter" && at < 0 && state.dialog.combo.open && opts.length) {
+      e.preventDefault();
+      pickTarget(name, opts[0].dataset.targetPick);
+    }
   }
 
   function fieldHtml(field) {
     const box = `class="field" data-field-box="${field.name}"`;
     const label = `<span data-label-for="${field.name}">${escapeHtml(lbl(field))}</span>`;
+    if (field.source === "transferTargets") {
+      return `<div ${box}>${label}<div class="mselect target-combo" data-target-combo="${field.name}"><input type="hidden" data-field="${field.name}" value="" /></div></div>`;
+    }
     if (field.kind === "select") {
       const options = (field.options || [])
-        .map((o) => `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(optionLabel(field, o))}</option>`)
+        .map((o) => `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(optionLabel(o))}</option>`)
         .join("");
       // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
       const empty = hasLbl(field, "placeholder") ? `<option value="" disabled>${escapeHtml(lbl(field, "placeholder"))}</option>` : "";
@@ -1314,7 +1393,7 @@
   }
 
   function showForm(open, form) {
-    state.dialog = Object.assign(open, { form });
+    state.dialog = Object.assign(open, { form, combo: { open: false, q: "" } });
     $("dialogTitle").textContent = lbl(form, "title");
     $("dialogNote").textContent = form.note || "";
     $("dialogNote").hidden = !form.note;
@@ -1327,13 +1406,14 @@
       const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : fallback;
       const el = $("dialogFields").querySelector(`[data-field="${field.name}"]`);
       if (el) el.value = pick || "";
+      if (field.source === "transferTargets") renderTargetCombo(field.name);
     });
     refreshDialogFields();
     const confirm = $("dialogConfirm");
     confirm.textContent = lbl(form, "confirmLabel");
     confirm.className = `btn ${form.style || "primary"}`;
     $("modalDialog").hidden = false;
-    ($("dialogFields").querySelector("[data-field]") || confirm).focus();
+    ($("dialogFields").querySelector("[data-target-input], [data-field]:not([type='hidden'])") || confirm).focus();
   }
 
   // Форма — из машины (forms), варианты полей и пояснение — из ответа сервера (fieldOptions, formNote)
@@ -3013,6 +3093,25 @@
       selectionDo(b.dataset.selDo);
     });
     $("dialogFields").addEventListener("change", refreshDialogFields);
+    // «Кому передать»: щелчок по полю открывает список, набор отбирает по подстроке, щелчок мимо — закрывает
+    $("dialogFields").addEventListener("click", (e) => {
+      const combo = e.target.closest("[data-target-combo]");
+      const pick = e.target.closest("[data-target-pick]");
+      if (pick) return pickTarget(combo.dataset.targetCombo, pick.dataset.targetPick);
+      if (combo && e.target.closest("[data-target-input]") && !state.dialog.combo.open) openTargetCombo(combo.dataset.targetCombo);
+    });
+    $("dialogFields").addEventListener("input", (e) => {
+      const input = e.target.closest("[data-target-input]");
+      if (!input) return;
+      if (!state.dialog.combo.open) return openTargetCombo(input.dataset.targetInput, input.value);
+      narrowTargets(input);
+    });
+    $("dialogFields").addEventListener("keydown", targetKey);
+    $("modalDialog").addEventListener("click", (e) => {
+      const open = state.dialog && state.dialog.combo.open && $("dialogFields").querySelector("[data-target-combo].open");
+      // Поле перерисовывается по щелчку: щелчок по уже убранному элементу — не «мимо»
+      if (open && e.target.isConnected && !e.target.closest("[data-target-combo]")) closeTargetCombo(open.dataset.targetCombo);
+    });
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
       else store.tree.forEach((n) => state.openGroups.add(n.guid));

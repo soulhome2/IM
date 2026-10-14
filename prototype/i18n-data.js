@@ -133,7 +133,6 @@ window.IM_DICT_DATA = {
     "Микрофон — торговый зал": "Microphone — sales floor",
     "Микрофон «Витрина у входа»: спектр разбития стекла, 87 дБ": "Microphone «Entrance display»: glass break spectrum, 87 dB",
     "Микрофоны": "Microphones",
-    "на смене": "on shift",
     "Наблюдать": "Monitor",
     "Направить охрану": "Dispatch guard",
     "Направить охрану к витрине": "Dispatch guard to the display",
