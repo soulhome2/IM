@@ -169,6 +169,39 @@
     });
   });
 
+  // Каждый вход в «Привязан» (§11.4): норматив закрытия привязанного истёк, его отсоединили и снова
+  // взяли в работу одним с тем же основным — норматив продолжается, второго нарушения нет (PROC-20)
+  const mergeTwo = async (env) => {
+    const linked = await newFire(env);
+    assert.status(await env.act(linked.guid, "claim", {}, "queue"), 200, null, "взять будущий привязанный");
+    const primary = (await env.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.status(await env.act(primary.guid, "claim", {}, "queue"), 200, null, "взять основной");
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, linked.guid], primaryGuid: primary.guid }), 200, null, "взять в работу одним");
+    return { linked: linked.guid, primary: primary.guid };
+  };
+  const REENTRY_LINKED = {
+    merge: {
+      name: "истёк у привязанного → «Отсоединить» → снова «Взять в работу» одним",
+      async run(env, { linked, primary }) {
+        assert.status(await env.call("DELETE", `/operator/incidents/${enc(primary)}/linked/${enc(linked)}`), 200, null, "отсоединить");
+        assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, linked], primaryGuid: primary }), 200, null, "снова одним");
+      },
+    },
+  };
+  Object.entries(REENTRY_LINKED).forEach(([id, c]) => {
+    test(`im-fsm: повторный вход в «Привязан» не даёт нового нарушения: ${c.name}`, async () => {
+      const env = await standWith({ workflow: W });
+      const pair = await mergeTwo(env);
+      const card = await env.card(pair.linked);
+      const expired = firedFor(await env.advance(untilDue(env, card)), pair.linked);
+      assert.eq(expired, ["linked_resolution_overdue"], "норматив закрытия привязанного истёк");
+      await c.run(env, pair);
+      assert.eq((await env.card(pair.linked)).state, "linked", `после «${id}» снова привязан`);
+      assert.eq(firedFor(await env.advance(60), pair.linked), [], `после «${id}» ничего не сработало`);
+      assert.eq((await env.card(pair.linked)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия одно");
+    });
+  });
+
   /* ===== Переходы без смены состояния: один раз на дедлайн ===== */
 
   const ONCE = {
@@ -273,6 +306,20 @@
       end: "new",
       breach: "reaction",
     },
+    {
+      // Закрытие основного — действие человека с другим инцидентом: окно привязанного его не ждёт (PROC-20)
+      name: "норматив закрытия привязанного × закрыт основной: нарушение на владельца основного, потом закрытие вместе с ним",
+      workflow: W,
+      async setup(env) {
+        const pair = await mergeTwo(env);
+        env.primaryGuid = pair.primary;
+        return pair.linked;
+      },
+      system: async (env) => assert.status(await env.act(env.primaryGuid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной"),
+      order: ["linked_resolution_overdue", "close_linked"],
+      end: "closed",
+      breach: "resolution",
+    },
   ];
   WINDOW.forEach((c) => {
     test(`im-fsm: системный переход в окне после дедлайна — нарушение не теряется: ${c.name}`, async () => {
@@ -299,11 +346,13 @@
 
   /* ===== Покрытие: наборы сценариев перечисляют всё, что есть в машине ===== */
 
-  test("im-fsm: покрытие — у каждого перехода без смены состояния, каждого входа в «В работе» и каждого таймера с нарушением есть сценарий", async () => {
+  test("im-fsm: покрытие — у каждого перехода без смены состояния, каждого входа в «В работе» и «Привязан» и каждого таймера с нарушением есть сценарий", async () => {
     const noChange = W.transitions.filter((t) => t.trigger !== "manual" && t.to === null).map((t) => t.id).sort();
     assert.eq(Object.keys(ONCE).sort(), noChange, "переходы без смены состояния — в наборе ONCE");
     const intoWork = W.transitions.filter((t) => t.trigger === "manual" && t.to === "in_progress" && t.id !== "reopen").map((t) => t.id).sort();
     assert.eq(Object.keys(REENTRY).sort(), intoWork, "входы в «В работе» (кроме переоткрытия) — в наборе REENTRY");
+    const intoLinked = W.transitions.filter((t) => t.to === "linked").map((t) => t.id).sort();
+    assert.eq(Object.keys(REENTRY_LINKED).sort(), intoLinked, "входы в «Привязан» — в наборе REENTRY_LINKED");
     // Таймеры, по которым переход пишет нарушение, — у каждого сценарий системного перехода в окне (RULE-67)
     const breachTimers = [...new Set(W.transitions.filter((t) => t.trigger === "timer" && t.effects.some((e) => e.fn === "recordBreach")).map((t) => t.guards.find((g) => g.fn === "timerExpired").args[0]))].sort();
     const inWindow = [...new Set(WINDOW.map((c) => c.breach))].sort();

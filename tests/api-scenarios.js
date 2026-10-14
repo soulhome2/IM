@@ -1160,9 +1160,9 @@
     assert.ok(states.length && states.every((i) => ["new", "on_hold"].includes(i.state)) && states.length === all.filter((i) => ["new", "on_hold"].includes(i.state)).length, "только новые и отложенные");
   });
 
-  /* ===== Объединение: основной и связанные события (§11, черновик) ===== */
+  /* ===== Объединение: основной и связанные события (§11) ===== */
 
-  test("«Выделить по фильтру» с «Одинаковый сценарий»: только то, что можно взять как одно; по умолчанию — где таких больше; чужие не включены; «Взять в работу» доступна (§11, черновик)", async () => {
+  test("«Выделить по фильтру» с «Одинаковый сценарий»: только то, что можно взять как одно; по умолчанию — где таких больше; чужие не включены; «Взять в работу» доступна (§11)", async () => {
     const env = await makeEnv();
     const body = { sourceGroupGuid: null, filter: { any: [] }, queueFilter: "open" };
     const plain = await env.ok("POST", "/operator/incidents/filter", body);
@@ -1217,7 +1217,7 @@
     assert.eq(gone.scenarioGuid, top.id, "сценария нет среди подходящих — где больше всего можно взять");
   });
 
-  test("«Выделить по фильтру»: условия через «ИЛИ» — подходит под любое; в условии — каскад: события и устройства только выбранного типа (§11, черновик)", async () => {
+  test("«Выделить по фильтру»: условия через «ИЛИ» — подходит под любое; в условии — каскад: события и устройства только выбранного типа (§11)", async () => {
     const env = await makeEnv();
     const filter = async (any) => env.ok("POST", "/operator/incidents/filter", { sourceGroupGuid: null, filter: { any } });
     const all = await filter([{}]);
@@ -1334,7 +1334,7 @@
     assert.eq((await env.card(office)).state, "closed", "связанный остался закрытым");
   });
 
-  test("Два основных со связанными — «Взять в работу» как одно: все связанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11, черновик)", async () => {
+  test("Два основных со связанными — «Взять в работу» как одно: все связанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11)", async () => {
     const env = await makeEnv();
     const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.ok(d, "в демо-данных четыре новых пожара");
@@ -1393,7 +1393,71 @@
     assert.eq([closed.state, closed.breaches.length], ["closed", 0], "закрыт вместе с основным, нарушения нет");
   });
 
-  test("Ответы сценария связанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11, черновик)", async () => {
+  test("Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42)", async () => {
+    const env = await makeEnv();
+    const [a, b, c] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    for (const e of [a, b]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: a.guid });
+    assert.status(await env.act(a.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    assert.eq((await env.card(b.guid)).linkedTo, a.guid, "закрытый вместе с основным — при нём как история");
+    assert.status(await env.act(b.guid, "reopen", { comment: "тест" }, "queue"), 200, null, "переоткрыть привязанный");
+    const reopened = await env.card(b.guid);
+    assert.eq([reopened.state, reopened.linkedTo], ["in_progress", null], "в работе, связи нет");
+    assert.eq(reopened.journal[reopened.journal.length - 1].templateKey, "workflow.journal.reopen_unlinked", "запись в журнале события");
+    const primary = await env.card(a.guid);
+    const note = primary.journal.filter((j) => j.templateKey === "workflow.journal.linked_reopened").pop();
+    assert.ok(note && note.vars.number === b.number, "запись в журнале основного");
+    assert.eq((await env.ok("GET", `/operator/incidents/${enc(a.guid)}/linked`)).items.map((x) => x.guid), [], "у основного его нет");
+    // Основной переоткрыли и объединили с другим — переоткрытый не трогается
+    assert.status(await env.act(a.guid, "reopen", { comment: "тест" }, "queue"), 200, null, "переоткрыть основной");
+    assert.status(await env.act(c.guid, "claim", {}, "queue"), 200, null, "взять третий");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [c.guid, a.guid], primaryGuid: c.guid });
+    const after = await env.card(b.guid);
+    assert.eq([after.state, after.linkedTo], ["in_progress", null], "переоткрытый остался сам по себе");
+    // Обычное переоткрытие — без записей о связи
+    const plain = (await env.card(c.guid)).journal.some((j) => /reopen_unlinked|linked_reopened/.test(j.templateKey));
+    assert.ok(!plain, "у несвязанного записей о связи нет");
+  });
+
+  test("У адресата основного нет доступа к привязанному — после эскалации или смены ролей привязанный отсоединяется и уходит в очередь (§11.4, §5, RULE-71)", async () => {
+    const W = window.IM_WORKFLOW;
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: "user:kuznetsov" }) : l));
+    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) } });
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const mall = fires.find((e) => e.site === "Торговый центр");
+    const office = fires.find((e) => e.site !== "Торговый центр");
+    assert.ok(mall && office, "пожары в ТЦ и вне его");
+    assert.status(await env.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [mall.guid, office.guid], primaryGuid: mall.guid });
+    const due = (await env.card(mall.guid)).timer.dueAt;
+    // Вручную Кузнецову (только ТЦ) нельзя: нет доступа к привязанному
+    const manual = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
+    assert.status(manual, 403, "GUARD_FAILED", "ручная передача без доступа к привязанному");
+    // Норматив закрытия истёк — эскалация Кузнецову, он оффлайн — «Охране ТЦ»: доступа к офису нет ни у кого
+    await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 10);
+    const primary = await env.card(mall.guid);
+    assert.eq([primary.state, primary.assignmentGroup && primary.assignmentGroup.id], ["pending_acceptance", "grp-tc"], "основной — «Охране ТЦ»");
+    const freed = await env.card(office.guid);
+    assert.eq([freed.state, freed.linkedTo, freed.owner], ["new", null, null], "привязанный — снова новый, ничей, без связи");
+    assert.eq(freed.timer && freed.timer.id, "reaction", "реакция — заново");
+    assert.ok(freed.journal.some((j) => j.templateKey === "workflow.journal.linked_lost_access"), "запись в журнале привязанного");
+    const note = primary.journal.filter((j) => j.templateKey === "workflow.journal.linked_lost_access_primary").pop();
+    assert.ok(note && note.vars.number === office.number, "запись в журнале основного");
+    assert.eq(primary.linkedCount, 0, "у основного привязанных нет");
+
+    // Смена ролей: у владельца основного больше нет доступа к объекту привязанного
+    const env2 = await makeEnv();
+    assert.status(await env2.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [mall.guid, office.guid], primaryGuid: mall.guid });
+    const roles = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] });
+    assert.ok(!roles.body.fired.some((f) => f.transitionId === "linked_lost_access"), "доступ остался — привязанный на месте");
+    const res = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
+    assert.ok(res.body.fired.some((f) => f.incidentGuid === office.guid && f.transitionId === "linked_lost_access"), "без доступа к офису — отсоединён");
+    const kept = await env2.card(mall.guid);
+    assert.eq([kept.state, kept.owner && kept.owner.id, kept.linkedCount], ["in_progress", ME, 0], "основной у меня, привязанных нет");
+  });
+
+  test("Ответы сценария связанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11)", async () => {
     const env = await makeEnv();
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять A");
@@ -1408,7 +1472,7 @@
     assert.eq((await env.card(a.guid)).scenario.answers.note, "из A", "у связанного ответы остались как история");
   });
 
-  test("Поиск находит связанное событие — строкой основного с «найдено в привязанных»; страница найденного среди связанных (§11, черновик)", async () => {
+  test("Поиск находит связанное событие — строкой основного с «найдено в привязанных»; страница найденного среди связанных (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
     const extra = Array.from({ length: 12 }, (_, k) =>
@@ -1428,7 +1492,7 @@
     assert.eq(none.focusPage, null, "не связанное — без страницы");
   });
 
-  test("Журнал основного: присоединено много — первые пять номеров и «и ещё N»; мало — все номера (§11, черновик)", async () => {
+  test("Журнал основного: присоединено много — первые пять номеров и «и ещё N»; мало — все номера (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
     const extra = Array.from({ length: 6 }, (_, k) =>
@@ -1447,7 +1511,7 @@
     assert.eq([small.templateKey, small.vars.ids.split(", ").length], ["workflow.journal.merged_in", 2], "оба номера");
   });
 
-  test("«Отсоединить все»: все связанные — снова новые, у основного связанных нет; нельзя — не меняется ничего (§11, черновик)", async () => {
+  test("«Отсоединить все»: все связанные — снова новые, у основного связанных нет; нельзя — не меняется ничего (§11)", async () => {
     const env = await makeEnv();
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 3);
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
@@ -1476,7 +1540,7 @@
     assert.status(await env.call("DELETE", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого");
   });
 
-  test("Выборка: «Взять» выборкой недоступно — как одно только «Взять в работу»; режима «однотипные» нет (§11, черновик)", async () => {
+  test("Выборка: «Взять» выборкой недоступно — как одно только «Взять в работу»; режима «однотипные» нет (§11)", async () => {
     const env = await makeEnv();
     const all = await env.all();
     const fires = all.filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);

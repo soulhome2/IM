@@ -35,7 +35,7 @@
     const addressee = (ev) => ev.owner || ev.assignmentGroup || null;
     const isTarget = (ev) => isSelf(addressee(ev));
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
-    // Объединение (§11, черновик): основной инцидент связанного — по linkedTo
+    // Объединение (§11): основной инцидент связанного — по linkedTo
     const byId = (id) => (id ? ctx.events().find((e) => e.id === id) || null : null);
     const unowned = (ev) => !ev.owner && !ev.assignmentGroup;
     // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
@@ -216,6 +216,13 @@
         const who = addressee(ev);
         if (!who) return ["workflow.guard.no_addressee"];
         return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["workflow.guard.addressee_access"];
+      },
+      // У адресата открытого основного есть ли доступ к объекту привязанного (§11.4, §5, RULE-71)
+      primaryAddresseeHasAccess: (ev, [expected]) => {
+        const p = ev.linkedTo && byId(ev.linkedTo);
+        const who = p && !isDone(p) ? addressee(p) : null;
+        if (!who) return ["workflow.guard.no_addressee"];
+        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["workflow.guard.primary_addressee_access"];
       },
       addresseeCanAccept: (ev, [expected]) => {
         const who = addressee(ev);
@@ -471,8 +478,15 @@
       setLinkedTo: (ev, [arg], s) => {
         ev.linkedTo = value(arg, ev, s.form, s);
       },
-      clearLink: (ev) => {
+      // Связь с основным снимается. С шаблонами — если связь была, запись в журнал события и основного:
+      // переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)
+      clearLink: (ev, [own, primary], s) => {
+        const p = ev.linkedTo && byId(ev.linkedTo);
         ev.linkedTo = null;
+        if (!p) return;
+        const at = now();
+        if (own) ctx.log(ev, s.actor, own, { primaryNumber: p.number }, at);
+        if (primary) s.after.push(() => ctx.log(p, s.actor, primary, { number: ev.number }, at));
       },
       // Заполненные шаги связанного — в незаполненные шаги основного (сценарий у них один); у связанного
       // ответы остаются как история. Что перенесено — запись в журнале основного
@@ -830,7 +844,7 @@
       return true;
     }
 
-    // «Взять в работу» на выборке (§11, черновик): переход с bulk.mode merge на каждом, кроме основного,
+    // «Взять в работу» на выборке (§11): переход с bulk.mode merge на каждом, кроме основного,
     // и, если основной новый, — grouping.takeWith на нём. Всё или ничего: сначала проверка всех
     function mergeCheck(primary, others) {
       const tr = W.transitions.find((t) => t.bulk && t.bulk.mode === "merge");

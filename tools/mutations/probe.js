@@ -201,7 +201,7 @@
       const has = Boolean(field("reasonId").querySelector('option[value="probe"]'));
       return [has, "новая причина удержания в форме: " + has];
     },
-    // «Взять в работу» на выборке (§11, черновик): два новых одного типа — связанное из списков пропадает
+    // «Взять в работу» на выборке (§11): два новых одного типа — связанное из списков пропадает
     async merge_hides() {
       await setFilter("open");
       const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));

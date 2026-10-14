@@ -775,7 +775,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .tree-node.level-1 > .node-content .node-text { font-weight: 500; }
 .tree-node.is-device > .node-content .node-text { color: var(--muted); }
 
-/* «Сгруппировать» на узле дерева — при наведении и у выбранной группы (§11, черновик) */
+/* «Сгруппировать» на узле дерева — при наведении и у выбранной группы (§11) */
 .node-group-btn {
   display: none;
   align-items: center;
@@ -926,7 +926,7 @@ select.search-input { padding-right: 36px; }
 .sel-count { font-size: 13px; font-weight: 600; margin-right: 4px; }
 .sel-clear { margin-left: auto; }
 
-/* Объединённый инцидент (§11, черновик): пометка в строке и связанные события в карточке */
+/* Объединённый инцидент (§11): пометка в строке и связанные события в карточке */
 .event-head { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .chip.linked { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); border-color: var(--accent); }
 .chip.linked .material-symbols-outlined { font-size: 14px; }
@@ -2005,7 +2005,7 @@ select.search-input { padding-right: 36px; }
 .workspace[data-full="video"] #panelMap,
 .workspace[data-full="map"] #panelVideo { display: none; }
 
-/* Окно «Сгруппировать» (§11, черновик) */
+/* Окно «Сгруппировать» (§11) */
 .grouping-by { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .grouping-by .chip-check {
   display: inline-flex;
@@ -2033,7 +2033,7 @@ select.search-input { padding-right: 36px; }
 .grouping-row-text .what { color: var(--muted); font-size: 13px; }
 .grouping-row.off { opacity: 0.6; }
 .grouping-hint.warn { color: var(--warn-text); }
-/* Окно фильтра из дерева (§11, черновик): строки «название — выпадающий список с галочками» */
+/* Окно фильтра из дерева (§11): строки «название — выпадающий список с галочками» */
 .filter-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: 12px; padding: 6px 0; }
 .filter-title { font-size: 13px; font-weight: 600; padding-top: 9px; }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }

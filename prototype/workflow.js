@@ -41,7 +41,7 @@ window.IM_WORKFLOW = {
       "id": "linked",
       "labelKey": "workflow.category.linked",
       "countsAsOpen": false,
-      "$comment": "§11 (черновик). Связанное событие объединённого инцидента: в списках не показывается, живёт в карточке основного"
+      "$comment": "§11. Связанное событие объединённого инцидента: в списках не показывается, живёт в карточке основного"
     }
   ],
   "states": [
@@ -291,7 +291,9 @@ window.IM_WORKFLOW = {
       "meaning": "Время от взятия в работу до закрытия",
       "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches. У привязанного (§11.4) идёт дальше, если уже шёл (merge — resumeTimer ifStarted): объединением просрочку не скрыть.",
       "startsOnEnter": [
-        "in_progress",
+        "in_progress"
+      ],
+      "resumesOnEnter": [
         "linked"
       ],
       "startsOnce": true,
@@ -1749,6 +1751,14 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "clearLink",
+          "args": [
+            "workflow.journal.reopen_unlinked",
+            "workflow.journal.linked_reopened"
+          ]
+        },
+        {
+          "kind": "transactional",
           "fn": "setFlag",
           "args": [
             "close_result",
@@ -2850,7 +2860,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "merge",
-      "$comment": "§11 (черновик). «Взять в работу» на выборке — как одно: отмеченные становятся связанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается связанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
+      "$comment": "§11. «Взять в работу» на выборке — как одно: отмеченные становятся связанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается связанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
       "labelKey": "workflow.transition.merge",
       "hintKey": "workflow.transition.merge.hint",
       "from": [
@@ -2970,7 +2980,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "detach",
-      "$comment": "§11 (черновик). «Отсоединить» из карточки основного: связанное событие возвращается в очередь новым, норматив реакции — заново",
+      "$comment": "§11. «Отсоединить» из карточки основного: связанное событие возвращается в очередь новым, норматив реакции — заново",
       "labelKey": "workflow.transition.detach",
       "hintKey": "workflow.transition.detach.hint",
       "from": [
@@ -3036,7 +3046,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "close_linked",
-      "$comment": "§11 (черновик). Основной закрыт — связанные закрываются с его результатом, причиной, комментарием и закрывшим; связь остаётся историей",
+      "$comment": "§11. Основной закрыт — связанные закрываются с его результатом, причиной, комментарием и закрывшим; связь остаётся историей",
       "labelKey": "workflow.transition.close_linked",
       "from": [
         "linked"
@@ -3081,6 +3091,63 @@ window.IM_WORKFLOW = {
           "fn": "externalCommand",
           "args": [
             "axxondata.export_incident"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "linked_lost_access",
+      "$comment": "§11.4, §5 (RULE-71). У адресата открытого основного нет доступа к объекту привязанного — после эскалации, ухода адресата в группу, смены ролей или групп доступа. Привязанный отсоединяется и возвращается в очередь новым, как при потере доступа (addressee_lost_access): ни один инцидент не остаётся у человека без доступа. Группе-адресату хватает доступа у одного участника",
+      "labelKey": "workflow.transition.linked_lost_access",
+      "from": [
+        "linked"
+      ],
+      "to": "new",
+      "trigger": "system",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "primaryAddresseeHasAccess",
+          "args": [
+            false
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "clearLink",
+          "args": [
+            "workflow.journal.linked_lost_access",
+            "workflow.journal.linked_lost_access_primary"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "returnToQueue"
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "alerts.target"
           ]
         }
       ],
@@ -3262,7 +3329,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "grouping": {
-    "$comment": "§11 (черновик). Групп сценария нет. Выборка (из дерева — «Выделить по фильтру», или отметками) — разом одно действие (bulk у переходов). «Взять в работу» на выборке — как одно: переход merge (основной и связанные события), основной новый — переходом takeWith. Здесь — takeWith и помощники выборки.",
+    "$comment": "§11. Групп сценария нет. Выборка (из дерева — «Выделить по фильтру», или отметками) — разом одно действие (bulk у переходов). «Взять в работу» на выборке — как одно: переход merge (основной и связанные события), основной новый — переходом takeWith. Здесь — takeWith и помощники выборки.",
     "takeWith": "claim",
     "selectionHelpers": [
       {
@@ -3471,18 +3538,21 @@ window.IM_WORKFLOW = {
     "workflow.guard.target_no_access_linked": {
       "vars": []
     },
+    "workflow.guard.primary_addressee_access": {
+      "vars": []
+    },
     "workflow.journal.merged_in": {
       "vars": [
         "ids"
       ],
-      "$comment": "§11 (черновик). Основному: к нему присоединены связанные; ids — их номера, не больше пяти"
+      "$comment": "§11. Основному: к нему присоединены связанные; ids — их номера, не больше пяти"
     },
     "workflow.journal.merged_in_more": {
       "vars": [
         "ids",
         "more"
       ],
-      "$comment": "§11 (черновик). То же, присоединено больше пяти: ids — первые пять номеров, more — сколько ещё"
+      "$comment": "§11. То же, присоединено больше пяти: ids — первые пять номеров, more — сколько ещё"
     },
     "workflow.error.selection.item": {
       "vars": [
@@ -3988,7 +4058,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.not_owner"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Инцидент ничей (новый) или мой: объединять можно только такие"
+        "$comment": "§11. Инцидент ничей (новый) или мой: объединять можно только такие"
       },
       {
         "fn": "mergePrimaryValid",
@@ -3998,7 +4068,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.merge_primary"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Основной (form.primaryId) — другой, открытый, не связанный, виден оператору; новый или мой в работе"
+        "$comment": "§11. Основной (form.primaryId) — другой, открытый, не связанный, виден оператору; новый или мой в работе"
       },
       {
         "fn": "sameScenarioAsPrimary",
@@ -4008,7 +4078,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.merge_scenario"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Сценарий тот же, что у основного (form.primaryId): как одно берутся только события одного сценария"
+        "$comment": "§11. Сценарий тот же, что у основного (form.primaryId): как одно берутся только события одного сценария"
       },
       {
         "fn": "primaryEditable",
@@ -4018,7 +4088,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.primary_not_editable"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Отсоединять может тот, кто ведёт основной, или любой, пока основной новый"
+        "$comment": "§11. Отсоединять может тот, кто ведёт основной, или любой, пока основной новый"
       },
       {
         "fn": "primaryClosed",
@@ -4028,7 +4098,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.primary_open"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Основной инцидент связанного закрыт"
+        "$comment": "§11. Основной инцидент связанного закрыт"
       },
       {
         "fn": "targetHasAccessToLinked",
@@ -4038,7 +4108,20 @@ window.IM_WORKFLOW = {
           "workflow.guard.target_no_access_linked"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик), §5. У адресата передачи (form.targetId) есть доступ к объектам всех связанных событий; до заполнения формы условие выполнено"
+        "$comment": "§11, §5. У адресата передачи (form.targetId) есть доступ к объектам всех связанных событий; до заполнения формы условие выполнено"
+      },
+      {
+        "fn": "primaryAddresseeHasAccess",
+        "args": [
+          "expected"
+        ],
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_addressee",
+          "workflow.guard.primary_addressee_access"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11.4, §5 (RULE-71). Есть ли у адресата основного доступ к объекту привязанного; группе хватает одного участника. Основной закрыт или без владельца и адресата — условие не выполнено при любом ожидании"
       }
     ],
     "effects": [
@@ -4118,31 +4201,31 @@ window.IM_WORKFLOW = {
         "fn": "setLinkedTo",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). linked_to — основной инцидент (form.primaryId)"
+        "$comment": "§11. linked_to — основной инцидент (form.primaryId)"
       },
       {
         "fn": "clearLink",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Связь с основным снимается"
+        "$comment": "§11. Связь с основным снимается. С шаблонами [событию, основному] — если связь была, запись в журнал события и основного: переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)"
       },
       {
         "fn": "copyAnswersToPrimary",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Заполненные шаги сценария связанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у связанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента"
+        "$comment": "§11. Заполненные шаги сценария связанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у связанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента"
       },
       {
         "fn": "relinkToPrimary",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Открытые связанные объединяемого переходят к новому основному: связанного у связанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история"
+        "$comment": "§11. Открытые связанные объединяемого переходят к новому основному: связанного у связанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история"
       },
       {
         "fn": "copyCloseFromPrimary",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (черновик). Результат, причина, комментарий и закрывший — от основного"
+        "$comment": "§11. Результат, причина, комментарий и закрывший — от основного"
       },
       {
         "fn": "notify",

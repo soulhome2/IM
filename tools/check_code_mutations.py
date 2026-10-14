@@ -78,7 +78,7 @@ MUTATIONS = [
     ("owner-group-ignored", "engine.js", "ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : [\"workflow.guard.owner_duty_group\"]),", "ownerHasDutyGroup: () => null,", "api"),
     ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
     ("visibility-ignored", "server.js", "let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));", "let list = events.filter((e) => shown.has(STATES[e.state].category));", "api"),
-    # Объединение (§11, черновик): основной, срок, закрытие связанных; вкладка — фильтр; панель выборки
+    # Объединение (§11): основной, срок, закрытие связанных; вкладка — фильтр; панель выборки
     ("merge-primary-order", "server.js", "const order = (a, b) => b.priority - a.priority || a.occurredAt - b.occurredAt || byNumber(a, b);", "const order = (a, b) => a.priority - b.priority || a.occurredAt - b.occurredAt || byNumber(a, b);", "api"),
     ("merge-linked-stay-open", "server.js", "if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === \"linked\")) runScheduler();", "", "api"),
     ("ui-linked-chip-hidden", "app.js", "if (!e.linkedCount) return \"\";", "return \"\";", "ui"),
@@ -189,6 +189,9 @@ MUTATIONS = [
     ("ui-linked-due-chip-hidden", "app.js", "    if (!e.linkedDueAt) return \"\";\n    const due = Date.parse(e.linkedDueAt);", "    return \"\";\n    const due = Date.parse(e.linkedDueAt);", "ui"),
     ("ui-select-by-filter-menu-dead", "app.js", "      openFilter(state.groupId || \"all\");\n", "", "ui"),
     ("ui-absence-hidden", "app.js", "    if (o.availabilityLabel) parts.push(t(o.availabilityLabel));\n", "", "ui"),
+    ("reopen-keeps-link", "engine.js", "        const p = ev.linkedTo && byId(ev.linkedTo);\n        ev.linkedTo = null;\n", "        const p = ev.linkedTo && byId(ev.linkedTo);\n        if (!s.form || !s.form.comment) ev.linkedTo = null;\n", "api"),
+    ("reopen-unlink-no-log", "engine.js", "        if (primary) s.after.push(() => ctx.log(p, s.actor, primary, { number: ev.number }, at));\n", "", "api"),
+    ("linked-access-ignored", "engine.js", "        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : [\"workflow.guard.primary_addressee_access\"];", "        return expected ? null : [\"workflow.guard.primary_addressee_access\"];", "api"),
     ("absence-no-reason", "server.js", 'render("workflow.label.absent.break", { reason: reason ? [reason.labelKey] : "" })', 'render("workflow.label.absent.break", { reason: "" })', "api"),
     ("last-transfer-target-forgotten", "server.js", "      if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];\n", "", "api"),
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),

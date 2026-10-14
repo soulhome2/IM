@@ -103,7 +103,7 @@ EOF
 
 ### Вспомогательный скрипт для пунктов «чтение»
 
-Слова в идентификаторах; таблица «переход — условия — подпись — запись журнала» (говорит ли подпись то, что проверяют условия); группа сценария (выводит ли из группы переход, который меняет владельца); значения из записи журнала, которые тот же переход меняет до записи (`→пусто` — очищает); места правил вне §4, §6, §8.1, где названа функция реестра; функции сверх базового реестра без описания.
+Слова в идентификаторах; таблица «переход — условия — подпись — запись журнала» (говорит ли подпись то, что проверяют условия); привязанные события (что со связью и доступом к привязанным после перехода); значения из записи журнала, которые тот же переход меняет до записи (`→пусто` — очищает); места правил вне §4, §6, §8.1, где названа функция реестра; функции сверх базового реестра без описания.
 
 ```bash
 python3 - <<'EOF'
@@ -114,12 +114,15 @@ print("Слова в идентификаторах переходов:", dict(w
 for t in w["transitions"]:
     guards = ", ".join(g["fn"] + (str(g["args"]) if g.get("args") else "") for g in t["guards"])
     logs = [e["args"][0] for e in t["effects"] if e["fn"] == "appendLog"]
-    print(f"| {t['id']} | {guards} | {t['label']} | {' / '.join(logs) or '—'} |")
-print("Группа сценария: переход | меняет владельца | clearGroup | режим выборки")
+    print(f"| {t['id']} | {guards} | {t.get('labelKey')} | {' / '.join(logs) or '—'} |")
+print("Привязанные (§11.4): переход | меняет адресата | доступ к привязанным | связь")
+LINK = ("clearLink", "setLinkedTo", "relinkToPrimary", "copyCloseFromPrimary")
 for t in w["transitions"]:
     fns = [e["fn"] for e in t["effects"]]
-    if "setOwner" in fns or t["to"] == "new":
-        print(f"| {t['id']} | {'да' if 'setOwner' in fns else 'нет'} | {'да' if 'clearGroup' in fns else 'НЕТ'} | {(t.get('bulk') or {}).get('mode', '—')} |")
+    moves = "setOwner" in fns or "setAssignmentGroup" in fns
+    if moves or "linked" in t["from"] + [t["to"]] or "closed" in t["from"] + [t["to"]]:
+        access = "условие" if any(g["fn"] == "targetHasAccessToLinked" for g in t["guards"]) else "linked_lost_access" if moves else "—"
+        print(f"| {t['id']} | {'да' if moves else 'нет'} | {access} | {', '.join(f for f in fns if f in LINK) or '—'} |")
 import re
 CHANGES = {"targetName": {"setOwner", "setAssignmentGroup"}, "escalationLevel": {"increment:escalation_level", "setFlag:escalation_level"},
            "holdReasonLabel": {"setHoldReason", "clearHoldReason"}, "closeResultLabel": {"setFlag:close_result"}, "stepNumber": {"setCursor"}}

@@ -607,10 +607,10 @@
       }));
     }
 
-    // Сценарий инцидента: «Взять в работу» на выборке — как одно, только с одним сценарием (§11, черновик)
+    // Сценарий инцидента: «Взять в работу» на выборке — как одно, только с одним сценарием (§11)
     const scenarioKey = (ev) => (scenarioOf(ev) && scenarioOf(ev).guid) || ev.typeId;
 
-    /* ===== «Выделить по фильтру» из дерева (§11, черновик) =====
+    /* ===== «Выделить по фильтру» из дерева (§11) =====
        Узел дерева (или все события) и условия, соединённые «ИЛИ». В условии — «И»: тип устройства
        (один или любой), события из выбранных, устройства из выбранных; пустое — любые. Нет условий —
        все события узла. Подходящие отмечаются, дальше — панель выборки */
@@ -769,7 +769,7 @@
       const src = eventSource(ev);
       const plan = planOf(ev);
       const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter((id) => myDevices.has(id));
-      // Камеры основного и открытых связанных событий, без повторов (§11, черновик)
+      // Камеры основного и открытых связанных событий, без повторов (§11)
       const own = ev.cameras || [];
       const extra = [...new Set(events.filter((e) => e.linkedTo === ev.id && e.state === "linked").flatMap((e) => e.cameras || []))].filter((id) => !own.includes(id));
       const cameras = own.concat(extra);
@@ -880,7 +880,7 @@
     const listed = () => new Set(W.queueFilters.flatMap((f) => (f.stateCategories || []).concat((f.states || []).map((st) => STATES[st].category))));
     function visible(q) {
       // В списках — только состояния, которые есть в фильтрах очереди машины: связанные события
-      // объединённого живут в карточке основного (§11, черновик)
+      // объединённого живут в карточке основного (§11)
       const shown = listed();
       let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
@@ -1077,7 +1077,7 @@
       return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
     }
 
-    // Основной при объединении (§11, черновик): мой в работе — к нему, иначе самый срочный новый,
+    // Основной при объединении (§11): мой в работе — к нему, иначе самый срочный новый,
     // у равных — самый ранний. Ни одного подходящего — null
     function pickPrimary(list) {
       const order = (a, b) => b.priority - a.priority || a.occurredAt - b.occurredAt || byNumber(a, b);
@@ -1311,7 +1311,7 @@
         (p, q) => {
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          // Связанные события объединённого (§11, черновик) — и закрытые вместе с ним, как история.
+          // Связанные события объединённого (§11) — и закрытые вместе с ним, как история.
           // Их может быть сколько угодно (выборка без предела): постранично, как очередь
           const all = events.filter((e) => e.linkedTo === primary.id && canSee(e));
           const size = Math.min(200, Math.max(1, Number(q.pageSize) || PAGE_SIZE));
