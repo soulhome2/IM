@@ -1090,13 +1090,13 @@
     const table = {
       transfer: {
         title: t("Передать {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет передано # событие} few {Будут переданы # события} other {Будут переданы # событий}} одному адресату. Одна причина на всю выборку.", { n }),
+        note: t("{n, plural, one {Будет передан # инцидент} few {Будут переданы # инцидента} other {Будут переданы # инцидентов}} одному адресату. Одна причина на всю выборку.", { n }),
         confirm: t("Передать {n}", { n }),
         toast: (form) => t("Передано: {n} → {who}", { n, who: actorName(form.targetId) }),
       },
       close: {
         title: t("Закрыть {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет закрыто # событие} few {Будут закрыты # события} other {Будут закрыты # событий}} без сценария. Одна причина на всю выборку.", { n }),
+        note: t("{n, plural, one {Будет закрыт # инцидент} few {Будут закрыты # инцидента} other {Будут закрыты # инцидентов}} без сценария. Одна причина на всю выборку.", { n }),
         confirm: t("Закрыть {n}", { n }),
         toast: () => t("Закрыто: {n}", { n }),
       },
@@ -1242,7 +1242,7 @@
     title: "Перерыв",
     confirmLabel: "Уйти на перерыв",
     style: "primary",
-    note: t("Активный инцидент будет отложен системой. Новые события не назначаются."),
+    note: t("Активный инцидент будет отложен системой. Новые инциденты не назначаются."),
     fields: [
       {
         name: "reasonId",
@@ -1718,7 +1718,7 @@
         <div class="node-content">
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
-          <span class="node-text">${te("Все события")}</span>
+          <span class="node-text">${te("Все инциденты")}</span>
           ${filterButtons("all")}
           <span class="tree-ev ${crit ? "crit" : ""}">${open}</span>
         </div>
@@ -1826,7 +1826,7 @@
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const start = (state.page - 1) * PAGE_SIZE;
     renderPager(total, pages, start, items.length);
-    $("eventsList").innerHTML = items.map(eventRowHtml).join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
+    $("eventsList").innerHTML = items.map(eventRowHtml).join("") || `<div class="empty">${te("Нет инцидентов в текущем фильтре")}</div>`;
   }
 
   function eventRowHtml(e) {
@@ -2332,7 +2332,7 @@
     $("statusQueue").textContent =
       LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", queueVars);
     if (!ev) {
-      $("statusIncident").textContent = t("Очередь ожидает выбора события");
+      $("statusIncident").textContent = t("Очередь ожидает выбора инцидента");
       $("statusSteps").textContent = "";
       $("statusSla").textContent = "";
       return;
@@ -2530,7 +2530,7 @@
   async function goOnBreak(reasonId) {
     try {
       await api.put("/operator/session/agent-state", { agentState: "not_ready", reasonId });
-      toast(t("Перерыв. Новые события не назначаются"));
+      toast(t("Перерыв. Новые инциденты не назначаются"));
     } catch (err) {
       toast(problemText(err));
     }
@@ -2800,7 +2800,7 @@
         const id = check.dataset.check;
         if (state.checked.has(id)) state.checked.delete(id);
         else if (LIMITS.maxBulk != null && state.checked.size >= LIMITS.maxBulk) {
-          toast(t("Не больше {max} событий в выборке", { max: LIMITS.maxBulk }));
+          toast(t("Не больше {max} инцидентов в выборке", { max: LIMITS.maxBulk }));
           return;
         } else state.checked.add(id);
         await updateSelection();
@@ -2871,7 +2871,7 @@
       if (detachAll) {
         try {
           const after = await api.del(`/operator/incidents/${enc(ev.guid)}/linked`);
-          toast(t("Отсоединено: {n} — события вернулись в очередь новыми", { n: ev.linkedCount - after.linkedCount }));
+          toast(t("Отсоединено: {n} — инциденты вернулись в очередь новыми", { n: ev.linkedCount - after.linkedCount }));
         } catch (err) {
           toast(problemText(err));
         }
@@ -3153,7 +3153,7 @@
       return;
     }
     if (!res.incidentGuids.length) {
-      toast(t("Нет событий для выборки"));
+      toast(t("Нет инцидентов для выборки"));
       return;
     }
     state.checked = new Set(res.incidentGuids);
@@ -3167,7 +3167,7 @@
     return pickSelection({ mode: "all_in_filter" }, (res) =>
       res.truncated
         ? t("Выбрано {n} из {max}", { n: res.incidentGuids.length, max: LIMITS.maxBulk })
-        : t("Выбрано событий: {n}", { n: res.incidentGuids.length })
+        : t("Выбрано инцидентов: {n}", { n: res.incidentGuids.length })
     );
   }
 
@@ -3195,7 +3195,7 @@
 
   function linkedChip(e) {
     if (!e.linkedCount) return "";
-    const text = t("+{n, plural, one {# событие} few {# события} other {# событий}}", { n: e.linkedCount });
+    const text = t("+{n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n: e.linkedCount });
     return `<span class="chip linked" data-work-tab="linked" title="${te("Объединено с этим инцидентом: {n}", { n: e.linkedCount })}"><span class="material-symbols-outlined" aria-hidden="true">link</span>${escapeHtml(text)}</span>`;
   }
 
@@ -3333,7 +3333,7 @@
     await loadFilter();
   }
 
-  const filterNodeName = () => (filt.node ? t(filt.node.name) : t("Все события"));
+  const filterNodeName = () => (filt.node ? t(filt.node.name) : t("Все инциденты"));
 
   async function loadFilter() {
     try {
@@ -3404,7 +3404,7 @@
                 : ""
             }</div>
             ${filterSelect(i, "deviceTypeId", t("Тип устройства"), o.deviceTypes, c.deviceTypeId ? [c.deviceTypeId] : [], true)}
-            ${filterSelect(i, "eventTypeIds", t("События"), o.eventTypes, c.eventTypeIds)}
+            ${filterSelect(i, "eventTypeIds", t("Тип события"), o.eventTypes, c.eventTypeIds)}
             ${filterSelect(i, "deviceGuids", t("Устройства"), o.devices, c.deviceGuids)}
           </div>`;
         })
@@ -3425,7 +3425,7 @@
   function renderFilter() {
     const v = filt.view;
     // Откуда берутся события: узел дерева и фильтр очереди — тот же, что над очередью
-    $("groupingIntro").textContent = t("«{name}», «{filter}»: подходящие события со всех страниц будут отмечены. Дальше — действие на панели выборки.", {
+    $("groupingIntro").textContent = t("«{name}», «{filter}»: подходящие инциденты со всех страниц будут отмечены. Дальше — действие на панели выборки.", {
       name: filterNodeName(),
       filter: lbl(WORKFLOW.queueFilters.find((f) => f.id === state.filter)),
     });

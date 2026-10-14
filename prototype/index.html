@@ -90,7 +90,7 @@
     </header>
 
     <div class="break-banner" id="breakBanner" hidden>
-      <span>События удерживаются в очереди диспетчера. Статус: перерыв. Новые инциденты вам не назначаются.</span>
+      <span>Инциденты удерживаются в очереди диспетчера. Статус: перерыв. Новые инциденты вам не назначаются.</span>
       <button type="button" class="btn outline small" id="breakReturn">Вернуться с перерыва</button>
     </div>
 
@@ -141,16 +141,16 @@
         <section class="panel" id="panelEvents" data-panel="events">
           <header class="panel-h">
             <h2>Очередь <em id="eventsCount">0</em></h2>
-            <div class="events-select" role="group" aria-label="Выборка событий">
+            <div class="events-select" role="group" aria-label="Выборка инцидентов">
               <!-- Выделить: все события текущего фильтра или «По фильтру…» — окно для текущего узла дерева (§11.1, §11.2) -->
               <div class="menu" id="selectMenu">
-                <button type="button" class="btn ghost small" id="selectMenuBtn" aria-haspopup="menu" aria-expanded="false" title="Выделить события">
+                <button type="button" class="btn ghost small" id="selectMenuBtn" aria-haspopup="menu" aria-expanded="false" title="Выделить инциденты">
                   <span class="material-symbols-outlined">select_all</span>
                   Выделить
                   <span class="material-symbols-outlined chevron">expand_more</span>
                 </button>
                 <div class="menu-pop" role="menu" hidden>
-                  <button type="button" class="menu-item" id="selectAllBtn" role="menuitem" title="Все события текущего фильтра очереди со всех страниц">
+                  <button type="button" class="menu-item" id="selectAllBtn" role="menuitem" title="Все инциденты текущего фильтра очереди со всех страниц">
                     <span class="material-symbols-outlined">select_all</span>
                     <span>Все в фильтре</span>
                   </button>
@@ -254,7 +254,7 @@
     </main>
 
     <footer class="statusbar">
-      <span id="statusIncident">Очередь ожидает выбора события</span>
+      <span id="statusIncident">Очередь ожидает выбора инцидента</span>
       <span id="statusSteps"></span>
       <span id="statusSla"></span>
       <span id="statusQueue"></span>
