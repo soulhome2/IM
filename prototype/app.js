@@ -1276,7 +1276,7 @@
   const targetsOf = (field) => (field.options || []).filter((o) => !o.disabled);
   function targetMenu(field, q, value) {
     const opt = (o) =>
-      `<button type="button" class="mselect-opt target-opt ${o.available === false ? "away" : ""}" role="option" data-target-pick="${escapeHtml(o.id)}"
+      `<button type="button" class="mselect-opt target-opt ${o.available === false ? "away" : ""}" role="option" tabindex="-1" data-target-pick="${escapeHtml(o.id)}"
         aria-selected="${o.id === value}" ${targetHit(o, q) ? "" : "hidden"}><span>${escapeHtml(t(o.label))}</span><em>${escapeHtml(
         [t(o.role || ""), o.available === false && o.availabilityLabel ? t(o.availabilityLabel) : ""].filter(Boolean).join(" · ")
       )}</em></button>`;
@@ -3109,6 +3109,17 @@
       narrowTargets(input);
     });
     $("dialogFields").addEventListener("keydown", targetKey);
+    // Фокус ушёл из поля (Tab, щелчок в другое поле) — список закрывается (BUG-44). Проверка — после
+    // перерисовки: поле перерисовывается и возвращает себе фокус. Щелчок по варианту фокус не забирает
+    $("dialogFields").addEventListener("mousedown", (e) => {
+      if (e.target.closest(".target-combo .mselect-menu")) e.preventDefault();
+    });
+    $("dialogFields").addEventListener("focusout", () =>
+      setTimeout(() => {
+        const open = state.dialog && state.dialog.combo.open && $("dialogFields").querySelector("[data-target-combo].open");
+        if (open && !open.contains(document.activeElement)) closeTargetCombo(open.dataset.targetCombo);
+      })
+    );
     $("modalDialog").addEventListener("click", (e) => {
       const open = state.dialog && state.dialog.combo.open && $("dialogFields").querySelector("[data-target-combo].open");
       // Поле перерисовывается по щелчку: щелчок по уже убранному элементу — не «мимо»

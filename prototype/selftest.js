@@ -576,6 +576,12 @@
       expect(input().placeholder === "Выберите адресата", `после набора без выбора в поле «${input().placeholder}»`);
       await confirmDialog(NOTE);
       expect(!$("modalDialog").hidden, "«Передать» с набранным, но не выбранным адресатом закрыла форму");
+      // Фокус ушёл в «Причину» — список закрылся; адресаты — не в порядке Tab (BUG-44)
+      await click(input());
+      expect([...menu().querySelectorAll("[data-target-pick]")].every((o) => o.tabIndex === -1), "адресаты списка — в порядке Tab");
+      field("comment").focus();
+      await wait();
+      expect(!menu(), "фокус ушёл в «Причину», а список адресатов открыт");
       await click(input());
       await click(menu().querySelector('[data-target-pick="petrova"]'));
       expect(!menu() && field("targetId").value === "petrova", "Петрова не выбрана");
