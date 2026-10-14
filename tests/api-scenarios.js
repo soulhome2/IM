@@ -1891,7 +1891,7 @@
     assert.eq(after.assignmentGroup && after.assignmentGroup.id, "grp-leads", "INC-1843 ушёл в первую по порядку группу");
   });
 
-  test("Адресат не на месте — почему: «перерыв: обед», вне МИ — «оффлайн», у группы — «никого нет на месте» (§8.1)", async () => {
+  test("Адресат не на месте — почему: «перерыв: Обед», вне МИ — «оффлайн», у группы — «никого нет на месте» (§8.1)", async () => {
     const env = await makeEnv();
     const open = await env.all("open");
     const labels = async (inc) =>
