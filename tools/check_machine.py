@@ -490,6 +490,30 @@ def check_rules_diagram(w, err):
                 err.append(f"диаграмма §3 правил: нет стрелки {src} → {t['to']} (переход `{t['id']}`)")
 
 
+def check_rules_example(w, err):
+    """Пример строки схемы в §14.8 правил — точная копия перехода машины с тем же id (DOC-35):
+    разработчик берёт его за образец. Сравниваются данные, а не текст."""
+    path = os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    section = text.split("### 14.8.", 1)[1].split("\n### ", 1)[0]
+    found = re.search(r"```json\n(.*?)\n```", section, re.S)
+    if not found:
+        err.append("§14.8 правил: нет примера строки схемы в блоке ```json")
+        return
+    try:
+        example = json.loads(found.group(1))
+    except json.JSONDecodeError as e:
+        err.append(f"§14.8 правил: пример — не JSON ({e})")
+        return
+    machine = next((t for t in w["transitions"] if t["id"] == example.get("id")), None)
+    if machine is None:
+        err.append(f"§14.8 правил: в машине нет перехода `{example.get('id')}` из примера")
+    elif example != machine:
+        diff = sorted(k for k in set(example) | set(machine) if example.get(k) != machine.get(k))
+        err.append(f"§14.8 правил: пример `{example['id']}` расходится с машиной — {', '.join(diff)}")
+
+
 def check_fixture_journal(w, err):
     """Записи журнала эталонного набора — те, что пишут машина и сервер (DATA-04, DATA-05): ключ
     записи журнала из машины (appendLog, messages, alerts.noRecipientLog) и ровно его подстановки
@@ -1156,6 +1180,7 @@ def main():
     check_literals(w, err)
     check_rules_tables(w, err)
     check_rules_diagram(w, err)
+    check_rules_example(w, err)
     check_doc_numbers(w, o, err)
     check_served(o, err)
     check_fixture_journal(w, err)

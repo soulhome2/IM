@@ -684,13 +684,16 @@ stateDiagram-v2
 ```json
 {
   "id": "accept",
-  "label": "Принять",
+  "labelKey": "workflow.transition.accept",
+  "hintKey": "workflow.transition.accept.hint",
   "from": ["pending_acceptance"],
   "to": "in_progress",
   "trigger": "manual",
   "concurrency": { "expectedVersion": true, "onTimerConflict": "manual_wins" },
+  "form": null,
+  "requiredStepSet": "none",
   "guards": [
-    { "fn": "hasPermission", "args": ["incident:claim"] },
+    { "fn": "hasPermission", "args": ["incident:accept"] },
     { "fn": "isTarget" },
     { "fn": "agentReady" },
     { "fn": "withinActiveLimit" }
@@ -700,9 +703,10 @@ stateDiagram-v2
     { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
     { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
     { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
-    { "kind": "transactional", "fn": "appendLog", "args": ["Передача принята, прогресс сценария сохранён"] }
+    { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+    { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
   ],
-  "bulk": { "allowed": false },
+  "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
   "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
 }
 ```
