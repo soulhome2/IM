@@ -589,7 +589,7 @@
     // Вкладка карточки: сценарий или привязанные инциденты — и чья карточка
     workTab: "scenario",
     workTabFor: null,
-    // Страница связанных событий в карточке основного (§11) и найденное поиском среди них
+    // Страница привязанных инцидентов в карточке основного (§11) и найденное поиском среди них
     linkedPage: 1,
     linkedFocus: null,
     search: "",
@@ -846,10 +846,10 @@
     heartbeat();
   }
 
-  // Связанные события основного (§11) — постранично: их может быть сколько угодно.
+  // Привязанные инциденты основного (§11) — постранично: их может быть сколько угодно.
   // Другая карточка — с первой страницы; страница опустела (отсоединили) — на последнюю
   const LINKED_PAGE = 10;
-  // Связанные этой карточки, найденные поиском очереди: строка основного несёт их в matchedLinked
+  // Привязанные этой карточки, найденные поиском очереди: строка основного несёт их в matchedLinked
   function foundLinked(guid) {
     const row = state.search && store.page.items.find((x) => x.guid === guid);
     return (row && row.matchedLinked) || [];
@@ -1937,9 +1937,9 @@
     const prog = stepProgress(ev);
     const editable = !ev.readOnly;
     const acts = cardActions(ev);
-    // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если связанные есть);
+    // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если привязанные есть);
     // другая карточка — со сценария
-    // Открыта из поиска, нашедшего связанное, — сразу на вкладке привязанных
+    // Открыта из поиска, нашедшего привязанный, — сразу на вкладке привязанных
     if (state.workTabFor !== ev.guid) Object.assign(state, { workTab: foundLinked(ev.guid).length ? "linked" : "scenario", workTabFor: ev.guid });
     const tab = ev.linkedCount ? state.workTab : "scenario";
     // Внизу один ряд: «Назад», действия с инцидентом, «Далее». На вкладке привязанных «Назад» / «Далее»
@@ -3199,7 +3199,7 @@
     return `<span class="chip linked" data-work-tab="linked" title="${te("Объединено с этим инцидентом: {n}", { n: e.linkedCount })}"><span class="material-symbols-outlined" aria-hidden="true">link</span>${escapeHtml(text)}</span>`;
   }
 
-  // Вкладки над сценарием: связанных много — им своё место, а не блок над шагами
+  // Вкладки над сценарием: привязанных много — им своё место, а не блок над шагами
   function workTabs(ev, tab) {
     if (!ev.linkedCount) return "";
     const b = (id, label) =>
@@ -3216,7 +3216,7 @@
     const list = page ? page.items : [];
     if (!list.length) return `<div class="empty">${te("Привязанных инцидентов нет")}</div>`;
     const total = page.total;
-    // «Отсоединить все» — тот же переход ко всем разом; доступность и причина — как у первого связанного
+    // «Отсоединить все» — тот же переход ко всем разом; доступность и причина — как у первого привязанного
     const first = list.map((m) => (m.actions || []).find((a) => (transitionDef(a.id) || {}).from && transitionDef(a.id).from.includes("linked"))).find(Boolean);
     const all =
       first && total > 1
@@ -3287,7 +3287,7 @@
     trigger(id, ev, "queue", [...state.checked]);
   }
 
-  // «Взять в работу» на выборке — как одно: основного выбирает сервер, остальные — его связанные
+  // «Взять в работу» на выборке — как одно: основного выбирает сервер, остальные — его привязанные
   async function takeAsOne() {
     const n = state.checked.size;
     let res;

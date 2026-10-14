@@ -86,8 +86,8 @@
       if (inc.owner && inc.owner.id === session.operator.guid && inc.state !== "pending_acceptance" && inc.state !== "closed" && inc.ownership !== "owner") {
         say(inc, `мой, а отношение «${inc.ownership}»`);
       }
-      // Объединение (§11): связанные в списках не показываются; связь у открытого — только у связанного
-      if (inc.state === "linked") say(inc, "связанное событие в списке");
+      // Объединение (§11): привязанные в списках не показываются; связь у открытого — только у привязанного
+      if (inc.state === "linked") say(inc, "привязанный инцидент в списке");
       if (inc.linkedTo && inc.state !== "closed") say(inc, "открытый со ссылкой на основной");
     });
     if (maxActive != null && session.usage.activeCount > maxActive) bad.push(`активных у меня ${session.usage.activeCount} > ${maxActive}`);
@@ -136,7 +136,7 @@
           history.push(`ответы ${card.guid}`);
         }
       } else if (x < 0.29) {
-        // «Объединить» (§11): два-три случайных открытых — отказ или основной со связанными
+        // «Объединить» (§11): два-три случайных открытых — отказ или основной со привязанными
         const open = await env.all("open");
         const picked = [...new Set([pick(r, open), pick(r, open), pick(r, open)].filter(Boolean))];
         if (picked.length >= 2) {

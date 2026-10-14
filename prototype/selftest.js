@@ -1379,7 +1379,7 @@
       }
     });
 
-    await step("Выделить по фильтру → «Взять в работу»: пожары одним инцидентом, у основного «+N», связанные в карточке; «Отсоединить» и «Отсоединить все» — события снова новые (§11)", async () => {
+    await step("Выделить по фильтру → «Взять в работу»: пожары одним инцидентом, у основного «+N», привязанные в карточке; «Отсоединить» и «Отсоединить все» — события снова новые (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
@@ -1402,7 +1402,7 @@
       await wait();
       const lead = (await stand.get("/operator/incidents", { filter: "mine", pageSize: 1000 })).items.find((e) => e.state === "in_progress" && e.linkedCount);
       try {
-        expect(lead && lead.linkedCount === picked.length - 1, `основной не взят или связанных не ${picked.length - 1}`);
+        expect(lead && lead.linkedCount === picked.length - 1, `основной не взят или привязанных не ${picked.length - 1}`);
         // Карточка основного открылась сама — на его текущем шаге сценария
         expect(mode() === "work" && $("statusIncident").textContent.includes(lead.number), `карточка основного не открылась: «${$("statusIncident").textContent}»`);
         const card = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
@@ -1414,8 +1414,8 @@
         expect(row && row.querySelector(".chip.linked"), "у основного нет пометки «+N»");
         await click(row.querySelector('[data-do="open_card"], [data-do="resume"]'));
         expect(mode() === "work", "карточка основного не открылась из очереди");
-        // Связанные — на своей вкладке, не над сценарием; открываются и по пометке «+N» в заголовке
-        expect(!root().querySelector("[data-detach]") && root().querySelector(".crumbs"), "связанные видны на вкладке сценария");
+        // Привязанные — на своей вкладке, не над сценарием; открываются и по пометке «+N» в заголовке
+        expect(!root().querySelector("[data-detach]") && root().querySelector(".crumbs"), "привязанные видны на вкладке сценария");
         // Один ряд: «Назад», действия с инцидентом, «Далее». Нижний блок одинаков на обеих вкладках: место
         // «Назад» / «Далее» на вкладке привязанных занято, действия не прыгают
         const actsTop = () => {
@@ -1438,21 +1438,21 @@
         expect(Boolean(root().querySelector(".lnk-due")) === earlier, `«Срок привязанного» в заголовке: ${Boolean(root().querySelector(".lnk-due"))}, а должен быть ${earlier}`);
         const detach = root().querySelectorAll("[data-detach]");
         // Постранично, по 10 (LINKED_PAGE)
-        expect(detach.length === Math.min(picked.length - 1, 10), `на вкладке связанных ${detach.length}`);
+        expect(detach.length === Math.min(picked.length - 1, 10), `на вкладке привязанных ${detach.length}`);
         const gone = detach[0].dataset.detach;
         await click(detach[0]);
         await wait();
         const back = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.guid === gone);
         expect(back && back.state === "new", "отсоединённый не вернулся в очередь новым");
-        // «Отсоединить все» — остальные разом, список связанных в карточке пропадает
+        // «Отсоединить все» — остальные разом, список привязанных в карточке пропадает
         const all = root().querySelector("[data-detach-all]");
         expect(all && !off(all), "нет кнопки «Отсоединить все»");
         await click(all);
         await wait();
         const left = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.filter((x) => x.state === "linked");
-        expect(!left.length && !root().querySelector("[data-detach]"), `после «Отсоединить все» связанных ${left.length}`);
-        expect(!root().querySelector(".work-tabs") && root().querySelector(".crumbs"), "связанных нет — а вкладки остались или сценарий не вернулся");
-        return `основной ${lead.number}, связанных ${picked.length - 1}`;
+        expect(!left.length && !root().querySelector("[data-detach]"), `после «Отсоединить все» привязанных ${left.length}`);
+        expect(!root().querySelector(".work-tabs") && root().querySelector(".crumbs"), "привязанных нет — а вкладки остались или сценарий не вернулся");
+        return `основной ${lead.number}, привязанных ${picked.length - 1}`;
       } finally {
         if (lead) {
           const rest = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 });
@@ -1545,7 +1545,7 @@
       }
     });
 
-    await step("Связанных много — на вкладке «Привязанные инциденты» постранично; поиск по номеру связанного — строка основного и страница найденного; «Отсоединить все» — со всех страниц (§11)", async () => {
+    await step("Привязанных много — на вкладке «Привязанные инциденты» постранично; поиск по номеру привязанного — строка основного и страница найденного; «Отсоединить все» — со всех страниц (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Ещё девять пожаров рядом с INC-1847 — копии с другими номерами
@@ -1560,7 +1560,7 @@
       try {
         const res = await stand.post("/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
         const lead = res.incident;
-        // Поиск по номеру связанного: находит строку основного, открытая из неё карточка — на странице найденного
+        // Поиск по номеру привязанного: находит строку основного, открытая из неё карточка — на странице найденного
         const sought = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.pop();
         await setFilter("open");
         $("eventSearch").value = sought.number;
@@ -1594,7 +1594,7 @@
         await click(root().querySelector("[data-detach-all]"));
         await wait();
         const left = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.filter((x) => x.state === "linked");
-        expect(!left.length && !root().querySelector(".lnk-panel"), `после «Отсоединить все» связанных ${left.length}`);
+        expect(!left.length && !root().querySelector(".lnk-panel"), `после «Отсоединить все» привязанных ${left.length}`);
         return `${first.join(", ")} | ${second.join(", ")}`;
       } finally {
         if (mode() === "work") await click($("backToQueue"));

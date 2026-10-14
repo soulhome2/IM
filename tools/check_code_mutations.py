@@ -78,7 +78,7 @@ MUTATIONS = [
     ("owner-group-ignored", "engine.js", "ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : [\"workflow.guard.owner_duty_group\"]),", "ownerHasDutyGroup: () => null,", "api"),
     ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
     ("visibility-ignored", "server.js", "let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));", "let list = events.filter((e) => shown.has(STATES[e.state].category));", "api"),
-    # Объединение (§11): основной, срок, закрытие связанных; вкладка — фильтр; панель выборки
+    # Объединение (§11): основной, срок, закрытие привязанных; вкладка — фильтр; панель выборки
     ("merge-primary-order", "server.js", "const order = (a, b) => b.priority - a.priority || a.occurredAt - b.occurredAt || byNumber(a, b);", "const order = (a, b) => a.priority - b.priority || a.occurredAt - b.occurredAt || byNumber(a, b);", "api"),
     ("merge-linked-stay-open", "server.js", "if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === \"linked\")) runScheduler();", "", "api"),
     ("ui-linked-chip-hidden", "app.js", "if (!e.linkedCount) return \"\";", "return \"\";", "ui"),

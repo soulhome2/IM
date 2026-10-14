@@ -769,7 +769,7 @@
       const src = eventSource(ev);
       const plan = planOf(ev);
       const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter((id) => myDevices.has(id));
-      // Камеры основного и открытых связанных событий, без повторов (§11)
+      // Камеры основного и открытых привязанных инцидентов, без повторов (§11)
       const own = ev.cameras || [];
       const extra = [...new Set(events.filter((e) => e.linkedTo === ev.id && e.state === "linked").flatMap((e) => e.cameras || []))].filter((id) => !own.includes(id));
       const cameras = own.concat(extra);
@@ -873,13 +873,13 @@
         (reactionRunning(a) ? a.reactionDueAt - b.reactionDueAt : a.occurredAt - b.occurredAt),
     };
 
-    // Поиск — по номеру, типу, площадке и месту. Связанные события в списках не видны, но ищутся:
-    // их находит строка основного, в ней — кто из связанных подошёл (matchedLinked)
+    // Поиск — по номеру, типу, площадке и месту. Привязанные инциденты в списках не видны, но ищутся:
+    // их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
     const hit = (e, needle) => `${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
     const linkedHits = (e, needle) => events.filter((x) => x.linkedTo === e.id && canSee(x) && hit(x, needle));
     const listed = () => new Set(W.queueFilters.flatMap((f) => (f.stateCategories || []).concat((f.states || []).map((st) => STATES[st].category))));
     function visible(q) {
-      // В списках — только состояния, которые есть в фильтрах очереди машины: связанные события
+      // В списках — только состояния, которые есть в фильтрах очереди машины: привязанные инциденты
       // объединённого живут в карточке основного (§11)
       const shown = listed();
       let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));
@@ -1070,7 +1070,7 @@
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
       const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
       if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];
-      // Основной закрыт — связанные закрываются сразу, системным переходом машины (§14.3)
+      // Основной закрыт — привязанные закрываются сразу, системным переходом машины (§14.3)
       if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === "linked")) runScheduler();
       const journal = journalView(ev).slice(before);
       const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
@@ -1094,7 +1094,7 @@
       const others = list.filter((e) => e !== primary);
       const r = engine.merge(primary, others);
       if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
-      // Связанные объединяемых перешли к новому основному (relinkToPrimary машины) — им тоже новая версия
+      // Привязанные объединяемых перешли к новому основному (relinkToPrimary машины) — им тоже новая версия
       touch(events.filter((e) => e.linkedTo === primary.id && !others.includes(e) && !isDone(e)));
       // Присоединённых может быть сколько угодно: в журнале — первые номера и «и ещё N»
       const shown = others.slice(0, MERGED_IN_SHOWN).map((o) => o.number).join(", ");
@@ -1311,12 +1311,12 @@
         (p, q) => {
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          // Связанные события объединённого (§11) — и закрытые вместе с ним, как история.
+          // Привязанные инциденты объединённого (§11) — и закрытые вместе с ним, как история.
           // Их может быть сколько угодно (выборка без предела): постранично, как очередь
           const all = events.filter((e) => e.linkedTo === primary.id && canSee(e));
           const size = Math.min(200, Math.max(1, Number(q.pageSize) || PAGE_SIZE));
           const n = Math.max(1, Number(q.page) || 1);
-          // На какой странице связанное из focusGuid (найденное поиском очереди); null — его нет среди связанных
+          // На какой странице привязанный из focusGuid (найденное поиском очереди); null — его нет среди привязанных
           const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;
           const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;
           return { status: 200, body: { items: all.slice((n - 1) * size, n * size).map((e) => summary(e, "card")), total: all.length, page: n, pageSize: size, focusPage } };
@@ -1328,7 +1328,7 @@
         (p) => {
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          // «Отсоединить все» — тот же переход ко всем связанным разом: всё или ничего
+          // «Отсоединить все» — тот же переход ко всем привязанным разом: всё или ничего
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
           const blocked = linked.find((ev) => !engine.availability(detach.id, ev).ok);

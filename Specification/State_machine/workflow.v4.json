@@ -25,7 +25,7 @@
     { "id": "pending", "labelKey": "workflow.category.pending", "countsAsOpen": true },
     { "id": "active", "labelKey": "workflow.category.active", "countsAsOpen": true },
     { "id": "done", "labelKey": "workflow.category.done", "countsAsOpen": false },
-    { "id": "linked", "labelKey": "workflow.category.linked", "countsAsOpen": false, "$comment": "§11. Связанное событие объединённого инцидента: в списках не показывается, живёт в карточке основного" }
+    { "id": "linked", "labelKey": "workflow.category.linked", "countsAsOpen": false, "$comment": "§11. Привязанный инцидент объединённого инцидента: в списках не показывается, живёт в карточке основного" }
   ],
 
   "states": [
@@ -73,7 +73,7 @@
     },
     {
       "id": "linked",
-      "$comment": "§11.4. Связан с основным инцидентом (linked_to): владельца нет, в списках не показывается. Норматив закрытия, если уже шёл, продолжает идти: истёк — нарушение на владельца основного (linked_resolution_overdue). Выход — «Отсоединить» (в новые) или закрытие вместе с основным",
+      "$comment": "§11.4. Привязан к основному инциденту (linked_to): владельца нет, в списках не показывается. Норматив закрытия, если уже шёл, продолжает идти: истёк — нарушение на владельца основного (linked_resolution_overdue). Выход — «Отсоединить» (в новые) или закрытие вместе с основным",
       "labelKey": "workflow.state.linked",
       "category": "linked",
       "terminal": false,
@@ -738,7 +738,7 @@
     {
       "id": "linked_resolution_overdue",
       "labelKey": "workflow.transition.linked_resolution_overdue",
-      "$comment": "§11.4. Истёк норматив закрытия привязанного события (у своего в работе или отложенного он идёт и после объединения): нарушение — на владельца основного, алерт. Эскалации нет: своего владельца у привязанного нет. Так объединением не скрыть близкую просрочку.",
+      "$comment": "§11.4. Истёк норматив закрытия привязанного инцидента (у своего в работе или отложенного он идёт и после объединения): нарушение — на владельца основного, алерт. Эскалации нет: своего владельца у привязанного нет. Так объединением не скрыть близкую просрочку.",
       "from": ["linked"],
       "to": null,
       "trigger": "timer",
@@ -984,7 +984,7 @@
     },
     {
       "id": "merge",
-      "$comment": "§11. «Взять в работу» на выборке — как одно: отмеченные становятся связанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается связанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
+      "$comment": "§11. «Взять в работу» на выборке — как одно: отмеченные становятся привязанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается привязанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
       "labelKey": "workflow.transition.merge",
       "hintKey": "workflow.transition.merge.hint",
       "from": ["new", "in_progress", "on_hold"],
@@ -1017,7 +1017,7 @@
     },
     {
       "id": "detach",
-      "$comment": "§11. «Отсоединить» из карточки основного: связанное событие возвращается в очередь новым, норматив реакции — заново",
+      "$comment": "§11. «Отсоединить» из карточки основного: привязанный инцидент возвращается в очередь новым, норматив реакции — заново",
       "labelKey": "workflow.transition.detach",
       "hintKey": "workflow.transition.detach.hint",
       "from": ["linked"],
@@ -1042,7 +1042,7 @@
     },
     {
       "id": "close_linked",
-      "$comment": "§11. Основной закрыт — связанные закрываются с его результатом, причиной, комментарием и закрывшим; связь остаётся историей",
+      "$comment": "§11. Основной закрыт — привязанные закрываются с его результатом, причиной, комментарием и закрывшим; связь остаётся историей",
       "labelKey": "workflow.transition.close_linked",
       "from": ["linked"],
       "to": "closed",
@@ -1140,7 +1140,7 @@
   },
 
   "limits": {
-    "$comment": "§10.2, §11. Связанные события объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
+    "$comment": "§10.2, §11. Привязанные инциденты объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
     "maxActive": null,
     "maxOnHold": 5,
     "maxBulk": null,
@@ -1158,7 +1158,7 @@
   },
 
   "grouping": {
-    "$comment": "§11. Групп сценария нет. Выборка (из дерева — «Выделить по фильтру», или отметками) — разом одно действие (bulk у переходов). «Взять в работу» на выборке — как одно: переход merge (основной и связанные события), основной новый — переходом takeWith. Здесь — takeWith и помощники выборки.",
+    "$comment": "§11. Групп сценария нет. Выборка (из дерева — «Выделить по фильтру», или отметками) — разом одно действие (bulk у переходов). «Взять в работу» на выборке — как одно: переход merge (основной и привязанные инциденты), основной новый — переходом takeWith. Здесь — takeWith и помощники выборки.",
     "takeWith": "claim",
     "selectionHelpers": [
       { "id": "select_all", "labelKey": "workflow.selection.select_all", "scope": "current_filter", "limit": "maxBulk" },
@@ -1225,7 +1225,7 @@
     "workflow.guard.primary_open": { "vars": [] },
     "workflow.guard.target_no_access_linked": { "vars": [] },
     "workflow.guard.primary_addressee_access": { "vars": [] },
-    "workflow.journal.merged_in": { "vars": ["ids"], "$comment": "§11. Основному: к нему присоединены связанные; ids — их номера, не больше пяти" },
+    "workflow.journal.merged_in": { "vars": ["ids"], "$comment": "§11. Основному: к нему присоединены привязанные; ids — их номера, не больше пяти" },
     "workflow.journal.merged_in_more": { "vars": ["ids", "more"], "$comment": "§11. То же, присоединено больше пяти: ids — первые пять номеров, more — сколько ещё" },
     "workflow.error.selection.item": { "vars": ["number", "reason"], "$comment": "§11. Причина недоступности действия на панели выборки: номер инцидента, которому оно недоступно, и причина" },
     "workflow.error.merge.too_few": { "vars": [] },
@@ -1307,7 +1307,7 @@
         "fn": "withinActiveLimit",
         "args": [],
         "onFail": "disable", "failKeys": ["workflow.guard.active_limit"],
-        "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; связанные события объединённого в лимит не входят — у них нет владельца."
+        "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца."
       },
       { "fn": "withinHoldLimit", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.hold_limit"], "extendsBaseRegistry": true, "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»." },
       { "fn": "withinReopenWindow", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.reopen_window"], "extendsBaseRegistry": true, "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут." },
@@ -1321,11 +1321,11 @@
       { "fn": "settingEnabled", "args": ["settingKey"], "onFail": "hide", "failKeys": ["workflow.guard.setting_off"] },
       { "fn": "settingIs", "args": ["settingKey", "value"], "onFail": "hide", "failKeys": ["workflow.guard.setting_other"], "extendsBaseRegistry": true, "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)." },
       { "fn": "isOwnerOrUnowned", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.not_owner"], "extendsBaseRegistry": true, "$comment": "§11. Инцидент ничей (новый) или мой: объединять можно только такие" },
-      { "fn": "mergePrimaryValid", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.merge_primary"], "extendsBaseRegistry": true, "$comment": "§11. Основной (form.primaryId) — другой, открытый, не связанный, виден оператору; новый или мой в работе" },
+      { "fn": "mergePrimaryValid", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.merge_primary"], "extendsBaseRegistry": true, "$comment": "§11. Основной (form.primaryId) — другой, открытый, не привязанный, виден оператору; новый или мой в работе" },
       { "fn": "sameScenarioAsPrimary", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.merge_scenario"], "extendsBaseRegistry": true, "$comment": "§11. Сценарий тот же, что у основного (form.primaryId): как одно берутся только события одного сценария" },
       { "fn": "primaryEditable", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.primary_not_editable"], "extendsBaseRegistry": true, "$comment": "§11. Отсоединять может тот, кто ведёт основной, или любой, пока основной новый" },
-      { "fn": "primaryClosed", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.primary_open"], "extendsBaseRegistry": true, "$comment": "§11. Основной инцидент связанного закрыт" },
-      { "fn": "targetHasAccessToLinked", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.target_no_access_linked"], "extendsBaseRegistry": true, "$comment": "§11, §5. У адресата передачи (form.targetId) есть доступ к объектам всех связанных событий; до заполнения формы условие выполнено" },
+      { "fn": "primaryClosed", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.primary_open"], "extendsBaseRegistry": true, "$comment": "§11. Основной инцидент привязанного закрыт" },
+      { "fn": "targetHasAccessToLinked", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.target_no_access_linked"], "extendsBaseRegistry": true, "$comment": "§11, §5. У адресата передачи (form.targetId) есть доступ к объектам всех привязанных инцидентов; до заполнения формы условие выполнено" },
       { "fn": "primaryAddresseeHasAccess", "args": ["expected"], "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.primary_addressee_access"], "extendsBaseRegistry": true, "$comment": "§11.4, §5 (RULE-71). Есть ли у адресата основного доступ к объекту привязанного; группе хватает одного участника. Основной закрыт или без владельца и адресата — условие не выполнено при любом ожидании" }
     ],
     "effects": [
@@ -1347,8 +1347,8 @@
       { "fn": "setCursor", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep). У «Взять», «Принять», «Возобновить», «Перехватить»." },
       { "fn": "setLinkedTo", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. linked_to — основной инцидент (form.primaryId)" },
       { "fn": "clearLink", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Связь с основным снимается. С шаблонами [событию, основному] — если связь была, запись в журнал события и основного: переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)" },
-      { "fn": "copyAnswersToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария связанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у связанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента" },
-      { "fn": "relinkToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Открытые связанные объединяемого переходят к новому основному: связанного у связанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история" },
+      { "fn": "copyAnswersToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента" },
+      { "fn": "relinkToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Открытые привязанные объединяемого переходят к новому основному: привязанного у привязанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история" },
       { "fn": "copyCloseFromPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Результат, причина, комментарий и закрывший — от основного" },
       { "fn": "notify", "kind": "external" },
       { "fn": "externalCommand", "kind": "external" }

@@ -1160,7 +1160,7 @@
     assert.ok(states.length && states.every((i) => ["new", "on_hold"].includes(i.state)) && states.length === all.filter((i) => ["new", "on_hold"].includes(i.state)).length, "только новые и отложенные");
   });
 
-  /* ===== Объединение: основной и связанные события (§11) ===== */
+  /* ===== Объединение: основной и привязанные инциденты (§11) ===== */
 
   test("«Выделить по фильтру» с «Одинаковый сценарий»: только то, что можно взять как одно; по умолчанию — где таких больше; чужие не включены; «Взять в работу» доступна (§11)", async () => {
     const env = await makeEnv();
@@ -1261,7 +1261,7 @@
     assert.ok(two.actions.find((a) => a.id === "close").enabled, "«Закрыть» доступна обоим");
   });
 
-  test("Взять в работу как одно: основной — самый срочный новый, взят мной; связанные пропали из списков; лимит — одна единица; сценарии разные — нельзя", async () => {
+  test("Взять в работу как одно: основной — самый срочный новый, взят мной; привязанные пропали из списков; лимит — одна единица; сценарии разные — нельзя", async () => {
     const env = await makeEnv();
     // Пожары разной срочности: основной — самый срочный, а не первый попавшийся
     const order = (a, b) => b.priority - a.priority || Date.parse(a.occurredAt) - Date.parse(b.occurredAt);
@@ -1279,14 +1279,14 @@
     const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
     assert.status(res, 200, null, "взять как одно");
     const primary = res.body.incident;
-    assert.eq([primary.guid, primary.state, primary.owner.id, primary.linkedCount], [expected.guid, "in_progress", ME, 2], "основной — самый срочный, у меня в работе, связанных двое");
+    assert.eq([primary.guid, primary.state, primary.owner.id, primary.linkedCount], [expected.guid, "in_progress", ME, 2], "основной — самый срочный, у меня в работе, привязанных двое");
     assert.eq(primary.priority, expected.priority, "приоритет основного — свой, объединение его не меняет");
     const others = fires.filter((e) => e.guid !== primary.guid).map((e) => e.guid);
     for (const filter of ["open", "all", "done", "mine", "foreign", "inbox"]) {
-      assert.ok((await env.all(filter)).every((e) => !others.includes(e.guid)), `связанные не в фильтре ${filter}`);
+      assert.ok((await env.all(filter)).every((e) => !others.includes(e.guid)), `привязанные не в фильтре ${filter}`);
     }
     const linked = await env.card(others[0]);
-    assert.eq([linked.state, linked.linkedTo, linked.owner], ["linked", primary.guid, null], "связанное — «Связан», ссылка на основной");
+    assert.eq([linked.state, linked.linkedTo, linked.owner], ["linked", primary.guid, null], "привязанный — «Привязан», ссылка на основной");
     assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
   });
 
@@ -1311,7 +1311,7 @@
     assert.eq([res.incident.timer.id, res.incident.timer.dueAt, res.incident.priority], [mine.timer.id, mine.timer.dueAt, mine.priority], "норматив, срок и приоритет основного — свои");
   });
 
-  test("Связанные: закрыли основной — закрыты его результатом; переоткрыли — остались закрытыми; «Отсоединить» — снова новое; передача — только с доступом к объектам связанных (§5)", async () => {
+  test("Привязанные: закрыли основной — закрыты его результатом; переоткрыли — остались закрытыми; «Отсоединить» — снова новое; передача — только с доступом к объектам привязанных (§5)", async () => {
     const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
     people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
     const env = await makeEnv({ fixturePatch: { people } });
@@ -1324,17 +1324,17 @@
     assert.eq([back.state, back.linkedTo], ["new", null], "отсоединённый — новый, без связи");
     assert.ok((await env.all("open")).some((e) => e.guid === third), "снова в очереди");
     const denied = await env.act(mall, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
-    assert.status(denied, 403, null, "у Кузнецова нет доступа к объекту связанного");
+    assert.status(denied, 403, null, "у Кузнецова нет доступа к объекту привязанного");
     assert.eq(denied.body.messageKey, "workflow.guard.target_no_access_linked", `причина: ${denied.body.message}`);
     assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     const closed = await env.card(office);
-    assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "связанный закрыт результатом основного, связь — история");
+    assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "привязанный закрыт результатом основного, связь — история");
     assert.eq(closed.journal[closed.journal.length - 1].templateKey, "workflow.journal.close_linked", "в журнале — закрыто вместе с основным");
     assert.status(await env.act(mall, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть основной");
-    assert.eq((await env.card(office)).state, "closed", "связанный остался закрытым");
+    assert.eq((await env.card(office)).state, "closed", "привязанный остался закрытым");
   });
 
-  test("Два основных со связанными — «Взять в работу» как одно: все связанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11)", async () => {
+  test("Два основных со привязанными — «Взять в работу» как одно: все привязанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11)", async () => {
     const env = await makeEnv();
     const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.ok(d, "в демо-данных четыре новых пожара");
@@ -1342,12 +1342,12 @@
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [c.guid, d.guid], primaryGuid: c.guid });
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, c.guid], primaryGuid: a.guid });
     const cards = await Promise.all([b, c, d].map((e) => env.card(e.guid)));
-    assert.ok(cards.every((x) => x.state === "linked" && x.linkedTo === a.guid), "B, C и D связаны с A напрямую");
+    assert.ok(cards.every((x) => x.state === "linked" && x.linkedTo === a.guid), "B, C и D привязаны к A напрямую");
     const moved = cards[2].journal[cards[2].journal.length - 1];
     assert.eq([moved.templateKey, moved.vars.primaryNumber], ["workflow.journal.merge", a.number], "у D — запись о новом основном");
     const page = await env.ok("GET", `/operator/incidents/${enc(a.guid)}/linked`);
-    assert.eq(page.items.map((x) => x.guid).sort(), [b.guid, c.guid, d.guid].sort(), "у A трое связанных");
-    assert.eq((await env.card(c.guid)).linkedCount, 0, "у C связанных не осталось");
+    assert.eq(page.items.map((x) => x.guid).sort(), [b.guid, c.guid, d.guid].sort(), "у A трое привязанных");
+    assert.eq((await env.card(c.guid)).linkedCount, 0, "у C привязанных не осталось");
     // Закрытые вместе с прежним основным остаются при нём как история: E + F, закрыть, переоткрыть E, к A
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
@@ -1416,7 +1416,7 @@
     assert.eq([after.state, after.linkedTo], ["in_progress", null], "переоткрытый остался сам по себе");
     // Обычное переоткрытие — без записей о связи
     const plain = (await env.card(c.guid)).journal.some((j) => /reopen_unlinked|linked_reopened/.test(j.templateKey));
-    assert.ok(!plain, "у несвязанного записей о связи нет");
+    assert.ok(!plain, "у непривязанного записей о связи нет");
   });
 
   test("У адресата основного нет доступа к привязанному — после эскалации или смены ролей привязанный отсоединяется и уходит в очередь (§11.4, §5, RULE-71)", async () => {
@@ -1457,7 +1457,7 @@
     assert.eq([kept.state, kept.owner && kept.owner.id, kept.linkedCount], ["in_progress", ME, 0], "основной у меня, привязанных нет");
   });
 
-  test("Ответы сценария связанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11)", async () => {
+  test("Ответы сценария привязанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11)", async () => {
     const env = await makeEnv();
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять A");
@@ -1469,10 +1469,10 @@
     assert.eq([primary.scenario.answers.visual, primary.scenario.answers.note], [true, "из B"], "флажок из A перенесён, своё поле B осталось");
     const entry = primary.journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
     assert.ok(entry && entry.vars.number === a.number && entry.vars.n === 1, `запись в журнале основного: ${entry && entry.text}`);
-    assert.eq((await env.card(a.guid)).scenario.answers.note, "из A", "у связанного ответы остались как история");
+    assert.eq((await env.card(a.guid)).scenario.answers.note, "из A", "у привязанного ответы остались как история");
   });
 
-  test("Поиск находит связанное событие — строкой основного с «найдено в привязанных»; страница найденного среди связанных (§11)", async () => {
+  test("Поиск находит привязанный инцидент — строкой основного с «найдено в привязанных»; страница найденного среди привязанных (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
     const extra = Array.from({ length: 12 }, (_, k) =>
@@ -1482,14 +1482,14 @@
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)), primaryGuid: base.guid });
     const last = extra[extra.length - 1];
     const res = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(last.number)}`);
-    assert.eq(res.items.map((e) => e.guid), [base.guid], "найден основной, связанного строкой нет");
-    assert.eq(res.items[0].matchedLinked, [{ guid: last.guid, number: last.number }], "в строке — какое связанное подошло");
+    assert.eq(res.items.map((e) => e.guid), [base.guid], "найден основной, привязанного строкой нет");
+    assert.eq(res.items[0].matchedLinked, [{ guid: last.guid, number: last.number }], "в строке — какой привязанный подошёл");
     const plain = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(base.number)}`);
     assert.ok(plain.items.length === 1 && !plain.items[0].matchedLinked, "поиск по самому основному — без «найдено в привязанных»");
     const p1 = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(last.guid)}`);
     assert.eq(p1.focusPage, 3, "найденное — на третьей странице по 5");
     const none = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(base.guid)}`);
-    assert.eq(none.focusPage, null, "не связанное — без страницы");
+    assert.eq(none.focusPage, null, "не привязанный — без страницы");
   });
 
   test("Журнал основного: присоединено много — первые пять номеров и «и ещё N»; мало — все номера (§11)", async () => {
@@ -1511,17 +1511,17 @@
     assert.eq([small.templateKey, small.vars.ids.split(", ").length], ["workflow.journal.merged_in", 2], "оба номера");
   });
 
-  test("«Отсоединить все»: все связанные — снова новые, у основного связанных нет; нельзя — не меняется ничего (§11)", async () => {
+  test("«Отсоединить все»: все привязанные — снова новые, у основного привязанных нет; нельзя — не меняется ничего (§11)", async () => {
     const env = await makeEnv();
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 3);
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
     const lead = res.incident.guid;
     const others = fires.map((e) => e.guid).filter((g) => g !== lead);
-    // Связанные — постранично: по одному на странице, вместе — все
+    // Привязанные — постранично: по одному на странице, вместе — все
     const p1 = await env.ok("GET", `/operator/incidents/${enc(lead)}/linked?page=1&pageSize=1`);
     const p2 = await env.ok("GET", `/operator/incidents/${enc(lead)}/linked?page=2&pageSize=1`);
     assert.eq([p1.total, p1.items.length, p2.items.length, p2.page], [2, 1, 1, 2], "две страницы по одному");
-    assert.eq([p1.items[0].guid, p2.items[0].guid].sort(), others.slice().sort(), "на страницах — все связанные");
+    assert.eq([p1.items[0].guid, p2.items[0].guid].sort(), others.slice().sort(), "на страницах — все привязанные");
     assert.status(await env.call("GET", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого основного");
     // На перерыве отсоединять нельзя: отказ — и ни одно не отсоединено
     await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
@@ -1531,12 +1531,12 @@
     const all = await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`);
     assert.status(all, 200, null, "отсоединить все");
     assert.eq(all.body.guid, lead, "ответ — основной");
-    assert.eq((await env.ok("GET", `/operator/incidents/${enc(lead)}/linked`)).items.filter((x) => x.state === "linked").length, 0, "связанных не осталось");
+    assert.eq((await env.ok("GET", `/operator/incidents/${enc(lead)}/linked`)).items.filter((x) => x.state === "linked").length, 0, "привязанных не осталось");
     const back = await Promise.all(others.map((g) => env.card(g)));
     assert.ok(back.every((c) => c.state === "new" && !c.linkedTo), "все — новые, без связи");
     const open = (await env.all("open")).map((e) => e.guid);
     assert.ok(others.every((g) => open.includes(g)), "все снова в очереди");
-    assert.status(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), 200, null, "связанных нет — без изменений");
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), 200, null, "привязанных нет — без изменений");
     assert.status(await env.call("DELETE", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого");
   });
 

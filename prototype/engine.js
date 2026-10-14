@@ -35,7 +35,7 @@
     const addressee = (ev) => ev.owner || ev.assignmentGroup || null;
     const isTarget = (ev) => isSelf(addressee(ev));
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
-    // Объединение (§11): основной инцидент связанного — по linkedTo
+    // Объединение (§11): основной инцидент привязанного — по linkedTo
     const byId = (id) => (id ? ctx.events().find((e) => e.id === id) || null : null);
     const unowned = (ev) => !ev.owner && !ev.assignmentGroup;
     // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
@@ -96,7 +96,7 @@
       hold: { due: "holdDueAt", since: "holdSince" },
     };
     const dueOf = (ev, id) => ev[FIELDS[id].due];
-    // Чьё нарушение у привязанного события: владельца основного (§11.4)
+    // Чьё нарушение у привязанного инцидента: владельца основного (§11.4)
     const breachOwnerOfLinked = (ev) => {
       const p = ev.linkedTo && ctx.events().find((x) => x.id === ev.linkedTo);
       return p ? addressee(p) : null;
@@ -165,7 +165,7 @@
       ev.firedTimers[id] = dueOf(ev, id);
     }
 
-    /* ===== Лимиты (§10.2): связанные события объединённого в лимит не входят — у них нет владельца ===== */
+    /* ===== Лимиты (§10.2): привязанные инциденты объединённого в лимит не входят — у них нет владельца ===== */
 
     function units(stateId, ev) {
       const own = ev ? ev.id : null;
@@ -267,7 +267,7 @@
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
       settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
       isOwnerOrUnowned: (ev) => (isMine(ev) || unowned(ev) ? null : ["workflow.guard.not_owner"]),
-      // Основной из формы — другой, открытый, не связанный; новый или мой в работе. До формы выполнено
+      // Основной из формы — другой, открытый, не привязанный; новый или мой в работе. До формы выполнено
       mergePrimaryValid: (ev, args, opts) => {
         const id = opts && opts.form ? opts.form.primaryId : null;
         const p = byId(id);
@@ -488,7 +488,7 @@
         if (own) ctx.log(ev, s.actor, own, { primaryNumber: p.number }, at);
         if (primary) s.after.push(() => ctx.log(p, s.actor, primary, { number: ev.number }, at));
       },
-      // Заполненные шаги связанного — в незаполненные шаги основного (сценарий у них один); у связанного
+      // Заполненные шаги привязанного — в незаполненные шаги основного (сценарий у них один); у привязанного
       // ответы остаются как история. Что перенесено — запись в журнале основного
       copyAnswersToPrimary: (ev, [template], s) => {
         const p = byId(s.form && s.form.primaryId);
@@ -503,7 +503,7 @@
           if (template) ctx.log(p, s.actor, template, { number: ev.number, n: moved.length }, at);
         });
       },
-      // Открытые связанные объединяемого — новому основному: связанного у связанного не бывает.
+      // Открытые привязанные объединяемого — новому основному: привязанного у привязанного не бывает.
       // Закрытые вместе с прежним основным остаются при нём как история
       relinkToPrimary: (ev, [template], s) => {
         const p = byId(s.form && s.form.primaryId);
