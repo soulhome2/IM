@@ -195,6 +195,8 @@ MUTATIONS = [
     ("ui-target-unnamed", "app.js", '    input.setAttribute("aria-label", `${lbl(field)}, ${picked ? t(picked.label) : hint}`);\n', "", "ui"),
     ("ui-target-selected-accent", "styles.css", '.target-opt[aria-selected="true"] { background: var(--accent-dim); color: var(--text); font-weight: 600; }', '.target-opt[aria-selected="true"] { background: var(--accent-dim); color: var(--accent); font-weight: 600; }', "ui"),
     ("ui-target-notes-faint", "styles.css", ".target-opt em { color: var(--muted); }", ".target-opt em { color: var(--faint); }", "ui"),
+    ("ui-target-enter-ignored", "app.js", "      pickTarget(name, opts[0].dataset.targetPick);\n", "", "ui"),
+    ("ui-target-down-closed", "app.js", "      if (!state.dialog.combo.open) return openTargetCombo(name);\n", "      if (!state.dialog.combo.open) return;\n", "ui"),
     ("ui-target-menu-in-flow", "styles.css", ".target-combo .mselect-menu { position: absolute;", ".target-combo .mselect-menu { position: static;", "ui"),
     ("ui-target-sections-swapped", "app.js", 'section("На месте", all.filter((o) => o.available !== false), `${field.name}-here`) +\n      section("Нет на месте", all.filter((o) => o.available === false), `${field.name}-away`)', 'section("Нет на месте", all.filter((o) => o.available === false), `${field.name}-away`) +\n      section("На месте", all.filter((o) => o.available !== false), `${field.name}-here`)', "ui"),
     ("ui-target-prefix-search", "app.js", "const targetHit = (o, q) => comboHit(`${t(o.label)} ${t(o.role || \"\")}`, q);", "const targetHit = (o, q) => !q || t(o.label).toLowerCase().startsWith(q.toLowerCase());", "ui"),

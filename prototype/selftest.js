@@ -587,6 +587,24 @@
       field("comment").focus();
       await wait();
       expect(!menu(), "фокус ушёл в «Причину», а список адресатов открыт");
+      // Клавиши (PROC-21): ↓ открывает список и ведёт к адресатам, ↑ с первого — обратно в поле, Enter — первый подходящий
+      const key = (el, k) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+      key(input(), "ArrowDown");
+      await wait();
+      expect(menu(), "↓ в поле не открыл список");
+      key(input(), "ArrowDown");
+      await wait();
+      const first = menu().querySelector(".target-opt:not([hidden])");
+      expect(document.activeElement === first, "↓ не перевёл фокус на первого адресата");
+      key(first, "ArrowUp");
+      await wait();
+      expect(document.activeElement === input(), "↑ с первого адресата не вернул фокус в поле");
+      input().value = "сид";
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+      await wait();
+      key(input(), "Enter");
+      await wait();
+      expect(!menu() && field("targetId").value === "sidorov", `Enter по «сид» выбрал «${field("targetId").value}», список ${menu() ? "открыт" : "закрыт"}`);
       await click(input());
       await click(menu().querySelector('[data-target-pick="petrova"]'));
       expect(!menu() && field("targetId").value === "petrova", "Петрова не выбрана");
