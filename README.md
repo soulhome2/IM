@@ -14,6 +14,7 @@
 | [prototype/api.js](prototype/api.js) | Клиент API: запросы интерфейса уходят во встроенный сервер, а с `?api=https://…` — на настоящий бэкенд |
 | [fixtures/demo.json](Specification/State_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы, сценарии. На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
 | [BACKEND.md](Specification/State_machine/BACKEND.md) | Памятка для команды бэкенда: что реализовать, как проверить на тестовом стенде, когда готово |
+| [FRONTEND.md](Specification/State_machine/FRONTEND.md) | Памятка для команды фронтенда: что из прототипа — требование, что только демо, что ещё за вами, когда готово |
 | [TRANSITIONS.md](Specification/State_machine/TRANSITIONS.md) | Переходы машины словами — собраны из `workflow.v4.json`. Рядом с §6 правил: что задумано и что сделано |
 | [SETTINGS.md](Specification/State_machine/SETTINGS.md) | Настройки администратора по вкладкам будущей админки с текущими значениями — собраны из `workflow.v4.json` (§20). В прототипе — меню пользователя → «Настройки администратора» |
 | [prototype/colleagues.js](prototype/colleagues.js) | Эмуляция коллег во встроенном сервере для живости демо: коллеги действуют через те же переходы машины, со своими правами и лимитами |
