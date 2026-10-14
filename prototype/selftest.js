@@ -551,7 +551,12 @@
       expect(!self.length, `среди адресатов есть сам оператор или его группа: ${self.join(", ")}`);
       const heads = [...menu().querySelectorAll(".mselect-head")].map((h) => h.textContent);
       expect(heads.join(" | ") === "На месте | Нет на месте", `разделы: ${heads.join(" | ")}`);
-      const items = [...menu().children];
+      // Для экранного диктора: имя поля — подпись и выбранный, раздел — группа с названием (BUG-46)
+      const name = input().getAttribute("aria-label");
+      expect(name === "Кому передать, Сидоров К.", `имя поля для диктора: «${name}»`);
+      const groups = [...menu().querySelectorAll('[role="group"]')].map((g) => (document.getElementById(g.getAttribute("aria-labelledby")) || {}).textContent);
+      expect(groups.join(" | ") === "На месте | Нет на месте", `группы списка для диктора: ${groups.join(" | ")}`);
+      const items = [...menu().querySelectorAll(".mselect-head, [data-target-pick]")];
       const awayAt = items.findIndex((el) => el.textContent === "Нет на месте");
       const at = (id) => items.findIndex((el) => el.dataset.targetPick === id);
       expect(at("sidorov") < awayAt && at("grp-response") < awayAt && at("orlova") > awayAt, "Сидоров и «Группа реагирования» — на месте, Орлова — нет");

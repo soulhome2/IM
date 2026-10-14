@@ -1280,12 +1280,17 @@
         aria-selected="${o.id === value}" ${targetHit(o, q) ? "" : "hidden"}><span>${escapeHtml(t(o.label))}</span><em>${escapeHtml(
         [t(o.role || ""), o.available === false && o.availabilityLabel ? t(o.availabilityLabel) : ""].filter(Boolean).join(" · ")
       )}</em></button>`;
-    const section = (title, list) =>
-      list.length ? `<div class="mselect-head" ${list.some((o) => targetHit(o, q)) ? "" : "hidden"}>${te(title)}</div>${list.map(opt).join("")}` : "";
+    // Раздел — группа с названием: диктор читает «На месте» вместе с адресатами (BUG-46)
+    const section = (title, list, id) =>
+      list.length
+        ? `<div role="group" aria-labelledby="${id}"><div class="mselect-head" id="${id}" ${list.some((o) => targetHit(o, q)) ? "" : "hidden"}>${te(
+            title
+          )}</div>${list.map(opt).join("")}</div>`
+        : "";
     const all = targetsOf(field);
     return (
-      section("На месте", all.filter((o) => o.available !== false)) +
-      section("Нет на месте", all.filter((o) => o.available === false)) +
+      section("На месте", all.filter((o) => o.available !== false), `${field.name}-here`) +
+      section("Нет на месте", all.filter((o) => o.available === false), `${field.name}-away`) +
       `<div class="muted mselect-empty" data-combo-none ${all.some((o) => targetHit(o, q)) ? "hidden" : ""}>${te("Никого не найдено")}</div>`
     );
   }
@@ -1303,8 +1308,12 @@
     box.insertAdjacentHTML(
       "beforeend",
       comboField("data-target-input", name, c.open, c.q, picked ? [value] : [], () => (picked ? t(picked.label) : ""), hint) +
-        (c.open ? `<div class="mselect-menu" role="listbox">${targetMenu(field, c.q, value)}</div>` : "")
+        (c.open ? `<div class="mselect-menu" role="listbox" id="${name}-targets">${targetMenu(field, c.q, value)}</div>` : "")
     );
+    // Имя поля для экранного диктора — подпись и выбранный адресат: «Кому передать, Петрова М.» (BUG-46)
+    const input = box.querySelector("[data-target-input]");
+    input.setAttribute("aria-label", `${lbl(field)}, ${picked ? t(picked.label) : hint}`);
+    input.setAttribute("aria-controls", `${name}-targets`);
   }
   function openTargetCombo(name, q) {
     Object.assign(state.dialog.combo, { open: true, q: q || "" });
