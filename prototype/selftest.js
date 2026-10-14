@@ -1078,7 +1078,7 @@
       return `${r.scroll} из ${r.width}`;
     });
 
-    await step("Контраст отсчётов, бейджей и уровня не ниже 4,5:1 в обеих темах", async () => {
+    await step("Контраст отсчётов, бейджей, уровня и списка «Кому передать» не ниже 4,5:1 в обеих темах", async () => {
       const original = document.documentElement.dataset.theme;
       const low = new Set();
       for (const theme of ["light", "dark"]) {
@@ -1092,6 +1092,19 @@
             const r = contrast(el);
             if (r < 4.5) low.add(`${theme} ${el.className}: ${r.toFixed(2)}`);
           });
+        }
+        // Список «Кому передать» (BUG-47): выбранный на месте и выбранный отсутствующий, имена и пояснения
+        for (const picked of ["sidorov", "orlova"]) {
+          await click(button($("eventsList"), "transfer"));
+          field("targetId").value = picked;
+          await click($("dialogFields").querySelector('[data-target-input="targetId"]'));
+          $("dialogFields").querySelectorAll(".target-opt span, .target-opt em").forEach((el) => {
+            const r = contrast(el);
+            const opt = el.closest(".target-opt");
+            const what = `${opt.getAttribute("aria-selected") === "true" ? "выбранный" : "адресат"}${opt.classList.contains("away") ? " отсутствующий" : ""} ${el.tagName.toLowerCase()}`;
+            if (r < 4.5) low.add(`${theme} «Кому передать», ${what}: ${r.toFixed(2)}`);
+          });
+          await click($("modalDialog").querySelector('[data-close="modalDialog"]'));
         }
       }
       await setTheme(original);

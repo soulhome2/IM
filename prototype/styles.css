@@ -2100,8 +2100,13 @@ select.search-input { padding-right: 36px; }
 /* Имя — цветом списка, а не бледной подписью поля формы (.field span) */
 .field .target-opt span { overflow: hidden; color: inherit; font-size: inherit; font-weight: inherit; text-overflow: ellipsis; white-space: nowrap; }
 .target-opt:focus-visible { outline: none; background: var(--hover); box-shadow: inset 0 0 0 2px var(--accent); }
-.target-opt[aria-selected="true"] { background: var(--accent-dim); color: var(--accent); }
-.target-opt.away span { opacity: 0.6; }
+/* Контраст не ниже 4,5:1 в обеих темах (BUG-47): выбранный — цвет текста, полужирный, на фоне выделения;
+   отсутствующий и пояснения — приглушённый цвет, не прозрачность */
+.target-opt em { color: var(--muted); }
+.target-opt[aria-selected="true"] { background: var(--accent-dim); color: var(--text); font-weight: 600; }
+.target-opt[aria-selected="true"] em { color: var(--text); font-weight: 400; }
+.field .target-opt.away span { color: var(--muted); }
+.field .target-opt.away[aria-selected="true"] span { color: inherit; }
 .filter-same { display: flex; width: fit-content; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .filter-same + .filter-row { margin-bottom: 8px; }
 .filter-cond { padding: 8px 12px; border: 1px solid var(--stroke-2); border-radius: var(--radius-sm); background: var(--panel); }
