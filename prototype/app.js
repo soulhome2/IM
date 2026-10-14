@@ -3188,7 +3188,7 @@
     const own = e.timer && e.timer.running && e.timer.dueAt ? Date.parse(e.timer.dueAt) : Infinity;
     if (due >= own) return "";
     const left = due - Date.now();
-    return `<span class="event-sla lnk-due ${left < 120000 ? "late" : ""}" data-due="${due}" title="${te("Срок закрытия привязанного события раньше срока этого инцидента: истечёт — нарушение на владельца основного")}">${te(
+    return `<span class="event-sla lnk-due ${left < 120000 ? "late" : ""}" data-due="${due}" title="${te("Срок закрытия привязанного инцидента раньше срока основного: истечёт — нарушение на владельца основного")}">${te(
       "Срок привязанного"
     )} <b class="sla-t">${fmtSla(left)}</b></span>`;
   }

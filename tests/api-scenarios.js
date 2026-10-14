@@ -1325,7 +1325,7 @@
     assert.ok((await env.all("open")).some((e) => e.guid === third), "снова в очереди");
     const denied = await env.act(mall, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
     assert.status(denied, 403, null, "у Кузнецова нет доступа к объекту связанного");
-    assert.ok(/связанных событий/.test(denied.body.message), `причина: ${denied.body.message}`);
+    assert.eq(denied.body.messageKey, "workflow.guard.target_no_access_linked", `причина: ${denied.body.message}`);
     assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     const closed = await env.card(office);
     assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "связанный закрыт результатом основного, связь — история");
