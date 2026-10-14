@@ -41,7 +41,7 @@ description: Ревью репозитория Incident Manager (IM) — пра�
 
 ```bash
 google-chrome --headless=new --disable-gpu --no-first-run \
-  --user-data-dir=<временная папка> --virtual-time-budget=30000 \
+  --user-data-dir=<временная папка> --virtual-time-budget=60000 \
   --dump-dom "file://$PWD/prototype/index.html?selftest" > <временная папка>/selftest.html
 ```
 
@@ -86,7 +86,7 @@ google-chrome --headless=new --disable-gpu --no-first-run \
 
 Для нового функционала отдельно:
 
-- есть ли он в действующих правилах (раздел, таблица переходов, кнопки, права, горячие клавиши);
+- есть ли он в действующих правилах (раздел, таблица переходов, кнопки, права);
 - записан ли он в журнал изменений правил (§16 → `State_rules/CHANGELOG.md`);
 - совпадает ли поведение прототипа с правилами — на всех состояниях и для всех владельцев: я, моя группа, другой, никто;
 - покрыт ли он самопроверкой.

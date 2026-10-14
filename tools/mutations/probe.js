@@ -24,10 +24,6 @@
   const field = (n) => $("dialogFields").querySelector(`[data-field="${n}"]`);
   const mode = () => $("workspace").dataset.mode;
   const root = () => $("scenarioRoot");
-  const key = async (k) => {
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
-    await wait();
-  };
   const row = (id) => $("eventsList").querySelector(`[data-id="${id}"]`);
   // Инцидент по номеру из эталонного набора: guid — UUID, на экране — номер
   const guidOf = (number) => (window.IM_FIXTURE.incidents.find((i) => i.number === number) || {}).guid;
@@ -56,12 +52,6 @@
       await click(anyBtn(root(), "close"));
       const value = field("resultId").value;
       return [value !== "", "результат в форме выбран заранее: «" + value + "»"];
-    },
-    async modalKey() {
-      await setFilter("open");
-      await key("?");
-      await key("n");
-      return [mode() === "work", "при открытой справке N взял инцидент: " + (mode() === "work")];
     },
     async selfTarget() {
       const id = await claimFirst();
@@ -149,27 +139,6 @@
       const sec = m ? Number(m[1]) * 60 + Number(m[2]) : -1;
       return [sec > 0 && sec <= 60, "после переоткрытия: " + $("statusSla").textContent];
     },
-    async exclude() {
-      const sel = $("eventTypeFilter");
-      let pair = null;
-      for (const o of [...sel.options].filter((x) => x.value !== "all")) {
-        sel.value = o.value;
-        sel.dispatchEvent(new Event("change"));
-        await wait();
-        const ids = [...$("eventsList").querySelectorAll(".event")]
-          .filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'))
-          .map((r) => r.dataset.id);
-        if (ids.length >= 2) {
-          pair = ids.slice(0, 2);
-          break;
-        }
-      }
-      await click($("eventsList").querySelector(`[data-check="${pair[0]}"]`));
-      await click($("eventsList").querySelector(`[data-check="${pair[1]}"]`));
-      await click(btn($("eventsList"), "claim", pair[0]));
-      const b = root().querySelector("[data-exclude]");
-      return [Boolean(b && !off(b)), "«Исключить из группы» активна: " + Boolean(b && !off(b))];
-    },
     async empty() {
       const counts = [];
       for (const f of ["open", "mine", "inbox", "done", "all"]) {
@@ -194,7 +163,7 @@
       await click($("backToQueue"));
       await setFilter("open");
       const b = btn($("eventsList"), "claim");
-      return [Boolean(b), "второе «Взять» доступно: " + Boolean(b)];
+      return [!b, "второе «Взять» доступно: " + Boolean(b)];
     },
     async norm() {
       await setFilter("open");
@@ -208,18 +177,6 @@
       await click(btn($("eventsList"), "close", id));
       const has = Boolean(field("resultId") && field("resultId").querySelector('option[value="false_alarm"]'));
       return [has, "в очереди предложена «Ложная тревога»: " + has];
-    },
-    async hotkey() {
-      await setFilter("open");
-      await key("n");
-      const afterN = mode();
-      await key("m");
-      const help = [...$("hotkeysTable").querySelectorAll("tr")].find((r) => r.textContent.includes("Взять следующее новое"));
-      const shown = help ? help.querySelector("kbd").textContent : "";
-      return [
-        afterN === "queue" && mode() === "work" && shown === "M",
-        `после N: ${afterN}, после M: ${mode()}, в справке: ${shown}`,
-      ];
     },
     async filter() {
       await setFilter("mine");
@@ -244,20 +201,95 @@
       const has = Boolean(field("reasonId").querySelector('option[value="probe"]'));
       return [has, "новая причина удержания в форме: " + has];
     },
-    async grouping() {
+    // «Взять в работу» на выборке (§11, черновик): два новых одного типа — связанное из списков пропадает
+    async merge_hides() {
       await setFilter("open");
-      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'));
-      const a = rows[0];
-      const b = rows.find((r) => r.querySelector(".event-title strong").textContent !== a.querySelector(".event-title strong").textContent);
-      // Список перерисовывается после каждой галочки: строки ищем заново по номеру
-      await click($("eventsList").querySelector(`[data-check="${a.dataset.id}"]`));
-      await click($("eventsList").querySelector(`[data-check="${b.dataset.id}"]`));
-      await click(btn($("eventsList"), "claim", a.dataset.id));
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));
+      const typeOf = (r) => r.querySelector(".event-title strong").textContent;
+      const pair = rows.filter((r) => rows.filter((x) => typeOf(x) === typeOf(r)).length >= 2);
+      const ids = pair.filter((r) => typeOf(r) === typeOf(pair[0])).slice(0, 2).map((r) => r.dataset.id);
+      for (const id of ids) await click($("eventsList").querySelector(`[data-check="${id}"]`));
+      await click($("selBar").querySelector('[data-sel-do="merge"]'));
       if (mode() === "work") await click($("backToQueue"));
+      await setFilter("all");
+      const both = ids.every((id) => $("eventsList").querySelector(`.event[data-id="${id}"]`));
+      return [both, "после «Объединить» оба в «Открытых»: " + both];
+    },
+    // Два основных со связанными — «Взять в работу» как одно: связанные прежнего основного переходят к новому
+    // (эффект перехода объединения). Пары: INC-1851 + INC-1847 (основной 1851) и INC-1838 + INC-1842 (основной 1838);
+    // затем 1851 + 1838 — основной старший 1838, у него трое связанных
+    async merge_relink() {
+      const tick = async (number) => {
+        for (let page = 1; page <= 6; page++) {
+          const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+          if (page > 1 && (!nav || nav.disabled)) break;
+          if (nav) await click(nav);
+          const box = $("eventsList").querySelector(`[data-check="${guidOf(number)}"]`);
+          if (box) return click(box);
+        }
+      };
+      const take = async (filter, numbers) => {
+        await setFilter(filter);
+        for (const n of numbers) await tick(n);
+        await click($("selBar").querySelector('[data-sel-do="merge"]'));
+        if (mode() === "work") await click($("backToQueue"));
+      };
+      await take("open", ["INC-1851", "INC-1847"]);
+      await take("open", ["INC-1838", "INC-1842"]);
       await setFilter("mine");
-      const both = Boolean(row(a.dataset.id) && row(b.dataset.id));
-      const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
-      return [both, "разнотипные взяты группой: " + both + " · " + toasts];
+      for (const n of ["INC-1851", "INC-1838"]) await tick(n);
+      await click($("selBar").querySelector('[data-sel-do="merge"]'));
+      const n = Number((root().querySelector(".work-tab-n") || { textContent: "0" }).textContent);
+      return [n === 2, "связанных у нового основного: " + n];
+    },
+    // Ответы связанного — основному (эффект перехода объединения). INC-1847 и INC-1838 — оба в работе,
+    // основной — старший INC-1838; шаг «visual» заполнен только в INC-1847
+    async merge_answers() {
+      for (const number of ["INC-1847", "INC-1838"]) {
+        await setFilter("open");
+        await click(btn($("eventsList"), "claim", guidOf(number)));
+        if (number === "INC-1847") await click(root().querySelector('[data-confirm="visual"]'));
+        await click($("backToQueue"));
+      }
+      await setFilter("mine");
+      for (const number of ["INC-1847", "INC-1838"]) await click($("eventsList").querySelector(`[data-check="${guidOf(number)}"]`));
+      await click($("selBar").querySelector('[data-sel-do="merge"]'));
+      const done = Boolean(root().querySelector('[data-confirm="visual"].on'));
+      return [!done, "у основного шаг «visual» заполнен: " + done];
+    },
+    // «Взять в работу» на выборке: куда дальше — ui.navigate объединения в машине
+    async merge_nav() {
+      await setFilter("open");
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));
+      const typeOf = (r) => r.querySelector(".event-title strong").textContent;
+      const pair = rows.filter((r) => rows.filter((x) => typeOf(x) === typeOf(r)).length >= 2);
+      const ids = pair.filter((r) => typeOf(r) === typeOf(pair[0])).slice(0, 2).map((r) => r.dataset.id);
+      for (const id of ids) await click($("eventsList").querySelector(`[data-check="${id}"]`));
+      await click($("selBar").querySelector('[data-sel-do="merge"]'));
+      return [ids.length === 2 && mode() === "queue", `после «Взять в работу» режим: ${mode()}`];
+    },
+    // Чужое в работе (INC-1846, Петрова, «Проникновение») с новым того же сценария (INC-1839) —
+    // «Взять в работу» в панели выборки
+    async merge_foreign() {
+      await setFilter("open");
+      const find = async (number) => {
+        for (let page = 1; page <= 6; page++) {
+          const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+          if (page > 1 && (!nav || nav.disabled)) break;
+          if (nav) await click(nav);
+          const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".event-sub").textContent.includes(number));
+          if (row) return row;
+        }
+        return null;
+      };
+      for (const number of ["INC-1846", "INC-1839"]) {
+        const row = await find(number);
+        if (!row) return [false, `нет ${number} в очереди`];
+        await click($("eventsList").querySelector(`[data-check="${row.dataset.id}"]`));
+      }
+      const b = $("selBar").querySelector('[data-sel-do="merge"]');
+      const on = Boolean(b && b.getAttribute("aria-disabled") !== "true");
+      return [on, "«Взять в работу» с чужим доступна: " + on];
     },
     async scenario() {
       await claimFirst();
@@ -290,11 +322,6 @@
       }
       const t = r.querySelector(".sla-t").textContent;
       return [t.startsWith("0:2") || t.startsWith("0:3"), "реакция после передачи: " + t];
-    },
-    async escape() {
-      await claimFirst();
-      await key("Escape");
-      return [mode() === "work", "после Esc режим: " + mode()];
     },
     async breakReason() {
       await click($("breakBtn"));

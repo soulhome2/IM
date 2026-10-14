@@ -49,7 +49,7 @@
   });
 
   test("Лимит активных 1: второе «Взять» недоступно и отклоняется сервером", async () => {
-    const env = await makeEnv();
+    const env = await makeEnv({ workflowPatch: { limits: { maxActive: 1 } } });
     const list = await env.all("open");
     const news = list.filter((e) => e.state === "new");
     assert.status(await env.act(news[0].guid, "claim", {}, "queue"), 200);
@@ -244,7 +244,7 @@
     for (const inc of mine) {
       assert.ok(res.body.affectedIncidents.some((i) => i.guid === inc.guid), `${inc.number}: среди изменённых`);
       const c = await env.card(inc.guid);
-      assert.eq([c.state, c.owner, c.holdReasonId, c.groupGuid], ["new", null, null, null], `${inc.number}: новый, ничей, без причины и группы`);
+      assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], `${inc.number}: новый, ничей, без причины`);
       assert.ok(c.journal.some((j) => /оператор вышел/.test(jt(j))), `${inc.number}: запись в журнале`);
     }
     assert.eq((await env.session()).usage.activeCount + (await env.session()).usage.onHoldCount, 0, "у меня ничего не осталось");
@@ -885,8 +885,9 @@
   });
 
   test("Сервер проверяет лимит выборки: в массовом действии больше maxBulk — 422 целиком (§11, BUG-40)", async () => {
-    const env = await makeEnv();
-    const max = W.limits.maxBulk;
+    // Предел задаёт администратор; в эталонной схеме его нет (null) — здесь он 10
+    const max = 10;
+    const env = await makeEnv({ workflowPatch: { limits: { maxBulk: max } } });
     const guids = (await env.all("open")).map((e) => e.guid);
     assert.ok(guids.length > max, "открытых больше лимита");
     const cause = W.reasonCatalogs.mass_fault.items[0].id;
@@ -897,146 +898,7 @@
     assert.status(await env.call("POST", "/operator/incidents/transitions/close/bulk", body(guids.slice(0, max))), 200, null, `${max} — в пределах лимита`);
   });
 
-  /* ===== Группа сценария и выборка (§11) ===== */
-
-  test("«Обработать как одно»: оба в работе одной группой, в лимите — одна единица, ответы общие", async () => {
-    const env = await makeEnv();
-    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
-    const res = await env.call("POST", "/operator/incident-groups", { incidentGuids: fires.map((e) => e.guid) });
-    assert.status(res, 201);
-    const group = res.body;
-    assert.eq(group.members.length, 2, "в группе");
-    assert.ok(group.members.every((m) => m.state === "in_progress" && m.groupGuid === group.guid), "оба в работе одной группой");
-    assert.ok(group.members.every((m) => m.groupSize === 2), "размер группы у каждого — 2");
-    assert.eq((await env.session()).usage.activeCount, 1, "одна единица в лимите");
-    assert.status(await env.answer(fires[0].guid, { visual: true }), 200, null, "ответ в группе");
-    assert.eq((await env.card(fires[1].guid)).scenario.answers.visual, true, "ответ виден у второго");
-    const c = await env.card(fires[0].guid);
-    assert.ok(!c.group.exclude.enabled && /Лимит активных/.test(c.group.exclude.reason), "исключить нельзя — лимит");
-    assert.status(await env.call("DELETE", `/operator/incident-groups/${enc(group.guid)}/members/${enc(fires[0].guid)}`), 403, "LIMIT_EXCEEDED");
-  });
-
-  test("Выход из группы — своя копия ответов: «Вернуть в очередь» один, ответ во втором его не меняет (BUG-27)", async () => {
-    const env = await makeEnv();
-    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: fires.map((e) => e.guid) }), 201);
-    assert.status(await env.act(fires[0].guid, "release", { comment: "не моё" }), 200, null, "вернуть один");
-    assert.status(await env.answer(fires[1].guid, { visual: true }), 200, null, "ответ во втором");
-    const back = await env.card(fires[0].guid);
-    assert.eq(back.groupGuid, null, "вернувшийся — не в группе");
-    assert.ok(!back.scenario.answers.visual, "ответ второго у вернувшегося не появился");
-  });
-
-  test("Группа следует за владельцем: передана и эскалирована целиком; «Принять» одного из очереди — он выходит, двое остаются группой; «Принять» из карточки — оба у меня одной группой (RULE-52)", async () => {
-    const W = window.IM_WORKFLOW;
-    const escalation = Object.assign({}, W.escalation, { levels: W.escalation.levels.map((l) => Object.assign({}, l, { targetRef: "group:grp-leads" })) });
-    const env = await makeEnv({ workflowPatch: { escalation } });
-    const news = (await env.all("open")).filter((e) => e.state === "new");
-    const type = news.find((e) => news.filter((x) => x.eventType.id === e.eventType.id).length >= 3).eventType.id;
-    const three = news.filter((e) => e.eventType.id === type).slice(0, 3).map((e) => e.guid);
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: three }), 201);
-    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: three, formValues: { targetId: "sidorov", comment: "тест" }, surface: "card" });
-    assert.eq(sent.succeeded.length, 3, "группа передана");
-    const leads = async () => (await Promise.all(three.map((g) => env.card(g)))).every((c) => c.assignmentGroup && c.assignmentGroup.id === "grp-leads");
-    for (let i = 0; i < 30 && !(await leads()); i++) await env.advance(120);
-    const before = await Promise.all(three.map((g) => env.card(g)));
-    assert.ok(before.every((c) => c.groupGuid && c.groupGuid === before[0].groupGuid && c.groupSize === 3), "эскалация увела группу целиком");
-    assert.status(await env.act(three[0], "accept", {}, "queue"), 200, null, "принять одного из очереди");
-    const [one, ...rest] = await Promise.all(three.map((g) => env.card(g)));
-    assert.eq([one.state, one.groupGuid], ["in_progress", null], "принятый отдельно — вне группы");
-    assert.eq(one.journal[one.journal.length - 1].templateKey, "workflow.journal.group.left", "выход из группы записан в журнал (RULE-57)");
-    assert.ok(rest.every((c) => c.groupGuid === before[0].groupGuid && c.groupSize === 2 && c.state === "pending_acceptance"), "двое остались группой");
-    assert.status(await env.act(three[0], "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть первого, чтобы был лимит");
-    const both = await env.ok("POST", "/operator/incidents/transitions/accept/bulk", { incidentGuids: three.slice(1), formValues: {}, surface: "card" });
-    assert.eq(both.succeeded.length, 2, "приняты оба");
-    const after = await Promise.all(three.slice(1).map((g) => env.card(g)));
-    assert.ok(after.every((c) => c.state === "in_progress" && c.groupGuid === before[0].groupGuid && c.groupSize === 2), "оба у меня одной группой");
-  });
-
-  test("Группа поделилась при передаче: каждая часть из двух и более — группа, лимит не превышен; при равных частях прежняя группа — у части с наименьшим номером (RULE-56)", async () => {
-    // Кузнецов — доступ только к ТЦ (группа доступа «Торговый центр»); на стенде он на месте
-    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
-    people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
-    const env = await makeEnv({ fixturePatch: { people } });
-    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
-    const mall = fires.filter((e) => e.site === "Торговый центр").slice(0, 2);
-    const rest = fires.filter((e) => e.site !== "Торговый центр").slice(0, 2);
-    assert.eq([mall.length, rest.length], [2, 2], "два пожара в ТЦ и два вне его");
-    const four = mall.concat(rest).map((e) => e.guid);
-    const group = await env.ok("POST", "/operator/incident-groups", { incidentGuids: four });
-    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: four, formValues: { targetId: "kuznetsov", comment: "тест" }, surface: "card" });
-    assert.eq(sent.succeeded.length, 2, "переданы двое из ТЦ");
-    assert.ok(sent.failed.length === 2 && sent.failed.every((f) => f.problem.code === "TARGET_NO_ACCESS"), "двое не переданы: нет доступа");
-    const cards = async (list) => Promise.all(list.map((e) => env.card(e.guid)));
-    const [mine, his] = [await cards(rest), await cards(mall)];
-    assert.ok(mine.every((c) => c.state === "in_progress" && c.groupGuid && c.groupGuid === mine[0].groupGuid && c.groupSize === 2), "у меня двое одной группой");
-    assert.ok(his.every((c) => c.state === "pending_acceptance" && c.groupGuid && c.groupGuid === his[0].groupGuid && c.groupSize === 2), "у Кузнецова двое другой группой");
-    assert.ok(mine[0].groupGuid !== his[0].groupGuid, "группы разные");
-    const num = (c) => Number(c.number.replace(/\D/g, ""));
-    const keeper = Math.min(...mine.map(num)) < Math.min(...his.map(num)) ? mine : his;
-    assert.eq(keeper[0].groupGuid, group.guid, "прежняя группа — у части с наименьшим номером");
-    assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
-    assert.status(await env.answer(rest[0].guid, { visual: true }), 200, null, "ответ в моей части");
-    assert.ok((await env.card(rest[1].guid)).scenario.answers.visual, "ответ общий в моей части");
-    assert.ok(!(await env.card(mall[0].guid)).scenario.answers.visual, "в другой части его нет");
-  });
-
-  test("Закрыть инцидент группы — только всю группу и всё или ничего; один — после «Исключить из группы» (§11, BUG-29)", async () => {
-    // Две группы и исключённый — три единицы лимита активных
-    const limits = Object.assign({}, W.limits, { maxActive: 3 });
-    const env = await makeEnv({ workflowPatch: { limits } });
-    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
-    const [a, b] = [fires.slice(0, 2).map((e) => e.guid), fires.slice(2, 4).map((e) => e.guid)];
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: a }), 201, null, "группа A");
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: b }), 201, null, "группа B");
-    const form = { resultId: "false_alarm", comment: "тест" };
-    const one = await env.act(a[0], "close", form, "card");
-    assert.status(one, 422, "BULK_SELECTION_INVALID", "закрыть один из группы");
-    assert.ok(/закройте всю группу/.test(one.body.message), `причина: ${one.body.message}`);
-    const part = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: [a[0]], formValues: form, surface: "card" });
-    assert.eq([part.succeeded.length, part.failed.map((f) => f.problem.code)], [0, ["BULK_SELECTION_INVALID"]], "групповой запрос с одним из группы");
-    const other = fires[4].guid;
-    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [a[0], other] });
-    const close = sel.actions.find((x) => x.id === "close");
-    assert.ok(close && !close.enabled && /часть группы/.test(close.reason), `«Закрыть» на выборке с частью группы: ${JSON.stringify(close)}`);
-    // Всё или ничего: отложенного «Ложная тревога» не закрывает — не закрывается и второй
-    assert.status(await env.act(b[1], "hold", { reasonId: "third_party", comment: "тест" }, "card"), 200, null, "отложить второго в B");
-    const stuck = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: b, formValues: form, surface: "card" });
-    assert.eq(stuck.succeeded.length, 0, "группа B не закрыта");
-    assert.ok((await Promise.all(b.map((g) => env.card(g)))).every((c) => c.state !== "closed"), "оба в B открыты");
-    // Один — после исключения из группы
-    const groupB = (await env.card(b[0])).groupGuid;
-    assert.status(await env.act(b[1], "resume", {}, "card"), 200, null, "возобновить второго в B");
-    assert.status(await env.call("DELETE", `/operator/incident-groups/${enc(groupB)}/members/${enc(b[0])}`), 200, null, "исключить первого из B");
-    assert.status(await env.act(b[0], "close", form, "card"), 200, null, "исключённый закрывается один");
-    const whole = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: a, formValues: form, surface: "card" });
-    assert.eq(whole.succeeded.length, 2, "группа A закрыта целиком");
-  });
-
-  test("Переоткрыть один из закрытой группы: второй закрытый не меняется — признак группы как история (§11, RULE-59)", async () => {
-    const env = await makeEnv();
-    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: pair }), 201, null, "группа");
-    const closed = await env.ok("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: pair, formValues: { resultId: "false_alarm", comment: "тест" }, surface: "card" });
-    assert.eq(closed.succeeded.length, 2, "группа закрыта");
-    const before = await env.card(pair[1]);
-    assert.status(await env.act(pair[0], "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть первого");
-    const after = await env.card(pair[1]);
-    assert.eq([after.state, after.version, after.groupGuid, after.journal.length], ["closed", before.version, before.groupGuid, before.journal.length], "второй закрытый не изменился");
-  });
-
-  test("Перехватить группу из карточки: оба мои одной группой, в лимите — одна единица (RULE-52, PROC-14)", async () => {
-    const env = await makeEnv();
-    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
-    const group = await env.ok("POST", "/operator/incident-groups", { incidentGuids: pair });
-    const sent = await env.ok("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: pair, formValues: { targetId: "petrova", comment: "тест" }, surface: "card" });
-    assert.eq(sent.succeeded.length, 2, "группа передана Петровой");
-    const taken = await env.ok("POST", "/operator/incidents/transitions/takeover/bulk", { incidentGuids: pair, formValues: { comment: "беру" }, surface: "card" });
-    assert.eq(taken.succeeded.length, 2, "перехвачены оба");
-    const cards = await Promise.all(pair.map((g) => env.card(g)));
-    assert.ok(cards.every((c) => c.state === "in_progress" && c.owner.id === ME && c.groupGuid === group.guid && c.groupSize === 2), "оба мои одной группой");
-    assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
-  });
+  /* ===== Выборка (§11) ===== */
 
   test("Внешние эффекты перехода — в ответе со статусом queued; себе и некому уведомления нет (§14.2, BUG-30)", async () => {
     const env = await makeEnv();
@@ -1298,28 +1160,335 @@
     assert.ok(states.length && states.every((i) => ["new", "on_hold"].includes(i.state)) && states.length === all.filter((i) => ["new", "on_hold"].includes(i.state)).length, "только новые и отложенные");
   });
 
-  test("Группа из разных типов событий не создаётся", async () => {
+  /* ===== Объединение: основной и связанные события (§11, черновик) ===== */
+
+  test("«Выделить по фильтру» с «Одинаковый сценарий»: только то, что можно взять как одно; по умолчанию — где таких больше; чужие не включены; «Взять в работу» доступна (§11, черновик)", async () => {
     const env = await makeEnv();
-    const news = (await env.all("open")).filter((e) => e.state === "new");
-    const mixed = [news.find((e) => e.eventType.id === "fire"), news.find((e) => e.eventType.id !== "fire")];
-    assert.status(await env.call("POST", "/operator/incident-groups", { incidentGuids: mixed.map((e) => e.guid) }), 422, "BULK_SELECTION_INVALID");
-    assert.ok((await env.all("open")).filter((e) => mixed.some((m) => m.guid === e.guid)).every((e) => e.state === "new"), "никто не взят");
+    const body = { sourceGroupGuid: null, filter: { any: [] }, queueFilter: "open" };
+    const plain = await env.ok("POST", "/operator/incidents/filter", body);
+    const sc = plain.options.scenarios;
+    assert.ok(sc.length > 1, "среди открытых — несколько сценариев");
+    assert.eq([plain.scenarioGuid, plain.excluded], [null, 0], "без галочки — без отбора по сценарию");
+    const top = sc.reduce((a, b) => (b.count > a.count ? b : a));
+    const same = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, body, { sameScenario: true }));
+    assert.eq([same.scenarioGuid, same.count], [top.id, top.count], "по умолчанию — сценарий, где больше всего можно взять");
+    let total = 0;
+    let left = 0;
+    for (const x of sc.filter((y) => y.count > 0)) {
+      const r = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, body, { sameScenario: true, scenarioGuid: x.id }));
+      assert.eq([r.scenarioGuid, r.count], [x.id, x.count], `выбранный сценарий «${x.label}»`);
+      total += r.count + r.excluded;
+      left += r.excluded;
+      const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: r.incidentGuids });
+      const merge = sel.actions.find((a) => a.id === "merge");
+      assert.ok(merge.enabled, `«${x.label}»: «Взять в работу» недоступна — ${merge.reason}`);
+      const cards = await Promise.all(r.incidentGuids.map((g) => env.card(g)));
+      assert.ok(cards.every((c) => c.state === "new" || (c.owner && c.owner.id === ME)), `«${x.label}»: включены чужие`);
+    }
+    assert.ok(total <= plain.count, "подходят + не включены — не больше всех подходящих");
+    assert.ok(left > 0, "в демо-данных есть чужие среди сценариев — их не включили");
+    // Без галочки чужой среди отмеченных: причина на «Взять в работу» — его номер, а не основного
+    const mixed = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: await Promise.all(["INC-1830", "INC-1840"].map((n) => env.guidOf(n))) });
+    const blocked = mixed.actions.find((a) => a.id === "merge");
+    assert.ok(!blocked.enabled && /^INC-1840: /.test(blocked.reason), `причина: ${blocked.reason}`);
+    // Сценарий, где взять нечего, не остаётся выбранным — «Выделить 0» не бывает
+    const empty = sc.find((x) => x.count === 0);
+    assert.ok(empty, "в демо-данных есть сценарий, где взять нечего");
+    const fallback = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, body, { sameScenario: true, scenarioGuid: empty.id }));
+    assert.eq([fallback.scenarioGuid, fallback.count], [top.id, top.count], "сценарий без того, что можно взять, — заменён");
+    // С галочкой варианты условий — только из того, что можно взять в сценарии: любой выбор что-то оставляет
+    for (const x of sc.filter((y) => y.count > 0)) {
+      const withBlank = Object.assign({}, body, { filter: { any: [{ deviceTypeId: null, eventTypeIds: [], deviceGuids: [] }] }, sameScenario: true, scenarioGuid: x.id });
+      const r = await env.ok("POST", "/operator/incidents/filter", withBlank);
+      for (const d of r.options.conditions[0].deviceTypes) {
+        const one = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, withBlank, { filter: { any: [{ deviceTypeId: d.id, eventTypeIds: [], deviceGuids: [] }] } }));
+        assert.ok(one.count > 0 && one.scenarioGuid === x.id, `«${x.label}», тип «${d.label}»: подходит ${one.count}, сценарий ${one.scenarioGuid}`);
+      }
+      for (const ev of r.options.conditions[0].eventTypes) {
+        const one = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, withBlank, { filter: { any: [{ deviceTypeId: null, eventTypeIds: [ev.id], deviceGuids: [] }] } }));
+        assert.ok(one.count > 0 && one.scenarioGuid === x.id, `«${x.label}», события «${ev.label}»: подходит ${one.count}`);
+      }
+      for (const dev of r.options.conditions[0].devices) {
+        const one = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, withBlank, { filter: { any: [{ deviceTypeId: null, eventTypeIds: [], deviceGuids: [dev.id] }] } }));
+        assert.ok(one.count > 0 && one.scenarioGuid === x.id, `«${x.label}», устройство «${dev.label}»: подходит ${one.count}`);
+      }
+    }
+    const gone = await env.ok("POST", "/operator/incidents/filter", Object.assign({}, body, { sameScenario: true, scenarioGuid: "нет-такого" }));
+    assert.eq(gone.scenarioGuid, top.id, "сценария нет среди подходящих — где больше всего можно взять");
   });
 
-  test("Выборка: однотипные — только новые того же типа; смешанная — «Взять» выборкой недоступно", async () => {
+  test("«Выделить по фильтру»: условия через «ИЛИ» — подходит под любое; в условии — каскад: события и устройства только выбранного типа (§11, черновик)", async () => {
     const env = await makeEnv();
-    const inc = await newFire(env);
-    const same = await env.ok("POST", "/operator/incidents/selection", { mode: "same_type_new", anchorIncidentGuid: inc.guid, filter: "open" });
+    const filter = async (any) => env.ok("POST", "/operator/incidents/filter", { sourceGroupGuid: null, filter: { any } });
+    const all = await filter([{}]);
+    const types = all.options.conditions[0].deviceTypes.filter((o) => o.count);
+    assert.ok(types.length >= 2, "событий хотя бы двух типов устройств");
+    const [a, b] = types;
+    const one = await filter([{ deviceTypeId: a.id }]);
+    assert.eq(one.count, a.count, "условие по типу — столько, сколько у варианта");
+    const both = await filter([{ deviceTypeId: a.id }, { deviceTypeId: b.id }]);
+    assert.eq(both.count, a.count + b.count, "«ИЛИ» — сумма двух типов");
+    const cascade = one.options.conditions[0];
+    assert.ok(cascade.eventTypes.length && cascade.eventTypes.every((o) => o.count > 0), "события — только того типа, с числами");
+    assert.ok(cascade.devices.length && cascade.devices.every((o) => o.count > 0), "устройства — только того типа");
+    const narrow = await filter([{ deviceTypeId: a.id, eventTypeIds: [cascade.eventTypes[0].id] }]);
+    assert.eq(narrow.count, cascade.eventTypes[0].count, "тип и событие — «И»");
+    assert.status(await env.call("POST", "/operator/incidents/filter", { sourceGroupGuid: "nope" }), 404, null, "узла нет");
+    assert.status(await env.call("POST", "/operator/incidents/filter", { filter: { color: ["red"] } }), 422, null, "неизвестный признак фильтра");
+    // Фильтр очереди: выделяется то, что видно в очереди при этом фильтре
+    const done = await env.ok("POST", "/operator/incidents/filter", { filter: { any: [{}] }, queueFilter: "done" });
+    const closed = (await env.all("done")).map((e) => e.guid);
+    assert.ok(done.count === closed.length && done.incidentGuids.every((g) => closed.includes(g)), "фильтр «Закрытые» — только закрытые");
+  });
+
+  test("Панель выборки: недоступное кому-то из отмеченных — с причиной и номером; не относящееся ни к одному — не показано", async () => {
+    const env = await makeEnv({ workflowPatch: { limits: { maxActive: 1 } } });
+    const news = (await env.all("open")).filter((e) => e.state === "new");
+    // Передал свой инцидент Сидорову, взял другой: лимит 1 занят — перехват передачи недоступен
+    assert.status(await env.act(news[0].guid, "claim", {}, "queue"), 200);
+    assert.status(await env.act(news[0].guid, "transfer", { targetId: "sidorov", comment: "нужен допуск" }), 200, null, "передать Сидорову");
+    assert.status(await env.act(news[1].guid, "claim", {}, "queue"), 200);
+    const one = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [news[0].guid] });
+    const card = actionOf(await env.card(news[0].guid), "takeover");
+    const solo = one.actions.find((a) => a.id === "takeover");
+    assert.ok(solo.visible && !solo.enabled && solo.reason === card.reason && /Лимит активных/.test(solo.reason), `одно отмеченное — причина как в карточке: ${solo.reason}`);
+    // Новый отмечен первым, но причина — того, к кому перехват относится: лимит, а не «не то состояние»
+    const two = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [news[2].guid, news[0].guid] });
+    const take = two.actions.find((a) => a.id === "takeover");
+    assert.ok(take.visible && !take.enabled, "«Перехватить» видна, но недоступна");
+    assert.eq(take.reason, `${news[0].number}: ${card.reason}`, "причина — с номером инцидента");
+    assert.ok(!two.actions.find((a) => a.id === "accept").visible, "«Принять» ни к одному не относится — не показана");
+    assert.ok(two.actions.find((a) => a.id === "close").enabled, "«Закрыть» доступна обоим");
+  });
+
+  test("Взять в работу как одно: основной — самый срочный новый, взят мной; связанные пропали из списков; лимит — одна единица; сценарии разные — нельзя", async () => {
+    const env = await makeEnv();
+    // Пожары разной срочности: основной — самый срочный, а не первый попавшийся
+    const order = (a, b) => b.priority - a.priority || Date.parse(a.occurredAt) - Date.parse(b.occurredAt);
+    const all = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").sort(order);
+    const fires = [all[all.length - 1], all[0], all[1]];
+    assert.ok(fires[0].priority < fires[1].priority, "есть пожары разной срочности");
+    const expected = fires.slice().sort(order)[0];
+    const other = (await env.all("open")).find((e) => e.state === "new" && e.eventType.id !== "fire");
+    const mixed = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fires[0].guid, other.guid] });
+    const take = mixed.actions.find((a) => a.id === "merge");
+    assert.ok(!take.enabled && /Сценарии разные/.test(take.reason), `разные сценарии: ${take.reason}`);
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [fires[0].guid, other.guid] }), 403, null, "разные сценарии — отказ");
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: fires.map((e) => e.guid) });
+    assert.ok(sel.actions.find((a) => a.id === "merge").enabled, "«Взять в работу» на выборке одного сценария");
+    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
+    assert.status(res, 200, null, "взять как одно");
+    const primary = res.body.incident;
+    assert.eq([primary.guid, primary.state, primary.owner.id, primary.linkedCount], [expected.guid, "in_progress", ME, 2], "основной — самый срочный, у меня в работе, связанных двое");
+    assert.eq(primary.priority, expected.priority, "приоритет основного — свой, объединение его не меняет");
+    const others = fires.filter((e) => e.guid !== primary.guid).map((e) => e.guid);
+    for (const filter of ["open", "all", "done", "mine", "foreign", "inbox"]) {
+      assert.ok((await env.all(filter)).every((e) => !others.includes(e.guid)), `связанные не в фильтре ${filter}`);
+    }
+    const linked = await env.card(others[0]);
+    assert.eq([linked.state, linked.linkedTo, linked.owner], ["linked", primary.guid, null], "связанное — «Связан», ссылка на основной");
+    assert.eq((await env.session()).usage.activeCount, 1, "в лимите — одна единица");
+  });
+
+  test("Взять в работу как одно: лимит занят — ничего не меняется; к моему в работе — новые присоединяются, приоритет и срок основного — свои", async () => {
+    const env = await makeEnv({ workflowPatch: { limits: { maxActive: 1 } } });
+    const news = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    // В работу — самый несрочный пожар: присоединяемые срочнее его
+    const [b, c] = news;
+    const a = news[news.length - 1];
+    assert.ok(a.priority < b.priority, "есть пожары разной срочности");
+    assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять один");
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [b.guid, c.guid] }), 403, "LIMIT_EXCEEDED", "лимит занят — взять новые как одно нельзя");
+    const after = await Promise.all([b, c].map((e) => env.card(e.guid)));
+    assert.ok(after.every((x) => x.state === "new" && !x.linkedTo), "ничего не изменилось");
+    const mine = await env.card(a.guid);
+    // Присоединяем новый более срочный: срок его реакции раньше срока закрытия моего — основной всё равно свой
+    const urgent = b;
+    assert.ok(urgent.priority > mine.priority, "присоединяемый срочнее моего");
+    assert.ok(Date.parse(urgent.timer.dueAt) < Date.parse(mine.timer.dueAt), "срок реакции нового раньше срока закрытия моего");
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, urgent.guid] });
+    assert.eq([res.incident.guid, res.incident.linkedCount], [a.guid, 1], "новый присоединён к моему в работе");
+    assert.eq([res.incident.timer.id, res.incident.timer.dueAt, res.incident.priority], [mine.timer.id, mine.timer.dueAt, mine.priority], "норматив, срок и приоритет основного — свои");
+  });
+
+  test("Связанные: закрыли основной — закрыты его результатом; переоткрыли — остались закрытыми; «Отсоединить» — снова новое; передача — только с доступом к объектам связанных (§5)", async () => {
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
+    const env = await makeEnv({ fixturePatch: { people } });
+    const [mall, office, third] = await Promise.all(["INC-1847", "INC-1838", "INC-1828"].map((n) => env.guidOf(n)));
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [] }), 422, "BULK_SELECTION_INVALID", "ничего не отмечено");
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office, third], primaryGuid: mall }), 200, null, "взять как одно с основным в ТЦ");
+    const detached = await env.call("DELETE", `/operator/incidents/${enc(mall)}/linked/${enc(third)}`);
+    assert.status(detached, 200, null, "отсоединить");
+    const back = await env.card(third);
+    assert.eq([back.state, back.linkedTo], ["new", null], "отсоединённый — новый, без связи");
+    assert.ok((await env.all("open")).some((e) => e.guid === third), "снова в очереди");
+    const denied = await env.act(mall, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
+    assert.status(denied, 403, null, "у Кузнецова нет доступа к объекту связанного");
+    assert.ok(/связанных событий/.test(denied.body.message), `причина: ${denied.body.message}`);
+    assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    const closed = await env.card(office);
+    assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "связанный закрыт результатом основного, связь — история");
+    assert.eq(closed.journal[closed.journal.length - 1].templateKey, "workflow.journal.close_linked", "в журнале — закрыто вместе с основным");
+    assert.status(await env.act(mall, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть основной");
+    assert.eq((await env.card(office)).state, "closed", "связанный остался закрытым");
+  });
+
+  test("Два основных со связанными — «Взять в работу» как одно: все связанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11, черновик)", async () => {
+    const env = await makeEnv();
+    const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.ok(d, "в демо-данных четыре новых пожара");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: a.guid });
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [c.guid, d.guid], primaryGuid: c.guid });
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, c.guid], primaryGuid: a.guid });
+    const cards = await Promise.all([b, c, d].map((e) => env.card(e.guid)));
+    assert.ok(cards.every((x) => x.state === "linked" && x.linkedTo === a.guid), "B, C и D связаны с A напрямую");
+    const moved = cards[2].journal[cards[2].journal.length - 1];
+    assert.eq([moved.templateKey, moved.vars.primaryNumber], ["workflow.journal.merge", a.number], "у D — запись о новом основном");
+    const page = await env.ok("GET", `/operator/incidents/${enc(a.guid)}/linked`);
+    assert.eq(page.items.map((x) => x.guid).sort(), [b.guid, c.guid, d.guid].sort(), "у A трое связанных");
+    assert.eq((await env.card(c.guid)).linkedCount, 0, "у C связанных не осталось");
+    // Закрытые вместе с прежним основным остаются при нём как история: E + F, закрыть, переоткрыть E, к A
+    const fx = window.IM_FIXTURE;
+    const base = fx.incidents.find((i) => i.number === "INC-1847");
+    const [e, f] = [0, 1].map((k) => Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000098${k}0`, number: `INC-98${k}0` }));
+    const env2 = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat([e, f]) } });
+    const lead = (await env2.all("open")).find((x) => x.number === "INC-1838");
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [e.guid, f.guid], primaryGuid: e.guid });
+    assert.status(await env2.act(e.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть E");
+    assert.status(await env2.act(e.guid, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть E");
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [lead.guid, e.guid], primaryGuid: lead.guid });
+    const closed = await env2.card(f.guid);
+    assert.eq([closed.state, closed.linkedTo], ["closed", e.guid], "закрытый F остался при E как история");
+  });
+
+  test("Норматив закрытия привязанного идёт дальше: истёк — нарушение на владельца основного и алерт; у нового привязанного норматива нет; закрыли основной раньше — нарушения нет (§11.4)", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const urgent = fires[0];
+    const calm = fires[fires.length - 1];
+    const fresh = fires[1];
+    assert.ok(urgent.priority > calm.priority, "есть пожары разной срочности");
+    for (const e of [urgent, calm]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    await env.advance(30);
+    const before = await env.card(urgent.guid);
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid, fresh.guid], primaryGuid: calm.guid });
+    const linked = await env.card(urgent.guid);
+    assert.eq([linked.state, linked.timer.id, linked.timer.running, linked.timer.dueAt], ["linked", "resolution", true, before.timer.dueAt], "у привязанного срок закрытия идёт, тот же");
+    assert.eq((await env.card(fresh.guid)).timer, null, "у нового привязанного норматива нет");
+    assert.eq(res.incident.linkedDueAt, before.timer.dueAt, "у основного — срок привязанного");
+    await env.advance(Math.ceil((Date.parse(before.timer.dueAt) - env.now) / 1000) + 5);
+    const late = await env.card(urgent.guid);
+    assert.eq([late.state, late.breaches.length, late.breaches[0].kind, late.breaches[0].owner && late.breaches[0].owner.id], ["linked", 1, "resolution", ME], "нарушение закрытия — на владельца основного");
+    assert.eq(late.journal[late.journal.length - 1].templateKey, "workflow.journal.linked_resolution_overdue", "запись в журнале привязанного");
+    const primary = await env.card(calm.guid);
+    assert.eq([primary.breaches.length, primary.timer.dueAt], [0, res.incident.timer.dueAt], "у основного нарушений нет, срок свой");
+    // Закрыли основной раньше срока привязанного — нарушения нет
+    const env2 = await makeEnv();
+    for (const e of [urgent, calm]) await env2.act(e.guid, "claim", {}, "queue");
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    assert.status(await env2.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    await env2.advance(900);
+    const closed = await env2.card(urgent.guid);
+    assert.eq([closed.state, closed.breaches.length], ["closed", 0], "закрыт вместе с основным, нарушения нет");
+  });
+
+  test("Ответы сценария связанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11, черновик)", async () => {
+    const env = await makeEnv();
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять A");
+    assert.status(await env.answer(a.guid, { visual: true, note: "из A" }), 200, null, "ответы A");
+    assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять B");
+    assert.status(await env.answer(b.guid, { note: "из B" }), 200, null, "ответы B");
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: b.guid });
+    const primary = await env.card(res.incident.guid);
+    assert.eq([primary.scenario.answers.visual, primary.scenario.answers.note], [true, "из B"], "флажок из A перенесён, своё поле B осталось");
+    const entry = primary.journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
+    assert.ok(entry && entry.vars.number === a.number && entry.vars.n === 1, `запись в журнале основного: ${entry && entry.text}`);
+    assert.eq((await env.card(a.guid)).scenario.answers.note, "из A", "у связанного ответы остались как история");
+  });
+
+  test("Поиск находит связанное событие — строкой основного с «найдено в привязанных»; страница найденного среди связанных (§11, черновик)", async () => {
+    const fx = window.IM_FIXTURE;
+    const base = fx.incidents.find((i) => i.number === "INC-1847");
+    const extra = Array.from({ length: 12 }, (_, k) =>
+      Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
+    );
+    const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)), primaryGuid: base.guid });
+    const last = extra[extra.length - 1];
+    const res = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(last.number)}`);
+    assert.eq(res.items.map((e) => e.guid), [base.guid], "найден основной, связанного строкой нет");
+    assert.eq(res.items[0].matchedLinked, [{ guid: last.guid, number: last.number }], "в строке — какое связанное подошло");
+    const plain = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(base.number)}`);
+    assert.ok(plain.items.length === 1 && !plain.items[0].matchedLinked, "поиск по самому основному — без «найдено в привязанных»");
+    const p1 = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(last.guid)}`);
+    assert.eq(p1.focusPage, 3, "найденное — на третьей странице по 5");
+    const none = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(base.guid)}`);
+    assert.eq(none.focusPage, null, "не связанное — без страницы");
+  });
+
+  test("Журнал основного: присоединено много — первые пять номеров и «и ещё N»; мало — все номера (§11, черновик)", async () => {
+    const fx = window.IM_FIXTURE;
+    const base = fx.incidents.find((i) => i.number === "INC-1847");
+    const extra = Array.from({ length: 6 }, (_, k) =>
+      Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
+    );
+    const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
+    const many = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)), primaryGuid: base.guid });
+    const entry = (c) => c.journal.filter((e) => /merged_in/.test(e.templateKey)).pop();
+    const big = entry(await env.card(many.incident.guid));
+    assert.eq([big.templateKey, big.vars.ids.split(", ").length, big.vars.more], ["workflow.journal.merged_in_more", 5, 1], "пять номеров и ещё один");
+    assert.ok(/и ещё 1$/.test(big.text), `текст: ${big.text}`);
+    const env2 = await makeEnv();
+    const fires = (await env2.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 3);
+    const few = await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
+    const small = entry(await env2.card(few.incident.guid));
+    assert.eq([small.templateKey, small.vars.ids.split(", ").length], ["workflow.journal.merged_in", 2], "оба номера");
+  });
+
+  test("«Отсоединить все»: все связанные — снова новые, у основного связанных нет; нельзя — не меняется ничего (§11, черновик)", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 3);
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
+    const lead = res.incident.guid;
+    const others = fires.map((e) => e.guid).filter((g) => g !== lead);
+    // Связанные — постранично: по одному на странице, вместе — все
+    const p1 = await env.ok("GET", `/operator/incidents/${enc(lead)}/linked?page=1&pageSize=1`);
+    const p2 = await env.ok("GET", `/operator/incidents/${enc(lead)}/linked?page=2&pageSize=1`);
+    assert.eq([p1.total, p1.items.length, p2.items.length, p2.page], [2, 1, 1, 2], "две страницы по одному");
+    assert.eq([p1.items[0].guid, p2.items[0].guid].sort(), others.slice().sort(), "на страницах — все связанные");
+    assert.status(await env.call("GET", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого основного");
+    // На перерыве отсоединять нельзя: отказ — и ни одно не отсоединено
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), 403, null, "на перерыве");
+    assert.eq((await Promise.all(others.map((g) => env.card(g)))).map((c) => c.state), others.map(() => "linked"), "ничего не отсоединено");
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "ready" });
+    const all = await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`);
+    assert.status(all, 200, null, "отсоединить все");
+    assert.eq(all.body.guid, lead, "ответ — основной");
+    assert.eq((await env.ok("GET", `/operator/incidents/${enc(lead)}/linked`)).items.filter((x) => x.state === "linked").length, 0, "связанных не осталось");
+    const back = await Promise.all(others.map((g) => env.card(g)));
+    assert.ok(back.every((c) => c.state === "new" && !c.linkedTo), "все — новые, без связи");
+    const open = (await env.all("open")).map((e) => e.guid);
+    assert.ok(others.every((g) => open.includes(g)), "все снова в очереди");
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), 200, null, "связанных нет — без изменений");
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого");
+  });
+
+  test("Выборка: «Взять» выборкой недоступно — как одно только «Взять в работу»; режима «однотипные» нет (§11, черновик)", async () => {
+    const env = await makeEnv();
     const all = await env.all();
-    assert.ok(same.incidentGuids.length >= 2, "нашлись однотипные");
-    assert.ok(same.incidentGuids.every((id) => all.find((e) => e.guid === id).eventType.id === "fire"), "все — пожарные");
-    assert.ok(same.incidentGuids.every((id) => all.find((e) => e.guid === id).state === "new"), "все — новые");
-    const mixed = all.filter((e) => e.state === "new").filter((e, i, list) => list.findIndex((x) => x.eventType.id === e.eventType.id) === i).slice(0, 2);
-    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: mixed.map((e) => e.guid) });
-    assert.ok(!sel.actions.find((a) => a.id === "claim").enabled, "«Взять» на смешанной выборке");
-    const allIn = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
-    assert.ok(allIn.incidentGuids.length <= W.limits.maxBulk, "не больше лимита выборки");
-    assert.eq(allIn.truncated, (await env.all("open")).length > W.limits.maxBulk, "признак усечения");
+    const fires = all.filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: fires.map((e) => e.guid) });
+    const claim = sel.actions.find((a) => a.id === "claim");
+    assert.ok(!claim.enabled && !claim.bulkAllowed, "«Взять» на двух однотипных новых");
+    assert.status(await env.call("POST", "/operator/incidents/transitions/claim/bulk", { incidentGuids: fires.map((e) => e.guid), formValues: {}, surface: "queue" }), 422, "BULK_SELECTION_INVALID", "«Взять» выборкой — отказ сервера");
+    assert.ok(fires.length === 2 && (await env.all("open")).filter((e) => fires.some((f) => f.guid === e.guid)).every((e) => e.state === "new"), "никто не взят");
+    const capped = await makeEnv({ workflowPatch: { limits: { maxBulk: 10 } } });
+    const allIn = await capped.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
+    assert.ok(allIn.incidentGuids.length <= 10, "не больше лимита выборки");
+    assert.eq(allIn.truncated, (await capped.all("open")).length > 10, "признак усечения");
   });
 
   test("Массовое действие: передача выборки — каждому, кому доступно; результат по каждому", async () => {
@@ -1420,16 +1589,25 @@
     assert.ok(priorities.every((x) => x.name.ru && x.color), "у каждого — название и цвет");
   });
 
-  test("Настройки оператора: предвыбор адресата меняет значение по умолчанию в форме передачи (§8.2)", async () => {
+  test("Форма «Передать» подставляет адресата прошлой передачи этого оператора; настройки нет; автоэскалация не запоминается (§8.2)", async () => {
     const env = await makeEnv();
     const preset = window.IM_FIXTURE.operatorPreferences;
-    const initial = (await env.session()).preferences;
-    Object.entries(preset).forEach(([key, value]) => assert.eq(initial[key], value, `после сброса ${key} — из эталонного набора`));
-    await env.ok("PATCH", "/operator/session/preferences", { defaultTransferTargetId: "noc" });
-    assert.eq((await env.session()).preferences.defaultTransferTargetId, "noc", "сохранено в сессии");
-    const inc = await newFire(env);
-    assert.eq(actionOf(inc, "transfer").fieldOptions.targetId.defaultValue, "noc", "по умолчанию в форме");
-    assert.status(await env.heartbeat(inc.guid), 204, null, "признак активности");
+    const initial = await env.session();
+    Object.entries(preset).forEach(([key, value]) => assert.eq(initial.preferences[key], value, `после сброса ${key} — из эталонного набора`));
+    assert.eq(initial.lastTransferTargetId, null, "после сброса — никого");
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.site !== "Торговый центр");
+    assert.eq(actionOf(a, "transfer").fieldOptions.targetId.defaultValue || null, null, "передач ещё не было — поле пустое");
+    assert.status(await env.act(a.guid, "transfer", { targetId: "noc", comment: "тест" }, "queue"), 200, null, "передать Дежурному ЦОД");
+    assert.eq((await env.session()).lastTransferTargetId, "noc", "сервер запомнил");
+    const again = (await env.all("open")).find((e) => e.guid === b.guid);
+    assert.eq(actionOf(again, "transfer").fieldOptions.targetId.defaultValue, "noc", "в следующей форме — он же");
+    // Адресату, которому этот инцидент передать нельзя (нет доступа), не подставляется
+    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову событие ТЦ");
+    assert.eq((await env.session()).lastTransferTargetId, "kuznetsov", "последний — Кузнецов");
+    const office = (await env.all("open")).find((e) => e.guid === b.guid);
+    assert.eq(actionOf(office, "transfer").fieldOptions.targetId.defaultValue || null, null, "Кузнецову вне ТЦ нельзя — не подставлен");
+    assert.status(await env.heartbeat(a.guid), 204, null, "признак активности");
   });
 
   test("Действия карточки и очереди различаются по поверхности; сценарий, журнал и камеры — те же, что в карточке", async () => {
@@ -1526,6 +1704,20 @@
     assert.ok(got.length > 0, "события о доступных пришли");
     // Кроме потери доступа к моим: в наборе есть инциденты вне ТЦ, адресованные мне (BUG-24)
     assert.ok(got.every((m) => !m.incidentGuid || seen.some((i) => i.guid === m.incidentGuid) || (m.type === "incident.access_lost" && !m.incident)), "о недоступных событий нет");
+  });
+
+  test("Дежурная группа с доступом ко всем объектам — в адресатах передачи у любого инцидента; своей группы там нет (§8.1)", async () => {
+    const env = await makeEnv();
+    const office = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const options = actionOf(office, "transfer").fieldOptions.targetId.options;
+    const group = options.find((o) => o.id === "grp-response");
+    assert.ok(group && !group.disabled, `«Группа реагирования» в форме передачи ${office.number}: ${options.map((o) => o.id)}`);
+    const listed = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(office.guid)}`)).find((t) => t.id === "grp-response");
+    assert.ok(listed && listed.kind === "duty_group" && listed.available, "в адресатах — дежурная группа, на месте есть кто принять");
+    assert.ok(!options.some((o) => o.id === "grp-leads"), "своей группы «Старшие операторы» нет");
+    assert.status(await env.act(office.guid, "transfer", { targetId: "grp-response", comment: "группе" }, "queue"), 200, null, "передать группе");
+    const card = await env.card(office.guid);
+    assert.eq([card.state, card.owner, card.assignmentGroup && card.assignmentGroup.id], ["pending_acceptance", null, "grp-response"], "ждёт принятия группой, владельца нет");
   });
 
   test("Передача только адресату с доступом (§8.1): Кузнецов и «Охрана ТЦ» видят только «Торговый центр»", async () => {
@@ -1635,6 +1827,19 @@
     assert.eq(after.assignmentGroup && after.assignmentGroup.id, "grp-leads", "INC-1843 ушёл в первую по порядку группу");
   });
 
+  test("Адресат не на месте — почему: перерыв с причиной, вне МИ — «оффлайн», у группы — «никого нет на месте» (§8.1)", async () => {
+    const env = await makeEnv();
+    const open = await env.all("open");
+    const labels = async (inc) =>
+      Object.fromEntries((await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => [t.id, [t.available, t.availabilityLabel]]));
+    const office = await labels(open.find((e) => e.state === "new" && e.site !== "Торговый центр"));
+    assert.eq(office.orlova, [false, "нет на месте — перерыв: Обед"], "Орлова на обеде");
+    assert.eq(office.sidorov, [true, null], "Сидоров на месте — без подписи");
+    const mall = await labels(open.find((e) => e.state === "new" && e.site === "Торговый центр"));
+    assert.eq(mall.kuznetsov, [false, "нет на месте — оффлайн"], "Кузнецов вне МИ");
+    assert.eq(mall["grp-tc"], [false, "никого нет на месте"], "в «Охране ТЦ» никого");
+  });
+
   test("Порядок дежурных групп задаёт администратор: при обратном порядке — в «Охрану ТЦ» (§8.1)", async () => {
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.reverse();
@@ -1650,8 +1855,9 @@
 
   test("Коллеги действуют через переходы машины: взять, передать мне, потеря связи и возврат в очередь (§12.3)", async () => {
     if (IMTest.external) return "пропущено: эмуляция коллег есть только во встроенном сервере";
+    // Лимит активных 1: проверяем, что у каждого коллеги он свой
     const server = IMServer.create({
-      workflow: W,
+      workflow: Object.assign({}, W, { limits: Object.assign({}, W.limits, { maxActive: 1 }) }),
       fixture: window.IM_FIXTURE,
       colleagues: window.IM_COLLEAGUES,
       autoTick: false,
@@ -1675,7 +1881,7 @@
     cards.filter((c) => c.state === "in_progress" && c.owner && colleagues.has(c.owner.id)).forEach((c) => {
       active[c.owner.id] = (active[c.owner.id] || 0) + 1;
     });
-    Object.entries(active).forEach(([who, n]) => assert.ok(n <= W.limits.maxActive, `у ${who} в работе ${n} > ${W.limits.maxActive}`));
+    Object.entries(active).forEach(([who, n]) => assert.ok(n <= 1, `у ${who} в работе ${n} > 1`));
 
     // Передача мне: переход «Передать» от имени коллеги — ожидает моего принятия
     const handed = cards.filter((c) => c.state === "pending_acceptance" && c.ownership === "target" && before.get(c.guid).state === "in_progress");

@@ -28,10 +28,8 @@ WHO = {
     "alerts.target": "получателю алертов (`alerts.target`; если на месте с доступом к объекту никого — запись в журнал)",
 }
 BULK = {
-    "same_type_new": "только новые одного типа, создаёт группу сценария",
     "each_allowed": "если доступно каждому отмеченному",
-    "group": "только группа сценария",
-    "group_or_each_allowed": "группа сценария или если доступно каждому отмеченному",
+    "merge": "«Взять в работу» на выборке — одним инцидентом (§11.3)",
 }
 
 
@@ -119,6 +117,12 @@ class Doc:
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
+            "isOwnerOrUnowned": lambda: "инцидент ничей или мой",
+            "mergePrimaryValid": lambda: "основной — другой открытый, не связанный, виден мне; новый или мой в работе",
+            "sameScenarioAsPrimary": lambda: "сценарий тот же, что у основного",
+            "primaryEditable": lambda: "основной новый или мой",
+            "primaryClosed": lambda: "основной закрыт",
+            "targetHasAccessToLinked": lambda: "у адресата есть доступ к объектам всех связанных событий",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для условия {fn}: добавьте её в tools/transitions_doc.py")
@@ -135,9 +139,9 @@ class Doc:
             + ("" if len(a) < 2 else " по нормативу уровня эскалации" if a[1] in ("byEscalationLevel", "escalation.level.reactionSec") else f", норматив {self.setting(a[1])} с"),
             "stopTimer": lambda: f"остановка {self.tm(a[0])}",
             "pauseTimer": lambda: f"пауза {self.tm(a[0])}, остаток сохраняется",
-            "resumeTimer": lambda: f"{self.tm(a[0])} продолжается с остатка, при первом запуске — с полного норматива",
+            "resumeTimer": lambda: f"{self.tm(a[0])} продолжается с остатка, " + ("если уже шёл; не шедший не запускается" if a[1:] == ["ifStarted"] else "при первом запуске — с полного норматива"),
             "restartTimer": lambda: f"{self.tm(a[0])} заново, без остатка; норматив {self.setting(a[1])}, не задан — обычный",
-            "recordBreach": lambda: f"нарушение `{a[0]}` в `breaches`",
+            "recordBreach": lambda: f"нарушение `{a[0]}` в `breaches`" + (" — на владельца основного" if a[1:] == ["primaryOwner"] else ""),
             "increment": lambda: f"`{a[0]}` +1",
             "setFlag": lambda: f"`{a[0]}`: {self.value(a[1])}",
             "appendLog": lambda: f"журнал: «{RU.get(a[0], a[0])}»",
@@ -145,6 +149,11 @@ class Doc:
             "evictOpenCard": lambda: f"открытая карточка ({WHO.get(a[0], a[0])}) — в режим просмотра",
             "setCursor": lambda: "сценарий открывается на первом незаполненном шаге" if a[0] == "firstOpenStep" else f"курсор сценария: `{a[0]}`",
             "clearGroup": lambda: "выходит из групповой обработки",
+            "setLinkedTo": lambda: f"связан с основным: {self.value(a[0])}",
+            "clearLink": lambda: "связь с основным снимается",
+            "relinkToPrimary": lambda: "открытые связанные объединяемого — новому основному, запись в журнале каждого",
+            "copyAnswersToPrimary": lambda: "заполненные шаги сценария — в незаполненные шаги основного, запись в журнале основного",
+            "copyCloseFromPrimary": lambda: "результат, причина, комментарий и закрывший — от основного",
             "notify": lambda: f"уведомление {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
         }
@@ -158,8 +167,10 @@ class Doc:
             return TRIGGER[t["trigger"]]
         ui = t.get("ui", {})
         where = ", ".join(SURFACE.get(s, s) for s in ui.get("surface", []))
-        hotkey = f"; клавиша `{ui['hotkey']}`" if ui.get("hotkey") else ""
-        return f"кнопка: {where}{hotkey}"
+        # Кнопки в строке и карточке нет — только на панели выборки (§11)
+        if not where and (t.get("bulk") or {}).get("allowed"):
+            where = "панель выборки"
+        return f"кнопка: {where}"
 
     def bulk(self, t):
         b = t.get("bulk") or {}

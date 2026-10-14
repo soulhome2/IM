@@ -84,7 +84,7 @@
     // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
     // (7 — запись журнала, 8 — группа обработки, 9 — запуск макроса), дальше — номер
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
-    const serial = { group: 0, macro: 0, incident: 0 };
+    const serial = { macro: 0, incident: 0 };
     let events = [];
     let SIM = { enabled: false };
     let session = null;
@@ -92,6 +92,7 @@
     const colleagueEngines = {};
     const colleagueIdleSince = {};
     const PAGE_SIZE = 8;
+    const MERGED_IN_SHOWN = 5;
 
     /* ===== Люди и права ===== */
 
@@ -245,6 +246,8 @@
       me: ME,
       now,
       events: () => events,
+      // Сценарий инцидента — условию «один сценарий с основным» у «Взять в работу» на выборке
+      scenarioKey: (ev) => scenarioKey(ev),
       can,
       isGroup: (id) => GROUPS.some((g) => g.id === id),
       // Дежурная группа человека (§8.1): первая, в которую он входит
@@ -266,16 +269,8 @@
       transferTargets: () => targets(),
       hasAccess: (id, ev) => hasAccess(id, ev),
       canAccept: (id, ev) => canAccept(id, ev),
-      defaultTransferTarget: () => session.preferences.defaultTransferTargetId,
-      // У членов группы ответы общие (grouping.shared): один объект ответов на всех
-      shareAnswers: (ev, first) => {
-        ev.answers = first.answers;
-      },
-      detachAnswers: (ev) => {
-        ev.answers = JSON.parse(JSON.stringify(ev.answers));
-      },
-      // Новая группа, когда группа делится по владельцу (RULE-56) — номер как у «Обработать как одно»
-      newGroupId: () => uuid(8, ++serial.group),
+      // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
+      defaultTransferTarget: () => session.lastTransferTargetId,
       // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
       // объекту. Оператору стенда — событие потока; сколько получателей, столько и вернуть
       notifyAlert: (ev, targetId, transitionId) => {
@@ -308,7 +303,6 @@
     function load(fixture) {
       // Сброс — вход оператора: молчание считается с этого момента
       lastHeartbeat = now();
-      serial.group = 0;
       serial.incident = 0;
       serial.macro = 0;
       const data = JSON.parse(JSON.stringify(fixture));
@@ -369,7 +363,7 @@
         timers: inc.timers,
         slaBreached: inc.slaBreached,
         breaches: (inc.breaches || []).map((b) => ({ kind: b.kind, at: abs(b.at), owner: b.owner || null })),
-        groupId: null,
+        linkedTo: inc.linkedGuid || null,
         answers: inc.scenario.answers,
         launched: inc.scenario.launchedMacros,
         log: inc.journal.map((j) => ({ at: abs(j.at), whoId: j.actor, who: j.actorName, k: j.template, v: j.vars })),
@@ -408,6 +402,7 @@
         reasonId: null,
         openIncidentGuid: null,
         preferences: JSON.parse(JSON.stringify(fixture.operatorPreferences || {})),
+        lastTransferTargetId: null,
       };
       SIM = opts.colleagues ? JSON.parse(JSON.stringify(opts.colleagues.SIM)) : { enabled: false };
       Object.keys(colleagueIdleSince).forEach((id) => delete colleagueIdleSince[id]);
@@ -459,6 +454,10 @@
 
     // Подпись таймера — из машины, на языке оператора (§14.9)
     const timerLabel = (id) => render((W.timers.find((t) => t.id === id) || {}).labelKey || id);
+    function linkedDue(ev) {
+      const due = events.filter((e) => e.linkedTo === ev.id && !isDone(e) && e.resolutionDueAt).map((e) => e.resolutionDueAt);
+      return due.length ? iso(Math.min(...due)) : null;
+    }
     function timerState(ev) {
       if (isDone(ev)) return null;
       const base = { serverTime: iso(now()) };
@@ -478,12 +477,10 @@
       return { id: "hold", label: timerLabel("hold"), dueAt: iso(ev.holdDueAt), remainingMs: ev.holdDueAt - now(), running: true, serverTime: iso(now()) };
     }
 
-    const groupMates = (ev) => (ev.groupId ? events.filter((e) => e.groupId === ev.groupId) : [ev]);
-
     // Варианты полей формы перехода для этого инцидента и значения по умолчанию (form машины)
     function formView(tr, ev, surface) {
       if (!tr || !tr.form) return {};
-      const f = engine.form(tr.form, ev, { surface, noteVars: { groupSize: groupMates(ev).length } });
+      const f = engine.form(tr.form, ev, { surface });
       const fieldOptions = {};
       f.fields.forEach((field) => {
         if (!field.options) return;
@@ -518,7 +515,6 @@
             reasonKey: why ? why.key : null,
             reasonVars: why ? why.vars : null,
             formId: a.formId || null,
-            hotkey: a.hotkey || null,
             navigate: a.navigate || null,
             bulkAllowed: Boolean(tr && tr.bulk && tr.bulk.allowed),
           },
@@ -562,8 +558,10 @@
         holdTimer: holdTimerState(ev),
         slaBreached: Boolean(ev.slaBreached),
         breaches: (ev.breaches || []).map((b) => ({ kind: b.kind, at: iso(b.at), owner: actorRef(b.owner) })),
-        groupGuid: ev.groupId || null,
-        groupSize: ev.groupId ? groupMates(ev).length : 0,
+        linkedTo: ev.linkedTo || null,
+        linkedCount: events.filter((e) => e.linkedTo === ev.id).length,
+        // Самый ранний идущий срок закрытия среди привязанных (§11.4): истечёт — нарушение на владельца основного
+        linkedDueAt: linkedDue(ev),
         scenarioProgress: stepProgress(ev),
         scenarioTitle: (scenarioOf(ev) && scenarioOf(ev).title) || null,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
@@ -609,23 +607,137 @@
       }));
     }
 
-    function groupView(ev) {
-      if (!ev.groupId) return null;
-      const mates = groupMates(ev);
-      const block = say(engine.excludeBlock(ev));
+    // Сценарий инцидента: «Взять в работу» на выборке — как одно, только с одним сценарием (§11, черновик)
+    const scenarioKey = (ev) => (scenarioOf(ev) && scenarioOf(ev).guid) || ev.typeId;
+
+    /* ===== «Выделить по фильтру» из дерева (§11, черновик) =====
+       Узел дерева (или все события) и условия, соединённые «ИЛИ». В условии — «И»: тип устройства
+       (один или любой), события из выбранных, устройства из выбранных; пустое — любые. Нет условий —
+       все события узла. Подходящие отмечаются, дальше — панель выборки */
+    const typeOfEvent = (e) => (eventSource(e) ? deviceSpec(eventSource(e)).type : null);
+    const COND_KEYS = ["deviceTypeId", "eventTypeIds", "deviceGuids"];
+    function badFilter(f) {
+      if (f == null) return null;
+      if (typeof f !== "object" || Object.keys(f).some((k) => k !== "any") || !Array.isArray(f.any || [])) return "any";
+      for (const c of f.any || []) {
+        const bad = Object.keys(c || {}).find((k) => !COND_KEYS.includes(k));
+        if (bad) return bad;
+        if (c.deviceTypeId != null && typeof c.deviceTypeId !== "string") return "deviceTypeId";
+        if (["eventTypeIds", "deviceGuids"].some((k) => c[k] != null && !Array.isArray(c[k]))) return "eventTypeIds";
+      }
+      return null;
+    }
+    const normCond = (c) => ({
+      deviceTypeId: (c && c.deviceTypeId) || null,
+      eventTypeIds: [...new Set(((c && c.eventTypeIds) || []).map(String))].sort(),
+      deviceGuids: [...new Set(((c && c.deviceGuids) || []).map(String))].sort(),
+    });
+    // Условия без повторов, по порядку; условие «всё любое» — то же, что нет условий
+    function normFilter(f) {
+      const seen = new Set();
+      const any = ((f && f.any) || []).map(normCond).filter((c) => {
+        const key = JSON.stringify(c);
+        return !seen.has(key) && seen.add(key);
+      });
+      return { any: any.some((c) => !c.deviceTypeId && !c.eventTypeIds.length && !c.deviceGuids.length) ? [] : any };
+    }
+    // skip — какое поле условия не учитывать: для вариантов этого поля в окне
+    const fitsCond = (c, e, skip) =>
+      (skip === "deviceTypeId" || !c.deviceTypeId || typeOfEvent(e) === c.deviceTypeId) &&
+      (skip === "eventTypeIds" || !c.eventTypeIds.length || c.eventTypeIds.includes(e.typeId)) &&
+      (skip === "deviceGuids" || !c.deviceGuids.length || c.deviceGuids.includes(eventSource(e)));
+    const fitsFilter = (f, e) => !f.any.length || f.any.some((c) => fitsCond(c, e));
+    // Под узлом — устройство-источник в группе дерева или во вложенных; без узла — все события
+    function underNode(nodeId) {
+      if (!nodeId) return () => true;
+      const node = findNode(TREE, nodeId);
+      const ids = new Set(node ? collectDeviceIds(node) : []);
+      return (e) => ids.has(eventSource(e));
+    }
+    const typeName = (id) => (events.find((e) => e.typeId === id) || { type: id }).type;
+    const deviceTypeLabel = (id) => (DEVICE_TYPES[id] || { label: id }).label;
+    // Окно фильтра: варианты для каждого условия по каскаду — тип устройства, события этого типа,
+    // устройства этого типа с выбранными событиями — с числами; сколько подходит под все условия и
+    // какие (для «Выделить» — не больше maxBulk; null — все). Со всех страниц очереди
+    function filterView(body) {
+      const nodeId = body.sourceGroupGuid || null;
+      if (nodeId && !findNode(TREE, nodeId)) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+      const bad = badFilter(body.filter);
+      if (bad) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.filter.bad", { name: bad }]);
+      // Варианты — и для пустых условий, которые оператор только добавил: их нормализация не убирает
+      const conds = ((body.filter && body.filter.any) || []).map(normCond);
+      const f = normFilter(body.filter);
+      const under = underNode(nodeId);
+      // Фильтр очереди (queueFilters машины), как над очередью; нет — открытые
+      const qf = body.queueFilter || "open";
+      if (!W.queueFilters.some((x) => x.id === qf)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.filter.bad", { name: qf }]);
+      const order = ORDERS[sortOf({})];
+      const pool = visible({ filter: qf }).filter(under).sort((a, b) => order(a, b) || byNumber(a, b));
+      const facet = (list, value, label, picked) => {
+        const counts = new Map();
+        list.forEach((e) => {
+          const v = value(e);
+          if (v != null) counts.set(v, (counts.get(v) || 0) + 1);
+        });
+        picked.forEach((v) => counts.has(v) || counts.set(v, 0));
+        return [...counts].map(([id, count]) => ({ id, label: label(id), count })).sort((a, b) => String(a.label).localeCompare(String(b.label)));
+      };
+      const all = pool.filter((e) => fitsFilter(f, e));
+      // «Одинаковый сценарий» (необязательно): события одного сценария, которые можно взять в работу как одно —
+      // основной и те, кого к нему можно присоединить по условиям перехода объединения машины.
+      // Чужие и ожидающие принятия не включаются: сколько — excluded. У сценария — сколько можно взять
+      const scenarioLabel = (k) => (Object.values(SCENARIOS).find((x) => x && x.guid === k) || { title: typeName(k) }).title;
+      const mergeTr = W.transitions.find((t) => t.bulk && t.bulk.mode === "merge");
+      const takeable = (list) => {
+        const p = pickPrimary(list);
+        return p ? list.filter((e) => e === p || engine.availability(mergeTr.id, e, { form: { primaryId: p.id } }).ok) : [];
+      };
+      const byScenario = new Map();
+      all.forEach((e) => byScenario.set(scenarioKey(e), (byScenario.get(scenarioKey(e)) || []).concat(e)));
+      const scenarios = [...byScenario]
+        .map(([id, list]) => ({ id, label: scenarioLabel(id), count: takeable(list).length }))
+        .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+      let scenarioGuid = null;
+      let matched = all;
+      let excluded = 0;
+      // Варианты условий: с галочкой — только из того, что можно взять в выбранном сценарии,
+      // иначе выбор объекта обнулил бы выделение
+      let base = pool;
+      if (body.sameScenario && scenarios.length) {
+        // Выбранный — если в нём есть что взять; иначе (не выбран, пропал, обнулился) — где взять можно больше всего
+        const best = scenarios.reduce((a, b) => (b.count > a.count ? b : a));
+        const asked = scenarios.find((x) => x.id === body.scenarioGuid);
+        scenarioGuid = asked && (asked.count > 0 || !best.count) ? asked.id : best.id;
+        const inScenario = byScenario.get(scenarioGuid);
+        matched = takeable(inScenario);
+        excluded = inScenario.length - matched.length;
+        base = takeable(pool.filter((e) => scenarioKey(e) === scenarioGuid));
+      }
+      // С галочкой вариант остаётся, только если среди его событий есть кто может стать основным (новый или мой
+      // в работе): иначе, выбрав его, взять было бы нечего. Выбранный раньше — остаётся, чтобы его можно было снять
+      const viable = (opts, list, value, picked) =>
+        base === pool ? opts : opts.filter((o) => picked.includes(o.id) || list.some((e) => value(e) === o.id && pickPrimary([e]) === e));
+      const option = (list, value, label, picked) => viable(facet(list, value, label, picked), list, value, picked);
+      const options = conds.map((c) => {
+        const forEvents = base.filter((e) => fitsCond(Object.assign({}, c, { deviceGuids: [] }), e, "eventTypeIds"));
+        const forDevices = base.filter((e) => fitsCond(c, e, "deviceGuids"));
+        return {
+          deviceTypes: option(base, typeOfEvent, deviceTypeLabel, c.deviceTypeId ? [c.deviceTypeId] : []),
+          // События — по типу устройства; устройства — по типу и выбранным событиям
+          eventTypes: option(forEvents, (e) => e.typeId, typeName, c.eventTypeIds),
+          devices: option(forDevices, eventSource, (v) => deviceSpec(v).name, c.deviceGuids),
+        };
+      });
+      const max = W.limits.maxBulk;
       return {
-        guid: ev.groupId,
-        createdAt: iso(ev.groupCreatedAt || now()),
-        owner: actorRef(ev.owner),
-        assignmentGroup: actorRef(ev.assignmentGroup),
-        eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
-        members: mates.map((m) => summary(m, "card")),
-        sharedAnswers: JSON.parse(JSON.stringify(ev.answers)),
-        exclude: {
-          enabled: engine.canExcludeFromGroup(ev),
-          reason: block ? block.text : null,
-          reasonKey: block ? block.key : null,
-          reasonVars: block ? block.vars : null,
+        status: 200,
+        body: {
+          count: matched.length,
+          incidentGuids: (max == null ? matched : matched.slice(0, max)).map((e) => e.id),
+          truncated: max != null && matched.length > max,
+          scenarioGuid,
+          excluded,
+          options: { conditions: options, scenarios },
         },
       };
     }
@@ -641,7 +753,6 @@
         scenario: scenarioView(ev),
         journal: journalView(ev),
         media: mediaView(ev),
-        group: groupView(ev),
         result: ev.closeComment || null,
       });
     }
@@ -658,8 +769,12 @@
       const src = eventSource(ev);
       const plan = planOf(ev);
       const ids = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])].filter((id) => myDevices.has(id));
+      // Камеры основного и открытых связанных событий, без повторов (§11, черновик)
+      const own = ev.cameras || [];
+      const extra = [...new Set(events.filter((e) => e.linkedTo === ev.id && e.state === "linked").flatMap((e) => e.cameras || []))].filter((id) => !own.includes(id));
+      const cameras = own.concat(extra);
       return {
-        cameras: (ev.cameras || []).filter((id) => myDevices.has(id)).map((id) => ({
+        cameras: cameras.filter((id) => myDevices.has(id)).map((id) => ({
           guid: id,
           name: deviceSpec(id).name,
           isSource: id === src,
@@ -702,6 +817,7 @@
         limits: Object.fromEntries(Object.entries(W.limits).filter(([key]) => !key.startsWith("$"))),
         usage: usage(),
         preferences: JSON.parse(JSON.stringify(session.preferences)),
+        lastTransferTargetId: session.lastTransferTargetId || null,
         workflowSchemaVersion: 4,
         permissionIssues: [],
       };
@@ -711,9 +827,12 @@
     // На месте — «Готов» или «Занят»; дежурная группа — если на месте хотя бы один участник (§8.1)
     const agentStateOf = (id) => (id === ME ? session.agentState : (OPERATORS.find((o) => o.id === id) || {}).agentState || "offline");
     const present = (op) => (op.group ? membersOf(op).some((m) => present({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
-    const stateLabel = (id) => {
-      const st = W.session.states.find((x) => x.id === agentStateOf(id));
-      return st ? render(st.labelKey) : null;
+    // Почему человека нет на месте (§8.1): перерыв — с причиной, вне МИ — «оффлайн»
+    const reasonOf = (id) => (id === ME ? session.reasonId : (OPERATORS.find((o) => o.id === id) || {}).reasonId);
+    const absenceLabel = (id) => {
+      if (agentStateOf(id) === "offline") return render("workflow.label.absent.offline");
+      const reason = W.session.breakReasons.find((r) => r.id === reasonOf(id));
+      return render("workflow.label.absent.break", { reason: reason ? [reason.labelKey] : "" });
     };
 
     // Адресаты передачи. Себя и своих групп в списке нет (§8.1, §10.1)
@@ -725,7 +844,7 @@
         label: op.name,
         role: op.group ? render("workflow.label.role.group") : op.role,
         available: present(op),
-        availabilityLabel: present(op) ? null : op.group ? render("workflow.label.nobody_present") : stateLabel(op.id),
+        availabilityLabel: present(op) ? null : op.group ? render("workflow.label.nobody_present") : absenceLabel(op.id),
         memberIds: op.group ? membersOf(op) : [],
       }));
     }
@@ -754,8 +873,16 @@
         (reactionRunning(a) ? a.reactionDueAt - b.reactionDueAt : a.occurredAt - b.occurredAt),
     };
 
+    // Поиск — по номеру, типу, площадке и месту. Связанные события в списках не видны, но ищутся:
+    // их находит строка основного, в ней — кто из связанных подошёл (matchedLinked)
+    const hit = (e, needle) => `${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
+    const linkedHits = (e, needle) => events.filter((x) => x.linkedTo === e.id && canSee(x) && hit(x, needle));
+    const listed = () => new Set(W.queueFilters.flatMap((f) => (f.stateCategories || []).concat((f.states || []).map((st) => STATES[st].category))));
     function visible(q) {
-      let list = events.filter(canSee);
+      // В списках — только состояния, которые есть в фильтрах очереди машины: связанные события
+      // объединённого живут в карточке основного (§11, черновик)
+      const shown = listed();
+      let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
         const node = findNode(TREE, q.sourceGroupGuid);
         const ids = node ? collectDeviceIds(node) : [q.sourceGroupGuid];
@@ -763,16 +890,17 @@
       }
       return list.filter((e) => {
         if (q.filter && !engine.inQueueFilter(e, q.filter)) return false;
-        if (q.eventTypeGuid && q.eventTypeGuid !== "all" && e.typeGuid !== q.eventTypeGuid) return false;
+        // Типы события и устройства — одно значение или несколько через запятую
+        if (q.eventTypeGuid && q.eventTypeGuid !== "all" && !String(q.eventTypeGuid).split(",").includes(e.typeGuid)) return false;
         if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;
         if (q.state && !String(q.state).split(",").includes(e.state)) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
           const src = eventSource(e);
-          if (!src || deviceSpec(src).type !== q.deviceTypeId) return false;
+          if (!src || !String(q.deviceTypeId).split(",").includes(deviceSpec(src).type)) return false;
         }
         if (q.search) {
           const needle = String(q.search).toLowerCase();
-          if (!`${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle)) return false;
+          if (!hit(e, needle) && !linkedHits(e, needle).length) return false;
         }
         return true;
       }).sort((a, b) => ORDERS[sortOf(q)](a, b) || byNumber(a, b));
@@ -786,12 +914,16 @@
       // На какой странице выбранный инцидент — если он виден при этих фильтрах (null — не виден)
       const idx = q.focusGuid ? list.findIndex((e) => e.id === q.focusGuid) : -1;
       const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;
-      return { items: list.slice((n - 1) * size, n * size).map((e) => summary(e, "queue")), total: list.length, page: n, pageSize: size, focusPage };
+      const found = (e) => (q.search ? linkedHits(e, String(q.search).toLowerCase()).map((x) => ({ guid: x.id, number: x.number })) : []);
+      const item = (e) => Object.assign(summary(e, "queue"), found(e).length ? { matchedLinked: found(e) } : {});
+      return { items: list.slice((n - 1) * size, n * size).map(item), total: list.length, page: n, pageSize: size, focusPage };
     }
 
-    function counters() {
+
+    function counters(q) {
       const out = {};
-      W.queueFilters.forEach((f) => (out[f.id] = events.filter((e) => canSee(e) && engine.inQueueFilter(e, f.id)).length));
+      const list = visible({});
+      W.queueFilters.forEach((f) => (out[f.id] = list.filter((e) => engine.inQueueFilter(e, f.id)).length));
       return out;
     }
 
@@ -815,7 +947,9 @@
             description: n.description || null,
             children: treeView(n.children || [], withCounters),
             devices,
-            counters: withCounters ? { open: open.length, topPriority: open.filter((e) => e.priority === topPriority()).length } : null,
+            counters: withCounters
+              ? { open: open.length, topPriority: open.filter((e) => e.priority === topPriority()).length }
+              : null,
           };
         });
     }
@@ -907,23 +1041,6 @@
       return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
     }
 
-    // Группа следует за владельцем (RULE-52, RULE-56): после операции целиком — запроса или такта
-    // планировщика — группа делится по владельцу. Новой группе — дата и запись в журнал, как при
-    // создании; вышедшему — запись о выходе (RULE-57); обо всех изменённых — событие потока
-    function settleGroups() {
-      const changed = engine.settleGroups();
-      changed.forEach(({ ev, groupId }) => {
-        if (groupId) {
-          ev.groupCreatedAt = now();
-          const ids = changed.filter((c) => c.groupId === groupId && c.ev !== ev).map((c) => c.ev.number);
-          log(ev, "dispatcher", "workflow.journal.group.created", { ids: ids.join(", ") });
-        } else {
-          log(ev, "dispatcher", "workflow.journal.group.left");
-        }
-        touch([ev]);
-        emit("incident.group_changed", ev, "dispatcher", { groupGuid: groupId });
-      });
-    }
 
     // Переход — одно событие потока (§9, RULE-60): какой, чем вызван и что было → стало. Что сказать
     // наблюдателям, клиент берёт из машины (ui.observerNotice), а не из имени перехода
@@ -950,43 +1067,96 @@
       if (!r.ok) return problem(422, "FORM_FIELD_REQUIRED", r.why);
       touch([ev]);
       emitTransition(ev, id, ME, r.facts);
+      // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
+      const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
+      if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];
+      // Основной закрыт — связанные закрываются сразу, системным переходом машины (§14.3)
+      if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === "linked")) runScheduler();
       const journal = journalView(ev).slice(before);
       const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
       return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
+    }
+
+    // Основной при объединении (§11, черновик): мой в работе — к нему, иначе самый срочный новый,
+    // у равных — самый ранний. Ни одного подходящего — null
+    function pickPrimary(list) {
+      const order = (a, b) => b.priority - a.priority || a.occurredAt - b.occurredAt || byNumber(a, b);
+      const mine = list.filter((e) => e.state === "in_progress" && e.owner === ME).sort(order);
+      const fresh = list.filter((e) => e.state === "new").sort(order);
+      return mine[0] || fresh[0] || null;
+    }
+    function mergeIncidents(guids, primaryGuid) {
+      const list = guids.map(find).filter(Boolean);
+      if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+      if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.merge.too_few"]);
+      const primary = primaryGuid ? list.find((e) => e.id === primaryGuid) : pickPrimary(list);
+      if (!primary) return problem(422, "BULK_SELECTION_INVALID", ["workflow.guard.merge_primary"]);
+      const others = list.filter((e) => e !== primary);
+      const r = engine.merge(primary, others);
+      if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
+      // Связанные объединяемых перешли к новому основному (relinkToPrimary машины) — им тоже новая версия
+      touch(events.filter((e) => e.linkedTo === primary.id && !others.includes(e) && !isDone(e)));
+      // Присоединённых может быть сколько угодно: в журнале — первые номера и «и ещё N»
+      const shown = others.slice(0, MERGED_IN_SHOWN).map((o) => o.number).join(", ");
+      if (others.length > MERGED_IN_SHOWN) log(primary, ME, "workflow.journal.merged_in_more", { ids: shown, more: others.length - MERGED_IN_SHOWN });
+      else if (others.length) log(primary, ME, "workflow.journal.merged_in", { ids: shown });
+      touch([primary].concat(others));
+      others.forEach((o, i) => emitTransition(o, r.transitionId, ME, r.facts[i]));
+      // Основной новый — взят в работу тем же действием (grouping.takeWith)
+      if (r.taken) emitTransition(primary, r.taken.transitionId, ME, r.taken.facts);
+      else emit("incident.updated", primary, ME, { stepIds: [] });
+      return { status: 200, body: { incident: card(primary) } };
     }
 
     function selectionActions(list) {
       const manual = W.transitions.filter((t) => t.trigger === "manual");
       return manual.map((tr) => {
         const mode = tr.bulk || { allowed: false };
-        const each = list.every((e) => engine.availability(tr.id, e).ok);
-        const sameTypeNew =
-          list.length &&
-          list.every((e) => W.grouping.createFrom.states.includes(e.state)) &&
-          (!W.grouping.createFrom.sameEventType || list.every((e) => e.typeId === list[0].typeId));
+        // По каждому отмеченному: доступно ли, а если нет — почему. Ни к одному не относится
+        // (скрыто у каждого, как в карточке) — на панели не показывается
+        const avail = list.map((e) => [e, engine.availability(tr.id, e)]);
+        const each = avail.every(([, a]) => a.ok);
+        // Сначала тот, к кому действие относится, но не проходит (лимит, права), потом — не в том состоянии
+        const failed = avail.find(([, a]) => !a.ok && !a.hidden) || avail.find(([, a]) => !a.ok);
+        const visible = mode.mode === "merge" || avail.some(([, a]) => !a.hidden);
         let ok = false;
-        if (list.length < 2) ok = each;
-        else if (mode.allowed && mode.mode === "same_type_new") ok = sameTypeNew && each;
-        else if (mode.allowed && (mode.mode === "each_allowed" || mode.mode === "group_or_each_allowed")) ok = each;
-        // Часть группы сценария — переход только на всю группу (BUG-29)
-        const partial = ok && list.some((e) => engine.groupBlock(tr.id, e, list.map((x) => x.id)));
-        const why = partial ? say(["workflow.error.selection_partial_group"]) : ok ? null : say(["workflow.error.selection_unavailable"]);
-        if (partial) ok = false;
+        let reason = null;
+        if (mode.mode === "merge") {
+          // «Взять в работу» как одно: один сценарий у всех, основной можно взять, остальные — объединить
+          const scenarios = [...new Set(list.map(scenarioKey))];
+          const primary = list.length ? pickPrimary(list) : null;
+          if (scenarios.length > 1) {
+            const titles = scenarios.map((k) => (Object.values(SCENARIOS).find((x) => x && x.guid === k) || { title: k }).title);
+            reason = ["workflow.error.merge.scenarios", { titles: titles.join(", ") }];
+          } else if (primary) {
+            // Одно отмеченное — просто «Взять»; несколько — как одно. Делать нечего — недоступно.
+            // Не проходит — причина того, кто мешает, с его номером
+            const check = engine.mergeCheck(primary, list.filter((e) => e !== primary));
+            ok = check.ok && (list.length > 1 || Boolean(check.take));
+            if (!check.ok && check.why) {
+              reason = list.length < 2 || !check.ev ? check.why : ["workflow.error.selection.item", { number: check.ev.number, reason: render(check.why[0], check.why[1]) }];
+            }
+          } else if (list.length) reason = ["workflow.guard.merge_primary"];
+        } else if (list.length < 2) ok = each;
+        else if (mode.allowed && mode.mode === "each_allowed") ok = each;
+        // Причина — одного такого отмеченного: одно отмеченное — как в карточке, несколько — с его номером
+        if (!ok && !reason && failed && failed[1].why && (mode.allowed || list.length < 2)) {
+          reason = list.length < 2 ? failed[1].why : ["workflow.error.selection.item", { number: failed[0].number, reason: render(failed[1].why[0], failed[1].why[1]) }];
+        }
+        const why = ok ? null : say(reason || ["workflow.error.selection_unavailable"]);
         return {
           id: tr.id,
           kind: "transition",
           label: render(tr.labelKey),
           style: tr.ui.style || "outline",
-          visible: true,
+          visible,
           enabled: ok,
           reason: why ? why.text : null,
           reasonKey: why ? why.key : null,
           reasonVars: why ? why.vars : null,
           formId: tr.form || null,
-          hotkey: tr.ui.hotkey || null,
           navigate: tr.ui.navigate || null,
           bulkAllowed: Boolean(mode.allowed),
-          createsGroup: Boolean(mode.createsGroup),
         };
       });
     }
@@ -999,11 +1169,6 @@
         list = (body.incidentGuids || []).map(find).filter(Boolean);
       } else if (body.mode === "all_in_filter") {
         list = visible(q).filter((e) => !isDone(e));
-      } else if (body.mode === "same_type_new") {
-        const pool = visible(q);
-        const groupable = (e) => W.grouping.createFrom.states.includes(e.state);
-        const anchor = find(body.anchorIncidentGuid) || pool.find(groupable);
-        list = anchor ? pool.filter((e) => groupable(e) && e.typeId === anchor.typeId) : [];
       }
       // null — без ограничения (§11, RULE-69)
       const truncated = body.mode !== "explicit" && max != null && list.length > max;
@@ -1072,25 +1237,21 @@
           if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
           const list = guids.map(find).filter(Boolean);
           if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_empty"]);
+          // На выборке — только переходы с bulk.allowed машины (§11): «Взять» отмеченных — нет
+          const bulkTr = engine.transition(p.transitionId);
+          if (bulkTr && !(bulkTr.bulk && bulkTr.bulk.allowed)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_unavailable"]);
           const succeeded = [];
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
           let navigate = null;
           const done = [];
-          // Всё или ничего внутри группы (BUG-29): проверка — до первого перехода, пока группа цела
-          const opts = { form: body.formValues || {}, surface: body.surface };
-          const blocks = new Map(list.map((ev) => [ev, engine.groupBlock(p.transitionId, ev, list.map((e) => e.id), opts)]));
           list.forEach((ev) => {
-            const block = blocks.get(ev);
-            if (block) return failed.push({ incidentGuid: ev.id, problem: problem(422, "BULK_SELECTION_INVALID", block.why).body });
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
             if (r.status === 200) {
               done.push(ev);
               navigate = r.body.navigate || navigate;
             } else failed.push({ incidentGuid: ev.id, problem: r.body });
           });
-          // Группа проверяется после всей выборки, а не после каждого члена (RULE-52)
-          settleGroups();
           done.forEach((ev) => succeeded.push(summary(ev, "queue")));
           return { status: 200, body: { succeeded, failed, navigate } };
         },
@@ -1122,54 +1283,61 @@
           if (body && body.expectedState && body.expectedState !== ev.state) {
             return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
           }
-          // Один инцидент группы — только вместе с группой (BUG-29)
-          const block = engine.groupBlock(p.transitionId, ev, [ev.id], { form: (body && body.formValues) || {}, surface: body && body.surface });
-          if (block) return problem(422, "BULK_SELECTION_INVALID", block.why);
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
           if (res.status === 200) {
-            settleGroups();
             res.body.incident = card(ev);
             res.headers = { ETag: etag(ev) };
           }
           return res;
         },
       ],
+      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.primaryGuid)],
       [
-        "POST",
-        "/operator/incident-groups",
-        (p, q, body) => {
-          const list = (body.incidentGuids || []).map(find).filter(Boolean);
-          const groupId = uuid(8, ++serial.group);
-          const r = engine.createGroup(list, groupId);
-          if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
-          list.forEach((ev) => {
-            ev.groupCreatedAt = now();
-            log(ev, ME, "workflow.journal.group.created", {
-              ids: list
-                .filter((x) => x.id !== ev.id)
-                .map((x) => x.number)
-                .join(", "),
-            });
-          });
-          touch(list);
-          list.forEach((ev) => emit("incident.group_changed", ev, ME, { groupGuid: groupId }));
-          return { status: 201, body: groupView(list[0]) };
+        "DELETE",
+        "/operator/incidents/{incidentGuid}/linked/{linkedGuid}",
+        (p) => {
+          const primary = find(p.incidentGuid);
+          const ev = find(p.linkedGuid);
+          if (!primary || !ev || ev.linkedTo !== primary.id || ev.state !== "linked") return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          // «Отсоединить» — ручной переход машины из linked
+          const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
+          const r = runTransition(detach.id, ev, {}, "card");
+          return r.status === 200 ? { status: 200, body: card(primary) } : r;
+        },
+      ],
+      [
+        "GET",
+        "/operator/incidents/{incidentGuid}/linked",
+        (p, q) => {
+          const primary = find(p.incidentGuid);
+          if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          // Связанные события объединённого (§11, черновик) — и закрытые вместе с ним, как история.
+          // Их может быть сколько угодно (выборка без предела): постранично, как очередь
+          const all = events.filter((e) => e.linkedTo === primary.id && canSee(e));
+          const size = Math.min(200, Math.max(1, Number(q.pageSize) || PAGE_SIZE));
+          const n = Math.max(1, Number(q.page) || 1);
+          // На какой странице связанное из focusGuid (найденное поиском очереди); null — его нет среди связанных
+          const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;
+          const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;
+          return { status: 200, body: { items: all.slice((n - 1) * size, n * size).map((e) => summary(e, "card")), total: all.length, page: n, pageSize: size, focusPage } };
         },
       ],
       [
         "DELETE",
-        "/operator/incident-groups/{groupGuid}/members/{incidentGuid}",
+        "/operator/incidents/{incidentGuid}/linked",
         (p) => {
-          const ev = find(p.incidentGuid);
-          if (!ev || ev.groupId !== p.groupGuid) return problem(404, "NOT_FOUND", ["workflow.error.group.not_member"]);
-          const r = engine.excludeFromGroup(ev);
-          if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
-          touch([ev]);
-          emit("incident.group_changed", ev, ME, { groupGuid: null });
-          settleGroups();
-          return { status: 200, body: card(ev) };
+          const primary = find(p.incidentGuid);
+          if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          // «Отсоединить все» — тот же переход ко всем связанным разом: всё или ничего
+          const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
+          const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
+          const blocked = linked.find((ev) => !engine.availability(detach.id, ev).ok);
+          if (blocked) return runTransition(detach.id, blocked, {}, "card");
+          linked.forEach((ev) => runTransition(detach.id, ev, {}, "card"));
+          return { status: 200, body: card(primary) };
         },
       ],
+      ["POST", "/operator/incidents/filter", (p, q, body) => filterView(body || {})],
       [
         "GET",
         "/operator/incidents/{incidentGuid}/scenario",
@@ -1376,7 +1544,7 @@
         holdDueAt: null,
         slaBreached: false,
         breaches: [],
-        groupId: null,
+        linkedTo: null,
         answers: {},
         launched: [],
         log: [],
@@ -1509,7 +1677,6 @@
         }
         emitTransition(ev, transition, tr.actor || "dispatcher", facts);
       });
-      settleGroups();
       return fired.concat(others);
     }
 
@@ -1532,7 +1699,7 @@
       return colleagueEngines[id];
     }
     const isColleague = (id) => Boolean(id) && id !== ME && OPERATORS.some((op) => op.id === id);
-    const foreignActive = () => events.filter((e) => e.state === "in_progress" && isColleague(e.owner) && !e.groupId);
+    const foreignActive = () => events.filter((e) => e.state === "in_progress" && isColleague(e.owner));
 
     // Коллега берёт одно из новых событий первой страницы очереди — не то, что открыто у оператора
     function simTakeEvent() {
@@ -1659,7 +1826,6 @@
       const fired = runScheduler();
       Object.keys(colleagueIdleSince).forEach(colleagueTick);
       if (!fired.length) simulateColleagues();
-      settleGroups();
     }
 
     if (opts.autoTick !== false) setInterval(second, 1000);

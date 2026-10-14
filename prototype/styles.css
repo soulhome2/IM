@@ -775,6 +775,31 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .tree-node.level-1 > .node-content .node-text { font-weight: 500; }
 .tree-node.is-device > .node-content .node-text { color: var(--muted); }
 
+/* «Сгруппировать» на узле дерева — при наведении и у выбранной группы (§11, черновик) */
+.node-group-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.node-group-btn .material-symbols-outlined { font-size: 18px; }
+.node-group-btn:hover { background: var(--stroke-2); color: var(--accent); }
+.node-group-btn + .node-group-btn { margin-left: 0; }
+.node-group-btn[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.node-group-btn[aria-disabled="true"]:hover { background: transparent; color: var(--muted); }
+.node-content:hover > .node-group-btn,
+.tree-node.active > .node-content > .node-group-btn,
+.node-group-btn:focus-visible { display: inline-flex; }
+
 .tree-badge {
   background: var(--hover);
   color: var(--muted);
@@ -817,7 +842,9 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
-.events-types select { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.events-types .mselect { min-width: 0; position: relative; }
+/* Меню списка над очередью — поверх строк, а не внутри панели */
+.mselect.tb .mselect-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent); }
 .events-sort { grid-column: 1 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Отступ .search-input не должен прятать текст списка под стрелкой */
 select.search-input { padding-right: 36px; }
@@ -883,6 +910,57 @@ select.search-input { padding-right: 36px; }
   z-index: 1;
 }
 .event.selected { background: var(--accent-dim); }
+/* Панель выборки (§11): над очередью, пока что-то отмечено */
+.sel-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 10px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  flex-shrink: 0;
+}
+.sel-count { font-size: 13px; font-weight: 600; margin-right: 4px; }
+.sel-clear { margin-left: auto; }
+
+/* Объединённый инцидент (§11, черновик): пометка в строке и связанные события в карточке */
+.event-head { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.chip.linked { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); border-color: var(--accent); }
+.chip.linked .material-symbols-outlined { font-size: 14px; }
+.chip.linked[data-work-tab] { cursor: pointer; }
+/* Вкладки карточки: «Сценарий» и «Привязанные инциденты» — над шагами */
+.work-tabs { display: flex; gap: 4px; margin: 12px var(--card-x) 12px; border-bottom: 1px solid var(--stroke-2); }
+.work-tab:first-child { padding-left: 0; }
+/* Список привязанных — сверху, а не по центру, как шаг сценария */
+.work-step.lnk { align-content: start; }
+.lnk-panel { gap: 0; }
+.work-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.work-tab:hover { color: var(--text); }
+.work-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.work-tab-n { padding: 0 6px; border-radius: 50px; background: var(--accent-dim); color: var(--accent); font-size: 12px; line-height: 18px; }
+.lnk-panel .lnk-head { padding-bottom: 8px; border-bottom: 1px solid var(--stroke); font-size: 14px; font-weight: 600; }
+.lnk-members { display: grid; gap: 2px; margin-top: 8px; }
+.lnk-panel .lnk-member { padding: 6px 4px; border-radius: 6px; }
+.lnk-panel .lnk-member:hover { background: var(--hover); }
+.lnk-panel .lnk-member.found { background: var(--accent-dim); }
+/* Строка основного, найденного поиском по связанному */
+.event-found { display: flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--accent); font-size: 12px; }
+.event-found .material-symbols-outlined { font-size: 14px; }
+.lnk-head { display: flex; align-items: center; gap: 12px; }
+.lnk-head > span:first-child { margin-right: auto; }
+.lnk-pager { display: inline-flex; align-items: center; gap: 2px; }
+.lnk-pager .pager-info { margin-right: 4px; }
+.lnk-pager .pager-btn { min-width: 28px; height: 28px; }
+.lnk-member { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 10px; font-size: 13px; }
+.lnk-member .lnk-sla { font-size: 12px; }
+.lnk-num { font-weight: 500; }
+.lnk-where { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnk-member time { color: var(--faint); font-size: 12px; }
+
+
 /* Цвет — из палитры приоритета (data-color), не из его id: приоритет может переименоваться
    редактором схемы, цвет остаётся тем же (BUG-39, priorities.palette в машине) */
 .event-pri { width: 4px; border-radius: 4px; align-self: stretch; }
@@ -919,7 +997,6 @@ select.search-input { padding-right: 36px; }
   color: var(--muted);
 }
 .chip.lvl { color: var(--warn-text); border-color: var(--break-border); }
-.chip.grp { color: var(--badge-foreign); border-color: var(--badge-foreign-border); }
 
 /* Кнопки справа колонкой одной ширины: набор из 2–4 действий не растягивает их по-разному */
 .event-acts {
@@ -1224,23 +1301,26 @@ select.search-input { padding-right: 36px; }
 .macro-row .btn.ok { border-color: var(--ok-border); color: var(--ok-text); }
 
 /* Переходы по состоянию инцидента отделены от навигации по шагам сценария */
+/* В ряду «Назад» — действия — «Далее»: действия сразу за «Назад», «Далее» — справа */
 .work-acts {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px var(--card-x) 0;
+  margin-right: auto;
 }
-.work-acts .btn { font-size: 14px; padding: 8px 14px; }
+/* Место «Назад» / «Далее» на вкладке привязанных: занято, но пусто — действия на том же месте */
+.tab-ghost { visibility: hidden; }
 
 .scenario-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
   padding: 12px var(--card-x);
 }
 /* Крупнее только в карточке: .btn общий с очередью и модальными окнами */
-.scenario-actions .btn { font-size: 15px; padding: 10px 18px; }
+.scenario-actions .btn { font-size: 14px; padding: 8px 14px; }
 .scenario-actions-end { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .step-hint {
   padding: 0 var(--card-x) 12px;
@@ -1508,6 +1588,8 @@ select.search-input { padding-right: 36px; }
   padding: 6px;
 }
 .menu-pop.wide { min-width: 280px; }
+.events-select .menu-pop { min-width: 200px; }
+.events-select .btn .chevron { font-size: 18px; margin-left: -2px; }
 .menu-pop a,
 .menu-item {
   display: flex;
@@ -1526,7 +1608,6 @@ select.search-input { padding-right: 36px; }
 .menu-pop a:hover,
 .menu-item:hover { background: var(--panel-2); }
 .menu-item .material-symbols-outlined { font-size: 20px; }
-.menu-item kbd { margin-left: auto; }
 .menu-sep { height: 1px; margin: 6px 8px; background: var(--stroke); }
 .menu-label {
   padding: 6px 14px;
@@ -1587,9 +1668,6 @@ select.search-input { padding-right: 36px; }
   line-height: 1.45;
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-.keys { width: 100%; border-collapse: collapse; margin: 12px 0; }
-.keys td { padding: 8px 0; border-bottom: 1px solid var(--stroke); font-size: 14px; }
-.keys td:first-child { width: 92px; }
 .modal-card.wide { width: min(720px, calc(100% - 32px)); }
 /* Окно настроек — постоянного размера: заголовок, вкладки и кнопки на месте, прокручивается содержимое вкладки */
 .modal-card.admin-card {
@@ -1674,15 +1752,6 @@ select.search-input { padding-right: 36px; }
 .doc-legend .sw.green { background: #16a34a; }
 .doc-legend .sw.red { background: #dc2626; }
 .doc-legend .sw.blue { background: #1976d2; }
-kbd {
-  font-family: var(--font);
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid var(--stroke-2);
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--panel-2);
-}
 
 .toast-stack {
   position: fixed;
@@ -1935,3 +2004,98 @@ kbd {
 .workspace[data-full] #splitVideo,
 .workspace[data-full="video"] #panelMap,
 .workspace[data-full="map"] #panelVideo { display: none; }
+
+/* Окно «Сгруппировать» (§11, черновик) */
+.grouping-by { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.grouping-by .chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 50px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.grouping-by .chip-check:has(input:disabled) { cursor: default; color: var(--muted); }
+/* Окно постоянного размера: заголовок, признаки, подсказка и кнопки на месте, прокручивается
+   только список строк — сколько бы строк и событий ни было */
+.modal-card.grouping-card {
+  height: min(600px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.grouping-card > :not(.grouping-rows) { flex-shrink: 0; }
+.grouping-rows { flex: 1 1 auto; min-height: 0; overflow: auto; align-content: start; padding-right: 4px; }
+.grouping-card .grouping-hint { margin: 12px 0 0; min-height: 2.9em; }
+.grouping-row-text { display: grid; gap: 2px; }
+.grouping-row-text .what { color: var(--muted); font-size: 13px; }
+.grouping-row.off { opacity: 0.6; }
+.grouping-hint.warn { color: var(--warn-text); }
+/* Окно фильтра из дерева (§11, черновик): строки «название — выпадающий список с галочками» */
+.filter-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: 12px; padding: 6px 0; }
+.filter-title { font-size: 13px; font-weight: 600; padding-top: 9px; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mselect { min-width: 0; position: relative; }
+/* Поле списка — как select приложения: фон поля, рамка, скругление, шеврон справа, подсветка фокуса; в него можно набирать */
+.mselect-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 36px 8px 12px;
+  border: 2px solid var(--stroke-2);
+  border-radius: var(--radius);
+  background-color: var(--input-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  color: var(--input-text);
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.mselect.open .mselect-input { cursor: text; }
+.mselect-input.has-more { padding-right: 72px; }
+/* Выбранное — подсказкой поля, но цветом значения; при наборе подсказка бледнеет */
+.mselect-input::placeholder { color: var(--faint); opacity: 1; }
+.mselect-input.has-value::placeholder { color: var(--input-text); }
+.mselect.open .mselect-input::placeholder { color: var(--faint); }
+[data-theme="dark"] .mselect-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.mselect-input:focus-visible,
+.mselect.open .mselect-input { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
+.mselect-more { position: absolute; top: 10px; right: 36px; padding: 0 6px; border-radius: 50px; background: var(--accent-dim); color: var(--accent); font-size: 12px; font-weight: 600; line-height: 20px; pointer-events: none; }
+.mselect-menu {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 6px;
+  max-height: 240px;
+  overflow: auto;
+  border: 2px solid var(--stroke-2);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+.mselect-opt { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.mselect-opt:hover { background: var(--hover); }
+.mselect-opt[hidden] { display: none; }
+.mselect-opt em { font-style: normal; color: var(--faint); font-size: 12px; }
+.mselect-opt.off { opacity: 0.5; cursor: not-allowed; }
+.mselect-menu > .btn { justify-self: start; margin-top: 4px; }
+.mselect-empty { padding: 4px 6px; font-size: 13px; }
+.filter-same { display: flex; width: fit-content; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.filter-same + .filter-row { margin-bottom: 8px; }
+.filter-cond { padding: 8px 12px; border: 1px solid var(--stroke-2); border-radius: var(--radius-sm); background: var(--panel); }
+.filter-cond-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; font-size: 13px; }
+.filter-cond-head .material-symbols-outlined { font-size: 16px; }
+.filter-or { margin: 6px 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+.filter-add { margin-top: 8px; }
+.filter-add .material-symbols-outlined { font-size: 16px; }
+

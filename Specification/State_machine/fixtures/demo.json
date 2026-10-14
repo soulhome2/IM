@@ -4,7 +4,6 @@
   "capturedAt": "2026-10-03T12:00:00Z",
   "operator": "me",
   "operatorPreferences": {
-    "defaultTransferTargetId": "petrova",
     "locale": "ru"
   },
   "people": {
@@ -63,6 +62,16 @@
           "Оператор ТЦ"
         ],
         "agentState": "offline"
+      },
+      {
+        "id": "orlova",
+        "name": "Орлова Е. В.",
+        "role": "оператор",
+        "roles": [
+          "Оператор"
+        ],
+        "agentState": "not_ready",
+        "reasonId": "lunch"
       }
     ],
     "dutyGroups": [
@@ -83,6 +92,15 @@
           "Оператор ТЦ"
         ],
         "members": []
+      },
+      {
+        "id": "grp-response",
+        "name": "Группа реагирования",
+        "roles": [],
+        "members": [
+          "sidorov",
+          "gusev"
+        ]
       }
     ],
     "system": [

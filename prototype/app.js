@@ -548,7 +548,7 @@
   const enc = encodeURIComponent;
   const incPath = (guid) => `/operator/incidents/${enc(guid)}`;
 
-  // Схема workflow — из /operator/workflow/active: формы, клавиши, фильтры, справочники
+  // Схема workflow — из /operator/workflow/active: формы, фильтры, справочники
   let WORKFLOW = null;
   let STATES = {};
   let LIMITS = {};
@@ -581,8 +581,17 @@
     groupQuery: "",
     filter: "open",
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
-    eventType: "all",
-    deviceType: "all",
+    // Несколько типов сразу; пусто — все. tbOpen — какой из двух списков раскрыт
+    eventTypes: [],
+    deviceTypes: [],
+    tbOpen: null,
+    tbQ: {},
+    // Вкладка карточки: сценарий или привязанные инциденты — и чья карточка
+    workTab: "scenario",
+    workTabFor: null,
+    // Страница связанных событий в карточке основного (§11, черновик) и найденное поиском среди них
+    linkedPage: 1,
+    linkedFocus: null,
     search: "",
     selectedId: "INC-1847",
     checked: new Set(),
@@ -611,11 +620,6 @@
     }
     return t(ref.name || "");
   };
-  const actorLabel = (id) => {
-    const target = targetById(id);
-    return target ? `${t(target.name)} · ${t(target.role)}` : t("Не назначен");
-  };
-  const defaultTarget = () => actorLabel(prefs().defaultTransferTargetId);
   const addresseeOf = (ev) => (ev && (ev.owner || ev.assignmentGroup)) || null;
 
   // Ответ сервера [шаблон, подстановки] → строка на языке интерфейса
@@ -719,10 +723,14 @@
     select.title = t("Язык интерфейса");
     applyStatic();
     applyTheme(state.themeMode);
-    renderEscalateDefault();
+    renderAutoLevels();
     renderTypeFilters();
-    renderHotkeysHelp();
     renderAll();
+    // Окно «Выделить по фильтру» — тоже на новом языке, даже закрытое
+    if (filt.view) {
+      filt.focusSearch = false;
+      renderFilter();
+    }
     syncLocale().catch(() => {});
   }
 
@@ -767,8 +775,8 @@
       filter: state.filter,
       search: state.search,
       sourceGroupGuid: state.groupId === "all" ? null : state.groupId,
-      eventTypeGuid: state.eventType === "all" ? null : state.eventType,
-      deviceTypeId: state.deviceType === "all" ? null : state.deviceType,
+      eventTypeGuid: state.eventTypes.length ? state.eventTypes.join(",") : null,
+      deviceTypeId: state.deviceTypes.length ? state.deviceTypes.join(",") : null,
       page: state.page,
       pageSize: PAGE_SIZE,
       focusGuid: state.selectedId,
@@ -813,6 +821,11 @@
       }
       await loadCard();
       renderAll();
+      // Очередь открыта на странице выбранного — и строка выбранного видна, а не за краем списка
+      if (jump && state.mode === "queue") {
+        const row = $("eventsList").querySelector(".event.selected");
+        if (row) row.scrollIntoView({ block: "nearest" });
+      }
     })()
       .catch((err) => toast(problemText(err)))
       .finally(() => {
@@ -829,7 +842,38 @@
     const id = state.selectedId;
     store.card = id ? await api.get(incPath(id)).catch(() => null) : null;
     if (store.card) focusCameras(store.card);
+    await loadLinked();
     heartbeat();
+  }
+
+  // Связанные события основного (§11, черновик) — постранично: их может быть сколько угодно.
+  // Другая карточка — с первой страницы; страница опустела (отсоединили) — на последнюю
+  const LINKED_PAGE = 10;
+  // Связанные этой карточки, найденные поиском очереди: строка основного несёт их в matchedLinked
+  function foundLinked(guid) {
+    const row = state.search && store.page.items.find((x) => x.guid === guid);
+    return (row && row.matchedLinked) || [];
+  }
+  async function loadLinked() {
+    const ev = store.card;
+    if (!ev || !ev.linkedCount) {
+      store.linked = null;
+      return;
+    }
+    // Другая карточка — с первой страницы; открыта из поиска — со страницы найденного
+    const fresh = !store.linked || store.linked.guid !== ev.guid;
+    if (fresh) Object.assign(state, { linkedPage: 1, linkedFocus: (foundLinked(ev.guid)[0] || {}).guid || null });
+    const get = (extra) => api.get(`${incPath(ev.guid)}/linked`, Object.assign({ page: state.linkedPage, pageSize: LINKED_PAGE }, extra)).catch(() => null);
+    let page = await get(fresh && state.linkedFocus ? { focusGuid: state.linkedFocus } : {});
+    if (page && page.focusPage && page.focusPage !== state.linkedPage) {
+      state.linkedPage = page.focusPage;
+      page = await get();
+    }
+    if (page && !page.items.length && page.total) {
+      state.linkedPage = Math.ceil(page.total / LINKED_PAGE);
+      page = await get();
+    }
+    store.linked = page && Object.assign(page, { guid: ev.guid });
   }
 
   // Признак активности оператора (§12.3) и какая карточка открыта (§9.3): раз в
@@ -1030,29 +1074,19 @@
   }
 
   // Действие над выборкой — по ответу сервера на /incidents/selection (режимы bulk машины, §11)
-  const selectionAction = (id) => (store.selection ? store.selection.actions.find((a) => a.id === id) : null) || null;
-  const inSelection = (ev) => Boolean(ev) && state.checked.size >= 2 && state.checked.has(ev.guid);
 
+  // Действия выборки — и для одного отмеченного: панель над очередью показывает, что с ним можно
   async function updateSelection() {
-    if (state.checked.size < 2) {
+    if (!state.checked.size) {
       store.selection = null;
       return;
     }
     store.selection = await api.post("/operator/incidents/selection", { mode: "explicit", incidentGuids: [...state.checked] });
   }
 
-  // Кому достанется действие: выборке, группе сценария или одному инциденту (§11)
-  function actionTargets(id, ev) {
-    if (inSelection(ev) && selectionAction(id) && selectionAction(id).enabled) return [...state.checked];
-    const tr = transitionDef(id);
-    const group = ev && ev.group;
-    if (group && tr && tr.bulk && tr.bulk.allowed && group.members.length >= 2) return group.members.map((m) => m.guid);
-    return ev ? [ev.guid] : [];
-  }
 
   function bulkCopy(id, list) {
     const n = list.length;
-    const oneGroup = list.every((e) => e.groupId && e.groupId === list[0].groupId);
     const table = {
       transfer: {
         title: t("Передать {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
@@ -1062,21 +1096,19 @@
       },
       close: {
         title: t("Закрыть {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: oneGroup
-          ? t("{n, plural, one {Закроется # инцидент} few {Закроются все # инцидента} other {Закроются все # инцидентов}} группы.", { n })
-          : t("{n, plural, one {Будет закрыто # событие} few {Будут закрыты # события} other {Будут закрыты # событий}} без сценария. Одна причина на всю выборку.", { n }),
+        note: t("{n, plural, one {Будет закрыто # событие} few {Будут закрыты # события} other {Будут закрыты # событий}} без сценария. Одна причина на всю выборку.", { n }),
         confirm: t("Закрыть {n}", { n }),
         toast: () => t("Закрыто: {n}", { n }),
       },
       hold: {
         title: t("Отложить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет отложен # инцидент} few {Будут отложены # инцидента} other {Будут отложены # инцидентов}} группы. Одна причина на всех.", { n }),
+        note: t("{n, plural, one {Будет отложен # инцидент} few {Будут отложены # инцидента} other {Будут отложены # инцидентов}}. Одна причина на всех.", { n }),
         confirm: t("Отложить {n}", { n }),
         toast: () => t("Отложено: {n}", { n }),
       },
       takeover: {
         title: t("Перехватить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет перехвачен # инцидент} few {Будут перехвачены все # инцидента} other {Будут перехвачены все # инцидентов}} группы.", { n }),
+        note: t("{n, plural, one {Будет перехвачен # инцидент} few {Будут перехвачены # инцидента} other {Будут перехвачены # инцидентов}}.", { n }),
         confirm: t("Перехватить {n}", { n }),
         toast: () => t("Перехвачено: {n}", { n }),
       },
@@ -1085,7 +1117,7 @@
       },
       release: {
         title: t("Вернуть в очередь {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}} группы.", { n }),
+        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}}.", { n }),
         confirm: t("Вернуть {n}", { n }),
         toast: () => t("Возвращено в очередь: {n}", { n }),
       },
@@ -1104,7 +1136,7 @@
     openDialog(id, ev, surface);
     if (!state.dialog) return false;
     state.dialog.bulkIds = guids;
-    const copy = bulkCopy(id, guids.map((guid) => ({ id: guid, groupId: ev.groupGuid })));
+    const copy = bulkCopy(id, guids);
     if (copy) {
       $("dialogTitle").textContent = copy.title;
       $("dialogNote").textContent = copy.note;
@@ -1114,13 +1146,11 @@
     return true;
   }
 
-  // Главная причина отказа выборки (§11, BUG-28): первый отказ самого инцидента, а не «группа не
-  // закрыта из-за соседа»; номер — если инцидент есть в загруженном списке или в группе карточки
+  // Главная причина отказа выборки (§11, BUG-28); номер — если инцидент есть в загруженном списке
   function failureText(failed) {
     const main = failed.find((f) => f.problem.code !== "BULK_SELECTION_INVALID") || failed[0];
     const why = problemText({ problem: main.problem });
-    const known = store.page.items.concat(...store.page.items.map((e) => (e.group ? e.group.members : [])));
-    const ev = known.find((e) => e.guid === main.incidentGuid);
+    const ev = store.page.items.find((e) => e.guid === main.incidentGuid);
     return ev ? `${ev.number}: ${why}` : why;
   }
 
@@ -1138,7 +1168,7 @@
     }
     state.checked.clear();
     store.selection = null;
-    const done = res.succeeded.map((e) => ({ id: e.guid, groupId: e.groupGuid }));
+    const done = res.succeeded.map((e) => ({ id: e.guid }));
     const copy = bulkCopy(id, done);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
     // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
@@ -1161,15 +1191,9 @@
   }
 
   // Кнопки очереди и карточки — те, что вернул сервер для этой поверхности (§7)
+  // Кнопки строки — всегда только этот инцидент; массовые действия — панель выборки (§11)
   function queueActions(ev) {
-    const views = ev.actions.map(actionView);
-    if (!inSelection(ev)) return views;
-    const why = t("Для этой выборки действие недоступно");
-    return views.map((a) => {
-      if (a.nav) return a;
-      const sel = selectionAction(a.id);
-      return sel && sel.enabled ? a : { ...a, disabled: true, hint: why };
-    });
+    return ev.actions.map(actionView);
   }
 
   function cardActions(ev) {
@@ -1243,12 +1267,11 @@
 
   const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
 
-  // Подпись адресата передачи: ФИО · роль · не на смене · предвыбор (§8.1)
+  // Подпись адресата передачи: ФИО · роль · не на смене (§8.1)
   function optionLabel(field, o) {
     if (field.source !== "transferTargets") return o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label);
     const parts = [`${t(o.label)} · ${t(o.role || "")}`];
     if (o.availabilityLabel) parts.push(t(o.availabilityLabel));
-    if (o.id === prefs().defaultTransferTargetId) parts.push(t("предвыбор"));
     return parts.join(" · ");
   }
 
@@ -1261,11 +1284,7 @@
         .join("");
       // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
       const empty = hasLbl(field, "placeholder") ? `<option value="" disabled>${escapeHtml(lbl(field, "placeholder"))}</option>` : "";
-      const hint =
-        field.source === "transferTargets"
-          ? `<p class="field-hint">${te("Предвыбор — {who}. Меняется в меню оператора.", { who: defaultTarget() })}</p>`
-          : "";
-      return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select></label>${hint}`;
+      return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select></label>`;
     }
     return `<label ${box}>${label}<textarea rows="3" data-field="${field.name}" placeholder="${escapeHtml(
       lbl(field, "placeholder")
@@ -1364,18 +1383,13 @@
   }
 
   // Переход либо спрашивает подробности в форме, либо выполняется сразу.
-  function trigger(id, ev, surface) {
+  // Кнопка на строке и в карточке — один инцидент; выборку передаёт только панель (targets)
+  function trigger(id, ev, surface, targets) {
     if (!ev) return;
-    if (inSelection(ev) && !isNav(id) && !(selectionAction(id) && selectionAction(id).enabled)) {
-      toast(t("Для этой выборки действие недоступно"));
-      return;
-    }
     if (isNav(id)) return openCard(id, ev);
     const tr = transitionDef(id);
     if (!tr) return;
-    const targets = actionTargets(id, ev);
-    if (targets.length >= 2) {
-      if (tr.bulk && tr.bulk.createsGroup) return groupProcess();
+    if (targets && targets.length >= 2) {
       if (tr.form) return openBulkDialog(id, ev, targets, surface);
       return runBulk(id, targets, {}, surface);
     }
@@ -1388,12 +1402,8 @@
     return runTransition(id, ev, {}, surface);
   }
 
-  function renderEscalateDefault() {
-    const select = $("escalateDefault");
-    select.innerHTML = store.targets
-      .map((op) => `<option value="${escapeHtml(op.id)}">${escapeHtml(actorLabel(op.id))}</option>`)
-      .join("");
-    select.value = prefs().defaultTransferTargetId || "";
+  // Кому уходит автоэскалация — для сведения, в меню оператора (§9)
+  function renderAutoLevels() {
     $("autoLevels").textContent = WORKFLOW.escalation.levels
       .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.targetRef.split(":")[1]) }))
       .join(", ");
@@ -1450,15 +1460,81 @@
       .map((f) => `<option value="${escapeHtml(f.id)}">${escapeHtml(lbl(f))}</option>`)
       .join("");
     $("eventFilter").value = state.filter;
-    $("eventTypeFilter").innerHTML = [`<option value="all">${te("Все типы событий")}</option>`]
-      .concat(store.eventTypes.map((e) => `<option value="${escapeHtml(e.guid)}">${te(e.name)}</option>`))
-      .join("");
-    $("eventTypeFilter").value = state.eventType;
-    $("deviceTypeFilter").innerHTML = [`<option value="all">${te("Все типы устройств")}</option>`]
-      .concat(store.deviceTypes.map((d) => `<option value="${escapeHtml(d.id)}">${te(d.label)}</option>`))
-      .join("");
-    $("deviceTypeFilter").value = state.deviceType;
+    renderTypeLists();
     renderQueueSort();
+  }
+
+  // Поле списка — редактируемое: щелчок открывает, набранный текст отбирает варианты (без запроса к серверу).
+  // Пока ничего не набрано, в поле видно выбранное: первое значение подсказкой и «+N» отдельно — многоточие не съедает счёт
+  function comboField(attr, id, open, q, picked, label, anyLabel) {
+    const all = picked.map(label).join(", ") || anyLabel;
+    return `<input type="text" class="mselect-input ${picked.length ? "has-value" : ""} ${picked.length > 1 ? "has-more" : ""}" ${attr}="${escapeHtml(id)}"
+      role="combobox" aria-expanded="${open}" autocomplete="off" spellcheck="false" value="${open ? escapeHtml(q || "") : ""}"
+      placeholder="${escapeHtml(picked.length ? label(picked[0]) : anyLabel)}" title="${escapeHtml(all)}" aria-label="${escapeHtml(all)}" />${
+      picked.length > 1 ? `<span class="mselect-more">+${picked.length - 1}</span>` : ""
+    }`;
+  }
+  const comboHit = (text, q) => !q || text.toLowerCase().includes(q.toLowerCase());
+  // Набор в поле: прячет неподходящие варианты раскрытого списка, не перерисовывая его
+  function comboNarrow(input) {
+    const menu = input.parentElement.querySelector(".mselect-menu");
+    if (!menu) return;
+    menu.querySelectorAll(".mselect-opt").forEach((o) => (o.hidden = !comboHit(o.querySelector("span").textContent, input.value)));
+    const none = menu.querySelector("[data-combo-none]");
+    if (none) none.hidden = Boolean(menu.querySelector(".mselect-opt:not([hidden])"));
+  }
+  // Клавиши поля — как у обычного списка: Enter — первый подходящий вариант, ↓ — к вариантам
+  function comboKey(e, close) {
+    const input = e.target.closest(".mselect-input");
+    if (!input) return;
+    const first = input.parentElement.querySelector(".mselect-opt:not([hidden]) input:not(:disabled)");
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    } else if (e.key === "Enter" && first) {
+      e.preventDefault();
+      first.click();
+    } else if (e.key === "ArrowDown" && first) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+  function comboFocus(input) {
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+  const comboNone = (shown) => `<div class="muted mselect-empty" data-combo-none ${shown ? "hidden" : ""}>${te("Нет вариантов")}</div>`;
+
+  // Типы устройств и событий над очередью — выпадающие списки с галочками, как в окне фильтра
+  function typeList(elId, key, options, anyLabel) {
+    const picked = state[key];
+    const label = (v) => {
+      const o = options.find((x) => x.id === v);
+      return o ? t(o.label) : v;
+    };
+    const open = state.tbOpen === key;
+    const q = state.tbQ[key] || "";
+    const el = $(elId);
+    el.classList.toggle("open", open);
+    const opts = options.map(
+      (o) =>
+        `<label class="mselect-opt" ${comboHit(t(o.label), q) ? "" : "hidden"}><input type="checkbox" data-tb="${key}" value="${escapeHtml(o.id)}" ${
+          picked.includes(o.id) ? "checked" : ""
+        } /><span>${te(o.label)}</span><em></em></label>`
+    );
+    el.innerHTML =
+      comboField("data-tb-toggle", key, open, q, picked, label, t(anyLabel)) +
+      (open
+        ? `<div class="mselect-menu">${opts.join("")}${comboNone(options.some((o) => comboHit(t(o.label), q)))}${
+            picked.length ? `<button type="button" class="btn ghost small" data-tb-clear="${key}">${te(anyLabel)}</button>` : ""
+          }</div>`
+        : "");
+  }
+  function renderTypeLists() {
+    typeList("deviceTypeFilter", "deviceTypes", store.deviceTypes.map((d) => ({ id: d.id, label: d.label })), "Все типы устройств");
+    typeList("eventTypeFilter", "eventTypes", store.eventTypes.map((e) => ({ id: e.guid, label: e.name })), "Все типы событий");
+    if (state.tbOpen) comboFocus(document.querySelector(`[data-tb-toggle="${state.tbOpen}"]`));
   }
 
   // Порядок очереди (§7, BUG-34): список — только если администратор разрешил оператору выбирать;
@@ -1500,6 +1576,7 @@
                   ? `<span class="tree-badge" title="${te("Подгрупп / устройств с открытыми инцидентами")}">${badgeText(item)}</span>`
                   : ""
               }
+              ${isDevice ? "" : filterButtons(item.guid)}
               ${
                 counters.open
                   ? `<span class="tree-ev ${crit ? "crit" : ""}" title="${te("Открытых инцидентов{crit}", {
@@ -1553,6 +1630,7 @@
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
           <span class="node-text">${te("Все события")}</span>
+          ${filterButtons("all")}
           <span class="tree-ev ${crit ? "crit" : ""}">${open}</span>
         </div>
       </li>
@@ -1648,12 +1726,10 @@
   // Чекбокс на любом событии очереди; смешанные типы можно набирать вручную (§11)
   // Лимит выборки null — без ограничения (§11, RULE-69)
   const bulkEligible = (ev) => state.checked.has(ev.guid) || LIMITS.maxBulk == null || state.checked.size < LIMITS.maxBulk;
-  const groupChip = (ev) =>
-    ev.groupGuid
-      ? `<span class="chip grp" title="${te("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: ev.groupSize })}">${te("группа")}</span>`
-      : "";
 
   function renderEvents() {
+    // Панель выборки зависит от отметок — перерисовывается вместе с очередью
+    renderSelectionBar();
     const { items, total } = store.page;
     $("eventsCount").textContent = String(total);
     $("clearSelectionBtn").disabled = state.checked.size === 0;
@@ -1661,81 +1737,70 @@
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const start = (state.page - 1) * PAGE_SIZE;
     renderPager(total, pages, start, items.length);
-    $("eventsList").innerHTML =
-      items
-        .map((e) => {
-          const badge = badgeView(e);
-          const prog = stepProgress(e);
-          const acts = queueActions(e);
-          const pickable = bulkEligible(e);
-          return `
-          <article class="event ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
-            <input class="pick" type="checkbox" data-check="${escapeHtml(e.guid)}" aria-label="${te("Выбрать {id}", {
-              id: e.number,
-            })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
-            <div class="event-pri" data-color="${escapeHtml(PRIORITIES[e.priority].color)}" role="img" aria-label="${te("Приоритет: {label}", {
-              label: inLang(PRIORITIES[e.priority].name),
-            })}" title="${escapeHtml(inLang(PRIORITIES[e.priority].description))}"></div>
-            <div class="event-main">
-              <div class="event-title">
-                <strong>${te(e.eventType.name)}</strong>
-                <time>${fmtTime(e.occurredAt)}</time>
-              </div>
-              <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>
-              <div class="event-foot">
-                <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
-                ${
-                  e.escalationLevel
-                    ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>`
-                    : ""
-                }
-                ${timerChip(e)}
-                ${holdChip(e)}
-                ${groupChip(e)}
-                ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}
-              </div>
-            </div>
-            <div class="event-acts">
-              ${acts
-                .map(
-                  (a) =>
-                    `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${escapeHtml(
-                      e.guid
-                    )}" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
-                )
-                .join("")}
-            </div>
-          </article>
-        `;
-        })
-        .join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
+    $("eventsList").innerHTML = items.map(eventRowHtml).join("") || `<div class="empty">${te("Нет событий в текущем фильтре")}</div>`;
   }
 
-  const groupMembers = (ev) => (ev && ev.group ? ev.group.members : ev ? [ev] : []);
+  function eventRowHtml(e) {
+    const badge = badgeView(e);
+    const prog = stepProgress(e);
+    const acts = queueActions(e);
+    const pickable = bulkEligible(e);
+    return `
+    <article class="event ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
+      <input class="pick" type="checkbox" data-check="${escapeHtml(e.guid)}" aria-label="${te("Выбрать {id}", {
+        id: e.number,
+      })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
+      <div class="event-pri" data-color="${escapeHtml(PRIORITIES[e.priority].color)}" role="img" aria-label="${te("Приоритет: {label}", {
+        label: inLang(PRIORITIES[e.priority].name),
+      })}" title="${escapeHtml(inLang(PRIORITIES[e.priority].description))}"></div>
+      <div class="event-main">
+        <div class="event-title">
+          <span class="event-head"><strong>${te(e.eventType.name)}</strong>${linkedChip(e)}</span>
+          <time>${fmtTime(e.occurredAt)}</time>
+        </div>
+        <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>
+        ${
+          e.matchedLinked
+            ? `<div class="event-found"><span class="material-symbols-outlined" aria-hidden="true">link</span>${te("Найдено в привязанных: {ids}", {
+                ids: e.matchedLinked.map((x) => x.number).join(", "),
+              })}</div>`
+            : ""
+        }
+        <div class="event-foot">
+          <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
+          ${
+            e.escalationLevel
+              ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>`
+              : ""
+          }
+          ${timerChip(e)}
+          ${holdChip(e)}
+          ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}
+        </div>
+      </div>
+      <div class="event-acts">
+        ${acts
+          .map(
+            (a) =>
+              `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${escapeHtml(
+                e.guid
+              )}" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
+          )
+          .join("")}
+      </div>
+    </article>
+        `;
+  }
 
   function renderWorkHeader(ev) {
     if (!ev) {
       $("workTitle").textContent = t("Обработка");
       return;
     }
-    const n = groupMembers(ev).length;
-    $("workTitle").textContent =
-      n > 1 ? `${ev.number} · ${t(ev.eventType.name)} · ${t("группа {n}", { n })}` : `${ev.number} · ${t(ev.eventType.name)}`;
+    $("workTitle").textContent = `${ev.number} · ${t(ev.eventType.name)}`;
   }
 
   function workNote(ev) {
-    const mates = groupMembers(ev);
-    if (mates.length > 1 && isMine(ev) && ev.state === "in_progress") {
-      const ex = ev.group.exclude;
-      return `<div class="work-note">${escapeHtml(
-        t("В работе группа из {n}: {ids}. Один сценарий на всех.", {
-          n: mates.length,
-          ids: mates.map((e) => e.number).join(", "),
-        })
-      )} <button type="button" class="btn ghost small" data-exclude="${escapeHtml(ev.guid)}" ${
-        ex.enabled ? "" : `aria-disabled="true" title="${escapeHtml(say(ex.reasonKey, ex.reasonVars))}"`
-      }>${te("Исключить из группы")}</button></div>`;
-    }
     if (isDone(ev)) {
       const why =
         ev.closeResultId && !fullyProcessed(ev.closeResultId) ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) }) : t("Инцидент закрыт.");
@@ -1783,6 +1848,15 @@
     const prog = stepProgress(ev);
     const editable = !ev.readOnly;
     const acts = cardActions(ev);
+    // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если связанные есть);
+    // другая карточка — со сценария
+    // Открыта из поиска, нашедшего связанное, — сразу на вкладке привязанных
+    if (state.workTabFor !== ev.guid) Object.assign(state, { workTab: foundLinked(ev.guid).length ? "linked" : "scenario", workTabFor: ev.guid });
+    const tab = ev.linkedCount ? state.workTab : "scenario";
+    // Внизу один ряд: «Назад», действия с инцидентом, «Далее». На вкладке привязанных «Назад» / «Далее»
+    // не видны, но место занимают (tab-ghost): действия не прыгают при переключении вкладок
+    const navGhost = tab === "scenario" ? "" : "tab-ghost";
+    const navInert = tab === "scenario" ? "" : 'inert aria-hidden="true"';
 
     const i = cursorOf(ev);
     const step = steps[i];
@@ -1799,7 +1873,11 @@
         <div class="work-top">
           ${renderIncidentHead(ev, prog)}
           ${workNote(ev)}
-          <ol class="crumbs ${editable ? "live" : ""}" aria-label="${te("Шаги сценария")}">
+          ${workTabs(ev, tab)}
+          ${
+            tab !== "scenario"
+              ? ""
+              : `<ol class="crumbs ${editable ? "live" : ""}" aria-label="${te("Шаги сценария")}">
           ${steps
             .map((s, idx) => {
               const open = canOpenStep(ev, idx);
@@ -1822,33 +1900,38 @@
               `;
             })
             .join("")}
-          </ol>
+          </ol>`
+          }
         </div>
-        <div class="work-step">
-          <div class="step-card">
+        <div class="work-step ${tab === "linked" ? "lnk" : ""}">
+          ${
+            tab === "linked"
+              ? `<div class="step-card lnk-panel">${linkedPanel(ev)}</div>`
+              : `<div class="step-card">
             <div class="step-h">
               <strong>${te(step.title)}</strong>
               <span>${te("{i} из {n}", { i: i + 1, n: steps.length })}${stepRequired(step) ? "" : ` · ${te("необязательно")}`}</span>
             </div>
             ${renderStepControl(step, ev, editable)}
-          </div>
+          </div>`
+          }
         </div>
         <div class="work-bottom">
-          ${
-            acts.length
-              ? `<div class="work-acts">${acts
-                  .map(
-                    (a) =>
-                      `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${escapeHtml(ev.guid)}" title="${escapeHtml(
-                        a.hint
-                      )}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
-                  )
-                  .join("")}</div>`
-              : ""
-          }
           <div class="scenario-actions">
-            <button type="button" class="btn ghost" id="stepBack" ${i === 0 ? "disabled" : ""}>${te("Назад")}</button>
-            <div class="scenario-actions-end">
+            <button type="button" class="btn ghost ${navGhost}" id="stepBack" ${i === 0 ? "disabled" : ""} ${navInert}>${te("Назад")}</button>
+            ${
+              acts.length
+                ? `<div class="work-acts">${acts
+                    .map(
+                      (a) =>
+                        `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${escapeHtml(ev.guid)}" title="${escapeHtml(
+                          a.hint
+                        )}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
+                    )
+                    .join("")}</div>`
+                : ""
+            }
+            <div class="scenario-actions-end ${navGhost}" ${navInert}>
               ${
                 editable
                   ? last && canClose
@@ -1863,7 +1946,7 @@
             </div>
           </div>
           ${
-            last && editable && !canClose && incomplete !== -1
+            tab === "scenario" && last && editable && !canClose && incomplete !== -1
               ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", { n: incomplete + 1, name: t(stepShort(steps[incomplete])) })}</p>`
               : ""
           }
@@ -1898,13 +1981,7 @@
           ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
           ${timerChip(ev, "sla")}
           ${holdChip(ev, "sla")}
-          ${
-            ev.groupGuid
-              ? `<span class="chip grp" title="${te("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: ev.groupSize })}">${te("группа {n}", {
-                  n: ev.groupSize,
-                })}</span>`
-              : ""
-          }
+          ${linkedChip(ev)}${linkedDueChip(ev)}
         </div>
         <h3>${te(ev.eventType.name)}</h3>
         <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
@@ -2254,10 +2331,10 @@
       state.full === "video",
       "close_fullscreen",
       "open_in_full",
-      t("Свернуть видеомонитор (Esc)"),
+      t("Свернуть видеомонитор"),
       t("Развернуть видеомонитор на всю рабочую область")
     );
-    syncToggle($("mapFull"), state.full === "map", "close_fullscreen", "open_in_full", t("Свернуть карту (Esc)"), t("Развернуть карту на всю рабочую область"));
+    syncToggle($("mapFull"), state.full === "map", "close_fullscreen", "open_in_full", t("Свернуть карту"), t("Развернуть карту на всю рабочую область"));
     $("videoFull").disabled = mode === "map";
     $("mapFull").disabled = mode === "video";
     // Состояние оператора — отдельная машина состояний (§12.1): значение отдаёт сервер, подпись — машина
@@ -2493,9 +2570,15 @@
   }
 
   // Смена фильтра, группы или поиска: очередь — заново, выделение — на видимое
-  function requery() {
+  // Другой список — другое выделение (§11.1): сменили узел дерева, фильтр, типы или поиск — отметки снимаются.
+  // Порядок очереди состав списка не меняет: keepSelection — отметки остаются
+  function requery(keepSelection) {
     state.page = 1;
     state.focus = true;
+    if (!keepSelection) {
+      state.checked.clear();
+      store.selection = null;
+    }
     return reload();
   }
 
@@ -2528,17 +2611,54 @@
     });
     $("queueSortSelect").addEventListener("change", async (e) => {
       await api.patch("/operator/session/preferences", { queueSort: e.target.value });
-      requery();
+      requery(true);
     });
-    [
-      ["eventTypeFilter", "eventType"],
-      ["deviceTypeFilter", "deviceType"],
-    ].forEach(([id, key]) =>
+    // Списки типов над очередью: щелчок по полю — открыть, набор — отбор вариантов, галочка — сразу отбор очереди,
+    // «Все…» — снять, щелчок мимо и Esc — закрыть
+    const closeTypeList = () => {
+      state.tbOpen = null;
+      state.tbQ = {};
+      renderTypeLists();
+    };
+    ["deviceTypeFilter", "eventTypeFilter"].forEach((id) => {
+      $(id).addEventListener("click", (e) => {
+        const toggle = e.target.closest("[data-tb-toggle]");
+        const clear = e.target.closest("[data-tb-clear]");
+        if (toggle) {
+          if (state.tbOpen === toggle.dataset.tbToggle) return;
+          state.tbOpen = toggle.dataset.tbToggle;
+          state.tbQ = {};
+        } else if (clear) {
+          state[clear.dataset.tbClear] = [];
+          requery();
+        } else return;
+        renderTypeLists();
+      });
       $(id).addEventListener("change", (e) => {
-        state[key] = e.target.value;
+        const box = e.target.closest("[data-tb]");
+        if (!box) return;
+        const key = box.dataset.tb;
+        state[key] = box.checked ? state[key].concat(box.value) : state[key].filter((v) => v !== box.value);
+        // Отметил — набранное стирается: можно сразу искать следующее
+        state.tbQ = {};
+        renderTypeLists();
         requery();
-      })
-    );
+      });
+      $(id).addEventListener("input", (e) => {
+        const input = e.target.closest("[data-tb-toggle]");
+        if (!input) return;
+        state.tbQ[input.dataset.tbToggle] = input.value;
+        if (state.tbOpen === input.dataset.tbToggle) return comboNarrow(input);
+        state.tbOpen = input.dataset.tbToggle;
+        renderTypeLists();
+      });
+      $(id).addEventListener("keydown", (e) => comboKey(e, closeTypeList));
+    });
+    document.addEventListener("click", (e) => {
+      // Щелчок по самому списку его перерисовал — цель уже не на странице: это не «щелчок мимо»
+      if (!state.tbOpen || !e.target.isConnected || e.target.closest(".mselect.tb")) return;
+      closeTypeList();
+    });
     $("eventSearch").addEventListener("input", (e) => {
       state.search = e.target.value;
       requery();
@@ -2563,6 +2683,12 @@
       renderGroups();
     });
     $("groupsList").addEventListener("click", (e) => {
+      const fbtn = e.target.closest("[data-filter]");
+      if (fbtn) {
+        e.stopPropagation();
+        openFilter(fbtn.dataset.node);
+        return;
+      }
       const toggle = e.target.closest(".toggle-icon");
       const node = e.target.closest(".tree-node");
       if (!node) return;
@@ -2638,12 +2764,37 @@
     $("scenarioRoot").addEventListener("click", async (e) => {
       const ev = selected();
       if (!ev) return;
-      const exclude = e.target.closest("[data-exclude]");
-      if (exclude && explainIfOff(exclude)) return;
-      if (exclude) {
+      const tabBtn = e.target.closest("[data-work-tab]");
+      if (tabBtn) {
+        state.workTab = tabBtn.dataset.workTab;
+        renderScenario();
+        return;
+      }
+      const lnkPage = e.target.closest("[data-lnk-page]");
+      if (lnkPage) {
+        state.linkedPage = Number(lnkPage.dataset.lnkPage);
+        await loadLinked();
+        renderAll();
+        return;
+      }
+      const detachAll = e.target.closest("[data-detach-all]");
+      if (detachAll && explainIfOff(detachAll)) return;
+      if (detachAll) {
         try {
-          await api.del(`/operator/incident-groups/${enc(ev.groupGuid)}/members/${enc(ev.guid)}`);
-          toast(t("{id} исключён из группы", { id: ev.number }));
+          const after = await api.del(`/operator/incidents/${enc(ev.guid)}/linked`);
+          toast(t("Отсоединено: {n} — события вернулись в очередь новыми", { n: ev.linkedCount - after.linkedCount }));
+        } catch (err) {
+          toast(problemText(err));
+        }
+        await reload();
+        return;
+      }
+      const detach = e.target.closest("[data-detach]");
+      if (detach && explainIfOff(detach)) return;
+      if (detach) {
+        try {
+          await api.del(`/operator/incidents/${enc(ev.guid)}/linked/${enc(detach.dataset.detach)}`);
+          toast(t("{id} отсоединён и вернулся в очередь новым", { id: detach.dataset.number }));
         } catch (err) {
           toast(problemText(err));
         }
@@ -2688,8 +2839,15 @@
         renderScenario();
       }
     });
-    $("selectAllBtn").addEventListener("click", () => selectAllVisible());
-    $("selectSimilarBtn").addEventListener("click", () => selectSimilar());
+    // Меню «Выделить» в шапке очереди: все в фильтре или окно «По фильтру…» для выбранного узла дерева
+    $("selectAllBtn").addEventListener("click", () => {
+      closeMenus();
+      selectAllVisible();
+    });
+    $("selectByFilterBtn").addEventListener("click", () => {
+      closeMenus();
+      openFilter(state.groupId || "all");
+    });
     $("clearSelectionBtn").addEventListener("click", () => clearSelection());
     $("videoStage").addEventListener("click", (e) => {
       const nav = e.target.closest("[data-cam-step]");
@@ -2743,10 +2901,6 @@
       adminState.tab = btn.dataset.adminTab;
       renderAdmin();
     });
-    $("hotkeysBtn").addEventListener("click", () => {
-      closeMenus();
-      $("modalHotkeys").hidden = false;
-    });
     document.querySelectorAll(".menu").forEach((menu) => {
       const trigger = menu.querySelector("[aria-haspopup]");
       const pop = menu.querySelector(".menu-pop");
@@ -2773,15 +2927,6 @@
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".menu")) closeMenus();
     });
-    $("escalateDefault").addEventListener("change", async (e) => {
-      try {
-        await api.patch("/operator/session/preferences", { defaultTransferTargetId: e.target.value });
-      } catch (err) {
-        toast(problemText(err));
-      }
-      store.session = await api.get("/operator/session");
-      toast(t("Предвыбор адресата: {who}", { who: defaultTarget() }));
-    });
     document.querySelectorAll("[data-close]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.close === "modalDialog") closeDialog();
@@ -2789,6 +2934,84 @@
       });
     });
     $("dialogConfirm").addEventListener("click", submitDialog);
+    $("groupingRows").addEventListener("change", (e) => {
+      const same = e.target.closest("[data-same]");
+      if (same) {
+        Object.assign(filt, { same: same.checked, scenario: null, open: null, q: {} });
+        return loadFilter();
+      }
+      const box = e.target.closest("[data-fkey]");
+      if (box && box.dataset.fkey === "s:scenario") {
+        Object.assign(filt, { scenario: box.value, open: null, q: {}, focusSearch: false });
+        return loadFilter();
+      }
+      if (box) {
+        const [i, key] = box.dataset.fkey.split(":");
+        const c = filt.filter.any[Number(i)];
+        if (key === "deviceTypeId") {
+          // Каскад: сменили тип — события и устройства выбираются заново
+          Object.assign(c, { deviceTypeId: box.value || null, eventTypeIds: [], deviceGuids: [] });
+          filt.open = null;
+          filt.q = {};
+        } else c[key] = box.checked ? c[key].concat(box.value) : c[key].filter((v) => v !== box.value);
+        // Галочка — список остаётся открытым, набранное стирается, фокус — в поле: можно искать следующее
+        filt.q = {};
+        filt.focusSearch = key !== "deviceTypeId";
+      } else return;
+      loadFilter();
+    });
+    $("groupingConfirm").addEventListener("click", submitFilter);
+    // Выпадающие списки фильтра: открыть один, щелчок мимо — закрыть; «Любые» — снять всё
+    $("modalGrouping").addEventListener("click", (e) => {
+      const toggle = e.target.closest("[data-ms-toggle]");
+      const clear = e.target.closest("[data-ms-clear]");
+      if (toggle) {
+        if (filt.open === toggle.dataset.msToggle) return;
+        filt.open = toggle.dataset.msToggle;
+        filt.q = {};
+        filt.focusSearch = true;
+      } else if (clear) {
+        const [i, key] = clear.dataset.msClear.split(":");
+        filt.filter.any[Number(i)][key] = [];
+        return loadFilter();
+      } else if (e.target.closest("[data-cond-add]")) {
+        filt.filter.any.push(blankCond());
+        return loadFilter();
+      } else if (e.target.closest("[data-cond-remove]")) {
+        filt.filter.any.splice(Number(e.target.closest("[data-cond-remove]").dataset.condRemove), 1);
+        filt.open = null;
+        return loadFilter();
+      } else if (!e.target.closest(".mselect") && filt.open) {
+        filt.open = null;
+        filt.q = {};
+      }
+      else return;
+      renderFilter();
+    });
+    // Набор в поле списка — без запроса к серверу: прячет неподходящие варианты
+    $("groupingRows").addEventListener("input", (e) => {
+      const input = e.target.closest("[data-ms-toggle]");
+      if (!input) return;
+      filt.q[input.dataset.msToggle] = input.value;
+      if (filt.open === input.dataset.msToggle) return comboNarrow(input);
+      filt.open = input.dataset.msToggle;
+      filt.focusSearch = true;
+      renderFilter();
+    });
+    $("groupingRows").addEventListener("keydown", (e) =>
+      comboKey(e, () => {
+        filt.open = null;
+        filt.q = {};
+        renderFilter();
+      })
+    );
+    $("selBar").addEventListener("click", (e) => {
+      if (e.target.closest("[data-sel-clear]")) return clearSelection();
+      const b = e.target.closest("[data-sel-do]");
+      if (!b) return;
+      if (b.getAttribute("aria-disabled") === "true") return toast(b.title);
+      selectionDo(b.dataset.selDo);
+    });
     $("dialogFields").addEventListener("change", refreshDialogFields);
     $("groupsCollapseAll").addEventListener("click", () => {
       if (state.openGroups.size) state.openGroups.clear();
@@ -2809,7 +3032,7 @@
       return;
     }
     if (!res.incidentGuids.length) {
-      toast(t(body.mode === "same_type_new" ? "Нет новых событий для выборки" : "Нет событий для выборки"));
+      toast(t("Нет событий для выборки"));
       return;
     }
     state.checked = new Set(res.incidentGuids);
@@ -2827,96 +3050,308 @@
     );
   }
 
-  function selectSimilar() {
-    const anchor = [...state.checked][0] || state.selectedId;
-    return pickSelection({ mode: "same_type_new", anchorIncidentGuid: anchor }, (res) =>
-      t("Выбрано однотипных: {n}", { n: res.incidentGuids.length })
-    );
-  }
-
   function clearSelection() {
     state.checked.clear();
     store.selection = null;
     renderEvents();
   }
 
-  // «Обработать как одно» (§11): группу создаёт сервер по grouping машины
-  async function groupProcess() {
-    if (state.checked.size < 2) return;
-    let group;
+  /* ===== Выборка и объединение (§11, черновик) =====
+     Панель над очередью — действия, доступные всей выборке (их решает сервер: /incidents/selection).
+     «Взять в работу» — одним инцидентом: основной выбирает сервер, остальные станут привязанными */
+
+  // Срок привязанного раньше своего (§11.4): истечёт — нарушение на владельца основного. Отсчёт — как у норматива
+  function linkedDueChip(e) {
+    if (!e.linkedDueAt) return "";
+    const due = Date.parse(e.linkedDueAt);
+    const own = e.timer && e.timer.running && e.timer.dueAt ? Date.parse(e.timer.dueAt) : Infinity;
+    if (due >= own) return "";
+    const left = due - Date.now();
+    return `<span class="event-sla lnk-due ${left < 120000 ? "late" : ""}" data-due="${due}" title="${te("Срок закрытия привязанного события раньше срока этого инцидента: истечёт — нарушение на владельца основного")}">${te(
+      "Срок привязанного"
+    )} <b class="sla-t">${fmtSla(left)}</b></span>`;
+  }
+
+  function linkedChip(e) {
+    if (!e.linkedCount) return "";
+    const text = t("+{n, plural, one {# событие} few {# события} other {# событий}}", { n: e.linkedCount });
+    return `<span class="chip linked" data-work-tab="linked" title="${te("Объединено с этим инцидентом: {n}", { n: e.linkedCount })}"><span class="material-symbols-outlined" aria-hidden="true">link</span>${escapeHtml(text)}</span>`;
+  }
+
+  // Вкладки над сценарием: связанных много — им своё место, а не блок над шагами
+  function workTabs(ev, tab) {
+    if (!ev.linkedCount) return "";
+    const b = (id, label) =>
+      `<button type="button" class="work-tab ${tab === id ? "on" : ""}" role="tab" aria-selected="${tab === id}" data-work-tab="${id}">${label}</button>`;
+    return `<div class="work-tabs" role="tablist">${b("scenario", te("Сценарий"))}${b(
+      "linked",
+      `${te("Привязанные инциденты")} <span class="work-tab-n">${ev.linkedCount}</span>`
+    )}</div>`;
+  }
+
+  // Привязанные инциденты основного (§11, черновик): постранично, «Отсоединить» у каждого и «Отсоединить все»
+  function linkedPanel(ev) {
+    const page = store.linked && store.linked.guid === ev.guid ? store.linked : null;
+    const list = page ? page.items : [];
+    if (!list.length) return `<div class="empty">${te("Привязанных инцидентов нет")}</div>`;
+    const total = page.total;
+    // «Отсоединить все» — тот же переход ко всем разом; доступность и причина — как у первого связанного
+    const first = list.map((m) => (m.actions || []).find((a) => (transitionDef(a.id) || {}).from && transitionDef(a.id).from.includes("linked"))).find(Boolean);
+    const all =
+      first && total > 1
+        ? `<button type="button" class="btn outline small" data-detach-all ${first.enabled ? "" : `aria-disabled="true" title="${escapeHtml(actionWhy(first) || "")}"`}>${te(
+            "Отсоединить все"
+          )}</button>`
+        : "";
+    const start = (state.linkedPage - 1) * LINKED_PAGE;
+    const step = (to, icon, label, off) =>
+      `<button type="button" class="pager-btn" data-lnk-page="${to}" title="${label}" aria-label="${label}" ${off ? "disabled" : ""}><span class="material-symbols-outlined">${icon}</span></button>`;
+    const pager =
+      total > LINKED_PAGE
+        ? `<span class="lnk-pager"><span class="pager-info">${te("{a}–{b} из {n}", { a: start + 1, b: start + list.length, n: total })}</span>${step(
+            state.linkedPage - 1,
+            "chevron_left",
+            t("Предыдущая страница"),
+            state.linkedPage === 1
+          )}${step(state.linkedPage + 1, "chevron_right", t("Следующая страница"), start + list.length >= total)}</span>`
+        : "";
+    return `<div class="lnk-head"><span>${te("Привязано: {n}", { n: total })}</span>${pager}${all}</div>
+      <div class="lnk-members">${list
+        .map((m) => {
+          const b = badgeView(m);
+          const d = (m.actions || []).find((a) => (transitionDef(a.id) || {}).from && transitionDef(a.id).from.includes("linked"));
+          const off = d && !d.enabled ? `aria-disabled="true" title="${escapeHtml(actionWhy(d) || "")}"` : `title="${escapeHtml(d ? lbl(transitionDef(d.id)) : "")}"`;
+          const found = foundLinked(ev.guid).some((x) => x.guid === m.guid);
+          return `<div class="lnk-member ${found ? "found" : ""}">
+            <span class="lnk-num">${escapeHtml(m.number)}</span>
+            <span class="lnk-where">${te(m.eventType.name)} · ${te(m.location)}</span>
+            <time>${fmtTime(m.occurredAt)}</time>
+            ${timerChip(m, "event-sla lnk-sla") || "<span></span>"}
+            <span class="badge ${b.cls}">${escapeHtml(b.text)}</span>
+            ${d ? `<button type="button" class="btn ghost small" data-detach="${escapeHtml(m.guid)}" data-number="${escapeHtml(m.number)}" ${off}>${escapeHtml(lbl(transitionDef(d.id)))}</button>` : "<span></span>"}
+          </div>`;
+        })
+        .join("")}</div>`;
+  }
+
+  // Действия выборки — переходы машины с bulk.allowed; недоступное — бледное с причиной
+  function renderSelectionBar() {
+    const bar = $("selBar");
+    const n = state.checked.size;
+    bar.hidden = !n;
+    if (!n) {
+      bar.innerHTML = "";
+      return;
+    }
+    // Что относится к отмеченным — по серверу (visible); недоступное кому-то — бледное, причина в подсказке и по клику
+    const acts = ((store.selection && store.selection.actions) || []).filter((a) => a.kind === "transition" && a.bulkAllowed && a.visible);
+    bar.innerHTML =
+      `<span class="sel-count">${te("Отмечено: {n}", { n })}</span>` +
+      acts
+        .map(
+          (a) =>
+            `<button type="button" class="btn ${escapeHtml(a.style)} small" data-sel-do="${escapeHtml(a.id)}" ${
+              a.enabled ? "" : 'aria-disabled="true"'
+            } title="${escapeHtml(a.enabled ? a.label : a.reason || a.label)}">${escapeHtml(a.label)}</button>`
+        )
+        .join("") +
+      `<button type="button" class="btn ghost small sel-clear" data-sel-clear title="${te("Снять выделение")}">${te("Снять")}</button>`;
+  }
+
+  async function selectionDo(id) {
+    if ((transitionDef(id).bulk || {}).mode === "merge") return takeAsOne();
+    // Действие над всеми отмеченными: форма — одна на всех, по первому из них
+    const first = [...state.checked][0];
+    const ev = store.page.items.find((e) => state.checked.has(e.guid)) || (await api.get(`/operator/incidents/${enc(first)}`));
+    trigger(id, ev, "queue", [...state.checked]);
+  }
+
+  // «Взять в работу» на выборке — как одно: основного выбирает сервер, остальные — его связанные
+  async function takeAsOne() {
+    const n = state.checked.size;
+    let res;
     try {
-      group = await api.post("/operator/incident-groups", { incidentGuids: [...state.checked] });
+      res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked] });
     } catch (err) {
       toast(problemText(err));
       return;
     }
-    state.selectedId = group.members[0].guid;
+    toast(n > 1 ? t("Взято в работу как одно: {id} и ещё {n}", { id: res.incident.number, n: n - 1 }) : t("Взято в работу: {id}", { id: res.incident.number }));
+    // Куда дальше — из машины (ui.navigate объединения): карточка основного на его текущем шаге сценария
+    const merge = WORKFLOW.transitions.find((x) => (x.bulk || {}).mode === "merge");
+    state.selectedId = res.incident.guid;
     state.checked.clear();
     store.selection = null;
-    toast(t("Группа из {n, plural, one {# события} other {# событий}} в одной карточке", { n: group.members.length }));
-    state.mode = "work";
-    state.mobileView = "card";
+    state.jump = true;
+    navigate(merge.ui.navigate);
     await reload();
   }
 
-  function onKey(e) {
-    const hotkey = WORKFLOW.hotkeys.find((h) => h.key === keyName(e));
-    if (!hotkey) return;
-    const target = e.target instanceof Element ? e.target : null;
-    const inInput = target && target.matches("input, textarea, select");
-    if (inInput && !hotkey.worksInInput) return;
-    const onControl = target && target.matches("button, a[href], summary, [role='button']");
-    if (onControl && (e.key === "Enter" || e.key === " ")) return;
-    const modalOpen = Boolean(state.dialog) || Boolean(document.querySelector(".modal:not([hidden])"));
-    if (modalOpen && !hotkey.worksInModal) return;
-    runHotkey(hotkey, e);
+  /* ===== «Выделить по фильтру» из дерева (§11, черновик) =====
+     Узел (или все события) и условия через «ИЛИ»: тип устройства, события, устройства; пустое —
+     любые. Варианты и сколько подходит считает сервер (POST /incidents/filter) */
+
+  // Кнопка у узла дерева и у «Все события»
+  function filterButtons(guid) {
+    const b = (mode, icon, title) =>
+      `<button type="button" class="node-group-btn" data-filter="${mode}" data-node="${escapeHtml(guid)}" title="${te(title)}" aria-label="${te(
+        title
+      )}"><span class="material-symbols-outlined">${icon}</span></button>`;
+    return b("select", "checklist", "Выделить по фильтру");
   }
 
-  // Esc разбирается по цепочке машины: форма → полный экран → панель групп → к очереди (§13.1).
-  // Срабатывает первое звено, которому есть что закрыть.
+  // Условие фильтра: тип устройства (один или любой), события, устройства; условия — через «ИЛИ»
+  const blankCond = () => ({ deviceTypeId: null, eventTypeIds: [], deviceGuids: [] });
+  // open — какой выпадающий список раскрыт («номер условия:поле»); q — строка поиска в каждом
+  const filt = { node: null, filter: { any: [] }, view: null, open: null, q: {} };
 
-  const ESCAPE_STEPS = {
-    close_form: () => {
-      const openMenu = closeMenus();
-      if (openMenu) {
-        openMenu.querySelector("[aria-haspopup]").focus();
-        return true;
-      }
-      if (state.dialog) {
-        closeDialog();
-        return true;
-      }
-      const openModal = document.querySelector(".modal:not([hidden])");
-      if (!openModal) return false;
-      openModal.hidden = true;
-      return true;
-    },
-    exit_fullscreen: () => {
-      if (!state.full) return false;
-      toggleFull(state.full);
-      return true;
-    },
-    close_groups_panel: () => {
-      if (!(state.groupsOn && narrowQuery.matches)) return false;
-      closeDrawer();
-      return true;
-    },
-    back_to_queue: () => {
-      if (state.mode !== "work") return false;
-      backToQueue();
-      return true;
-    },
-  };
+  async function openFilter(guid) {
+    const node = guid === "all" ? null : findNode(store.tree, guid);
+    Object.assign(filt, { node, filter: { any: [blankCond()] }, view: null, open: null, q: {}, same: false, scenario: null });
+    $("modalGrouping").hidden = false;
+    await loadFilter();
+  }
 
-  // Справка по клавишам — из машины: подряд идущие клавиши с одной подписью — одна строка
-  // («←» «→», «1–4»). Внизу — какие клавиши работают в полях ввода и при открытом окне (§13)
+  const filterNodeName = () => (filt.node ? t(filt.node.name) : t("Все события"));
 
-  const KEY_GLYPH = { ArrowLeft: "←", ArrowRight: "→" };
-  const kbdHtml = (key) =>
-    key
-      .split("+")
-      .map((part) => `<kbd>${escapeHtml(KEY_GLYPH[part] || part)}</kbd>`)
-      .join("+");
+  async function loadFilter() {
+    try {
+      filt.view = await api.post("/operator/incidents/filter", {
+        sourceGroupGuid: filt.node ? filt.node.guid : null,
+        filter: filt.filter,
+        // Как над очередью: фильтр «Открытые / Мои / …» — тот же
+        queueFilter: state.filter,
+        // «Одинаковый сценарий» — необязательно; какой — выбранный, иначе сервер берёт самый частый
+        sameScenario: filt.same,
+        scenarioGuid: filt.same ? filt.scenario : null,
+      });
+    } catch (err) {
+      $("modalGrouping").hidden = true;
+      toast(problemText(err));
+      return;
+    }
+    filt.scenario = filt.view.scenarioGuid;
+    renderFilter();
+  }
+
+  // Список фильтра — выпадающий: закрытый показывает выбранное, открытый — варианты с числами.
+  // single — один вариант или «Любой» (тип устройства), иначе галочки
+  function filterSelect(i, key, title, options, picked, single, noAny) {
+    const id = `${i}:${key}`;
+    const label = (v) => {
+      const o = options.find((x) => x.id === v);
+      return o ? t(o.label) : v;
+    };
+    const any = single ? t("Любой") : t("Любые");
+    const open = filt.open === id;
+    const q = filt.q[id] || "";
+    const opt = (o) => {
+      // «Любой» (id пустой) отмечен, когда ничего не выбрано
+      const on = o.id === "" ? !picked.length : picked.includes(o.id);
+      const hide = comboHit(t(o.label), q) ? "" : "hidden";
+      const input = single
+        ? `<input type="radio" name="f${escapeHtml(id)}" data-fkey="${id}" value="${escapeHtml(o.id)}" ${on ? "checked" : ""} />`
+        : `<input type="checkbox" data-fkey="${id}" value="${escapeHtml(o.id)}" ${on ? "checked" : ""} />`;
+      // Ноль — выбрать нечего: вариант бледный и не нажимается (выбранный раньше — снять можно)
+      const none = o.count === 0 && !on;
+      return `<label class="mselect-opt ${none ? "off" : ""}" ${hide}>${none ? input.replace(" />", " disabled />") : input}<span>${te(o.label)}</span><em>${o.count}</em></label>`;
+    };
+    const menu = open
+      ? `<div class="mselect-menu">${single && !noAny ? opt({ id: "", label: "Любой", count: "" }) : ""}${options.map(opt).join("")}${comboNone(
+          options.some((o) => comboHit(t(o.label), q))
+        )}${!single && picked.length ? `<button type="button" class="btn ghost small" data-ms-clear="${id}">${te("Любые")}</button>` : ""}</div>`
+      : "";
+    return `<div class="filter-row">
+      <span class="filter-title">${escapeHtml(title)}</span>
+      <div class="mselect ${open ? "open" : ""}">
+        ${comboField("data-ms-toggle", id, open, q, picked, label, any)}
+        ${menu}
+      </div>
+    </div>`;
+  }
+
+  function filterConditions() {
+    const conds = filt.filter.any;
+    return (
+      conds
+        .map((c, i) => {
+          const o = filt.view.options.conditions[i] || { deviceTypes: [], eventTypes: [], devices: [] };
+          return `<div class="filter-cond">
+            <div class="filter-cond-head"><b>${te("Условие {n}", { n: i + 1 })}</b>${
+              conds.length > 1
+                ? `<button type="button" class="btn ghost small" data-cond-remove="${i}"><span class="material-symbols-outlined">close</span>${te("Убрать")}</button>`
+                : ""
+            }</div>
+            ${filterSelect(i, "deviceTypeId", t("Тип устройства"), o.deviceTypes, c.deviceTypeId ? [c.deviceTypeId] : [], true)}
+            ${filterSelect(i, "eventTypeIds", t("События"), o.eventTypes, c.eventTypeIds)}
+            ${filterSelect(i, "deviceGuids", t("Устройства"), o.devices, c.deviceGuids)}
+          </div>`;
+        })
+        .join(`<div class="filter-or">${te("ИЛИ")}</div>`) +
+      `<button type="button" class="btn ghost small filter-add" data-cond-add><span class="material-symbols-outlined">add</span>${te("ИЛИ")}</button>`
+    );
+  }
+
+  // «Одинаковый сценарий» — необязательно: только события одного сценария, тогда «Взять в работу»
+  // на выделенных доступна. Сценарии — подходящих под условия, с числами
+  function sameScenarioRow() {
+    const v = filt.view;
+    const box = `<label class="filter-same"><input type="checkbox" data-same ${filt.same ? "checked" : ""} /><span>${te("Одинаковый сценарий")}</span></label>`;
+    if (!filt.same) return box;
+    return box + filterSelect("s", "scenario", t("Сценарий"), v.options.scenarios, v.scenarioGuid ? [v.scenarioGuid] : [], true, true);
+  }
+
+  function renderFilter() {
+    const v = filt.view;
+    // Откуда берутся события: узел дерева и фильтр очереди — тот же, что над очередью
+    $("groupingIntro").textContent = t("«{name}», «{filter}»: подходящие события со всех страниц будут отмечены. Дальше — действие на панели выборки.", {
+      name: filterNodeName(),
+      filter: lbl(WORKFLOW.queueFilters.find((f) => f.id === state.filter)),
+    });
+
+    $("groupingBy").innerHTML = "";
+    // «Одинаковый сценарий» — первым, над условиями
+    $("groupingRows").innerHTML = sameScenarioRow() + filterConditions();
+    // Раскрытый список — целиком в видимой части окна
+    const opened = $("groupingRows").querySelector(".mselect.open");
+    if (opened) opened.scrollIntoView({ block: "nearest" });
+    if (filt.open && filt.focusSearch) comboFocus($("groupingRows").querySelector(`[data-ms-toggle="${filt.open}"]`));
+    const hint = $("groupingHint");
+    const confirm = $("groupingConfirm");
+    hint.classList.toggle("warn", !v.count);
+    hint.textContent = v.truncated
+      ? t("Подходит: {n}. Будут отмечены первые {max} — предел выборки", { n: v.count, max: LIMITS.maxBulk })
+      : v.excluded
+        ? t("Подходит: {n} · не включены — их нельзя взять в работу: {x}", { n: v.count, x: v.excluded })
+        : t("Подходит: {n}", { n: v.count });
+    confirm.textContent = t("Выделить {n}", { n: v.incidentGuids.length });
+    confirm.disabled = !v.count;
+  }
+
+  async function submitFilter() {
+    // «Выделить»: подходящие отмечены — дальше панель выборки. Очередь — на узел окна, без типов и поиска:
+    // на экране тот список, где отмечено (§11.1)
+    $("modalGrouping").hidden = true;
+    Object.assign(state, { groupId: filt.node ? filt.node.guid : "all", deviceTypes: [], eventTypes: [], search: "", page: 1 });
+    $("eventSearch").value = "";
+    renderTypeLists();
+    renderGroups();
+    state.checked = new Set(filt.view.incidentGuids);
+    await updateSelection();
+    toast(t("Выделено: {n}", { n: state.checked.size }));
+    await reload();
+  }
+
+  // Горячих клавиш нет. Esc — обычное поведение окон: закрывает открытое меню, форму или окно
+  function onKey(e) {
+    if (e.key !== "Escape") return;
+    const openMenu = closeMenus();
+    if (openMenu) return openMenu.querySelector("[aria-haspopup]").focus();
+    if (state.dialog) return closeDialog();
+    const openModal = document.querySelector(".modal:not([hidden])");
+    if (openModal) openModal.hidden = true;
+  }
+
   /* ===== Меню справки (§7, RULE-49): справочник ссылок — общие и площадки открытого инцидента ===== */
 
   // Демо-адреса набора открывают окна прототипа; настоящие — новой вкладкой
@@ -2925,12 +3360,11 @@
     const ev = selected();
     const links = await api.get("/operator/reference/help-links", ev && ev.site ? { site: ev.site } : {}).catch(() => []);
     const item = (l) => {
-      const hotkey = WORKFLOW.hotkeys.find((h) => h.action === `docs:${l.id}`);
       const demo = /^demo:doc\/(.+)$/.exec(l.url);
       const target = demo ? `data-doc="${DEMO_DOCS[demo[1]] || ""}"` : `data-url="${escapeHtml(l.url)}"`;
       return `<button type="button" class="menu-item" role="menuitem" ${target}>
         <span class="material-symbols-outlined">${escapeHtml(l.icon || (l.kind === "file" ? "description" : "public"))}</span>
-        <span data-i18n-skip>${escapeHtml(l.title)}</span>${hotkey ? kbdHtml(hotkey.key) : ""}
+        <span data-i18n-skip>${escapeHtml(l.title)}</span>
       </button>`;
     };
     const common = links.filter((l) => !l.site);
@@ -2975,7 +3409,6 @@
       return v
         .map((x) => {
           if (typeof x !== "object") return fmtSetting(x, key, sec);
-          if (x.key && hasLbl(x, "label")) return `${kbdHtml(x.key)} ${escapeHtml(lbl(x))}`;
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
@@ -3063,88 +3496,6 @@
     table.innerHTML = `<thead><tr>${head.map((h) => `<th>${te(h)}</th>`).join("")}</tr></thead><tbody>${body.join("")}</tbody>`;
   }
 
-  function renderHotkeysHelp() {
-    const rows = [];
-    WORKFLOW.hotkeys.forEach((h) => {
-      const last = rows[rows.length - 1];
-      if (last && last.label === lbl(h)) last.keys.push(h.key);
-      else rows.push({ label: lbl(h), keys: [h.key] });
-    });
-    $("hotkeysTable").innerHTML = rows
-      .map((r) => {
-        const digits = r.keys.length > 2 && r.keys.every((k) => /^\d$/.test(k));
-        const keys = digits ? `${kbdHtml(r.keys[0])}–${kbdHtml(r.keys[r.keys.length - 1])}` : r.keys.map(kbdHtml).join(" ");
-        return `<tr><td>${keys}</td><td>${te(r.label)}</td></tr>`;
-      })
-      .join("");
-    const list = (pick) => WORKFLOW.hotkeys.filter(pick).map((h) => h.key).join(", ");
-    $("hotkeysNote").textContent = [
-      t("В полях ввода работают только {keys}.", { keys: list((h) => h.worksInInput) }),
-      t("При открытом окне — только {keys}.", { keys: list((h) => h.worksInModal) }),
-      t("Набор можно будет задавать «под себя» в настройках оператора."),
-    ].join(" ");
-  }
-
-  // Имя клавиши в записи машины: «N», «Shift+A», «Ctrl+K», «Enter», «ArrowLeft», «?», «Esc».
-  // Shift пишется только у букв: «?» набирается с Shift, но это своя клавиша
-
-  function keyName(e) {
-    const base = e.key === "Escape" ? "Esc" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-    if (e.ctrlKey || e.metaKey) return `Ctrl+${base}`;
-    return e.shiftKey && /^[A-ZА-ЯЁ]$/.test(base) ? `Shift+${base}` : base;
-  }
-
-  // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет переход
-
-  // Горячие клавиши — из машины (§13): клавиша только вызывает действие, право проверяет сервер
-  async function runHotkey(hotkey, e) {
-    const [kind, name] = hotkey.action.split(":");
-    const ev = selected();
-    const surface = state.mode === "work" ? "card" : "queue";
-    if (hotkey.action === "escape_chain") {
-      hotkey.chain.some((stepId) => ESCAPE_STEPS[stepId] && ESCAPE_STEPS[stepId]());
-      return;
-    }
-    if (kind === "docs" && name === "regulation") {
-      e.preventDefault();
-      closeMenus();
-      showModal("modalRegulation");
-      return;
-    }
-    if (kind === "transition") {
-      if (hotkey.scope === "next_new") {
-        const open = await api.get("/operator/incidents", { filter: "open", pageSize: 1000 });
-        const next = open.items.find((x) => canDo(name, x));
-        if (next) trigger(name, next, "queue");
-        return;
-      }
-      trigger(name, ev, surface);
-    } else if (kind === "form" && name === "open" && state.mode === "work") {
-      trigger(hotkey.action.split(":")[2], ev, "card");
-    } else if (kind === "group") {
-      groupProcess();
-    } else if (kind === "selection") {
-      e.preventDefault();
-      if (name === "same_type") selectSimilar();
-      else if (state.checked.size) clearSelection();
-    } else if (kind === "session") {
-      $("breakBtn").click();
-    } else if (kind === "docs" && name === "hotkeys") {
-      $("modalHotkeys").hidden = !$("modalHotkeys").hidden;
-    } else if (kind === "media") {
-      if (name === "camera_prev") stepCamera(-1);
-      else if (name === "camera_next") stepCamera(1);
-      else if (name === "camera_select") {
-        const cam = camerasOf(cardOfSelected())[hotkey.args[0] - 1];
-        if (cam) {
-          state.activeCam = cam;
-          renderVideo();
-          renderMap();
-        }
-      }
-    }
-  }
-
   // Часы и обратный отсчёт — на клиенте по меткам времени (§4). Дедлайны ведёт сервер:
   // что сработало, он сообщает в потоке событий
   setInterval(() => {
@@ -3174,10 +3525,9 @@
     // Опубликована новая схема: подписи, кнопки, фильтры и порядок очереди — по ней (§14.6)
     if (msg.type === "workflow.schema_published") {
       return loadWorkflow().then(() => {
-        renderEscalateDefault();
+        renderAutoLevels();
         renderTypeFilters();
-        renderHotkeysHelp();
-        reload();
+            reload();
       });
     }
     // Доступ к объекту пропал (§5): данных инцидента больше нет — только номер; карточка закрывается
@@ -3201,9 +3551,6 @@
       if (notice && (notice.audience === "observers" || (notice.audience === "newAddressee" && toMe))) {
         toast(t(notice.key, { id, who: who(msg.actor), addressee: who(p.addressee), previousOwner: who(p.owner && p.owner.from) }));
       }
-    } else if (msg.type === "incident.group_changed" && !msg.payload.groupGuid && isMine(msg.incident)) {
-      // Система вывела мой инцидент из группы: владелец разошёлся с группой (§11, RULE-57)
-      toast(t("{id} вышел из групповой обработки", { id }));
     }
     reload();
   }

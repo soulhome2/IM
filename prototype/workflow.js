@@ -36,6 +36,12 @@ window.IM_WORKFLOW = {
       "id": "done",
       "labelKey": "workflow.category.done",
       "countsAsOpen": false
+    },
+    {
+      "id": "linked",
+      "labelKey": "workflow.category.linked",
+      "countsAsOpen": false,
+      "$comment": "§11 (черновик). Связанное событие объединённого инцидента: в списках не показывается, живёт в карточке основного"
     }
   ],
   "states": [
@@ -80,11 +86,26 @@ window.IM_WORKFLOW = {
       "terminal": true,
       "owner": "closed_by",
       "activeTimer": null
+    },
+    {
+      "id": "linked",
+      "$comment": "§11.4. Связан с основным инцидентом (linked_to): владельца нет, в списках не показывается. Норматив закрытия, если уже шёл, продолжает идти: истёк — нарушение на владельца основного (linked_resolution_overdue). Выход — «Отсоединить» (в новые) или закрытие вместе с основным",
+      "labelKey": "workflow.state.linked",
+      "category": "linked",
+      "terminal": false,
+      "owner": "none",
+      "activeTimer": "resolution"
     }
   ],
   "badges": {
     "$comment": "§2.4. Бейдж не хранится — вычисляется сервером под смотрящего оператора и отдаётся в поле badge каждой записи очереди.",
     "rules": [
+      {
+        "state": "linked",
+        "viewerRole": "any",
+        "labelKey": "workflow.badge.linked.any",
+        "style": "linked"
+      },
       {
         "state": "new",
         "viewerRole": "any",
@@ -232,7 +253,8 @@ window.IM_WORKFLOW = {
       ],
       "stopsOnEnter": [
         "in_progress",
-        "closed"
+        "closed",
+        "linked"
       ],
       "pausable": false,
       "defaultSec": 300,
@@ -267,9 +289,10 @@ window.IM_WORKFLOW = {
       "labelKey": "workflow.timer.resolution",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
-      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches.",
+      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches. У привязанного (§11.4) идёт дальше, если уже шёл (merge — resumeTimer ifStarted): объединением просрочку не скрыть.",
       "startsOnEnter": [
-        "in_progress"
+        "in_progress",
+        "linked"
       ],
       "startsOnce": true,
       "stopsOnEnter": [],
@@ -307,7 +330,8 @@ window.IM_WORKFLOW = {
         "in_progress",
         "new",
         "pending_acceptance",
-        "closed"
+        "closed",
+        "linked"
       ],
       "pausable": false,
       "secFrom": "reasonCatalogs.hold[].maxMinutes",
@@ -536,7 +560,7 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.transfer.field.targetId",
           "required": true,
           "source": "transferTargets",
-          "defaultFrom": "session.preferences.defaultTransferTargetId",
+          "defaultFrom": "session.lastTransferTargetId",
           "excludes": [
             "self",
             "currentOwner",
@@ -630,12 +654,6 @@ window.IM_WORKFLOW = {
       "confirmKey": "workflow.form.close.confirm",
       "style": "primary",
       "notes": [
-        {
-          "when": {
-            "grouped": true
-          },
-          "textKey": "workflow.form.close.note.0"
-        },
         {
           "when": {},
           "textKey": "workflow.form.close.note.1"
@@ -833,17 +851,13 @@ window.IM_WORKFLOW = {
         }
       ],
       "bulk": {
-        "allowed": true,
-        "mode": "same_type_new",
-        "minItems": 2,
-        "createsGroup": true
+        "allowed": false
       },
       "ui": {
         "surface": [
           "queue"
         ],
         "style": "primary",
-        "hotkey": "N",
         "navigate": "card",
         "observerNotice": {
           "key": "workflow.notice.claim",
@@ -929,7 +943,7 @@ window.IM_WORKFLOW = {
       ],
       "bulk": {
         "allowed": true,
-        "mode": "group",
+        "mode": "each_allowed",
         "minItems": 2
       },
       "ui": {
@@ -938,7 +952,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "primary",
-        "hotkey": "A",
         "navigate": "card"
       }
     },
@@ -995,10 +1008,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.reject"
@@ -1016,7 +1025,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "outline",
-        "hotkey": null,
         "navigate": "queue"
       }
     },
@@ -1088,7 +1096,7 @@ window.IM_WORKFLOW = {
       ],
       "bulk": {
         "allowed": true,
-        "mode": "group",
+        "mode": "each_allowed",
         "minItems": 2
       },
       "ui": {
@@ -1096,7 +1104,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "outline",
-        "hotkey": "H",
         "navigate": "queue"
       }
     },
@@ -1175,7 +1182,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "primary",
-        "hotkey": "R",
         "navigate": "card"
       }
     },
@@ -1244,10 +1250,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.release"
@@ -1260,7 +1262,7 @@ window.IM_WORKFLOW = {
       ],
       "bulk": {
         "allowed": true,
-        "mode": "group",
+        "mode": "each_allowed",
         "minItems": 2
       },
       "ui": {
@@ -1268,7 +1270,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "outline",
-        "hotkey": null,
         "navigate": "queue"
       }
     },
@@ -1321,6 +1322,9 @@ window.IM_WORKFLOW = {
         },
         {
           "fn": "targetHasAccess"
+        },
+        {
+          "fn": "targetHasAccessToLinked"
         },
         {
           "fn": "targetCanAccept"
@@ -1415,7 +1419,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "warn",
-        "hotkey": "E",
         "navigate": "queue",
         "observerNotice": {
           "key": "workflow.notice.transfer",
@@ -1534,7 +1537,7 @@ window.IM_WORKFLOW = {
       ],
       "bulk": {
         "allowed": true,
-        "mode": "group",
+        "mode": "each_allowed",
         "minItems": 2
       },
       "ui": {
@@ -1542,7 +1545,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "danger",
-        "hotkey": "T",
         "navigate": "card",
         "$comment": "§7. Только из карточки: оператор должен сначала увидеть, что уже сделано."
       }
@@ -1678,11 +1680,10 @@ window.IM_WORKFLOW = {
       ],
       "bulk": {
         "allowed": true,
-        "mode": "group_or_each_allowed",
-        "$comment": "§11. Группа сценария закрывается одним результатом на всех; ручная выборка — если выбранный результат доступен каждому.",
+        "mode": "each_allowed",
+        "$comment": "§11. Выборка закрывается одним результатом — если он доступен каждому отмеченному.",
         "minItems": 2,
-        "sharedForm": true,
-        "createsGroup": false
+        "sharedForm": true
       },
       "ui": {
         "surface": [
@@ -1690,7 +1691,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "outline",
-        "hotkey": "Enter",
         "navigate": "queue"
       }
     },
@@ -1770,10 +1770,6 @@ window.IM_WORKFLOW = {
             "resolution",
             "limits.reopenResolutionSec"
           ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "clearGroup"
         }
       ],
       "bulk": {
@@ -1785,7 +1781,6 @@ window.IM_WORKFLOW = {
           "card"
         ],
         "style": "outline",
-        "hotkey": null,
         "navigate": "card"
       }
     },
@@ -1886,7 +1881,6 @@ window.IM_WORKFLOW = {
       "ui": {
         "surface": [],
         "style": null,
-        "hotkey": null,
         "navigate": null,
         "observerNotice": {
           "key": "workflow.notice.auto_escalate",
@@ -2055,6 +2049,52 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "workflow.journal.resolution_overdue"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "notify",
+          "args": [
+            "alerts.target"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "linked_resolution_overdue",
+      "labelKey": "workflow.transition.linked_resolution_overdue",
+      "$comment": "§11.4. Истёк норматив закрытия привязанного события (у своего в работе или отложенного он идёт и после объединения): нарушение — на владельца основного, алерт. Эскалации нет: своего владельца у привязанного нет. Так объединением не скрыть близкую просрочку.",
+      "from": [
+        "linked"
+      ],
+      "to": null,
+      "trigger": "timer",
+      "actor": "dispatcher",
+      "guards": [
+        {
+          "fn": "timerExpired",
+          "args": [
+            "resolution"
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "recordBreach",
+          "args": [
+            "resolution",
+            "primaryOwner"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.linked_resolution_overdue"
           ]
         },
         {
@@ -2464,10 +2504,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.system_release_idle"
@@ -2572,10 +2608,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.addressee_signed_out_to_queue"
@@ -2638,10 +2670,6 @@ window.IM_WORKFLOW = {
           "args": [
             "reaction"
           ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "clearGroup"
         },
         {
           "kind": "transactional",
@@ -2724,10 +2752,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.addressee_lost_access"
@@ -2800,10 +2824,6 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearGroup"
-        },
-        {
-          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.addressee_cannot_accept"
@@ -2821,6 +2841,246 @@ window.IM_WORKFLOW = {
           "fn": "notify",
           "args": [
             "alerts.target"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "merge",
+      "$comment": "§11 (черновик). «Взять в работу» на выборке — как одно: отмеченные становятся связанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается связанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
+      "labelKey": "workflow.transition.merge",
+      "hintKey": "workflow.transition.merge.hint",
+      "from": [
+        "new",
+        "in_progress",
+        "on_hold"
+      ],
+      "to": "linked",
+      "trigger": "manual",
+      "concurrency": {
+        "expectedVersion": false,
+        "onTimerConflict": "manual_wins"
+      },
+      "form": null,
+      "requiredStepSet": "none",
+      "guards": [
+        {
+          "fn": "hasPermission",
+          "args": [
+            "incident:bulk"
+          ]
+        },
+        {
+          "fn": "agentReady"
+        },
+        {
+          "fn": "isOwnerOrUnowned"
+        },
+        {
+          "fn": "mergePrimaryValid"
+        },
+        {
+          "fn": "sameScenarioAsPrimary"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "copyAnswersToPrimary",
+          "args": [
+            "workflow.journal.answers_moved"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "relinkToPrimary",
+          "args": [
+            "workflow.journal.merge"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setLinkedTo",
+          "args": [
+            "form.primaryId"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setAssignmentGroup",
+          "args": [
+            null
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearHoldReason"
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "resumeTimer",
+          "args": [
+            "resolution",
+            "ifStarted"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.merge"
+          ]
+        }
+      ],
+      "bulk": {
+        "allowed": true,
+        "mode": "merge",
+        "minItems": 2
+      },
+      "ui": {
+        "surface": [],
+        "style": "outline",
+        "navigate": "card",
+        "$comment": "§11. Кнопки нет: «Взять в работу» на панели выборки. После — карточка основного на его текущем шаге сценария (основной новый берётся переходом takeWith — с первого незаполненного шага)."
+      }
+    },
+    {
+      "id": "detach",
+      "$comment": "§11 (черновик). «Отсоединить» из карточки основного: связанное событие возвращается в очередь новым, норматив реакции — заново",
+      "labelKey": "workflow.transition.detach",
+      "hintKey": "workflow.transition.detach.hint",
+      "from": [
+        "linked"
+      ],
+      "to": "new",
+      "trigger": "manual",
+      "concurrency": {
+        "expectedVersion": false,
+        "onTimerConflict": "manual_wins"
+      },
+      "form": null,
+      "requiredStepSet": "none",
+      "guards": [
+        {
+          "fn": "agentReady"
+        },
+        {
+          "fn": "primaryEditable"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.detach"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearLink"
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "returnToQueue"
+        }
+      ],
+      "bulk": {
+        "allowed": false
+      },
+      "ui": {
+        "surface": [
+          "card"
+        ],
+        "style": "outline",
+        "navigate": null
+      }
+    },
+    {
+      "id": "close_linked",
+      "$comment": "§11 (черновик). Основной закрыт — связанные закрываются с его результатом, причиной, комментарием и закрывшим; связь остаётся историей",
+      "labelKey": "workflow.transition.close_linked",
+      "from": [
+        "linked"
+      ],
+      "to": "closed",
+      "trigger": "system",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "primaryClosed"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "copyCloseFromPrimary"
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closed_at",
+            "now"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.close_linked"
+          ]
+        },
+        {
+          "kind": "external",
+          "fn": "externalCommand",
+          "args": [
+            "axxondata.export_incident"
           ]
         }
       ],
@@ -2975,13 +3235,12 @@ window.IM_WORKFLOW = {
     "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
   "limits": {
-    "$comment": "§10.2, §11. Инциденты одной группы считаются одной единицей, иначе групповая обработка упиралась бы в лимит активных. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
-    "maxActive": 1,
+    "$comment": "§10.2, §11. Связанные события объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
+    "maxActive": null,
     "maxOnHold": 5,
-    "maxBulk": 10,
+    "maxBulk": null,
     "reopenWindowMin": 1440,
-    "reopenResolutionSec": null,
-    "groupCountsAsOneUnit": true
+    "reopenResolutionSec": null
   },
   "scenarioEdit": {
     "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (PATCH .../scenario/answers, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
@@ -3003,61 +3262,8 @@ window.IM_WORKFLOW = {
     ]
   },
   "grouping": {
-    "$comment": "§11. Группа — признак (group_id), а не сущность: родительский инцидент не создаётся. memberLeavesGroupOn: owner_diverges — после операции целиком (действие на группу, такт планировщика) группа делится по владельцу или адресату: самая большая часть остаётся группой, при равенстве — часть с инцидентом с наименьшим номером; каждая другая часть из двух и более — новая группа с копией общих ответов; одиночный выходит со своей копией ответов (RULE-56). Закрытые не делятся: group_id у закрытых — история (RULE-59). Переходы в очередь выводят из группы эффектом clearGroup (RULE-52). wholeGroupOnly — переходы, которые на инциденте группы выполняются только вместе со всеми её открытыми инцидентами в одном запросе и только если каждый из них проходит условия — всё или ничего; иначе отказ BULK_SELECTION_INVALID «Инцидент в группе: закройте всю группу или сначала исключите его из группы» (§11, BUG-29).",
-    "enabled": true,
-    "permissions": [
-      "incident:bulk",
-      "incident:claim"
-    ],
-    "createFrom": {
-      "states": [
-        "new"
-      ],
-      "sameEventType": true,
-      "minItems": 2,
-      "maxItems": 10
-    },
-    "shared": [
-      "group_id",
-      "owner",
-      "assignment_group",
-      "scenarioAnswers"
-    ],
-    "notShared": [
-      "state",
-      "timers",
-      "journal"
-    ],
-    "memberLeavesGroupOn": [
-      "manual_exclude",
-      "owner_diverges"
-    ],
-    "wholeGroupOnly": [
-      "close"
-    ],
-    "excludeGuards": [
-      {
-        "fn": "stateIs",
-        "args": [
-          [
-            "in_progress"
-          ]
-        ]
-      },
-      {
-        "fn": "isOwner"
-      },
-      {
-        "fn": "agentReady"
-      },
-      {
-        "fn": "withinActiveLimit",
-        "args": [
-          1
-        ],
-        "$comment": "§10.2, RULE-13: исключённый инцидент остаётся в работе отдельной единицей — лимит должен это позволять"
-      }
-    ],
+    "$comment": "§11 (черновик). Групп сценария нет. Выборка (из дерева — «Выделить по фильтру», или отметками) — разом одно действие (bulk у переходов). «Взять в работу» на выборке — как одно: переход merge (основной и связанные события), основной новый — переходом takeWith. Здесь — takeWith и помощники выборки.",
+    "takeWith": "claim",
     "selectionHelpers": [
       {
         "id": "select_all",
@@ -3066,15 +3272,8 @@ window.IM_WORKFLOW = {
         "limit": "maxBulk"
       },
       {
-        "id": "select_same_type",
-        "labelKey": "workflow.selection.select_same_type",
-        "scope": "state:new + same_event_type",
-        "hotkey": "Shift+A"
-      },
-      {
         "id": "clear_selection",
-        "labelKey": "workflow.selection.clear_selection",
-        "hotkey": "Shift+D"
+        "labelKey": "workflow.selection.clear_selection"
       }
     ]
   },
@@ -3127,153 +3326,6 @@ window.IM_WORKFLOW = {
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
   },
-  "hotkeys": [
-    {
-      "key": "N",
-      "action": "transition:claim",
-      "labelKey": "workflow.hotkey.transition.claim",
-      "scope": "next_new",
-      "worksInInput": false
-    },
-    {
-      "key": "A",
-      "action": "transition:accept",
-      "labelKey": "workflow.hotkey.transition.accept",
-      "worksInInput": false
-    },
-    {
-      "key": "R",
-      "action": "transition:resume",
-      "labelKey": "workflow.hotkey.transition.resume",
-      "worksInInput": false
-    },
-    {
-      "key": "E",
-      "action": "transition:transfer",
-      "labelKey": "workflow.hotkey.transition.transfer",
-      "worksInInput": false
-    },
-    {
-      "key": "T",
-      "action": "transition:takeover",
-      "labelKey": "workflow.hotkey.transition.takeover",
-      "worksInInput": false
-    },
-    {
-      "key": "H",
-      "action": "transition:hold",
-      "labelKey": "workflow.hotkey.transition.hold",
-      "worksInInput": false
-    },
-    {
-      "key": "G",
-      "action": "group:create",
-      "labelKey": "workflow.hotkey.group.create",
-      "worksInInput": false
-    },
-    {
-      "key": "Shift+A",
-      "action": "selection:same_type",
-      "labelKey": "workflow.hotkey.selection.same_type",
-      "worksInInput": false
-    },
-    {
-      "key": "Shift+D",
-      "action": "selection:clear",
-      "labelKey": "workflow.hotkey.selection.clear",
-      "worksInInput": false
-    },
-    {
-      "key": "B",
-      "action": "session:toggle_break",
-      "labelKey": "workflow.hotkey.session.toggle_break",
-      "worksInInput": false
-    },
-    {
-      "key": "Enter",
-      "action": "form:open:close",
-      "labelKey": "workflow.hotkey.form.open.close",
-      "worksInInput": false
-    },
-    {
-      "key": "ArrowLeft",
-      "action": "media:camera_prev",
-      "labelKey": "workflow.hotkey.media.camera_prev",
-      "worksInInput": false
-    },
-    {
-      "key": "ArrowRight",
-      "action": "media:camera_next",
-      "labelKey": "workflow.hotkey.media.camera_next",
-      "worksInInput": false
-    },
-    {
-      "key": "1",
-      "action": "media:camera_select",
-      "labelKey": "workflow.hotkey.media.camera_select",
-      "args": [
-        1
-      ],
-      "worksInInput": false
-    },
-    {
-      "key": "2",
-      "action": "media:camera_select",
-      "labelKey": "workflow.hotkey.media.camera_select",
-      "args": [
-        2
-      ],
-      "worksInInput": false
-    },
-    {
-      "key": "3",
-      "action": "media:camera_select",
-      "labelKey": "workflow.hotkey.media.camera_select",
-      "args": [
-        3
-      ],
-      "worksInInput": false
-    },
-    {
-      "key": "4",
-      "action": "media:camera_select",
-      "labelKey": "workflow.hotkey.media.camera_select",
-      "args": [
-        4
-      ],
-      "worksInInput": false
-    },
-    {
-      "key": "F1",
-      "action": "docs:regulation",
-      "labelKey": "workflow.hotkey.docs.regulation",
-      "worksInInput": true,
-      "worksInModal": true,
-      "reassignable": false
-    },
-    {
-      "key": "?",
-      "action": "docs:hotkeys",
-      "labelKey": "workflow.hotkey.docs.hotkeys",
-      "worksInInput": false,
-      "worksInModal": true,
-      "reassignable": false
-    },
-    {
-      "key": "Esc",
-      "action": "escape_chain",
-      "labelKey": "workflow.hotkey.escape_chain",
-      "worksInInput": true,
-      "worksInModal": true,
-      "reassignable": false,
-      "chain": [
-        "close_form",
-        "exit_fullscreen",
-        "close_groups_panel",
-        "back_to_queue"
-      ]
-    }
-  ],
   "queueFilters": [
     {
       "id": "open",
@@ -3319,7 +3371,12 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "all",
-      "labelKey": "workflow.filter.all"
+      "labelKey": "workflow.filter.all",
+      "stateCategories": [
+        "pending",
+        "active",
+        "done"
+      ]
     }
   ],
   "queueGrouping": {
@@ -3361,20 +3418,6 @@ window.IM_WORKFLOW = {
       ],
       "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)"
     },
-    "workflow.journal.group.created": {
-      "vars": [
-        "ids"
-      ],
-      "$comment": "§11. Группа сценария создана; ids — номера остальных её инцидентов"
-    },
-    "workflow.journal.group.excluded": {
-      "vars": [],
-      "$comment": "§11. Ручное исключение из группы"
-    },
-    "workflow.journal.group.left": {
-      "vars": [],
-      "$comment": "§11 (RULE-57). Вышел из группы: владелец разошёлся с группой"
-    },
     "workflow.journal.macro.launched": {
       "vars": [
         "name"
@@ -3406,6 +3449,49 @@ window.IM_WORKFLOW = {
       ]
     },
     "workflow.guard.not_owner": {
+      "vars": []
+    },
+    "workflow.guard.merge_primary": {
+      "vars": []
+    },
+    "workflow.guard.merge_scenario": {
+      "vars": []
+    },
+    "workflow.error.merge.scenarios": {
+      "vars": [
+        "titles"
+      ]
+    },
+    "workflow.guard.primary_not_editable": {
+      "vars": []
+    },
+    "workflow.guard.primary_open": {
+      "vars": []
+    },
+    "workflow.guard.target_no_access_linked": {
+      "vars": []
+    },
+    "workflow.journal.merged_in": {
+      "vars": [
+        "ids"
+      ],
+      "$comment": "§11 (черновик). Основному: к нему присоединены связанные; ids — их номера, не больше пяти"
+    },
+    "workflow.journal.merged_in_more": {
+      "vars": [
+        "ids",
+        "more"
+      ],
+      "$comment": "§11 (черновик). То же, присоединено больше пяти: ids — первые пять номеров, more — сколько ещё"
+    },
+    "workflow.error.selection.item": {
+      "vars": [
+        "number",
+        "reason"
+      ],
+      "$comment": "§11. Причина недоступности действия на панели выборки: номер инцидента, которому оно недоступно, и причина"
+    },
+    "workflow.error.merge.too_few": {
       "vars": []
     },
     "workflow.guard.already_owner": {
@@ -3451,11 +3537,6 @@ window.IM_WORKFLOW = {
       "vars": [
         "n",
         "id"
-      ]
-    },
-    "workflow.guard.active_limit_extra": {
-      "vars": [
-        "n"
       ]
     },
     "workflow.guard.hold_limit": {
@@ -3513,39 +3594,6 @@ window.IM_WORKFLOW = {
     "workflow.error.unknown_action": {
       "vars": []
     },
-    "workflow.error.group.disabled": {
-      "vars": []
-    },
-    "workflow.error.group.no_permission": {
-      "vars": []
-    },
-    "workflow.error.group.too_few": {
-      "vars": [
-        "n"
-      ]
-    },
-    "workflow.error.group.too_many": {
-      "vars": [
-        "max"
-      ]
-    },
-    "workflow.error.group.new_only": {
-      "vars": []
-    },
-    "workflow.error.group.same_type": {
-      "vars": []
-    },
-    "workflow.error.group.whole_only": {
-      "vars": []
-    },
-    "workflow.error.group.not_closed": {
-      "vars": [
-        "id"
-      ]
-    },
-    "workflow.error.group.not_member": {
-      "vars": []
-    },
     "workflow.error.precondition_required": {
       "vars": []
     },
@@ -3553,9 +3601,6 @@ window.IM_WORKFLOW = {
       "vars": [
         "state"
       ]
-    },
-    "workflow.error.selection_partial_group": {
-      "vars": []
     },
     "workflow.error.selection_unavailable": {
       "vars": []
@@ -3624,6 +3669,14 @@ window.IM_WORKFLOW = {
       "vars": []
     },
     "workflow.label.nobody_present": {
+      "vars": []
+    },
+    "workflow.label.absent.break": {
+      "vars": [
+        "reason"
+      ]
+    },
+    "workflow.label.absent.offline": {
       "vars": []
     },
     "workflow.scenario.confirmation": {
@@ -3796,15 +3849,12 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "withinActiveLimit",
-        "args": [
-          "extraUnits?"
-        ],
+        "args": [],
         "onFail": "disable",
         "failKeys": [
-          "workflow.guard.active_limit",
-          "workflow.guard.active_limit_extra"
+          "workflow.guard.active_limit"
         ],
-        "$comment": "§10.2. Сколько единиц уже в работе, не считая единицы самого инцидента (группа — одна единица). extraUnits — сколько единиц добавит действие сверх неё: исключение из группы делает её двумя (RULE-13)."
+        "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; связанные события объединённого в лимит не входят — у них нет владельца."
       },
       {
         "fn": "withinHoldLimit",
@@ -3814,7 +3864,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.hold_limit"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold, группа сценария — одна единица. Только у ручного «Отложить»."
+        "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»."
       },
       {
         "fn": "withinReopenWindow",
@@ -3929,6 +3979,66 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)."
+      },
+      {
+        "fn": "isOwnerOrUnowned",
+        "args": [],
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.not_owner"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Инцидент ничей (новый) или мой: объединять можно только такие"
+      },
+      {
+        "fn": "mergePrimaryValid",
+        "args": [],
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.merge_primary"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Основной (form.primaryId) — другой, открытый, не связанный, виден оператору; новый или мой в работе"
+      },
+      {
+        "fn": "sameScenarioAsPrimary",
+        "args": [],
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.merge_scenario"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Сценарий тот же, что у основного (form.primaryId): как одно берутся только события одного сценария"
+      },
+      {
+        "fn": "primaryEditable",
+        "args": [],
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.primary_not_editable"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Отсоединять может тот, кто ведёт основной, или любой, пока основной новый"
+      },
+      {
+        "fn": "primaryClosed",
+        "args": [],
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.primary_open"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Основной инцидент связанного закрыт"
+      },
+      {
+        "fn": "targetHasAccessToLinked",
+        "args": [],
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.target_no_access_linked"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик), §5. У адресата передачи (form.targetId) есть доступ к объектам всех связанных событий; до заполнения формы условие выполнено"
       }
     ],
     "effects": [
@@ -3970,12 +4080,12 @@ window.IM_WORKFLOW = {
         "fn": "recordBreach",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
+        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент; второй аргумент primaryOwner — владелец основного (у привязанного своего нет, §11.4). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
       },
       {
         "fn": "resumeTimer",
         "kind": "transactional",
-        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer."
+        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer. Второй аргумент ifStarted — только если таймер уже запускался: ещё не шедший не запускается (merge, §11.4)."
       },
       {
         "fn": "increment",
@@ -4005,10 +4115,34 @@ window.IM_WORKFLOW = {
         "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep). У «Взять», «Принять», «Возобновить», «Перехватить»."
       },
       {
-        "fn": "clearGroup",
+        "fn": "setLinkedTo",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11 (BUG-27). Инцидент выходит из группы сценария: group_id снимается, ответы сценария остаются у него своей копией и дальше меняются отдельно от группы."
+        "$comment": "§11 (черновик). linked_to — основной инцидент (form.primaryId)"
+      },
+      {
+        "fn": "clearLink",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Связь с основным снимается"
+      },
+      {
+        "fn": "copyAnswersToPrimary",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Заполненные шаги сценария связанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у связанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента"
+      },
+      {
+        "fn": "relinkToPrimary",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Открытые связанные объединяемого переходят к новому основному: связанного у связанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история"
+      },
+      {
+        "fn": "copyCloseFromPrimary",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11 (черновик). Результат, причина, комментарий и закрывший — от основного"
       },
       {
         "fn": "notify",
@@ -4028,7 +4162,6 @@ window.IM_WORKFLOW = {
       "state_without_incoming",
       "permission_set_state_without_any_transition",
       "target_permission_set_cannot_exit_state",
-      "duplicate_hotkey",
       "unknown_permission_reference",
       "unused_permission"
     ],
@@ -4092,7 +4225,6 @@ window.IM_WORKFLOW = {
       "alerts",
       "limits",
       "session",
-      "hotkeys",
       "queueSort"
     ],
     "valueLabels": {
@@ -4269,18 +4401,6 @@ window.IM_WORKFLOW = {
         ]
       },
       {
-        "id": "hotkeys",
-        "labelKey": "workflow.settings.tab.hotkeys",
-        "rules": "§13",
-        "items": [
-          {
-            "path": "hotkeys",
-            "labelKey": "workflow.settings.hotkeys",
-            "whatKey": "workflow.settings.hotkeys.what"
-          }
-        ]
-      },
-      {
         "id": "queue",
         "labelKey": "workflow.settings.tab.queue",
         "rules": "§7",
@@ -4374,10 +4494,6 @@ window.IM_WORKFLOW = {
       {
         "path": "reasonCatalogs.mass_fault",
         "why": "кроме списка причин — поле и обязательность (модель)"
-      },
-      {
-        "path": "limits.groupCountsAsOneUnit",
-        "why": "правило §11: группа сценария — одна единица лимита"
       },
       {
         "path": "session.states",

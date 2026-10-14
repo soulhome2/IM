@@ -180,6 +180,19 @@
       workflow: withEscalation({ onResolutionOverdue: "escalate", maxLevel: 0 }),
       async setup(env) { const inc = await newFire(env); await env.act(inc.guid, "claim", {}, "queue"); return inc.guid; },
     },
+    linked_resolution_overdue: {
+      windowSec: 1500,
+      workflow: W,
+      // Свой в работе стал привязанным к другому своему — его норматив закрытия идёт дальше (§11.4)
+      async setup(env) {
+        const linked = await newFire(env);
+        await env.act(linked.guid, "claim", {}, "queue");
+        const primary = (await env.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire");
+        await env.act(primary.guid, "claim", {}, "queue");
+        assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, linked.guid], primaryGuid: primary.guid }), 200, null, "взять в работу одним");
+        return linked.guid;
+      },
+    },
     hold_overdue: {
       windowSec: 3700,
       workflow: W,

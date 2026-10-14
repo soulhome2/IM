@@ -4,7 +4,7 @@
 Запуск из корня репозитория: python3 tools/check_machine.py
 Проверяет, что всё из реестров условий и эффектов реализовано в prototype/engine.js;
 что переходы ссылаются на существующие состояния, формы, условия, эффекты,
-права и таймеры; что справочники, горячие клавиши и фильтры очереди ссылаются на то,
+права и таймеры; что справочники и фильтры очереди ссылаются на то,
 что есть в модели; что состояния, справочники и бейджи в API совпадают с моделью
 и все $ref в API разрешаются; что интерфейс прототипа (app.js) говорит только с API
 и не трогает исполнитель и демо-данные напрямую; что эталонный набор fixtures/demo.json ссылается
@@ -47,7 +47,6 @@ def check_workflow(w, err):
         ("переходы", [t["id"] for t in w["transitions"]]),
         ("формы", [f["id"] for f in w["forms"]]),
         ("права", [p["key"] for p in w["permissions"]]),
-        ("горячие клавиши", [h["key"] for h in w["hotkeys"]]),
     ]:
         for d in duplicates(ids):
             err.append(f"дубль: {name} — {d}")
@@ -101,15 +100,6 @@ def check_workflow(w, err):
         if item.get("causeCatalog") and item["causeCatalog"] not in catalogs:
             err.append(f"результат {rid}: нет справочника {item['causeCatalog']}")
 
-    keys = [h["key"] for h in w["hotkeys"]]
-    for key in sorted({k for k in keys if keys.count(k) > 1}):
-        err.append(f"клавиша {key} назначена дважды (§13, правило 5)")
-    for h in w["hotkeys"]:
-        if h["key"].startswith("Ctrl+"):
-            err.append(f"клавиша {h['key']}: сочетания с Ctrl занимает браузер (§13, правило 5)")
-        action = h["action"]
-        if action.startswith("transition:") and action.split(":", 1)[1] not in transitions:
-            err.append(f"клавиша {h['key']}: нет перехода {action}")
     for x in w["validation"]["claimWithoutExitPermission"]["requiresAnyOf"]:
         if x not in perms:
             err.append(f"проверка §10.3: нет права {x}")
@@ -204,18 +194,13 @@ def check_fixture(w, err):
     people = fx["people"]
     humans = {o["id"] for o in people["operators"]}
     groups = {g["id"] for g in people["dutyGroups"]}
-    target = (fx.get("operatorPreferences") or {}).get("defaultTransferTargetId")
     # Дежурные группы (§8.1): участники — люди с одной из ролей группы плюс названные отдельно
-    my_roles = next((o.get("roles", []) for o in people["operators"] if o["id"] == fx.get("operator")), [])
-    own = {g["id"] for g in people["dutyGroups"] if fx.get("operator") in g.get("members", []) or set(my_roles) & set(g.get("roles", []))}
     for g in people["dutyGroups"]:
         if not g.get("roles") and not g.get("members"):
             err.append(f"эталон: дежурная группа {g['id']} — ни ролей, ни участников")
         for m in g.get("members", []):
             if m not in humans:
                 err.append(f"эталон: дежурная группа {g['id']} — нет человека {m}")
-    if target is not None and (target not in humans | groups or target == fx.get("operator") or target in own):
-        err.append(f"эталон: operatorPreferences.defaultTransferTargetId «{target}» — нет такого адресата или это сам оператор и его группа (§10.1)")
     system = {a["id"] for a in people["system"]}
     devices = {d["id"] for d in fx["devices"]}
     fx_devices = {d["id"]: d for d in fx["devices"]}
@@ -284,6 +269,11 @@ def check_fixture(w, err):
     for o in people["operators"]:
         if o.get("agentState") not in agent_states:
             err.append(f"эталон: у человека {o['id']} состояние agentState «{o.get('agentState')}» — нет в session.states машины (§12.1)")
+        needs_reason = any(st["id"] == o.get("agentState") and st.get("requiresReason") for st in w["session"]["states"])
+        if needs_reason and o.get("reasonId") not in {r["id"] for r in w["session"]["breakReasons"]}:
+            err.append(f"эталон: у человека {o['id']} на перерыве причина reasonId «{o.get('reasonId')}» — нет в session.breakReasons (§12.1)")
+        if not needs_reason and o.get("reasonId") is not None:
+            err.append(f"эталон: у человека {o['id']} причина reasonId без перерыва (§12.1)")
         if not isinstance(o.get("roles"), list) or not o["roles"]:
             err.append(f"эталон: у оператора {o['id']} нет ролей (roles) — ему ничего не видно (§5)")
     for kind, value in entities:
@@ -395,7 +385,7 @@ def check_fixture(w, err):
             if inc["state"] == state and inc["owner"]:
                 per[inc["owner"]] = per.get(inc["owner"], 0) + 1
         for who, n in per.items():
-            if n > limit:
+            if limit is not None and n > limit:
                 err.append(f"эталон: у {who} {name} {n}, лимит — {limit} (§10.2)")
 
 
@@ -692,6 +682,7 @@ def guard_terms(g):
         "addresseeHasAccess": lambda: ("у адресата есть доступ", a[0]),
         "addresseeCanAccept": lambda: ("адресат может принять", a[0]),
         "holdReasonIn": lambda: ("причина удержания в " + ",".join(a[0]), True),
+        "primaryClosed": lambda: ("основной закрыт", True),
     }.get(fn, lambda: None)()
 
 
@@ -1050,33 +1041,6 @@ def check_served(o, err):
         err.append(f"поток событий: тип {t} — {'нет строки в таблице событий' if t in enum else 'в таблице, но не в перечне'} (ARCH-04)")
 
 
-def check_grouping(w, err):
-    """Группа сценария следует за владельцем (§11, RULE-52; grouping.memberLeavesGroupOn: owner_diverges).
-    Описание сверяется с эффектами в обе стороны. Нужен clearGroup: переход в состояние без владельца;
-    ручной переход со сменой владельца, который не идёт на группу (кроме создающего группу и перехода
-    в терминальное). Лишний clearGroup: в остальных переходах — группа уходит вместе, а кто отстал,
-    выходит по owner_diverges."""
-    if "owner_diverges" not in w["grouping"].get("memberLeavesGroupOn", []):
-        return
-    states = {s["id"]: s for s in w["states"]}
-    for t in w["transitions"]:
-        if t["trigger"] == "event":
-            continue  # появление: группы у нового инцидента ещё нет (RULE-61)
-        fns = [e["fn"] for e in t["effects"]]
-        bulk = t.get("bulk") or {}
-        clears = "clearGroup" in fns
-        to = states.get(t.get("to")) or {}
-        ownerless = to.get("owner") == "none"
-        manual_alone = t["trigger"] == "manual" and "setOwner" in fns and not bulk.get("allowed")
-        exempt = bulk.get("createsGroup") or to.get("terminal")
-        if ownerless and not clears:
-            err.append(f"группа: {t['id']} ведёт в {t['to']} без владельца, но не выводит из группы (clearGroup, §11)")
-        elif manual_alone and not exempt and not clears:
-            err.append(f"группа: {t['id']} меняет владельца одного инцидента — нужен режим группы (bulk) или clearGroup (RULE-52)")
-        elif clears and not ownerless and not manual_alone:
-            err.append(f"группа: {t['id']} с clearGroup, а группа должна уходить вместе — лишний clearGroup (RULE-52, owner_diverges)")
-
-
 def check_graph(w, err):
     """Граф состояний (RULE-46): ровно одно начальное, оно не терминальное; каждое состояние
     достижимо из него; у каждого нетерминального есть выход в другое состояние."""
@@ -1184,7 +1148,6 @@ def main():
     check_fixture_journal(w, err)
     check_graph(w, err)
     check_state_owners(w, err)
-    check_grouping(w, err)
     check_priorities(w, o, err)
     check_priority_literals(err)
     check_limits(w, err)

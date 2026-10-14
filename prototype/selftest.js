@@ -294,13 +294,24 @@
     expect(!list.length, `не переведено ${list.length}: «${list.slice(0, 8).join("», «")}»${list.length > 8 ? " …" : ""}`);
   }
 
+  // Самопроверка написана под лимит активных 1, а в машине — без ограничения: стенд задаёт 1 на весь прогон.
+  // extra — изменения стенда шага (JSON Merge Patch): свой limits заменяет этот
+  async function standReset(extra) {
+    const body = Object.assign({}, extra);
+    body.workflowPatch = Object.assign({ limits: { maxActive: 1 } }, body.workflowPatch);
+    return window.IM_SELFTEST_API.raw("POST", "/test/reset", body);
+  }
+
   async function run() {
+    if (window.IM_SELFTEST_API) {
+      await standReset({ fixture: "demo" });
+      await wait(400);
+    }
     let closedId = null;
     let workId = null;
     let acceptedId = null;
     let acceptedLeft = null;
     let freshId = null;
-    let groupPair = [];
 
     await step("Взять новое событие", async () => {
       await setFilter("open");
@@ -510,7 +521,7 @@
       expect(mode() === "work", "карточка не открылась");
     }, "Отложить");
 
-    await step("Передать; себя и своей группы нет среди адресатов", async () => {
+    await step("Передать; себя и своей группы нет среди адресатов; кого нет на месте — почему", async () => {
       await openOwn(workId);
       const b = button(root(), "transfer");
       expect(b, "в карточке нет кнопки «Передать»");
@@ -518,6 +529,9 @@
       const offered = [...field("targetId").options].map((o) => o.value);
       const self = offered.filter((id) => id === "me" || id === "grp-leads");
       expect(!self.length, `среди адресатов есть сам оператор или его группа: ${self.join(", ")}`);
+      const text = (id) => ([...field("targetId").options].find((o) => o.value === id) || {}).textContent || "";
+      expect(text("orlova").endsWith("· нет на месте — перерыв: Обед"), `у Орловой «${text("orlova")}»`);
+      expect(text("sidorov") && !text("sidorov").includes("нет на месте"), `у Сидорова «${text("sidorov")}»`);
       await confirmDialog(NOTE);
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
     }, "Возобновить");
@@ -627,10 +641,10 @@
       return freshId;
     });
 
-    await step("Esc в своей карточке возвращает к очереди, инцидент остаётся в работе", async () => {
+    await step("«К очереди» из своей карточки — инцидент остаётся в работе", async () => {
       await openOwn(freshId);
-      await pressKey("Escape");
-      expect(mode() === "queue", "Esc не вернул к очереди");
+      await click($("backToQueue"));
+      expect(mode() === "queue", "«К очереди» не вернула к очереди");
       await setFilter("mine");
       expect(button($("eventsList"), "open_card", freshId), `${freshId} больше не «В работе»`);
     }, "«Обработан» недоступен, пока сценарий не заполнен");
@@ -648,7 +662,7 @@
       const text = row ? row.textContent : "";
       await click($("breakBtn"));
       expect(text.includes("Перерыв оператора"), `${freshId} не отложен с причиной «Перерыв оператора»`);
-    }, "Esc в своей карточке возвращает к очереди, инцидент остаётся в работе");
+    }, "«К очереди» из своей карточки — инцидент остаётся в работе");
 
     await step("Закрыть отложенный с результатом «Массовый сбой»", async () => {
       await setFilter("mine");
@@ -682,61 +696,16 @@
       await confirmDialog(NOTE);
     }, "Закрыть отложенный с результатом «Массовый сбой»");
 
-    await step("Обработать как одно: два однотипных берутся вместе", async () => {
-      await setFilter("open");
-      // Тип, у которого на первой странице есть два новых события: перебираем фильтр по типу
-      const select = $("eventTypeFilter");
-      let pair = null;
-      for (const opt of [...select.options].filter((o) => o.value !== "all")) {
-        select.value = opt.value;
-        select.dispatchEvent(new Event("change"));
-        await wait();
-        const ids = [...$("eventsList").querySelectorAll(".event")]
-          .filter((r) => r.querySelector('[data-do="claim"]:not([aria-disabled="true"])'))
-          .map((r) => r.dataset.id);
-        if (ids.length >= 2) {
-          pair = ids.slice(0, 2);
-          break;
-        }
-      }
-      expect(pair, "нет типа событий с двумя новыми");
-      const [a, b] = pair;
-      groupPair = pair;
-      await click($("eventsList").querySelector(`[data-check="${a}"]`));
-      await click($("eventsList").querySelector(`[data-check="${b}"]`));
-      await click(button($("eventsList"), "claim", a));
-      select.value = "all";
-      select.dispatchEvent(new Event("change"));
-      if (mode() === "work") await click($("backToQueue"));
-      await setFilter("mine");
-      const both = [a, b].every((id) => $("eventsList").querySelector(`[data-id="${id}"]`));
-      expect(both, `в работу ушли не оба: ${a}, ${b}`);
-      return `${a} + ${b}`;
-    });
-
-    // При лимите активных 1 исключение сделало бы две единицы в работе (RULE-13). Путь, где
-    // исключение проходит, проверяет мутация exclude в tools/check_mutations.py
-    await step("Исключить из группы нельзя, если превысится лимит активных", async () => {
-      await openOwn(groupPair[0]);
-      const b = root().querySelector("[data-exclude]");
-      expect(b, "в карточке группы нет кнопки «Исключить из группы»");
-      expect(off(b), "кнопка активна, хотя лимит активных превысится");
-      expect((b.title || "").includes("Лимит активных"), `нет подсказки о лимите: «${b.title}»`);
-      await click($("backToQueue"));
-      return groupPair[0];
-    }, "Обработать как одно: два однотипных берутся вместе");
-
     await step("Фильтр по типу устройства поверх группы", async () => {
       await setFilter("all");
-      const select = $("deviceTypeFilter");
       const total = $("eventsList").querySelectorAll(".event").length;
-      select.value = "fire-detector";
-      select.dispatchEvent(new Event("change"));
+      await click($("deviceTypeFilter").querySelector("[data-tb-toggle]"));
+      await click($("deviceTypeFilter").querySelector('[data-tb][value="fire-detector"]'));
       await wait();
       const rows = [...$("eventsList").querySelectorAll(".event")];
       const stray = rows.filter((r) => !r.textContent.includes("Пожарная тревога"));
-      select.value = "all";
-      select.dispatchEvent(new Event("change"));
+      await click($("deviceTypeFilter").querySelector("[data-tb-clear]"));
+      await click($("eventsList"));
       await setFilter("open");
       expect(rows.length, "по типу «Пожарный извещатель» ничего не нашлось");
       expect(!stray.length, `у пожарного извещателя нашлись события другого типа: ${stray.length}`);
@@ -760,21 +729,68 @@
 
     await step("Фильтр по типу события поверх группы", async () => {
       await setFilter("all");
-      const select = $("eventTypeFilter");
-      const opt = [...select.options].find((o) => o.value !== "all");
-      expect(opt, "в фильтре нет ни одного типа события");
       const before = $("eventsList").querySelectorAll(".event").length;
-      select.value = opt.value;
-      select.dispatchEvent(new Event("change"));
+      await click($("eventTypeFilter").querySelector("[data-tb-toggle]"));
+      const box = $("eventTypeFilter").querySelector("[data-tb]");
+      expect(box, "в фильтре нет ни одного типа события");
+      const opt = { textContent: box.closest("label").textContent.trim() };
+      await click(box);
       await wait();
       const rows = [...$("eventsList").querySelectorAll(".event")];
       const stray = rows.filter((r) => !r.textContent.includes(opt.textContent));
-      select.value = "all";
-      select.dispatchEvent(new Event("change"));
+      await click($("eventTypeFilter").querySelector("[data-tb-clear]"));
+      await click($("eventsList"));
       await setFilter("open");
       expect(rows.length, `по типу «${opt.textContent}» ничего не нашлось`);
       expect(!stray.length, `в выборке «${opt.textContent}» есть события другого типа: ${stray.length}`);
       return `${opt.textContent}: ${rows.length} из ${before}`;
+    });
+
+    await step("Списки — поле с набором: текст отбирает варианты, Enter отмечает первый подходящий, Esc закрывает", async () => {
+      const type = async (input, text) => {
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await wait();
+      };
+      const press = async (input, key) => {
+        input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        await wait();
+      };
+      const field = () => $("deviceTypeFilter").querySelector("[data-tb-toggle]");
+      await setFilter("all");
+      try {
+        await click(field());
+        const opts = () => [...$("deviceTypeFilter").querySelectorAll(".mselect-opt")];
+        const all = opts().map((o) => o.textContent.trim());
+        expect(all.length > 1, "в списке типов устройств меньше двух вариантов");
+        const want = all[all.length - 1];
+        await type(field(), want.toLowerCase());
+        const shown = opts().filter((o) => !o.hidden).map((o) => o.textContent.trim());
+        expect(shown.length < all.length && shown.includes(want), `набор «${want}» не отобрал варианты: ${shown.join(", ")}`);
+        expect(document.activeElement === field(), "фокус ушёл из поля");
+        await press(field(), "Enter");
+        expect(field().title === shown[0], `Enter отметил «${field().title}», а не «${shown[0]}»`);
+        expect(field().value === "" && document.activeElement === field(), "после отметки набранное не стёрлось или фокус ушёл из поля");
+        await press(field(), "Escape");
+        expect(!$("deviceTypeFilter").classList.contains("open"), "Esc не закрыл список");
+        // Окно «Выделить по фильтру»: то же поле; ничего не подошло — «Нет вариантов»
+        await click(document.querySelector('.tree-all [data-filter="select"]'));
+        const events = () => $("groupingRows").querySelector('[data-ms-toggle="0:eventTypeIds"]');
+        await click(events());
+        await type(events(), "нет такого события");
+        const menu = events().parentElement.querySelector(".mselect-menu");
+        expect(menu && !menu.querySelector(".mselect-opt:not([hidden])"), "в окне фильтра набор не отобрал варианты");
+        expect(!menu.querySelector("[data-combo-none]").hidden, "нет надписи «Нет вариантов»");
+        await click(document.querySelector('[data-close="modalGrouping"]'));
+        return `${want}: ${shown.length} из ${all.length}`;
+      } finally {
+        if (!$("modalGrouping").hidden) await click(document.querySelector('[data-close="modalGrouping"]'));
+        await click(field());
+        const clear = $("deviceTypeFilter").querySelector("[data-tb-clear]");
+        if (clear) await click(clear);
+        await click($("eventsList"));
+        await setFilter("open");
+      }
     });
 
     await step("Перерыв и возврат с перерыва", async () => {
@@ -789,7 +805,8 @@
     await step("Меню справки: ссылки из справочника, ссылка площадки — только при её инциденте (§7, RULE-49)", async () => {
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("open");
-      const rows = [...$("eventsList").querySelectorAll(".event")];
+      // Строки одиночных событий: у строки группы события могут быть с разных площадок
+      const rows = [...$("eventsList").querySelectorAll(".event:not(.event-group)")];
       const mall = rows.find((r) => /Торговый центр/.test(r.textContent));
       const other = rows.find((r) => !/Торговый центр/.test(r.textContent));
       expect(mall && other, "в очереди нет инцидентов ТЦ и других площадок");
@@ -818,7 +835,8 @@
       expect(tabs.length === window.IM_WORKFLOW.adminSettings.tabs.length, `вкладок ${tabs.length}, в машине ${window.IM_WORKFLOW.adminSettings.tabs.length}`);
       await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
       const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
-      expect(row && row.cells[1].textContent.trim() === String(window.IM_WORKFLOW.limits.maxActive), "лимит активных не показан или не совпадает с машиной");
+      // Стенд самопроверки задал лимит 1 (standReset): экран показывает действующую схему
+      expect(row && row.cells[1].textContent.trim() === "1", "лимит активных не показан или не совпадает со схемой");
       // Значения перечня — подписями из машины, а не машинным словом (BUG-26)
       await click($("adminTabs").querySelector('[data-admin-tab="escalation"]'));
       const overdue = [...$("adminTable").querySelectorAll("tr")].find((r) => /Просрочка закрытия/.test(r.textContent));
@@ -838,21 +856,25 @@
       expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });
 
+    // Взять новое в работу служебным запросом стенда — с версией записи, как клиент
+    async function standClaim(stand, guid) {
+      const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
+      const res = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": card.headers.ETag || card.headers.etag });
+      expect(res.status === 200, `не взялся: ${res.status}`);
+    }
+
     await step("Выход из МИ: подтверждение, дальше только просмотр, вход (§12.1)", async () => {
-      // Группа сценария из двух в работе: подтверждение считает инциденты, а не единицы лимита (BUG-25)
+      // Инцидент в работе: подтверждение считает свои в работе (BUG-25)
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
-      const sameType = (e) => open.filter((x) => x.eventType.id === e.eventType.id);
-      const pair = sameType(open.find((e) => sameType(e).length > 1)).slice(0, 2);
-      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: pair.map((e) => e.guid) });
-      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
+      const fresh = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+      await standClaim(stand, fresh.guid);
       const mine = (await stand.get("/operator/incidents", { filter: "mine", pageSize: 1000 })).items.filter((e) => e.state === "in_progress").length;
       await setFilter("open");
       await click($("signOutBtn"));
       await wait(200);
       expect(!$("modalDialog").hidden && /вернутся в очередь/.test($("dialogNote").textContent), "выход не спросил подтверждения");
-      expect(mine >= 2 && $("dialogNote").textContent.includes(`: ${mine},`), `в подтверждении не ${mine} в работе: «${$("dialogNote").textContent}»`);
+      expect(mine >= 1 && $("dialogNote").textContent.includes(`: ${mine},`), `в подтверждении не ${mine} в работе: «${$("dialogNote").textContent}»`);
       await confirmDialog();
       expect(!$("signedOutBanner").hidden, "плашка «Вы вышли» не появилась");
       expect($("dutyBadge").textContent === "Вышел", `в шапке «${$("dutyBadge").textContent}» вместо «Вышел»`);
@@ -863,27 +885,57 @@
       expect([...$("eventsList").querySelectorAll('[data-do="claim"]')].some((b) => !off(b)), "после входа «Взять» недоступно");
     });
 
-    await step("Частичная передача группы: уведомление называет не переданные (§11, BUG-28)", async () => {
-      // После входа в работе ничего: группа из однотипных новых в ТЦ и вне его, у Петровой на время —
-      // доступ только к ТЦ. Не переданные остаются у оператора группой — в конце они возвращаются в очередь
+    await step("Панель выборки: недоступное кому-то из отмеченных — бледное, с номером и причиной", async () => {
+      // Новый и чужой в работе: «Перехватить» относится только к чужому — видна, но недоступна из-за нового
+      try {
+        // Оба — в одном списке «Все», при необходимости на разных страницах: между страницами отметки сохраняются
+        await setFilter("all");
+        const tickFirst = async (pick) => {
+          for (let page = 1; page <= 6; page++) {
+            const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+            if (page > 1 && (!nav || nav.disabled)) break;
+            if (nav) await click(nav);
+            const row = [...$("eventsList").querySelectorAll(".event")].find(pick);
+            if (row) return click($("eventsList").querySelector(`[data-check="${row.dataset.id}"]`)).then(() => row);
+          }
+          return null;
+        };
+        expect(await tickFirst((r) => r.querySelector('[data-do="claim"]')), "в списке нет нового");
+        expect(await tickFirst((r) => r.querySelector('[data-do="open_readonly"]')), "нет чужих инцидентов в работе");
+        expect($("selBar").textContent.includes("Отмечено: 2"), `панель: «${$("selBar").textContent.trim()}»`);
+        const b = $("selBar").querySelector('[data-sel-do="takeover"]');
+        expect(b && off(b), "«Перехватить» не показана бледной");
+        expect(/^INC-\d+: \S/.test(b.title), `причина без номера: «${b.title}»`);
+        expect(!$("selBar").querySelector('[data-sel-do="accept"]'), "«Принять» показана, хотя ни к одному не относится");
+        await click(b);
+        const note = [...$("toasts").children].some((x) => x.textContent.includes(b.title));
+        expect(note, "по клику причина не показана");
+        return b.title;
+      } finally {
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await setFilter("open");
+      }
+    });
+
+    await step("Частичная передача выборки: уведомление называет не переданные (§11, BUG-28)", async () => {
+      // Отмечены новые в ТЦ и вне его, у Петровой на время — доступ только к ТЦ: передаются только из ТЦ
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
-      const mall = (e) => e.site === "Торговый центр";
-      const anchor = open.find((e) => mall(e) && open.some((x) => !mall(x) && x.eventType.id === e.eventType.id));
-      expect(anchor, "нет однотипных новых в ТЦ и вне его");
-      const same = open.filter((e) => e.eventType.id === anchor.eventType.id);
-      const sent = same.filter(mall).slice(0, 2);
-      const kept = same.filter((e) => !mall(e)).slice(0, 2);
-      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: sent.concat(kept).map((e) => e.guid) });
-      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
       const roles = window.IM_FIXTURE.people.operators.find((o) => o.id === "petrova").roles;
       await stand.raw("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] });
       try {
-        await openOwn(sent[0].guid);
-        const b = button(root(), "transfer");
-        expect(b, "в карточке нет кнопки «Передать»");
+        await setFilter("open");
+        const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="transfer"]') && r.querySelector('[data-do="claim"]'));
+        const mall = (r) => r.querySelector(".event-sub").textContent.includes("Торговый центр");
+        const sent = rows.filter(mall).slice(0, 2);
+        const kept = rows.filter((r) => !mall(r)).slice(0, 1);
+        expect(sent.length && kept.length, "на странице нет новых в ТЦ и вне его");
+        for (const r of sent.concat(kept)) await click($("eventsList").querySelector(`[data-check="${r.dataset.id}"]`));
+        const b = $("selBar").querySelector('[data-sel-do="transfer"]');
+        expect(b && !off(b), "в панели выборки нет «Передать»");
         await click(b);
+        const title = $("dialogTitle").textContent;
+        expect(title === `Передать ${sent.length + kept.length} инцидента`, `заголовок окна: «${title}»`);
         await setField("targetId", "petrova");
         await confirmDialog(NOTE);
         await wait(200);
@@ -893,112 +945,56 @@
         return text;
       } finally {
         await stand.raw("PUT", "/test/operators/petrova/roles", { roles });
-        await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: kept.map((e) => e.guid), formValues: { comment: NOTE }, surface: "card" });
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
         await setFilter("open");
       }
     });
 
-    // Группа сценария из двух новых однотипных — у оператора в работе (служебной операцией стенда)
-    async function standGroup(stand) {
-      const open = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new");
-      const sameType = (e) => open.filter((x) => x.eventType.id === e.eventType.id);
-      const pair = sameType(open.find((e) => sameType(e).length > 1)).slice(0, 2);
-      const grouped = await stand.raw("POST", "/operator/incident-groups", { incidentGuids: pair.map((e) => e.guid) });
-      expect(grouped.status === 201, `группа сценария не создалась: ${grouped.status}`);
-      return pair;
-    }
-    const standTransfer = (stand, list) =>
-      stand.raw("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: list.map((e) => e.guid), formValues: { targetId: "petrova", comment: NOTE }, surface: "card" });
-    const standRelease = (stand, list) =>
-      stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: list.map((e) => e.guid), formValues: { comment: NOTE }, surface: "card" });
-
-    await step("Перехват группы из карточки: диалог на всю группу, оба мои одной группой (RULE-52, PROC-14)", async () => {
+    await step("Кнопка на отмеченной строке — только этот инцидент; массовые действия — только панель выборки (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      const pair = await standGroup(stand);
-      await standTransfer(stand, pair);
-      try {
-        await setFilter("all");
-        const row = await rowOnPages(pair[0].guid);
-        expect(row, `${pair[0].number} нет в очереди`);
-        await click(button($("eventsList"), "open_readonly", pair[0].guid));
-        expect(mode() === "work", "чужая карточка не открылась");
-        const take = button(root(), "takeover", pair[0].guid);
-        expect(take, "в карточке группы нет кнопки «Перехватить»");
-        await click(take);
-        const title = $("dialogTitle").textContent;
-        expect(title === "Перехватить 2 инцидента", `заголовок диалога: «${title}»`);
-        await confirmDialog(NOTE);
-        await wait(200);
-        const note = [...$("toasts").children].find((x) => /Перехвачено/.test(x.textContent));
-        expect(note && note.textContent.includes("Перехвачено: 2"), `уведомление: «${note ? note.textContent : "нет"}»`);
-        const cards = await Promise.all(pair.map((e) => stand.get(`/operator/incidents/${encodeURIComponent(e.guid)}`)));
-        expect(cards.every((c) => c.owner && c.owner.id === "me" && c.groupGuid && c.groupGuid === cards[0].groupGuid), "после перехвата не оба мои одной группой");
-        return title;
-      } finally {
-        await standRelease(stand, pair);
-        if (mode() === "work") await click($("backToQueue"));
-        await setFilter("open");
-      }
-    });
-
-    await step("Выход из группы: уведомление владельцу (§11, RULE-57)", async () => {
-      const stand = window.IM_SELFTEST_API;
-      expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      const [moved, left] = await standGroup(stand);
-      await standTransfer(stand, [moved]);
-      try {
-        await wait(300);
-        // На экране могут оставаться уведомления прошлых шагов — ищем с номером этого инцидента
-        const note = [...$("toasts").children].find((x) => x.textContent.includes(`${left.number} вышел из групповой обработки`));
-        expect(note, `нет уведомления о выходе ${left.number} из группы`);
-        return note.textContent;
-      } finally {
-        await standRelease(stand, [left]);
-        await setFilter("open");
-      }
-    });
-
-    await step("Смешанная выборка: «Взять» у отмеченных недоступно с объяснением", async () => {
       await setFilter("open");
-      const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]'));
-      const a = rows[0];
-      const typeOf = (r) => r.querySelector(".event-title strong").textContent;
-      const b = rows.find((r) => typeOf(r) !== typeOf(a));
-      expect(a && b, "нет двух новых событий разного типа");
-      const ids = [a.dataset.id, b.dataset.id];
+      const ids = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]')).slice(0, 2).map((r) => r.dataset.id);
+      expect(ids.length === 2, "нет двух новых событий");
       for (const id of ids) await click($("eventsList").querySelector(`[data-check="${id}"]`));
       const claim = $("eventsList").querySelector(`[data-do="claim"][data-ev="${ids[0]}"]`);
-      const blocked = claim && off(claim) && /выборки/.test(claim.title);
-      await click($("clearSelectionBtn"));
-      expect(blocked, `«Взять» на смешанной выборке: ${claim ? claim.title : "нет кнопки"}`);
-      return ids.join(" + ");
+      expect(claim && !off(claim), `«Взять» на отмеченной строке недоступна: ${claim ? claim.title : "нет кнопки"}`);
+      await click(claim);
+      try {
+        const [first, second] = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
+        expect(first.state === "in_progress" && second.state === "new", `взято не одно: ${first.state}, ${second.state}`);
+        return `${first.number} взят, ${second.number} остался новым`;
+      } finally {
+        await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: [ids[0]], formValues: { comment: NOTE }, surface: "card" });
+        if (mode() === "work") await click($("backToQueue"));
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await setFilter("open");
+      }
     });
 
-    await step("Shift+A выбирает однотипные, Shift+D снимает выделение", async () => {
+    await step("Горячих клавиш нет: Shift+D, N, A, Shift+A, Ctrl+A ничего не делают", async () => {
       await setFilter("open");
+      expect(!$("selectSimilarBtn"), "кнопка «Однотипные» осталась");
+      expect(!$("hotkeysBtn") && !$("modalHotkeys"), "справка по клавишам осталась");
       // «Снять» доступна, только когда выборка не пуста — на любой странице очереди
       const picked = () => !$("clearSelectionBtn").disabled;
-      await pressKey("A", { shiftKey: true });
-      const after = picked();
-      const last = $("toasts").lastElementChild;
-      await pressKey("D", { shiftKey: true });
-      expect(after, "Shift+A ничего не выбрал");
-      expect(!picked(), "Shift+D не снял выделение");
-      await pressKey("A", { ctrlKey: true });
-      expect(!picked(), "Ctrl+A перехвачен прототипом");
-      return last ? last.textContent : "";
+      await click($("eventsList").querySelector("[data-check]"));
+      expect(picked(), "галочка ничего не выбрала");
+      for (const [k, mods] of [["D", { shiftKey: true }], ["n"], ["a"], ["A", { shiftKey: true }], ["A", { ctrlKey: true }]]) {
+        await pressKey(k, mods);
+        expect(picked() && mode() === "queue", `клавиша ${k} что-то сделала`);
+      }
+      await click($("clearSelectionBtn"));
+      expect(!picked(), "«Снять» не сняла выделение");
     });
 
-    await step("Горячие клавиши не работают при открытой справке", async () => {
+    await step("Esc закрывает окно, очередь не трогает", async () => {
       await setFilter("open");
-      await pressKey("?");
-      expect(!$("modalHotkeys").hidden, "справка по ? не открылась");
-      await pressKey("n");
-      const taken = mode() === "work";
-      await pressKey("?");
-      expect(!taken, "N взял инцидент за окном справки");
-      expect($("modalHotkeys").hidden, "? не закрыл справку");
+      await click($("breakBtn"));
+      expect(!$("modalDialog").hidden, "окно перерыва не открылось");
+      await pressKey("Escape");
+      expect($("modalDialog").hidden, "Esc не закрыл окно");
+      expect(mode() === "queue" && $("breakBanner").hidden, "Esc что-то сделал кроме закрытия окна");
     });
 
     await step("На телефоне 360 пикселей страница не шире экрана", async () => {
@@ -1011,7 +1007,8 @@
           resolve(e.data);
         };
         window.addEventListener("message", onMessage);
-        setTimeout(() => resolve(null), 5000);
+        // Узкая страница отвечает после load — а он ждёт шрифты из сети (Inter, Material Symbols): бывает и 8 с
+        setTimeout(() => resolve(null), 15000);
       });
       frame.src = location.pathname.split("/").pop() + "?widthcheck";
       document.body.appendChild(frame);
@@ -1158,7 +1155,7 @@
       const select = $("queueSortSelect");
       expect(select.hidden, "список порядков виден без разрешения администратора");
       // Администратор разрешил: стенд подменяет схему, клиент перечитывает её по workflow.schema_published
-      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: true } } });
+      await standReset({ fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: true } } });
       await wait(300);
       try {
         expect(!select.hidden, "разрешили менять порядок — список не появился: схема не перечитана");
@@ -1180,7 +1177,7 @@
         expect(asked > 0, "после выбора очередь не перечитана");
         return `порядков: ${options.length}, выбран «${select.selectedOptions[0].textContent}»`;
       } finally {
-        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await standReset({ fixture: "demo" });
         await wait(300);
         expect(select.hidden, "разрешение сняли — список не скрылся");
       }
@@ -1209,7 +1206,7 @@
       expect(!wrong.length, `плашка не название сценария: ${wrong.map(([a, b]) => `«${a}» вместо «${b}»`).join(", ")}`);
       // Нет названия — «Без названия»: стенд убирает его у сценария пожара (в Merge Patch null удаляет поле)
       if (mode() !== "queue") await click($("backToQueue"));
-      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { scenarios: { fire: { title: null } } } });
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { fire: { title: null } } } });
       // Смена фильтра перечитывает очередь с сервера
       await setFilter("all");
       let untitled = 0;
@@ -1224,7 +1221,7 @@
           });
         }
       } finally {
-        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await standReset({ fixture: "demo" });
         await setFilter("open");
       }
       expect(untitled > 0, "у сценария без названия плашка не «Без названия»");
@@ -1235,7 +1232,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
       // Стенд снимает лимиты — клиент перечитывает схему по workflow.schema_published
-      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { limits: { maxActive: null, maxOnHold: null, maxBulk: null } } });
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null, maxOnHold: null, maxBulk: null } } });
       await wait(400);
       try {
         const status = $("statusQueue").textContent;
@@ -1253,7 +1250,7 @@
         await click($("clearSelectionBtn"));
         return `${status}; настройки: ${shown.join(", ")}; ${toast}`;
       } finally {
-        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await standReset({ fixture: "demo" });
         await wait(400);
         expect(/ из /.test($("statusQueue").textContent), "лимиты вернули — «из N» не вернулось");
       }
@@ -1276,7 +1273,7 @@
       if (mode() !== "queue") await click($("backToQueue"));
       const before = labels();
       // Справочник сменился — клиент получает reference.priorities_changed и перечитывает его
-      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { priorities: levels, incidents: fx.incidents } });
+      await standReset({ fixture: "demo", fixturePatch: { priorities: levels, incidents: fx.incidents } });
       await wait(400);
       try {
         const names = levels.map((p) => `Приоритет: ${p.name.ru}`);
@@ -1286,9 +1283,234 @@
         expect(!top || !top.title || top.title.includes("«Угроза»"), `метка дерева не по самому срочному уровню нового справочника: ${top && top.title}`);
         return `было: ${[...new Set(before)].join(", ")}; стало: ${[...new Set(after)].join(", ")}`;
       } finally {
-        await stand.raw("POST", "/test/reset", { fixture: "demo" });
+        await standReset({ fixture: "demo" });
         await wait(400);
         expect(labels().every((l) => before.includes(l)), "справочник вернули — подписи не вернулись");
+      }
+    });
+
+    await step("Выделить по фильтру → «Взять в работу»: пожары одним инцидентом, у основного «+N», связанные в карточке; «Отсоединить» и «Отсоединить все» — события снова новые (§11, черновик)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      // Лимит активных свободен: свои в работе — в очередь
+      const busy = (await stand.get("/operator/incidents", { filter: "mine", pageSize: 1000 })).items.filter((e) => e.state === "in_progress");
+      if (busy.length) await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: busy.map((e) => e.guid), formValues: { comment: NOTE }, surface: "card" });
+      await setFilter("open");
+      await click($("groupsList").querySelector('.tree-all [data-filter="select"]'));
+      await click($("groupingRows").querySelector('[data-ms-toggle="0:eventTypeIds"]'));
+      const fire = [...$("groupingRows").querySelectorAll('[data-fkey="0:eventTypeIds"]')].find((x) => x.value === "fire");
+      expect(fire, "в окне нет «Пожарная тревога»");
+      await click(fire);
+      await click($("groupingConfirm"));
+      // Как над очередью — «Открытые»: новые и свои в работе или отложенные
+      const picked = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.eventType.id === "fire").map((e) => e.guid);
+      expect(!$("selBar").hidden && $("selBar").textContent.includes(`${picked.length}`), `панель выборки: «${$("selBar").textContent.trim()}»`);
+      const take = $("selBar").querySelector('[data-sel-do="merge"]');
+      expect(take && !off(take), `«Взять в работу» недоступна: ${take ? take.title : "нет кнопки"}`);
+      await click(take);
+      await wait();
+      const lead = (await stand.get("/operator/incidents", { filter: "mine", pageSize: 1000 })).items.find((e) => e.state === "in_progress" && e.linkedCount);
+      try {
+        expect(lead && lead.linkedCount === picked.length - 1, `основной не взят или связанных не ${picked.length - 1}`);
+        // Карточка основного открылась сама — на его текущем шаге сценария
+        expect(mode() === "work" && $("statusIncident").textContent.includes(lead.number), `карточка основного не открылась: «${$("statusIncident").textContent}»`);
+        const card = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
+        const at = card.scenario.steps.findIndex((x) => x.id === card.scenario.cursorStepId) + 1;
+        expect($("statusSteps").textContent.startsWith(`Шаг ${at} из`), `карточка не на шаге ${at}: «${$("statusSteps").textContent}»`);
+        await click($("backToQueue"));
+        await setFilter("mine");
+        const row = $("eventsList").querySelector(`.event[data-id="${lead.guid}"]`);
+        expect(row && row.querySelector(".chip.linked"), "у основного нет пометки «+N»");
+        await click(row.querySelector('[data-do="open_card"], [data-do="resume"]'));
+        expect(mode() === "work", "карточка основного не открылась из очереди");
+        // Связанные — на своей вкладке, не над сценарием; открываются и по пометке «+N» в заголовке
+        expect(!root().querySelector("[data-detach]") && root().querySelector(".crumbs"), "связанные видны на вкладке сценария");
+        // Один ряд: «Назад», действия с инцидентом, «Далее». Нижний блок одинаков на обеих вкладках: место
+        // «Назад» / «Далее» на вкладке привязанных занято, действия не прыгают
+        const actsTop = () => {
+          const bottom = root().querySelector(".work-bottom").getBoundingClientRect();
+          const acts = root().querySelector(".work-acts").getBoundingClientRect();
+          return `${Math.round(acts.left - bottom.left)}:${Math.round(acts.top - bottom.top)}/${Math.round(bottom.height)}`;
+        };
+        const box = (sel) => root().querySelector(sel).getBoundingClientRect();
+        expect(Math.abs(box(".work-acts").top - box("#stepBack").top) < 8 && box(".work-acts").left > box("#stepBack").left, "действия не в одном ряду с «Назад» / «Далее»");
+        const before = actsTop();
+        await click(root().querySelector('.chip.linked[data-work-tab="linked"]'));
+        expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "пометка «+N» не открыла вкладку привязанных");
+        expect(actsTop() === before, `действия сдвинулись при переключении вкладок: ${before} → ${actsTop()}`);
+        // Срок привязанного виден: у кого норматив закрытия идёт — отсчёт; в заголовке — «Срок привязанного», если раньше своего
+        const leadCard = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
+        const linkedPage = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 10 });
+        const running = linkedPage.items.filter((x) => x.timer && x.timer.running).length;
+        expect(root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length === running, `отсчётов у привязанных ${root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length}, а идёт норматив у ${running}`);
+        const earlier = Boolean(leadCard.linkedDueAt) && (!leadCard.timer || !leadCard.timer.running || Date.parse(leadCard.linkedDueAt) < Date.parse(leadCard.timer.dueAt));
+        expect(Boolean(root().querySelector(".lnk-due")) === earlier, `«Срок привязанного» в заголовке: ${Boolean(root().querySelector(".lnk-due"))}, а должен быть ${earlier}`);
+        const detach = root().querySelectorAll("[data-detach]");
+        // Постранично, по 10 (LINKED_PAGE)
+        expect(detach.length === Math.min(picked.length - 1, 10), `на вкладке связанных ${detach.length}`);
+        const gone = detach[0].dataset.detach;
+        await click(detach[0]);
+        await wait();
+        const back = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.guid === gone);
+        expect(back && back.state === "new", "отсоединённый не вернулся в очередь новым");
+        // «Отсоединить все» — остальные разом, список связанных в карточке пропадает
+        const all = root().querySelector("[data-detach-all]");
+        expect(all && !off(all), "нет кнопки «Отсоединить все»");
+        await click(all);
+        await wait();
+        const left = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.filter((x) => x.state === "linked");
+        expect(!left.length && !root().querySelector("[data-detach]"), `после «Отсоединить все» связанных ${left.length}`);
+        expect(!root().querySelector(".work-tabs") && root().querySelector(".crumbs"), "связанных нет — а вкладки остались или сценарий не вернулся");
+        return `основной ${lead.number}, связанных ${picked.length - 1}`;
+      } finally {
+        if (lead) {
+          const rest = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 });
+          for (const x of rest.items.filter((e) => e.state === "linked")) await stand.raw("DELETE", `/operator/incidents/${encodeURIComponent(lead.guid)}/linked/${encodeURIComponent(x.guid)}`);
+          await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: [lead.guid], formValues: { comment: NOTE }, surface: "card" });
+        }
+        if (mode() === "work") await click($("backToQueue"));
+        await setFilter("open");
+      }
+    });
+
+    await step("Отмеченное живёт в своём списке: другой узел дерева или фильтр — отметки сняты, листание страниц — нет", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      const picked = () => Number(($("selBar").textContent.match(/Отмечено: (\d+)/) || [0, 0])[1]);
+      await click($("eventsList").querySelector("[data-check]"));
+      expect(picked() === 1 && !$("selBar").hidden, "отметка не поставилась");
+      const next = $("eventsPager").querySelector('[data-page="2"]');
+      if (next) {
+        await click(next);
+        expect(picked() === 1, "листание сняло отметку");
+        await click($("eventsPager").querySelector('[data-page="1"]'));
+      }
+      const node = [...$("groupsList").querySelectorAll(".tree-node .node-content")].find((n) => n.textContent.includes("Главный офис"));
+      await click(node);
+      expect($("selBar").hidden && $("clearSelectionBtn").disabled, "другой узел дерева — отметки не сняты");
+      await click($("groupsList").querySelector(".tree-all .node-content"));
+      await click($("eventsList").querySelector("[data-check]"));
+      await setFilter("all");
+      expect($("selBar").hidden, "другой фильтр — отметки не сняты");
+      await setFilter("open");
+      // «Выделить по фильтру» у другого узла: очередь переходит на этот узел — отмеченные на экране
+      const office = [...$("groupsList").querySelectorAll(".tree-node")].find((n) => n.querySelector(".node-text") && n.querySelector(".node-text").textContent.includes("Главный офис"));
+      await click(office.querySelector('[data-filter="select"]'));
+      await click($("groupingConfirm"));
+      const ticked = [...$("eventsList").querySelectorAll("[data-check]")].filter((c) => c.checked).length;
+      const active = $("groupsList").querySelector(".tree-node.active .node-text");
+      expect(active && active.textContent.includes("Главный офис"), `очередь не на узле окна: «${active ? active.textContent : "нет"}»`);
+      expect(ticked === Math.min(picked(), $("eventsList").querySelectorAll(".event").length) && picked() > 0, `отмечено ${picked()}, на экране отмеченных ${ticked}`);
+      await click($("clearSelectionBtn"));
+      await click($("groupsList").querySelector(".tree-all .node-content"));
+    });
+
+    await step("Меню «Выделить» в шапке очереди: «Все в фильтре» и «По фильтру…» — окно для выбранного узла дерева", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      try {
+        await click($("selectMenuBtn"));
+        const pop = $("selectMenu").querySelector(".menu-pop");
+        expect(!pop.hidden && $("selectAllBtn") && $("selectByFilterBtn"), "меню «Выделить» не открылось");
+        await click($("selectByFilterBtn"));
+        expect(pop.hidden, "меню не закрылось");
+        expect(!$("modalGrouping").hidden, "окно «Выделить по фильтру» не открылось");
+        const intro = $("groupingIntro").textContent;
+        expect(intro.startsWith("«Все события»"), `окно не для выбранного узла: «${intro}»`);
+        return intro;
+      } finally {
+        if (!$("modalGrouping").hidden) await click(document.querySelector('[data-close="modalGrouping"]'));
+      }
+    });
+
+    await step("Выделить по фильтру с «Одинаковый сценарий»: сценарий по выбору, «Взять в работу» на выделенных доступна", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      try {
+        await click($("groupsList").querySelector('.tree-all [data-filter="select"]'));
+        const all = Number(($("groupingHint").textContent.match(/\d+/) || [0])[0]);
+        await click($("groupingRows").querySelector("[data-same]"));
+        await click($("groupingRows").querySelector('[data-ms-toggle="s:scenario"]'));
+        const opts = [...$("groupingRows").querySelectorAll('[data-fkey="s:scenario"]')];
+        expect(opts.length > 1, `сценариев в списке: ${opts.length}`);
+        // Сценарий, где взять нечего, не выбрать — иначе «Выделить 0» и окно не закрыть
+        const zero = opts.filter((o) => o.closest("label").querySelector("em").textContent === "0");
+        expect(zero.every((o) => o.disabled), `сценарий с нулём можно выбрать: ${zero.map((o) => o.closest("label").textContent.trim()).join(", ")}`);
+        const other = opts.find((o) => !o.checked && Number(o.closest("label").querySelector("em").textContent) > 1);
+        expect(other, "нет другого сценария с двумя событиями и больше");
+        const n = Number(other.closest("label").querySelector("em").textContent);
+        const name = other.closest("label").querySelector("span").textContent;
+        await click(other);
+        const hint = $("groupingHint").textContent;
+        expect(hint.startsWith(`Подходит: ${n}`) && n < all, `после выбора «${name}»: «${hint}», без галочки — ${all}`);
+        await click($("groupingConfirm"));
+        const take = $("selBar").querySelector('[data-sel-do="merge"]');
+        expect($("selBar").textContent.includes(`Отмечено: ${n}`), `панель выборки: «${$("selBar").textContent.trim()}»`);
+        expect(take && !off(take), `«Взять в работу» недоступна: ${take ? take.title : "нет кнопки"}`);
+        return `${name}: ${n} из ${all}`;
+      } finally {
+        if (!$("modalGrouping").hidden) await click(document.querySelector('[data-close="modalGrouping"]'));
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+      }
+    });
+
+    await step("Связанных много — на вкладке «Привязанные инциденты» постранично; поиск по номеру связанного — строка основного и страница найденного; «Отсоединить все» — со всех страниц (§11, черновик)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Ещё девять пожаров рядом с INC-1847 — копии с другими номерами
+      const fx = window.IM_FIXTURE;
+      const base = fx.incidents.find((i) => i.number === "INC-1847");
+      const extra = Array.from({ length: 14 }, (_, k) =>
+        Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
+      );
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo", fixturePatch: { incidents: fx.incidents.concat(extra) } });
+      await wait(400);
+      try {
+        const res = await stand.post("/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
+        const lead = res.incident;
+        // Поиск по номеру связанного: находит строку основного, открытая из неё карточка — на странице найденного
+        const sought = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.pop();
+        await setFilter("open");
+        $("eventSearch").value = sought.number;
+        $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
+        await wait(300);
+        const hitRow = $("eventsList").querySelector(`.event[data-id="${lead.guid}"]`);
+        const note = hitRow && hitRow.querySelector(".event-found");
+        expect(note && note.textContent.includes(sought.number) && $("eventsList").querySelectorAll(".event").length === 1, `поиск ${sought.number}: «${note ? note.textContent : "нет строки основного"}»`);
+        await click(hitRow.querySelector('[data-do="open_card"], [data-do="resume"]'));
+        expect(mode() === "work", "карточка основного не открылась");
+        const found = root().querySelector(".lnk-member.found .lnk-num");
+        expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && found && found.textContent === sought.number, `из поиска — не на вкладке привязанных или ${sought.number} не подсвечен`);
+        await click($("backToQueue"));
+        $("eventSearch").value = "";
+        $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
+        await wait(300);
+        await setFilter("mine");
+        await click($("eventsList").querySelector(`.event[data-id="${lead.guid}"] [data-do="open_card"], .event[data-id="${lead.guid}"] [data-do="resume"]`));
+        expect(mode() === "work", "карточка основного не открылась");
+        await click(root().querySelector('.work-tab[data-work-tab="linked"]'));
+        // Та же карточка — на той странице, где оставили (на странице найденного): к первой
+        const toFirst = root().querySelector('[data-lnk-page="1"]');
+        if (toFirst && !toFirst.disabled) await click(toFirst);
+        const rows = () => [...root().querySelectorAll(".lnk-member .lnk-num")].map((x) => x.textContent);
+        const info = () => (root().querySelector(".lnk-pager .pager-info") || { textContent: "" }).textContent;
+        const first = rows();
+        expect(first.length === 10 && info() === "1–10 из 14", `первая страница: ${first.length} строк, «${info()}»`);
+        await click(root().querySelector('[data-lnk-page="2"]'));
+        const second = rows();
+        expect(second.length === 4 && info() === "11–14 из 14" && !second.some((n) => first.includes(n)), `вторая страница: ${second.join(", ")}, «${info()}»`);
+        await click(root().querySelector("[data-detach-all]"));
+        await wait();
+        const left = (await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 200 })).items.filter((x) => x.state === "linked");
+        expect(!left.length && !root().querySelector(".lnk-panel"), `после «Отсоединить все» связанных ${left.length}`);
+        return `${first.join(", ")} | ${second.join(", ")}`;
+      } finally {
+        if (mode() === "work") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
       }
     });
 

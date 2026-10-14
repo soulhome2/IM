@@ -61,7 +61,7 @@
   }
 
   // Инварианты модели по ответам API — то, что должно быть верно после любого шага
-  function invariants(list, session) {
+  function invariants(list, session, maxActive) {
     const bad = [];
     const say = (inc, msg) => bad.push(`${inc.guid} (${inc.state}): ${msg}`);
     list.forEach((inc) => {
@@ -86,25 +86,19 @@
       if (inc.owner && inc.owner.id === session.operator.guid && inc.state !== "pending_acceptance" && inc.state !== "closed" && inc.ownership !== "owner") {
         say(inc, `мой, а отношение «${inc.ownership}»`);
       }
-      // Закрытые хранят признак группы как историю (RULE-59): группа из одного — только среди открытых
-      if (inc.groupGuid && inc.groupSize < 2 && inc.state !== "closed") say(inc, "группа из одного (RULE-52)");
-      if (inc.groupGuid && !inc.owner && !inc.assignmentGroup) say(inc, "ничейный в группе (RULE-52)");
-      if (!inc.groupGuid && inc.groupSize) say(inc, "не в группе, а размер группы задан");
+      // Объединение (§11, черновик): связанные в списках не показываются; связь у открытого — только у связанного
+      if (inc.state === "linked") say(inc, "связанное событие в списке");
+      if (inc.linkedTo && inc.state !== "closed") say(inc, "открытый со ссылкой на основной");
     });
-    // Группа следует за владельцем (RULE-52): у членов один владелец и один адресат
-    const groups = new Map();
-    list.filter((inc) => inc.groupGuid && inc.state !== "closed").forEach((inc) => groups.set(inc.groupGuid, (groups.get(inc.groupGuid) || []).concat(inc)));
-    groups.forEach((members, g) => {
-      const keys = new Set(members.map((m) => `${m.owner ? m.owner.id : ""}|${m.assignmentGroup ? m.assignmentGroup.id : ""}`));
-      if (keys.size > 1) bad.push(`группа ${g}: у членов разные владельцы или адресаты (RULE-52)`);
-    });
-    if (session.usage.activeCount > W.limits.maxActive) bad.push(`активных у меня ${session.usage.activeCount} > ${W.limits.maxActive}`);
+    if (maxActive != null && session.usage.activeCount > maxActive) bad.push(`активных у меня ${session.usage.activeCount} > ${maxActive}`);
     return bad;
   }
 
   async function walk(seed) {
     const r = rng(seed);
-    const env = await makeEnv();
+    // Лимит активных: в машине — без ограничения; каждое второе зерно — с лимитом 1, чтобы проверялся и он
+    const maxActive = SEEDS.indexOf(seed) % 2 ? W.limits.maxActive : 1;
+    const env = await makeEnv(maxActive === W.limits.maxActive ? undefined : { workflowPatch: { limits: { maxActive } } });
     const history = [];
     const versions = new Map();
     const journals = new Map();
@@ -142,12 +136,13 @@
           history.push(`ответы ${card.guid}`);
         }
       } else if (x < 0.29) {
-        const news = (await env.all("open")).filter((e) => e.state === "new");
-        const a = pick(r, news);
-        const b = a && news.find((e) => e.guid !== a.guid && e.eventType.id === a.eventType.id);
-        if (a && b) {
-          const res = await env.call("POST", "/operator/incident-groups", { incidentGuids: [a.guid, b.guid] });
-          history.push(`группа ${a.guid}+${b.guid}: ${res.status}`);
+        // «Объединить» (§11, черновик): два-три случайных открытых — отказ или основной со связанными
+        const open = await env.all("open");
+        const picked = [...new Set([pick(r, open), pick(r, open), pick(r, open)].filter(Boolean))];
+        if (picked.length >= 2) {
+          const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: picked.map((e) => e.guid) });
+          if (![200, 403, 422].includes(res.status)) fail(step, `объединение: ${res.status}`);
+          history.push(`объединить ${picked.map((e) => e.guid).join("+")}: ${res.status}`);
         }
       } else {
         const all = await env.all();
@@ -178,7 +173,7 @@
         }
       }
       const [list, session] = await Promise.all([env.all(), env.session()]);
-      const bad = invariants(list, session).concat(accessInvariants(list, session, roles));
+      const bad = invariants(list, session, maxActive).concat(accessInvariants(list, session, roles));
       list.forEach((inc) => {
         const v = Number(inc.version);
         if (v < (versions.get(inc.guid) || 0)) bad.push(`${inc.guid}: версия уменьшилась`);
@@ -204,7 +199,7 @@
 
   test("Инварианты верны на начальных демо-данных", async () => {
     const env = await makeEnv();
-    const bad = invariants(await env.all(), await env.session());
+    const bad = invariants(await env.all(), await env.session(), W.limits.maxActive);
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });
 })();

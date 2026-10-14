@@ -55,12 +55,6 @@
           <div class="menu-pop" role="menu" hidden>
             <!-- Справочные ссылки — из справочника (GET /operator/reference/help-links): общие и площадки открытого инцидента; строит app.js -->
             <div id="helpLinks"></div>
-            <div class="menu-sep"></div>
-            <button type="button" class="menu-item" id="hotkeysBtn" role="menuitem">
-              <span class="material-symbols-outlined">keyboard</span>
-              Горячие клавиши
-              <kbd>?</kbd>
-            </button>
           </div>
         </div>
 
@@ -77,7 +71,6 @@
             <button type="button" class="menu-item" id="breakBtn" role="menuitem">
               <span class="material-symbols-outlined">coffee</span>
               <span id="breakBtnLabel">Уйти на перерыв</span>
-              <kbd>B</kbd>
             </button>
             <button type="button" class="menu-item" id="adminBtn" role="menuitem" hidden>
               <span class="material-symbols-outlined">tune</span>
@@ -88,14 +81,6 @@
               <span>Выйти</span>
             </button>
             <div class="menu-sep"></div>
-            <div class="menu-label">Предвыбор адресата передачи</div>
-            <label class="menu-field">
-              <span>Кому передавать</span>
-              <select id="escalateDefault"></select>
-            </label>
-            <p class="menu-hint">
-              Личная настройка: подставляется в форму передачи. На автоэскалацию не влияет.
-            </p>
             <p class="menu-hint" data-i18n-html>Автоэскалация по нормативу реакции: <b id="autoLevels"></b>. Настраивает администратор схемы.</p>
           </div>
         </div>
@@ -157,21 +142,33 @@
           <header class="panel-h">
             <h2>Очередь <em id="eventsCount">0</em></h2>
             <div class="events-select" role="group" aria-label="Выборка событий">
-              <button type="button" class="btn ghost small" id="selectAllBtn" title="Выбрать все видимые события">
-                <span class="material-symbols-outlined">select_all</span>
-                Выбрать все
-              </button>
-              <button type="button" class="btn ghost small" id="selectSimilarBtn" title="Выбрать все однотипные новые события (Shift+A)">
-                <span class="material-symbols-outlined">library_add_check</span>
-                Однотипные
-              </button>
-              <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение (Shift+D)" disabled>
+              <!-- Выделить: все события текущего фильтра или «По фильтру…» — окно для текущего узла дерева (§11.1, §11.2) -->
+              <div class="menu" id="selectMenu">
+                <button type="button" class="btn ghost small" id="selectMenuBtn" aria-haspopup="menu" aria-expanded="false" title="Выделить события">
+                  <span class="material-symbols-outlined">select_all</span>
+                  Выделить
+                  <span class="material-symbols-outlined chevron">expand_more</span>
+                </button>
+                <div class="menu-pop" role="menu" hidden>
+                  <button type="button" class="menu-item" id="selectAllBtn" role="menuitem" title="Все события текущего фильтра очереди со всех страниц">
+                    <span class="material-symbols-outlined">select_all</span>
+                    <span>Все в фильтре</span>
+                  </button>
+                  <button type="button" class="menu-item" id="selectByFilterBtn" role="menuitem" title="Окно «Выделить по фильтру» для выбранного узла дерева">
+                    <span class="material-symbols-outlined">checklist</span>
+                    <span>По фильтру…</span>
+                  </button>
+                </div>
+              </div>
+              <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение" disabled>
                 <span class="material-symbols-outlined">deselect</span>
                 Снять
               </button>
             </div>
           </header>
           <div class="panel-b events-body">
+            <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
+            <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
             <div class="events-toolbar">
               <div class="search-wrapper">
                 <span class="material-symbols-outlined">search</span>
@@ -180,8 +177,9 @@
               <!-- Фильтры по состоянию — из машины (queueFilters) -->
               <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
               <div class="events-types">
-                <select id="eventTypeFilter" class="search-input" aria-label="Тип события"></select>
-                <select id="deviceTypeFilter" class="search-input" aria-label="Тип устройства"></select>
+                <!-- Выпадающие списки с галочками: несколько типов сразу; строит app.js -->
+                <div class="mselect tb" id="deviceTypeFilter" aria-label="Тип устройства"></div>
+                <div class="mselect tb" id="eventTypeFilter" aria-label="Тип события"></div>
               </div>
               <!-- Порядок очереди — только если администратор разрешил оператору его менять (§7, BUG-34) -->
               <select id="queueSortSelect" class="search-input events-sort" hidden></select>
@@ -193,7 +191,7 @@
 
         <section class="panel" id="panelScenario" data-panel="scenario">
           <header class="panel-h work-h">
-            <button type="button" class="btn ghost" id="backToQueue" title="Вернуться к очереди, инцидент остаётся за вами (Esc)">
+            <button type="button" class="btn ghost" id="backToQueue" title="Вернуться к очереди, инцидент остаётся за вами">
               <span class="material-symbols-outlined">arrow_back</span>К очереди
             </button>
             <h2 id="workTitle">Обработка</h2>
@@ -293,18 +291,6 @@
     </div>
   </div>
 
-  <div class="modal" id="modalHotkeys" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalHotkeysTitle">
-      <h3 id="modalHotkeysTitle">Горячие клавиши</h3>
-      <!-- Клавиши и подписи — из машины (hotkeys), строит app.js -->
-      <table class="keys" id="hotkeysTable"></table>
-      <p class="muted" id="hotkeysNote"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn primary" data-close="modalHotkeys">Закрыть</button>
-      </div>
-    </div>
-  </div>
-
   <div class="modal" id="modalAdmin" hidden>
     <div class="modal-card wide admin-card" role="dialog" aria-modal="true" aria-labelledby="modalAdminTitle">
       <h3 id="modalAdminTitle">Настройки администратора</h3>
@@ -317,6 +303,22 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn primary" data-close="modalAdmin">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- «Выделить по фильтру» из дерева (§11, черновик): варианты и сколько подходит — запросом
+       POST /operator/incidents/filter; строит app.js -->
+  <div class="modal" id="modalGrouping" hidden>
+    <div class="modal-card wide grouping-card" role="dialog" aria-modal="true" aria-labelledby="modalGroupingTitle">
+      <h3 id="modalGroupingTitle">Выделить по фильтру</h3>
+      <p class="muted" id="groupingIntro"></p>
+      <div class="grouping-by" id="groupingBy"></div>
+      <div class="grouping-rows" id="groupingRows"></div>
+      <p class="field-hint grouping-hint" id="groupingHint"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close="modalGrouping">Отмена</button>
+        <button type="button" class="btn primary" id="groupingConfirm">Выделить</button>
       </div>
     </div>
   </div>

@@ -35,6 +35,9 @@
     const addressee = (ev) => ev.owner || ev.assignmentGroup || null;
     const isTarget = (ev) => isSelf(addressee(ev));
     const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
+    // Объединение (§11, черновик): основной инцидент связанного — по linkedTo
+    const byId = (id) => (id ? ctx.events().find((e) => e.id === id) || null : null);
+    const unowned = (ev) => !ev.owner && !ev.assignmentGroup;
     // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
     // адресован», даже если владельцем записан я сам: так передают лично оператору
     function ownership(ev) {
@@ -93,6 +96,11 @@
       hold: { due: "holdDueAt", since: "holdSince" },
     };
     const dueOf = (ev, id) => ev[FIELDS[id].due];
+    // Чьё нарушение у привязанного события: владельца основного (§11.4)
+    const breachOwnerOfLinked = (ev) => {
+      const p = ev.linkedTo && ctx.events().find((x) => x.id === ev.linkedTo);
+      return p ? addressee(p) : null;
+    };
 
     // Длительность таймера: из справочника (secFrom, например срок удержания по причине),
     // по уровню эскалации или по нормативам (§4)
@@ -157,15 +165,15 @@
       ev.firedTimers[id] = dueOf(ev, id);
     }
 
-    /* ===== Лимиты (§10.2): группа сценария — одна единица ===== */
+    /* ===== Лимиты (§10.2): связанные события объединённого в лимит не входят — у них нет владельца ===== */
 
     function units(stateId, ev) {
-      const own = ev ? ev.groupId || ev.id : null;
+      const own = ev ? ev.id : null;
       return new Set(
         ctx
           .events()
           .filter((e) => e.state === stateId && isMine(e))
-          .map((e) => e.groupId || e.id)
+          .map((e) => e.id)
           .filter((u) => u !== own)
       );
     }
@@ -218,15 +226,13 @@
       ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["workflow.guard.owner_duty_group"]),
       // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
       agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["workflow.guard.agent_online"]),
-      // extra — сколько единиц добавит действие сверх единицы самого инцидента (§10.2)
       // Лимит null — без ограничения (§10.2, RULE-69)
-      withinActiveLimit: (ev, [extra = 0]) => {
+      withinActiveLimit: (ev) => {
         if (W.limits.maxActive == null) return null;
         const u = units("in_progress", ev);
-        if (u.size + extra < W.limits.maxActive) return null;
-        if (extra) return ["workflow.guard.active_limit_extra", { n: W.limits.maxActive }];
-        // В подсказке — номер инцидента, который держит лимит (у группы — номер первого из неё)
-        const busy = ctx.events().find((e) => e.state === "in_progress" && isMine(e) && u.has(e.groupId || e.id));
+        if (u.size < W.limits.maxActive) return null;
+        // В подсказке — номер инцидента, который держит лимит
+        const busy = ctx.events().find((e) => e.state === "in_progress" && isMine(e) && u.has(e.id));
         return ["workflow.guard.active_limit", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
       },
       withinHoldLimit: (ev) =>
@@ -253,6 +259,32 @@
       canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_done"]),
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
       settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
+      isOwnerOrUnowned: (ev) => (isMine(ev) || unowned(ev) ? null : ["workflow.guard.not_owner"]),
+      // Основной из формы — другой, открытый, не связанный; новый или мой в работе. До формы выполнено
+      mergePrimaryValid: (ev, args, opts) => {
+        const id = opts && opts.form ? opts.form.primaryId : null;
+        const p = byId(id);
+        const ok = p && p !== ev && !p.linkedTo && (p.state === "new" || (p.state === "in_progress" && isMine(p)));
+        return ok ? null : ["workflow.guard.merge_primary"];
+      },
+      sameScenarioAsPrimary: (ev, args, opts) => {
+        const p = byId(opts && opts.form ? opts.form.primaryId : null);
+        return p && ctx.scenarioKey(p) === ctx.scenarioKey(ev) ? null : ["workflow.guard.merge_scenario"];
+      },
+      primaryEditable: (ev) => {
+        const p = byId(ev.linkedTo);
+        return p && (isMine(p) || unowned(p)) ? null : ["workflow.guard.primary_not_editable"];
+      },
+      primaryClosed: (ev) => {
+        const p = byId(ev.linkedTo);
+        return p && isDone(p) ? null : ["workflow.guard.primary_open"];
+      },
+      targetHasAccessToLinked: (ev, args, opts) => {
+        const target = opts && opts.form ? opts.form.targetId : null;
+        if (!target) return null;
+        const linked = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
+        return linked.every((e) => ctx.hasAccess(target, e)) ? null : ["workflow.guard.target_no_access_linked"];
+      },
     };
 
     function setting(path) {
@@ -313,7 +345,6 @@
           style: tr.ui.style || "outline",
           enabled: Boolean(a.ok),
           formId: tr.form,
-          hotkey: tr.ui.hotkey,
           navigate: tr.ui.navigate,
         });
       });
@@ -344,6 +375,7 @@
           filledSteps: prog.filled,
           totalSteps: prog.total,
           escalationReason: [W.escalation.reasonKey],
+          primaryNumber: ev.linkedTo && byId(ev.linkedTo) ? byId(ev.linkedTo).number : "",
         },
         extra || {}
       );
@@ -404,7 +436,11 @@
       startTimer: (ev, [id, arg]) => startTimer(ev, id, arg),
       stopTimer: (ev, [id]) => stopTimer(ev, id),
       pauseTimer: (ev, [id]) => pauseTimer(ev, id),
-      resumeTimer: (ev, [id]) => resumeTimer(ev, id),
+      // ifStarted — только если таймер уже запускался (идёт или на паузе с остатком): ещё не шедший не запускается
+      resumeTimer: (ev, [id, mode]) => {
+        if (mode === "ifStarted" && !dueOf(ev, id) && ev[FIELDS[id].left] == null) return;
+        resumeTimer(ev, id);
+      },
       // Запуск заново, без остатка: длительность из настройки, иначе обычный норматив (RULE-11)
       restartTimer: (ev, [id, settingPath]) => {
         const f = FIELDS[id];
@@ -415,9 +451,10 @@
       },
       // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
       // Нарушение по таймеру датируется дедлайном, а не моментом выполнения после окна (RULE-63)
-      recordBreach: (ev, [kind], s) => {
+      // primaryOwner — нарушение на владельца основного: у привязанного своего нет (§11.4)
+      recordBreach: (ev, [kind, who], s) => {
         ev.breaches = ev.breaches || [];
-        ev.breaches.push({ kind, at: s.deadline != null ? s.deadline : now(), owner: addressee(ev) });
+        ev.breaches.push({ kind, at: s.deadline != null ? s.deadline : now(), owner: who === "primaryOwner" ? breachOwnerOfLinked(ev) : addressee(ev) });
         ev.slaBreached = true;
       },
       increment: (ev, [field]) => {
@@ -431,7 +468,46 @@
       returnToQueue: () => {},
       evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
       setCursor: (ev) => ctx.setCursor(ev),
-      clearGroup: (ev) => leaveGroup(ev),
+      setLinkedTo: (ev, [arg], s) => {
+        ev.linkedTo = value(arg, ev, s.form, s);
+      },
+      clearLink: (ev) => {
+        ev.linkedTo = null;
+      },
+      // Заполненные шаги связанного — в незаполненные шаги основного (сценарий у них один); у связанного
+      // ответы остаются как история. Что перенесено — запись в журнале основного
+      copyAnswersToPrimary: (ev, [template], s) => {
+        const p = byId(s.form && s.form.primaryId);
+        const filled = (v) => v !== undefined && v !== null && v !== "" && v !== false;
+        if (!p || !ev.answers) return;
+        const moved = Object.keys(ev.answers).filter((k) => filled(ev.answers[k]) && !filled((p.answers || {})[k]));
+        if (!moved.length) return;
+        const at = now();
+        s.after.push(() => {
+          p.answers = p.answers || {};
+          moved.forEach((k) => (p.answers[k] = JSON.parse(JSON.stringify(ev.answers[k]))));
+          if (template) ctx.log(p, s.actor, template, { number: ev.number, n: moved.length }, at);
+        });
+      },
+      // Открытые связанные объединяемого — новому основному: связанного у связанного не бывает.
+      // Закрытые вместе с прежним основным остаются при нём как история
+      relinkToPrimary: (ev, [template], s) => {
+        const p = byId(s.form && s.form.primaryId);
+        if (!p) return;
+        const children = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
+        const at = now();
+        s.after.push(() =>
+          children.forEach((e) => {
+            e.linkedTo = p.id;
+            if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);
+          })
+        );
+      },
+      copyCloseFromPrimary: (ev) => {
+        const p = byId(ev.linkedTo);
+        if (!p) return;
+        Object.assign(ev, { closeResult: p.closeResult, massCause: p.massCause, closeComment: p.closeComment, closedBy: p.closedBy });
+      },
       // Алерт (§9, RULE-43) — внешний эффект: уходит после того, как переход применён. Кому — решает
       // сервер (на месте и с доступом к объекту); никому — запись в журнал из машины
       notify: (ev, [who], s) => {
@@ -457,6 +533,7 @@
         transitionId: tr.id,
         after: [],
         previousOwner: draft.owner,
+        // Состояние до перехода: черновик получает новое раньше эффектов
         level: nextLevel(draft),
         logVars: { previousOwnerName: ctx.actorName(addressee(draft)) },
       };
@@ -530,7 +607,7 @@
       if (bad) return { ok: false, why: bad };
       // Ручное действие в окне после дедлайна выигрывает у таймера (§10.1, правило 5; RULE-63)
       const canceled = overridden(ev);
-      const owner = addressee(ev);
+      const owner = ev.linkedTo ? breachOwnerOfLinked(ev) : addressee(ev);
       const before = ev.log.length;
       if (canceled) ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
       const applied = applyEffects(tr, ev, form, ME);
@@ -670,7 +747,6 @@
         const w = n.when || {};
         if (w.state && w.state !== ev.state) return false;
         if (w.ownership && w.ownership !== role) return false;
-        if (w.grouped && !(extra && extra.groupSize > 1)) return false;
         return true;
       });
       if (!note) return null;
@@ -754,105 +830,37 @@
       return true;
     }
 
-    // «Обработать как одно» (§11): «Взять» с bulk.createsGroup на каждом отмеченном и общий group_id.
-    // Условия и общие поля — из grouping машины. group_id ставится до проверки «Взять»: группа
-    // считается в лимите активных одной единицей
-    function createGroup(list, groupId) {
-      const g = W.grouping;
-      const claim = W.transitions.find((t) => t.bulk && t.bulk.createsGroup);
-      if (!g.enabled || !claim) return { ok: false, why: ["workflow.error.group.disabled"] };
-      if (!g.permissions.every(ctx.can)) return { ok: false, why: ["workflow.error.group.no_permission"] };
-      if (list.length < g.createFrom.minItems) return { ok: false, why: ["workflow.error.group.too_few", { n: g.createFrom.minItems }] };
-      if (list.length > g.createFrom.maxItems) return { ok: false, why: ["workflow.error.group.too_many", { max: g.createFrom.maxItems }] };
-      if (!list.every((e) => g.createFrom.states.includes(e.state))) return { ok: false, why: ["workflow.error.group.new_only"] };
-      if (g.createFrom.sameEventType && list.some((e) => e.typeId !== list[0].typeId)) {
-        return { ok: false, why: ["workflow.error.group.same_type"] };
+    // «Взять в работу» на выборке (§11, черновик): переход с bulk.mode merge на каждом, кроме основного,
+    // и, если основной новый, — grouping.takeWith на нём. Всё или ничего: сначала проверка всех
+    function mergeCheck(primary, others) {
+      const tr = W.transitions.find((t) => t.bulk && t.bulk.mode === "merge");
+      if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
+      const form = { primaryId: primary.id };
+      for (const ev of others) {
+        const a = availability(tr.id, ev, { form });
+        // ev — какой из объединяемых не проходит: панель выборки называет его номер
+        if (!a.ok) return { ok: false, why: a.why, guard: a.guard, ev };
       }
-      list.forEach((ev) => (ev.groupId = groupId));
-      const blocked = list.find((ev) => !availability(claim.id, ev).ok);
-      if (blocked) {
-        const { why, guard } = availability(claim.id, blocked);
-        list.forEach((ev) => (ev.groupId = null));
-        return { ok: false, why, guard };
+      const take = W.transitions.find((t) => t.id === W.grouping.takeWith);
+      const taking = Boolean(take && take.from.includes(primary.state));
+      if (taking) {
+        const a = availability(take.id, primary);
+        if (!a.ok) return { ok: false, why: a.why, guard: a.guard, ev: primary };
       }
-      const applied = applyAll(claim, list, {}, ME);
-      if (!applied.ok) {
-        list.forEach((ev) => (ev.groupId = null));
-        return applied;
+      return { ok: true, tr, form, take: taking ? take : null };
+    }
+    function merge(primary, others) {
+      const check = mergeCheck(primary, others);
+      if (!check.ok) return check;
+      const applied = applyAll(check.tr, others, check.form, ME);
+      if (!applied.ok) return applied;
+      applied.transitionId = check.tr.id;
+      if (check.take) {
+        const r = applyEffects(check.take, primary, {}, ME);
+        if (!r.ok) return r;
+        applied.taken = { transitionId: check.take.id, facts: r.facts[0] };
       }
-      if (g.shared.includes("scenarioAnswers")) list.forEach((ev) => ctx.shareAnswers(ev, list[0]));
-      return { ok: true };
-    }
-
-    const canExcludeFromGroup = (ev) => Boolean(ev && ev.groupId) && !firstFail(ev, W.grouping.excludeGuards);
-    // Почему исключить нельзя — для подсказки на кнопке
-    const excludeBlock = (ev) => (ev && ev.groupId ? (firstFail(ev, W.grouping.excludeGuards) || {}).why || null : null);
-
-    // Выход из группы сценария (§11): признак снят, ответы — своя копия, дальше меняются отдельно
-    function leaveGroup(ev) {
-      if (!ev.groupId) return;
-      ev.groupId = null;
-      ctx.detachAnswers(ev);
-    }
-
-    // Группа следует за владельцем (§11, RULE-52, RULE-56; grouping.memberLeavesGroupOn: owner_diverges):
-    // после операции целиком группа делится по владельцу или адресату. Самая большая часть сохраняет
-    // группу, при равенстве — та, где инцидент с наименьшим номером; другая часть из двух и более —
-    // новая группа с копией общих ответов; одиночный выходит со своей копией. Так у оператора не
-    // становится больше единиц лимита активных. Закрытые — история, не делятся (RULE-59). Возвращает
-    // изменённых: инцидент и его новую группу (null — вышел)
-    function settleGroups() {
-      if (!W.grouping.memberLeavesGroupOn.includes("owner_diverges")) return [];
-      const groups = new Map();
-      ctx.events().filter((e) => e.groupId && !states[e.state].terminal).forEach((e) => groups.set(e.groupId, (groups.get(e.groupId) || []).concat(e)));
-      const changed = [];
-      const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
-      groups.forEach((members) => {
-        const parts = new Map();
-        members.forEach((e) => {
-          const key = `${e.owner || ""}|${e.assignmentGroup || ""}`;
-          parts.set(key, (parts.get(key) || []).concat(e));
-        });
-        const sorted = [...parts.values()].map((p) => p.sort(byNumber)).sort((a, b) => b.length - a.length || byNumber(a[0], b[0]));
-        sorted.forEach((part, i) => {
-          if (i === 0 && part.length > 1) return;
-          if (part.length === 1) {
-            leaveGroup(part[0]);
-            changed.push({ ev: part[0], groupId: null });
-            return;
-          }
-          const groupId = ctx.newGroupId();
-          ctx.detachAnswers(part[0]);
-          part.forEach((e) => {
-            e.groupId = groupId;
-            ctx.shareAnswers(e, part[0]);
-            changed.push({ ev: e, groupId });
-          });
-        });
-      });
-      return changed;
-    }
-
-    // Переход только на всю группу (§11, BUG-29; grouping.wholeGroupOnly): на инциденте группы — вместе
-    // со всеми её открытыми инцидентами в одном запросе, и всё или ничего: если кого-то из них нельзя,
-    // нельзя никого. Закрытые члены — история, не считаются. Возвращает причину отказа или null
-    function groupBlock(id, ev, guids, opts) {
-      if (!ev.groupId || !(W.grouping.wholeGroupOnly || []).includes(id)) return null;
-      const open = ctx.events().filter((e) => e.groupId === ev.groupId && !states[e.state].terminal);
-      if (!open.every((e) => guids.includes(e.id))) return { why: ["workflow.error.group.whole_only"] };
-      const stuck = open.find((e) => e !== ev && !availability(id, e, opts).ok);
-      return stuck ? { why: ["workflow.error.group.not_closed", { id: stuck.number }] } : null;
-    }
-
-    // Ручное исключение из группы сценария (§11, grouping.memberLeavesGroupOn: manual_exclude):
-    // инцидент остаётся в работе со своей копией ответов
-    function excludeFromGroup(ev) {
-      if (!ev.groupId || !W.grouping.memberLeavesGroupOn.includes("manual_exclude")) return { ok: false, why: ["workflow.error.group.not_member"] };
-      const fail = firstFail(ev, W.grouping.excludeGuards);
-      if (fail) return { ok: false, why: fail.why, guard: fail.guard };
-      leaveGroup(ev);
-      ctx.log(ev, ME, "workflow.journal.group.excluded");
-      return { ok: true };
+      return applied;
     }
 
     return {
@@ -885,12 +893,8 @@
       tick,
       canEditScenario,
       closeResultLabel,
-      createGroup,
-      excludeFromGroup,
-      settleGroups,
-      groupBlock,
-      canExcludeFromGroup,
-      excludeBlock,
+      merge,
+      mergeCheck,
       units,
     };
   }

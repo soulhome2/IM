@@ -76,10 +76,6 @@ def escalate_to_my_group(w):
     w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
 
 
-def key_in_modal(w):
-    next(h for h in w["hotkeys"] if h["key"] == "N")["worksInModal"] = True
-
-
 def close_without_placeholder(w):
     form = next(f for f in w["forms"] if f["id"] == "close")
     del next(f for f in form["fields"] if f["name"] == "resultId")["placeholderKey"]
@@ -111,7 +107,7 @@ def without_manual_transitions(w):
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
     ("from", "«Отложить» ни из какого состояния", lambda w: transition(w, "hold").update({"from": []})),
-    ("limit", "лимит активных 1 → 2", lambda w: w["limits"].update(maxActive=2)),
+    ("limit", "лимит активных: без ограничения → 1", lambda w: w["limits"].update(maxActive=1)),
     ("norm", "норматив реакции критического 4 → 10 мин", lambda w: reaction_override(w, 100).update(sec=600)),
     (
         "surfaces",
@@ -120,7 +116,6 @@ MUTATIONS = [
             surfaces=["queue", "card"]
         ),
     ),
-    ("hotkey", "клавиша «Взять» N → M", lambda w: next(h for h in w["hotkeys"] if h["key"] == "N").update(key="M")),
     ("filter", "фильтр «Мои» включает закрытые", lambda w: next(q for q in w["queueFilters"] if q["id"] == "mine")["states"].append("closed")),
     ("badge", "бейдж «Новое» → «Свежее»", lambda w: ru(w, next(b for b in w["badges"]["rules"] if b["state"] == "new")["labelKey"], "Свежее")),
     (
@@ -135,12 +130,15 @@ MUTATIONS = [
         "новая причина удержания",
         lambda w: (w["reasonCatalogs"]["hold"]["items"].append({"id": "probe", "labelKey": "workflow.catalog.hold.probe", "maxMinutes": 5, "setBy": "operator"}), ru(w, "workflow.catalog.hold.probe", "Проба")),
     ),
-    ("grouping", "группа сценария из разных типов событий", lambda w: w["grouping"]["createFrom"].update(sameEventType=False)),
+    ("merge_hides", "связанные события в списках не показываются", lambda w: next(s for s in w["states"] if s["id"] == "linked").update(category="pending")),
+    ("merge_relink", "связанные прежнего основного не переходят к новому", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "relinkToPrimary"])),
+    ("merge_answers", "ответы сценария связанного основному не переносятся", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "copyAnswersToPrimary"])),
+    ("merge_nav", "после «Взять в работу» на выборке — к очереди, а не в карточку", lambda w: transition(w, "merge")["ui"].update(navigate="queue")),
+    ("merge_foreign", "объединить можно только ничьё или своё", lambda w: transition(w, "merge").update(guards=[g for g in transition(w, "merge")["guards"] if g["fn"] != "isOwnerOrUnowned"])),
     ("scenario", "править сценарий можно только в «Отложен»", lambda w: w["scenarioEdit"]["guards"].append({"fn": "stateIs", "args": [["on_hold"]]})),
     ("permission", "из каталога убрано право transfer:own", lambda w: w.update(permissions=[p for p in w["permissions"] if p["key"] != "incident:transfer:own"])),
     ("reopen", "срок переоткрытия 24 ч → 1 мин", lambda w: w["limits"].update(reopenWindowMin=1)),
     ("escalation", "норматив реакции уровня 1: 120 → 30 с", lambda w: w["escalation"]["levels"][0].update(reactionSec=30)),
-    ("escape", "Esc без шага «к очереди»", lambda w: next(h for h in w["hotkeys"] if h["key"] == "Esc")["chain"].remove("back_to_queue")),
     ("breakReason", "новая причина перерыва", lambda w: (w["session"]["breakReasons"].append({"id": "probe", "labelKey": "workflow.session.break.probe"}), ru(w, "workflow.session.break.probe", "Проба"))),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
@@ -148,7 +146,6 @@ MUTATIONS = [
     ("holdBreach", "предельный срок удержания ~2 с — нарушение удержания", short_hold),
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
-    ("modalKey", "«Взять следующее» работает при открытой справке", key_in_modal),
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
@@ -159,11 +156,6 @@ MUTATIONS = [
         lambda w: (no_grace(w), [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]]),
     ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
-    (
-        "exclude",
-        "исключение из группы без проверки лимита",
-        lambda w: w["grouping"].update(excludeGuards=[g for g in w["grouping"]["excludeGuards"] if g["fn"] != "withinActiveLimit"]),
-    ),
 ]
 
 
