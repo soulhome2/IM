@@ -843,6 +843,9 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   gap: 8px;
 }
 .events-types .mselect { min-width: 0; position: relative; }
+/* Кнопка «Фильтры» — только на телефоне (BUG-50) */
+.events-more { display: none; position: relative; }
+.events-more-n { min-width: 18px; padding: 0 5px; border-radius: 50px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-style: normal; font-weight: 600; line-height: 18px; text-align: center; }
 /* Меню списка над очередью — поверх строк, а не внутри панели */
 .mselect.tb .mselect-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent); }
 .events-sort { grid-column: 1 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1864,8 +1867,7 @@ select.search-input { padding-right: 36px; }
   .clock,
   #toggleMedia { display: none; }
   .events-types { grid-template-columns: minmax(0, 1fr); }
-  #panelEvents .panel-h { flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
-  #panelEvents .panel-h .events-select { flex: 1 1 100%; }
+  #panelEvents .panel-h { padding-top: 6px; padding-bottom: 6px; }
   .topbar-cluster { padding-left: 8px; }
   .topbar-actions { gap: 4px; }
   /* Язык — только значок: список тот же, он лежит поверх значка невидимым */
@@ -1956,11 +1958,15 @@ select.search-input { padding-right: 36px; }
   .pager-btn { min-width: 40px; height: 40px; }
   .cam-tick { height: 24px; padding: 10px 0; background-clip: content-box; }
 
-  .events-toolbar { grid-template-columns: minmax(0, 1fr); }
-  .events-toolbar select { min-width: 0; }
+  /* Шапка очереди — одной строкой; поиск, состояние и «Фильтры» — второй. Типы и порядок —
+     под «Фильтры»: на список остаётся место (BUG-50) */
+  .events-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .events-toolbar select { min-width: 0; max-width: 132px; }
+  .events-more { display: inline-flex; }
   .events-types { grid-row: auto; }
-  .events-select { justify-content: stretch; }
-  .events-select .btn { flex: 1; }
+  .events-toolbar .events-sort { grid-column: 1 / -1; max-width: none; }
+  .events-toolbar:not(.more-open) .events-types,
+  .events-toolbar:not(.more-open) .events-sort { display: none; }
 
   .event {
     grid-template-columns: 24px 4px minmax(0, 1fr);

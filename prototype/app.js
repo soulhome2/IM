@@ -585,6 +585,7 @@
     eventTypes: [],
     deviceTypes: [],
     tbOpen: null,
+    moreFilters: false,
     tbQ: {},
     // Вкладка карточки: сценарий или привязанные инциденты — и чья карточка
     workTab: "scenario",
@@ -1624,6 +1625,18 @@
     typeList("deviceTypeFilter", "deviceTypes", store.deviceTypes.map((d) => ({ id: d.id, label: d.label })), "Все типы устройств");
     typeList("eventTypeFilter", "eventTypes", store.eventTypes.map((e) => ({ id: e.guid, label: e.name })), "Все типы событий");
     if (state.tbOpen) comboFocus(document.querySelector(`[data-tb-toggle="${state.tbOpen}"]`));
+    renderMoreFilters();
+  }
+  // Телефон (BUG-50): типы и порядок — под кнопкой «Фильтры»; число на ней — сколько типов выбрано,
+  // чтобы скрытый фильтр не забылся. На широком экране кнопки нет, всё видно сразу
+  function renderMoreFilters() {
+    const n = state.deviceTypes.length + state.eventTypes.length;
+    $("eventsMoreN").hidden = !n;
+    $("eventsMoreN").textContent = String(n);
+    $("eventsToolbar").classList.toggle("more-open", state.moreFilters);
+    const btn = $("eventsMoreBtn");
+    btn.setAttribute("aria-expanded", String(state.moreFilters));
+    btn.setAttribute("aria-label", n ? t("Фильтры: выбрано {n}", { n }) : t("Фильтры"));
   }
 
   // Порядок очереди (§7, BUG-34): список — только если администратор разрешил оператору выбирать;
@@ -2697,6 +2710,10 @@
     $("eventFilter").addEventListener("change", (e) => {
       state.filter = e.target.value;
       requery();
+    });
+    $("eventsMoreBtn").addEventListener("click", () => {
+      state.moreFilters = !state.moreFilters;
+      renderMoreFilters();
     });
     $("queueSortSelect").addEventListener("change", async (e) => {
       await api.patch("/operator/session/preferences", { queueSort: e.target.value });

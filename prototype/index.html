@@ -169,14 +169,20 @@
           <div class="panel-b events-body">
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
             <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
-            <div class="events-toolbar">
+            <div class="events-toolbar" id="eventsToolbar">
               <div class="search-wrapper">
                 <span class="material-symbols-outlined">search</span>
                 <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по площадке, типу, ID..." />
               </div>
               <!-- Фильтры по состоянию — из машины (queueFilters) -->
               <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
-              <div class="events-types">
+              <!-- Телефон: типы и порядок — под кнопкой «Фильтры» с числом выбранных типов (§7, BUG-50) -->
+              <button type="button" class="btn ghost small events-more" id="eventsMoreBtn" aria-expanded="false" aria-controls="eventsTypes queueSortSelect" title="Фильтры по типам и порядок очереди">
+                <span class="material-symbols-outlined">tune</span>
+                <span>Фильтры</span>
+                <em class="events-more-n" id="eventsMoreN" hidden></em>
+              </button>
+              <div class="events-types" id="eventsTypes">
                 <!-- Выпадающие списки с галочками: несколько типов сразу; строит app.js -->
                 <div class="mselect tb" id="deviceTypeFilter" aria-label="Тип устройства"></div>
                 <div class="mselect tb" id="eventTypeFilter" aria-label="Тип события"></div>

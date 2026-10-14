@@ -301,6 +301,8 @@ window.IM_DICT_UI = {
     "Сработка от уборщика": "Triggered by the cleaning staff",
     "Все типы событий": "All event types",
     "Все типы устройств": "All device types",
+    "Фильтры": "Filters",
+    "Фильтры: выбрано {n}": "Filters: {n} selected",
     "Тип события": "Event type",
     "Тип устройства": "Device type",
     "Нужна проверка по камерам площадки": "Site cameras need to be checked",

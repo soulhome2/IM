@@ -212,6 +212,9 @@ MUTATIONS = [
     ("ui-no-if-match", "app.js", "const ifMatch = (ev) => ({ \"If-Match\": `\"${ev.version}\"` });", "const ifMatch = () => ({});", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue");', 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)
+    # Телефон: типы и порядок — под «Фильтры» с числом выбранных (BUG-50)
+    ("ui-more-filters-no-count", "app.js", '$("eventsMoreN").hidden = !n;', '$("eventsMoreN").hidden = true;', "ui"),
+    ("ui-more-filters-no-toggle", "app.js", '$("eventsToolbar").classList.toggle("more-open", state.moreFilters);', "", "ui"),
     ("ui-sort-ignores-permission", "app.js", "select.hidden = !s.operatorMayChange;", "select.hidden = false;", "ui"),
     ("ui-sort-not-saved", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "", "ui"),
     ("ui-sort-no-requery", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });\n      requery(true);', 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "ui"),

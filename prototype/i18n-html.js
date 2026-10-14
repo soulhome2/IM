@@ -67,6 +67,8 @@ window.IM_DICT_HTML = {
     "Ничего не найдено": "Nothing found",
     "Номер": "Number",
     "Снять выделение": "Clear selection",
+    "Фильтры по типам и порядок очереди": "Type filters and queue order",
+    "Фильтры": "Filters",
     "Выделить": "Select",
     "Выделить инциденты": "Select incidents",
     "Все в фильтре": "All in filter",

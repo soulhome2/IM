@@ -8,17 +8,40 @@
    После упавшего шага прототип возвращается в очередь и освобождает лимит активных,
    чтобы независимые шаги дальше не падали следом. */
 (() => {
-  // Страница, открытая самопроверкой в узкой рамке: сообщает, шире ли она экрана
+  // Страница, открытая самопроверкой в узкой рамке: сообщает, шире ли она экрана, сколько места
+  // над очередью занимают шапка и фильтры и работает ли кнопка «Фильтры» (BUG-50)
   if (new URLSearchParams(location.search).has("widthcheck")) {
-    window.addEventListener("load", () =>
-      setTimeout(() => {
-        const wide = [...document.querySelectorAll("body *")]
-          .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
-          .slice(0, 3)
-          .map((el) => el.id || el.className);
-        parent.postMessage({ widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide }, "*");
-      }, 300)
-    );
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const height = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? el.getBoundingClientRect().height : 0;
+    };
+    window.addEventListener("load", async () => {
+      await pause(300);
+      const wide = [...document.querySelectorAll("body *")]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+        .slice(0, 3)
+        .map((el) => el.id || el.className);
+      const filters = Math.round(height("#panelEvents .panel-h") + height("#eventsToolbar"));
+      const more = document.getElementById("eventsMoreBtn");
+      const typesHidden = height("#eventsTypes") === 0;
+      more.click();
+      const typesShown = height("#eventsTypes") > 0 && more.getAttribute("aria-expanded") === "true";
+      // Отметить один тип устройства — на кнопке число выбранных
+      document.querySelector('[data-tb-toggle="deviceTypes"]').click();
+      await pause(50);
+      const box = document.querySelector('input[data-tb="deviceTypes"]');
+      if (box) box.click();
+      await pause(50);
+      const count = document.getElementById("eventsMoreN");
+      const counted = !count.hidden && count.textContent === "1";
+      more.click();
+      const closed = height("#eventsTypes") === 0;
+      parent.postMessage(
+        { widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide, filters, more: { typesHidden, typesShown, counted, closed } },
+        "*"
+      );
+    });
     return;
   }
   if (!new URLSearchParams(location.search).has("selftest")) return;
@@ -1074,7 +1097,7 @@
       expect(mode() === "queue" && $("breakBanner").hidden, "Esc что-то сделал кроме закрытия окна");
     });
 
-    await step("На телефоне 360 пикселей страница не шире экрана", async () => {
+    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50)", async () => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";
       const report = new Promise((resolve) => {
@@ -1093,7 +1116,12 @@
       frame.remove();
       expect(r, "узкая страница не ответила");
       expect(r.scroll <= r.width, `ширина ${r.scroll} при экране ${r.width}: ${r.wide.join(", ")}`);
-      return `${r.scroll} из ${r.width}`;
+      expect(r.filters <= 120, `шапка очереди и фильтры — ${r.filters} px, на список мало места`);
+      expect(r.more.typesHidden, "типы видны без «Фильтры»");
+      expect(r.more.typesShown, "«Фильтры» не открыли типы");
+      expect(r.more.counted, "на «Фильтры» нет числа выбранных типов");
+      expect(r.more.closed, "«Фильтры» не закрыли типы");
+      return `${r.scroll} из ${r.width}, шапка и фильтры ${r.filters} px`;
     });
 
     await step("Контраст отсчётов, бейджей, уровня и списка «Кому передать» не ниже 4,5:1 в обеих темах", async () => {
