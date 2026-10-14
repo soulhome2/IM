@@ -544,6 +544,13 @@ def check_doc_numbers(w, o, err):
     manual = sum(1 for t in w["transitions"] if t["trigger"] == "manual")
     with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
         version = int(re.search(r"Версия: \*\*v(\d+)\*\*", f.read()).group(1))
+    # Операции, которые тесты API не проверяют, — по выражению NOT_COVERED из tests/harness.js (DOC-38)
+    with open(os.path.join(ROOT, "tests", "harness.js"), encoding="utf-8") as f:
+        not_covered = re.compile(re.search(r"const NOT_COVERED = /(.+)/;", f.read()).group(1).replace("\\/", "/"))
+    skipped = [f"{m.upper()} {path}" for path, item in o["paths"].items() for m in item if m in ("get", "post", "put", "patch", "delete")]
+    skipped = [op for op in skipped if not_covered.search(op)]
+    skipped_schemas = sum(1 for op in skipped if "/workflow/schemas" in op)
+    skipped_priorities = sum(1 for op in skipped if "/admin/priorities" in op)
 
     def text(*parts):
         with open(os.path.join(ROOT, *parts), encoding="utf-8") as f:
@@ -566,6 +573,7 @@ def check_doc_numbers(w, o, err):
         ("BACKEND.md", r"(\d+) операц\w*, плюс (\d+) служебн", [("операций", len(ops) - test_ops), ("служебных", test_ops)]),
         ("BACKEND.md", r"(\d+) состояни\w*, (\d+) переход\w*, (\d+) услови\w*, (\d+) эффект", [("состояний", len(w["states"])), ("переходов", len(w["transitions"])), ("условий", len(w["registries"]["guards"])), ("эффектов", len(w["registries"]["effects"]))]),
         ("BACKEND.md", r"нужны (\w+) служебные операции", [("служебных операций", test_ops)]),
+        ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\) и правку справочника приоритетов \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities)]),
         ("корневой README", r"сейчас версия (\d+)", [("версия правил", version)]),
         ("корневой README", r"Приведена к правилам v(\d+)", [("версия правил", version)]),
         ("машина ($comment)", r"версия v(\d+)", [("версия правил", version)]),
