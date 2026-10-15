@@ -213,6 +213,20 @@
     }
   });
 
+  test("«Перехватить» — не адресату: переданное моей группе принимают, а не перехватывают — ни в карточке, ни на панели выборки (§6.1, §7, BUG-55)", async () => {
+    const env = await makeEnv();
+    const guid = await env.guidOf("INC-1836");
+    const card = await env.card(guid);
+    assert.eq([card.state, card.ownership], ["pending_acceptance", "target"], "передано моей группе");
+    const visible = (acts) => (acts || []).filter((a) => a.visible !== false).map((a) => a.id);
+    assert.ok(visible(card.actions).includes("accept") && !visible(card.actions).includes("takeover"), `в карточке: ${visible(card.actions).join(", ")}`);
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [guid] });
+    assert.ok(!visible(sel.actions).includes("takeover"), `на панели выборки: ${visible(sel.actions).join(", ")}`);
+    const res = await env.act(guid, "takeover", { comment: "тест" });
+    assert.ok(res.status >= 400, `сервер перехват адресату отклоняет: ${res.status}`);
+    assert.eq((await env.card(guid)).state, "pending_acceptance", "состояние не изменилось");
+  });
+
   test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {
     const env = await makeEnv();
     const inc = await env.card(await env.guidOf("INC-1836"));

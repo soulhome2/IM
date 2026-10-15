@@ -560,6 +560,7 @@
         { "fn": "hasPermission", "args": ["incident:reassign"] },
         { "fn": "hasPermission", "args": ["incident:claim"] },
         { "fn": "isNotOwner" },
+        { "fn": "isNotTarget" },
         { "fn": "agentReady" },
         { "fn": "withinActiveLimit" }
       ],

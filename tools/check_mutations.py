@@ -154,6 +154,7 @@ MUTATIONS = [
     ("transferEmpty", "у адресата передачи нет placeholder — форма выбирает первого сама", transfer_without_placeholder),
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
+    ("takeoverTarget", "«Перехватить» и адресату: переданное моей группе можно перехватить", lambda w: transition(w, "takeover").update(guards=[g for g in transition(w, "takeover")["guards"] if g["fn"] != "isNotTarget"])),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

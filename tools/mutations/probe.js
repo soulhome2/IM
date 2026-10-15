@@ -47,6 +47,16 @@
       const text = badge ? badge.textContent : "";
       return [text.includes("Группе на принятие"), "бейдж INC-1836: " + text];
     },
+    // Переданное моей группе: на панели выборки — «Перехватить» рядом с «Принять» (BUG-55)
+    async takeoverTarget() {
+      await setFilter("inbox");
+      const r = row(guidOf("INC-1836"));
+      if (!r) return [false, "нет INC-1836 в «Мне на принятие»"];
+      await click(r.querySelector("[data-check]"));
+      await wait(300);
+      const take = $("selBar").querySelector('[data-sel-do="takeover"]');
+      return [Boolean(take) && !off(take), "«Перехватить» на панели выборки: " + (take ? (off(take) ? "бледная" : "доступна") : "нет")];
+    },
     async transferEmpty() {
       await setFilter("open");
       await click(btn($("eventsList"), "transfer"));

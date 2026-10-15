@@ -1463,6 +1463,9 @@ window.IM_WORKFLOW = {
           "fn": "isNotOwner"
         },
         {
+          "fn": "isNotTarget"
+        },
+        {
           "fn": "agentReady"
         },
         {
