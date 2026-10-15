@@ -128,6 +128,9 @@ def check_workflow(w, err):
     for b in w["badges"]["rules"]:
         if b["state"] not in states:
             err.append(f"бейдж: нет состояния {b['state']}")
+        # Подпись бейджа — только ключом каталога (§14.9): текст без ключа исполнитель не покажет (BUG-51, PROC-25)
+        if not b.get("labelKey") or "label" in b:
+            err.append(f"бейдж {b['state']} / {b['viewerRole']}: подпись — не ключом каталога labelKey (BUG-51)")
 
 
 def check_engine(w, err):

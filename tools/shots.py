@@ -94,11 +94,12 @@ class WebSocket:
 
 
 class Browser:
-    def __init__(self, chrome):
+    def __init__(self, chrome, extra=()):
+        # extra — ключи Chrome сверх обычных, например --no-sandbox на CI (tools/check_ui.py)
         self.dir = tempfile.mkdtemp(prefix="im-shots-")
         self.proc = subprocess.Popen(
             [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--hide-scrollbars",
-             "--allow-file-access-from-files", "--remote-debugging-port=0", f"--user-data-dir={self.dir}", "about:blank"],
+             "--allow-file-access-from-files", "--remote-debugging-port=0", f"--user-data-dir={self.dir}", *extra, "about:blank"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         port_file = Path(self.dir) / "DevToolsActivePort"
