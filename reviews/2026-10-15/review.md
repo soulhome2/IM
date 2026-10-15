@@ -1,0 +1,155 @@
+# Ревью IM 2026-10-15: полное
+
+Дата: 2026-10-15. Проверяемый коммит: `a4119cd` (тег `handoff-1`), ветка `main`. Действующие правила: v9. Роли: все — архитектор, тестировщик, продакт, UX / оператор, дизайнер, разработчик.
+
+Что просмотрено:
+- правила целиком;
+- машина: переходы, бейджи, таймеры, сессия; `TRANSITIONS.md`;
+- README, README машины, `BACKEND.md`, `FRONTEND.md`, `prototype/README.md`;
+- Vision и сверка с Vision, руководство оператора;
+- журналы и медиа эталонного набора;
+- ссылки «§N» во всех документах и коде;
+- в Chrome — экраны, которые прошлое ревью не проходило: карточка сценария, макросы, форма закрытия, чужая и закрытая карточки, вкладка привязанных, телефон 360 и 390 px, настройки администратора, меню справки; обе темы.
+
+Пункты с пометкой ✅ подтверждены запуском: встроенный сервер во временной странице тестов или headless Chrome по протоколу DevTools. Остальное найдено чтением кода и документов.
+
+Ссылки ведут на файлы в коммите `a4119cd`.
+
+Номера и важность — по договорённостям в [reviews/README.md](../README.md). План исправлений — [plan.md](plan.md).
+
+## Главное
+
+Все автоматические проверки зелёные. Но вручную нашлись ошибки, которых они не видят:
+
+1. **BUG-51** — у инцидента, с которым работает коллега, бейдж пустой: в очереди, в карточке и в строке состояния. Оператор не видит, кто ведёт инцидент. Сломано с 2026-10-11 (RULE-66), ни одна проверка не заметила (PROC-25).
+2. **RULE-76** — уровень эскалации считает и ручные передачи. После одной передачи коллеге автоэскалация пропускает старшего и идёт сразу в ЦОД. После двух не идёт никуда: остаётся только алерт.
+3. **BUG-52** — у «Передать» белый текст на оранжевом, контраст 3,47:1 в обеих темах. `FRONTEND.md` требует 4,5:1.
+4. **BUG-53** — на телефоне во вкладке «Привязанные инциденты» кнопки «Отсоединить» за правым краем экрана.
+5. **DOC-41** — README машины: у «Принять» указано право `incident:claim`, у «Перехватить» и «Переоткрыть» не указано `incident:claim`, состояния «Привязан» в таблице нет. Разработчик, который читает README, а не машину, сделает права неправильно.
+
+Роли без находок: нет.
+
+## Автоматические проверки
+
+- Самопроверка — 55 из 55. Тесты API — 124 из 124. Через сеть (`check_loopback.py`) — тоже 124 из 124.
+- `check_machine.py` — 0 ошибок. `build_workflow.py --check` — `TRANSITIONS.md` и `SETTINGS.md` совпадают с машиной.
+- `check_mutations.py` — 0 из 32. `check_code_mutations.py` — выживших 0 из 197.
+- `check_i18n.py`, `check_links.py`, `check_guide.py` — 0.
+- Покрытие: после прошлого ревью новых переходов, кнопок и форм нет — только исправления, у каждого есть шаг или тест. Без проверки остаются:
+  - текст бейджей — BUG-51, PROC-25;
+  - вёрстка вкладки привязанных на телефоне — BUG-53;
+  - контраст кнопок действий — BUG-52.
+
+## Открытые пункты прошлых циклов
+
+- **PROC-15** — не исправлено: тексты интерфейса передаются в каталог строк команде фронтенда (`FRONTEND.md`, «Что ещё за вами»).
+
+## 2. Ошибки в прототипе
+
+- **BUG-51** [высокий] *тестировщик, UX, дизайнер* ✅ **Бейдж «коллега в работе» пустой.** В очереди, в карточке и в строке состояния у чужого инцидента «В работе» вместо «ФИО оператора» (§2.4) — пустая плашка. В строке состояния — «Карточка INC-1846 · » и ничего после точки.
+  - Причина: в машине у этого бейджа остался текст `"label": "{ownerName}"` вместо ключа каталога ([workflow.v4.json:94](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/workflow.v4.json#L94)). С RULE-66 (`56632e0`, 2026-10-11) исполнитель читает только `labelKey` ([engine.js:830](https://github.com/soulhome2/IM/blob/a4119cd/prototype/engine.js#L830)), а `label` без ключа он не видит.
+  - Почему важно: это самый частый способ узнать, кто ведёт инцидент, — фильтр «Чужие», контроль оператора (Vision). То же на английском.
+  - Снимок `state-badge-foreign-*.png`, переснятый по DOC-40, тоже показывает пустую плашку.
+  - Как воспроизвести: открыть прототип, подождать, пока коллега возьмёт инцидент, → фильтр «Чужие» → «Открыть».
+- **BUG-52** [средний] *дизайнер, UX* ✅ **«Передать» — контраст 3,47:1.** Белый текст на `burnt-orange` rgb(208, 113, 0) в очереди, карточке и форме, в обеих темах ([bridge.css:72](https://github.com/soulhome2/IM/blob/a4119cd/prototype/bridge.css#L72)). `FRONTEND.md` переносит в продукт требование «контраст текста не ниже 4,5:1 в обеих темах». Шаг самопроверки меряет контраст отсчётов, бейджей и списка адресатов, а кнопок — нет. Остальные кнопки в норме: «Взять» — 4,73:1, «Перехватить» — 10,6:1 и 11,9:1.
+- **BUG-53** [средний] *UX, дизайнер* ✅ **На телефоне «Отсоединить» за краем экрана.**
+  - Строки вкладки «Привязанные инциденты» шире панели: 447 px при ширине 322–352 px ([app.js:2011](https://github.com/soulhome2/IM/blob/a4119cd/prototype/app.js#L2011), [styles.css:941](https://github.com/soulhome2/IM/blob/a4119cd/prototype/styles.css#L941)).
+  - На 360 px кнопки «Отсоединить» начинаются с 355 px. «Отсоединить все» обрезана. Строки вылезают за рамку панели. Достать кнопки можно только горизонтальной прокруткой внутри карточки.
+  - `FRONTEND.md` требует телефон 360 px без горизонтальной прокрутки, а §11.4 — «Отсоединить» у каждого.
+- **BUG-54** [низкий] *UX* ✅ **Подсказки камер обещают клавиши.** «Предыдущая камера (←)», «Следующая камера (→)» ([app.js:2237](https://github.com/soulhome2/IM/blob/a4119cd/prototype/app.js#L2237), [2242](https://github.com/soulhome2/IM/blob/a4119cd/prototype/app.js#L2242), `i18n-ui.js`). Стрелки камеры не переключают: горячих клавиш нет (§13, решение 2026-10-13). Обработчик стрелок есть только у разделителей панелей.
+
+## 3. Прототип расходится с правилами
+
+- **BUG-55** [средний] *архитектор, UX* ✅ **«Перехватить» у инцидента, переданного моей группе.**
+  - Карточка INC-1836 («Вашей группе · Старшие операторы») показывает «Принять», «Отклонить», «Передать», «Закрыть» — и красное «Перехватить».
+  - У переданного лично мне (INC-1843) «Перехватить» нет.
+  - §7, таблица карточки: адресованному мне — «Принять», «Отклонить», «Передать» ([States rules IM.md:398](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L398)).
+  - Причина: у `takeover` есть условие «я не владелец», но нет «я не адресат» ([workflow.v4.json:550](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/workflow.v4.json#L550)). У группы владельца нет — условие проходит.
+  - Почему важно: две кнопки «взять себе» с разными правами и журналом. «Перехват у Старшие операторы» записывается вместо «Передача принята».
+
+## 4. Противоречия и пробелы в правилах
+
+- **RULE-76** [средний] *архитектор, продакт* ✅ **Ручная передача «съедает» уровни автоэскалации.**
+  - `escalation_level` одновременно считает передачи — ручная передача +1 ([workflow.v4.json:536](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/workflow.v4.json#L536)) — и хранит ступень цепочки: автоэскалация ставит номер уровня ([workflow.v4.json:670](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/workflow.v4.json#L670)). В §1 — «сколько раз ответственность передавалась» ([States rules IM.md:73](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L73)), в §8.3 — номер уровня ([States rules IM.md:452](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L452)). Чек-лист архитектора: «счётчик передач и ступень иерархии — разные вещи».
+  - Проверено на эталонном наборе:
+    - новый инцидент передан коллеге (Сидорову), уровень 1. Норматив реакции истёк → автоэскалация сразу на уровень 2 — дежурному ЦОД, а уровень 1 (старший, Петрова) пропущен;
+    - две передачи коллегам, уровень 2. Норматив истёк → `escalation_ceiling`: инцидент остаётся у того, кто не реагирует, только нарушение и алерт.
+  - Почему важно: обычная передача коллеге отключает цепочку «старшие → ЦОД», которую настроил администратор. Отчёт «на каком уровне решён» смешивает передачи и эскалации. Решение — в плане.
+- **RULE-77** [низкий] *архитектор, продакт* **«На перерыве новые инциденты не назначаются» — а передача и автоэскалация назначают.**
+  - §12.1: у «Перерыв» — «назначаются ли новые инциденты: нет» ([States rules IM.md:591](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L591)). Руководство §10 обещает оператору то же.
+  - §8.1 разрешает передачу отсутствующему. Автоэскалация выбирает адресата уровня только по праву и доступу: старший на обеде остаётся адресатом, и инцидент ждёт его весь норматив уровня.
+  - Флаг машины `assignsNewIncidents` ([workflow.v4.json:1174](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/workflow.v4.json#L1174)) не читают ни исполнитель, ни сервер, его нет в контракте.
+  - Что значит «не назначаются» в модели без автоназначения — решение в плане.
+- **RULE-78** [низкий] *архитектор* **§11.3 и §11.4 не говорят, что делать в двух случаях — прототип решает сам.**
+  - Основной: «ваш В работе среди отмеченных; иначе самый срочный новый» ([States rules IM.md:561](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L561)). Лимит активных по умолчанию снят, поэтому «ваших в работе» среди отмеченных может быть несколько. Прототип берёт самый срочный, при равенстве — самый старый ([server.js:1082](https://github.com/soulhome2/IM/blob/a4119cd/prototype/server.js#L1082)). Если отмечены только свои отложенные, основного нет — действие недоступно. В правилах этого нет.
+  - «Отсоединить» может «тот, кто ведёт основной» ([States rules IM.md:574](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L574)). У основного «Ожидает принятия» прототип разрешает отсоединить адресату-человеку ещё до «Принять», а участнику группы-адресата — нет ([engine.js:281](https://github.com/soulhome2/IM/blob/a4119cd/prototype/engine.js#L281)).
+- **RULE-79** [низкий] *архитектор* **Описание `incident:claim` расходится с §10.3 и §10.4.**
+  - В §5 — «Без него инцидент в работу не попадает» ([States rules IM.md:265](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L265)). Но «Принять» ведёт в работу по `incident:accept` без `incident:claim` (§6.1, [§10.3](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L512)).
+  - «Взять в работу» на выборке с новым основным требует `incident:claim` (§10.4), а в описании права этого нет.
+
+## 5. Документы
+
+- **DOC-41** [средний] *разработчик* **README машины устарел в таблицах модели.**
+  - Таблица состояний без `linked` ([README.md:52](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L52)).
+  - Права:
+    - `accept` — `incident:claim` ([:95](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L95)), а в машине `incident:accept`;
+    - у `takeover` нет `incident:claim` ([:101](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L101));
+    - у `reopen` нет `incident:claim` ([:103](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L103)).
+  - Среди функций сверх реестра — `clearGroup`, которой больше нет ([:133](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L133)).
+  - `escalation.level.target` выбирается «по доступу», а в машине — «может принять»: право и доступ ([:158](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L158)).
+  - `escalation_level` — «+1 при каждой передаче и автоэскалации», а автоэскалация ставит номер уровня ([:193](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L193)).
+  - `{escalationReason}` — «`escalation.reason`», а в машине `escalation.reasonKey` ([:227](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L227)).
+  - Почему важно: `BACKEND.md` отправляет к README машины за смыслом модели.
+- **DOC-42** [низкий] *архитектор, разработчик* **Таблица таймеров §4 не знает про «Привязан».**
+  - Реакция «останавливается: вход в `in_progress`, `closed`» ([States rules IM.md:243](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L243)). Но и объединение её снимает (`stopsOnEnter` содержит `linked`).
+  - Норматив закрытия «приостанавливается при любом выходе из `in_progress`» ([:244](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L244)). При объединении он идёт дальше, а у отложенного, ставшего привязанным, снимается с паузы (§11.4, `resumesOnEnter: ["linked"]`). Так же в таблице таймеров README машины.
+  - §2.3 называет четыре категории «той же тройкой», что в Jira ([:156](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L156)).
+- **DOC-43** [низкий] *разработчик* **Ссылки на разделы, которых нет.**
+  - «§9.3» — пять мест: [openapi.json:1582](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/openapi.json#L1582), [3747](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/openapi.json#L3747), [5578](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/openapi.json#L5578), [README машины:332](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/README.md?plain=1#L332), [app.js:880](https://github.com/soulhome2/IM/blob/a4119cd/prototype/app.js#L880). Подразделов у §9 нет; имеется в виду пункт 3 «Порядка срабатывания».
+  - «§4.1» — [openapi.json:2714](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/openapi.json#L2714); имеется в виду правило 1 §4.
+  - «§4.5» — [openapi.json:5301](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/openapi.json#L5301). Предельный срок удержания — правило 7, а правило 5 — календарные минуты.
+  - Чек-лист архитектора: «ссылки «§N» ведут туда, куда сказано». Проверяющего скрипта нет.
+- **DOC-44** [низкий] *разработчик* **`TRANSITIONS.md` говорит «связанные события».** Условия и эффекты `transfer`, `merge`, `reopen`, `linked_lost_access`: «доступ к объектам всех связанных событий», «основной … не связанный», «открытые связанные объединяемого», «запись в журнал события и основного». Эти тексты собирает генератор ([transitions_doc.py:122](https://github.com/soulhome2/IM/blob/a4119cd/tools/transitions_doc.py#L122), [126](https://github.com/soulhome2/IM/blob/a4119cd/tools/transitions_doc.py#L126), [153–155](https://github.com/soulhome2/IM/blob/a4119cd/tools/transitions_doc.py#L153-L155)). RULE-73 и RULE-75 его не тронули, а §6 правил отправляет к `TRANSITIONS.md` за полным перечнем.
+- **DOC-45** [низкий] *разработчик* **Два имени в правилах не совпадают с машиной.**
+  - §9: настройка `reason`, в машине — `escalation.reason` ([States rules IM.md:464](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L464)). На деле это ключ `escalation.reasonKey`, так и в `SETTINGS.md`.
+  - §14.9: пример ключа `workflow.guard.withinActiveLimit` ([:739](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L739)) — такого ключа в каталоге нет, есть `workflow.guard.active_limit`.
+- **DOC-46** [низкий] *продакт* **Сверка с Vision отстала.**
+  - Связи камер — «устройство → камеры» ([Vision coverage.md:37](https://github.com/soulhome2/IM/blob/a4119cd/Specification/Vision%20coverage.md?plain=1#L37)). После RULE-70 связь — многие-ко-многим: название, устройства, камеры (§19.1).
+  - Экран журнала — «для старшего смены» ([:41](https://github.com/soulhome2/IM/blob/a4119cd/Specification/Vision%20coverage.md?plain=1#L41)), а в модели — старший оператор (§1).
+- **DOC-47** [низкий] *продакт, разработчик* **§17 перечисляет не все отступления прототипа** ([States rules IM.md:805](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_rules/States%20rules%20IM.md?plain=1#L805)). Нет:
+  - редактора, валидатора, симулятора и публикации схемы (§14.6, §14.7);
+  - правки справочника приоритетов (§2.5);
+  - внешних эффектов (§14.2): макрос всегда «доставлен», результат в AxxonData не уходит, признака «команда не доставлена» нет.
+
+  `FRONTEND.md` и `BACKEND.md` об этом говорят. Но тот, кто согласует правила по прототипу, смотрит в §17 (RULE-06).
+- **DOC-48** [низкий] *разработчик, дизайнер* **README отстали в мелочах.**
+  - `prototype/README.md`, «Решения, которые принял сам», п. 5: «скриншоты сняты `scripts/shots.mjs` кита через Edge» ([README.md:71](https://github.com/soulhome2/IM/blob/a4119cd/prototype/README.md?plain=1#L71)). После DOC-40 их снимает `tools/shots.py` через Chrome — так и написано ниже, в «Как смотреть».
+  - Корневой README: «групповую обработку» ([README.md:26](https://github.com/soulhome2/IM/blob/a4119cd/README.md?plain=1#L26)) вместо выборки и привязанных инцидентов, «коллеги начнут разбирать события» ([:68](https://github.com/soulhome2/IM/blob/a4119cd/README.md?plain=1#L68)) вопреки словарю RULE-75: оператор работает с инцидентами.
+
+## 6. Демо-данные
+
+- **DATA-06** [низкий] *тестировщик* **Журналы семи инцидентов — не цепочки переходов** (чек-лист тестировщика).
+  - Закрытые INC-1826, INC-1829, INC-1831, INC-1837 и отложенный INC-1834 — без «Взято в работу». Закрыть «Обработан», «Ложная тревога», «Плановая проверка» и отложить можно только своё в работе ([demo.json:2822](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/fixtures/demo.json#L2822), [3021](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/fixtures/demo.json#L3021)).
+  - У INC-1836 и INC-1843 журнал начинается с передачи, записи о появлении нет ([demo.json:2294](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/fixtures/demo.json#L2294), [2708](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/fixtures/demo.json#L2708)).
+  - `check_machine.py` сверяет ключи записей (DATA-05), но не их порядок.
+- **DATA-07** [низкий] *тестировщик, разработчик* ✅ **У INC-1831 скрыт видеомонитор, хотя камера есть.**
+  - В наборе `"media": "map"` ([demo.json:2994](https://github.com/soulhome2/IM/blob/a4119cd/Specification/State_machine/fixtures/demo.json#L2994)). Карточка показывает только карту и подпись «Камер в зоне: 1»: камера связи источника есть, а видео не открыть.
+  - Какие панели показывать, задаёт поле инцидента `mediaKinds` ([server.js:567](https://github.com/soulhome2/IM/blob/a4119cd/prototype/server.js#L567)). В контракте у поля нет описания, в правилах его нет совсем, а по §19.1 у инцидента своего списка камер нет. Камеры и план следуют из связей и устройства, поэтому отдельное поле может с ними расходиться — как здесь. У остальных 25 инцидентов совпадает.
+
+## 7. Процесс
+
+- **PROC-25** [низкий] *тестировщик* **Пустой бейдж BUG-51 не поймала ни одна проверка.**
+  - `check_machine.py` не требует у правила бейджа ключа `labelKey`.
+  - Шаг самопроверки «На экране нет ключей каталога вместо текста» не замечает пустой текст.
+  - Тесты API не сверяют текст бейджа чужого инцидента: при сбросе его в наборе нет, коллеги на стенде выключены.
+  - Снимок DOC-40 с пустой плашкой прошёл прошлое ревью.
+
+## Ограничения проверки
+
+- Код `app.js` построчно не перечитывался. Интерфейс смотрели по снимкам экрана (обе темы, 1440×900, 390 и 360 px) и замерам в DOM.
+- Контраст кнопок мерили только у «Взять», «Передать», «Закрыть» и «Перехватить».
+- Экранный диктор не запускали: подписи проверяет шаг самопроверки.
+- Карточку сценария прошли только для пожарной тревоги и проникновения. Макросы не запускали.
+- Формальную проверку машины (im-fsm) не запускали: после прошлой проверки машина не менялась.
+- Бэкенд-репозиторий не смотрели. Срок открытого вопроса §15 «до описания API бэкенда», вероятно, наступил — это решают владельцы вопроса.
+- Машина сценариев не подключена (§14.5) — по договорённости.
