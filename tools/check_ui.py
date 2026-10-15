@@ -60,10 +60,6 @@ SCREENS = [
 KNOWN = [
     ("BUG-52", "контраст «Передать» 3,47:1", lambda p: p["kind"] == "контраст" and p["text"] == "Передать"),
     ("BUG-56", "приглушённый текст --faint и --muted светлой темы ниже 4,5:1", lambda p: p["kind"] == "контраст" and p.get("muted")),
-    ("BUG-58", "мелкий текст ниже 4,5:1: навигация, вкладка, плашка, дерево, бейдж карточки",
-     lambda p: p["kind"] == "контраст" and (p["el"] in ("#navQueueCount", "button.work-tab", "span.work-tab-n", "span.tree-ev", "span.tree-badge")
-                                           or (p["el"] in ("span.badge", "span.chip") and not p["screen"].startswith("очередь"))
-                                           or (p["el"] == "span.crumb-name" and p["theme"] == "dark"))),
     ("BUG-59", "меню справки за левым краем телефона", lambda p: p["kind"] == "ширина" and p["el"] == "button.menu-item" and p["screen"] == "меню справки"),
 ]
 

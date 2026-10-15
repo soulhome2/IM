@@ -242,3 +242,22 @@ textarea,
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34.6406 40'%3E%3Cpath d='M34.6406 10V30L17.3203 40L0 30V10L17.3203 0L34.6406 10ZM3 11.7314V28.2676L17.3203 36.5361L31.6406 28.2676V11.7314L17.3203 3.46289L3 11.7314Z' fill='currentColor'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34.6406 40'%3E%3Cpath d='M34.6406 10V30L17.3203 40L0 30V10L17.3203 0L34.6406 10ZM3 11.7314V28.2676L17.3203 36.5361L31.6406 28.2676V11.7314L17.3203 3.46289L3 11.7314Z' fill='currentColor'/%3E%3C/svg%3E") center / contain no-repeat;
 }
+
+/* ---- Мелкий текст не ниже 4,5:1 (BUG-58, check_ui.py) ---------------------------------------
+   Акцент как цвет текста — отдельный текстовый оттенок кита: заливочный --one-accent на тёмной
+   панели даёт 3,44:1. Статусы — их текстовые оттенки (--one-*-text), а не значковые (--one-*-icon) */
+:root { --accent-text: var(--one-accent-indicator); }
+.work-tab.on,
+.work-tab-n,
+.chip.linked,
+.crumb.current { color: var(--accent-text); }
+.chip.linked { border-color: var(--accent-text); }
+.badge.mine { color: var(--one-info-text); }
+.badge.linked,
+.tree-badge { color: var(--text); }
+[data-theme="dark"] .tree-ev { color: var(--one-warning-text); }
+/* Есть инцидент самого срочного приоритета (§2.5) — сигнал тревоги: красная плашка с числом, в обеих темах.
+   Красный текст на тёмной панели — 4,28:1, а текстовый красный кита бледный и теряет сигнал */
+.tree-ev.crit { min-width: 18px; padding: 0 6px; border-radius: 50px; background: var(--crit); color: var(--one-accent-on); font-weight: 600; line-height: 18px; text-align: center; }
+[data-theme="dark"] .tree-ev.crit { color: var(--bg); }
+[data-theme="dark"] .nav-count { color: var(--bg); }
