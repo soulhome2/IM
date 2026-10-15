@@ -2234,12 +2234,12 @@
       ${
         many
           ? `
-        <button type="button" class="cam-nav prev" data-cam-step="-1" title="${te("Предыдущая камера (←)")}" aria-label="${te(
+        <button type="button" class="cam-nav prev" data-cam-step="-1" title="${te("Предыдущая камера")}" aria-label="${te(
               "Предыдущая камера"
             )}">
           <span class="material-symbols-outlined">chevron_left</span>
         </button>
-        <button type="button" class="cam-nav next" data-cam-step="1" title="${te("Следующая камера (→)")}" aria-label="${te(
+        <button type="button" class="cam-nav next" data-cam-step="1" title="${te("Следующая камера")}" aria-label="${te(
               "Следующая камера"
             )}">
           <span class="material-symbols-outlined">chevron_right</span>
