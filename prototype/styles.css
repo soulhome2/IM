@@ -1180,7 +1180,8 @@ select.search-input { padding-right: 36px; }
 }
 .crumb.current { color: var(--accent); }
 .crumb.done:not(.current) { color: var(--text); }
-.crumb.locked { opacity: 0.45; }
+/* Шаг, до которого нельзя перейти, — бледные кружок и линия; название и ответ читаются: это план работы (BUG-57) */
+.crumb.locked .crumb-track { opacity: 0.45; }
 .crumb.nav { cursor: pointer; }
 .crumb:focus-visible {
   outline: 2px solid var(--accent);
