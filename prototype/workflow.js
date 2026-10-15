@@ -142,7 +142,7 @@ window.IM_WORKFLOW = {
       {
         "state": "in_progress",
         "viewerRole": "other",
-        "label": "{ownerName}",
+        "labelKey": "workflow.badge.in_progress.other",
         "style": "foreign"
       },
       {

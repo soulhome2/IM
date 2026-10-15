@@ -455,6 +455,23 @@
       throw new Error("кнопка «Закрыть инцидент» так и не появилась");
     }, "Запустить макрос из сценария");
 
+    await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
+      await setFilter("foreign");
+      const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".badge.foreign"));
+      expect(row, "в «Чужих» нет инцидента в работе у коллеги");
+      const names = window.IM_FIXTURE.people.operators.map((o) => o.name);
+      const text = row.querySelector(".badge.foreign").textContent.trim();
+      expect(names.includes(text), `бейдж в очереди: «${text}», а не ФИО коллеги`);
+      const id = row.dataset.id;
+      await click(button($("eventsList"), "open_readonly", id));
+      expect(mode() === "work", "чужая карточка не открылась");
+      const card = root().querySelector(".badge.foreign");
+      expect(card && card.textContent.trim() === text, `бейдж в карточке: «${card ? card.textContent.trim() : "нет"}», а не «${text}»`);
+      expect($("statusIncident").textContent.trim().endsWith(text), `строка состояния: «${$("statusIncident").textContent.trim()}»`);
+      await click($("backToQueue"));
+      return `${id}: ${text}`;
+    });
+
     let foreignTransferred = null;
     await step("Передать чужой инцидент", async () => {
       await setFilter("foreign");

@@ -131,6 +131,7 @@
   "workflow.badge.pending_acceptance.target": "For you to accept",
   "workflow.badge.pending_acceptance.other": "Awaiting acceptance · {ownerName}",
   "workflow.badge.in_progress.owner": "In progress",
+  "workflow.badge.in_progress.other": "{ownerName}",
   "workflow.badge.on_hold.owner": "On hold · {holdReasonLabel}",
   "workflow.badge.on_hold.other": "On hold · {ownerName}",
   "workflow.badge.closed.any.processed": "Closed",

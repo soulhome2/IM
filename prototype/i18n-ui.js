@@ -306,7 +306,6 @@ window.IM_DICT_UI = {
     "Тип события": "Event type",
     "Тип устройства": "Device type",
     "Нужна проверка по камерам площадки": "Site cameras need to be checked",
-    "{ownerName}": "{ownerName}",
     "Активный инцидент будет отложен системой. Новые инциденты не назначаются.": "The active incident will be put on hold by the system. New incidents are not assigned.",
     "Закрыть с результатом": "Close with a result",
     "Отклонить {n, plural, one {# передачу} few {# передачи} other {# передач}}": "Reject {n, plural, one {# handoff} other {# handoffs}}",

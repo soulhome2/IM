@@ -131,6 +131,7 @@
   "workflow.badge.pending_acceptance.target": "Вам на принятие",
   "workflow.badge.pending_acceptance.other": "Ожидает принятия · {ownerName}",
   "workflow.badge.in_progress.owner": "В работе",
+  "workflow.badge.in_progress.other": "{ownerName}",
   "workflow.badge.on_hold.owner": "Отложен · {holdReasonLabel}",
   "workflow.badge.on_hold.other": "Отложен · {ownerName}",
   "workflow.badge.closed.any.processed": "Закрыто",

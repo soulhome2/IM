@@ -91,7 +91,7 @@
       { "state": "pending_acceptance", "viewerRole": "target", "labelKey": "workflow.badge.pending_acceptance.target", "style": "inbox" },
       { "state": "pending_acceptance", "viewerRole": "other", "labelKey": "workflow.badge.pending_acceptance.other", "style": "escalated" },
       { "state": "in_progress", "viewerRole": "owner", "labelKey": "workflow.badge.in_progress.owner", "style": "mine" },
-      { "state": "in_progress", "viewerRole": "other", "label": "{ownerName}", "style": "foreign" },
+      { "state": "in_progress", "viewerRole": "other", "labelKey": "workflow.badge.in_progress.other", "style": "foreign" },
       { "state": "on_hold", "viewerRole": "owner", "labelKey": "workflow.badge.on_hold.owner", "style": "paused" },
       { "state": "on_hold", "viewerRole": "other", "labelKey": "workflow.badge.on_hold.other", "style": "paused" },
       { "state": "closed", "viewerRole": "any", "when": { "closeResult": "processed" }, "labelKey": "workflow.badge.closed.any.processed", "style": "done" },

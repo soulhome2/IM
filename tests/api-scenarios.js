@@ -200,6 +200,19 @@
     assert.status(await env.act(inc.guid, "transfer", { targetId: "grp-leads", comment: "x" }), 403, "TRANSFER_TO_SELF_FORBIDDEN", "своей группе");
   });
 
+  test("Бейдж чужого инцидента в работе — ФИО владельца, ключом каталога: в очереди и в карточке (§2.4, BUG-51)", async () => {
+    const env = await makeEnv();
+    const guid = await env.guidOf("INC-1846");
+    const owner = window.IM_FIXTURE.people.operators.find((o) => o.id === "petrova");
+    const row = (await env.all("foreign")).find((e) => e.guid === guid);
+    const card = await env.card(guid);
+    assert.eq([card.state, card.owner && card.owner.id], ["in_progress", owner.id], "в работе у коллеги");
+    for (const [where, inc] of [["очередь", row], ["карточка", card]]) {
+      assert.eq(inc.badge.template, "workflow.badge.in_progress.other", `${where}: ключ бейджа`);
+      assert.eq(inc.badge.label, owner.name, `${where}: текст бейджа`);
+    }
+  });
+
   test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {
     const env = await makeEnv();
     const inc = await env.card(await env.guidOf("INC-1836"));
