@@ -1896,6 +1896,10 @@ select.search-input { padding-right: 36px; }
   .user-btn .chevron { display: none; }
   .duty { white-space: nowrap; }
   .user-btn .operator-meta { display: none; }
+  /* Меню шапки — под шапкой на всю ширину экрана с отступами 8 px, а не от края кнопки: иначе справка уходит за левый край (BUG-59) */
+  .topbar { position: relative; }
+  .topbar .menu { position: static; }
+  .topbar .menu-pop { left: 8px; right: 8px; min-width: 0; }
   .break-banner { padding: 8px 12px; }
 
   .workspace,
