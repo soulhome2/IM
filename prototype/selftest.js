@@ -1474,6 +1474,18 @@
         await click(root().querySelector('.chip.linked[data-work-tab="linked"]'));
         expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "пометка «+N» не открыла вкладку привязанных");
         expect(actsTop() === before, `действия сдвинулись при переключении вкладок: ${before} → ${actsTop()}`);
+        // Узкая панель — как на телефоне 360 px (BUG-53): «Отсоединить» и «Отсоединить все» внутри панели, строки не шире её
+        const lnk = root().querySelector(".lnk-panel");
+        lnk.style.width = "300px";
+        await wait();
+        const edge = lnk.getBoundingClientRect();
+        const outside = [...lnk.querySelectorAll("[data-detach], [data-detach-all]")].filter((x) => {
+          const r = x.getBoundingClientRect();
+          return r.left < edge.left - 1 || r.right > edge.right + 1;
+        });
+        const wide = [...lnk.querySelectorAll(".lnk-member, .lnk-head")].filter((x) => x.scrollWidth > x.clientWidth + 1);
+        lnk.style.width = "";
+        expect(!outside.length && !wide.length, `узкая панель: за краем — ${outside.map((x) => x.textContent.trim()).join(", ") || "ничего"}; шире панели — ${wide.length} строк`);
         // Срок привязанного виден: у кого норматив закрытия идёт — отсчёт; в заголовке — «Срок привязанного», если раньше своего
         const leadCard = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
         const linkedPage = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 10 });
