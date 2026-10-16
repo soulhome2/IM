@@ -86,6 +86,29 @@
       const lvl = r && r.querySelector(".chip.lvl");
       return [Boolean(lvl), "пометка уровня после передачи: " + (lvl ? lvl.textContent : "нет")];
     },
+    // «Передать» нового через несколько секунд: отсчёт реакции снова полный (RULE-76, RULE-84 — ifStopped)
+    async transferRestarts() {
+      await setFilter("open");
+      const id = guidOf("INC-1838");
+      if (!row(id) || !btn($("eventsList"), "transfer", id)) return [false, "нет «Передать» у нового INC-1838"];
+      const before = row(id).querySelector(".sla-t").textContent;
+      await wait(4000);
+      await click(btn($("eventsList"), "transfer", id));
+      field("targetId").value = "sidorov";
+      await confirm("проба");
+      await wait(300);
+      await setFilter("all");
+      let r = row(id);
+      for (let p = 2; !r && p <= 5; p++) {
+        const nav = $("eventsPager").querySelector(`[data-page="${p}"]`);
+        if (!nav) break;
+        await click(nav);
+        r = row(id);
+      }
+      const after = r ? r.querySelector(".sla-t").textContent : "строки нет";
+      const sec = (t) => t.split(":").reduce((m, x) => m * 60 + Number(x), 0);
+      return [sec(after) >= sec(before), `реакция до «Передать» ${before}, после ${after}`];
+    },
     // «Отклонить» через несколько секунд после появления: отсчёт реакции снова полный (RULE-82)
     async rejectRestarts() {
       await setFilter("inbox");

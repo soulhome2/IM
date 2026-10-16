@@ -1230,6 +1230,35 @@
     assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", idOf(second), 2], "по окончании окна — автоэскалация уровню 2");
   });
 
+  test("После потолка и нарушения реакции: «Передать» запускает её по нормативу уровня, «Отклонить» — нет (RULE-84)", async () => {
+    const toDue = (env, inc) => Math.round((Date.parse(inc.timer.dueAt) - env.now) / 1000);
+    const firedFor = (fired, guid) => fired.filter((f) => f.incidentGuid === guid).map((f) => f.transitionId);
+    const reactions = (card) => card.breaches.filter((b) => b.kind === "reaction").length;
+    // Эскалация выключена: нарушение реакции остановило её; «Передать» — у адресата новый срок, истёк — второе нарушение
+    let env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { enabled: false }) }) });
+    let inc = await newFire(env);
+    assert.eq(firedFor(await env.advance(toDue(env, inc) + GRACE + 1), inc.guid), ["reaction_overdue"], "нарушение реакции");
+    let res = await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "тест" }, "card");
+    assert.status(res, 200, null, "передать после нарушения");
+    let c = res.body.incident;
+    assert.ok(c.timer && Date.parse(c.timer.dueAt) > env.now, `у адресата новый срок реакции: ${JSON.stringify(c.timer)}`);
+    assert.eq(firedFor(await env.advance(toDue(env, c) + GRACE + 1), inc.guid), ["reaction_overdue"], "срок адресата истёк — снова нарушение");
+    assert.eq(reactions(await env.card(inc.guid)), 2, "два нарушения реакции");
+    // Потолок: единственный уровень — я; не принял — потолок остановил реакцию; «Отклонить» — новый без срока
+    const [first] = W.escalation.levels;
+    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, { targetRef: `user:${ME}` })], maxLevel: 1 }) }) });
+    inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+    assert.eq(firedFor(await env.advance(toDue(env, inc) + GRACE + 1), inc.guid), ["auto_escalate"], "эскалация на меня");
+    c = await env.card(inc.guid);
+    assert.eq(firedFor(await env.advance(toDue(env, c) + GRACE + 1), inc.guid), ["escalation_ceiling"], "потолок");
+    res = await env.act(inc.guid, "reject", { comment: "тест" }, "card");
+    assert.status(res, 200, null, "отклонить после потолка");
+    c = res.body.incident;
+    assert.eq([c.state, Boolean(c.timer && c.timer.dueAt)], ["new", false], "новый в очереди без срока реакции");
+    assert.eq(firedFor(await env.advance(3600), inc.guid), [], "за час ничего не сработало");
+    assert.eq(reactions(await env.card(inc.guid)), 1, "нарушение реакции одно — от потолка");
+  });
+
   test("Окно после дедлайна: «Взять в работу одним» в окне — нарушение не теряется ни у привязанного, ни у основного (BUG-62)", async () => {
     assert.ok(GRACE > 0, "окно задано в машине");
     const noEscalation = { workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { enabled: false }) }) };
