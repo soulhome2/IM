@@ -3319,19 +3319,16 @@ window.IM_WORKFLOW = {
     "states": [
       {
         "id": "ready",
-        "labelKey": "workflow.session.state.ready",
-        "assignsNewIncidents": true
+        "labelKey": "workflow.session.state.ready"
       },
       {
         "id": "busy",
         "labelKey": "workflow.session.state.busy",
-        "assignsNewIncidents": true,
         "derived": true
       },
       {
         "id": "not_ready",
         "labelKey": "workflow.session.state.not_ready",
-        "assignsNewIncidents": false,
         "requiresReason": true,
         "permission": "agent:set_not_ready",
         "readOnly": true,
@@ -3340,7 +3337,6 @@ window.IM_WORKFLOW = {
       {
         "id": "offline",
         "labelKey": "workflow.session.state.offline",
-        "assignsNewIncidents": false,
         "readOnly": true,
         "readOnlyReasonKey": "workflow.session.readonly.offline"
       }

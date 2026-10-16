@@ -36,7 +36,6 @@ window.IM_DICT_UI = {
     "Выделить по фильтру": "Select by filter",
     "Источник": "Source",
     "Состояние": "State",
-    "Новые": "New",
     "«{name}», «{filter}»: подходящие инциденты со всех страниц будут отмечены. Дальше — действие на панели выборки.": "“{name}”, “{filter}”: matching incidents from all pages will be ticked. Then choose an action on the selection bar.",
     "Подходит: {n}. Будут отмечены первые {max} — предел выборки": "Matching: {n}. The first {max} will be ticked — the selection limit",
     "Подходит: {n}": "Matching: {n}",
@@ -232,7 +231,7 @@ window.IM_DICT_UI = {
     "Вышел": "Signed out",
     "Вы вышли из МИ: доступен только просмотр": "You have signed out of IM: only viewing is available",
     "Перерыв оператора": "Operator break",
-    "Перерыв. Новые инциденты не назначаются": "Break. New incidents are not assigned to you",
+    "Перерыв. Переданное вам будет ждать в «Мне на принятие»": "Break. Anything handed to you will wait in “For me to accept”",
     "перехват и передача недоступны по правам":
       "take-over and transfer are not allowed by your permissions",
     "перехват недоступен по правам, можно передать":
@@ -304,7 +303,7 @@ window.IM_DICT_UI = {
     "Тип события": "Event type",
     "Тип устройства": "Device type",
     "Нужна проверка по камерам площадки": "Site cameras need to be checked",
-    "Активный инцидент будет отложен системой. Новые инциденты не назначаются.": "The active incident will be put on hold by the system. New incidents are not assigned.",
+    "Ваши инциденты в работе будут отложены системой. Переданное вам за это время будет ждать в «Мне на принятие».": "Your incidents in progress will be put on hold by the system. Anything handed to you meanwhile will wait in “For me to accept”.",
     "Закрыть с результатом": "Close with a result",
     "Отклонить {n, plural, one {# передачу} few {# передачи} other {# передач}}": "Reject {n, plural, one {# handoff} other {# handoffs}}",
     "Причина перерыва": "Break reason",

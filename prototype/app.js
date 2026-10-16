@@ -1244,7 +1244,7 @@
     title: "Перерыв",
     confirmLabel: "Уйти на перерыв",
     style: "primary",
-    note: t("Активный инцидент будет отложен системой. Новые инциденты не назначаются."),
+    note: t("Ваши инциденты в работе будут отложены системой. Переданное вам за это время будет ждать в «Мне на принятие»."),
     fields: [
       {
         name: "reasonId",
@@ -2556,7 +2556,7 @@
   async function goOnBreak(reasonId) {
     try {
       await api.put("/operator/session/agent-state", { agentState: "not_ready", reasonId });
-      toast(t("Перерыв. Новые инциденты не назначаются"));
+      toast(t("Перерыв. Переданное вам будет ждать в «Мне на принятие»"));
     } catch (err) {
       toast(problemText(err));
     }

@@ -1157,10 +1157,10 @@
   "session": {
     "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится. readOnly — в этом состоянии доступен только просмотр: переходы отклоняет условие agentReady с текстом readOnlyReason.",
     "states": [
-      { "id": "ready", "labelKey": "workflow.session.state.ready", "assignsNewIncidents": true },
-      { "id": "busy", "labelKey": "workflow.session.state.busy", "assignsNewIncidents": true, "derived": true },
-      { "id": "not_ready", "labelKey": "workflow.session.state.not_ready", "assignsNewIncidents": false, "requiresReason": true, "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.not_ready" },
-      { "id": "offline", "labelKey": "workflow.session.state.offline", "assignsNewIncidents": false, "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.offline" }
+      { "id": "ready", "labelKey": "workflow.session.state.ready" },
+      { "id": "busy", "labelKey": "workflow.session.state.busy", "derived": true },
+      { "id": "not_ready", "labelKey": "workflow.session.state.not_ready", "requiresReason": true, "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.not_ready" },
+      { "id": "offline", "labelKey": "workflow.session.state.offline", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.offline" }
     ],
     "breakReasons": [
       { "id": "lunch", "labelKey": "workflow.session.break.lunch" },

@@ -8,7 +8,7 @@ window.IM_DICT_HTML = {
     "Только просмотр: что настраивает администратор с правом incident:schema:admin и какое значение сейчас. В продукте — вкладка администрирования бэкенда, правка там (§20).": "View only: what an administrator with the incident:schema:admin right configures and the current value. In the product — the backend administration tab, editing is done there (§20).",
     "Оператор": "Operator",
     "Выйти": "Sign out",
-    "Инциденты удерживаются в очереди диспетчера. Статус: перерыв. Новые инциденты вам не назначаются.": "Incidents are held in the dispatcher queue. Status: break. No new incidents are assigned to you.",
+    "Статус: перерыв. Доступен только просмотр. Переданное вам за это время ждёт в «Мне на принятие».": "Status: break. View only. Anything handed to you meanwhile waits in “For me to accept”.",
     "Вернуться с перерыва": "Back from break",
     "Вы вышли из МИ: доступен только просмотр, новые инциденты вам не назначаются.": "You have signed out of IM: only viewing is available, no new incidents are assigned to you.",
     "Войти": "Sign in",
