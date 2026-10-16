@@ -52,7 +52,6 @@
   --map-room: #e2e8f0;
   --map-room-2: #f1f5f9;
   --map-label: #64748b;
-  --progress-track: #e2e8f0;
   --overlay: rgba(15, 23, 42, 0.35);
   --scroll: #e2e8f0;
   --scroll-hover: #cbd5e1;
@@ -120,7 +119,6 @@
   --map-room: #1e293b;
   --map-room-2: #2b384e;
   --map-label: #94a3b8;
-  --progress-track: #334155;
   --overlay: rgba(2, 6, 23, 0.62);
   --scroll: #334155;
   --scroll-hover: #64748b;
@@ -1130,19 +1128,6 @@ select.search-input { padding-right: 36px; }
 .sla { color: var(--warn-text); }
 .sla.late { color: var(--crit-text); }
 
-.progress {
-  height: 4px;
-  background: var(--progress-track);
-  margin: 8px 0 0;
-  border-radius: 50px;
-  overflow: hidden;
-}
-.progress > i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 50px;
-}
 
 .work-h { justify-content: flex-start; gap: 12px; padding: 0 var(--card-x); }
 .work-h h2 {

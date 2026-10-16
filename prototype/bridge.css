@@ -24,7 +24,6 @@
   --overlay: var(--one-scrim);
   --scroll: var(--one-surface-subtle);
   --scroll-hover: var(--one-border);
-  --progress-track: var(--one-surface-subtle);
 
   /* --stroke is used for every region boundary (topbar, panel headers, column
      splitters, popups, statusbar); --stroke-2 is the control border.

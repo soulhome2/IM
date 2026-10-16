@@ -2056,7 +2056,6 @@
       return;
     }
     const steps = stepsOf(ev);
-    const prog = stepProgress(ev);
     const editable = !ev.readOnly;
     const acts = cardActions(ev);
     // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если привязанные есть);
@@ -2080,7 +2079,7 @@
     root.innerHTML = `
       <div class="work-doc">
         <div class="work-top">
-          ${renderIncidentHead(ev, prog)}
+          ${renderIncidentHead(ev)}
           ${workNote(ev)}
           ${workTabs(ev, tab)}
           ${
@@ -2175,7 +2174,8 @@
     `;
   }
 
-  function renderIncidentHead(ev, prog) {
+  // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90)
+  function renderIncidentHead(ev) {
     const badge = badgeView(ev);
     return `
       <div class="incident-head">
@@ -2189,7 +2189,6 @@
         </div>
         <h3>${te(ev.eventType.name)}</h3>
         <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
-        <div class="progress"><i style="width:${prog.total ? Math.round((prog.filled / prog.total) * 100) : 0}%"></i></div>
       </div>
     `;
   }
