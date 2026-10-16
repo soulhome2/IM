@@ -176,7 +176,6 @@ window.IM_DICT_UI = {
     "источник события": "event source",
     "К инциденту не привязаны камеры": "No cameras linked to this incident",
     "План площадки не привязан": "No site plan linked",
-    "К незаполненным": "To unfilled steps",
     "Камер в зоне: {n}": "Cameras in the area: {n}",
     "Камеры не привязаны": "No cameras linked",
     "Карточка {id} · {badge}": "Card {id} · {badge}",

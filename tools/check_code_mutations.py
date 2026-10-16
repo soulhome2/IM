@@ -157,6 +157,9 @@ MUTATIONS = [
     ("tree-search-esc-kept", "app.js", "      } else if (e.key === \"Escape\" && e.target.value) {", "      } else if (false) {", "ui"),
     ("tree-hit-stays", "app.js", "state.treeHit = (state.treeHit + dir + n) % n;", "state.treeHit = (state.treeHit + n) % n;", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
+    # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
+    ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),
+    ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = !last && (editable', "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
@@ -192,7 +195,7 @@ MUTATIONS = [
     ("filter-options-not-viable", "server.js", "        base === pool ? opts : opts.filter(", "        true ? opts : opts.filter(", "api"),
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
-    ("ui-actions-jump-on-tab", "app.js", "    const navInert = tab === \"scenario\" ? \"\" : 'inert aria-hidden=\"true\"';", "    const navInert = tab === \"scenario\" ? \"\" : \"hidden\";", "ui"),
+    ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : i === 0 ? "disabled" : ""}', "ui"),
     ("search-ignores-linked", "server.js", "if (!hit(e, needle) && !linkedHits(e, needle).length) return false;", "if (!hit(e, needle)) return false;", "api"),
     ("linked-focus-page-ignored", "server.js", "const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;", "const idx = -1;", "api"),
     ("ui-search-opens-scenario", "app.js", "workTab: foundLinked(ev.guid).length ? \"linked\" : \"scenario\"", "workTab: \"scenario\"", "ui"),

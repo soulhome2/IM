@@ -2064,16 +2064,14 @@
     // Открыта из поиска, нашедшего привязанный, — сразу на вкладке привязанных
     if (state.workTabFor !== ev.guid) Object.assign(state, { workTab: foundLinked(ev.guid).length ? "linked" : "scenario", workTabFor: ev.guid });
     const tab = ev.linkedCount ? state.workTab : "scenario";
-    // Внизу один ряд: «Назад», действия с инцидентом, «Далее». На вкладке привязанных «Назад» / «Далее»
-    // не видны, но место занимают (tab-ghost): действия не прыгают при переключении вкладок
-    const navGhost = tab === "scenario" ? "" : "tab-ghost";
-    const navInert = tab === "scenario" ? "" : 'inert aria-hidden="true"';
+    // Внизу один ряд: «К очереди» и «Назад», действия с инцидентом, «Далее» (RULE-89). Кнопки всегда на
+    // месте и с теми же названиями — недоступные серые, в том числе на вкладке привязанных
 
     const i = cursorOf(ev);
     const step = steps[i];
     const last = i === steps.length - 1;
-    const canNext = isStepValid(ev, step);
-    // «Закрыть инцидент» в конце сценария — когда доступен результат полной обработки (§2.2)
+    const canNext = tab === "scenario" && !last && (editable ? isStepValid(ev, step) : canOpenStep(ev, i + 1));
+    // Подсказка на последнем шаге — какой шаг не заполнен, если закрыть «Обработан» пока нельзя (§2.2)
     const close = actionOf(ev, "close");
     const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
     const canClose = editable && Boolean(close && close.enabled) && results.some((r) => fullyProcessed(r.id) && !r.disabled);
@@ -2129,7 +2127,12 @@
         </div>
         <div class="work-bottom">
           <div class="scenario-actions">
-            <button type="button" class="btn ghost ${navGhost}" id="stepBack" ${i === 0 ? "disabled" : ""} ${navInert}>${te("Назад")}</button>
+            <div class="scenario-actions-start">
+              <button type="button" class="btn outline" id="backToQueue" title="${te("Вернуться к очереди, инцидент остаётся за вами")}">
+                <span class="material-symbols-outlined">arrow_back</span>${te("К очереди")}
+              </button>
+              <button type="button" class="btn ghost" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
+            </div>
             ${
               acts.length
                 ? `<div class="work-acts">${acts
@@ -2142,18 +2145,8 @@
                     .join("")}</div>`
                 : ""
             }
-            <div class="scenario-actions-end ${navGhost}" ${navInert}>
-              ${
-                editable
-                  ? last && canClose
-                    ? `<button type="button" class="btn primary" data-do="close" data-ev="${escapeHtml(ev.guid)}">${te("Закрыть инцидент")}</button>`
-                    : `<button type="button" class="btn primary" id="stepNext" ${canNext ? "" : "disabled"}>${te(
-                        last ? "К незаполненным" : "Далее"
-                      )}</button>`
-                  : !last && canOpenStep(ev, i + 1)
-                    ? `<button type="button" class="btn outline" id="stepNext">${te("Далее")}</button>`
-                    : ""
-              }
+            <div class="scenario-actions-end">
+              <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${canNext ? "" : "disabled"}>${te("Далее")}</button>
             </div>
           </div>
           ${
@@ -2815,7 +2808,6 @@
     });
     $("videoFull").addEventListener("click", () => toggleFull("video"));
     $("mapFull").addEventListener("click", () => toggleFull("map"));
-    $("backToQueue").addEventListener("click", () => backToQueue());
     $("eventFilter").addEventListener("change", (e) => {
       state.filter = e.target.value;
       requery();
@@ -2985,7 +2977,8 @@
       ev.scenario.answers[el.dataset.ans] = el.value;
       const next = $("stepNext");
       const step = stepsOf(ev)[cursorOf(ev)];
-      if (next && step) next.disabled = !isStepValid(ev, step);
+      // На последнем шаге «Далее» недоступна: дальше идти некуда (RULE-89)
+      if (next && step) next.disabled = cursorOf(ev) === stepsOf(ev).length - 1 || !isStepValid(ev, step);
     });
     $("scenarioRoot").addEventListener("change", (e) => {
       const ev = selected();
@@ -3003,6 +2996,7 @@
       crumb.click();
     });
     $("scenarioRoot").addEventListener("click", async (e) => {
+      if (e.target.closest("#backToQueue")) return backToQueue();
       const ev = selected();
       if (!ev) return;
       const tabBtn = e.target.closest("[data-work-tab]");

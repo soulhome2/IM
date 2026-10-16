@@ -1144,7 +1144,7 @@ select.search-input { padding-right: 36px; }
   border-radius: 50px;
 }
 
-.work-h { justify-content: flex-start; gap: 12px; padding: 0 var(--card-x) 0 8px; }
+.work-h { justify-content: flex-start; gap: 12px; padding: 0 var(--card-x); }
 .work-h h2 {
   flex: 1;
   min-width: 0;
@@ -1157,7 +1157,7 @@ select.search-input { padding-right: 36px; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#backToQueue { padding: 6px 12px 6px 8px; gap: 6px; flex-shrink: 0; }
+.scenario-actions #backToQueue { padding: 8px 14px 8px 10px; gap: 6px; flex-shrink: 0; }
 #backToQueue .material-symbols-outlined { font-size: 18px; color: inherit; }
 
 /* Шапка со шагами и кнопки прибиты к краям, по центру — только текущий шаг:
@@ -1366,8 +1366,6 @@ select.search-input { padding-right: 36px; }
   justify-content: center;
   gap: 8px;
 }
-/* Место «Назад» / «Далее» на вкладке привязанных: занято, но пусто — действия на том же месте */
-.tab-ghost { visibility: hidden; }
 
 .scenario-actions {
   display: grid;
@@ -1377,7 +1375,12 @@ select.search-input { padding-right: 36px; }
   gap: 8px;
   padding: 12px var(--card-x);
 }
-#stepBack { grid-area: back; justify-self: start; }
+.scenario-actions-start { grid-area: back; justify-self: start; display: flex; flex-wrap: nowrap; gap: 8px; }
+/* Узкая карточка: «К очереди», «Назад» и «Далее» — строкой, действия — строкой ниже, по центру (RULE-89) */
+.work-bottom { container-type: inline-size; }
+@container (max-width: 900px) {
+  .scenario-actions { grid-template-columns: 1fr auto; grid-template-areas: "back next" "acts acts"; }
+}
 /* Крупнее только в карточке: .btn общий с очередью и модальными окнами */
 .scenario-actions .btn { font-size: 14px; padding: 8px 14px; }
 .scenario-actions-end { grid-area: next; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }

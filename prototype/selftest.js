@@ -435,24 +435,26 @@
       throw new Error("в сценарии нет шага с макросами");
     }, "Ответ с вариантами сохраняется после «Далее»");
 
-    await step("Закрыть инцидент по сценарию", async () => {
+    await step("Закрыть инцидент по сценарию: «Далее» до последнего шага, там она серая; «Закрыть» — «Обработан» выбран (RULE-89)", async () => {
       await openOwn(closedId);
+      const last = () => $("statusSteps").textContent.match(/Шаг (\d+) из (\d+)/);
       for (let i = 0; i < 10; i++) {
-        // Кнопка в конце сценария, а не «Закрыть» в панели действий
-        const close = root().querySelector('.scenario-actions [data-do="close"]');
-        if (close) {
-          await click(close);
+        await answerCurrentStep();
+        const next = $("stepNext");
+        expect(next, "кнопки «Далее» нет");
+        const [, at, of] = last() || [];
+        if (at && at === of) {
+          expect(next.disabled && next.textContent.trim() === "Далее", `на последнем шаге «${next.textContent.trim()}», ${next.disabled ? "серая" : "доступна"}`);
+          await click(root().querySelector('.work-acts [data-do="close"]'));
           expect(field("resultId").value === "processed", `результат по умолчанию «${field("resultId").value}», а не «Обработан»`);
           await confirmDialog();
           expect(mode() === "queue", "после закрытия карточка не закрылась");
           return closedId;
         }
-        await answerCurrentStep();
-        const next = $("stepNext");
-        expect(next && !next.disabled, "сценарий не проходится до конца");
+        expect(!next.disabled, "сценарий не проходится до конца");
         await click(next);
       }
-      throw new Error("кнопка «Закрыть инцидент» так и не появилась");
+      throw new Error("последний шаг так и не наступил");
     }, "Запустить макрос из сценария");
 
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
@@ -1649,11 +1651,25 @@
           return `${Math.round(acts.left - bottom.left)}:${Math.round(acts.top - bottom.top)}/${Math.round(bottom.height)}`;
         };
         const box = (sel) => root().querySelector(sel).getBoundingClientRect();
-        expect(Math.abs(box(".work-acts").top - box("#stepBack").top) < 8 && box(".work-acts").left > box("#stepBack").left, "действия не в одном ряду с «Назад» / «Далее»");
+        // Широкая карточка — один ряд; узкая — действия строкой ниже, по центру (RULE-89)
+        const oneRow = Math.abs(box(".work-acts").top - box("#stepBack").top) < 8 && box(".work-acts").left > box("#stepBack").left;
+        const below = box(".work-acts").top >= box("#stepBack").bottom - 1;
+        expect(oneRow || below, `действия ни в ряду с «Назад» / «Далее», ни строкой ниже: действия ${Math.round(box(".work-acts").left)},${Math.round(box(".work-acts").top)}, «Назад» ${Math.round(box("#stepBack").left)},${Math.round(box("#stepBack").top)}, ряд ${Math.round(box(".scenario-actions").width)}`);
+        expect(Math.abs(box("#stepNext").top - box("#stepBack").top) < 8, "«Далее» не в одной строке с «Назад»");
+        // «К очереди» — в той же строке, первой слева, в шапке её нет (RULE-89)
+        expect(Math.abs(box("#backToQueue").top - box("#stepBack").top) < 8 && box("#backToQueue").left < box("#stepBack").left, "«К очереди» не слева от «Назад» в нижнем ряду");
+        expect(!document.querySelector(".work-h #backToQueue"), "«К очереди» осталась в шапке");
         const before = actsTop();
         await click(root().querySelector('.chip.linked[data-work-tab="linked"]'));
         expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "пометка «+N» не открыла вкладку привязанных");
         expect(actsTop() === before, `действия сдвинулись при переключении вкладок: ${before} → ${actsTop()}`);
+        // На вкладке привязанных «Назад» и «Далее» видны, но серые; «К очереди» доступна (RULE-89)
+        const shown = (sel) => {
+          const el = root().querySelector(sel);
+          return el && el.getClientRects().length > 0 && getComputedStyle(el).visibility === "visible" ? el : null;
+        };
+        expect(shown("#stepBack") && shown("#stepBack").disabled && shown("#stepNext") && shown("#stepNext").disabled, "на вкладке привязанных «Назад» / «Далее» не видны или доступны");
+        expect(shown("#backToQueue") && !shown("#backToQueue").disabled, "на вкладке привязанных нет «К очереди»");
         // Узкая панель — как на телефоне 360 px (BUG-53): «Отсоединить» и «Отсоединить все» внутри панели, строки не шире её
         const lnk = root().querySelector(".lnk-panel");
         lnk.style.width = "300px";
