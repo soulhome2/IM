@@ -155,6 +155,8 @@ MUTATIONS = [
     ("tree-focus-lost", "app.js", "    if (current && hadFocus) current.focus();\n", "", "ui"),
     ("tree-right-ignored", "app.js", "      state.openGroups.add(id);\n      return renderGroups();", "      return;", "ui"),
     ("tree-search-esc-kept", "app.js", "      } else if (e.key === \"Escape\" && e.target.value) {", "      } else if (false) {", "ui"),
+    ("tree-hit-stays", "app.js", "state.treeHit = (state.treeHit + dir + n) % n;", "state.treeHit = (state.treeHit + n) % n;", "ui"),
+    ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),

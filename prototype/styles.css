@@ -720,7 +720,14 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .tree-node.hidden { display: none; }
 /* Поиск в дереве (RULE-88): совпавшая часть названия, число найденного, узел в фокусе клавиатуры */
 .node-text mark { background: var(--accent-dim); color: inherit; border-radius: 2px; }
-.tree-found { padding: 6px 4px 0; font-size: 12px; color: var(--muted); }
+.tree-found { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 0; font-size: 12px; color: var(--muted); }
+.tree-found[hidden] { display: none; }
+.tree-hit-nav { display: inline-flex; align-items: center; gap: 2px; }
+.tree-hit-nav #groupsHitPos { margin-right: 4px; font-variant-numeric: tabular-nums; }
+.tree-hit-nav .icon-btn { width: 28px; height: 28px; }
+.tree-hit-nav .icon-btn .material-symbols-outlined { font-size: 20px; }
+.tree-node.hit-current > .node-content { box-shadow: inset 0 0 0 1px var(--accent); }
+.tree-node.hit-current > .node-content mark { background: var(--accent); color: var(--on-accent); }
 .tree-node:focus { outline: none; }
 .tree-node:focus-visible > .node-content { box-shadow: inset 0 0 0 2px var(--accent); }
 .tree-node > ul {

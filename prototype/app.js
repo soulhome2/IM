@@ -581,6 +581,9 @@
     groupQuery: "",
     // Узел дерева с фокусом клавиатуры — переживает перерисовку (RULE-88)
     treeFocus: null,
+    // Текущее найденное в поиске по дереву и нужно ли прокрутить к нему (RULE-88)
+    treeHit: 0,
+    treeHitScroll: false,
     filter: "open",
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
     // Несколько типов сразу; пусто — все. tbOpen — какой из двух списков раскрыт
@@ -1559,6 +1562,16 @@
   // Дерево с клавиатуры, как дерево WAI-ARIA (§13, RULE-88): ↑ ↓ — по видимым узлам, Home и End — первый
   // и последний, → — раскрыть или к первому вложенному, ← — свернуть или к родителю, Enter и пробел — выбрать
   const treeItems = () => [...$("groupsList").querySelectorAll(".tree-node")].filter((n) => n.getClientRects().length > 0);
+  // Узлы, чьё название совпало с поиском, — по порядку дерева
+  const treeHits = () => [...$("groupsList").querySelectorAll(".tree-node:not(.hidden) > .node-content mark")].map((m) => m.closest(".tree-node"));
+  // ▲ ▼ у поиска, Enter и Shift+Enter в поле — к предыдущему и следующему найденному, по кругу
+  function stepTreeHit(dir) {
+    const n = treeHits().length;
+    if (!n) return;
+    state.treeHit = (state.treeHit + dir + n) % n;
+    state.treeHitScroll = true;
+    renderGroups();
+  }
   function focusTreeNode(node) {
     if (!node) return;
     $("groupsList").querySelectorAll('.tree-node[tabindex="0"]').forEach((n) => (n.tabIndex = -1));
@@ -1806,9 +1819,18 @@
       (n) => n.dataset.id !== "all" && !n.classList.contains("hidden")
     );
     $("groupsEmpty").hidden = !q || visible.length > 0;
-    const found = $("groupsList").querySelectorAll(".tree-node:not(.hidden) > .node-content mark").length;
-    $("groupsFound").hidden = !q || !found;
-    $("groupsFound").textContent = t("Найдено: {n}", { n: found });
+    // Найденное и текущее из него: ▲ ▼ и Enter в поиске прыгают только по совпадениям (RULE-88)
+    const hits = treeHits();
+    $("groupsFound").hidden = !q || !hits.length;
+    $("groupsFoundText").textContent = t("Найдено: {n}", { n: hits.length });
+    state.treeHit = hits.length ? Math.min(state.treeHit, hits.length - 1) : 0;
+    const hit = hits[state.treeHit];
+    $("groupsHitPos").textContent = hits.length ? `${state.treeHit + 1} / ${hits.length}` : "";
+    if (hit) {
+      hit.classList.add("hit-current");
+      if (state.treeHitScroll) hit.querySelector(":scope > .node-content").scrollIntoView({ block: "nearest" });
+    }
+    state.treeHitScroll = false;
     // Один узел дерева — в порядке Tab: тот, где был фокус, иначе выбранный, иначе первый (RULE-88)
     const items = treeItems();
     const byId = (id) => items.find((n) => n.dataset.id === id);
@@ -2873,21 +2895,29 @@
     });
     $("groupSearch").addEventListener("input", (e) => {
       state.groupQuery = e.target.value;
+      state.treeHit = 0;
+      state.treeHitScroll = true;
       renderGroups();
     });
-    // ↓ — на первое найденное (или первый узел), Esc — очистить поиск (RULE-88)
+    $("groupsHitPrev").addEventListener("click", () => stepTreeHit(-1));
+    $("groupsHitNext").addEventListener("click", () => stepTreeHit(1));
+    // ↓ — в дерево, на текущее найденное (или первый узел); Enter — к следующему найденному,
+    // Shift+Enter — к предыдущему; Esc — очистить поиск (RULE-88)
     $("groupSearch").addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") {
-        const hit = $("groupsList").querySelector(".tree-node:not(.hidden) > .node-content mark");
-        const first = hit ? hit.closest(".tree-node") : treeItems()[0];
+        const first = treeHits()[state.treeHit] || treeItems()[0];
         if (!first) return;
         e.preventDefault();
         focusTreeNode(first);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        stepTreeHit(e.shiftKey ? -1 : 1);
       } else if (e.key === "Escape" && e.target.value) {
         e.preventDefault();
         e.stopPropagation();
         e.target.value = "";
         state.groupQuery = "";
+        state.treeHit = 0;
         renderGroups();
       }
     });

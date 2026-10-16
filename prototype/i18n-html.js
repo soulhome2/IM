@@ -115,6 +115,8 @@ window.IM_DICT_HTML = {
     "Росгвардия · пульт ПЦО": "National Guard · alarm monitoring desk",
     "Сборный пункт — парковка П2, 60 м от южного выхода": "Assembly point — car park P2, 60 m from the south exit",
     "Свернуть все группы": "Collapse all groups",
+    "Предыдущее найденное": "Previous match",
+    "Следующее найденное": "Next match",
     "Сервис видеонаблюдения": "Video surveillance support",
     "Скорая помощь": "Ambulance",
     "Служба": "Service",

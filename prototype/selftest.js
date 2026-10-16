@@ -1537,7 +1537,7 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
-    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ↓ из поиска — на первое найденное, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить (§13, RULE-88)", async () => {
+    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить (§13, RULE-88)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const key = async (el, k) => {
         el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
@@ -1550,10 +1550,27 @@
       try {
         const marks = [...$("groupsList").querySelectorAll(".tree-node:not(.hidden) > .node-content mark")];
         expect(marks.length > 1 && marks.every((m) => m.textContent.toLowerCase() === "конференц"), `выделено: ${marks.map((m) => m.textContent).join(", ")}`);
-        expect(!$("groupsFound").hidden && $("groupsFound").textContent === `Найдено: ${marks.length}`, `счётчик «${$("groupsFound").textContent}», выделено ${marks.length}`);
+        expect(!$("groupsFound").hidden && $("groupsFoundText").textContent === `Найдено: ${marks.length}`, `счётчик «${$("groupsFoundText").textContent}», выделено ${marks.length}`);
+        // ▲ ▼ и Enter в поле — только по найденным, по кругу; текущее — с рамкой
+        const n = marks.length;
+        const at = () => [$("groupsHitPos").textContent, $("groupsList").querySelector(".hit-current").dataset.id];
+        const hitId = (i) => marks[i].closest(".tree-node").dataset.id;
+        expect(JSON.stringify(at()) === JSON.stringify([`1 / ${n}`, hitId(0)]), `сначала текущее — первое: ${at()}`);
+        await click($("groupsHitNext"));
+        expect(JSON.stringify(at()) === JSON.stringify([`2 / ${n}`, hitId(1)]), `▼ — ко второму: ${at()}`);
+        await key(search, "Enter");
+        expect(at()[0] === `3 / ${n}`, `Enter — к следующему: ${at()}`);
+        search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+        await wait();
+        expect(at()[0] === `2 / ${n}`, `Shift+Enter — к предыдущему: ${at()}`);
+        await click($("groupsHitPrev"));
+        await click($("groupsHitPrev"));
+        expect(JSON.stringify(at()) === JSON.stringify([`${n} / ${n}`, hitId(n - 1)]), `▲ с первого — к последнему: ${at()}`);
+        await click($("groupsHitNext"));
+        expect(at()[0] === `1 / ${n}`, `▼ с последнего — к первому: ${at()}`);
         await key(search, "ArrowDown");
         const first = document.activeElement;
-        expect(first === marks[0].closest(".tree-node"), "↓ из поиска — не на первое найденное");
+        expect(first.dataset.id === hitId(0), "↓ из поиска — не на текущее найденное");
         await key(first, "ArrowDown");
         const second = document.activeElement;
         expect(second.classList.contains("tree-node") && second !== first, "↓ в дереве не перешла к следующему узлу");
