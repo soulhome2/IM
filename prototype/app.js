@@ -1923,9 +1923,12 @@
       return `<div class="work-note ok">${escapeHtml(`${why} ${more}`)}</div>`;
     }
     if (ev.state === "pending_acceptance" && isTarget(ev)) {
-      return `<div class="work-note inbox">${te("Инцидент адресован вам, уровень {lvl}. Примите его или отклоните с указанием причины.", {
-        lvl: ev.escalationLevel,
-      })}</div>`;
+      // Уровень — только если инцидент поднят автоэскалацией: ручная передача уровень не меняет (RULE-76)
+      return `<div class="work-note inbox">${
+        ev.escalationLevel > 0
+          ? te("Инцидент адресован вам автоэскалацией, уровень {lvl}. Примите его или отклоните с указанием причины.", { lvl: ev.escalationLevel })
+          : te("Инцидент адресован вам. Примите его или отклоните с указанием причины.")
+      }</div>`;
     }
     if (!isMine(ev)) {
       const rights = canDo("takeover", ev)

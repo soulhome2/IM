@@ -162,8 +162,9 @@ window.IM_DICT_UI = {
     "Закрыть инцидент": "Close incident",
     "Занят": "Busy",
     "Запущено": "Launched",
-    "Инцидент адресован вам, уровень {lvl}. Примите его или отклоните с указанием причины.":
-      "The incident is addressed to you, level {lvl}. Accept it or reject it with a reason.",
+    "Инцидент адресован вам автоэскалацией, уровень {lvl}. Примите его или отклоните с указанием причины.":
+      "The incident is addressed to you by auto-escalation, level {lvl}. Accept it or reject it with a reason.",
+    "Инцидент адресован вам. Примите его или отклоните с указанием причины.": "The incident is addressed to you. Accept it or reject it with a reason.",
     "Инцидент закрыт.": "The incident is closed.",
     "Инцидент не выбран": "No incident selected",
     "Инцидент обрабатывает {who}.": "{who} is handling the incident.",
