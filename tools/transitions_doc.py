@@ -119,11 +119,11 @@ class Doc:
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
             "isOwnerOrUnowned": lambda: "инцидент ничей или мой",
-            "mergePrimaryValid": lambda: "основной — другой открытый, не связанный, виден мне; новый или мой в работе",
+            "mergePrimaryValid": lambda: "основной — другой открытый, не привязанный, виден мне; новый или мой в работе",
             "sameScenarioAsPrimary": lambda: "сценарий тот же, что у основного",
             "primaryEditable": lambda: "основной новый или мой",
             "primaryClosed": lambda: "основной закрыт",
-            "targetHasAccessToLinked": lambda: "у адресата есть доступ к объектам всех связанных событий",
+            "targetHasAccessToLinked": lambda: "у адресата есть доступ к объектам всех привязанных инцидентов",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для условия {fn}: добавьте её в tools/transitions_doc.py")
@@ -151,8 +151,8 @@ class Doc:
             "setCursor": lambda: "сценарий открывается на первом незаполненном шаге" if a[0] == "firstOpenStep" else f"курсор сценария: `{a[0]}`",
             "clearGroup": lambda: "выходит из групповой обработки",
             "setLinkedTo": lambda: f"связан с основным: {self.value(a[0])}",
-            "clearLink": lambda: "связь с основным снимается" + (" — если была, запись в журнал события и основного" if a else ""),
-            "relinkToPrimary": lambda: "открытые связанные объединяемого — новому основному, запись в журнале каждого",
+            "clearLink": lambda: "связь с основным снимается" + (" — если была, запись в журнал привязанного и основного" if a else ""),
+            "relinkToPrimary": lambda: "открытые привязанные объединяемого — новому основному, запись в журнале каждого",
             "copyAnswersToPrimary": lambda: "заполненные шаги сценария — в незаполненные шаги основного, запись в журнале основного",
             "copyCloseFromPrimary": lambda: "результат, причина, комментарий и закрывший — от основного",
             "notify": lambda: f"уведомление {WHO.get(a[0], a[0])}",
