@@ -538,6 +538,59 @@ def check_fixture_journal(w, err):
                 err.append(f"эталон: {inc['number']} — у записи {key} подстановки {sorted(entry.get('vars') or {})}, а нужны {sorted(need)}")
 
 
+def check_fixture_history(w, err):
+    """Журнал каждого инцидента эталонного набора — цепочка переходов машины (DATA-06): первая
+    запись — появление (`create` или текст источника), каждая запись перехода — из того состояния,
+    где инцидент был, последняя приводит в его состояние; записи идут по времени, а у закрытого
+    время закрытия — время записи «Закрыто». Записи, которые не переходы (макрос, шаг сценария), не
+    меняют состояние."""
+    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    by_key = {}
+    for t in w["transitions"]:
+        for e in t.get("effects", []):
+            if e["fn"] == "appendLog":
+                by_key.setdefault(e["args"][0], []).append(t)
+    appear = {"workflow.journal.create", "workflow.journal.source"}
+    # «Закрыть» из состояния — по строке результата закрытия (fromStates), а не по from перехода
+    close_from = {r["id"]: r["fromStates"] for r in w["reasonCatalogs"]["close_result"]["items"]}
+    prefix = "workflow.catalog.close_result."
+    for inc in fx["incidents"]:
+        n, journal = inc["number"], inc.get("journal", [])
+        if not journal or journal[0].get("template") not in appear:
+            err.append(f"эталон: {n} — журнал начинается не с появления инцидента (DATA-06)")
+            continue
+        state, last, close_at = "new", journal[0]["at"], None
+        for entry in journal[1:]:
+            key = entry.get("template")
+            if entry["at"] < last:
+                err.append(f"эталон: {n} — запись {key} раньше предыдущей ({entry['at']} < {last})")
+            last = entry["at"]
+            if key in appear:
+                err.append(f"эталон: {n} — второе появление в журнале ({key})")
+                continue
+            if key not in by_key:
+                continue
+            tr = next((t for t in by_key[key] if state in t["from"]), None)
+            if not tr:
+                err.append(f"эталон: {n} — запись {key}: переход {', '.join(t['id'] for t in by_key[key])} не идёт из «{state}» (DATA-06)")
+                break
+            if tr["id"] == "close":
+                label = ((entry.get("vars") or {}).get("closeResultLabel") or [""])[0]
+                result = label[len(prefix):] if label.startswith(prefix) else inc.get("closeResult")
+                if state not in close_from.get(result, []):
+                    err.append(f"эталон: {n} — закрыт «{result}» из «{state}», а этот результат — только из {close_from.get(result)} (DATA-06)")
+                    break
+            state = tr["to"] or state
+            if state == "closed":
+                close_at = entry["at"]
+        else:
+            if state != inc["state"]:
+                err.append(f"эталон: {n} — журнал приводит в «{state}», а у инцидента «{inc['state']}» (DATA-06)")
+            elif state == "closed" and inc.get("closedAt") != close_at:
+                err.append(f"эталон: {n} — время закрытия {inc.get('closedAt')}, а запись «Закрыто» — {close_at}")
+
+
 def check_doc_numbers(w, o, err):
     """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
     ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
@@ -1195,6 +1248,7 @@ def main():
     check_doc_numbers(w, o, err)
     check_served(o, err)
     check_fixture_journal(w, err)
+    check_fixture_history(w, err)
     check_graph(w, err)
     check_state_owners(w, err)
     check_priorities(w, o, err)

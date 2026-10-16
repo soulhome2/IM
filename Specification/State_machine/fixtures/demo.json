@@ -2293,6 +2293,13 @@
       },
       "journal": [
         {
+          "at": "2026-10-03T11:39:47Z",
+          "actor": null,
+          "actorName": "Диспетчер",
+          "template": "workflow.journal.create",
+          "vars": {}
+        },
+        {
           "at": "2026-10-03T12:00:00Z",
           "actor": "noc",
           "actorName": null,
@@ -2621,7 +2628,7 @@
       "closeCause": null,
       "result": null,
       "closedBy": "me",
-      "closedAt": "2026-10-03T11:48:00Z",
+      "closedAt": "2026-10-03T11:02:54Z",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -2646,6 +2653,13 @@
           "vars": {
             "text": "Скопление в зоне ожидания"
           }
+        },
+        {
+          "at": "2026-10-03T10:58:15Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
         },
         {
           "at": "2026-10-03T11:02:54Z",
@@ -2706,6 +2720,13 @@
         "launchedMacros": []
       },
       "journal": [
+        {
+          "at": "2026-10-03T10:49:57Z",
+          "actor": null,
+          "actorName": "Диспетчер",
+          "template": "workflow.journal.create",
+          "vars": {}
+        },
         {
           "at": "2026-10-03T12:00:00Z",
           "actor": "sidorov",
@@ -2828,6 +2849,13 @@
           "vars": {
             "text": "Задымление на кухне"
           }
+        },
+        {
+          "at": "2026-10-03T10:35:02Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
         },
         {
           "at": "2026-10-03T10:36:36Z",
@@ -3001,7 +3029,7 @@
       "closeCause": null,
       "result": "плановый тест",
       "closedBy": "sidorov",
-      "closedAt": "2026-10-03T09:00:00Z",
+      "closedAt": "2026-10-03T10:15:02Z",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3027,6 +3055,13 @@
           "vars": {
             "text": "Сработка пожарного датчика"
           }
+        },
+        {
+          "at": "2026-10-03T10:10:05Z",
+          "actor": "sidorov",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
         },
         {
           "at": "2026-10-03T10:15:02Z",
@@ -3120,7 +3155,7 @@
       "closeCause": null,
       "result": null,
       "closedBy": "me",
-      "closedAt": "2026-10-03T09:00:00Z",
+      "closedAt": "2026-10-03T09:56:47Z",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3145,6 +3180,13 @@
           "vars": {
             "text": "Открытие двери без карты"
           }
+        },
+        {
+          "at": "2026-10-03T09:54:10Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
         },
         {
           "at": "2026-10-03T09:56:47Z",
@@ -3319,7 +3361,14 @@
           }
         },
         {
-          "at": "2026-10-03T12:00:00Z",
+          "at": "2026-10-03T09:28:30Z",
+          "actor": "petrova",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:35:00Z",
           "actor": "petrova",
           "actorName": null,
           "template": "workflow.journal.close",

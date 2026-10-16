@@ -324,7 +324,7 @@
     async reopen() {
       await setFilter("done");
       const has = Boolean(anyBtn($("eventsList"), "reopen", guidOf("INC-1837")));
-      return [!has, "«Переоткрыть» у INC-1837 (закрыт 12 мин назад): " + has];
+      return [!has, "«Переоткрыть» у INC-1837 (закрыт 57 мин назад): " + has];
     },
     async escalation() {
       const id = await claimFirst();
