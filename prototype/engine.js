@@ -279,9 +279,11 @@
         const p = byId(opts && opts.form ? opts.form.primaryId : null);
         return p && ctx.scenarioKey(p) === ctx.scenarioKey(ev) ? null : ["workflow.guard.merge_scenario"];
       },
+      // Основной «мой» (§2.4) — в работе или отложен у меня; ожидающий моего принятия — ещё не мой:
+      // до «Принять» его никто не ведёт, отсоединять нельзя ни человеку, ни группе (RULE-78)
       primaryEditable: (ev) => {
         const p = byId(ev.linkedTo);
-        return p && (isMine(p) || unowned(p)) ? null : ["workflow.guard.primary_not_editable"];
+        return p && (ownership(p) === "owner" || unowned(p)) ? null : ["workflow.guard.primary_not_editable"];
       },
       primaryClosed: (ev) => {
         const p = byId(ev.linkedTo);

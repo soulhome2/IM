@@ -182,6 +182,7 @@ MUTATIONS = [
     ("copy-answers-no-log", "engine.js", "          if (template) ctx.log(p, s.actor, template, { number: ev.number, n: moved.length }, at);\n", "", "api"),
     ("relink-closed-too", "engine.js", "const children = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));", "const children = ctx.events().filter((e) => e.linkedTo === ev.id);", "api"),
     ("relink-no-log", "engine.js", "            if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);\n", "", "api"),
+    ("detach-before-accept", "engine.js", "return p && (ownership(p) === \"owner\" || unowned(p)) ? null", "return p && (isMine(p) || unowned(p)) ? null", "api"),
     ("linked-breach-owner-self", "engine.js", "owner: who === \"primaryOwner\" ? breachOwnerOfLinked(ev) : addressee(ev)", "owner: addressee(ev)", "api"),
     ("merge-starts-fresh-resolution", "engine.js", "        if (mode === \"ifStarted\" && !dueOf(ev, id) && ev[FIELDS[id].left] == null) return;\n", "", "api"),
     ("linked-due-missing", "server.js", "        linkedDueAt: linkedDue(ev),", "        linkedDueAt: null,", "api"),

@@ -1605,6 +1605,28 @@
     assert.status(await env.call("DELETE", `/operator/incidents/${enc("00000000-0000-4000-8000-000000000000")}/linked`), 404, "NOT_FOUND", "нет такого");
   });
 
+  test("Основной «Ожидает принятия»: отсоединять — только после «Принять», и человеку, и группе (§11.4, RULE-78)", async () => {
+    // Основной адресован мне автоэскалацией: первая ступень — я сам или моя группа
+    for (const [who, targetRef, ownership] of [["лично", `user:${ME}`, "target"], ["группе", "group:grp-leads", "target"]]) {
+      const env = await makeEnv({ workflowPatch: { escalation: { levels: [{ level: 1, targetRef, reactionSec: 600 }], maxLevel: 1 } } });
+      const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
+      const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
+      const lead = res.incident.guid;
+      const other = fires.map((e) => e.guid).find((g) => g !== lead);
+      assert.status(await env.act(lead, "release", { comment: "тест" }, "card"), 200, null, `${who}: основной — в очередь`);
+      await env.advance(W.timers.find((t) => t.id === "reaction").defaultSec + 60);
+      const pending = await env.card(lead);
+      assert.eq([pending.state, pending.ownership], ["pending_acceptance", ownership], `${who}: основной ждёт моего принятия`);
+      assert.eq((await env.card(other)).state, "linked", `${who}: привязанный на месте`);
+      const before = await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked/${enc(other)}`);
+      assert.ok(before.status >= 400, `${who}: до «Принять» отсоединить нельзя — ${before.status}`);
+      assert.eq((await env.card(other)).state, "linked", `${who}: не отсоединён`);
+      assert.status(await env.act(lead, "accept", {}, "card"), 200, null, `${who}: «Принять»`);
+      assert.status(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked/${enc(other)}`), 200, null, `${who}: после «Принять» — можно`);
+      assert.eq((await env.card(other)).state, "new", `${who}: отсоединённый — снова новый`);
+    }
+  });
+
   test("Выборка: «Взять» выборкой недоступно — как одно только «Взять в работу»; режима «однотипные» нет (§11)", async () => {
     const env = await makeEnv();
     const all = await env.all();
