@@ -1537,6 +1537,56 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
+    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ↓ из поиска — на первое найденное, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить (§13, RULE-88)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      const key = async (el, k) => {
+        el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+        await wait();
+      };
+      const search = $("groupSearch");
+      search.value = "конференц";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await wait();
+      try {
+        const marks = [...$("groupsList").querySelectorAll(".tree-node:not(.hidden) > .node-content mark")];
+        expect(marks.length > 1 && marks.every((m) => m.textContent.toLowerCase() === "конференц"), `выделено: ${marks.map((m) => m.textContent).join(", ")}`);
+        expect(!$("groupsFound").hidden && $("groupsFound").textContent === `Найдено: ${marks.length}`, `счётчик «${$("groupsFound").textContent}», выделено ${marks.length}`);
+        await key(search, "ArrowDown");
+        const first = document.activeElement;
+        expect(first === marks[0].closest(".tree-node"), "↓ из поиска — не на первое найденное");
+        await key(first, "ArrowDown");
+        const second = document.activeElement;
+        expect(second.classList.contains("tree-node") && second !== first, "↓ в дереве не перешла к следующему узлу");
+        await key(second, "ArrowUp");
+        expect(document.activeElement === first, "↑ не вернула к прежнему узлу");
+        const id = first.dataset.id;
+        await key(first, "Enter");
+        await wait(300);
+        const active = $("groupsList").querySelector(".tree-node.active");
+        expect(active && active.dataset.id === id, "Enter не выбрал узел");
+        expect(document.activeElement && document.activeElement.dataset.id === id, "после выбора фокус ушёл из дерева");
+        search.focus();
+        await key(search, "Escape");
+        expect(search.value === "" && $("groupsFound").hidden && !$("groupsList").querySelector("mark"), "Esc в поиске не очистил его");
+        // → раскрывает свёрнутую группу, ← — сворачивает; фокус остаётся на ней
+        const closed = [...$("groupsList").querySelectorAll(".tree-node.has-children:not(.open)")].find((n) => n.getClientRects().length > 0);
+        expect(closed, "нет свёрнутой группы");
+        const node = () => $("groupsList").querySelector(`[data-id="${closed.dataset.id}"]`);
+        closed.focus();
+        await key(closed, "ArrowRight");
+        expect(node().classList.contains("open") && node().getAttribute("aria-expanded") === "true" && document.activeElement === node(), "→ не раскрыла группу");
+        await key(node(), "ArrowLeft");
+        expect(!node().classList.contains("open") && document.activeElement === node(), "← не свернула группу");
+        return `найдено ${marks.length}, выбран «${first.querySelector(".node-text").textContent}»`;
+      } finally {
+        if (search.value) {
+          search.value = "";
+          search.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await click($("groupsList").querySelector('[data-id="all"] > .node-content'));
+      }
+    });
+
     await step("Выделить по фильтру → «Взять в работу»: пожары одним инцидентом, у основного «+N», привязанные в карточке; «Отсоединить» и «Отсоединить все» — события снова новые (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");

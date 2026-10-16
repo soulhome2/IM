@@ -579,6 +579,8 @@
     groupId: "all",
     openGroups: new Set(),
     groupQuery: "",
+    // Узел дерева с фокусом клавиатуры — переживает перерисовку (RULE-88)
+    treeFocus: null,
     filter: "open",
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
     // Несколько типов сразу; пусто — все. tbOpen — какой из двух списков раскрыт
@@ -1540,11 +1542,66 @@
   const openDevices = (node) => groupDevices(node).filter((d) => d.counters && d.counters.open > 0);
   const badgeText = (node) => `${(node.children || []).length}/${openDevices(node).length}`;
 
+  // Совпавшая с поиском часть названия — выделена (RULE-88)
+  function markMatch(text, q) {
+    const at = q ? text.toLowerCase().indexOf(q) : -1;
+    if (at < 0) return escapeHtml(text);
+    return `${escapeHtml(text.slice(0, at))}<mark>${escapeHtml(text.slice(at, at + q.length))}</mark>${escapeHtml(text.slice(at + q.length))}`;
+  }
+
   function nodeMatchesQuery(node, q, isDevice) {
     if (!q) return true;
     if (t(node.name).toLowerCase().includes(q)) return true;
     if (isDevice) return false;
     return (node.children || []).some((c) => nodeMatchesQuery(c, q)) || groupDevices(node).some((d) => nodeMatchesQuery(d, q, true));
+  }
+
+  // Дерево с клавиатуры, как дерево WAI-ARIA (§13, RULE-88): ↑ ↓ — по видимым узлам, Home и End — первый
+  // и последний, → — раскрыть или к первому вложенному, ← — свернуть или к родителю, Enter и пробел — выбрать
+  const treeItems = () => [...$("groupsList").querySelectorAll(".tree-node")].filter((n) => n.getClientRects().length > 0);
+  function focusTreeNode(node) {
+    if (!node) return;
+    $("groupsList").querySelectorAll('.tree-node[tabindex="0"]').forEach((n) => (n.tabIndex = -1));
+    node.tabIndex = 0;
+    state.treeFocus = node.dataset.id;
+    node.focus();
+    node.querySelector(":scope > .node-content").scrollIntoView({ block: "nearest" });
+  }
+  function treeKey(e) {
+    const node = e.target;
+    if (!node.classList || !node.classList.contains("tree-node")) return;
+    const items = treeItems();
+    const at = items.indexOf(node);
+    const moves = { ArrowDown: items[at + 1], ArrowUp: at > 0 ? items[at - 1] : null, Home: items[0], End: items[items.length - 1] };
+    if (e.key in moves) {
+      e.preventDefault();
+      // Выше первого узла — в поиск
+      return moves[e.key] ? focusTreeNode(moves[e.key]) : $("groupSearch").focus();
+    }
+    const id = node.dataset.id;
+    const open = node.classList.contains("open");
+    if (e.key === "ArrowRight" && node.classList.contains("has-children")) {
+      e.preventDefault();
+      if (open) return focusTreeNode(node.querySelector(":scope > ul > .tree-node:not(.hidden)"));
+      state.treeFocus = id;
+      state.openGroups.add(id);
+      return renderGroups();
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      // Пока идёт поиск, ветки с найденным раскрыты поиском — ← ведёт к родителю
+      if (open && !state.groupQuery.trim()) {
+        state.treeFocus = id;
+        state.openGroups.delete(id);
+        return renderGroups();
+      }
+      return focusTreeNode(node.parentElement.closest(".tree-node"));
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      state.treeFocus = id;
+      node.querySelector(":scope > .node-content").click();
+    }
   }
 
   // Списки фильтров: по состоянию — из машины, типы событий и устройств — справочники сервера
@@ -1671,11 +1728,12 @@
           <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
             state.groupId === item.guid ? "active" : ""
           } ${traced} ${isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
-              data-id="${escapeHtml(item.guid)}" data-type="${isDevice ? "device" : "group"}" role="treeitem">
+              data-id="${escapeHtml(item.guid)}" data-type="${isDevice ? "device" : "group"}" role="treeitem" tabindex="-1"
+              aria-level="${level + 1}" aria-selected="${state.groupId === item.guid}"${hasKids ? ` aria-expanded="${open}"` : ""}>
             <div class="node-content" title="${escapeHtml(title)}">
               <span class="toggle-icon material-symbols-outlined">chevron_right</span>
               <span class="material-symbols-outlined">${icon}</span>
-              <span class="node-text">${escapeHtml(t(item.name))}</span>
+              <span class="node-text">${markMatch(t(item.name), q)}</span>
               ${
                 !isDevice && hasKids
                   ? `<span class="tree-badge" title="${te("Подгрупп / устройств с открытыми инцидентами")}">${badgeText(item)}</span>`
@@ -1721,6 +1779,7 @@
   }
 
   function renderGroups() {
+    const hadFocus = $("groupsList").contains(document.activeElement);
     const trace = traceGroups();
     const collapseBtn = $("groupsCollapseAll");
     const expanded = state.openGroups.size > 0;
@@ -1730,7 +1789,8 @@
     const open = store.counters.open || 0;
     const crit = store.tree.some((n) => n.counters && n.counters.topPriority > 0);
     $("groupsList").innerHTML = `
-      <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group">
+      <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group" role="treeitem" tabindex="-1"
+          aria-level="1" aria-selected="${state.groupId === "all"}">
         <div class="node-content">
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
@@ -1746,6 +1806,15 @@
       (n) => n.dataset.id !== "all" && !n.classList.contains("hidden")
     );
     $("groupsEmpty").hidden = !q || visible.length > 0;
+    const found = $("groupsList").querySelectorAll(".tree-node:not(.hidden) > .node-content mark").length;
+    $("groupsFound").hidden = !q || !found;
+    $("groupsFound").textContent = t("Найдено: {n}", { n: found });
+    // Один узел дерева — в порядке Tab: тот, где был фокус, иначе выбранный, иначе первый (RULE-88)
+    const items = treeItems();
+    const byId = (id) => items.find((n) => n.dataset.id === id);
+    const current = byId(state.treeFocus) || byId(state.groupId) || items[0];
+    if (current) current.tabIndex = 0;
+    if (current && hadFocus) current.focus();
     if (trace.changed) {
       const leaf = $("groupsList").querySelector(".trace-leaf > .node-content");
       if (leaf) leaf.scrollIntoView({ block: "nearest" });
@@ -2806,6 +2875,23 @@
       state.groupQuery = e.target.value;
       renderGroups();
     });
+    // ↓ — на первое найденное (или первый узел), Esc — очистить поиск (RULE-88)
+    $("groupSearch").addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        const hit = $("groupsList").querySelector(".tree-node:not(.hidden) > .node-content mark");
+        const first = hit ? hit.closest(".tree-node") : treeItems()[0];
+        if (!first) return;
+        e.preventDefault();
+        focusTreeNode(first);
+      } else if (e.key === "Escape" && e.target.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.target.value = "";
+        state.groupQuery = "";
+        renderGroups();
+      }
+    });
+    $("groupsList").addEventListener("keydown", treeKey);
     $("groupsList").addEventListener("click", (e) => {
       const fbtn = e.target.closest("[data-filter]");
       if (fbtn) {
@@ -2825,6 +2911,7 @@
         return;
       }
       if (!e.target.closest(".node-content")) return;
+      state.treeFocus = id;
       state.groupId = id;
       if (narrowQuery.matches) state.groupsOn = false;
       requery();

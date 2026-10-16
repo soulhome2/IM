@@ -20,6 +20,7 @@ window.IM_DICT_UI = {
     "Срок закрытия привязанного инцидента раньше срока основного: истечёт — нарушение на владельца основного": "A linked incident is due earlier than the primary: when it expires, the breach is recorded against the primary's owner",
     "Найдено в привязанных: {ids}": "Found in linked: {ids}",
     "Привязано: {n}": "Linked: {n}",
+    "Найдено: {n}": "Found: {n}",
     "Привязанных инцидентов нет": "No linked incidents",
     "Отмечено: {n}": "Ticked: {n}",
     "{id} отсоединён и вернулся в очередь новым": "{id} detached and returned to the queue as new",
