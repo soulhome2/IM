@@ -110,7 +110,6 @@
     { "key": "incident:transfer:own", "labelKey": "workflow.permission.incident.transfer.own" },
     { "key": "incident:transfer:any", "labelKey": "workflow.permission.incident.transfer.any" },
     { "key": "incident:reassign", "labelKey": "workflow.permission.incident.reassign" },
-    { "key": "incident:read:any", "labelKey": "workflow.permission.incident.read.any" },
     { "key": "incident:bulk", "labelKey": "workflow.permission.incident.bulk" },
     { "key": "incident:run_action", "labelKey": "workflow.permission.incident.run_action" },
     { "key": "incident:schema:admin", "labelKey": "workflow.permission.incident.schema.admin" },
@@ -373,7 +372,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.claim"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["queue"], "style": "primary", "navigate": "card", "observerNotice": { "key": "workflow.notice.claim", "audience": "observers" } }
+      "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card", "observerNotice": { "key": "workflow.notice.claim", "audience": "observers" } }
     },
     {
       "id": "accept",
@@ -1096,25 +1095,14 @@
         "$comment": "§7. Только у своего «В работе»: у отложенного — «Возобновить», это переход."
       },
       {
-        "id": "open_readonly",
-        "labelKey": "workflow.nav.open_readonly",
-        "hintKey": "workflow.nav.open_readonly.hint",
-        "style": "outline",
-        "guards": [
-          { "fn": "stateIs", "args": [["pending_acceptance", "in_progress", "on_hold"]] },
-          { "fn": "isNotOwner" },
-          { "fn": "canReadOpen" }
-        ],
+        "id": "view",
+        "labelKey": "workflow.nav.view",
+        "hintKey": "workflow.nav.view.hint",
+        "style": "icon",
+        "icon": "visibility",
+        "guards": [{ "fn": "stateIs", "args": [["new", "pending_acceptance", "in_progress", "on_hold", "closed"]] }],
         "surface": ["queue"],
-        "$comment": "§6.3. Не мой инцидент в работе, отложенный или ожидающий принятия: просмотр. Адресату — тоже (BUG-60): посмотреть, что сделано, до «Принять» или «Отклонить»; кнопки карточки — по §7."
-      },
-      {
-        "id": "open_done",
-        "labelKey": "workflow.nav.open_done",
-        "hintKey": "workflow.nav.open_done.hint",
-        "style": "outline",
-        "guards": [{ "fn": "stateIs", "args": [["closed"]] }, { "fn": "canReadDone" }],
-        "surface": ["queue"]
+        "$comment": "§6.3, §7, RULE-80, RULE-81. «Посмотреть» — значок у каждого инцидента очереди: открывает карточку, ничего не меняя. Свой в работе — для работы, как «Продолжить», остальное — на просмотр (scenarioEdit). Отдельного права нет: кто видит инцидент в очереди, тот видит и карточку (§5). Что можно сделать — кнопки карточки (§7)."
       },
       { "id": "back_to_queue", "labelKey": "workflow.nav.back_to_queue", "style": "ghost", "guards": [], "surface": ["card"] },
       { "id": "run_macro", "labelKey": "workflow.nav.run_macro", "style": "outline", "guards": [{ "fn": "hasPermission", "args": ["incident:run_action"] }, { "fn": "isOwner" }, { "fn": "agentReady" }, { "fn": "stateIs", "args": ["in_progress"] }], "surface": ["card"] }
@@ -1250,8 +1238,6 @@
     "workflow.guard.timer_not_expired": { "vars": [] },
     "workflow.guard.other_hold_reason": { "vars": [] },
     "workflow.guard.wrong_state": { "vars": [] },
-    "workflow.guard.no_read_done": { "vars": [] },
-    "workflow.guard.no_read_open": { "vars": [] },
     "workflow.guard.setting_off": { "vars": [] },
     "workflow.guard.setting_other": { "vars": [] },
     "workflow.error.guard_not_implemented": { "vars": ["fn"] },
@@ -1292,7 +1278,7 @@
       { "fn": "hasPermission", "args": ["permissionKey"], "onFail": "hide", "failKeys": ["workflow.guard.no_permission"] },
       { "fn": "hasScopedPermission", "args": ["resourceAction"], "onFail": "hide", "failKeys": ["workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§5. Право с областью: ключ <действие>:own, если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе <действие>:any. Сейчас — у «Передать»." },
       { "fn": "isOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.not_owner"] },
-      { "fn": "isNotOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.already_owner"], "extendsBaseRegistry": true, "$comment": "§6.1, §6.3. Инцидент смотрящему не «мой» (§2.4): «Перехватить» и «Открыть на просмотр» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я." },
+      { "fn": "isNotOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.already_owner"], "extendsBaseRegistry": true, "$comment": "§6.1. Инцидент смотрящему не «мой» (§2.4): «Перехватить» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я." },
       { "fn": "isTarget", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.not_target"] },
       { "fn": "isNotTarget", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.is_target"], "extendsBaseRegistry": true, "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают." },
       { "fn": "targetIsNotSelf", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.transfer_to_self"], "extendsBaseRegistry": true, "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено." },
@@ -1318,8 +1304,6 @@
       { "fn": "escalationTargetAvailable", "args": ["expected"], "onFail": "hide", "failKeys": ["workflow.guard.no_escalation_level"], "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, адресат которого может принять — право incident:accept и доступ к объекту, у группы — хотя бы один такой участник (§8.1, §8.3): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Остальные уровни пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "onFail": "hide", "failKeys": ["workflow.guard.other_hold_reason"], "extendsBaseRegistry": true, "$comment": "§12.3. Причина удержания из списка: возврат в очередь по долгому молчанию касается только отложенных системой." },
       { "fn": "stateIs", "args": ["stateIds"], "onFail": "hide", "failKeys": ["workflow.guard.wrong_state"], "extendsBaseRegistry": true, "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]." },
-      { "fn": "canReadOpen", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.no_read_open"], "extendsBaseRegistry": true, "$comment": "§6.3. Открытую не свою карточку открывает адресат (BUG-60) или тот, у кого есть incident:read:any." },
-      { "fn": "canReadDone", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.no_read_done"], "extendsBaseRegistry": true, "$comment": "§6.3. Закрытую карточку открывает владелец, закрывший или тот, у кого есть incident:read:any." },
       { "fn": "settingEnabled", "args": ["settingKey"], "onFail": "hide", "failKeys": ["workflow.guard.setting_off"] },
       { "fn": "settingIs", "args": ["settingKey", "value"], "onFail": "hide", "failKeys": ["workflow.guard.setting_other"], "extendsBaseRegistry": true, "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)." },
       { "fn": "isOwnerOrUnowned", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.not_owner"], "extendsBaseRegistry": true, "$comment": "§11. Инцидент ничей (новый) или мой: объединять можно только такие" },
@@ -1374,12 +1358,12 @@
         {
           "id": "operator",
           "labelKey": "workflow.validation.set.operator",
-          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         },
         {
           "id": "senior",
           "labelKey": "workflow.validation.set.senior",
-          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:read:any", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
+          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "agent:set_not_ready"]
         }
       ]
     },

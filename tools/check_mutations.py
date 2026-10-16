@@ -155,7 +155,8 @@ MUTATIONS = [
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
     ("takeoverTarget", "«Перехватить» и адресату: переданное моей группе можно перехватить", lambda w: transition(w, "takeover").update(guards=[g for g in transition(w, "takeover")["guards"] if g["fn"] != "isNotTarget"])),
-    ("readonlyTarget", "«Открыть» не адресату: переданное мне не посмотреть до «Принять»", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "open_readonly")["guards"].append({"fn": "isNotTarget"})),
+    ("readonlyTarget", "«Посмотреть» не адресату: переданное мне не посмотреть до «Принять»", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"].append({"fn": "isNotTarget"})),
+    ("viewNew", "«Посмотреть» не у нового: новый не посмотреть, не взяв", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"][0]["args"][0].remove("new")),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

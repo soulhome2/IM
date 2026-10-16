@@ -216,10 +216,6 @@ window.IM_WORKFLOW = {
       "labelKey": "workflow.permission.incident.reassign"
     },
     {
-      "key": "incident:read:any",
-      "labelKey": "workflow.permission.incident.read.any"
-    },
-    {
       "key": "incident:bulk",
       "labelKey": "workflow.permission.incident.bulk"
     },
@@ -858,7 +854,8 @@ window.IM_WORKFLOW = {
       },
       "ui": {
         "surface": [
-          "queue"
+          "queue",
+          "card"
         ],
         "style": "primary",
         "navigate": "card",
@@ -3187,54 +3184,29 @@ window.IM_WORKFLOW = {
         "$comment": "§7. Только у своего «В работе»: у отложенного — «Возобновить», это переход."
       },
       {
-        "id": "open_readonly",
-        "labelKey": "workflow.nav.open_readonly",
-        "hintKey": "workflow.nav.open_readonly.hint",
-        "style": "outline",
+        "id": "view",
+        "labelKey": "workflow.nav.view",
+        "hintKey": "workflow.nav.view.hint",
+        "style": "icon",
+        "icon": "visibility",
         "guards": [
           {
             "fn": "stateIs",
             "args": [
               [
+                "new",
                 "pending_acceptance",
                 "in_progress",
-                "on_hold"
-              ]
-            ]
-          },
-          {
-            "fn": "isNotOwner"
-          },
-          {
-            "fn": "canReadOpen"
-          }
-        ],
-        "surface": [
-          "queue"
-        ],
-        "$comment": "§6.3. Не мой инцидент в работе, отложенный или ожидающий принятия: просмотр. Адресату — тоже (BUG-60): посмотреть, что сделано, до «Принять» или «Отклонить»; кнопки карточки — по §7."
-      },
-      {
-        "id": "open_done",
-        "labelKey": "workflow.nav.open_done",
-        "hintKey": "workflow.nav.open_done.hint",
-        "style": "outline",
-        "guards": [
-          {
-            "fn": "stateIs",
-            "args": [
-              [
+                "on_hold",
                 "closed"
               ]
             ]
-          },
-          {
-            "fn": "canReadDone"
           }
         ],
         "surface": [
           "queue"
-        ]
+        ],
+        "$comment": "§6.3, §7, RULE-80, RULE-81. «Посмотреть» — значок у каждого инцидента очереди: открывает карточку, ничего не меняя. Свой в работе — для работы, как «Продолжить», остальное — на просмотр (scenarioEdit). Отдельного права нет: кто видит инцидент в очереди, тот видит и карточку (§5). Что можно сделать — кнопки карточки (§7)."
       },
       {
         "id": "back_to_queue",
@@ -3632,12 +3604,6 @@ window.IM_WORKFLOW = {
     "workflow.guard.wrong_state": {
       "vars": []
     },
-    "workflow.guard.no_read_done": {
-      "vars": []
-    },
-    "workflow.guard.no_read_open": {
-      "vars": []
-    },
     "workflow.guard.setting_off": {
       "vars": []
     },
@@ -3800,7 +3766,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.already_owner"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.1, §6.3. Инцидент смотрящему не «мой» (§2.4): «Перехватить» и «Открыть на просмотр» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я."
+        "$comment": "§6.1. Инцидент смотрящему не «мой» (§2.4): «Перехватить» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я."
       },
       {
         "fn": "isTarget",
@@ -4017,26 +3983,6 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]."
-      },
-      {
-        "fn": "canReadOpen",
-        "args": [],
-        "onFail": "hide",
-        "failKeys": [
-          "workflow.guard.no_read_open"
-        ],
-        "extendsBaseRegistry": true,
-        "$comment": "§6.3. Открытую не свою карточку открывает адресат (BUG-60) или тот, у кого есть incident:read:any."
-      },
-      {
-        "fn": "canReadDone",
-        "args": [],
-        "onFail": "hide",
-        "failKeys": [
-          "workflow.guard.no_read_done"
-        ],
-        "extendsBaseRegistry": true,
-        "$comment": "§6.3. Закрытую карточку открывает владелец, закрывший или тот, у кого есть incident:read:any."
       },
       {
         "fn": "settingEnabled",
@@ -4272,7 +4218,6 @@ window.IM_WORKFLOW = {
             "incident:release",
             "incident:close",
             "incident:transfer:own",
-            "incident:read:any",
             "incident:bulk",
             "incident:run_action",
             "agent:set_not_ready"
@@ -4292,7 +4237,6 @@ window.IM_WORKFLOW = {
             "incident:transfer:own",
             "incident:transfer:any",
             "incident:reassign",
-            "incident:read:any",
             "incident:bulk",
             "incident:run_action",
             "agent:set_not_ready"

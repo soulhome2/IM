@@ -294,7 +294,7 @@
     const leftovers = new Set(findRussian());
     // Карточка тоже должна быть переведена: открываем завершённый инцидент на просмотр
     await setFilter("done");
-    const view = button($("eventsList"), "open_done");
+    const view = button($("eventsList"), "view");
     if (view) {
       await click(view);
       findRussian().forEach((s) => leftovers.add(s));
@@ -463,7 +463,7 @@
       const text = row.querySelector(".badge.foreign").textContent.trim();
       expect(names.includes(text), `бейдж в очереди: «${text}», а не ФИО коллеги`);
       const id = row.dataset.id;
-      await click(button($("eventsList"), "open_readonly", id));
+      await click(button($("eventsList"), "view", id));
       expect(mode() === "work", "чужая карточка не открылась");
       const card = root().querySelector(".badge.foreign");
       expect(card && card.textContent.trim() === text, `бейдж в карточке: «${card ? card.textContent.trim() : "нет"}», а не «${text}»`);
@@ -476,7 +476,7 @@
     await step("Передать чужой инцидент", async () => {
       await setFilter("foreign");
       const rows = [...$("eventsList").querySelectorAll(".event")].filter(
-        (r) => r.querySelector('[data-do="open_readonly"]') && r.querySelector('[data-do="transfer"]:not([aria-disabled="true"])')
+        (r) => r.querySelector('[data-do="view"]') && r.querySelector('[data-do="transfer"]:not([aria-disabled="true"])')
       );
       expect(rows.length, "нет чужих инцидентов, которые можно передать");
       foreignTransferred = rows[0].dataset.id;
@@ -500,11 +500,11 @@
     await step("Перехватить чужой инцидент", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find(
-        (r) => r.dataset.id !== foreignTransferred && r.querySelector('[data-do="open_readonly"]') && r.textContent.includes("Закрытие")
+        (r) => r.dataset.id !== foreignTransferred && r.querySelector('[data-do="view"]') && r.textContent.includes("Закрытие")
       );
       expect(row, "нет чужого инцидента в работе");
       const id = row.dataset.id;
-      await click(button($("eventsList"), "open_readonly", id));
+      await click(button($("eventsList"), "view", id));
       expect(mode() === "work", "чужая карточка не открылась");
       const take = button(root(), "takeover", id);
       expect(take, "в чужой карточке нет кнопки «Перехватить»");
@@ -659,9 +659,10 @@
         const id = guidOf(n);
         const row = $("eventsList").querySelector(`[data-id="${id}"]`);
         expect(row, `${n} нет в «Мне на принятие»`);
-        const order = [...row.querySelectorAll("[data-do]")].map((b) => b.dataset.do).slice(0, 2).join(", ");
-        expect(order === "accept, open_readonly", `${n}: в строке первыми «${order}», а нужно «Принять», затем «Открыть»`);
-        await click(button($("eventsList"), "open_readonly", id));
+        const first = row.querySelector(".event-acts [data-do]");
+        expect(first && first.dataset.do === "accept", `${n}: первая в колонке «${first ? first.dataset.do : "нет"}», а нужно «Принять»`);
+        expect(row.querySelector('.event-open[data-do="view"]'), `${n}: нет значка «Посмотреть» у названия`);
+        await click(button($("eventsList"), "view", id));
         expect(mode() === "work", `${n}: карточка адресата не открылась`);
         for (const a of ["accept", "reject", "transfer"]) expect(button(root(), a), `${n}: в карточке нет кнопки ${a}`);
         expect(!button(root(), "takeover"), `${n}: в карточке адресата «Перехватить» — принимают, а не перехватывают (BUG-55)`);
@@ -670,6 +671,34 @@
         expect(badge && /Вам на принятие|Вашей группе/.test(badge.textContent), `${n}: после просмотра бейдж «${badge ? badge.textContent : "нет"}»`);
       }
       return "INC-1843, INC-1836";
+    });
+
+    await step("«Посмотреть» — значок у каждого инцидента; открывает карточку, ничего не меняя (RULE-80, RULE-81)", async () => {
+      await setFilter("all");
+      const rows = [...$("eventsList").querySelectorAll(".event")];
+      const without = rows.filter((r) => !r.querySelector('.event-open[data-do="view"]'));
+      expect(rows.length && !without.length, `без значка: ${without.map((r) => r.querySelector(".event-sub").textContent.split(" ·")[0]).join(", ") || "строк нет"}`);
+      const eye = rows[0].querySelector('.event-open[data-do="view"]');
+      expect(eye.getAttribute("aria-label").startsWith("Посмотреть: ") && eye.title && eye.querySelector(".event-eye") && eye.querySelector("strong"), `подпись «${eye.getAttribute("aria-label")}», подсказка «${eye.title}»: глаз и название — одна кнопка`);
+      expect(!$("eventsList").querySelector('.event-acts [data-do="view"]'), "«Посмотреть» попала в колонку кнопок");
+      // Свой отложенный — карточка с «Возобновить», остаётся отложенным; новый — с «Взять», остаётся новым
+      await setFilter("open");
+      const fresh = $("eventsList").querySelector('.event [data-do="claim"]');
+      expect(fresh, "в «Открытых» нет нового");
+      const freshId = fresh.closest(".event").dataset.id;
+      for (const [id, filter, act, still] of [[guidOf("INC-1834"), "mine", "resume", "Отложен"], [freshId, "open", "claim", "Новое"]]) {
+        await setFilter(filter);
+        const row = await rowOnPages(id);
+        const n = row ? row.querySelector(".event-sub").textContent.split(" ·")[0] : id;
+        expect(row, `${n} нет в списке`);
+        await click(row.querySelector('[data-do="view"]'));
+        expect(mode() === "work", `${n}: карточка не открылась`);
+        expect(button(root(), act), `${n}: в карточке нет ${act}`);
+        await click($("backToQueue"));
+        const badge = (await rowOnPages(id)).querySelector(".badge");
+        expect(badge.textContent.includes(still), `${n}: после просмотра бейдж «${badge.textContent}»`);
+      }
+      return `${rows.length} строк; свой отложенный и новый открыты и не изменились`;
     });
 
     await step("Отклонить адресованную передачу", async () => {
@@ -1037,7 +1066,7 @@
           return null;
         };
         expect(await tickFirst((r) => r.querySelector('[data-do="claim"]')), "в списке нет нового");
-        expect(await tickFirst((r) => r.querySelector('[data-do="open_readonly"]')), "нет чужих инцидентов в работе");
+        expect(await tickFirst((r) => r.querySelector(".badge.foreign")), "нет чужих инцидентов в работе");
         expect($("selBar").textContent.includes("Отмечено: 2"), `панель: «${$("selBar").textContent.trim()}»`);
         const b = $("selBar").querySelector('[data-sel-do="takeover"]');
         expect(b && off(b), "«Перехватить» не показана бледной");

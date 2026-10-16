@@ -516,6 +516,7 @@
             reasonVars: why ? why.vars : null,
             formId: a.formId || null,
             navigate: a.navigate || null,
+            icon: a.icon || null,
             bulkAllowed: Boolean(tr && tr.bulk && tr.bulk.allowed),
           },
           a.enabled ? formView(tr, ev, surface) : {}

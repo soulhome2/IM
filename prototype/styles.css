@@ -995,6 +995,28 @@ select.search-input { padding-right: 36px; }
 .event-title { display: flex; justify-content: space-between; gap: 8px; }
 .event-title strong { font-size: 14px; font-weight: 600; }
 .event-title time { font-size: 12px; font-weight: 500; color: var(--faint); flex-shrink: 0; }
+/* «Посмотреть» (§7, RULE-81): глаз и название — одна кнопка. Глаз — в своей колонке слева, чтобы
+   название, номер и метка стояли на одной линии; при наведении подсвечиваются оба, название
+   подчёркнуто — видно, что это действие, а не метка. Поля с минусом — область нажатия больше строки */
+.event-main { padding-left: 28px; }
+.event-open {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  margin: -4px -6px -4px -30px;
+  padding: 4px 6px 4px 30px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.event-open strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline transparent; text-underline-offset: 3px; }
+.event-eye { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); font-size: 20px; color: var(--muted); }
+.event-open:hover strong { color: var(--accent-text); text-decoration-color: currentColor; }
+.event-open:hover .event-eye { color: var(--accent-text); }
 .event-sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .event-sla { font-size: 12px; font-weight: 500; color: var(--warn-text); }
@@ -1972,6 +1994,8 @@ select.search-input { padding-right: 36px; }
   .statusbar span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .icon-btn { width: 44px; height: 44px; }
+  /* На телефоне — область нажатия не ниже 44 px */
+  .event-open { margin: -12px -6px -12px -30px; padding: 12px 6px 12px 30px; }
   .btn { padding: 10px 14px; }
   .seg button { padding: 8px 12px; }
   .menu-pop a,

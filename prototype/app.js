@@ -1069,6 +1069,7 @@
       label: t(a.label),
       hint: a.enabled ? (hasLbl(def, "hint") ? lbl(def, "hint") : t(a.label)) : actionWhy(a),
       style: a.style || "outline",
+      icon: a.icon || null,
       disabled: !a.enabled,
       nav: a.kind === "nav",
     };
@@ -1845,7 +1846,11 @@
   function eventRowHtml(e) {
     const badge = badgeView(e);
     const prog = stepProgress(e);
-    const acts = queueActions(e);
+    // Значок (style: icon, §7) вместе с названием — одна кнопка: глаз слева, в своей колонке, и
+    // название; остальные действия — колонкой справа (RULE-81)
+    const open = queueActions(e).find((a) => a.style === "icon");
+    const acts = queueActions(e).filter((a) => a.style !== "icon");
+    const title = `<strong>${te(e.eventType.name)}</strong>`;
     const pickable = bulkEligible(e);
     return `
     <article class="event ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
@@ -1857,7 +1862,15 @@
       })}" title="${escapeHtml(inLang(PRIORITIES[e.priority].description))}"></div>
       <div class="event-main">
         <div class="event-title">
-          <span class="event-head"><strong>${te(e.eventType.name)}</strong>${linkedChip(e)}</span>
+          <span class="event-head">${
+            open
+              ? `<button type="button" class="event-open" data-do="${open.id}" data-ev="${escapeHtml(e.guid)}" title="${escapeHtml(
+                  open.hint
+                )}" aria-label="${escapeHtml(`${open.label}: ${te(e.eventType.name)}`)}"><span class="event-eye material-symbols-outlined" aria-hidden="true">${escapeHtml(
+                  open.icon
+                )}</span>${title}</button>`
+              : title
+          }${linkedChip(e)}</span>
           <time>${fmtTime(e.occurredAt)}</time>
         </div>
         <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>

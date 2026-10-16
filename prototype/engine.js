@@ -265,8 +265,6 @@
       timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["workflow.guard.timer_not_expired"]),
       holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["workflow.guard.other_hold_reason"]),
       stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["workflow.guard.wrong_state"]),
-      canReadOpen: (ev) => (ownership(ev) === "target" || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_open"]),
-      canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_done"]),
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
       settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
       isOwnerOrUnowned: (ev) => (isMine(ev) || unowned(ev) ? null : ["workflow.guard.not_owner"]),
@@ -362,7 +360,7 @@
         if (!nav.surface.includes(surface)) return;
         const a = availability(nav.id, ev);
         if (a.hidden || !a.ok) return;
-        out.push({ id: nav.id, kind: "nav", label: nav.labelKey, hint: nav.hintKey || nav.labelKey, style: nav.style, enabled: true });
+        out.push({ id: nav.id, kind: "nav", label: nav.labelKey, hint: nav.hintKey || nav.labelKey, style: nav.style, icon: nav.icon || null, enabled: true });
       });
       // Во главе колонки — основная кнопка (§7): «Взять», «Принять», «Продолжить», «Возобновить»;
       // за ней навигация — «Открыть», «Просмотр», потом остальные. Адресату «Принять» — первой,

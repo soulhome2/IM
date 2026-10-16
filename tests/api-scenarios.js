@@ -227,21 +227,42 @@
     assert.eq((await env.card(guid)).state, "pending_acceptance", "состояние не изменилось");
   });
 
-  test("Адресат открывает карточку до «Принять» — и без incident:read:any; «Принять» в строке первой, «Открыть» второй (§6.3, §7, BUG-60)", async () => {
-    const perms = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin" && k !== "incident:read:any");
-    const env = await makeEnv({ permissions: perms });
+  test("Адресат открывает карточку до «Принять»; «Принять» в строке первой (§6.3, §7, BUG-60)", async () => {
+    const env = await makeEnv();
     const inbox = await env.all("inbox");
     for (const n of ["INC-1843", "INC-1836"]) {
       const guid = await env.guidOf(n);
       const row = inbox.find((e) => e.guid === guid);
-      assert.eq(row.actions.map((a) => a.id).slice(0, 2), ["accept", "open_readonly"], `${n}: начало строки`);
+      assert.eq(row.actions.map((a) => a.id).slice(0, 2), ["accept", "view"], `${n}: начало строки`);
       const card = await env.card(guid);
       const ids = card.actions.filter((a) => a.visible !== false).map((a) => a.id);
       assert.ok(["accept", "reject", "transfer"].every((a) => ids.includes(a)) && !ids.includes("takeover"), `${n}: в карточке ${ids.join(", ")}`);
     }
-    // Чужой в работе без incident:read:any — по-прежнему не открыть
-    const foreign = (await env.all("foreign")).find((e) => e.state === "in_progress");
-    assert.ok(!foreign.actions.some((a) => a.id === "open_readonly"), `чужой ${foreign.number}: «Открыть» без права`);
+  });
+
+  test("«Посмотреть» — значок у каждого инцидента очереди, без отдельного права; ничего не меняет (§6.3, §7, RULE-80, RULE-81)", async () => {
+    assert.ok(!W.permissions.some((p) => p.key.startsWith("incident:read")), "в каталоге нет права на просмотр");
+    // Только права для работы — «Посмотреть» от прав не зависит
+    const env = await makeEnv({ permissions: ["incident:claim", "incident:accept"] });
+    const all = await env.all("all");
+    const states = new Set();
+    for (const e of all) {
+      const v = e.actions.find((a) => a.id === "view");
+      assert.ok(v, `${e.number} (${e.state}/${e.ownership}): нет «Посмотреть»`);
+      assert.eq([v.kind, v.style, v.icon, v.enabled], ["nav", "icon", "visibility", true], `${e.number}: «Посмотреть» — значок`);
+      states.add(`${e.state}/${e.ownership}`);
+    }
+    for (const kind of ["new/other", "pending_acceptance/target", "on_hold/owner", "in_progress/other", "closed/owner"]) assert.ok(states.has(kind), `в наборе есть ${kind}`);
+    // Свой в работе: основная — «Продолжить», значок тоже есть
+    const fresh = all.find((e) => e.state === "new");
+    await env.act(fresh.guid, "claim", {}, "queue");
+    const mine = (await env.all("mine")).find((e) => e.guid === fresh.guid);
+    assert.eq(mine.actions.slice(0, 2).map((a) => a.id), ["open_card", "view"], "свой в работе");
+    // Карточка нового — на просмотр, с «Взять»; просмотр ничего не меняет
+    const other = all.find((e) => e.state === "new" && e.guid !== fresh.guid);
+    const card = await env.card(other.guid);
+    assert.eq([card.state, card.readOnly, card.actions.some((a) => a.id === "claim" && a.enabled)], ["new", true, true], "карточка нового");
+    assert.eq((await env.card(other.guid)).version, card.version, "просмотр не меняет инцидент");
   });
 
   test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {

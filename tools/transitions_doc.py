@@ -115,8 +115,6 @@ class Doc:
             + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту; остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
-            "canReadOpen": lambda: "я адресат или есть право `incident:read:any`",
-            "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
             "isOwnerOrUnowned": lambda: "инцидент ничей или мой",
@@ -239,9 +237,6 @@ class Doc:
                 if g["fn"] == "hasPermission" and a and a[0] == key:
                     return True
                 if g["fn"] == "hasScopedPermission" and a and key in (f"{a[0]}:own", f"{a[0]}:any"):
-                    return True
-                # Условие с правом внутри: «Просмотр» закрытого — свой, закрытый мной или по праву
-                if g["fn"] in ("canReadDone", "canReadOpen") and key == "incident:read:any":
                     return True
             return False
 

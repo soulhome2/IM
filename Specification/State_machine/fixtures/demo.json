@@ -130,7 +130,6 @@
         "incident:transfer:own",
         "incident:transfer:any",
         "incident:reassign",
-        "incident:read:any",
         "incident:bulk",
         "incident:run_action",
         "agent:set_not_ready"
@@ -149,7 +148,6 @@
         "incident:transfer:own",
         "incident:transfer:any",
         "incident:reassign",
-        "incident:read:any",
         "incident:bulk",
         "incident:run_action",
         "agent:set_not_ready"
@@ -168,7 +166,6 @@
         "incident:transfer:own",
         "incident:transfer:any",
         "incident:reassign",
-        "incident:read:any",
         "incident:bulk",
         "incident:run_action",
         "agent:set_not_ready"
@@ -176,9 +173,7 @@
     },
     {
       "name": "Наблюдатель",
-      "permissions": [
-        "incident:read:any"
-      ]
+      "permissions": []
     }
   ],
   "deviceTypes": [

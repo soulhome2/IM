@@ -62,8 +62,16 @@
       await setFilter("inbox");
       const r = row(guidOf("INC-1843"));
       if (!r) return [false, "нет INC-1843 в «Мне на принятие»"];
-      const has = Boolean(r.querySelector('[data-do="open_readonly"]'));
+      const has = Boolean(r.querySelector('[data-do="view"]'));
       return [!has, "«Открыть» у INC-1843: " + (has ? "есть" : "нет")];
+    },
+    // Новый: у строки нет значка «Посмотреть» — заглянуть можно только взяв (RULE-80, RULE-81)
+    async viewNew() {
+      await setFilter("open");
+      const r = row(guidOf("INC-1838"));
+      if (!r) return [false, "нет INC-1838 в «Открытых»"];
+      const has = Boolean(r.querySelector('[data-do="view"]'));
+      return [!has, "«Посмотреть» у нового INC-1838: " + (has ? "есть" : "нет")];
     },
     async transferEmpty() {
       await setFilter("open");
@@ -127,7 +135,7 @@
       field("targetId").value = "sidorov";
       await confirm("проба");
       await setFilter("foreign");
-      await click(btn($("eventsList"), "open_readonly", id));
+      await click(btn($("eventsList"), "view", id));
       const opened = mode() === "work";
       await wait(4000);
       const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
