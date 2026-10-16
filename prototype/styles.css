@@ -1345,27 +1345,30 @@ select.search-input { padding-right: 36px; }
 .macro-row .btn.ok { border-color: var(--ok-border); color: var(--ok-text); }
 
 /* Переходы по состоянию инцидента отделены от навигации по шагам сценария */
-/* В ряду «Назад» — действия — «Далее»: действия сразу за «Назад», «Далее» — справа */
+/* В ряду «Назад» — действия — «Далее»: действия по центру карточки. Крайние колонки равной ширины —
+   поэтому центр ряда, а не середина оставшегося места */
 .work-acts {
+  grid-area: acts;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
-  margin-right: auto;
 }
 /* Место «Назад» / «Далее» на вкладке привязанных: занято, но пусто — действия на том же месте */
 .tab-ghost { visibility: hidden; }
 
 .scenario-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "back acts next";
   align-items: center;
   gap: 8px;
   padding: 12px var(--card-x);
 }
+#stepBack { grid-area: back; justify-self: start; }
 /* Крупнее только в карточке: .btn общий с очередью и модальными окнами */
 .scenario-actions .btn { font-size: 14px; padding: 8px 14px; }
-.scenario-actions-end { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.scenario-actions-end { grid-area: next; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .step-hint {
   padding: 0 var(--card-x) 12px;
   color: var(--warn-text);
@@ -2031,7 +2034,8 @@ select.search-input { padding-right: 36px; }
   .crumbs { padding: 6px var(--card-x) 10px; }
   .crumb:not(.current) { display: none; }
   .crumb.current .crumb-line { display: none; }
-  .scenario-actions { flex-wrap: wrap; }
+  /* Телефон: «Назад» и «Далее» — одной строкой, действия — строкой ниже, по центру */
+  .scenario-actions { grid-template-columns: 1fr 1fr; grid-template-areas: "back next" "acts acts"; }
 
   /* На телефоне карточка не делится на зоны — прокручивается целиком */
   #scenarioRoot { overflow: auto; }
