@@ -393,16 +393,19 @@
     assert.ok(entry.vars.closeResultLabel, `в записи о переоткрытии — прежний результат: ${entry.text}`);
   });
 
-  test("Отклонить: инцидент снова новый, ничей, уровень эскалации сохранён", async () => {
+  test("Отклонить: инцидент снова новый, ничей, уровень эскалации сохранён, реакция продолжается (RULE-82)", async () => {
     const env = await makeEnv();
     const inc = await env.card(await env.guidOf("INC-1843"));
     assert.eq(inc.badge.label, "Вам на принятие", "бейдж личной передачи");
+    // Часть срока прошла: начни реакция заново — срок бы сдвинулся
+    await env.advance(20);
     const res = await env.act(inc.guid, "reject", { comment: "не мой профиль" });
     assert.status(res, 200);
     const c = res.body.incident;
     assert.eq(c.state, "new", "состояние");
     assert.eq(c.owner, null, "владелец");
     assert.eq(c.escalationLevel, inc.escalationLevel, "уровень сохранён");
+    assert.eq([c.timer.id, c.timer.dueAt], ["reaction", inc.timer.dueAt], "реакция продолжается с того же срока");
   });
 
   test("Права own и any: без incident:transfer:any своё передать можно, чужое — нет (§5)", async () => {

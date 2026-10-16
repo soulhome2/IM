@@ -165,6 +165,7 @@ MUTATIONS = [
     ("readonlyTarget", "«Посмотреть» не адресату: переданное мне не посмотреть до «Принять»", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"].append({"fn": "isNotTarget"})),
     ("viewNew", "«Посмотреть» не у нового: новый не посмотреть, не взяв", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"][0]["args"][0].remove("new")),
     ("transferLevel", "«Передать» снова поднимает уровень эскалации", lambda w: transition(w, "transfer")["effects"].append({"kind": "transactional", "fn": "increment", "args": ["escalation_level"]})),
+    ("rejectRestarts", "«Отклонить» снова начинает реакцию заново", lambda w: (transition(w, "reject")["effects"].insert(0, {"kind": "transactional", "fn": "startTimer", "args": ["reaction"]}), next(t for t in w["timers"] if t["id"] == "reaction")["continuesOn"].remove("reject"))),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (

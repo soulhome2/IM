@@ -246,7 +246,8 @@ window.IM_WORKFLOW = {
       "continuesOn": [
         "addressee_signed_out_to_group",
         "addressee_signed_out_to_queue",
-        "transfer"
+        "transfer",
+        "reject"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -998,13 +999,6 @@ window.IM_WORKFLOW = {
           "fn": "setAssignmentGroup",
           "args": [
             null
-          ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "startTimer",
-          "args": [
-            "reaction"
           ]
         },
         {

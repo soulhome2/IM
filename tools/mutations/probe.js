@@ -86,6 +86,26 @@
       const lvl = r && r.querySelector(".chip.lvl");
       return [Boolean(lvl), "пометка уровня после передачи: " + (lvl ? lvl.textContent : "нет")];
     },
+    // «Отклонить» через несколько секунд после появления: отсчёт реакции снова полный (RULE-82)
+    async rejectRestarts() {
+      await setFilter("inbox");
+      const id = guidOf("INC-1843");
+      const before = row(id).querySelector(".sla-t").textContent;
+      await wait(4000);
+      await click(btn($("eventsList"), "reject", id));
+      await confirm("проба");
+      await setFilter("all");
+      let r = row(id);
+      for (let p = 2; !r && p <= 5; p++) {
+        const nav = $("eventsPager").querySelector(`[data-page="${p}"]`);
+        if (!nav) break;
+        await click(nav);
+        r = row(id);
+      }
+      const after = r ? r.querySelector(".sla-t").textContent : "строки нет";
+      const sec = (t) => t.split(":").reduce((m, x) => m * 60 + Number(x), 0);
+      return [sec(after) >= sec(before), `реакция до «Отклонить» ${before}, после ${after}`];
+    },
     async transferEmpty() {
       await setFilter("open");
       await click(btn($("eventsList"), "transfer"));

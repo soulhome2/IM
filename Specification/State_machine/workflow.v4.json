@@ -124,7 +124,7 @@
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
       "startsOnEnter": ["new", "pending_acceptance"],
-      "continuesOn": ["addressee_signed_out_to_group", "addressee_signed_out_to_queue", "transfer"],
+      "continuesOn": ["addressee_signed_out_to_group", "addressee_signed_out_to_queue", "transfer", "reject"],
       "stopsOnEnter": ["in_progress", "closed", "linked"],
       "pausable": false,
       "defaultSec": 300,
@@ -419,7 +419,6 @@
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": [null] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
-        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reject"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
