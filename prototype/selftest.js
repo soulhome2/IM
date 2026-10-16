@@ -1163,6 +1163,31 @@
       expect(mode() === "queue" && $("breakBanner").hidden, "Esc что-то сделал кроме закрытия окна");
     });
 
+    await step("Esc в карточке: сначала закрывает форму, потом — карточку, как «К очереди»; инцидент остаётся моим (§13, RULE-87)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      const b = button($("eventsList"), "claim");
+      expect(b, "нет доступной кнопки «Взять»");
+      const id = b.dataset.ev;
+      await click(b);
+      expect(mode() === "work", "карточка не открылась");
+      try {
+        await click(button(root(), "transfer"));
+        expect(!$("modalDialog").hidden, "форма «Передать» не открылась");
+        await pressKey("Escape");
+        expect($("modalDialog").hidden && mode() === "work", "первый Esc должен закрыть только форму");
+        await pressKey("Escape");
+        await wait(300);
+        expect(mode() === "queue", "второй Esc не вернул к очереди");
+        const card = await stand.get(`/operator/incidents/${id}`);
+        expect(card.state === "in_progress" && card.owner && card.owner.id === "me", `Esc что-то поменял: ${card.state}, ${card.owner && card.owner.id}`);
+      } finally {
+        await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: [id], formValues: { comment: NOTE }, surface: "card" });
+      }
+    });
+
     await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50)", async () => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";

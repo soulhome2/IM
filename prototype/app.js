@@ -3498,14 +3498,19 @@
     await reload();
   }
 
-  // Горячих клавиш нет. Esc — обычное поведение окон: закрывает открытое меню, форму или окно
+  // Горячих клавиш нет. Esc — обычное поведение окон: закрывает открытое меню, форму или окно,
+  // а если ничего не открыто — закрывает карточку, как «К очереди» (§13, RULE-87)
   function onKey(e) {
     if (e.key !== "Escape") return;
     const openMenu = closeMenus();
     if (openMenu) return openMenu.querySelector("[aria-haspopup]").focus();
     if (state.dialog) return closeDialog();
     const openModal = document.querySelector(".modal:not([hidden])");
-    if (openModal) openModal.hidden = true;
+    if (openModal) return (openModal.hidden = true);
+    if (state.mode !== "work") return;
+    // Набранный в поле сценария ответ сохраняется при уходе из поля — как при нажатии «К очереди»
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    backToQueue();
   }
 
   /* ===== Меню справки (§7, RULE-49): справочник ссылок — общие и площадки открытого инцидента ===== */

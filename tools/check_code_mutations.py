@@ -147,6 +147,8 @@ MUTATIONS = [
     ("group-by-all-devices", "server.js", "const touches = (ev, ids) => ids.includes(eventSource(ev));", "const touches = (ev, ids) => (ev.deviceIds || []).some((id) => ids.includes(id));", "api"),
     # В дереве — все устройства группы, а не только с тревогой (RULE-86)
     ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? openDevices(parent) : [];", "ui"),
+    # Esc в карточке — «К очереди», если не открыто меню, форма или окно (RULE-87)
+    ("esc-keeps-card", "app.js", "    if (state.mode !== \"work\") return;\n", "    return;\n", "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
