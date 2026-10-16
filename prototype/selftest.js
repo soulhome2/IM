@@ -1484,6 +1484,34 @@
       }
     });
 
+    await step("Дерево групп: в группе все её устройства, счётчик — только у устройства-источника открытых инцидентов; камеры рядом без тревоги (§19.1, RULE-85, RULE-86)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      // Конференц-зал: пожар от датчика дыма, камеры зала — рядом (INC-1838)
+      const inc = window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1838");
+      const groupId = window.IM_FIXTURE.sourceGroups
+        .flatMap(function all(g) {
+          return [g].concat((g.groups || []).flatMap(all));
+        })
+        .find((g) => (g.devices || []).includes(inc.devices[0])).id;
+      const find = (nodes) => nodes.reduce((hit, n) => hit || (n.guid === groupId ? n : find(n.children)), null);
+      const node = find(await stand.get("/operator/reference/source-groups", { withCounters: "true" }));
+      const li = $("groupsList").querySelector(`[data-id="${groupId}"]`);
+      expect(node && li, "нет группы конференц-зала в дереве");
+      const shown = [...li.querySelectorAll(':scope > ul > [data-type="device"]')];
+      expect(shown.length === node.devices.length, `устройств в группе на экране ${shown.length}, у группы ${node.devices.length}`);
+      node.devices.forEach((d) => {
+        const el = shown.find((x) => x.dataset.id === d.guid);
+        expect(el, `нет устройства «${d.name}» в группе`);
+        const counter = el.querySelector(":scope > .node-content .tree-ev");
+        expect(Boolean(counter) === (d.counters.open > 0), `«${d.name}»: счётчик ${counter ? counter.textContent : "нет"}, открытых ${d.counters.open}`);
+      });
+      const cameras = node.devices.filter((d) => inc.devices.slice(1).includes(d.guid));
+      expect(cameras.length && cameras.every((d) => d.counters.open === 0), "камеры рядом с источником — с тревогой");
+      return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
+    });
+
     await step("Выделить по фильтру → «Взять в работу»: пожары одним инцидентом, у основного «+N», привязанные в карточке; «Отсоединить» и «Отсоединить все» — события снова новые (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");

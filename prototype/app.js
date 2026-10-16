@@ -1534,15 +1534,17 @@
     return walk(store.tree, []) || [];
   }
 
-  // В дереве — группы и устройства с открытыми инцидентами
-  const openDevices = (node) => (node.devices || []).filter((d) => d.counters && d.counters.open > 0);
+  // В дереве — группы и все устройства группы, доступные оператору; у устройства с открытыми
+  // инцидентами — счётчик (§19.1, RULE-86). В плашке группы — сколько устройств с открытыми инцидентами
+  const groupDevices = (node) => node.devices || [];
+  const openDevices = (node) => groupDevices(node).filter((d) => d.counters && d.counters.open > 0);
   const badgeText = (node) => `${(node.children || []).length}/${openDevices(node).length}`;
 
   function nodeMatchesQuery(node, q, isDevice) {
     if (!q) return true;
     if (t(node.name).toLowerCase().includes(q)) return true;
     if (isDevice) return false;
-    return (node.children || []).some((c) => nodeMatchesQuery(c, q)) || openDevices(node).some((d) => nodeMatchesQuery(d, q, true));
+    return (node.children || []).some((c) => nodeMatchesQuery(c, q)) || groupDevices(node).some((d) => nodeMatchesQuery(d, q, true));
   }
 
   // Списки фильтров: по состоянию — из машины, типы событий и устройств — справочники сервера
@@ -1655,7 +1657,7 @@
   }
 
   function treeItemHtml(item, isDevice, level, trace, q) {
-    const kids = isDevice ? [] : (item.children || []).concat(openDevices(item));
+    const kids = isDevice ? [] : (item.children || []).concat(groupDevices(item));
     const hasKids = kids.length > 0;
     const icon = isDevice ? DEVICE_ICON[item.typeId] || "videocam" : "folder";
     const counters = item.counters || { open: 0, critical: 0 };
@@ -1695,7 +1697,7 @@
   function renderTreeHtml(parent, level, trace) {
     const q = state.groupQuery.trim().toLowerCase();
     const groups = parent ? parent.children || [] : store.tree;
-    const devices = parent ? openDevices(parent) : [];
+    const devices = parent ? groupDevices(parent) : [];
     return groups
       .map((g) => treeItemHtml(g, false, level, trace, q))
       .concat(devices.map((d) => treeItemHtml(d, true, level, trace, q)))
