@@ -227,6 +227,23 @@
     assert.eq((await env.card(guid)).state, "pending_acceptance", "состояние не изменилось");
   });
 
+  test("Адресат открывает карточку до «Принять» — и без incident:read:any; «Принять» в строке первой, «Открыть» второй (§6.3, §7, BUG-60)", async () => {
+    const perms = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin" && k !== "incident:read:any");
+    const env = await makeEnv({ permissions: perms });
+    const inbox = await env.all("inbox");
+    for (const n of ["INC-1843", "INC-1836"]) {
+      const guid = await env.guidOf(n);
+      const row = inbox.find((e) => e.guid === guid);
+      assert.eq(row.actions.map((a) => a.id).slice(0, 2), ["accept", "open_readonly"], `${n}: начало строки`);
+      const card = await env.card(guid);
+      const ids = card.actions.filter((a) => a.visible !== false).map((a) => a.id);
+      assert.ok(["accept", "reject", "transfer"].every((a) => ids.includes(a)) && !ids.includes("takeover"), `${n}: в карточке ${ids.join(", ")}`);
+    }
+    // Чужой в работе без incident:read:any — по-прежнему не открыть
+    const foreign = (await env.all("foreign")).find((e) => e.state === "in_progress");
+    assert.ok(!foreign.actions.some((a) => a.id === "open_readonly"), `чужой ${foreign.number}: «Открыть» без права`);
+  });
+
   test("Передача группе: owner пуст, адресат в assignment_group, бейдж «Вашей группе», «Принять» делает меня владельцем", async () => {
     const env = await makeEnv();
     const inc = await env.card(await env.guidOf("INC-1836"));

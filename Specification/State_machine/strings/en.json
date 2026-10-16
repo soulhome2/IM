@@ -72,6 +72,7 @@
   "workflow.guard.other_hold_reason": "Different hold reason",
   "workflow.guard.wrong_state": "Not available in the current state",
   "workflow.guard.no_read_done": "No permission to open other operators’ cards",
+  "workflow.guard.no_read_open": "No permission to open other operators’ cards",
   "workflow.guard.setting_off": "Disabled by a setting",
   "workflow.guard.setting_other": "The setting has a different value",
   "workflow.error.guard_not_implemented": "Condition not implemented: {fn}",

@@ -3206,19 +3206,13 @@ window.IM_WORKFLOW = {
             "fn": "isNotOwner"
           },
           {
-            "fn": "isNotTarget"
-          },
-          {
-            "fn": "hasPermission",
-            "args": [
-              "incident:read:any"
-            ]
+            "fn": "canReadOpen"
           }
         ],
         "surface": [
           "queue"
         ],
-        "$comment": "§6.3. Чужой инцидент в работе или ожидающий принятия у другого: только просмотр."
+        "$comment": "§6.3. Не мой инцидент в работе, отложенный или ожидающий принятия: просмотр. Адресату — тоже (BUG-60): посмотреть, что сделано, до «Принять» или «Отклонить»; кнопки карточки — по §7."
       },
       {
         "id": "open_done",
@@ -3641,6 +3635,9 @@ window.IM_WORKFLOW = {
     "workflow.guard.no_read_done": {
       "vars": []
     },
+    "workflow.guard.no_read_open": {
+      "vars": []
+    },
     "workflow.guard.setting_off": {
       "vars": []
     },
@@ -3803,7 +3800,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.already_owner"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.1, §6.3. Смотрящий не владелец инцидента: «Перехватить» и «Открыть на просмотр» — только для чужого."
+        "$comment": "§6.1, §6.3. Инцидент смотрящему не «мой» (§2.4): «Перехватить» и «Открыть на просмотр» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я."
       },
       {
         "fn": "isTarget",
@@ -3821,7 +3818,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.is_target"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.3. Смотрящий не адресат передачи — или адресат, уже ставший владельцем. Адресату вместо «Открыть на просмотр» — «Принять»."
+        "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают."
       },
       {
         "fn": "targetIsNotSelf",
@@ -4020,6 +4017,16 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]."
+      },
+      {
+        "fn": "canReadOpen",
+        "args": [],
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_read_open"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3. Открытую не свою карточку открывает адресат (BUG-60) или тот, у кого есть incident:read:any."
       },
       {
         "fn": "canReadDone",

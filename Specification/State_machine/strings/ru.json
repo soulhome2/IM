@@ -72,6 +72,7 @@
   "workflow.guard.other_hold_reason": "Другая причина удержания",
   "workflow.guard.wrong_state": "Недоступно в текущем состоянии",
   "workflow.guard.no_read_done": "Нет права открывать чужие карточки",
+  "workflow.guard.no_read_open": "Нет права открывать чужие карточки",
   "workflow.guard.setting_off": "Выключено настройкой",
   "workflow.guard.setting_other": "Другое значение настройки",
   "workflow.error.guard_not_implemented": "Условие не реализовано: {fn}",

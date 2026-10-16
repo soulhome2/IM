@@ -57,6 +57,14 @@
       const take = $("selBar").querySelector('[data-sel-do="takeover"]');
       return [Boolean(take) && !off(take), "«Перехватить» на панели выборки: " + (take ? (off(take) ? "бледная" : "доступна") : "нет")];
     },
+    // Переданное мне лично: в строке нет «Открыть» — посмотреть можно только приняв (BUG-60)
+    async readonlyTarget() {
+      await setFilter("inbox");
+      const r = row(guidOf("INC-1843"));
+      if (!r) return [false, "нет INC-1843 в «Мне на принятие»"];
+      const has = Boolean(r.querySelector('[data-do="open_readonly"]'));
+      return [!has, "«Открыть» у INC-1843: " + (has ? "есть" : "нет")];
+    },
     async transferEmpty() {
       await setFilter("open");
       await click(btn($("eventsList"), "transfer"));

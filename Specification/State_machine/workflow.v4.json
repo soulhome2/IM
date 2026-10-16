@@ -1103,11 +1103,10 @@
         "guards": [
           { "fn": "stateIs", "args": [["pending_acceptance", "in_progress", "on_hold"]] },
           { "fn": "isNotOwner" },
-          { "fn": "isNotTarget" },
-          { "fn": "hasPermission", "args": ["incident:read:any"] }
+          { "fn": "canReadOpen" }
         ],
         "surface": ["queue"],
-        "$comment": "§6.3. Чужой инцидент в работе или ожидающий принятия у другого: только просмотр."
+        "$comment": "§6.3. Не мой инцидент в работе, отложенный или ожидающий принятия: просмотр. Адресату — тоже (BUG-60): посмотреть, что сделано, до «Принять» или «Отклонить»; кнопки карточки — по §7."
       },
       {
         "id": "open_done",
@@ -1252,6 +1251,7 @@
     "workflow.guard.other_hold_reason": { "vars": [] },
     "workflow.guard.wrong_state": { "vars": [] },
     "workflow.guard.no_read_done": { "vars": [] },
+    "workflow.guard.no_read_open": { "vars": [] },
     "workflow.guard.setting_off": { "vars": [] },
     "workflow.guard.setting_other": { "vars": [] },
     "workflow.error.guard_not_implemented": { "vars": ["fn"] },
@@ -1292,9 +1292,9 @@
       { "fn": "hasPermission", "args": ["permissionKey"], "onFail": "hide", "failKeys": ["workflow.guard.no_permission"] },
       { "fn": "hasScopedPermission", "args": ["resourceAction"], "onFail": "hide", "failKeys": ["workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§5. Право с областью: ключ <действие>:own, если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе <действие>:any. Сейчас — у «Передать»." },
       { "fn": "isOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.not_owner"] },
-      { "fn": "isNotOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.already_owner"], "extendsBaseRegistry": true, "$comment": "§6.1, §6.3. Смотрящий не владелец инцидента: «Перехватить» и «Открыть на просмотр» — только для чужого." },
+      { "fn": "isNotOwner", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.already_owner"], "extendsBaseRegistry": true, "$comment": "§6.1, §6.3. Инцидент смотрящему не «мой» (§2.4): «Перехватить» и «Открыть на просмотр» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я." },
       { "fn": "isTarget", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.not_target"] },
-      { "fn": "isNotTarget", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.is_target"], "extendsBaseRegistry": true, "$comment": "§6.3. Смотрящий не адресат передачи — или адресат, уже ставший владельцем. Адресату вместо «Открыть на просмотр» — «Принять»." },
+      { "fn": "isNotTarget", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.is_target"], "extendsBaseRegistry": true, "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают." },
       { "fn": "targetIsNotSelf", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.transfer_to_self"], "extendsBaseRegistry": true, "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено." },
       { "fn": "targetCanAccept", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.target_cannot_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим." },
       { "fn": "targetHasAccess", "args": [], "onFail": "disable", "failKeys": ["workflow.guard.target_no_access"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)." },
@@ -1318,6 +1318,7 @@
       { "fn": "escalationTargetAvailable", "args": ["expected"], "onFail": "hide", "failKeys": ["workflow.guard.no_escalation_level"], "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, адресат которого может принять — право incident:accept и доступ к объекту, у группы — хотя бы один такой участник (§8.1, §8.3): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Остальные уровни пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "onFail": "hide", "failKeys": ["workflow.guard.other_hold_reason"], "extendsBaseRegistry": true, "$comment": "§12.3. Причина удержания из списка: возврат в очередь по долгому молчанию касается только отложенных системой." },
       { "fn": "stateIs", "args": ["stateIds"], "onFail": "hide", "failKeys": ["workflow.guard.wrong_state"], "extendsBaseRegistry": true, "$comment": "§6.3. Состояние инцидента из списка — для действий без смены состояния и настроек, где нет from[]." },
+      { "fn": "canReadOpen", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.no_read_open"], "extendsBaseRegistry": true, "$comment": "§6.3. Открытую не свою карточку открывает адресат (BUG-60) или тот, у кого есть incident:read:any." },
       { "fn": "canReadDone", "args": [], "onFail": "hide", "failKeys": ["workflow.guard.no_read_done"], "extendsBaseRegistry": true, "$comment": "§6.3. Закрытую карточку открывает владелец, закрывший или тот, у кого есть incident:read:any." },
       { "fn": "settingEnabled", "args": ["settingKey"], "onFail": "hide", "failKeys": ["workflow.guard.setting_off"] },
       { "fn": "settingIs", "args": ["settingKey", "value"], "onFail": "hide", "failKeys": ["workflow.guard.setting_other"], "extendsBaseRegistry": true, "$comment": "Настройка схемы равна значению: например, escalation.onResolutionOverdue — alert или escalate (§9)." },

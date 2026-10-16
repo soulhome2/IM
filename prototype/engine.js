@@ -190,9 +190,11 @@
         return ctx.can(key) ? null : ["workflow.guard.no_permission", { p: key }];
       },
       isOwner: (ev) => (isMine(ev) ? null : ["workflow.guard.not_owner"]),
-      isNotOwner: (ev) => (isMine(ev) ? ["workflow.guard.already_owner"] : null),
+      // «Не мой» и «не мне адресован» — по отношению смотрящего (§2.4): инцидент, ожидающий моего
+      // принятия, — адресованный мне, даже если владельцем записан я сам (BUG-60)
+      isNotOwner: (ev) => (ownership(ev) === "owner" ? ["workflow.guard.already_owner"] : null),
       isTarget: (ev) => (isTarget(ev) ? null : ["workflow.guard.not_target"]),
-      isNotTarget: (ev) => (isTarget(ev) && !isMine(ev) ? ["workflow.guard.is_target"] : null),
+      isNotTarget: (ev) => (ownership(ev) === "target" ? ["workflow.guard.is_target"] : null),
       // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
       targetIsNotSelf: (ev, args, opts) => {
         const target = opts && opts.form ? opts.form.targetId : null;
@@ -263,6 +265,7 @@
       timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["workflow.guard.timer_not_expired"]),
       holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["workflow.guard.other_hold_reason"]),
       stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["workflow.guard.wrong_state"]),
+      canReadOpen: (ev) => (ownership(ev) === "target" || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_open"]),
       canReadDone: (ev) => (isMine(ev) || ev.closedBy === ME || ctx.can("incident:read:any") ? null : ["workflow.guard.no_read_done"]),
       settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
       settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
@@ -361,8 +364,11 @@
         if (a.hidden || !a.ok) return;
         out.push({ id: nav.id, kind: "nav", label: nav.labelKey, hint: nav.hintKey || nav.labelKey, style: nav.style, enabled: true });
       });
-      // Навигация — первой: «Продолжить», «Открыть», «Просмотр» стоят во главе колонки
-      return out.filter((a) => a.kind === "nav").concat(out.filter((a) => a.kind === "transition"));
+      // Во главе колонки — основная кнопка (§7): «Взять», «Принять», «Продолжить», «Возобновить»;
+      // за ней навигация — «Открыть», «Просмотр», потом остальные. Адресату «Принять» — первой,
+      // «Открыть» — второй (BUG-60)
+      const rank = (a) => (a.style === "primary" ? 0 : a.kind === "nav" ? 1 : 2);
+      return out.sort((x, y) => rank(x) - rank(y));
     }
 
     /* ===== Выполнение перехода (/transitions, §6) ===== */

@@ -91,7 +91,7 @@ class Doc:
             "hasPermission": lambda: f"право `{a[0]}`",
             "hasScopedPermission": lambda: f"право `{a[0]}:own` — для своего, ничьего и адресованного мне; `{a[0]}:any` — для чужого",
             "isOwner": lambda: "я владелец",
-            "isNotOwner": lambda: "я не владелец",
+            "isNotOwner": lambda: "инцидент не мой (ожидающий моего принятия — не мой, а адресованный мне)",
             "isTarget": lambda: "адресат — я или моя дежурная группа",
             "isNotTarget": lambda: "адресат — не я и не моя дежурная группа",
             "targetIsNotSelf": lambda: "адресат — не я и не моя дежурная группа",
@@ -115,6 +115,7 @@ class Doc:
             + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту; остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
+            "canReadOpen": lambda: "я адресат или есть право `incident:read:any`",
             "canReadDone": lambda: "я владелец, или закрыл его я, или есть право `incident:read:any`",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",
@@ -240,7 +241,7 @@ class Doc:
                 if g["fn"] == "hasScopedPermission" and a and key in (f"{a[0]}:own", f"{a[0]}:any"):
                     return True
                 # Условие с правом внутри: «Просмотр» закрытого — свой, закрытый мной или по праву
-                if g["fn"] == "canReadDone" and key == "incident:read:any":
+                if g["fn"] in ("canReadDone", "canReadOpen") and key == "incident:read:any":
                     return True
             return False
 

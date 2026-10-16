@@ -653,6 +653,25 @@
       expect(mode() === "queue", "после «Передать» карточка не закрылась");
     }, "Возобновить");
 
+    await step("Адресат смотрит карточку до «Принять» (BUG-60)", async () => {
+      await setFilter("inbox");
+      for (const n of ["INC-1843", "INC-1836"]) {
+        const id = guidOf(n);
+        const row = $("eventsList").querySelector(`[data-id="${id}"]`);
+        expect(row, `${n} нет в «Мне на принятие»`);
+        const order = [...row.querySelectorAll("[data-do]")].map((b) => b.dataset.do).slice(0, 2).join(", ");
+        expect(order === "accept, open_readonly", `${n}: в строке первыми «${order}», а нужно «Принять», затем «Открыть»`);
+        await click(button($("eventsList"), "open_readonly", id));
+        expect(mode() === "work", `${n}: карточка адресата не открылась`);
+        for (const a of ["accept", "reject", "transfer"]) expect(button(root(), a), `${n}: в карточке нет кнопки ${a}`);
+        expect(!button(root(), "takeover"), `${n}: в карточке адресата «Перехватить» — принимают, а не перехватывают (BUG-55)`);
+        await click($("backToQueue"));
+        const badge = $("eventsList").querySelector(`[data-id="${id}"] .badge`);
+        expect(badge && /Вам на принятие|Вашей группе/.test(badge.textContent), `${n}: после просмотра бейдж «${badge ? badge.textContent : "нет"}»`);
+      }
+      return "INC-1843, INC-1836";
+    });
+
     await step("Отклонить адресованную передачу", async () => {
       await setFilter("inbox");
       const badge = $("eventsList").querySelector(`[data-id="${guidOf("INC-1843")}"] .badge`);
