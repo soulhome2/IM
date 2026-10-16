@@ -630,25 +630,35 @@
       if (!a.ok) return { ok: false, why: a.why };
       const bad = validateForm(tr, ev, form);
       if (bad) return { ok: false, why: bad };
-      // Ручное действие в окне после дедлайна выигрывает у таймера (§10.1, правило 5; RULE-63)
-      const canceled = overridden(ev, id);
-      const owner = ev.linkedTo ? breachOwnerOfLinked(ev) : addressee(ev);
-      const before = ev.log.length;
-      if (canceled) ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
+      const canceled = windowBefore(ev, id);
       const applied = applyEffects(tr, ev, form, ME);
       if (!applied.ok) return applied;
       const facts = applied.facts[0];
-      if (canceled) {
-        // Нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал
-        canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
-          ev.breaches = (ev.breaches || []).concat({ kind: x.args[0], at: canceled.due, owner });
-          ev.slaBreached = true;
-          facts.breach = x.args[0];
-        });
-        ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
-        ev.log.splice(before, 0, ev.log.pop());
-      }
+      windowAfter(ev, canceled, facts);
       return { ok: true, navigate: tr.ui.navigate, external: applied.external[0], facts, canceled: canceled ? canceled.tr.id : null };
+    }
+
+    // Ручное действие в окне после дедлайна выигрывает у таймера (§10.1, правило 5; RULE-63) — у одиночного
+    // перехода и у объединения (BUG-62). До эффектов: отменённое срабатывание отмечено, чьё нарушение — запомнено
+    function windowBefore(ev, id) {
+      const canceled = overridden(ev, id);
+      if (!canceled) return null;
+      canceled.owner = ev.linkedTo ? breachOwnerOfLinked(ev) : addressee(ev);
+      canceled.logAt = ev.log.length;
+      ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
+      return canceled;
+    }
+    // После эффектов: нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал —
+    // перед записью о самом действии
+    function windowAfter(ev, canceled, facts) {
+      if (!canceled) return;
+      canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
+        ev.breaches = (ev.breaches || []).concat({ kind: x.args[0], at: canceled.due, owner: canceled.owner });
+        ev.slaBreached = true;
+        facts.breach = x.args[0];
+      });
+      ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
+      ev.log.splice(canceled.logAt, 0, ev.log.pop());
     }
 
     // Переход по таймеру, чей дедлайн наступил, а окно ещё не кончилось: ручное действие его отменяет (RULE-63)
@@ -879,12 +889,17 @@
     function merge(primary, others) {
       const check = mergeCheck(primary, others);
       if (!check.ok) return check;
+      // Окно после дедлайна — как у одиночного перехода: у каждого привязанного и у основного, если его берут (BUG-62)
+      const canceled = others.map((ev) => windowBefore(ev, check.tr.id));
+      const primaryCanceled = check.take ? windowBefore(primary, check.take.id) : null;
       const applied = applyAll(check.tr, others, check.form, ME);
       if (!applied.ok) return applied;
+      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
       applied.transitionId = check.tr.id;
       if (check.take) {
         const r = applyEffects(check.take, primary, {}, ME);
         if (!r.ok) return r;
+        windowAfter(primary, primaryCanceled, r.facts[0]);
         applied.taken = { transitionId: check.take.id, facts: r.facts[0] };
       }
       return applied;

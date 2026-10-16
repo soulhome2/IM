@@ -1230,6 +1230,41 @@
     assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", idOf(second), 2], "по окончании окна — автоэскалация уровню 2");
   });
 
+  test("Окно после дедлайна: «Взять в работу одним» в окне — нарушение не теряется ни у привязанного, ни у основного (BUG-62)", async () => {
+    assert.ok(GRACE > 0, "окно задано в машине");
+    const noEscalation = { workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { enabled: false }) }) };
+    const merge = (env, primary, other) => env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, other], primaryGuid: primary });
+    const overriddenAt = (card, kind, due) => {
+      assert.eq(card.breaches.map((b) => [b.kind, Date.parse(b.at)]), [[kind, due]], `${card.number}: нарушение ${kind} на момент дедлайна`);
+      assert.ok(card.journal.some((j) => j.templateKey === "workflow.journal.timer_overridden"), `${card.number}: отмена — в журнале`);
+    };
+    // Норматив реакции истёк секунду назад: инцидент привязывается к другому новому — и он же как основной
+    for (const asPrimary of [false, true]) {
+      const env = await standWith(noEscalation);
+      const [late, other] = (await env.all("open"))
+        .filter((e) => e.state === "new" && e.eventType.id === "fire")
+        .sort((x, y) => Date.parse(x.timer.dueAt) - Date.parse(y.timer.dueAt));
+      const due = Date.parse(late.timer.dueAt);
+      await env.advance(Math.round((due - env.now) / 1000) + 1);
+      const res = asPrimary ? await merge(env, late.guid, other.guid) : await merge(env, other.guid, late.guid);
+      assert.status(res, 200, null, asPrimary ? "объединить, основной — с истёкшей реакцией" : "объединить, привязанный — с истёкшей реакцией");
+      const c = await env.card(late.guid);
+      assert.eq(c.state, asPrimary ? "in_progress" : "linked", "состояние после объединения");
+      overriddenAt(c, "reaction", due);
+    }
+    // Срок удержания истёк секунду назад: свой отложенный привязывается к своему в работе
+    const env = await makeEnv();
+    const [held, primary] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.status(await env.act(held.guid, "claim", {}, "queue"), 200, null, "взять будущий привязанный");
+    assert.status(await env.act(primary.guid, "claim", {}, "queue"), 200, null, "взять основной");
+    const onHold = await env.act(held.guid, "hold", { reasonId: "third_party", comment: "ждём" });
+    assert.status(onHold, 200, null, "отложить");
+    const due = Date.parse(onHold.body.incident.holdTimer.dueAt);
+    await env.advance(Math.round((due - env.now) / 1000) + 1);
+    assert.status(await merge(env, primary.guid, held.guid), 200, null, "объединить с отложенным");
+    overriddenAt(await env.card(held.guid), "hold", due);
+  });
+
   test("Параметры контракта работают: счётчики дерева групп — только по запросу, журнал постранично (BUG-37)", async () => {
     const env = await makeEnv();
     const plain = await env.ok("GET", "/operator/reference/source-groups");
