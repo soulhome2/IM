@@ -542,7 +542,8 @@ def check_fixture_history(w, err):
     """Журнал каждого инцидента эталонного набора — цепочка переходов машины (DATA-06): первая
     запись — появление (`create` или текст источника), каждая запись перехода — из того состояния,
     где инцидент был, последняя приводит в его состояние; записи идут по времени, а у закрытого
-    время закрытия — время записи «Закрыто». Записи, которые не переходы (макрос, шаг сценария), не
+    время закрытия — время записи «Закрыто». Число передач — transferCount, уровень эскалации без
+    автоэскалации в журнале — 0 (RULE-76). Записи, которые не переходы (макрос, шаг сценария), не
     меняют состояние."""
     with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
@@ -587,6 +588,14 @@ def check_fixture_history(w, err):
         else:
             if state != inc["state"]:
                 err.append(f"эталон: {n} — журнал приводит в «{state}», а у инцидента «{inc['state']}» (DATA-06)")
+            # Передачи считает transferCount; уровень меняет только автоэскалация (RULE-76)
+            keys = [e.get("template") for e in journal]
+            transfers = keys.count("workflow.journal.transfer")
+            escalated = any(k in ("workflow.journal.auto_escalate", "workflow.journal.resolution_escalate") for k in keys)
+            if (inc.get("transferCount") or 0) != transfers:
+                err.append(f"эталон: {n} — transferCount {inc.get('transferCount') or 0}, а передач в журнале {transfers} (RULE-76)")
+            if not escalated and inc.get("escalationLevel"):
+                err.append(f"эталон: {n} — уровень эскалации {inc['escalationLevel']}, а автоэскалации в журнале нет: передача уровень не меняет (RULE-76)")
             elif state == "closed" and inc.get("closedAt") != close_at:
                 err.append(f"эталон: {n} — время закрытия {inc.get('closedAt')}, а запись «Закрыто» — {close_at}")
 

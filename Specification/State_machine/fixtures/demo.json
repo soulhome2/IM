@@ -2261,7 +2261,8 @@
       "state": "pending_acceptance",
       "owner": "me",
       "assignmentGroup": null,
-      "escalationLevel": 1,
+      "escalationLevel": 0,
+      "transferCount": 1,
       "holdReason": null,
       "closeResult": null,
       "closeCause": null,
@@ -2301,7 +2302,6 @@
           "template": "workflow.journal.transfer",
           "vars": {
             "targetName": "Иванов А. С.",
-            "escalationLevel": 1,
             "comment": "Нужна проверка по камерам площадки"
           }
         }
@@ -2691,7 +2691,8 @@
       "state": "pending_acceptance",
       "owner": null,
       "assignmentGroup": "grp-leads",
-      "escalationLevel": 1,
+      "escalationLevel": 0,
+      "transferCount": 1,
       "holdReason": null,
       "closeResult": null,
       "closeCause": null,
@@ -2729,7 +2730,6 @@
           "template": "workflow.journal.transfer",
           "vars": {
             "targetName": "Старшие операторы",
-            "escalationLevel": 1,
             "comment": "Нужен допуск в зону"
           }
         }

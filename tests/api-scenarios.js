@@ -173,7 +173,38 @@
 
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */
 
-  test("Передать человеку: ожидает принятия, адресат в owner, уровень +1, норматив закрытия на паузе", async () => {
+  test("Передачи не расходуют цепочку автоэскалации и не продлевают реакцию: две передачи нового — не принят, уходит на уровень 1 (§8.3, RULE-76)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const due = inc.timer.dueAt;
+    for (const [n, target] of [[1, "sidorov"], [2, "gusev"]]) {
+      // Часть срока уже прошла: начни реакция заново — срок бы сдвинулся
+      await env.advance(20);
+      const res = await env.act(inc.guid, "transfer", { targetId: target, comment: `передача ${n}` }, "queue");
+      assert.status(res, 200, null, `передача ${n}`);
+      const c = res.body.incident;
+      assert.eq([c.escalationLevel, c.transferCount], [0, n], `после передачи ${n}: уровень 0, передач ${n}`);
+      assert.eq([c.timer.id, c.timer.dueAt], ["reaction", due], `после передачи ${n}: реакция продолжается с того же срока`);
+    }
+    await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + GRACE + 1);
+    const c = await env.card(inc.guid);
+    const first = W.escalation.levels.find((l) => l.level === 1).targetRef.split(":")[1];
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel, c.transferCount], ["pending_acceptance", first, 1, 2], "автоэскалация — на уровень 1, а не пропуском на 2 и не потолок");
+  });
+
+  test("Передать из «В работе»: реакция запускается по нормативу текущего уровня (RULE-76)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const res = await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "нужен допуск" });
+    assert.status(res, 200);
+    const timer = W.timers.find((t) => t.id === "reaction");
+    const sec = (timer.overrides.find((o) => o.priority === inc.priority && Object.keys(o).length === 2) || {}).sec || timer.defaultSec;
+    const left = Math.round((Date.parse(res.body.incident.timer.dueAt) - env.now) / 1000);
+    assert.eq([res.body.incident.timer.id, left], ["reaction", sec], "реакция — полный норматив уровня 0");
+  });
+
+  test("Передать человеку: ожидает принятия, адресат в owner, уровень не меняется, передач +1, норматив закрытия на паузе (RULE-76)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     await env.act(inc.guid, "claim", {}, "queue");
@@ -183,7 +214,7 @@
     assert.eq(c.state, "pending_acceptance", "состояние");
     assert.eq(c.owner && c.owner.id, "sidorov", "owner — человек");
     assert.eq(c.assignmentGroup, null, "группы нет");
-    assert.eq(c.escalationLevel, 1, "уровень");
+    assert.eq([c.escalationLevel, c.transferCount], [0, 1], "уровень не меняется, передач — одна");
     assert.eq(c.ownership, "other", "для меня — чужой");
     assert.eq(c.timer.id, "reaction", "идёт реакция адресата");
     assert.eq(res.body.navigate, "queue", "возврат к очереди");

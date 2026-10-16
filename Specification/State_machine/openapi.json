@@ -3900,7 +3900,12 @@
             "$ref": "#/components/schemas/Badge"
           },
           "escalationLevel": {
-            "type": "integer"
+            "type": "integer",
+            "description": "§8.3. Ступень автоэскалации, на которой инцидент: 0 — ещё не эскалировался, N — его отдали адресату уровня N. Меняет только автоэскалация; ручная передача — нет (RULE-76)"
+          },
+          "transferCount": {
+            "type": "integer",
+            "description": "§8.3. Сколько раз инцидент передавали вручную — для отчётов. На цепочку автоэскалации не влияет (RULE-76)"
           },
           "holdReasonId": {
             "type": [

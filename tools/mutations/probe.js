@@ -73,6 +73,19 @@
       const has = Boolean(r.querySelector('[data-do="view"]'));
       return [!has, "«Посмотреть» у нового INC-1838: " + (has ? "есть" : "нет")];
     },
+    // Передача нового коллеге: в строке появилась пометка уровня — передача расходует цепочку (RULE-76)
+    async transferLevel() {
+      await setFilter("open");
+      const b = btn($("eventsList"), "transfer");
+      const id = b.dataset.ev;
+      await click(b);
+      field("targetId").value = "sidorov";
+      await confirm("проба");
+      await wait(300);
+      const r = row(id);
+      const lvl = r && r.querySelector(".chip.lvl");
+      return [Boolean(lvl), "пометка уровня после передачи: " + (lvl ? lvl.textContent : "нет")];
+    },
     async transferEmpty() {
       await setFilter("open");
       await click(btn($("eventsList"), "transfer"));
@@ -128,27 +141,22 @@
       const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
       return [stillWorking && toasts.includes("Переход не выполнен"), `остался «В работе»: ${stillWorking}; ${toasts.slice(-80)}`];
     },
+    // Новый открыт на просмотр — его реакция истекает, автоэскалация; карточка остаётся открытой
     async autoEscalation() {
       await setFilter("open");
       const id = btn($("eventsList"), "claim").dataset.ev;
-      await click(btn($("eventsList"), "transfer", id));
-      field("targetId").value = "sidorov";
-      await confirm("проба");
-      await setFilter("foreign");
       await click(btn($("eventsList"), "view", id));
       const opened = mode() === "work";
-      await wait(4000);
+      await wait(4500);
       const toasts = [...$("toasts").children].map((x) => x.textContent).join(" | ");
       const escalated = toasts.includes("Автоэскалация");
       return [opened && escalated && mode() === "work", `автоэскалация: ${escalated}, карточка открыта: ${mode() === "work"}`];
     },
+    // Новый не взяли: ступень 1 — Петрова, ступень 2 — моя группа; принимаю и он мой
     async groupTarget() {
       await setFilter("open");
       const id = btn($("eventsList"), "claim").dataset.ev;
-      await click(btn($("eventsList"), "transfer", id));
-      field("targetId").value = "sidorov";
-      await confirm("проба");
-      await wait(3500);
+      await wait(6000);
       await setFilter("inbox");
       const accept = btn($("eventsList"), "accept", id);
       if (accept) await click(accept);
@@ -342,11 +350,11 @@
       const has = Boolean(anyBtn($("eventsList"), "reopen", guidOf("INC-1837")));
       return [!has, "«Переоткрыть» у INC-1837 (закрыт 57 мин назад): " + has];
     },
+    // Новый не взяли — автоэскалация на ступень 1, дальше отсчёт по нормативу ступени
     async escalation() {
-      const id = await claimFirst();
-      await click(anyBtn(root(), "transfer"));
-      field("targetId").value = "sidorov";
-      await confirm("проба");
+      await setFilter("open");
+      const id = btn($("eventsList"), "claim").dataset.ev;
+      await wait(4500);
       await setFilter("all");
       let r = row(id);
       for (let p = 2; !r && p <= 5; p++) {
@@ -355,8 +363,8 @@
         await click(nav);
         r = row(id);
       }
-      const t = r.querySelector(".sla-t").textContent;
-      return [t.startsWith("0:2") || t.startsWith("0:3"), "реакция после передачи: " + t];
+      const t = r ? r.querySelector(".sla-t").textContent : "строки нет";
+      return [t.startsWith("0:2") || t.startsWith("0:1"), "реакция после автоэскалации: " + t];
     },
     async breakReason() {
       await click($("breakBtn"));

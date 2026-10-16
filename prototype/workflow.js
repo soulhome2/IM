@@ -245,7 +245,8 @@ window.IM_WORKFLOW = {
       ],
       "continuesOn": [
         "addressee_signed_out_to_group",
-        "addressee_signed_out_to_queue"
+        "addressee_signed_out_to_queue",
+        "transfer"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -1349,7 +1350,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "increment",
           "args": [
-            "escalation_level"
+            "transfer_count"
           ]
         },
         {
@@ -1375,7 +1376,8 @@ window.IM_WORKFLOW = {
           "fn": "startTimer",
           "args": [
             "reaction",
-            "byEscalationLevel"
+            "byEscalationLevel",
+            "ifStopped"
           ]
         },
         {
@@ -4096,7 +4098,8 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "startTimer",
-        "kind": "transactional"
+        "kind": "transactional",
+        "$comment": "§14.8. Запускает таймер с полного норматива (второй аргумент — откуда норматив). Третий аргумент ifStopped — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)."
       },
       {
         "fn": "stopTimer",

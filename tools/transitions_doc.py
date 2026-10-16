@@ -136,7 +136,8 @@ class Doc:
             "setHoldReason": lambda: "причина удержания: " + (self.value(a[0]) if str(a[0]).startswith("form.") else f"«{self.reasons.get(a[0], a[0])}»"),
             "clearHoldReason": lambda: "причина удержания очищается",
             "startTimer": lambda: f"запуск {self.tm(a[0])}"
-            + ("" if len(a) < 2 else " по нормативу уровня эскалации" if a[1] in ("byEscalationLevel", "escalation.level.reactionSec") else f", норматив {self.setting(a[1])} с"),
+            + ("" if len(a) < 2 else " по нормативу уровня эскалации" if a[1] in ("byEscalationLevel", "escalation.level.reactionSec") else f", норматив {self.setting(a[1])} с")
+            + (" — если не идёт; идущий продолжается" if a[2:] == ["ifStopped"] else ""),
             "stopTimer": lambda: f"остановка {self.tm(a[0])}",
             "pauseTimer": lambda: f"пауза {self.tm(a[0])}, остаток сохраняется",
             "resumeTimer": lambda: f"{self.tm(a[0])} продолжается с остатка, " + ("если уже шёл; не шедший не запускается" if a[1:] == ["ifStarted"] else "при первом запуске — с полного норматива"),

@@ -81,9 +81,10 @@
     }
 
     // Норматив реакции уровня автоэскалации (§8.3)
+    // Уровень 0 — инцидент не эскалировался: обычный норматив (передача уровень не меняет, RULE-76)
     function levelNorm(ev, level) {
       const levels = W.escalation.levels;
-      const found = levels.find((l) => l.level === level) || levels[levels.length - 1];
+      const found = level > 0 ? levels.find((l) => l.level === level) || levels[levels.length - 1] : null;
       return found ? found.reactionSec : baseNorm(ev, "reaction");
     }
 
@@ -431,7 +432,7 @@
       return arg;
     }
 
-    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached", escalation_level: "escalationLevel" };
+    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached", escalation_level: "escalationLevel", transfer_count: "transferCount" };
 
     const EFFECTS = {
       setOwner: (ev, [arg], s) => {
@@ -446,7 +447,11 @@
       clearHoldReason: (ev) => {
         ev.holdReason = null;
       },
-      startTimer: (ev, [id, arg]) => startTimer(ev, id, arg),
+      // ifStopped — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» не обнуляет реакцию)
+      startTimer: (ev, [id, arg, mode]) => {
+        if (mode === "ifStopped" && dueOf(ev, id)) return;
+        startTimer(ev, id, arg);
+      },
       stopTimer: (ev, [id]) => stopTimer(ev, id),
       pauseTimer: (ev, [id]) => pauseTimer(ev, id),
       // ifStarted — только если таймер уже запускался (идёт или на паузе с остатком): ещё не шедший не запускается
@@ -471,8 +476,8 @@
         ev.slaBreached = true;
       },
       increment: (ev, [field]) => {
-        if (field === "escalation_level") ev.escalationLevel += 1;
-        else ev[field] = (ev[field] || 0) + 1;
+        const key = FLAG_FIELD[field] || field;
+        ev[key] = (ev[key] || 0) + 1;
       },
       setFlag: (ev, [field, arg], s) => {
         ev[FLAG_FIELD[field] || field] = value(arg, ev, s.form, s);
@@ -775,7 +780,6 @@
         note.textKey,
         Object.assign(
           {
-            nextEscalationLevel: ev.escalationLevel + 1,
             ownerName: ctx.actorName(addressee(ev)),
             filledSteps: prog.filled,
             totalSteps: prog.total,

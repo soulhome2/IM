@@ -74,8 +74,15 @@ def transfer_without_placeholder(w):
     del next(f for f in form["fields"] if f["name"] == "targetId")["placeholderKey"]
 
 
-def escalate_to_my_group(w):
+def fast_reaction(w, sec=3):
+    """Реакция новых — несколько секунд: подняться по ступеням можно только автоэскалацией —
+    ручная передача уровень не меняет (RULE-76)."""
     no_grace(w)
+    next(t for t in w["timers"] if t["id"] == "reaction")["overrides"] = [{"sec": sec}]
+
+
+def escalate_to_my_group(w):
+    fast_reaction(w)
     for lvl in w["escalation"]["levels"]:
         lvl["reactionSec"] = 2
     w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
@@ -143,7 +150,7 @@ MUTATIONS = [
     ("scenario", "править сценарий можно только в «Отложен»", lambda w: w["scenarioEdit"]["guards"].append({"fn": "stateIs", "args": [["on_hold"]]})),
     ("permission", "из каталога убрано право transfer:own", lambda w: w.update(permissions=[p for p in w["permissions"] if p["key"] != "incident:transfer:own"])),
     ("reopen", "срок переоткрытия 24 ч → 1 мин", lambda w: w["limits"].update(reopenWindowMin=1)),
-    ("escalation", "норматив реакции уровня 1: 120 → 30 с", lambda w: w["escalation"]["levels"][0].update(reactionSec=30)),
+    ("escalation", "реакция 3 с, норматив уровня 1: 120 → 30 с — после автоэскалации отсчёт по уровню", lambda w: (fast_reaction(w), w["escalation"]["levels"][0].update(reactionSec=30))),
     ("breakReason", "новая причина перерыва", lambda w: (w["session"]["breakReasons"].append({"id": "probe", "labelKey": "workflow.session.break.probe"}), ru(w, "workflow.session.break.probe", "Проба"))),
     ("effect", "«Отложить» не ставит норматив закрытия на паузу", hold_without_pause),
     ("empty", "убраны все ручные переходы и навигация", without_manual_transitions),
@@ -157,12 +164,13 @@ MUTATIONS = [
     ("takeoverTarget", "«Перехватить» и адресату: переданное моей группе можно перехватить", lambda w: transition(w, "takeover").update(guards=[g for g in transition(w, "takeover")["guards"] if g["fn"] != "isNotTarget"])),
     ("readonlyTarget", "«Посмотреть» не адресату: переданное мне не посмотреть до «Принять»", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"].append({"fn": "isNotTarget"})),
     ("viewNew", "«Посмотреть» не у нового: новый не посмотреть, не взяв", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"][0]["args"][0].remove("new")),
+    ("transferLevel", "«Передать» снова поднимает уровень эскалации", lambda w: transition(w, "transfer")["effects"].append({"kind": "transactional", "fn": "increment", "args": ["escalation_level"]})),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),
     ("breach", "норматив закрытия 2 с — нарушение записывается", short_resolution),
     (
         "autoEscalation",
-        "норматив реакции уровней 2 с — автоэскалация, открытая карточка остаётся просмотром",
-        lambda w: (no_grace(w), [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]]),
+        "реакция 3 с, уровней 2 с — автоэскалация, открытая на просмотр карточка остаётся открытой",
+        lambda w: (fast_reaction(w), [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]]),
     ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
 ]
