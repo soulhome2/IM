@@ -1376,14 +1376,14 @@ select.search-input { padding-right: 36px; }
   padding: 12px var(--card-x);
 }
 .scenario-actions-start { grid-area: back; justify-self: start; display: flex; flex-wrap: nowrap; gap: 8px; }
-/* Узкая карточка: «К очереди», «Назад» и «Далее» — строкой, действия — строкой ниже, по центру (RULE-89) */
+/* Узкая карточка: «К очереди» и «Назад» / «Далее» — строкой, действия — строкой ниже, по центру (RULE-89) */
 .work-bottom { container-type: inline-size; }
 @container (max-width: 900px) {
   .scenario-actions { grid-template-columns: 1fr auto; grid-template-areas: "back next" "acts acts"; }
 }
 /* Крупнее только в карточке: .btn общий с очередью и модальными окнами */
 .scenario-actions .btn { font-size: 14px; padding: 8px 14px; }
-.scenario-actions-end { grid-area: next; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.scenario-actions-end { grid-area: next; display: flex; flex-wrap: nowrap; gap: 8px; justify-content: flex-end; }
 .step-hint {
   padding: 0 var(--card-x) 12px;
   color: var(--warn-text);

@@ -1651,13 +1651,15 @@
           return `${Math.round(acts.left - bottom.left)}:${Math.round(acts.top - bottom.top)}/${Math.round(bottom.height)}`;
         };
         const box = (sel) => root().querySelector(sel).getBoundingClientRect();
-        // Широкая карточка — один ряд; узкая — действия строкой ниже, по центру (RULE-89)
-        const oneRow = Math.abs(box(".work-acts").top - box("#stepBack").top) < 8 && box(".work-acts").left > box("#stepBack").left;
+        // «К очереди» слева, действия в середине, «Назад» и «Далее» рядом справа (RULE-89). Широкая карточка —
+        // один ряд; узкая — действия строкой ниже, по центру
+        const sameLine = (a, b) => Math.abs(box(a).top - box(b).top) < 8;
+        const oneRow = sameLine(".work-acts", "#stepBack") && box(".work-acts").left > box("#backToQueue").right && box("#stepBack").left > box(".work-acts").right;
         const below = box(".work-acts").top >= box("#stepBack").bottom - 1;
-        expect(oneRow || below, `действия ни в ряду с «Назад» / «Далее», ни строкой ниже: действия ${Math.round(box(".work-acts").left)},${Math.round(box(".work-acts").top)}, «Назад» ${Math.round(box("#stepBack").left)},${Math.round(box("#stepBack").top)}, ряд ${Math.round(box(".scenario-actions").width)}`);
-        expect(Math.abs(box("#stepNext").top - box("#stepBack").top) < 8, "«Далее» не в одной строке с «Назад»");
-        // «К очереди» — в той же строке, первой слева, в шапке её нет (RULE-89)
-        expect(Math.abs(box("#backToQueue").top - box("#stepBack").top) < 8 && box("#backToQueue").left < box("#stepBack").left, "«К очереди» не слева от «Назад» в нижнем ряду");
+        expect(oneRow || below, `действия ни между «К очереди» и «Назад», ни строкой ниже: действия ${Math.round(box(".work-acts").left)},${Math.round(box(".work-acts").top)}, «Назад» ${Math.round(box("#stepBack").left)},${Math.round(box("#stepBack").top)}, ряд ${Math.round(box(".scenario-actions").width)}`);
+        expect(sameLine("#stepNext", "#stepBack") && box("#stepNext").left - box("#stepBack").right < 16 && box("#stepNext").left > box("#stepBack").left, "«Назад» не рядом слева от «Далее»");
+        // «К очереди» — в той же строке, первой слева, в шапке её нет
+        expect(sameLine("#backToQueue", "#stepBack") && box("#backToQueue").left < box("#stepBack").left, "«К очереди» не слева в нижнем ряду");
         expect(!document.querySelector(".work-h #backToQueue"), "«К очереди» осталась в шапке");
         const before = actsTop();
         await click(root().querySelector('.chip.linked[data-work-tab="linked"]'));

@@ -160,6 +160,7 @@ MUTATIONS = [
     # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
     ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),
     ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = !last && (editable', "ui"),
+    ("back-after-next", "styles.css", ".scenario-actions-end { grid-area: next; display: flex; flex-wrap: nowrap;", ".scenario-actions-end { grid-area: next; display: flex; flex-direction: row-reverse; flex-wrap: nowrap;", "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),

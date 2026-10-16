@@ -2064,8 +2064,8 @@
     // Открыта из поиска, нашедшего привязанный, — сразу на вкладке привязанных
     if (state.workTabFor !== ev.guid) Object.assign(state, { workTab: foundLinked(ev.guid).length ? "linked" : "scenario", workTabFor: ev.guid });
     const tab = ev.linkedCount ? state.workTab : "scenario";
-    // Внизу один ряд: «К очереди» и «Назад», действия с инцидентом, «Далее» (RULE-89). Кнопки всегда на
-    // месте и с теми же названиями — недоступные серые, в том числе на вкладке привязанных
+    // Внизу один ряд: «К очереди», действия с инцидентом, «Назад» и «Далее» рядом (RULE-89). Кнопки всегда
+    // на месте и с теми же названиями — недоступные серые, в том числе на вкладке привязанных
 
     const i = cursorOf(ev);
     const step = steps[i];
@@ -2131,7 +2131,6 @@
               <button type="button" class="btn outline" id="backToQueue" title="${te("Вернуться к очереди, инцидент остаётся за вами")}">
                 <span class="material-symbols-outlined">arrow_back</span>${te("К очереди")}
               </button>
-              <button type="button" class="btn ghost" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
             </div>
             ${
               acts.length
@@ -2146,6 +2145,7 @@
                 : ""
             }
             <div class="scenario-actions-end">
+              <button type="button" class="btn ghost" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
               <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${canNext ? "" : "disabled"}>${te("Далее")}</button>
             </div>
           </div>
