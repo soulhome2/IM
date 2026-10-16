@@ -591,6 +591,30 @@ def check_fixture_history(w, err):
                 err.append(f"эталон: {n} — время закрытия {inc.get('closedAt')}, а запись «Закрыто» — {close_at}")
 
 
+def check_fixture_media(err):
+    """Панели инцидента эталонного набора (`media`, в API `mediaKinds`, §19.1) сходятся с камерами
+    и планом (DATA-07): камеры есть — видео не скрыто; карта — только если есть план. Камеры — из
+    связей источника, план — тот, где стоит источник, устройство или камера события, иначе план
+    площадки (как planOf сервера)."""
+    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    devices = {d["id"]: d for d in fx["devices"]}
+    for inc in fx["incidents"]:
+        src = inc["devices"][0]
+        cameras = [c for link in fx["cameraLinks"] if src in link["devices"] for c in link["cameras"]]
+        placed = next((devices[i]["position"] for i in [*inc["devices"], *cameras] if (devices.get(i) or {}).get("position")), None)
+        plan = next((p for p in fx["plans"] if (p["id"] == placed["plan"] if placed else p["site"] == inc["site"])), None)
+        media = inc.get("media")
+        if media not in ("video", "map", "both"):
+            err.append(f"эталон: {inc['number']} — media «{media}», а нужно video, map или both (§19.1)")
+        elif cameras and media == "map":
+            err.append(f"эталон: {inc['number']} — видео скрыто (media «map»), а камер по связям источника {len(cameras)} (DATA-07)")
+        elif not cameras and media != "map":
+            err.append(f"эталон: {inc['number']} — media «{media}», а камер по связям источника нет")
+        elif not plan and media != "video":
+            err.append(f"эталон: {inc['number']} — media «{media}», а плана нет")
+
+
 def check_doc_numbers(w, o, err):
     """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
     ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
@@ -1249,6 +1273,7 @@ def main():
     check_served(o, err)
     check_fixture_journal(w, err)
     check_fixture_history(w, err)
+    check_fixture_media(err)
     check_graph(w, err)
     check_state_owners(w, err)
     check_priorities(w, o, err)
