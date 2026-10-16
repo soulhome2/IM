@@ -56,6 +56,7 @@
 | `in_progress` | В работе | active | оператор | `resolution` |
 | `on_hold` | Отложен | active | оператор | `hold`; `resolution` на паузе |
 | `closed` | Закрыто | done | кто закрыл | — |
+| `linked` | Привязан | linked | нет — работу ведут по основному (§11.4) | `resolution`, если уже шёл: идёт дальше, у отложенного снимается с паузы |
 
 Конечное состояние одно. Чем закончился инцидент, говорит результат закрытия `close_result` (§2.2): «Обработан», «Ложная тревога», «Дубликат», «Плановая проверка», «Прервано», «Массовый сбой». Отдельного «Отменено» нет (RULE-02).
 
@@ -92,15 +93,15 @@ stateDiagram-v2
 | id | Кнопка | Откуда → Куда | Право | Форма |
 |---|---|---|---|---|
 | `claim` | Взять | `new` → `in_progress` | `incident:claim` | — |
-| `accept` | Принять | `pending_acceptance` → `in_progress` | `incident:claim` | — |
+| `accept` | Принять | `pending_acceptance` → `in_progress` | `incident:accept` | — |
 | `reject` | Отклонить | `pending_acceptance` → `new` | `incident:release` | причина |
 | `hold` | Отложить | `in_progress` → `on_hold` | `incident:hold` | причина + комментарий |
 | `resume` | Возобновить | `on_hold` → `in_progress` | `incident:claim` | — |
 | `release` | Вернуть в очередь | `in_progress`, `on_hold` → `new` | `incident:release` | причина |
 | `transfer` | Передать | `new`, `pending_acceptance`, `in_progress`, `on_hold` → `pending_acceptance` | `incident:transfer:own` / `:any` | адресат + причина |
-| `takeover` | Перехватить | `pending_acceptance`, `in_progress`, `on_hold` → `in_progress` | `incident:reassign` | подтверждение |
+| `takeover` | Перехватить | `pending_acceptance`, `in_progress`, `on_hold` → `in_progress` | `incident:reassign` + `incident:claim` | подтверждение |
 | `close` | Закрыть | `in_progress` → `closed`; для «Массовый сбой» ещё `new`, `pending_acceptance`, `on_hold` | по результату: `incident:close` или `incident:close:unprocessed` | результат + комментарий (кроме «Обработан»); у массового сбоя — причина |
-| `reopen` | Переоткрыть | `closed` → `in_progress` | `incident:reopen` | основание |
+| `reopen` | Переоткрыть | `closed` → `in_progress` | `incident:reopen` + `incident:claim` | основание |
 | `merge` | Взять в работу — на панели выборки (§11.3) | `new`, `in_progress`, `on_hold` → `linked` | `incident:bulk` | — |
 | `detach` | Отсоединить — в карточке основного, вкладка привязанных | `linked` → `new` | — | — |
 
@@ -130,7 +131,7 @@ stateDiagram-v2
 }
 ```
 
-Реестры лежат в `workflow.v4.json` → `registries`. Позиции с `"extendsBaseRegistry": true` — то, что добавлено сверх списка из §14.8 и требует реализации: `hasScopedPermission`, `isNotOwner`, `withinHoldLimit`, `withinReopenWindow`, `setCursor`, `clearGroup` и др.; что делает каждая — `$comment` в реестре
+Реестры лежат в `workflow.v4.json` → `registries`. Позиции с `"extendsBaseRegistry": true` — то, что добавлено сверх списка из §14.8 и требует реализации: `hasScopedPermission`, `isNotOwner`, `withinHoldLimit`, `withinReopenWindow`, `setCursor`, `setLinkedTo` и др.; что делает каждая — `$comment` в реестре
 
 Эффекты делятся на два класса (§14.2), и это влияет на ответ API:
 
@@ -155,7 +156,7 @@ stateDiagram-v2
 | `null` | очистить поле |
 | `now` | время сервера в момент перехода |
 | `form.<поле>` | значение поля формы перехода; пустая строка — то же, что `null` |
-| `escalation.level.target` | адресат уровня автоэскалации, на который переходит инцидент: ближайший следующий уровень `escalation.levels[]` не выше потолка, у адресата которого есть доступ к объекту инцидента (§8.3); номер этого уровня — `escalation.level.number`. `targetRef` записан как `user:<id>` или `group:<id>`, значение — `<id>` |
+| `escalation.level.target` | адресат уровня автоэскалации, на который переходит инцидент: ближайший следующий уровень `escalation.levels[]` не выше потолка, адресат которого может принять: у человека — право `incident:accept` и доступ к объекту инцидента, у дежурной группы — хотя бы один такой участник (§8.1, §8.3); номер этого уровня — `escalation.level.number`. `targetRef` записан как `user:<id>` или `group:<id>`, значение — `<id>` |
 | `<значение>.ifPerson` | значение, если это человек, иначе `null`. Так в `owner` попадает только человек |
 | `<значение>.ifGroup` | значение, если это дежурная группа, иначе `null`. Так группа попадает в `assignment_group` |
 | id позиции справочника (`setHoldReason`) | например `break`, `no_link` — системные причины удержания |
@@ -190,7 +191,7 @@ stateDiagram-v2
 
 | Поле | Смысл |
 |---|---|
-| `escalation_level` | уровень эскалации; +1 при каждой передаче и автоэскалации |
+| `escalation_level` | уровень эскалации (§8.3): ручная передача — +1 (`increment`), автоэскалация — номер уровня, на который ушёл инцидент (`setFlag` = `escalation.level.number`); при появлении — 0 |
 | `close_result` | id результата закрытия из `reasonCatalogs.close_result` |
 | `close_cause` | причина сбоя из справочника `causeCatalog` выбранного результата |
 | `result` | комментарий при закрытии |
@@ -224,7 +225,7 @@ stateDiagram-v2
 
 | Где | Переменные |
 |---|---|
-| `appendLog` | `{comment}`, `{stepNumber}`, `{holdReasonLabel}`, `{targetName}` — адресат после перехода, `{escalationLevel}` — после перехода, `{closeResultLabel}`, `{filledSteps}`, `{totalSteps}`, `{previousOwnerName}` — адресат до перехода, `{escalationReason}` — `escalation.reason` |
+| `appendLog` | `{comment}`, `{stepNumber}`, `{holdReasonLabel}`, `{targetName}` — адресат после перехода, `{escalationLevel}` — после перехода, `{closeResultLabel}`, `{filledSteps}`, `{totalSteps}`, `{previousOwnerName}` — адресат до перехода, `{escalationReason}` — текст по ключу `escalation.reasonKey` |
 | `forms[].notes` | `{ownerName}` — адресат, `{nextEscalationLevel}`, `{filledSteps}`, `{totalSteps}` |
 | `badges` | `{ownerName}` — адресат, `{holdReasonLabel}`, `{closeResultLabel}` — подпись причины сбоя, если она выбрана, иначе результата |
 

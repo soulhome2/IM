@@ -3995,7 +3995,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.no_escalation_level"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, у адресата которого есть доступ к объекту инцидента (§5): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Уровни без доступа пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах."
+        "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, адресат которого может принять — право incident:accept и доступ к объекту, у группы — хотя бы один такой участник (§8.1, §8.3): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Остальные уровни пропускаются; найденный уровень — значения escalation.level.target и escalation.level.number в эффектах."
       },
       {
         "fn": "holdReasonIn",
