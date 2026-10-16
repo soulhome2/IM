@@ -71,7 +71,9 @@
   /* transfer: one warn accent for handing the incident off (v3; D-009) */
   --esc-bg: var(--one-palette-burnt-orange);
   --esc-hover: var(--one-palette-orange);
-  --esc-text: #ffffff;
+  /* Тёмный текст на оранжевом в обеих темах: белый даёт 3,47:1, этот — 4,99:1, при наведении — 7,3:1
+     (BUG-52, решение 2026-10-16; в конце проекта — подтвердить у дизайн-кита) */
+  --esc-text: #1a1a1e;
 
   /* badges */
   --badge-mine: var(--one-info-icon);

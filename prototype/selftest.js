@@ -1189,7 +1189,7 @@
       return `${r.scroll} из ${r.width}, шапка и фильтры ${r.filters} px`;
     });
 
-    await step("Контраст отсчётов, бейджей, уровня и списка «Кому передать» не ниже 4,5:1 в обеих темах", async () => {
+    await step("Контраст отсчётов, бейджей, уровня, кнопок действий и списка «Кому передать» не ниже 4,5:1 в обеих темах", async () => {
       const original = document.documentElement.dataset.theme;
       const low = new Set();
       for (const theme of ["light", "dark"]) {
@@ -1199,11 +1199,22 @@
           const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
           if (page > 1 && (!nav || nav.disabled)) break;
           if (nav && page > 1) await click(nav);
-          $("eventsList").querySelectorAll(".event-sla, .badge, .chip.lvl").forEach((el) => {
+          // Кнопки действий — тоже (BUG-52): «Взять», «Передать», «Закрыть» и остальные доступные
+          $("eventsList").querySelectorAll('.event-sla, .badge, .chip.lvl, .event-act:not([aria-disabled="true"])').forEach((el) => {
             const r = contrast(el);
             if (r < 4.5) low.add(`${theme} ${el.className}: ${r.toFixed(2)}`);
           });
         }
+        // Кнопки карточки чужого инцидента: «Перехватить», «Передать» (BUG-52)
+        await setFilter("foreign");
+        await click($("eventsList").querySelector('[data-do="view"]'));
+        root().querySelectorAll('.btn:not([aria-disabled="true"]):not(:disabled)').forEach((el) => {
+          const r = contrast(el);
+          if (r < 4.5) low.add(`${theme} карточка, «${el.textContent.trim()}»: ${r.toFixed(2)}`);
+        });
+        expect(button(root(), "takeover"), "в карточке чужого нет «Перехватить» — шаг контраста её не проверил");
+        await click($("backToQueue"));
+        await setFilter("all");
         // Список «Кому передать» (BUG-47): выбранный на месте и выбранный отсутствующий, имена и пояснения
         for (const picked of ["sidorov", "orlova"]) {
           await click(button($("eventsList"), "transfer"));
