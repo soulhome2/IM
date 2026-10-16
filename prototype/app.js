@@ -1519,7 +1519,7 @@
     return null;
   }
 
-  // Цепочка групп от корня до той, где стоит устройство события.
+  // Цепочка групп от корня до той, где стоит устройство-источник события (§19.1, RULE-85).
   // Устройство может встречаться и в сквозных подборках — берём первое вхождение.
   function groupPathForDevices(deviceIds) {
     const wanted = new Set(deviceIds || []);
@@ -1708,9 +1708,9 @@
   // раскрывается — но только при смене события, чтобы не мешать сворачиванию
   function traceGroups() {
     const ev = selected();
-    const devices = ev && ev.devices ? ev.devices.map((d) => d.guid) : [];
+    const devices = ev && ev.source ? [ev.source.guid] : [];
     const path = groupPathForDevices(devices);
-    const changed = (ev ? ev.guid : null) !== tracedEventId && Boolean(ev && ev.devices);
+    const changed = (ev ? ev.guid : null) !== tracedEventId && Boolean(ev && ev.source);
     if (changed) {
       tracedEventId = ev.guid;
       path.forEach((id) => state.openGroups.add(id));

@@ -1851,6 +1851,38 @@
     assert.eq(open, (await env.ok("GET", `/operator/incidents?filter=open&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`)).total, "счётчик группы в дереве");
   });
 
+  test("Группа и устройство — по устройству-источнику: камеры рядом тревогой не считаются (§19.1, RULE-85)", async () => {
+    const env = await makeEnv();
+    const fx = window.IM_FIXTURE;
+    // Пожар от датчика, в устройствах события — и камеры рядом (INC-1838, конференц-зал)
+    const inc = fx.incidents.find((i) => i.number === "INC-1838");
+    const [source, ...nearby] = inc.devices;
+    assert.ok(nearby.length > 0, "у INC-1838 есть устройства рядом с источником");
+    const tree = await env.ok("GET", "/operator/reference/source-groups?withCounters=true");
+    const devicesById = new Map();
+    const walk = (nodes) => nodes.forEach((n) => (n.devices.forEach((d) => devicesById.set(d.guid, d)), walk(n.children)));
+    walk(tree);
+    const openAt = (id) => (devicesById.get(id).counters || {}).open || 0;
+    assert.ok(openAt(source) > 0, "у источника — открытый инцидент");
+    // Устройство рядом краснеет, только если оно само источник какого-то открытого инцидента
+    const sources = new Set(fx.incidents.filter((i) => !["closed", "linked"].includes(i.state)).map((i) => i.devices[0]));
+    nearby.filter((id) => devicesById.has(id) && !sources.has(id)).forEach((id) => assert.eq(openAt(id), 0, `${devicesById.get(id).name}: камера рядом без тревоги`));
+    // Очередь группы — только инциденты её устройств-источников: группы, где есть камера рядом, но нет источника, INC-1838 не показывают
+    const groups = [];
+    const collect = (nodes) => nodes.forEach((g) => (groups.push(g), collect(g.groups || [])));
+    collect(fx.sourceGroups);
+    const deep = (g) => (g.devices || []).concat(...(g.groups || []).map(deep));
+    const foreign = groups.filter((g) => !deep(g).includes(source) && nearby.some((id) => deep(g).includes(id)));
+    assert.ok(foreign.length > 0, "есть группа с камерой рядом, но без источника");
+    for (const g of foreign) {
+      const items = (await env.ok("GET", `/operator/incidents?filter=all&sourceGroupGuid=${enc(g.id)}&pageSize=1000`)).items;
+      assert.ok(!items.some((e) => e.number === "INC-1838"), `группа «${g.name}»: без INC-1838`);
+    }
+    const own = groups.find((g) => (g.devices || []).includes(source));
+    const items = (await env.ok("GET", `/operator/incidents?filter=all&sourceGroupGuid=${enc(own.id)}&pageSize=1000`)).items;
+    assert.ok(items.some((e) => e.number === "INC-1838"), `группа источника «${own.name}»: INC-1838 есть`);
+  });
+
   /* ===== Справочники, схема, сессия, карточка по частям ===== */
 
   test("Схема workflow и справочники — те, что в машине; приоритеты — из справочника набора (§2.5)", async () => {

@@ -143,6 +143,8 @@ MUTATIONS = [
     ("merge-primary-window-ignored", "engine.js", "const primaryCanceled = check.take ? windowBefore(primary, check.take.id) : null;", "const primaryCanceled = null;", "api"),
     # Ручной переход, после которого таймер продолжается, окно не отменяет (RULE-83)
     ("window-cancels-continuing", "engine.js", "        if ((timers[g.args[0]].continuesOn || []).includes(manualId)) return;\n", "", "api"),
+    # Группа и устройство — по устройству-источнику, а не по всем устройствам события (RULE-85)
+    ("group-by-all-devices", "server.js", "const touches = (ev, ids) => ids.includes(eventSource(ev));", "const touches = (ev, ids) => (ev.deviceIds || []).some((id) => ids.includes(id));", "api"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
