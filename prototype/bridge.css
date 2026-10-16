@@ -200,8 +200,18 @@ textarea,
 .btn:disabled,
 .btn[aria-disabled="true"],
 .icon-btn:disabled { opacity: 1; color: var(--one-fg-disabled); cursor: not-allowed; }
+/* Цветные действия — «Передать» (warn) и «Перехватить» (danger) — недоступными тоже серые, как основная:
+   иначе цветной фон с бледным текстом похож на доступную кнопку и хуже читается (BUG-61) */
 .btn.primary:disabled,
-.btn.primary[aria-disabled="true"] { background: var(--one-control-disabled); border-color: var(--one-border); }
+.btn.primary[aria-disabled="true"],
+.btn.warn:disabled,
+.btn.warn[aria-disabled="true"],
+.btn.danger:disabled,
+.btn.danger[aria-disabled="true"] { background: var(--one-control-disabled); border-color: var(--one-border); }
+.btn.warn:disabled,
+.btn.warn[aria-disabled="true"],
+.btn.danger:disabled,
+.btn.danger[aria-disabled="true"] { border: 1px solid var(--one-border); }
 .btn.outline:disabled,
 .btn.outline[aria-disabled="true"] { background: transparent; border-color: var(--one-border); }
 
