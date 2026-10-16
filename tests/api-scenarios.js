@@ -1199,6 +1199,37 @@
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "«Взять» после окна");
   });
 
+  test("Окно после дедлайна: «Передать» и «Отклонить» таймер не отменяют — реакция продолжается, автоэскалация по окончании окна (RULE-83)", async () => {
+    assert.ok(GRACE > 0, "окно задано в машине");
+    const toDue = (env, inc) => Math.round((Date.parse(inc.timer.dueAt) - env.now) / 1000);
+    const levelZero = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+    const [first, second] = W.escalation.levels;
+    const idOf = (level) => level.targetRef.split(":")[1];
+    // «Передать» Сидорову через секунду после дедлайна: эскалация не отменена — по окончании окна уровню 1
+    let env = await makeEnv();
+    let inc = await levelZero(env);
+    await env.advance(toDue(env, inc) + 1);
+    let res = await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "тест" }, "card");
+    assert.status(res, 200, null, "«Передать» в окне");
+    assert.eq(res.body.canceledTimerTrigger, null, "срабатывание не отменено");
+    await env.advance(GRACE);
+    let c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", idOf(first), 1], "по окончании окна — автоэскалация уровню 1");
+    // «Отклонить» адресатом уровня 1 через секунду после его дедлайна: по окончании окна — уровню 2
+    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, { targetRef: `user:${ME}` }), second] }) }) });
+    inc = await levelZero(env);
+    await env.advance(toDue(env, inc) + GRACE + 1);
+    c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", ME, 1], "автоэскалация на меня");
+    await env.advance(toDue(env, c) + 1);
+    res = await env.act(inc.guid, "reject", { comment: "тест" }, "card");
+    assert.status(res, 200, null, "«Отклонить» в окне");
+    assert.eq(res.body.canceledTimerTrigger, null, "срабатывание не отменено");
+    await env.advance(GRACE);
+    c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", idOf(second), 2], "по окончании окна — автоэскалация уровню 2");
+  });
+
   test("Параметры контракта работают: счётчики дерева групп — только по запросу, журнал постранично (BUG-37)", async () => {
     const env = await makeEnv();
     const plain = await env.ok("GET", "/operator/reference/source-groups");

@@ -137,7 +137,9 @@ MUTATIONS = [
     # При прыжке часов переход по таймеру — не позже готового системного (BUG-38)
     ("timer-after-system-in-jump", "engine.js", "Math.max(next.moment + GRACE_MS, last || 0), sysAt)", "Math.max(next.moment + GRACE_MS, last || 0), ctx.now())", "api"),
     ("system-waits-for-grace", "engine.js", 'c.tr.trigger === "timer" && !system && (agentOnly', 'c.tr.trigger === "timer" && (agentOnly', "api"),
-    ("override-ignored", "engine.js", "      const canceled = overridden(ev);", "      const canceled = null;", "api"),
+    ("override-ignored", "engine.js", "      const canceled = overridden(ev, id);", "      const canceled = null;", "api"),
+    # Ручной переход, после которого таймер продолжается, окно не отменяет (RULE-83)
+    ("window-cancels-continuing", "engine.js", "        if ((timers[g.args[0]].continuesOn || []).includes(manualId)) return;\n", "", "api"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),

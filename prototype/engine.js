@@ -631,7 +631,7 @@
       const bad = validateForm(tr, ev, form);
       if (bad) return { ok: false, why: bad };
       // Ручное действие в окне после дедлайна выигрывает у таймера (§10.1, правило 5; RULE-63)
-      const canceled = overridden(ev);
+      const canceled = overridden(ev, id);
       const owner = ev.linkedTo ? breachOwnerOfLinked(ev) : addressee(ev);
       const before = ev.log.length;
       if (canceled) ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
@@ -652,7 +652,7 @@
     }
 
     // Переход по таймеру, чей дедлайн наступил, а окно ещё не кончилось: ручное действие его отменяет (RULE-63)
-    function overridden(ev) {
+    function overridden(ev, manualId) {
       if (!GRACE_MS) return null;
       let found = null;
       W.transitions.forEach((tr) => {
@@ -660,6 +660,9 @@
         const g = (tr.guards || []).find((x) => x.fn === "timerExpired");
         const due = g ? dueOf(ev, g.args[0]) : null;
         if (!due || due > now() || due + GRACE_MS <= now() || (ev.firedTimers || {})[g.args[0]] === due) return;
+        // Таймер после ручного перехода продолжается (continuesOn) — окно срабатывание не отменяет:
+        // переход по таймеру выполнится по окончании окна, уже из нового состояния (RULE-83)
+        if ((timers[g.args[0]].continuesOn || []).includes(manualId)) return;
         at = due;
         const fail = firstFail(ev, tr.guards);
         at = null;
