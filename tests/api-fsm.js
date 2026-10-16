@@ -3,8 +3,9 @@
    по ним скилл находит результаты. Тесты идут против встроенного сервера и против бэкенда: другая
    настройка схемы — изменениями на прогон в POST /test/reset (PROC-13).
 
-   Наборы ниже перечислены по машине: если в ней появится переход без смены состояния или новый
-   вход в «В работе», для которого здесь нет сценария, — тест «покрытие» упадёт. */
+   Наборы ниже перечислены по машине: если в ней появится переход без смены состояния, новый
+   вход в «В работе» или ручной переход, после которого таймер продолжается, для которого здесь нет
+   сценария, — тест «покрытие» упадёт. */
 (() => {
   const { test, makeEnv, assert, enc } = IMTest;
   const ME = "me";
@@ -344,9 +345,55 @@
     });
   });
 
+  /* ===== Ручное действие в окне, после которого таймер продолжается (§10.1, правило 5; RULE-83) ===== */
+
+  // Ручные переходы из continuesOn таймера (check_machine.py --fsm): срабатывание в окне они не отменяют.
+  // Действие за секунду до дедлайна и через секунду после — дальше срабатывает одно и то же
+  const CONTINUING = {
+    transfer: {
+      name: "«Передать» нового Сидорову",
+      workflow: W,
+      async setup(env) {
+        const inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+        return inc.guid;
+      },
+      act: (env, guid) => env.act(guid, "transfer", { targetId: "sidorov", comment: "тест" }, "card"),
+    },
+    reject: {
+      name: "«Отклонить» адресатом уровня 1",
+      workflow: withEscalation({ levels: levelsTo([`user:${ME}`]) }),
+      async setup(env) {
+        const inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+        assert.eq(firedFor(await env.advance(untilDue(env, inc)), inc.guid), ["auto_escalate"], "эскалация на меня");
+        return inc.guid;
+      },
+      act: (env, guid) => env.act(guid, "reject", { comment: "тест" }, "card"),
+    },
+  };
+  Object.entries(CONTINUING).forEach(([id, c]) => {
+    test(`im-fsm: ручное действие в окне, после которого таймер продолжается, — дальше то же, что до дедлайна: ${c.name}`, async () => {
+      async function run(offsetSec) {
+        const env = await standWith({ workflow: c.workflow });
+        const guid = await c.setup(env);
+        const due = Date.parse((await env.card(guid)).timer.dueAt);
+        assert.eq(firedFor(await env.advance(Math.round((due - env.now) / 1000) + offsetSec), guid), [], "до действия ничего не сработало");
+        const res = await c.act(env, guid);
+        assert.status(res, 200, null, `«${id}» ${offsetSec < 0 ? "до дедлайна" : "в окне"}`);
+        assert.eq(res.body.canceledTimerTrigger, null, "срабатывание не отменено");
+        const fired = firedFor(await env.advance(3600), guid);
+        const card = await env.card(guid);
+        return { fired, end: [card.state, card.owner && card.owner.id, card.assignmentGroup && card.assignmentGroup.id, card.escalationLevel, card.breaches.map((b) => b.kind)] };
+      }
+      const before = await run(-1);
+      const inWindow = await run(1);
+      assert.ok(before.fired.length > 0, `после действия до дедлайна автоматика работает: ${before.fired}`);
+      assert.eq(inWindow, before, "в окне — те же срабатывания и тот же итог");
+    });
+  });
+
   /* ===== Покрытие: наборы сценариев перечисляют всё, что есть в машине ===== */
 
-  test("im-fsm: покрытие — у каждого перехода без смены состояния, каждого входа в «В работе» и «Привязан» и каждого таймера с нарушением есть сценарий", async () => {
+  test("im-fsm: покрытие — у каждого перехода без смены состояния, каждого входа в «В работе» и «Привязан», каждого таймера с нарушением и ручного перехода, после которого таймер продолжается, есть сценарий", async () => {
     const noChange = W.transitions.filter((t) => t.trigger !== "manual" && t.to === null).map((t) => t.id).sort();
     assert.eq(Object.keys(ONCE).sort(), noChange, "переходы без смены состояния — в наборе ONCE");
     const intoWork = W.transitions.filter((t) => t.trigger === "manual" && t.to === "in_progress" && t.id !== "reopen").map((t) => t.id).sort();
@@ -357,5 +404,12 @@
     const breachTimers = [...new Set(W.transitions.filter((t) => t.trigger === "timer" && t.effects.some((e) => e.fn === "recordBreach")).map((t) => t.guards.find((g) => g.fn === "timerExpired").args[0]))].sort();
     const inWindow = [...new Set(WINDOW.map((c) => c.breach))].sort();
     assert.eq(inWindow, breachTimers, "таймеры с нарушением — в наборе WINDOW");
+    // Ручные переходы из continuesOn таймера, у которых в исходном состоянии есть переход по нему (RULE-83)
+    const byTimer = (timer) => W.transitions.filter((t) => t.trigger === "timer" && t.guards.some((g) => g.fn === "timerExpired" && g.args[0] === timer));
+    const continuing = [...new Set(W.timers.flatMap((tm) => (tm.continuesOn || [])
+      .map((id) => W.transitions.find((t) => t.id === id))
+      .filter((t) => t && t.trigger === "manual" && t.from.some((s) => byTimer(tm.id).some((x) => x.from.includes(s))))
+      .map((t) => t.id)))].sort();
+    assert.eq(Object.keys(CONTINUING).sort(), continuing, "ручные переходы, после которых таймер продолжается, — в наборе CONTINUING");
   });
 })();

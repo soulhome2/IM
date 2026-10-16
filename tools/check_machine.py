@@ -917,6 +917,37 @@ def show_overlaps(w):
             print(f"  {state} | {a['id']} ({kind(a)}) | {b['id']} ({kind(b)}) | {a['to'] or '—'} / {b['to'] or '—'} ({diff}) | {first['id']}")
 
 
+def continuing_in_window(w):
+    """Ручные переходы, после которых таймер продолжается (continuesOn), из состояний, где по этому таймеру
+    есть переход: в окне после дедлайна они срабатывание не отменяют (§10.1, правило 5; RULE-83). Список —
+    (таймер, переход, из, в, переходы по таймеру до, после); сценарии — набор CONTINUING в tests/api-fsm.js."""
+    by_timer = {}
+    for t in w["transitions"]:
+        g = next((g for g in t["guards"] if g["fn"] == "timerExpired"), None)
+        if t["trigger"] == "timer" and g:
+            by_timer.setdefault(g["args"][0], []).append(t)
+    rows = []
+    for timer in w["timers"]:
+        for tid in timer.get("continuesOn", []):
+            t = next((x for x in w["transitions"] if x["id"] == tid), None)
+            if not t or t["trigger"] != "manual":
+                continue
+            for src in t["from"]:
+                before = [x["id"] for x in by_timer.get(timer["id"], []) if src in x["from"]]
+                if before:
+                    dst = t["to"] or src
+                    after = [x["id"] for x in by_timer.get(timer["id"], []) if dst in x["from"]]
+                    rows.append((timer["id"], tid, src, dst, before, after))
+    return rows
+
+
+def show_continuing(w):
+    print("\nРучные переходы в окне, после которых таймер продолжается (RULE-83): таймер | переход | из → в | по таймеру до / после")
+    print("  срабатывание не отменяется — выполняется по окончании окна, из нового состояния; сценарии — CONTINUING в tests/api-fsm.js")
+    for timer, tid, src, dst, before, after in continuing_in_window(w):
+        print(f"  {timer} | {tid} | {src} → {dst} | {', '.join(before)} / {', '.join(after) or '—'}")
+
+
 def itertools_pairs(items):
     import itertools
     return itertools.combinations(items, 2)
@@ -1297,6 +1328,7 @@ def main():
     check_work_rights(w, err)
     if "--fsm" in sys.argv:
         show_overlaps(w)
+        show_continuing(w)
     check_registry_used(w, err)
     check_registry_comments(w, err)
     check_automatic_fields(w, err)
