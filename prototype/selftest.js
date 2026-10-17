@@ -43,11 +43,28 @@
       toggle.click();
       await pause(50);
       const drawerOpened = ws.dataset.groups === "on";
+      // Длинные названия на узком экране не обрезаны до неразличимых (BUG-65): найденные — не длиннее двух
+      // строк без потерь, текущее найденное — целиком
+      const search = document.getElementById("groupSearch");
+      const find = async (q) => {
+        search.value = q;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await pause(50);
+      };
+      await find("Конференц-зал —");
+      const cut = (el) => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+      const hits = [...document.querySelectorAll("#groupsList .tree-node:not(.hidden) > .node-content mark")].map((m) => m.closest(".node-text"));
+      const names = { count: hits.length, cut: hits.filter(cut).map((el) => el.textContent) };
+      await find("турникет");
+      const current = document.querySelector("#groupsList .hit-current > .node-content .node-text");
+      // В демо-данных нет названия длиннее двух строк — проверяется, что у текущего нет ограничения строк
+      names.currentCut = !current || cut(current) || getComputedStyle(current).getPropertyValue("-webkit-line-clamp") !== "none";
+      await find("");
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await pause(50);
       const drawer = { opened: drawerOpened, closed: ws.dataset.groups === "off", focus: document.activeElement === toggle };
       parent.postMessage(
-        { widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide, filters, more: { typesHidden, typesShown, counted, closed }, drawer },
+        { widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide, filters, more: { typesHidden, typesShown, counted, closed }, drawer, names },
         "*"
       );
     });
@@ -1205,7 +1222,7 @@
       }
     });
 
-    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50); Esc закрывает панель групп (RULE-91)", async () => {
+    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50); Esc закрывает панель групп (RULE-91); названия в дереве различимы (BUG-65)", async () => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";
       const report = new Promise((resolve) => {
@@ -1230,6 +1247,8 @@
       expect(r.more.counted, "на «Фильтры» нет числа выбранных типов");
       expect(r.more.closed, "«Фильтры» не закрыли типы");
       expect(r.drawer.opened, "панель групп не открылась");
+      expect(r.names.count >= 2 && !r.names.cut.length, `названия в дереве обрезаны: найдено ${r.names.count}, обрезаны — ${r.names.cut.join(", ")}`);
+      expect(!r.names.currentCut, "текущее найденное показано не целиком");
       expect(r.drawer.closed && r.drawer.focus, `Esc не закрыл панель групп или фокус не на её кнопке: ${JSON.stringify(r.drawer)}`);
       return `${r.scroll} из ${r.width}, шапка и фильтры ${r.filters} px, Esc закрывает панель групп`;
     });

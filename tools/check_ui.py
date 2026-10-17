@@ -49,6 +49,7 @@ SCREENS = [
     ("чужая карточка", S.FOREIGN + ["#eventsList button[data-do=view]"]),
     ("закрытая карточка", [("filter", "done"), "#eventsList button[data-do=view]"]),
     ("панель выборки", S.TICK_THREE),
+    ("поиск в дереве", [("groups", "конференц")]),
     ("окно «Выделить по фильтру»", ["#groupsList .tree-all [data-filter='select']"]),
     ("привязанные инциденты", S.MERGE_FIRES),
     ("настройки администратора", ["#userBtn", "#adminBtn"]),

@@ -748,7 +748,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
    Выше выбранного и пути выбранного события: у них свой цвет */
 .tree-node.quiet > .node-content .node-text,
 .tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { color: var(--tree-quiet, var(--muted)); }
-.tree-node.quiet > .node-content mark { color: var(--text); }
+.tree-node.quiet:not(.hit-current) > .node-content mark { color: var(--text); }
 .tree-node.active > .node-content { background: var(--accent-dim); }
 .tree-node.active > .node-content .node-text { font-weight: 500; color: var(--accent); }
 .tree-node.active > .node-content .material-symbols-outlined { color: var(--accent); }
@@ -777,15 +777,21 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   pointer-events: none;
 }
 
+/* Длинное название — на две строки, дальше многоточие: «Конференц-зал — сцена» и «… — общий план»
+   различимы и на телефоне. Текущее найденное — целиком: совпадение не прячется в обрезанной части (BUG-65) */
 .node-text {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   padding: 0 4px;
   font-weight: 400;
 }
+.tree-node.hit-current > .node-content .node-text { display: block; -webkit-line-clamp: none; line-clamp: none; }
 .tree-node.level-0 > .node-content .node-text { font-weight: 600; }
 .tree-node.level-1 > .node-content .node-text { font-weight: 500; }
 /* Приглушённый узел — без жирного: уходит на второй план (RULE-92) */
@@ -1847,6 +1853,8 @@ select.search-input { padding-right: 36px; }
 
 /* Панель групп уходит в выдвижную шторку поверх контента */
 @media (max-width: 900px) {
+  /* Узкий экран: отступ уровня дерева меньше — названиям больше места (BUG-65) */
+  .tree-node > ul { padding-left: 16px; }
   .topbar { flex-wrap: nowrap; }
   .brand { min-width: 0; }
   .clock { display: none; }

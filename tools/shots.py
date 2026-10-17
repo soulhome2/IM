@@ -200,11 +200,20 @@ def mouse(b, kind, selector):
 def prepare_step(b, step):
     # Подготовка экрана: селектор — щелчок из страницы (так не мешают перекрытия и прокрутка),
     # («filter», id) — фильтр очереди из машины, как его выбирает оператор; («quiet», —) — убрать
-    # всплывающие уведомления: на снимке экрана они закрывают то, ради чего снимок
+    # всплывающие уведомления: на снимке экрана они закрывают то, ради чего снимок; («groups», запрос) — поиск
+    # в дереве групп, текущее найденное — второе (панель групп открывается, если скрыта, как на телефоне)
     if isinstance(step, tuple):
         kind, value = step
         if kind == "quiet":
             b.eval("document.getElementById('toasts').replaceChildren()")
+            return
+        if kind == "groups":
+            b.eval(
+                "(() => { if (document.getElementById('workspace').dataset.groups !== 'on') document.getElementById('toggleGroups').click();"
+                " const s = document.getElementById('groupSearch'); s.value = " + json.dumps(value) + ";"
+                " s.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('groupsHitNext').click(); })()"
+            )
+            time.sleep(0.4)
             return
         b.eval(
             "(() => { const s = document.getElementById('eventFilter'); s.value = " + json.dumps(value) + ";"

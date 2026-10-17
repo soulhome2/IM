@@ -151,6 +151,9 @@ MUTATIONS = [
     # Узел без открытых инцидентов приглушён (RULE-92)
     ("tree-quiet-ignored", "app.js", 'const quiet = counters.open ? "" : "quiet";', 'const quiet = "";', "ui"),
     ("tree-quiet-unstyled", "styles.css", ".tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { color: var(--tree-quiet, var(--muted)); }", ".tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { }", "ui"),
+    # Длинные названия в дереве — на две строки, текущее найденное — целиком (BUG-65)
+    ("tree-names-one-line", "styles.css", "  display: -webkit-box;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 2;\n", "  white-space: nowrap;\n  text-overflow: ellipsis;\n", "ui"),
+    ("tree-current-clamped", "styles.css", ".tree-node.hit-current > .node-content .node-text { display: block; -webkit-line-clamp: none; line-clamp: none; }", ".tree-node.hit-current > .node-content .node-text { display: block; }", "ui"),
     ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? groupDevices(parent).filter((d) => d.counters && d.counters.open > 0) : [];", "ui"),
     # Esc в карточке — «К очереди», если не открыто меню, форма или окно (RULE-87)
     # Esc — по одному слою: развёрнутые видео или карта, панель групп поверх узкого экрана (RULE-91)
