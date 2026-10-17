@@ -173,6 +173,8 @@ MUTATIONS = [
     ("tree-found-group-empty", "app.js", "const reveal = Boolean(all || (q && !forceOpen && open));", "const reveal = false;", "ui"),
     ("tree-found-group-forced", "app.js", "const forceOpen = Boolean(q && !all && hasKids && foundInside(item, q));", "const forceOpen = Boolean(q && !all && hasKids && nodeMatchesQuery(item, q, isDevice));", "ui"),
     ("tree-left-search-stuck", "app.js", 'if (open && !node.classList.contains("search-open")) {', "if (open && !state.groupQuery.trim()) {", "ui"),
+    # Home и End в дереве — первый и последний видимый узел (§13, PROC-27)
+    ("tree-home-end-ignored", "app.js", ", Home: items[0], End: items[items.length - 1] };", " };", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
     # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
     ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),

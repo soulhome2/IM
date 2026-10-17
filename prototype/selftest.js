@@ -1605,7 +1605,7 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
-    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить, выбранное остаётся видным; найденную группу → раскрывает целиком (§13, RULE-88, BUG-63, BUG-67)", async () => {
+    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Home и End — первый и последний, Enter — выбрать, Esc — очистить, выбранное остаётся видным; найденную группу → раскрывает целиком (§13, RULE-88, BUG-63, BUG-67)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const key = async (el, k) => {
         el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
@@ -1644,6 +1644,13 @@
         expect(second.classList.contains("tree-node") && second !== first, "↓ в дереве не перешла к следующему узлу");
         await key(second, "ArrowUp");
         expect(document.activeElement === first, "↑ не вернула к прежнему узлу");
+        // Home и End — первый и последний видимый узел (§13, PROC-27)
+        const visible = () => [...$("groupsList").querySelectorAll(".tree-node")].filter((n) => n.getClientRects().length > 0);
+        await key(first, "End");
+        expect(document.activeElement === visible().pop(), "End — не на последний видимый узел");
+        await key(document.activeElement, "Home");
+        expect(document.activeElement === visible()[0] && document.activeElement.dataset.id === "all", "Home — не на первый узел");
+        first.focus();
         const id = first.dataset.id;
         await key(first, "Enter");
         await wait(300);
