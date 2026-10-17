@@ -1539,11 +1539,9 @@
     return walk(store.tree, []) || [];
   }
 
-  // В дереве — группы и все устройства группы, доступные оператору; у устройства с открытыми
-  // инцидентами — счётчик (§19.1, RULE-86). В плашке группы — сколько устройств с открытыми инцидентами
+  // В дереве — группы и все устройства группы, доступные оператору; у группы и устройства с открытыми
+  // инцидентами — одно число, счётчик (§19.1, RULE-86, BUG-64)
   const groupDevices = (node) => node.devices || [];
-  const openDevices = (node) => groupDevices(node).filter((d) => d.counters && d.counters.open > 0);
-  const badgeText = (node) => `${(node.children || []).length}/${openDevices(node).length}`;
 
   // Совпавшая с поиском часть названия — выделена (RULE-88)
   function markMatch(text, q) {
@@ -1747,11 +1745,6 @@
               <span class="toggle-icon material-symbols-outlined">chevron_right</span>
               <span class="material-symbols-outlined">${icon}</span>
               <span class="node-text">${markMatch(t(item.name), q)}</span>
-              ${
-                !isDevice && hasKids
-                  ? `<span class="tree-badge" title="${te("Подгрупп / устройств с открытыми инцидентами")}">${badgeText(item)}</span>`
-                  : ""
-              }
               ${isDevice ? "" : filterButtons(item.guid)}
               ${
                 counters.open

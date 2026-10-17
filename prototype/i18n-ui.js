@@ -195,7 +195,6 @@ window.IM_DICT_UI = {
     "Норматив закрытия приостановлен на время удержания":
       "The resolution timer is paused while the incident is on hold",
     "Удержание": "Hold",
-    "Подгрупп / устройств с открытыми инцидентами": "Subgroups / devices with open incidents",
     "Открытых инцидентов{crit}": "Open incidents{crit}",
     ", есть «{name}»": ", including «{name}»",
     "Время до предельного срока удержания по причине": "Time left before the hold limit for this reason",

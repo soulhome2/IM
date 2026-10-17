@@ -264,8 +264,7 @@ textarea,
 .crumb.current { color: var(--accent-text); }
 .chip.linked { border-color: var(--accent-text); }
 .badge.mine { color: var(--one-info-text); }
-.badge.linked,
-.tree-badge { color: var(--text); }
+.badge.linked { color: var(--text); }
 [data-theme="dark"] .tree-ev { color: var(--one-warning-text); }
 /* Есть инцидент самого срочного приоритета (§2.5) — сигнал тревоги: красная плашка с числом, в обеих темах.
    Красный текст на тёмной панели — 4,28:1, а текстовый красный кита бледный и теряет сигнал */

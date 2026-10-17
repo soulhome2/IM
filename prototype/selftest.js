@@ -1528,7 +1528,7 @@
       }
     });
 
-    await step("Дерево групп: в группе все её устройства, счётчик — только у устройства-источника открытых инцидентов; камеры рядом без тревоги (§19.1, RULE-85, RULE-86)", async () => {
+    await step("Дерево групп: в группе все её устройства, счётчик — только у устройства-источника открытых инцидентов; камеры рядом без тревоги; у группы одно число — открытые инциденты (§19.1, RULE-85, RULE-86, BUG-64)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
@@ -1553,6 +1553,15 @@
       });
       const cameras = node.devices.filter((d) => inc.devices.slice(1).includes(d.guid));
       expect(cameras.length && cameras.every((d) => d.counters.open === 0), "камеры рядом с источником — с тревогой");
+      // У группы одно число — открытые инциденты; без них — ничего, плашки «подгрупп / устройств» нет (BUG-64)
+      const groups = (nodes) => nodes.flatMap((n) => [n].concat(groups(n.children || [])));
+      expect(!$("groupsList").querySelector(".tree-badge"), "у группы снова плашка «подгрупп / устройств»");
+      groups(await stand.get("/operator/reference/source-groups", { withCounters: "true" })).forEach((g) => {
+        const content = $("groupsList").querySelector(`[data-id="${g.guid}"] > .node-content`);
+        const numbers = [...content.children].filter((el) => !el.classList.contains("node-text") && /^\d/.test(el.textContent.trim()));
+        const ok = g.counters.open > 0 ? numbers.length === 1 && numbers[0].textContent.trim() === String(g.counters.open) : numbers.length === 0;
+        expect(ok, `«${g.name}»: на экране ${numbers.map((el) => el.textContent.trim()).join(" ") || "ничего"}, открытых ${g.counters.open}`);
+      });
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 

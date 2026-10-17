@@ -146,7 +146,9 @@ MUTATIONS = [
     # Группа и устройство — по устройству-источнику, а не по всем устройствам события (RULE-85)
     ("group-by-all-devices", "server.js", "const touches = (ev, ids) => ids.includes(eventSource(ev));", "const touches = (ev, ids) => (ev.deviceIds || []).some((id) => ids.includes(id));", "api"),
     # В дереве — все устройства группы, а не только с тревогой (RULE-86)
-    ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? openDevices(parent) : [];", "ui"),
+    # У группы одно число — открытые инциденты, плашки «подгрупп / устройств» нет (BUG-64)
+    ("tree-badge-back", "app.js", '              ${isDevice ? "" : filterButtons(item.guid)}', '              ${isDevice ? "" : `<span class="tree-badge">${(item.children || []).length}</span>` + filterButtons(item.guid)}', "ui"),
+    ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? groupDevices(parent).filter((d) => d.counters && d.counters.open > 0) : [];", "ui"),
     # Esc в карточке — «К очереди», если не открыто меню, форма или окно (RULE-87)
     # Esc — по одному слою: развёрнутые видео или карта, панель групп поверх узкого экрана (RULE-91)
     ("esc-ignores-full", "app.js", "    if (state.full) {\n", "    if (false) {\n", "ui"),
