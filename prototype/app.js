@@ -1554,8 +1554,10 @@
     if (!q) return true;
     if (t(node.name).toLowerCase().includes(q)) return true;
     if (isDevice) return false;
-    return (node.children || []).some((c) => nodeMatchesQuery(c, q)) || groupDevices(node).some((d) => nodeMatchesQuery(d, q, true));
+    return foundInside(node, q);
   }
+  const foundInside = (node, q) =>
+    (node.children || []).some((c) => nodeMatchesQuery(c, q)) || groupDevices(node).some((d) => nodeMatchesQuery(d, q, true));
 
   // Дерево с клавиатуры, как дерево WAI-ARIA (§13, RULE-88): ↑ ↓ — по видимым узлам, Home и End — первый
   // и последний, → — раскрыть или к первому вложенному, ← — свернуть или к родителю, Enter и пробел — выбрать
@@ -1600,8 +1602,8 @@
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      // Пока идёт поиск, ветки с найденным раскрыты поиском — ← ведёт к родителю
-      if (open && !state.groupQuery.trim()) {
+      // Ветку с найденным раскрыл поиск — ← ведёт к родителю; раскрытую оператором — сворачивает
+      if (open && !node.classList.contains("search-open")) {
         state.treeFocus = id;
         state.openGroups.delete(id);
         return renderGroups();
@@ -1724,21 +1726,25 @@
     select.setAttribute("aria-label", lbl(item));
   }
 
-  function treeItemHtml(item, isDevice, level, trace, q) {
+  // all — узел внутри найденной группы, которую оператор раскрыл: поиск его не скрывает
+  function treeItemHtml(item, isDevice, level, trace, q, all) {
     const kids = isDevice ? [] : (item.children || []).concat(groupDevices(item));
     const hasKids = kids.length > 0;
     const icon = isDevice ? DEVICE_ICON[item.typeId] || "videocam" : "folder";
     const counters = item.counters || { open: 0, critical: 0 };
-    const hidden = q && !nodeMatchesQuery(item, q, isDevice);
-    const forceOpen = Boolean(q && hasKids && nodeMatchesQuery(item, q, isDevice));
+    const hidden = q && !all && !nodeMatchesQuery(item, q, isDevice);
+    // Поиск раскрывает путь к найденному. Группа, найденная только по своему названию, — свёрнута, как обычно;
+    // раскрыл её оператор — внутри всё, а не пусто (BUG-67)
+    const forceOpen = Boolean(q && !all && hasKids && foundInside(item, q));
     const open = forceOpen || state.openGroups.has(item.guid);
+    const reveal = Boolean(all || (q && !forceOpen && open));
     const title = t(item.description || item.name);
     const traced = trace.ids.has(item.guid) ? (item.guid === trace.leaf ? "trace trace-leaf" : "trace") : "";
     const crit = counters.topPriority > 0;
     // Без открытых инцидентов — приглушён: путь к тревоге виден сразу, порядок группы не меняется (§19.1, RULE-92)
     const quiet = counters.open ? "" : "quiet";
     return `
-          <li class="tree-node ${quiet} ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
+          <li class="tree-node ${quiet} ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${forceOpen ? "search-open" : ""} ${
             state.groupId === item.guid ? "active" : ""
           } ${traced} ${isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
               data-id="${escapeHtml(item.guid)}" data-type="${isDevice ? "device" : "group"}" role="treeitem" tabindex="-1"
@@ -1756,17 +1762,17 @@
                   : ""
               }
             </div>
-            ${hasKids ? `<ul role="group">${renderTreeHtml(item, level + 1, trace)}</ul>` : ""}
+            ${hasKids ? `<ul role="group">${renderTreeHtml(item, level + 1, trace, reveal)}</ul>` : ""}
           </li>`;
   }
 
-  function renderTreeHtml(parent, level, trace) {
+  function renderTreeHtml(parent, level, trace, all) {
     const q = state.groupQuery.trim().toLowerCase();
     const groups = parent ? parent.children || [] : store.tree;
     const devices = parent ? groupDevices(parent) : [];
     return groups
-      .map((g) => treeItemHtml(g, false, level, trace, q))
-      .concat(devices.map((d) => treeItemHtml(d, true, level, trace, q)))
+      .map((g) => treeItemHtml(g, false, level, trace, q, all))
+      .concat(devices.map((d) => treeItemHtml(d, true, level, trace, q, all)))
       .join("");
   }
 

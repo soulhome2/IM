@@ -169,6 +169,10 @@ MUTATIONS = [
     ("tree-hit-stays", "app.js", "state.treeHit = (state.treeHit + dir + n) % n;", "state.treeHit = (state.treeHit + n) % n;", "ui"),
     # Выбор узла раскрывает путь к нему: после очистки поиска выбранное видно (BUG-63)
     ("tree-chosen-hidden", "app.js", "for (let up = node.parentElement.closest(\".tree-node\"); up; up = up.parentElement.closest(\".tree-node\")) state.openGroups.add(up.dataset.id);", "", "ui"),
+    # Группа, найденная по названию, — свёрнута; раскрытая — внутри всё (BUG-67)
+    ("tree-found-group-empty", "app.js", "const reveal = Boolean(all || (q && !forceOpen && open));", "const reveal = false;", "ui"),
+    ("tree-found-group-forced", "app.js", "const forceOpen = Boolean(q && !all && hasKids && foundInside(item, q));", "const forceOpen = Boolean(q && !all && hasKids && nodeMatchesQuery(item, q, isDevice));", "ui"),
+    ("tree-left-search-stuck", "app.js", 'if (open && !node.classList.contains("search-open")) {', "if (open && !state.groupQuery.trim()) {", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
     # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
     ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),

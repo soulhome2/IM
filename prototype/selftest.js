@@ -1605,7 +1605,7 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
-    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить, выбранное остаётся видным (§13, RULE-88, BUG-63)", async () => {
+    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить, выбранное остаётся видным; найденную группу → раскрывает целиком (§13, RULE-88, BUG-63, BUG-67)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const key = async (el, k) => {
         el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
@@ -1668,6 +1668,23 @@
         await key(search, "Escape");
         const chosen = [...$("groupsList").querySelectorAll(".tree-node.active")].find((n) => n.getClientRects().length > 0);
         expect(chosen && chosen.dataset.id === quiet.dataset.id && chosen.tabIndex === 0, "после очистки поиска выбранный узел скрыт в свёрнутой группе или не в порядке Tab (BUG-63)");
+        // Группа, найденная только по названию, — свёрнута; → раскрывает её, внутри — всё; ← сворачивает (BUG-67)
+        if ($("groupsCollapseAll").textContent.includes("unfold_less")) await click($("groupsCollapseAll"));
+        search.value = "Офис 1";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await wait();
+        await key(search, "ArrowDown");
+        const office = () => $("groupsList").querySelector(`[data-id="${document.activeElement.dataset.id}"]`);
+        const inside = () => [...office().querySelectorAll(":scope > ul > .tree-node")].filter((n) => n.getClientRects().length > 0).length;
+        expect(office().querySelector(":scope > .node-content .node-text").textContent === "Офис 1", "↓ из поиска — не на «Офис 1»");
+        expect(!office().classList.contains("open") && office().getAttribute("aria-expanded") === "false", "найденная по названию группа раскрыта, а внутри пусто");
+        await key(office(), "ArrowRight");
+        const all = window.IM_FIXTURE.sourceGroups.flatMap(function walk(g) { return [g].concat((g.groups || []).flatMap(walk)); }).find((g) => g.name === "Офис 1");
+        expect(office().classList.contains("open") && inside() === (all.groups || []).length + all.devices.length, `→ на найденной группе: внутри видно ${inside()}, у группы ${(all.groups || []).length + all.devices.length}`);
+        await key(office(), "ArrowLeft");
+        expect(!office().classList.contains("open") && inside() === 0, "← не свернула раскрытую в поиске группу");
+        search.focus();
+        await key(search, "Escape");
         // → раскрывает свёрнутую группу, ← — сворачивает; фокус остаётся на ней
         const closed = [...$("groupsList").querySelectorAll(".tree-node.has-children:not(.open)")].find((n) => n.getClientRects().length > 0);
         expect(closed, "нет свёрнутой группы");
