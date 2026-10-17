@@ -156,6 +156,8 @@ MUTATIONS = [
     ("tree-right-ignored", "app.js", "      state.openGroups.add(id);\n      return renderGroups();", "      return;", "ui"),
     ("tree-search-esc-kept", "app.js", "      } else if (e.key === \"Escape\" && e.target.value) {", "      } else if (false) {", "ui"),
     ("tree-hit-stays", "app.js", "state.treeHit = (state.treeHit + dir + n) % n;", "state.treeHit = (state.treeHit + n) % n;", "ui"),
+    # Выбор узла раскрывает путь к нему: после очистки поиска выбранное видно (BUG-63)
+    ("tree-chosen-hidden", "app.js", "for (let up = node.parentElement.closest(\".tree-node\"); up; up = up.parentElement.closest(\".tree-node\")) state.openGroups.add(up.dataset.id);", "", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
     # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
     ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),

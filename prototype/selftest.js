@@ -1539,7 +1539,7 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
-    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить (§13, RULE-88)", async () => {
+    await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Enter — выбрать, Esc — очистить, выбранное остаётся видным (§13, RULE-88, BUG-63)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const key = async (el, k) => {
         el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
@@ -1587,6 +1587,21 @@
         search.focus();
         await key(search, "Escape");
         expect(search.value === "" && $("groupsFound").hidden && !$("groupsList").querySelector("mark"), "Esc в поиске не очистил его");
+        // Выбранное в поиске после очистки видно и в порядке Tab, даже если путь к нему был свёрнут (BUG-63).
+        // Группа без инцидентов: путь к группе инцидента раскрывается и так — подсветкой выбранного в очереди
+        if ($("groupsCollapseAll").textContent.includes("unfold_less")) await click($("groupsCollapseAll"));
+        search.value = "Офис 2";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await wait();
+        await key(search, "ArrowDown");
+        const quiet = document.activeElement;
+        expect(quiet.classList.contains("tree-node") && quiet.querySelector(":scope > .node-content .node-text").textContent === "Офис 2", "↓ из поиска — не на «Офис 2»");
+        await key(quiet, "Enter");
+        await wait(300);
+        search.focus();
+        await key(search, "Escape");
+        const chosen = [...$("groupsList").querySelectorAll(".tree-node.active")].find((n) => n.getClientRects().length > 0);
+        expect(chosen && chosen.dataset.id === quiet.dataset.id && chosen.tabIndex === 0, "после очистки поиска выбранный узел скрыт в свёрнутой группе или не в порядке Tab (BUG-63)");
         // → раскрывает свёрнутую группу, ← — сворачивает; фокус остаётся на ней
         const closed = [...$("groupsList").querySelectorAll(".tree-node.has-children:not(.open)")].find((n) => n.getClientRects().length > 0);
         expect(closed, "нет свёрнутой группы");

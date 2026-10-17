@@ -2932,6 +2932,8 @@
         return;
       }
       if (!e.target.closest(".node-content")) return;
+      // Путь к выбранному раскрыт: после очистки поиска узел виден и в порядке Tab (BUG-63)
+      for (let up = node.parentElement.closest(".tree-node"); up; up = up.parentElement.closest(".tree-node")) state.openGroups.add(up.dataset.id);
       state.treeFocus = id;
       state.groupId = id;
       if (narrowQuery.matches) state.groupsOn = false;
