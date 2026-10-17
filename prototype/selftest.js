@@ -37,8 +37,17 @@
       const counted = !count.hidden && count.textContent === "1";
       more.click();
       const closed = height("#eventsTypes") === 0;
+      // Панель групп поверх узкого экрана — слой: Esc закрывает её, фокус — на кнопку панели (RULE-91)
+      const ws = document.getElementById("workspace");
+      const toggle = document.getElementById("toggleGroups");
+      toggle.click();
+      await pause(50);
+      const drawerOpened = ws.dataset.groups === "on";
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await pause(50);
+      const drawer = { opened: drawerOpened, closed: ws.dataset.groups === "off", focus: document.activeElement === toggle };
       parent.postMessage(
-        { widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide, filters, more: { typesHidden, typesShown, counted, closed } },
+        { widthcheck: true, width: innerWidth, scroll: document.documentElement.scrollWidth, wide, filters, more: { typesHidden, typesShown, counted, closed }, drawer },
         "*"
       );
     });
@@ -1165,7 +1174,7 @@
       expect(mode() === "queue" && $("breakBanner").hidden, "Esc что-то сделал кроме закрытия окна");
     });
 
-    await step("Esc в карточке: сначала закрывает форму, потом — карточку, как «К очереди»; инцидент остаётся моим (§13, RULE-87)", async () => {
+    await step("Esc в карточке: сначала закрывает форму, потом сворачивает развёрнутое видео, потом — карточку, как «К очереди»; инцидент остаётся моим (§13, RULE-87, RULE-91)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
@@ -1180,6 +1189,12 @@
         expect(!$("modalDialog").hidden, "форма «Передать» не открылась");
         await pressKey("Escape");
         expect($("modalDialog").hidden && mode() === "work", "первый Esc должен закрыть только форму");
+        // Развёрнутое видео — тоже слой поверх карточки: Esc сначала сворачивает его (RULE-91)
+        await click($("videoFull"));
+        expect($("workspace").dataset.full === "video", "видео не развернулось");
+        await pressKey("Escape");
+        expect(!$("workspace").dataset.full && mode() === "work", "Esc при развёрнутом видео должен свернуть только видео");
+        expect(document.activeElement === $("videoFull"), "после Esc фокус не вернулся на кнопку «Развернуть видео»");
         await pressKey("Escape");
         await wait(300);
         expect(mode() === "queue", "второй Esc не вернул к очереди");
@@ -1190,7 +1205,7 @@
       }
     });
 
-    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50)", async () => {
+    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50); Esc закрывает панель групп (RULE-91)", async () => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";
       const report = new Promise((resolve) => {
@@ -1214,7 +1229,9 @@
       expect(r.more.typesShown, "«Фильтры» не открыли типы");
       expect(r.more.counted, "на «Фильтры» нет числа выбранных типов");
       expect(r.more.closed, "«Фильтры» не закрыли типы");
-      return `${r.scroll} из ${r.width}, шапка и фильтры ${r.filters} px`;
+      expect(r.drawer.opened, "панель групп не открылась");
+      expect(r.drawer.closed && r.drawer.focus, `Esc не закрыл панель групп или фокус не на её кнопке: ${JSON.stringify(r.drawer)}`);
+      return `${r.scroll} из ${r.width}, шапка и фильтры ${r.filters} px, Esc закрывает панель групп`;
     });
 
     await step("Контраст отсчётов, бейджей, уровня, кнопок действий и списка «Кому передать» не ниже 4,5:1 в обеих темах", async () => {

@@ -3610,8 +3610,9 @@
     await reload();
   }
 
-  // Горячих клавиш нет. Esc — обычное поведение окон: закрывает открытое меню, форму или окно,
-  // а если ничего не открыто — закрывает карточку, как «К очереди» (§13, RULE-87)
+  // Горячих клавиш нет. Esc — обычное поведение окон: закрывает то, что сверху, по одному за нажатие —
+  // меню, форму или окно, развёрнутые видео или карту, панель групп поверх узкого экрана, а если
+  // ничего не открыто — карточку, как «К очереди» (§13, RULE-87, RULE-91)
   function onKey(e) {
     if (e.key !== "Escape") return;
     const openMenu = closeMenus();
@@ -3619,6 +3620,12 @@
     if (state.dialog) return closeDialog();
     const openModal = document.querySelector(".modal:not([hidden])");
     if (openModal) return (openModal.hidden = true);
+    if (state.full) {
+      const btn = $(state.full === "video" ? "videoFull" : "mapFull");
+      toggleFull(state.full);
+      return btn.focus();
+    }
+    if (state.groupsOn && narrowQuery.matches) return closeDrawer();
     if (state.mode !== "work") return;
     // Набранный в поле сценария ответ сохраняется при уходе из поля — как при нажатии «К очереди»
     if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();

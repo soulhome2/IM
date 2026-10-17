@@ -148,6 +148,9 @@ MUTATIONS = [
     # В дереве — все устройства группы, а не только с тревогой (RULE-86)
     ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? openDevices(parent) : [];", "ui"),
     # Esc в карточке — «К очереди», если не открыто меню, форма или окно (RULE-87)
+    # Esc — по одному слою: развёрнутые видео или карта, панель групп поверх узкого экрана (RULE-91)
+    ("esc-ignores-full", "app.js", "    if (state.full) {\n", "    if (false) {\n", "ui"),
+    ("esc-ignores-drawer", "app.js", "if (state.groupsOn && narrowQuery.matches) return closeDrawer();", "", "ui"),
     ("esc-keeps-card", "app.js", "    if (state.mode !== \"work\") return;\n", "    return;\n", "ui"),
     # Поиск и клавиатура в дереве групп (RULE-88)
     ("tree-no-mark", "app.js", "if (at < 0) return escapeHtml(text);", "return escapeHtml(text);", "ui"),
