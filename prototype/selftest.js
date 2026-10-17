@@ -1528,7 +1528,7 @@
       }
     });
 
-    await step("Дерево групп: в группе все её устройства, счётчик — только у устройства-источника открытых инцидентов; камеры рядом без тревоги; у группы одно число — открытые инциденты (§19.1, RULE-85, RULE-86, BUG-64)", async () => {
+    await step("Дерево групп: в группе все её устройства, счётчик — только у устройства-источника открытых инцидентов; камеры рядом без тревоги; у группы одно число — открытые инциденты; без них — приглушено (§19.1, RULE-85, RULE-86, BUG-64, RULE-92)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
@@ -1561,7 +1561,28 @@
         const numbers = [...content.children].filter((el) => !el.classList.contains("node-text") && /^\d/.test(el.textContent.trim()));
         const ok = g.counters.open > 0 ? numbers.length === 1 && numbers[0].textContent.trim() === String(g.counters.open) : numbers.length === 0;
         expect(ok, `«${g.name}»: на экране ${numbers.map((el) => el.textContent.trim()).join(" ") || "ничего"}, открытых ${g.counters.open}`);
+        // Без открытых инцидентов — приглушён, путь к тревоге — нет (RULE-92)
+        expect(content.parentElement.classList.contains("quiet") === !g.counters.open, `«${g.name}»: приглушён — ${content.parentElement.classList.contains("quiet")}, открытых ${g.counters.open}`);
       });
+      node.devices.forEach((d) => {
+        const el = shown.find((x) => x.dataset.id === d.guid);
+        expect(el.classList.contains("quiet") === !d.counters.open, `«${d.name}»: приглушён — ${el.classList.contains("quiet")}, открытых ${d.counters.open}`);
+      });
+      // Приглушённое читается: цвет отличается от обычного, контраст не ниже 4,5:1 в обеих темах
+      const original = document.documentElement.dataset.theme;
+      try {
+        for (const theme of ["light", "dark"]) {
+          await setTheme(theme);
+          const group = $("groupsList").querySelector(`[data-id="${groupId}"]`);
+          const quietText = group.querySelector(":scope > ul > .tree-node.quiet > .node-content .node-text");
+          const loudText = group.querySelector(":scope > .node-content .node-text");
+          const r = contrast(quietText);
+          expect(r >= 4.5, `${theme}: контраст приглушённого «${quietText.textContent}» — ${r.toFixed(2)}`);
+          expect(getComputedStyle(quietText).color !== getComputedStyle(loudText).color, `${theme}: приглушённое того же цвета, что путь к тревоге`);
+        }
+      } finally {
+        await setTheme(original);
+      }
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 

@@ -35,6 +35,8 @@
   --text: var(--one-fg);
   --muted: var(--one-fg-muted);
   --faint: var(--one-fg-subtle);
+  /* Приглушённый узел дерева (RULE-92): светлее --muted, но не ниже 4,5:1 — у --faint в светлой теме 4,45 (BUG-56) */
+  --tree-quiet: color-mix(in srgb, var(--one-fg-muted) 25%, var(--one-fg-subtle));
 
   /* accent */
   --accent: var(--one-accent);
@@ -132,7 +134,6 @@ textarea:focus-visible,
 .tree-node.active > .node-content .material-symbols-outlined,
 .tree-node.trace-leaf > .node-content .node-text,
 .tree-node.trace-leaf > .node-content .material-symbols-outlined { color: var(--text); }
-.tree-node.is-device.active > .node-content .node-text { color: var(--text); }
 
 /* Control borders are 1px in every state (D-014). */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),

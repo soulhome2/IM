@@ -744,6 +744,11 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   transition: background 0.12s;
 }
 .node-content:hover { background: var(--hover); }
+/* Узел без открытых инцидентов — приглушён, путь к тревоге — обычным цветом (§19.1, RULE-92).
+   Выше выбранного и пути выбранного события: у них свой цвет */
+.tree-node.quiet > .node-content .node-text,
+.tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { color: var(--tree-quiet, var(--muted)); }
+.tree-node.quiet > .node-content mark { color: var(--text); }
 .tree-node.active > .node-content { background: var(--accent-dim); }
 .tree-node.active > .node-content .node-text { font-weight: 500; color: var(--accent); }
 .tree-node.active > .node-content .material-symbols-outlined { color: var(--accent); }
@@ -783,7 +788,8 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 }
 .tree-node.level-0 > .node-content .node-text { font-weight: 600; }
 .tree-node.level-1 > .node-content .node-text { font-weight: 500; }
-.tree-node.is-device > .node-content .node-text { color: var(--muted); }
+/* Приглушённый узел — без жирного: уходит на второй план (RULE-92) */
+.tree-node.quiet > .node-content .node-text { font-weight: 400; }
 
 /* «Сгруппировать» на узле дерева — при наведении и у выбранной группы (§11) */
 .node-group-btn {

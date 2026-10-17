@@ -148,6 +148,9 @@ MUTATIONS = [
     # В дереве — все устройства группы, а не только с тревогой (RULE-86)
     # У группы одно число — открытые инциденты, плашки «подгрупп / устройств» нет (BUG-64)
     ("tree-badge-back", "app.js", '              ${isDevice ? "" : filterButtons(item.guid)}', '              ${isDevice ? "" : `<span class="tree-badge">${(item.children || []).length}</span>` + filterButtons(item.guid)}', "ui"),
+    # Узел без открытых инцидентов приглушён (RULE-92)
+    ("tree-quiet-ignored", "app.js", 'const quiet = counters.open ? "" : "quiet";', 'const quiet = "";', "ui"),
+    ("tree-quiet-unstyled", "styles.css", ".tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { color: var(--tree-quiet, var(--muted)); }", ".tree-node.quiet > .node-content > .material-symbols-outlined:not(.toggle-icon) { }", "ui"),
     ("tree-open-devices-only", "app.js", "const devices = parent ? groupDevices(parent) : [];", "const devices = parent ? groupDevices(parent).filter((d) => d.counters && d.counters.open > 0) : [];", "ui"),
     # Esc в карточке — «К очереди», если не открыто меню, форма или окно (RULE-87)
     # Esc — по одному слою: развёрнутые видео или карта, панель групп поверх узкого экрана (RULE-91)

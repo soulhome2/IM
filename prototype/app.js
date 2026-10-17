@@ -1735,8 +1735,10 @@
     const title = t(item.description || item.name);
     const traced = trace.ids.has(item.guid) ? (item.guid === trace.leaf ? "trace trace-leaf" : "trace") : "";
     const crit = counters.topPriority > 0;
+    // Без открытых инцидентов — приглушён: путь к тревоге виден сразу, порядок группы не меняется (§19.1, RULE-92)
+    const quiet = counters.open ? "" : "quiet";
     return `
-          <li class="tree-node ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
+          <li class="tree-node ${quiet} ${hasKids ? "has-children" : ""} ${open ? "open" : ""} ${
             state.groupId === item.guid ? "active" : ""
           } ${traced} ${isDevice ? "is-device" : ""} ${hidden ? "hidden" : ""} level-${level}"
               data-id="${escapeHtml(item.guid)}" data-type="${isDevice ? "device" : "group"}" role="treeitem" tabindex="-1"
