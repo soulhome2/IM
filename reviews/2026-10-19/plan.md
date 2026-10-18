@@ -14,8 +14,8 @@
 
 ### После решений: прототип и машина
 
-- [ ] **RULE-93** По решению: `$comment` условия `escalationTargetAvailable` в машине; выбор уровня (`nextLevel`) в исполнителе; тесты API — оба случая из ревью и группа, где принять может только текущий адресат; мутация. Модель Quint: выбор уровня, свойства `autoEscalateNotToCurrentAddressee` и `resolutionEscalateNotToCurrentAddressee` — в `inv`, сценарий в `im_test.qnt`.
+- [x] **RULE-93** По решению: `$comment` условия `escalationTargetAvailable` в машине; выбор уровня (`nextLevel`) в исполнителе; тесты API — оба случая из ревью и группа, где принять может только текущий адресат; мутация. Модель Quint: выбор уровня, свойства `autoEscalateNotToCurrentAddressee` и `resolutionEscalateNotToCurrentAddressee` — в `inv`, сценарий в `im_test.qnt`. Сервер: `canAccept` группы — без участника, у которого инцидент уже есть; мутации кода `level-current-addressee-ignored`, `level-group-owner-counted`, `group-accept-except-ignored`; три сценария Quint. Коммит: `e46edea`
 
 ### После решений: правила
 
-- [ ] **RULE-93** §8.3 «Уровни» и §9 «Порядок срабатывания»; README машины; журнал изменений.
+- [x] **RULE-93** §8.3 «Уровни» и §9 «Порядок срабатывания»; журнал изменений. README машины выбор уровня не описывает — не менялся. Коммит: `e46edea`
