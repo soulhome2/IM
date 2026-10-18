@@ -61,8 +61,9 @@ module im_test {
 
   /* ===== 2. Эскалация по реакции до потолка (§8.3, RULE-84) ===== */
 
+  // В группе уровня 2 — и a: иначе принять в ней мог бы только b, у кого инцидент уже есть (RULE-93)
   run escalationToCeilingTest =
-    initWith(BASE)
+    initWith({ ...BASE, members: Set("a", "b") })
       .then(create("i1"))
       .then(expireReaction("i1"))
       .expect(not(claimOk("a", "i1")))  // переход по таймеру срочный — ручные ждут
@@ -100,6 +101,39 @@ module im_test {
       .expect(not(autoEscalateOk("i1")))
       .then(reactionOverdue("i1"))
       .expect(x1.state == New and x1.reaction == IDLE and breachesOf("reaction") == 1)
+      .expect(inv)
+
+  // Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (§8.3, RULE-93).
+  // Передан b — адресату уровня 1: уровень 1 пропущен; в группе уровня 2 принять может только b —
+  // пропущена и она; дальше уровней нет — потолок: нарушение реакции
+  run escalationSkipsCurrentAddresseeTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(transfer("a", "i1", "b"))
+      .then(expireReaction("i1"))
+      .expect(not(autoEscalateOk("i1")))
+      .then(escalationCeiling("i1"))
+      .expect(x1.owner == "b" and x1.level == 0 and breachesOf("reaction") == 1)
+      .expect(inv)
+
+  // Та же группа, но принять в ней может и a — уровень 2 не пропускается
+  run escalationGroupWithOthersTest =
+    initWith({ ...BASE, members: Set("a", "b") })
+      .then(create("i1"))
+      .then(transfer("a", "i1", "b"))
+      .then(expireReaction("i1"))
+      .then(autoEscalate("i1"))
+      .expect(x1.owner == NOBODY and x1.group == GROUP and x1.level == 2 and breachesOf("reaction") == 0)
+      .expect(inv)
+
+  // Закрытие: b ведёт инцидент и сам адресат уровня 1 — уровень пропущен, сразу группа
+  run resolutionEscalateSkipsOwnerTest =
+    initWith({ ...BASE, members: Set("a", "b"), onResolutionOverdue: "escalate" })
+      .then(create("i1"))
+      .then(claim("b", "i1"))
+      .then(expireResolution("i1"))
+      .then(resolutionEscalate("i1"))
+      .expect(x1.state == Pending and x1.group == GROUP and x1.level == 2 and x1.breaches == [{ kind: "resolution", who: "b" }])
       .expect(inv)
 
   /* ===== 3. Остаток норматива закрытия (RULE-07, RULE-50) ===== */

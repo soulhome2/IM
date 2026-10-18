@@ -865,6 +865,37 @@
     assert.ok(none.card.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
   });
 
+  test("Автоэскалация пропускает уровень, где принять может только тот, у кого инцидент уже есть (§8.3, RULE-93)", async () => {
+    const first = W.escalation.levels[0].targetRef.split(":")[1];
+    const second = W.escalation.levels[1].targetRef.split(":")[1];
+    const firedFor = (fired, guid) => fired.filter((f) => f.incidentGuid === guid).map((f) => f.transitionId);
+    // Реакция: передан адресату уровня 1 и не принят — эскалация не возвращает инцидент ему же с новым сроком
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const sent = await env.act(inc.guid, "transfer", { targetId: first, comment: "тест" }, "queue");
+    assert.status(sent, 200, null, `передать ${first}`);
+    const fired = firedFor(await env.advance(Math.ceil((Date.parse(sent.body.incident.timer.dueAt) - env.now) / 1000) + GRACE + 1), inc.guid);
+    const c = await env.card(inc.guid);
+    assert.eq([fired, c.owner && c.owner.id, c.escalationLevel], [["auto_escalate"], second, 2], `реакция: уровень 1 — ${first}, у кого инцидент уже есть, — пропущен`);
+    // Закрытие: адресат уровня 1 — тот, кто ведёт инцидент, или группа, где принять может только он
+    async function overdue(level1Ref, roles) {
+      const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: level1Ref }) : l));
+      const esc = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }) });
+      if (roles) assert.status(await esc.call("PUT", `/test/operators/${roles.id}/roles`, { roles: roles.roles }), 200, null, `роли ${roles.id}`);
+      const fire = await newFire(esc);
+      const claimed = await esc.act(fire.guid, "claim", {}, "queue");
+      assert.status(claimed, 200, null, "взять");
+      const got = firedFor(await esc.advance(Math.ceil((Date.parse(claimed.body.incident.timer.dueAt) - esc.now) / 1000) + GRACE + 1), fire.guid);
+      return { fired: got, card: await esc.card(fire.guid) };
+    }
+    const self = await overdue(`user:${ME}`);
+    assert.eq([self.fired, self.card.state, self.card.owner && self.card.owner.id, self.card.escalationLevel], [["resolution_escalate"], "pending_acceptance", second, 2], "закрытие: уровень 1 — я сам — пропущен, сразу уровень 2");
+    assert.eq(self.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
+    // В «Старших операторах» — я и Петрова по роли «Старший оператор»; без этой роли принять в группе могу только я
+    const alone = await overdue("group:grp-leads", { id: "petrova", roles: ["Оператор"] });
+    assert.eq([alone.fired, alone.card.owner && alone.card.owner.id, alone.card.escalationLevel], [["resolution_escalate"], second, 2], "группа, где принять могу только я, пропущена");
+  });
+
   test("Истёкший норматив закрытия срабатывает один раз: возврат в работу не даёт нового срока (§4, RULE-50)", async () => {
     // «Отложить → Возобновить» после истечения — без второго нарушения и алерта
     const env = await makeEnv();

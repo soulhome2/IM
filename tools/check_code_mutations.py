@@ -89,7 +89,11 @@ MUTATIONS = [
     ("counters-ignore-access", "server.js", "const list = visible({});", "const list = events;", "api"),
     ("target-access-ignored", "engine.js", "return !target || ctx.hasAccess(target, ev) ? null : [\"workflow.guard.target_no_access\"];", "return null;", "api"),
     ("group-access-all-members", "server.js", "if (group) return membersOf(group).some((m) => hasAccess(m, ev));", "if (group) return membersOf(group).every((m) => hasAccess(m, ev));", "api"),
-    ("level-cannot-accept-ignored", "engine.js", ".find((l) => !ctx.canAccept || ctx.canAccept(refToId(l.targetRef), ev)) || null;", ".find(() => true) || null;", "api"),
+    ("level-cannot-accept-ignored", "engine.js", "return !ctx.canAccept || ctx.canAccept(target, ev, ev.owner);", "return true;", "api"),
+    # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
+    ("level-current-addressee-ignored", "engine.js", "if (target === addressee(ev)) return false;", "", "api"),
+    ("level-group-owner-counted", "engine.js", "ctx.canAccept(target, ev, ev.owner)", "ctx.canAccept(target, ev)", "api"),
+    ("group-accept-except-ignored", "server.js", "membersOf(group).some((m) => m !== except && canAccept(m, ev))", "membersOf(group).some((m) => canAccept(m, ev))", "api"),
     ("alert-ignores-access", "server.js", ".filter((id) => present({ id }) && hasAccess(id, ev));", ".filter((id) => present({ id }));", "api"),
     ("alert-ignores-presence", "server.js", ".filter((id) => present({ id }) && hasAccess(id, ev));", ".filter((id) => hasAccess(id, ev));", "api"),
     ("alert-no-recipient-silent", "engine.js", "if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {}, now());", "", "api"),

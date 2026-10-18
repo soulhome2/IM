@@ -51,12 +51,18 @@
     const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
     const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
     // Следующий уровень автоэскалации (§8.3): ближайший выше текущего и не выше потолка, адресат
-    // которого может принять — право «Принимать» и доступ к объекту (§5, §8.1); остальные пропускаются
+    // которого может принять — право «Принимать» и доступ к объекту (§5, §8.1); остальные пропускаются.
+    // Пропускается и уровень, где принять может только тот, у кого инцидент уже есть: его адресат или
+    // группа, где принять может только владелец, — как «Исключение владельца» у передачи (RULE-93)
     const nextLevel = (ev) =>
       W.escalation.levels
         .filter((l) => l.level > ev.escalationLevel && l.level <= W.escalation.maxLevel)
         .sort((a, b) => a.level - b.level)
-        .find((l) => !ctx.canAccept || ctx.canAccept(refToId(l.targetRef), ev)) || null;
+        .find((l) => {
+          const target = refToId(l.targetRef);
+          if (target === addressee(ev)) return false;
+          return !ctx.canAccept || ctx.canAccept(target, ev, ev.owner);
+        }) || null;
 
     /* ===== Нормативы (§4, правило 2) ===== */
 

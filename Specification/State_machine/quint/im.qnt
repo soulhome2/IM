@@ -152,6 +152,10 @@ module im {
   def canAccept(who: str, i: str): bool =
     if (isGroup(who)) cfg.members.exists(m => canAcceptP(m, i))
     else OPERATORS.contains(who) and canAcceptP(who, i)
+  // То же, но участник except не в счёт: у него инцидент уже есть (RULE-93)
+  def canAcceptExcept(who: str, i: str, except: str): bool =
+    if (isGroup(who)) cfg.members.exists(m => m != except and canAcceptP(m, i))
+    else canAccept(who, i)
 
   /* ===== Условия (registries.guards) ===== */
 
@@ -175,9 +179,16 @@ module im {
   }
 
   // escalationTargetAvailable: ближайший уровень выше текущего, не выше потолка, адресат
-  // которого может принять; остальные пропускаются. LEVELS упорядочены по возрастанию
+  // которого может принять; остальные пропускаются. Пропускается и уровень, где принять может
+  // только тот, у кого инцидент уже есть: его адресат или группа, где принять может только
+  // владелец (RULE-93). LEVELS упорядочены по возрастанию
   def nextLevels(x: Incident, i: str): List[{ level: int, target: str }] =
-    LEVELS.select(l => l.level > x.level and l.level <= MAX_LEVEL and canAccept(l.target, i))
+    LEVELS.select(l => all {
+      l.level > x.level,
+      l.level <= MAX_LEVEL,
+      l.target != addressee(x),
+      canAcceptExcept(l.target, i, x.owner),
+    })
   def escalationTargetAvailable(x: Incident, i: str): bool = nextLevels(x, i).length() > 0
 
   /* ===== Переходы по таймеру: условия ===== */
@@ -756,16 +767,19 @@ module im {
     x.state == Pending implies canAccept(addressee(x), i)
   })
 
-  // Открытый вопрос, в inv не входит: эскалация не адресует инцидент тому, у кого он уже есть —
-  // тому же человеку или той же группе, как «Исключение владельца» ручной передачи (§8.1, §8.3).
-  // Сейчас нарушается: выбор уровня (escalationTargetAvailable) текущего адресата не исключает
+  // 10. Эскалация не адресует инцидент тому, у кого он уже есть: тому же человеку, той же группе
+  //     или группе, где принять может только его владелец — как «Исключение владельца» ручной
+  //     передачи (§8.1, §8.3, RULE-93). Иначе просрочка закрытия не дошла бы до старшего, а не
+  //     принявший вовремя получил бы новый срок реакции без нарушения
   def escalatesToCurrentAddressee(i: str): bool = {
     val x = inc.get(i)
-    escalationTargetAvailable(x, i) and nextLevels(x, i)[0].target == addressee(x)
+    val t = nextLevels(x, i)[0].target
+    escalationTargetAvailable(x, i) and (
+      t == addressee(x)
+      or (isGroup(t) and not(cfg.members.exists(m => m != x.owner and canAcceptP(m, i))))
+    )
   }
-  // Случай 1: реакция истекла — auto_escalate снова адресует тому же, реакция заново, нарушения нет
   val autoEscalateNotToCurrentAddressee = INCIDENTS.forall(i => autoEscalateOk(i) implies not(escalatesToCurrentAddressee(i)))
-  // Случай 2: норматив закрытия истёк — resolution_escalate возвращает инцидент владельцу на принятие
   val resolutionEscalateNotToCurrentAddressee = INCIDENTS.forall(i => resolutionEscalateOk(i) implies not(escalatesToCurrentAddressee(i)))
 
   val inv = all {
@@ -778,5 +792,7 @@ module im {
     dueDeadlineHandled,
     limitsRespected,
     pendingAddresseeCanAccept,
+    autoEscalateNotToCurrentAddressee,
+    resolutionEscalateNotToCurrentAddressee,
   }
 }

@@ -173,10 +173,10 @@
     // Права человека: у оператора стенда — его набор, у остальных — объединение прав его ролей
     const permsOf = (id) => (id === ME ? PERMISSIONS : [...new Set(rolesOf(id).flatMap((r) => ROLE_RIGHTS[r] || []))]);
     // Может ли адресат принять (§8.1): право «Принимать» и доступ к объекту; группа — если хотя бы
-    // один участник может
-    function canAccept(id, ev) {
+    // один участник может. except — участник, который не в счёт: у него инцидент уже есть (RULE-93)
+    function canAccept(id, ev, except) {
       const group = GROUPS.find((g) => g.id === id);
-      if (group) return membersOf(group).some((m) => canAccept(m, ev));
+      if (group) return membersOf(group).some((m) => m !== except && canAccept(m, ev));
       return permsOf(id).includes("incident:accept") && hasAccess(id, ev);
     }
     // Группа устройства-источника: самая глубокая, где оно стоит (первое вхождение по дереву)
@@ -270,7 +270,7 @@
       log,
       transferTargets: () => targets(),
       hasAccess: (id, ev) => hasAccess(id, ev),
-      canAccept: (id, ev) => canAccept(id, ev),
+      canAccept: (id, ev, except) => canAccept(id, ev, except),
       // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
       defaultTransferTarget: () => session.lastTransferTargetId,
       // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
