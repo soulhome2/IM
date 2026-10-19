@@ -2223,7 +2223,7 @@
                 : ""
             }
             <div class="scenario-actions-end">
-              <button type="button" class="btn ghost" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
+              <button type="button" class="btn outline" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
               <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${canNext ? "" : "disabled"}>${te("Далее")}</button>
             </div>
           </div>
