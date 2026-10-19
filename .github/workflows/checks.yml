@@ -3,6 +3,8 @@
 # и экран прототипа (пустой текст, контраст, ширина).
 # Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
 # что что-то сломалось; подробности — в журнале шага.
+# Мутации — отдельными задачами, они идут одновременно с основной: мутации кода разложены на 4 части
+# (матрица, --shard), внутри задачи мутации идут в несколько потоков (tools/parallel.py).
 name: checks
 
 on:
@@ -79,14 +81,6 @@ jobs:
         if: always()
         run: python3 tools/check_i18n.py
 
-      - name: Правила только в машине
-        if: always()
-        run: python3 tools/check_mutations.py
-
-      - name: Мутации кода — тесты ловят ошибки
-        if: always()
-        run: python3 tools/check_code_mutations.py
-
       - name: Ссылки в документах
         if: always()
         run: python3 tools/check_links.py
@@ -98,3 +92,24 @@ jobs:
       - name: Экран — пустой текст, контраст, ширина, ключи и клавиши
         if: always()
         run: python3 tools/check_ui.py
+
+  machine-mutations:
+    name: Правила только в машине
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Мутации машины меняют поведение прототипа
+        run: python3 tools/check_mutations.py
+
+  code-mutations:
+    name: Мутации кода — часть ${{ matrix.shard }} из 4
+    runs-on: ubuntu-24.04
+    strategy:
+      # Упавшая часть не останавливает остальные: видны все выжившие мутации сразу
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Тесты ловят порчу кода
+        run: python3 tools/check_code_mutations.py --shard=${{ matrix.shard }}/4

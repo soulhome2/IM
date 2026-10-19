@@ -13,21 +13,28 @@
 и проверяется, что тесты замечают поломку.
 
 Быстро (PROC-17): чтобы поймать порчу, хватает одного упавшего теста. Поэтому тесты идут до
-первого падения (failfast), а копия прототипа одна на все мутации. Вердикт тот же: выжившая
-мутация всегда проходит полный набор тестов.
+первого падения (failfast). Мутации идут одновременно в несколько потоков — у каждого своя копия
+прототипа и свой Chrome (tools/parallel.py). Вердикт тот же: выжившая мутация всегда проходит
+полный набор тестов.
 
 Запуск из корня репозитория:
-  python3 tools/check_code_mutations.py            — все мутации, около четырёх минут
+  python3 tools/check_code_mutations.py            — все мутации; на 8 ядрах — несколько минут
   python3 tools/check_code_mutations.py hold-limit — только названные
-  python3 tools/check_code_mutations.py --full     — без ускорения: полные прогоны, около десяти минут
+  python3 tools/check_code_mutations.py --full     — без failfast: полные прогоны
+  --jobs=N — потоков (по умолчанию три четверти ядер), --shard=K/M — K-я из M частей (так делит CI)
 Код выхода 1, если хоть одна мутация выжила.
 """
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import parallel  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -358,50 +365,78 @@ def run_tests(site, kind, profile, failfast=False):
     return passed, fails, bool(log)
 
 
-def main():
-    wanted = [a for a in sys.argv[1:] if not a.startswith("-")]
-    full = "--full" in sys.argv
-    work = tempfile.mkdtemp(prefix="im-code-mut-")
-    profile = os.path.join(work, "profile")
-    site = os.path.join(work, "site")
-    survived = 0
-    # Одна копия прототипа и тестов: портится и восстанавливается по одному файлу
-    for sub in ("prototype", "tests", "theme"):
-        shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
+def check(site, profile, mutation, full):
+    """Одна мутация в своей копии прототипа: строка вердикта и выжила ли."""
+    name, file, old, new, kind = mutation
+    path = os.path.join(site, "prototype", file)
+    with open(path, encoding="utf-8") as f:
+        code = f.read()
+    if code.count(old) != 1:
+        return f"STALE {name}: в {file} не найдено место порчи — обновите мутацию", True
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(code.replace(old, new))
     try:
-        for name, file, old, new, kind in MUTATIONS:
-            if wanted and name not in wanted:
-                continue
-            path = os.path.join(site, "prototype", file)
-            with open(path, encoding="utf-8") as f:
-                code = f.read()
-            if code.count(old) != 1:
-                print(f"STALE {name}: в {file} не найдено место порчи — обновите мутацию")
-                survived += 1
-                continue
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(code.replace(old, new))
-            # До первого падения: не упало ничего — значит, пройден весь набор
-            passed, fails, ran = run_tests(site, kind, profile, failfast=not full)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(code)
-            if not ran:
-                print(f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)")
-            elif passed:
-                survived += 1
-                print(f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}")
-            else:
-                print(f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}")
-        # Контроль: без порчи тесты проходят — полный прогон
-        if not wanted:
+        # До первого падения: не упало ничего — значит, пройден весь набор
+        passed, fails, ran = run_tests(site, kind, profile, failfast=not full)
+    finally:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+    if not ran:
+        return f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)", False
+    if passed:
+        return f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}", True
+    return f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}", False
+
+
+def main():
+    wanted, jobs, shard, shards = parallel.options()
+    full = "--full" in sys.argv
+    todo = parallel.part([m for m in MUTATIONS if not wanted or m[0] in wanted], shard, shards)
+    work = tempfile.mkdtemp(prefix="im-code-mut-")
+    tasks = queue.Queue()
+    for m in todo:
+        tasks.put(m)
+    lock = threading.Lock()
+    survived = []
+
+    def worker(n):
+        # Своя копия прототипа и тестов: портится и восстанавливается по одному файлу
+        site = os.path.join(work, f"site{n}")
+        for sub in ("prototype", "tests", "theme"):
+            shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
+        profile = os.path.join(work, f"profile{n}")
+        while True:
+            try:
+                m = tasks.get_nowait()
+            except queue.Empty:
+                return
+            line, bad = check(site, profile, m, full)
+            with lock:
+                print(line, flush=True)
+                if bad:
+                    survived.append(m[0])
+
+    try:
+        threads = [threading.Thread(target=worker, args=(n,)) for n in range(min(jobs, len(todo)) or 1)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        # Контроль: без порчи тесты проходят — полный прогон; при делении на части — в первой
+        if not wanted and shard == 1:
+            site, profile = os.path.join(work, "site0"), os.path.join(work, "profile-base")
+            if not os.path.exists(site):
+                for sub in ("prototype", "tests", "theme"):
+                    shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
             for kind in ("api", "ui", "scenario"):
                 passed, fails, _ = run_tests(site, kind, profile)
                 if not passed:
-                    survived += 1
+                    survived.append(f"BASE {kind}")
                     print(f"BASE [{kind}] — без порчи тесты не проходят: {fails[:2]}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    print(f"Выживших мутаций кода: {survived}")
+    part = f" (часть {shard} из {shards}: {len(todo)} мутаций)" if shards > 1 else ""
+    print(f"Выживших мутаций кода: {len(survived)}{part}")
     return 1 if survived else 0
 
 

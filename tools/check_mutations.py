@@ -7,7 +7,9 @@
 изменилось — правило продублировано в коде прототипа, а не берётся из машины.
 
 Запуск из корня репозитория: python3 tools/check_mutations.py [имя ...]
-Нужен google-chrome. Около полутора минут. Код выхода 1, если хоть одна мутация не прошла.
+Мутации идут одновременно в несколько потоков, у каждой своя копия прототипа: --jobs=N (по умолчанию три
+четверти ядер), --shard=K/M — K-я из M частей (tools/parallel.py).
+Нужен google-chrome. Код выхода 1, если хоть одна мутация не прошла.
 """
 import copy
 import json
@@ -17,6 +19,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import parallel  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINE = os.path.join(ROOT, "Specification", "Workflow_machine", "workflow_schema.v1.json")
@@ -219,7 +225,7 @@ def run_probe(work, probe, workflow):
 
 
 def main():
-    only = sys.argv[1:]
+    only, jobs, shard, shards = parallel.options()
     with open(MACHINE, encoding="utf-8") as f:
         base = json.load(f)
     folder = os.path.join(os.path.dirname(MACHINE), "strings")
@@ -228,24 +234,32 @@ def main():
         if name.endswith(".json"):
             with open(os.path.join(folder, name), encoding="utf-8") as f:
                 base["$strings"][name[:-5]] = {k: v for k, v in json.load(f).items() if not k.startswith("$")}
-    failed = 0
-    total = 0
+    todo = parallel.part([m for m in MUTATIONS if not only or m[0] in only], shard, shards)
     with tempfile.TemporaryDirectory() as work:
-        for probe, what, mutate in MUTATIONS:
-            if only and probe not in only:
-                continue
-            total += 1
+
+        def check(n_mutation):
+            # Своя папка на мутацию: копия прототипа и профиль Chrome не пересекаются с соседними потоками
+            n, (probe, what, mutate) = n_mutation
+            own = os.path.join(work, str(n))
+            os.makedirs(own)
             mutated = copy.deepcopy(base)
             mutate(mutated)
-            with_change = run_probe(work, probe, mutated)
-            without = run_probe(work, probe, base)
-            ok = with_change.startswith("PASS") and without.startswith("FAIL")
-            failed += not ok
-            print(f"{'OK ' if ok else 'BAD'} {what}")
-            if not ok:
-                print(f"    с мутацией: {with_change}")
-                print(f"    на исходной машине: {without}")
-    print(f"Мутаций, не изменивших поведение прототипа: {failed} из {total}")
+            with_change = run_probe(own, probe, mutated)
+            without = run_probe(own, probe, base)
+            return what, with_change, without
+
+        failed = 0
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            # Результаты — в порядке списка мутаций, по мере готовности
+            for what, with_change, without in pool.map(check, enumerate(todo)):
+                ok = with_change.startswith("PASS") and without.startswith("FAIL")
+                failed += not ok
+                print(f"{'OK ' if ok else 'BAD'} {what}", flush=True)
+                if not ok:
+                    print(f"    с мутацией: {with_change}")
+                    print(f"    на исходной машине: {without}")
+    part = f" (часть {shard} из {shards})" if shards > 1 else ""
+    print(f"Мутаций, не изменивших поведение прототипа: {failed} из {len(todo)}{part}")
     return 1 if failed else 0
 
 
