@@ -2217,6 +2217,9 @@
     const failed = results.filter((r) => !r.ok).length;
     const skipped = results.filter((r) => r.skipped).length;
     const lines = results.map((r) => `${r.skipped ? "SKIP" : r.ok ? "PASS" : "FAIL"}  ${r.name}${r.note ? " — " + r.note : ""}`);
+    // Сколько виртуального времени заняла самопроверка: бюджет в CI — 180 с; ближе 120 с — пора поднимать (PROC-31)
+    const spent = Math.round(performance.now() / 1000);
+    lines.push(`${spent > 120 ? "WARN" : "INFO"}  Время самопроверки: ${spent} с из 180 с бюджета CI${spent > 120 ? " — запас мал, поднимите --virtual-time-budget" : ""}`);
     const summary = failed
       ? `Самопроверка: ${failed} из ${results.length} не прошли${skipped ? `, ${skipped} пропущены` : ""}`
       : `Самопроверка: все ${results.length} проверок прошли`;

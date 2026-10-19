@@ -20,9 +20,11 @@ jobs:
 
       - name: Самопроверка прототипа
         if: always()
+        # Бюджет виртуального времени — с запасом втрое: самопроверка заканчивается раньше, а время, которое она
+        # заняла, печатает в отчёте (PROC-31)
         run: |
           google-chrome --headless=new --disable-gpu --no-sandbox --no-first-run \
-            --virtual-time-budget=60000 \
+            --virtual-time-budget=180000 \
             --dump-dom "file://$PWD/prototype/index.html?selftest" > selftest.html
           python3 - <<'EOF'
           import html, re, sys

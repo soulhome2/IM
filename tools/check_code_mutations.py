@@ -358,7 +358,8 @@ def run_tests(site, kind, profile, failfast=False):
         passed = 'data-scenariotest="pass"' in page
         log = re.search(r'<pre id="scenariotest-log">(.*?)</pre>', page, re.S)
     else:
-        page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 60000)
+        # Бюджет — как у самопроверки в CI, с запасом втрое (PROC-31)
+        page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 180000)
         passed = 'data-selftest="pass"' in page
         log = re.search(r'<pre id="selftest-log"[^>]*>(.*?)</pre>', page, re.S)
     fails = [line for line in (log.group(1).splitlines() if log else []) if line.startswith("FAIL")]
