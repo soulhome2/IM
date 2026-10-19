@@ -1,4 +1,4 @@
-// Собрано из Specification/State_machine/strings/*.json скриптом tools/build_workflow.py.
+// Собрано из Specification/Workflow_machine/strings/*.json скриптом tools/build_workflow.py.
 // Руками не править: правится исходник, затем сборка.
 window.IM_STRINGS = {
   "en": {

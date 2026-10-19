@@ -18,8 +18,8 @@
 
 | Файл в IM | Путь в `incident-manager-dsl` | sha256 исходника | Что сделано |
 |---|---|---|---|
-| `dsl-v1-draft.md` | `dsl-v1-draft.md` | `47b7c0e49602a3216286c7c1936528c623153e48f13b05aa833a4e2c2efede43` | переписан |
-| `dsl-v1-schema.json` | `dsl-v1-schema.json` | `26bab84c41ee64c594b7f2292b01d3e97130a39bc2e1a0a2f1f9b0d7ad1cd465` | переписана по `scenario.zod.ts` |
+| `scenario_spec.v1.md` | `dsl-v1-draft.md` | `47b7c0e49602a3216286c7c1936528c623153e48f13b05aa833a4e2c2efede43` | переписан |
+| `scenario_schema.v1.json` | `dsl-v1-schema.json` | `26bab84c41ee64c594b7f2292b01d3e97130a39bc2e1a0a2f1f9b0d7ad1cd465` | переписана по `scenario.zod.ts` |
 | `examples/01-perimeter-alarm.json` | то же | `cda5f3ec2708207f70f50806d52de7012a380f5c7f84efb344e82e051596b941` | переведён |
 | `examples/02-fire-alarm.json` | то же | `263cc84d552c45c7f880f947a20e6dfaa1d369ce665ceb09d5ca07af3fae197a` | переведён |
 | `examples/03-access-control-violation.json` | то же | `f4f1cb9078abd8114bcba8d70317d4eab9028d6ef187fcbe1bbb5c86161b7e70` | переведён |

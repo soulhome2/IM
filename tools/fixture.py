@@ -1,4 +1,4 @@
-"""Эталонный набор тестового стенда целиком: Specification/State_machine/fixtures/demo.json и сценарии
+"""Эталонный набор тестового стенда целиком: Specification/Workflow_machine/fixtures/demo.json и сценарии
 fixtures/scenarios/<сценарий>.v<версия>.json — по файлу на версию сценария, в формате машины сценариев (DATA-09).
 
 Набор для POST /test/reset и патчей стенда — один объект: строки сценариев (scenarios.rows — как на сервере:
@@ -9,7 +9,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIXTURES = os.path.join(ROOT, "Specification", "State_machine", "fixtures")
+FIXTURES = os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures")
 SCENARIOS = os.path.join(FIXTURES, "scenarios")
 
 

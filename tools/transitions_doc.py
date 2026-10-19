@@ -1,6 +1,6 @@
-"""Таблица переходов машины состояний для человека: Specification/State_machine/TRANSITIONS.md.
+"""Таблица переходов машины состояний для человека: Specification/Workflow_machine/TRANSITIONS.md.
 
-Собирается из workflow.v4.json скриптом tools/build_workflow.py. Каждое условие и эффект
+Собирается из workflow_schema.v4.json скриптом tools/build_workflow.py. Каждое условие и эффект
 машины переводится в фразу; функции без фразы — ошибка сборки, чтобы таблица не отставала
 от машины молча. По ней правила (§6) сверяются с машиной глазами: что задумали — в правилах,
 что сделано — здесь.
@@ -9,7 +9,7 @@ import json
 import os
 
 # Тексты записей журнала — из русского каталога строк (§14.9): в машине только ключи
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "Workflow_machine", "strings", "ru.json"), encoding="utf-8") as _f:
     RU = json.load(_f)
 
 
@@ -185,7 +185,7 @@ class Doc:
         out = [
             "# Переходы машины состояний",
             "",
-            "Собрано из [`workflow.v4.json`](workflow.v4.json) скриптом `tools/build_workflow.py`. Руками не править: правится машина, затем сборка. "
+            "Собрано из [`workflow_schema.v4.json`](workflow_schema.v4.json) скриптом `tools/build_workflow.py`. Руками не править: правится машина, затем сборка. "
             "Это то, что машина делает на самом деле; что задумано — в правилах, §6. Строки правил ссылаются на переходы по идентификатору в первой колонке.",
             "",
             "## Переходы",

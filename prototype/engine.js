@@ -1,4 +1,4 @@
-/* Исполнитель машины состояний в браузере: Specification/State_machine/workflow.v4.json,
+/* Исполнитель машины состояний в браузере: Specification/Workflow_machine/workflow_schema.v4.json,
    подключённой как window.IM_WORKFLOW (prototype/workflow.js).
 
    Решает, какие действия доступны (/actions), выполняет переход (/transitions), строит

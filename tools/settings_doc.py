@@ -1,16 +1,16 @@
-"""Настройки администратора словами: Specification/State_machine/SETTINGS.md (RULE-44).
+"""Настройки администратора словами: Specification/Workflow_machine/SETTINGS.md (RULE-44).
 
-Собирается из раздела adminSettings машины workflow.v4.json вместе с текущими значениями.
+Собирается из раздела adminSettings машины workflow_schema.v4.json вместе с текущими значениями.
 Вызывается из tools/build_workflow.py; руками SETTINGS.md не правится.
 """
 import json
 import os
 
 # Подписи из машины — ключами (§14.9): текст берётся из русского каталога строк
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "strings", "ru.json"), encoding="utf-8") as _f:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "Workflow_machine", "strings", "ru.json"), encoding="utf-8") as _f:
     RU = json.load(_f)
 # Приоритеты — справочник МИ, не схема (§2.5, RULE-68): названия уровней для нормативов по приоритету
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as _f:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as _f:
     PRIORITY_NAMES = {str(p["value"]): p["name"]["ru"] for p in json.load(_f).get("priorities", [])}
 
 
@@ -93,7 +93,7 @@ def render(w):
     out = [
         "# Настройки администратора",
         "",
-        "Собрано из раздела `adminSettings` машины [workflow.v4.json](workflow.v4.json) скриптом `tools/build_workflow.py` — руками не править. "
+        "Собрано из раздела `adminSettings` машины [workflow_schema.v4.json](workflow_schema.v4.json) скриптом `tools/build_workflow.py` — руками не править. "
         "Что меняет администратор с правом `incident:schema:admin`, по вкладкам будущей админки, и какое значение сейчас (RULE-44). "
         "Переходы, состояния, формы и бейджи — модель, а не настройки: их здесь нет. "
         "Тот же перечень показывает прототип: меню пользователя → «Настройки администратора». "

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Проверка «правила только в машине»: мутации машины состояний меняют поведение прототипа.
 
-Для каждой мутации: в копии прототипа меняется одно правило в workflow.v4.json, и проба
+Для каждой мутации: в копии прототипа меняется одно правило в workflow_schema.v4.json, и проба
 (tools/mutations/probe.js) через интерфейс проверяет, что прототип ведёт себя по-новому.
 Затем та же проба запускается на исходной машине и должна упасть. Если поведение не
 изменилось — правило продублировано в коде прототипа, а не берётся из машины.
@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MACHINE = os.path.join(ROOT, "Specification", "State_machine", "workflow.v4.json")
+MACHINE = os.path.join(ROOT, "Specification", "Workflow_machine", "workflow_schema.v4.json")
 PROBE = os.path.join(ROOT, "tools", "mutations", "probe.js")
 
 

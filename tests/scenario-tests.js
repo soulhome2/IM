@@ -1,5 +1,5 @@
 /* Тесты исполнителя машины сценариев (prototype/scenario.js) на примерах машины сценариев.
-   Что проверяется — спецификация DSL v1 (формат редактора продукта) и профиль МИ (Specification/Scenario_machine/README.md).
+   Что проверяется — спецификация формата сценария v1 (формат редактора продукта) и профиль МИ (Specification/Scenario_machine/README.md).
    Отчёт: <pre id="scenariotest-log">, итог — data-scenariotest="pass|fail" у <html>. */
 (() => {
   const S = window.IMScenario;

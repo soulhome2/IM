@@ -1,4 +1,4 @@
-/* Сверка ответов API со схемами контракта Specification/State_machine/openapi.json
+/* Сверка ответов API со схемами контракта Specification/Workflow_machine/openapi.json
    (prototype/openapi.js). Ею пользуются самопроверка прототипа и тесты API (tests/api.html). */
 (() => {
   /* Сверка ответа со схемой openapi.json: типы, обязательные поля, перечисления, вложенные

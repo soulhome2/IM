@@ -1456,7 +1456,7 @@
     }
   ],
   "scenarios": {
-    "$comment": "Машина сценариев (§14.5, Specification/Scenario_machine/): сценарии — файлами DSL v1 рядом, fixtures/scenarios/<сценарий>.v<версия>.json, по файлу на версию (DATA-09). Набор для стенда собирается с ними: строки scenarios.rows — как на сервере (guid, version, name, script), из metadata файла (tools/fixture.py). byEventType — какой сценарий у типа события, как правило инцидента на сервере (incidentRule.scenarios); новый инцидент получает последнюю версию. Инцидент ссылается на сценарий и версию, прохождение — scenarioResult (спецификация DSL, раздел 9).",
+    "$comment": "Машина сценариев (§14.5, Specification/Scenario_machine/): сценарии — файлами рядом, fixtures/scenarios/<сценарий>.v<версия>.json, по файлу на версию (DATA-09). Набор для стенда собирается с ними: строки scenarios.rows — как на сервере (guid, version, name, script), из metadata файла (tools/fixture.py). byEventType — какой сценарий у типа события, как правило инцидента на сервере (incidentRule.scenarios); новый инцидент получает последнюю версию. Инцидент ссылается на сценарий и версию, прохождение — scenarioResult (спецификация DSL, раздел 9).",
     "byEventType": {
       "fire": "60000000-0000-4000-8000-000000000002",
       "intrusion": "60000000-0000-4000-8000-000000000004",

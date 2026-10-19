@@ -7,7 +7,7 @@
 | Что | Где описано |
 |---|---|
 | REST API операторского места — 44 операции, плюс 4 служебные для тестового стенда | [`openapi.json`](openapi.json) — контракт, OpenAPI 3.1 |
-| Исполнение модели workflow: 6 состояний, 31 переход, 33 условия, 23 эффекта, таймеры, лимиты, права | [`workflow.v4.json`](workflow.v4.json) — модель как данные; смысл — в [README машины](README.md), «Модель workflow» |
+| Исполнение модели workflow: 6 состояний, 31 переход, 33 условия, 23 эффекта, таймеры, лимиты, права | [`workflow_schema.v4.json`](workflow_schema.v4.json) — модель как данные; смысл — в [README машины](README.md), «Модель workflow» |
 | Правила, из которых всё это следует | [`States rules IM.md`](../State_rules/States%20rules%20IM.md) — действующие правила, ссылки «§N» ведут туда |
 
 Модель — это конфигурация, а не код. Сервер хранит её, исполняет и отдаёт клиенту (`GET /operator/workflow/active`). Переходы, кнопки, формы, бейджи и нормативы клиент берёт оттуда и из ответов сервера. Своей таблицы переходов у клиента нет.
@@ -36,7 +36,7 @@
   - добавлены: состояние `linked` и категория `linked` (не открытые, в списках нет), переходы `merge`, `detach`, `close_linked`; `POST /operator/incidents/filter` («Выделить по фильтру», «Одинаковый сценарий»); `POST /operator/incidents/merge` (всё или ничего); `DELETE /operator/incidents/{guid}/linked` и `…/linked/{linkedGuid}`; у строки очереди `linkedTo`, `linkedCount`, при поиске — `matchedLinked`;
   - на выборку идут только переходы с `bulk.allowed` — иначе `422 BULK_SELECTION_INVALID`; причина недоступности действия выборки — с номером инцидента (`workflow.error.selection.item`).
 - **Сценарии — машина сценариев (§14.5, [`Scenario_machine/`](../Scenario_machine/README.md)). Ломающие изменения контракта:**
-  - сценарий — формат редактора сценариев продукта, как его сохраняет редактор в `scenarios.script` (схема — `Scenario_machine/dsl-v1-schema.json`, 2026-10-19); прохождение — формат МИ (раздел 9 спецификации), у редактора его нет: `GET …/scenario` отдаёт `IncidentScenario` — сценарий версии инцидента (`script`), прохождение (`result`, `scenarioResult` — раздел 9 спецификации) и что МИ из него считает: путь, курсор показа, прогресс, `requiredStepsFilled`;
+  - сценарий — формат редактора сценариев продукта, как его сохраняет редактор в `scenarios.script` (схема — `Scenario_machine/scenario_schema.v1.json`, 2026-10-19); прохождение — формат МИ (раздел 9 спецификации), у редактора его нет: `GET …/scenario` отдаёт `IncidentScenario` — сценарий версии инцидента (`script`), прохождение (`result`, `scenarioResult` — раздел 9 спецификации) и что МИ из него считает: путь, курсор показа, прогресс, `requiredStepsFilled`;
   - вместо `PATCH …/scenario/answers` с набором ответов — `POST …/scenario/answer`: ответ на один шаг, что дальше — решает машина сценариев; `PUT …/scenario/cursor` — только шаг пути, без `move`;
   - убран ручной запуск макроса `POST …/macros/{macroId}`: макрос запускает ответ — макрос исхода (`macro`) — по условиям `run_macro`; в событии `macro.completed` `macroId` — имя макроса;
   - в `IncidentScenario` — `ahead`: шаги впереди по кратчайшему пути до конца, без текущего (RULE-95); считать тем же обходом, что M в прогрессе;

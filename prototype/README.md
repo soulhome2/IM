@@ -13,7 +13,7 @@ Restyle изменил только оформление: разметку (кр
 
 ## Логика: встроенный сервер и машина состояний
 
-Прототип устроен как продукт: интерфейс разговаривает только запросами из контракта [`openapi.json`](../Specification/State_machine/openapi.json), а отвечает ему встроенный сервер в той же вкладке. Сервер исполняет машину состояний [`workflow.v4.json`](../Specification/State_machine/workflow.v4.json). Своей таблицы переходов у прототипа нет. Сеть не нужна: страница открывается и с диска, и с сайта.
+Прототип устроен как продукт: интерфейс разговаривает только запросами из контракта [`openapi.json`](../Specification/Workflow_machine/openapi.json), а отвечает ему встроенный сервер в той же вкладке. Сервер исполняет машину состояний [`workflow_schema.v4.json`](../Specification/Workflow_machine/workflow_schema.v4.json). Своей таблицы переходов у прототипа нет. Сеть не нужна: страница открывается и с диска, и с сайта.
 
 ```
 app.js     интерфейс: только запросы API — api.get("/operator/incidents?filter=open"), api.post(…/transitions/claim)
@@ -33,7 +33,7 @@ engine.js  исполнитель машины: действия, переход
 | [`engine.js`](engine.js) | Исполнитель машины — его вызывает только сервер |
 | [`scenario.js`](scenario.js) | Исполнитель машины сценариев ([`Specification/Scenario_machine/`](../Specification/Scenario_machine/README.md)): прохождение, путь, курсор, прогресс, перенос ответов. Его вызывает только сервер — через стык §14.5. Условия — копия `json-logic-js` в [`vendor/`](vendor/json-logic-js/LICENSE) |
 | [`colleagues.js`](colleagues.js) | Настройки эмуляции коллег для живости демо. Коллеги действуют через переходы машины от своего имени; проверяет это тест в `tests/api-scenarios.js` |
-| [`workflow.js`](workflow.js), [`openapi.js`](openapi.js), [`fixture.js`](fixture.js) | Машина, контракт и эталонный набор данных [`fixtures/demo.json`](../Specification/State_machine/fixtures/demo.json), собранные скриптом `tools/build_workflow.py`: из `file://` браузер не читает JSON. Руками не правятся |
+| [`workflow.js`](workflow.js), [`openapi.js`](openapi.js), [`fixture.js`](fixture.js) | Машина, контракт и эталонный набор данных [`fixtures/demo.json`](../Specification/Workflow_machine/fixtures/demo.json), собранные скриптом `tools/build_workflow.py`: из `file://` браузер не читает JSON. Руками не правятся |
 
 После правки машины или контракта — `python3 tools/build_workflow.py`, затем самопроверка `index.html?selftest`: она проходит переходы через интерфейс и сверяет ответы встроенного сервера со схемами `openapi.json`. Правила модели без интерфейса, с управляемым временем и случайными прогонами, проверяют тесты API — [`../tests/api.html`](../tests/api.html). Что правила не продублированы в коде прототипа, проверяет `python3 tools/check_mutations.py`.
 

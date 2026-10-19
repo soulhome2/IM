@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверка машины состояний: workflow.v4.json и openapi.json сходятся сами с собой и между собой.
+"""Проверка машины состояний: workflow_schema.v4.json и openapi.json сходятся сами с собой и между собой.
 
 Запуск из корня репозитория: python3 tools/check_machine.py
 Проверяет, что всё из реестров условий и эффектов реализовано в prototype/engine.js;
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fixture  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIR = os.path.join(ROOT, "Specification", "State_machine")
+DIR = os.path.join(ROOT, "Specification", "Workflow_machine")
 
 
 def load(name):
@@ -515,7 +515,7 @@ def check_fixture_journal(w, err):
     """Записи журнала эталонного набора — те, что пишут машина и сервер (DATA-04, DATA-05): ключ
     записи журнала из машины (appendLog, messages, alerts.noRecipientLog) и ровно его подстановки
     по русской строке каталога (§14.9). История в наборе выглядит так, как её записала бы система."""
-    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
     with open(os.path.join(DIR, "strings", "ru.json"), encoding="utf-8") as f:
         ru = json.load(f)
@@ -539,7 +539,7 @@ def check_fixture_history(w, err):
     время закрытия — время записи «Закрыто». Число передач — transferCount, уровень эскалации без
     автоэскалации в журнале — 0 (RULE-76). Записи, которые не переходы (макрос, шаг сценария), не
     меняют состояние."""
-    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
     by_key = {}
     for t in w["transitions"]:
@@ -599,7 +599,7 @@ def check_fixture_media(err):
     и планом (DATA-07): камеры есть — видео не скрыто; карта — только если есть план. Камеры — из
     связей источника, план — тот, где стоит источник, устройство или камера события, иначе план
     площадки (как planOf сервера)."""
-    with open(os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
     devices = {d["id"]: d for d in fx["devices"]}
     for inc in fx["incidents"]:
@@ -640,8 +640,8 @@ def check_doc_numbers(w, o, err):
             return f.read()
 
     docs = {
-        "README машины": text("Specification", "State_machine", "README.md"),
-        "BACKEND.md": text("Specification", "State_machine", "BACKEND.md"),
+        "README машины": text("Specification", "Workflow_machine", "README.md"),
+        "BACKEND.md": text("Specification", "Workflow_machine", "BACKEND.md"),
         "корневой README": text("README.md"),
         "машина ($comment)": w.get("$comment", ""),
         "контракт (info.description)": o["info"].get("description", ""),
@@ -1291,7 +1291,7 @@ def check_admin_settings(w, o, err):
 def main():
     err = []
     try:
-        w = load("workflow.v4.json")
+        w = load("workflow_schema.v4.json")
         o = load("openapi.json")
     except (OSError, json.JSONDecodeError) as e:
         print(f"Не читается: {e}")

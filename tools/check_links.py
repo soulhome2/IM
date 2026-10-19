@@ -33,7 +33,7 @@ SKIP_FILES = {
 # Машина сценариев: примеры — копии исходника (ORIGIN.md), ссылки в них ведут на документы исходного репозитория.
 # Спецификация и схема приведены к формату редактора продукта (CHANGELOG) — проверяются как свои
 SCENARIO_MACHINE = os.path.join("Specification", "Scenario_machine")
-SCENARIO_OWN = {"README.md", "CHANGELOG.md", "ORIGIN.md", "dsl-v1-draft.md", "dsl-v1-schema.json"}
+SCENARIO_OWN = {"README.md", "CHANGELOG.md", "ORIGIN.md", "scenario_spec.v1.md", "scenario_schema.v1.json"}
 
 
 def source_copy(rel):

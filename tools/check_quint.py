@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Модель Quint (Specification/State_machine/quint/im.qnt) не разошлась с машиной состояний.
+"""Модель Quint (Specification/Workflow_machine/quint/im.qnt) не разошлась с машиной состояний.
 
 Запуск из корня репозитория: python3 tools/check_quint.py
 Проверяет: каждый переход машины либо смоделирован, либо назван в списке NOT_MODELED,
@@ -18,7 +18,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIR = os.path.join(ROOT, "Specification", "State_machine")
+DIR = os.path.join(ROOT, "Specification", "Workflow_machine")
 MODEL = os.path.join(DIR, "quint", "im.qnt")
 
 # Переходы машины, которых в модели пока нет
@@ -300,7 +300,7 @@ def check_catalogs(w, src, err):
 
 
 def main():
-    with open(os.path.join(DIR, "workflow.v4.json"), encoding="utf-8") as f:
+    with open(os.path.join(DIR, "workflow_schema.v4.json"), encoding="utf-8") as f:
         w = json.load(f)
     with open(MODEL, encoding="utf-8") as f:
         src = f.read()

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/State_machine/,
+"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/Workflow_machine/,
 примеров машины сценариев для её тестов (tests/scenario-examples.js) из Specification/Scenario_machine/examples/,
-таблицы переходов для человека Specification/State_machine/TRANSITIONS.md и перечня настроек
-администратора Specification/State_machine/SETTINGS.md.
+таблицы переходов для человека Specification/Workflow_machine/TRANSITIONS.md и перечня настроек
+администратора Specification/Workflow_machine/SETTINGS.md.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
 Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
@@ -26,9 +26,9 @@ import settings_doc  # noqa: E402
 import transitions_doc  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MACHINE = os.path.join(ROOT, "Specification", "State_machine")
+MACHINE = os.path.join(ROOT, "Specification", "Workflow_machine")
 TARGETS = [
-    ("workflow.v4.json", "workflow.js", "IM_WORKFLOW", 2),
+    ("workflow_schema.v4.json", "workflow.js", "IM_WORKFLOW", 2),
     ("openapi.json", "openapi.js", "IM_OPENAPI", None),
     ("fixtures/demo.json", "fixture.js", "IM_FIXTURE", None),
 ]
@@ -43,7 +43,7 @@ def build(source, var, indent):
         with open(os.path.join(MACHINE, source), encoding="utf-8") as f:
             data = json.load(f)
     header = (
-        f"// Собрано из Specification/State_machine/{source} скриптом tools/build_workflow.py.\n"
+        f"// Собрано из Specification/Workflow_machine/{source} скриптом tools/build_workflow.py.\n"
         "// Руками не править: правится исходник, затем сборка.\n"
     )
     body = json.dumps(data, ensure_ascii=False, indent=indent, separators=None if indent else (",", ":"))
@@ -59,7 +59,7 @@ def build_strings():
             with open(os.path.join(folder, name), encoding="utf-8") as f:
                 catalog[name[:-5]] = {k: v for k, v in json.load(f).items() if not k.startswith("$")}
     header = (
-        "// Собрано из Specification/State_machine/strings/*.json скриптом tools/build_workflow.py.\n"
+        "// Собрано из Specification/Workflow_machine/strings/*.json скриптом tools/build_workflow.py.\n"
         "// Руками не править: правится исходник, затем сборка.\n"
     )
     return f"{header}window.IM_STRINGS = {json.dumps(catalog, ensure_ascii=False, indent=2)};\n"
@@ -89,10 +89,10 @@ def outputs():
         yield f"prototype/{target}", build(source, var, indent), source
     yield "prototype/strings.js", build_strings(), "strings/*.json"
     yield "tests/scenario-examples.js", build_scenario_examples(), "Scenario_machine/examples/"
-    with open(os.path.join(MACHINE, "workflow.v4.json"), encoding="utf-8") as f:
+    with open(os.path.join(MACHINE, "workflow_schema.v4.json"), encoding="utf-8") as f:
         w = json.load(f)
-    yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow.v4.json"
-    yield "Specification/State_machine/SETTINGS.md", settings_doc.render(w), "workflow.v4.json"
+    yield "Specification/Workflow_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow_schema.v4.json"
+    yield "Specification/Workflow_machine/SETTINGS.md", settings_doc.render(w), "workflow_schema.v4.json"
 
 
 def main():

@@ -2138,7 +2138,6 @@
     const close = actionOf(ev, "close");
     const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
     const canClose = editable && Boolean(close && close.enabled) && results.some((r) => fullyProcessed(r.id) && !r.disabled);
-    const total = stepProgress(ev).total || path.length;
 
     root.innerHTML = `
       <div class="work-doc">
@@ -2198,7 +2197,7 @@
               : `<div class="step-card">
             <div class="step-h">
               <strong>${te(stepShort(step))}</strong>
-              <span>${te("{i} из {n}", { i: i + 1, n: total })}${stepRequired(step) ? "" : ` · ${te("необязательно")}`}</span>
+              ${stepRequired(step) ? "" : `<span>${te("необязательно")}</span>`}
             </div>
             ${renderStepControl(step, ev, stepEditable(ev, i, editable))}
           </div>`

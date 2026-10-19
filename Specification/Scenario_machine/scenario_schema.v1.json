@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axxonsoft.dev/im/dsl/v1/script.json",
-  "title": "Incident Manager — Scenario script (DSL v1)",
-  "description": "Формат документа `scenarios.script` (JSONB) сервера incident-manager-server — сценарий обработки инцидента, по которому оператор идёт шаг за шагом. Поле в поле совпадает с форматом редактора сценариев продукта (incident-manager, src/shared/schema/scenario.zod.ts, коммит 1fcfa25): что сохраняет редактор, то проходит эту схему. Отступления от исходника DSL v1 — в CHANGELOG.md машины сценариев. Текст и смысл — dsl-v1-draft.md; прохождение (scenarioResult) — там же, раздел 9, и `ScenarioResult` в openapi.json машины состояний.",
+  "title": "Incident Manager — Scenario script (scenario format v1)",
+  "description": "Формат документа `scenarios.script` (JSONB) сервера incident-manager-server — сценарий обработки инцидента, по которому оператор идёт шаг за шагом. Поле в поле совпадает с форматом редактора сценариев продукта (incident-manager, src/shared/schema/scenario.zod.ts, коммит 1fcfa25): что сохраняет редактор, то проходит эту схему. Отступления от исходника DSL v1 — в CHANGELOG.md машины сценариев. Текст и смысл — scenario_spec.v1.md; прохождение (scenarioResult) — там же, раздел 9, и `ScenarioResult` в openapi.json машины состояний.",
 
   "type": "object",
   "required": ["scenario", "steps"],
@@ -112,7 +112,7 @@
     },
 
     "Condition": {
-      "description": "Условие JSONLogic над ответом своего шага: RadioButton — `{ \"var\": \"value\" }` (id варианта), Checkbox — `{ \"var\": \"selected\" }` (отмеченные), Select — `{ \"var\": \"<id списка>\" }` (отмеченные в списке). Ответы других шагов условию не видны. Операторы `==`, `!=`, `in` над массивом отмеченных — как в редакторе продукта (dsl-v1-draft.md, раздел 7).",
+      "description": "Условие JSONLogic над ответом своего шага: RadioButton — `{ \"var\": \"value\" }` (id варианта), Checkbox — `{ \"var\": \"selected\" }` (отмеченные), Select — `{ \"var\": \"<id списка>\" }` (отмеченные в списке). Ответы других шагов условию не видны. Операторы `==`, `!=`, `in` над массивом отмеченных — как в редакторе продукта (scenario_spec.v1.md, раздел 7).",
       "type": "object"
     },
 

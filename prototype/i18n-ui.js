@@ -104,7 +104,6 @@ window.IM_DICT_UI = {
     "Выйти": "Sign out",
     "В работе: {active}, отложено: {held} — они вернутся в очередь. Адресованные вам и не принятые уйдут вашей дежурной группе или в очередь.": "In progress: {active}, on hold: {held} — they will return to the queue. Incidents addressed to you and not accepted will go to your duty group or to the queue.",
     "{a}–{b} из {n}": "{a}–{b} of {n}",
-    "{i} из {n}": "{i} of {n}",
     "{id} в работе": "{id} in progress",
     "{id} возвращён в очередь": "{id} returned to the queue",
     "{id} закрыт": "{id} closed",
