@@ -1,0 +1,66 @@
+{
+  "scenario": {
+    "id": "0b1d6a52-6c0e-7c4b-9a1e-5f3d2c1b0a96",
+    "name": "[A5/bad-6] Макрос на финальном шаге",
+    "description": "Проходит схему и смысловую проверку, но у финального шага переходы не читаются: макрос «Вызвать наряд» на нём не запустится ни в МИ, ни в предпросмотре редактора продукта. Отвергает проверка исполнения (RULE-96). Пример МИ, не из исходника.",
+    "version": 1,
+    "createdAt": "2026-10-19T00:00:00Z",
+    "updatedAt": "2026-10-19T00:00:00Z",
+    "initialStep": "verdict"
+  },
+  "steps": [
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Классификация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Что на видео?",
+        "required": true,
+        "default": null,
+        "options": [
+          {
+            "id": "real",
+            "label": "Реальная"
+          },
+          {
+            "id": "false",
+            "label": "Ложная"
+          }
+        ]
+      },
+      "transitions": {
+        "default": {
+          "goto": "done",
+          "macro": null
+        }
+      }
+    },
+    {
+      "id": "done",
+      "type": "Message",
+      "title": "Закрыть",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
+      "view": {
+        "label": "Готово"
+      },
+      "transitions": {
+        "default": {
+          "goto": null,
+          "macro": {
+            "name": "Вызвать наряд",
+            "args": {}
+          }
+        }
+      }
+    }
+  ]
+}

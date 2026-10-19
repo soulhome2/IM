@@ -16,7 +16,8 @@ Checkbox, ссылки условий на варианты и списки. С�
 Select; операторы — из белого списка (раздел 7); var — только на ответ своего шага; значения по умолчанию — из
 вариантов; из каждого достижимого шага можно дойти до конца.
 Формальная проверка (PROC-28): перебором ответов своего шага — правило или default, которые не срабатывают ни при
-каком ответе, правило, заслонённое более ранним. В примерах это замечания, в сценариях набора — ошибки.
+каком ответе, правило, заслонённое более ранним; у финального шага макрос или правила — не исполнятся (RULE-96).
+В примерах это замечания, в сценариях набора — ошибки.
 --fsm — карта «ответ → исход» и циклы.
 Код выхода 1, если есть ошибки.
 """
@@ -52,10 +53,12 @@ PROFILE_SETS = {"closing", "none"}
 # --fsm: карта «ответ → исход» по шагам с правилами и циклы (для /im-fsm)
 FSM = [] if "--fsm" in sys.argv else None
 
-# Чего ждать от примеров A5 (README машины сценариев, «Примеры»): schema — отвергает схема, meaning — смысловая проверка
+# Чего ждать от примеров A5 (README машины сценариев, «Примеры»): schema — отвергает схема, meaning — смысловая проверка,
+# formal — схему и смысл проходит, отвергает проверка исполнения (перебор, финальный шаг)
 EXPECTED = {
     "architecture/A5-anti-patterns/bad-1-schema-broken-goto.json": "meaning",
     "architecture/A5-anti-patterns/bad-3-unknown-step-type.json": "schema",
+    "architecture/A5-anti-patterns/bad-6-macro-on-finish-step.json": "formal",
 }
 
 
@@ -479,6 +482,13 @@ def formal(script, name, fsm=None):
     более ранним; default, до которого не дойти. fsm — список строк карты для --fsm."""
     err = []
     steps = {s["id"]: s for s in script["steps"]}
+    # RULE-96: у финального шага переходы не читаются — его макрос и правила не исполнятся, хотя формат их хранит
+    for sid, step in steps.items():
+        t = step["transitions"]
+        if step["finish"] and (t["default"].get("macro") or t.get("rules")):
+            what = ", ".join(x for x in ("макрос" if t["default"].get("macro") or any(r.get("macro") for r in t.get("rules", [])) else "",
+                                         "правила" if t.get("rules") else "") if x)
+            err.append(f"{name}: шаг {sid}: финальный — его переходы не читаются, не исполнятся: {what} (RULE-96)")
     for sid, step in steps.items():
         rules = rules_of(step)
         if not rules:
@@ -545,6 +555,8 @@ def check_examples(validator, err, warn):
                 err.append(f"examples/{name}: схема должна отвергать этот пример")
             elif expected == "meaning" and (schema or not sense):
                 err.append(f"examples/{name}: этот пример должна отвергать смысловая проверка, а не схема")
+            elif expected == "formal" and (schema or sense or not found):
+                err.append(f"examples/{name}: этот пример должна отвергать проверка исполнения, а не схема или смысл")
             elif not expected:
                 err += schema + sense
                 # Перебор ответов в примерах — замечания: примеры только показывают формат
