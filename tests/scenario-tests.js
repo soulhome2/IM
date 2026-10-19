@@ -342,6 +342,13 @@
     consistent(script, result, "перенос завершённого");
   });
 
+  /* ===== Условия: та же семантика, что у проверки tools/check_scenarios.py ===== */
+
+  test("Крайние случаи JSONLogic: json-logic-js даёт то же, что записано в tests/jsonlogic-cases.js (по нему сверяется и проверка на Python)", () => {
+    const bad = window.IM_JSONLOGIC_CASES.filter((c) => Boolean(window.jsonLogic.apply(c.when, { state: c.state })) !== c.fires);
+    assert.eq(bad.map((c) => JSON.stringify(c.when) + " при " + JSON.stringify(c.state)).slice(0, 3), [], "расхождения");
+  });
+
   /* ===== Эталонный набор ===== */
 
   test("Прохождения инцидентов эталонного набора — те, что даёт исполнитель: те же ответы в том же порядке", () => {
