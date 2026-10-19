@@ -126,17 +126,23 @@ for t in w["transitions"]:
         access = "условие" if any(g["fn"] == "targetHasAccessToLinked" for g in t["guards"]) else "linked_lost_access" if moves else "—"
         print(f"| {t['id']} | {'да' if moves else 'нет'} | {access} | {', '.join(f for f in fns if f in LINK) or '—'} |")
 import re
+# Аргумент appendLog — ключ каталога строк (RULE-66): переменные ищутся в тексте записи, а не в ключе
+ru = json.load(open("Specification/State_machine/strings/ru.json", encoding="utf-8"))
 CHANGES = {"targetName": {"setOwner", "setAssignmentGroup"}, "escalationLevel": {"increment:escalation_level", "setFlag:escalation_level"},
-           "holdReasonLabel": {"setHoldReason", "clearHoldReason"}, "closeResultLabel": {"setFlag:close_result"}, "stepNumber": {"setCursor"}}
-print("Запись журнала: переход | переменная | меняется в том же переходе до записи")
+           "holdReasonLabel": {"setHoldReason", "clearHoldReason"}, "closeResultLabel": {"setFlag:close_result"}, "stepNumber": {"setCursor"},
+           "previousOwnerName": {"setOwner"}}
+# Значение, которое исполнитель снимает до перехода (engine.js, logVars), — эффекты до записи его не меняют
+BEFORE = {"previousOwnerName": "исполнитель берёт до перехода"}
+print("Запись журнала: переход | переменная | меняется в том же переходе до записи | текст записи")
 for t in w["transitions"]:
     fx = [(e["fn"] + (":" + e["args"][0] if e["fn"] in ("setFlag", "increment") else ""),
            e["fn"].startswith("clear") or (e["fn"] in ("setFlag", "setOwner") and e["args"][-1] is None)) for e in t["effects"]]
     for i, e in enumerate(t["effects"]):
-        for v in re.findall(r"\{(\w+)\}", e["args"][0]) if e["fn"] == "appendLog" else []:
+        text = ru.get(e["args"][0], e["args"][0]) if e["fn"] == "appendLog" else ""
+        for v in re.findall(r"\{(\w+)", text):
             before = [f + ("→пусто" if empty else "") for f, empty in fx[:i] if f in CHANGES.get(v, ())]
             if before:
-                print(f"| {t['id']} | {{{v}}} | {', '.join(before)} |")
+                print(f"| {t['id']} | {{{v}}} | {', '.join(before)}{' — ' + BEFORE[v] if v in BEFORE else ''} | {text} |")
 fns = {g["fn"] for g in w["registries"]["guards"]} | {e["fn"] for e in w["registries"]["effects"]}
 print("Правила вне §4, §6, §8.1: строка | раздел | функции реестра")
 sec = ""
