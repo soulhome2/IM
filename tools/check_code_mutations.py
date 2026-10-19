@@ -91,6 +91,9 @@ MUTATIONS = [
     ("select-required-ignored", "scenario.js", 'return v.required && v.lists.some((l) => !(value[l.id] || []).length) ? "required" : null;', "return null;", "scenario"),
     ("macro-effect-ignored", "server.js", 'res.effects.filter((e) => e.type === "macro")', 'res.effects.filter((e) => e.type === "callMacro")', "api"),
     ("ui-default-ignored", "app.js", "    return defaultOf(step);\n", "    return null;\n", "ui"),
+    # PROC-33: «Далее» у обязательного Select — когда отмечено в каждом списке; вложение Image одно
+    ("ui-select-partial", "app.js", 'if (step.type === "Select") return Boolean(value) && step.view.lists.every((l) => (value[l.id] || []).length > 0);', 'if (step.type === "Select") return Boolean(value) && step.view.lists.some((l) => (value[l.id] || []).length > 0);', "ui"),
+    ("ui-image-keeps-first", "app.js", "setDraft(ev, file.dataset.file, atts[0].id, atts);", "const d0 = draftOf(ev, file.dataset.file);\n        setDraft(ev, file.dataset.file, (d0 && d0.value) || atts[0].id, atts.concat((d0 && d0.attachments) || []));", "ui"),
     ("draft-kept-on-leave", "app.js", "    state.drafts.delete(draftKey(ev, path[cursorOf(ev)]));\n", "", "ui"),
     ("required-steps-code-lost", "server.js", 'const code = REASON_CODE[check.why && check.why[0]] || GUARD_CODE[check.guard] || "GUARD_FAILED";', 'const code = GUARD_CODE[check.guard] || "GUARD_FAILED";', "api"),
     ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),

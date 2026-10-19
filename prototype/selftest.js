@@ -617,6 +617,95 @@
       }
     });
 
+    await step("Обязательный Select из двух списков — «Далее» серая, пока один пуст; Image — второй файл заменяет первый, вложение одно (спецификация, разделы 6.3, 6.5; PROC-33)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Новая версия пожара: у «Тип сработки» два обязательных списка, после него — файл оператора
+      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const rows = window.IM_FIXTURE.scenarios.rows;
+      const latest = rows.filter((r) => r.guid === fireGuid).sort((a, b) => b.version - a.version)[0];
+      const script = JSON.parse(JSON.stringify(latest.script));
+      const version = latest.version + 1;
+      script.scenario.version = version;
+      const kind = script.steps.find((x) => x.id === "kind");
+      kind.view.required = true;
+      kind.view.lists.push({ id: "floor", label: "Этаж", options: [{ id: "f1", label: "1" }, { id: "f2", label: "2" }], default: [] });
+      const photo = { id: "photo", type: "Image", title: "Снимок", description: "", revisitable: true, multitasking: false, report: false, finish: false,
+        view: { label: "Снимок", source: "operator", image: null }, transitions: { default: { goto: kind.transitions.default.goto, macro: null } } };
+      kind.transitions.default.goto = "photo";
+      script.steps.push(photo);
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: latest.name, script }) } } });
+      await wait(300);
+      try {
+        const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+        const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
+        const guid = created.body.guid;
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", guid);
+        expect(claim, "новый инцидент нельзя взять");
+        await click(claim);
+        expect(mode() === "work", "карточка не открылась");
+        const current = async () => {
+          const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+          return sc.script.steps.find((x) => x.id === sc.result.currentStepId);
+        };
+        const showStep = async (st) => {
+          const shown = () => (root().querySelector(".step-h strong") || {}).textContent === st.title;
+          for (let k = 0; k < 25 && !shown(); k++) await wait();
+          expect(shown(), `карточка не показала шаг «${st.id}»`);
+        };
+        // Подтверждение и классификация — как обычно, до «Тип сработки»
+        for (let n = 0; n < 4; n++) {
+          const st = await current();
+          if (st.id === "kind") break;
+          await showStep(st);
+          await fillStep(st);
+          await click($("stepNext"));
+        }
+        const st = await current();
+        expect(st.id === "kind", `ожидался шаг «Тип сработки», а текущий — «${st.id}»`);
+        await showStep(st);
+        const box = (list) => root().querySelector(`[data-list="kind"][data-list-id="${list}"]`);
+        expect($("stepNext").disabled, "«Далее» доступна без отметок в обязательных списках");
+        await click(box("kind"));
+        expect($("stepNext").disabled, "«Далее» доступна, хотя список «Этаж» пуст");
+        await click(box("floor"));
+        expect(!$("stepNext").disabled, "«Далее» недоступна, хотя отмечено в обоих списках");
+        await click($("stepNext"));
+        await showStep(photo);
+        // Файл читается асинхронно: вложение готово, когда карточка перерисовала поле (новый элемент) и показывает «Фото: 1»
+        const attach = async (name) => {
+          const input = root().querySelector('[data-file="photo"]');
+          const files = new DataTransfer();
+          files.items.add(new File([name], name, { type: "image/png" }));
+          input.files = files.files;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          const ready = () =>
+            root().querySelector('[data-file="photo"]') !== input && /Фото: 1/.test((root().querySelector(".step-card .macro-row") || {}).textContent || "");
+          for (let k = 0; k < 25 && !ready(); k++) await wait();
+          expect(ready(), `файл ${name} не прикрепился`);
+        };
+        await attach("first.png");
+        await attach("second.png");
+        await click($("stepNext"));
+        await wait(200);
+        const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+        const entry = sc.result.state.photo;
+        const atts = (sc.result.attachments || []).filter((a) => a.stepId === "photo");
+        expect(entry && typeof entry.value === "string" && atts.length === 1 && atts[0].id === entry.value, `ответ Image: ${JSON.stringify(entry && entry.value)}, вложений ${atts.length}`);
+        expect(atts[0].fileName === "second.png", `ушёл файл «${atts[0].fileName}», а не второй — «second.png»`);
+        expect(JSON.stringify(sc.result.state.kind.value) === JSON.stringify({ kind: [kind.view.lists[0].options[0].id], floor: ["f1"] }), `ответ Select: ${JSON.stringify(sc.result.state.kind.value)}`);
+        return "Select — оба списка, Image — второй файл";
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Значения по умолчанию и описание шага: поле открывается заполненным, «Далее» доступна, по ней записывается значение по умолчанию (спецификация, раздел 6)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
