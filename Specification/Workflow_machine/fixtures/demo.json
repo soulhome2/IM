@@ -1464,7 +1464,8 @@
       "loiter": "60000000-0000-4000-8000-000000000005",
       "ppe": "60000000-0000-4000-8000-000000000006",
       "alcohol": "60000000-0000-4000-8000-000000000001",
-      "glass": "60000000-0000-4000-8000-000000000003"
+      "glass": "60000000-0000-4000-8000-000000000003",
+      "abandoned": "60000000-0000-4000-8000-000000000008"
     }
   },
   "incidents": [
@@ -1922,6 +1923,162 @@
           "template": "workflow.journal.macro.launched",
           "vars": {
             "name": "Оповещение в зону и инженер по охране труда"
+          }
+        }
+      ]
+    },
+    {
+      "guid": "10000000-0000-4000-8000-000000001852",
+      "number": "INC-1852",
+      "eventType": {
+        "guid": "40000000-0000-4000-8000-000000000008",
+        "id": "abandoned",
+        "name": "Оставленный предмет"
+      },
+      "priority": 75,
+      "site": "Торговый центр",
+      "siteType": "Торговый центр",
+      "location": "2-й этаж, фойе кинотеатра",
+      "occurredAt": "2026-10-03T11:53:10Z",
+      "devices": [
+        "20000000-0001-4000-8000-000000000029"
+      ],
+      "media": "video",
+      "state": "on_hold",
+      "owner": "me",
+      "assignmentGroup": null,
+      "escalationLevel": 0,
+      "holdReason": "third_party",
+      "closeResult": null,
+      "closeCause": null,
+      "result": null,
+      "closedBy": null,
+      "closedAt": null,
+      "timers": {
+        "reaction": null,
+        "resolution": {
+          "leftSec": 600
+        },
+        "hold": {
+          "startedAt": "2026-10-03T11:57:00Z"
+        }
+      },
+      "slaBreached": false,
+      "breaches": [],
+      "scenarioGuid": "60000000-0000-4000-8000-000000000008",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "state": {
+          "object": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:54:05Z",
+            "by": "me"
+          },
+          "owner": {
+            "value": "not_found",
+            "answeredAt": "2026-10-03T11:55:20Z",
+            "by": "me"
+          },
+          "evacuate": {
+            "value": "announce",
+            "answeredAt": "2026-10-03T11:56:02Z",
+            "by": "me"
+          }
+        },
+        "history": [
+          {
+            "ts": "2026-10-03T11:54:05Z",
+            "stepId": "object",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:54:05Z",
+            "stepId": "object",
+            "action": "transition",
+            "to": "owner",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:55:20Z",
+            "stepId": "owner",
+            "action": "answer",
+            "value": "not_found",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:55:20Z",
+            "stepId": "owner",
+            "action": "transition",
+            "to": "evacuate",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:56:02Z",
+            "stepId": "evacuate",
+            "action": "answer",
+            "value": "announce",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:56:02Z",
+            "stepId": "evacuate",
+            "action": "macro",
+            "name": "Объявить эвакуацию зоны"
+          },
+          {
+            "ts": "2026-10-03T11:56:02Z",
+            "stepId": "evacuate",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": 0
+          }
+        ],
+        "currentStepId": "note",
+        "completedAt": null
+      },
+      "journal": [
+        {
+          "at": "2026-10-03T11:53:10Z",
+          "actor": null,
+          "actorName": "Диспетчер",
+          "template": "workflow.journal.source",
+          "vars": {
+            "text": "Рюкзак без присмотра у бара"
+          }
+        },
+        {
+          "at": "2026-10-03T11:53:40Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:56:02Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Объявить эвакуацию зоны"
+          }
+        },
+        {
+          "at": "2026-10-03T11:57:00Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.hold",
+          "vars": {
+            "stepNumber": 4,
+            "holdReasonLabel": [
+              "workflow.catalog.hold.third_party"
+            ],
+            "comment": ""
           }
         }
       ]

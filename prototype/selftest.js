@@ -806,6 +806,45 @@
       }
     });
 
+    await step("Шаг без переответа (revisitable: false): INC-1852 «Оставленный предмет» — замок в ленте только у «Эвакуации»; на ней поля недоступны и сказано почему, на «Владельце» — доступны (спецификация, раздел 8)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo" });
+      await wait(300);
+      try {
+        const guid = guidOf("INC-1852");
+        await openOwn(guid);
+        const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+        const locked = sc.script.steps.filter((s) => s.revisitable === false).map((s) => s.title);
+        expect(locked.join() === "Эвакуация", `шаги без переответа в сценарии: «${locked.join(", ")}», а не одна «Эвакуация»`);
+        const crumbs = () => [...root().querySelectorAll(".crumb")];
+        const name = (c) => c.querySelector(".crumb-name").textContent.replace("lock", "").trim();
+        const withLock = crumbs().filter((c) => c.querySelector(".crumb-lock")).map(name);
+        expect(withLock.join() === "Эвакуация", `замок в ленте у шагов: «${withLock.join(", ")}», а не только у «Эвакуации»`);
+        const goTo = async (title) => {
+          const c = crumbs().find((x) => name(x) === title);
+          expect(c && c.dataset.crumb !== undefined, `на шаг «${title}» нельзя перейти из ленты`);
+          await click(c);
+          expect((root().querySelector(".step-h strong") || {}).textContent === title, `карточка не показала шаг «${title}»`);
+        };
+        await goTo("Эвакуация");
+        const evac = crumbs().find((x) => x.querySelector(".crumb-lock"));
+        expect(evac.title.includes("Ответ не меняется после перехода дальше"), `подсказка у шага с замком: «${evac.title}»`);
+        const radios = () => [...root().querySelectorAll('.step-card input[type="radio"]')];
+        expect(radios().length && radios().every((r) => r.disabled), "на пройденной «Эвакуации» варианты доступны");
+        expect(root().querySelector(".step-locked"), "на пройденной «Эвакуации» не сказано, почему ответ не изменить");
+        await goTo("Владелец");
+        expect(radios().length && radios().every((r) => !r.disabled), "на пройденном «Владельце» варианты недоступны");
+        expect(!root().querySelector(".step-locked") && !root().querySelector(".step-lock"), "на «Владельце» пометка шага без переответа");
+        return "замок — у «Эвакуации», «Владелец» переотвечается";
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".badge.foreign"));

@@ -1005,6 +1005,11 @@
   const isCurrentStep = (ev, i) => !runDone(ev) && i === pathOf(ev).length - 1;
   // Ответ можно менять: на текущем шаге — всегда, на пройденном — если шаг revisitable (профиль МИ)
   const stepEditable = (ev, i, editable) => editable && (isCurrentStep(ev, i) || stepOf(ev, pathOf(ev)[i]).revisitable !== false);
+  // Шаг без переответа (revisitable: false) — замок в ленте шагов и подсказка к нему
+  const lockedStep = (step) => step.revisitable === false;
+  const crumbLock = (step) => (lockedStep(step) ? `<span class="material-symbols-outlined crumb-lock" aria-hidden="true">lock</span>` : "");
+  const crumbTitle = (step, extra) =>
+    [t(stepShort(step)), extra, lockedStep(step) ? t("Ответ не меняется после перехода дальше") : ""].filter(Boolean).join(" — ");
 
   // «Далее»: на текущем шаге — есть ответ или шаг можно пропустить (кнопку — только нажать); на пройденном —
   // ответ изменён или впереди есть шаг пути. На последнем шаге пройденного сценария идти некуда (RULE-89)
@@ -2159,13 +2164,13 @@
               return `
                 <li class="crumb ${current ? "current" : ""} ${answer ? "done" : ""} ${open ? "" : "locked"} ${nav ? "nav" : ""}" ${
                   current ? 'aria-current="step"' : ""
-                } ${nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""} title="${te(stepShort(s))}">
+                } ${nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""} title="${escapeHtml(crumbTitle(s))}">
                   <span class="crumb-track">
                     <span class="crumb-n">${idx + 1}</span>
                     <span class="crumb-line" aria-hidden="true"></span>
                   </span>
                   <span class="crumb-body">
-                    <span class="crumb-name">${te(stepShort(s))}</span>
+                    <span class="crumb-name">${crumbLock(s)}${te(stepShort(s))}</span>
                     ${answer && !current ? `<span class="crumb-ans">${te(answer)}</span>` : ""}
                   </span>
                 </li>
@@ -2175,13 +2180,13 @@
           ${aheadOf(ev)
             .map(
               (id, k) => `
-                <li class="crumb locked ahead" title="${te("Может измениться от ответов")}">
+                <li class="crumb locked ahead" title="${escapeHtml(crumbTitle(stepOf(ev, id), t("Может измениться от ответов")))}">
                   <span class="crumb-track">
                     <span class="crumb-n">${path.length + k + 1}</span>
                     <span class="crumb-line" aria-hidden="true"></span>
                   </span>
                   <span class="crumb-body">
-                    <span class="crumb-name">${te(stepShort(stepOf(ev, id)))}</span>
+                    <span class="crumb-name">${crumbLock(stepOf(ev, id))}${te(stepShort(stepOf(ev, id)))}</span>
                   </span>
                 </li>
               `
@@ -2197,8 +2202,9 @@
               : `<div class="step-card">
             <div class="step-h">
               <strong>${te(stepShort(step))}</strong>
-              ${stepRequired(step) ? "" : `<span>${te("необязательно")}</span>`}
+              ${stepTags(step, ev, i)}
             </div>
+            ${lockedStep(step) && editable && !isCurrentStep(ev, i) ? `<p class="step-locked">${te("Ответ записан, этот шаг не переотвечается.")}</p>` : ""}
             ${renderStepControl(step, ev, stepEditable(ev, i, editable))}
           </div>`
           }
@@ -2270,6 +2276,16 @@
         <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
       </div>
     `;
+  }
+
+  // Пометки в шапке шага: «необязательно»; у шага без переответа на текущем шаге — заранее, что ответ потом
+  // не изменить
+  function stepTags(step, ev, i) {
+    const tags = [];
+    if (!stepRequired(step)) tags.push(te("необязательно"));
+    if (lockedStep(step) && isCurrentStep(ev, i))
+      tags.push(`<span class="material-symbols-outlined step-lock" aria-hidden="true">lock</span>${te("ответ нельзя будет изменить")}`);
+    return tags.length ? `<span class="step-tags">${tags.join(" · ")}</span>` : "";
   }
 
   // Поле шага по его типу: пояснение — description шага, вопрос — view.label, ответ — черновик, записанный

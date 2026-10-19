@@ -1,0 +1,158 @@
+{
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000008",
+    "name": "Оставленный предмет",
+    "description": "",
+    "version": 1,
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "object"
+  },
+  "steps": [
+    {
+      "id": "object",
+      "type": "Checkbox",
+      "title": "Предмет",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Предмет на месте",
+        "minSelected": 1,
+        "maxSelected": null,
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю",
+            "default": false
+          }
+        ]
+      },
+      "transitions": {
+        "default": {
+          "goto": "owner",
+          "macro": null
+        }
+      }
+    },
+    {
+      "id": "owner",
+      "type": "RadioButton",
+      "title": "Владелец",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Владелец нашёлся?",
+        "required": true,
+        "default": null,
+        "options": [
+          {
+            "id": "found",
+            "label": "Нашёлся"
+          },
+          {
+            "id": "not_found",
+            "label": "Не нашёлся"
+          }
+        ]
+      },
+      "transitions": {
+        "rules": [
+          {
+            "condition": {
+              "==": [
+                {
+                  "var": "value"
+                },
+                "found"
+              ]
+            },
+            "goto": "note",
+            "macro": null
+          }
+        ],
+        "default": {
+          "goto": "evacuate",
+          "macro": null
+        }
+      }
+    },
+    {
+      "id": "evacuate",
+      "type": "RadioButton",
+      "title": "Эвакуация",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Эвакуация зоны",
+        "required": true,
+        "default": null,
+        "options": [
+          {
+            "id": "announce",
+            "label": "Объявить"
+          },
+          {
+            "id": "not_needed",
+            "label": "Не требуется"
+          }
+        ]
+      },
+      "transitions": {
+        "rules": [
+          {
+            "condition": {
+              "==": [
+                {
+                  "var": "value"
+                },
+                "announce"
+              ]
+            },
+            "goto": "note",
+            "macro": {
+              "name": "Объявить эвакуацию зоны",
+              "args": {}
+            }
+          }
+        ],
+        "default": {
+          "goto": "note",
+          "macro": null
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
+      "view": {
+        "label": "Комментарий",
+        "default": "",
+        "required": false,
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
+      },
+      "transitions": {
+        "default": {
+          "goto": null,
+          "macro": null
+        }
+      }
+    }
+  ]
+}
