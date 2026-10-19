@@ -9,7 +9,8 @@
    (prototype/vendor/json-logic-js), подключённый раньше этого файла. */
 (() => {
   const logic = window.jsonLogic;
-  const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+  // Ответ Datetime — момент: часовой пояс обязателен, «Z» или смещение (BUG-72)
+  const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
   const WITH_RULES = ["RadioButton", "Checkbox", "Select"];
 
   /* Операторы над отмеченными вариантами — как в редакторе продукта (jsonLogic.ts, спецификация, раздел 7):
@@ -129,10 +130,11 @@
   }
 
   // Каноническое значение (спецификация, раздел 9): у кнопки и у шага «только для показа» значения нет;
-  // у Select — все списки шага, неотмеченные — пустые
+  // у Select — все списки шага, неотмеченные — пустые; Datetime — в UTC с точностью до секунды
   function canonical(step, raw) {
     if (step.type === "Message" || (step.type === "Comment" && step.view.readonly)) return null;
     if (step.type === "Select") return Object.fromEntries(step.view.lists.map((l) => [l.id, (raw[l.id] || []).slice()]));
+    if (step.type === "Datetime") return new Date(raw).toISOString().replace(/\.\d+Z$/, "Z");
     return raw;
   }
 

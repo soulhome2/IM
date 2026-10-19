@@ -88,6 +88,8 @@ MUTATIONS = [
     ("eq-standard", "scenario.js", 'logic.add_operation("==", (a, b) => {', 'logic.add_operation("==_off", (a, b) => {', "scenario"),
     ("empty-condition-fires", "scenario.js", 'if (!condition || typeof condition !== "object" || !Object.keys(condition).length) return false;', 'if (!condition || typeof condition !== "object") return false;', "scenario"),
     ("rules-on-any-type", "scenario.js", "const rules = WITH_RULES.includes(step.type) ? step.transitions.rules || [] : [];\n    const context", "const rules = step.transitions.rules || [];\n    const context", "scenario"),
+    ("datetime-without-zone", "scenario.js", "(Z|[+-]\\d{2}:\\d{2})$/;", "(Z|[+-]\\d{2}:\\d{2})?$/;", "scenario"),
+    ("datetime-not-utc", "scenario.js", '    if (step.type === "Datetime") return new Date(raw).toISOString().replace(/\\.\\d+Z$/, "Z");\n', "", "scenario"),
     ("select-required-ignored", "scenario.js", 'return v.required && v.lists.some((l) => !(value[l.id] || []).length) ? "required" : null;', "return null;", "scenario"),
     ("macro-effect-ignored", "server.js", 'res.effects.filter((e) => e.type === "macro")', 'res.effects.filter((e) => e.type === "callMacro")', "api"),
     ("ui-default-ignored", "app.js", "    return defaultOf(step);\n", "    return null;\n", "ui"),

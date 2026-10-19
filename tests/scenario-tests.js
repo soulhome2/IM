@@ -205,6 +205,18 @@
     assert.eq(sel.state.select_single.value, { [list.id]: [list.options[1].id] }, "ответ Select — объект списков");
   });
 
+  test("Datetime: ответ — только с часовым поясом; смещение записывается в UTC (BUG-72)", () => {
+    const script = {
+      scenario: { id: "dt", name: "Дата и время", version: 1, createdAt: "", updatedAt: "", initialStep: "when" },
+      steps: [{ id: "when", type: "Datetime", title: "Когда", description: "", revisitable: true, multitasking: false, report: false, finish: true,
+        view: { label: "Когда", required: true, min: null, max: null }, transitions: { default: { goto: null, macro: null } } }],
+    };
+    refused(script, S.start(script), "when", "2026-10-19T14:30", "format");
+    refused(script, S.start(script), "when", "2026-10-19T14:30:00", "format");
+    assert.eq(answerOk(script, S.start(script), "when", "2026-10-19T14:30:00+05:00").result.state.when.value, "2026-10-19T09:30:00Z", "смещение — в UTC");
+    assert.eq(answerOk(script, S.start(script), "when", "2026-10-19T09:30:00.250Z").result.state.when.value, "2026-10-19T09:30:00Z", "до секунды");
+  });
+
   test("Шаг без пути: ответ не на шаг пути — отказ; ответ на кнопку хранится как null; финальный шаг завершает", () => {
     const script = ex("01-perimeter-alarm.json");
     let r = S.start(script);
