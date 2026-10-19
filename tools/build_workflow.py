@@ -28,7 +28,7 @@ import transitions_doc  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINE = os.path.join(ROOT, "Specification", "Workflow_machine")
 TARGETS = [
-    ("workflow_schema.v4.json", "workflow.js", "IM_WORKFLOW", 2),
+    ("workflow_schema.v1.json", "workflow.js", "IM_WORKFLOW", 2),
     ("openapi.json", "openapi.js", "IM_OPENAPI", None),
     ("fixtures/demo.json", "fixture.js", "IM_FIXTURE", None),
 ]
@@ -89,10 +89,10 @@ def outputs():
         yield f"prototype/{target}", build(source, var, indent), source
     yield "prototype/strings.js", build_strings(), "strings/*.json"
     yield "tests/scenario-examples.js", build_scenario_examples(), "Scenario_machine/examples/"
-    with open(os.path.join(MACHINE, "workflow_schema.v4.json"), encoding="utf-8") as f:
+    with open(os.path.join(MACHINE, "workflow_schema.v1.json"), encoding="utf-8") as f:
         w = json.load(f)
-    yield "Specification/Workflow_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow_schema.v4.json"
-    yield "Specification/Workflow_machine/SETTINGS.md", settings_doc.render(w), "workflow_schema.v4.json"
+    yield "Specification/Workflow_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow_schema.v1.json"
+    yield "Specification/Workflow_machine/SETTINGS.md", settings_doc.render(w), "workflow_schema.v1.json"
 
 
 def main():

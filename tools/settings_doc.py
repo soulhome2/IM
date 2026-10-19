@@ -1,6 +1,6 @@
 """Настройки администратора словами: Specification/Workflow_machine/SETTINGS.md (RULE-44).
 
-Собирается из раздела adminSettings машины workflow_schema.v4.json вместе с текущими значениями.
+Собирается из раздела adminSettings машины workflow_schema.v1.json вместе с текущими значениями.
 Вызывается из tools/build_workflow.py; руками SETTINGS.md не правится.
 """
 import json
@@ -93,7 +93,7 @@ def render(w):
     out = [
         "# Настройки администратора",
         "",
-        "Собрано из раздела `adminSettings` машины [workflow_schema.v4.json](workflow_schema.v4.json) скриптом `tools/build_workflow.py` — руками не править. "
+        "Собрано из раздела `adminSettings` машины [workflow_schema.v1.json](workflow_schema.v1.json) скриптом `tools/build_workflow.py` — руками не править. "
         "Что меняет администратор с правом `incident:schema:admin`, по вкладкам будущей админки, и какое значение сейчас (RULE-44). "
         "Переходы, состояния, формы и бейджи — модель, а не настройки: их здесь нет. "
         "Тот же перечень показывает прототип: меню пользователя → «Настройки администратора». "

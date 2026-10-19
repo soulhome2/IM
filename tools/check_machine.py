@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверка машины состояний: workflow_schema.v4.json и openapi.json сходятся сами с собой и между собой.
+"""Проверка машины состояний: workflow_schema.v1.json и openapi.json сходятся сами с собой и между собой.
 
 Запуск из корня репозитория: python3 tools/check_machine.py
 Проверяет, что всё из реестров условий и эффектов реализовано в prototype/engine.js;
@@ -1291,7 +1291,7 @@ def check_admin_settings(w, o, err):
 def main():
     err = []
     try:
-        w = load("workflow_schema.v4.json")
+        w = load("workflow_schema.v1.json")
         o = load("openapi.json")
     except (OSError, json.JSONDecodeError) as e:
         print(f"Не читается: {e}")

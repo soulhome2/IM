@@ -14,7 +14,7 @@ description: Ревью репозитория Incident Manager (IM) — пра�
 - `Specification/` — Vision, сверка покрытия Vision `Vision coverage.md` и правила перехода состояний `State_rules/States rules IM.md`. Это действующие правила: один файл, правится на месте, номер версии — в шапке, порядок ведения — в §16, сам журнал изменений — в `State_rules/CHANGELOG.md`. Прошлые версии лежат в `State_rules/archive/` и не правятся: их не ревьюить, ошибки в них не записывать.
 - `prototype/` — кликабельный прототип: `index.html`, интерфейс в `app.js`, встроенный сервер по `openapi.json` в `server.js` с исполнителем машины `engine.js` на эталонных данных `Specification/Workflow_machine/fixtures/demo.json`, клиент API `api.js`, переводы в `i18n-*.js`, оформление в `styles.css` и `bridge.css`.
 - `reviews/` — прошлые ревью и планы. Указатель и договорённости — `reviews/README.md`. Образец результата — `reviews/2026-10-01/`.
-- `Specification/Workflow_machine/` — машина состояний: `workflow_schema.v4.json` (JSON-модель workflow) и `openapi.json` (контракт API). Её ведёт программист. Формат не изобретать заново. Расхождения машины с правилами и прототипом — находки ревью. Решения по правилам считать предварительными, пока их не внесли в машину.
+- `Specification/Workflow_machine/` — машина состояний: `workflow_schema.v1.json` (JSON-модель workflow) и `openapi.json` (контракт API). Её ведёт программист. Формат не изобретать заново. Расхождения машины с правилами и прототипом — находки ревью. Решения по правилам считать предварительными, пока их не внесли в машину.
 - В репозитории работают двое и пушат прямо в `main`, без pull request. Коммитить и пушить — только по просьбе пользователя.
 
 ## Порядок
@@ -53,7 +53,7 @@ google-chrome --headless=new --disable-gpu --no-first-run \
 **Тесты API:** открыть `tests/api.html` тем же способом, что самопроверку (`--virtual-time-budget=120000`); отчёт — `<pre id="apitest-log">`, итог — `data-apitest="pass|fail"`. Сценарии по правилам, случайные прогоны с инвариантами, сверка ответов с `openapi.json`, покрытие маршрутов.
 **Тесты API по сети:** `python3 tools/check_loopback.py` — те же тесты через петлю: клиент говорит со встроенным сервером по `fetch` и SSE. Режим `--dump-dom` для них не годится — в нём не регистрируется Service Worker.
 
-**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow_schema.v4.json` и `openapi.json`, граница слоёв прототипа, значения справочников машины не зашиты в код, эталонный набор данных, таблицы §6 правил против машины. Переходы машины словами — `Specification/Workflow_machine/TRANSITIONS.md`, по нему правила сверяются глазами.
+**Машина состояний:** `python3 tools/check_machine.py` — целостность `workflow_schema.v1.json` и `openapi.json`, граница слоёв прототипа, значения справочников машины не зашиты в код, эталонный набор данных, таблицы §6 правил против машины. Переходы машины словами — `Specification/Workflow_machine/TRANSITIONS.md`, по нему правила сверяются глазами.
 
 **Правила только в машине:** `python3 tools/check_mutations.py` — мутации машины меняют поведение прототипа. Мутация со статусом BAD — находка: правило продублировано в коде прототипа.
 

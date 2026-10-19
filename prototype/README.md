@@ -13,7 +13,7 @@ Restyle изменил только оформление: разметку (кр
 
 ## Логика: встроенный сервер и машина состояний
 
-Прототип устроен как продукт: интерфейс разговаривает только запросами из контракта [`openapi.json`](../Specification/Workflow_machine/openapi.json), а отвечает ему встроенный сервер в той же вкладке. Сервер исполняет машину состояний [`workflow_schema.v4.json`](../Specification/Workflow_machine/workflow_schema.v4.json). Своей таблицы переходов у прототипа нет. Сеть не нужна: страница открывается и с диска, и с сайта.
+Прототип устроен как продукт: интерфейс разговаривает только запросами из контракта [`openapi.json`](../Specification/Workflow_machine/openapi.json), а отвечает ему встроенный сервер в той же вкладке. Сервер исполняет машину состояний [`workflow_schema.v1.json`](../Specification/Workflow_machine/workflow_schema.v1.json). Своей таблицы переходов у прототипа нет. Сеть не нужна: страница открывается и с диска, и с сайта.
 
 ```
 app.js     интерфейс: только запросы API — api.get("/operator/incidents?filter=open"), api.post(…/transitions/claim)

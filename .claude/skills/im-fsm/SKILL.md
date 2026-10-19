@@ -1,6 +1,6 @@
 ---
 name: im-fsm
-description: Формальная проверка машин состояний Incident Manager (IM) — машины инцидента Specification/Workflow_machine/workflow_schema.v4.json как конечного автомата (синтаксис и структура, начальное и терминальные состояния, достижимость, тупики, детерминизм, пересечения и полнота условий, одновременные автоматические переходы, сравнение с общепринятыми нотациями) и машины сценариев Specification/Scenario_machine/ (граф шагов каждого сценария, перебор ответов — мёртвые и заслонённые правила, условия вне пути, стык с машиной инцидента). Использовать, когда просят «проверь машину состояний», «проверь машину сценариев», «формальная проверка», «верификация FSM», после правок workflow_schema.v4.json, сценариев эталонного набора или как часть ревью архитектора. Результат — отчёт в чате и проход в reviews/<дата>/. Formal verification of the state machine.
+description: Формальная проверка машин состояний Incident Manager (IM) — машины инцидента Specification/Workflow_machine/workflow_schema.v1.json как конечного автомата (синтаксис и структура, начальное и терминальные состояния, достижимость, тупики, детерминизм, пересечения и полнота условий, одновременные автоматические переходы, сравнение с общепринятыми нотациями) и машины сценариев Specification/Scenario_machine/ (граф шагов каждого сценария, перебор ответов — мёртвые и заслонённые правила, условия вне пути, стык с машиной инцидента). Использовать, когда просят «проверь машину состояний», «проверь машину сценариев», «формальная проверка», «верификация FSM», после правок workflow_schema.v1.json, сценариев эталонного набора или как часть ревью архитектора. Результат — отчёт в чате и проход в reviews/<дата>/. Formal verification of the state machine.
 ---
 
 # Формальная проверка машины состояний IM
@@ -13,7 +13,7 @@ description: Формальная проверка машин состояний
 
 ## Что проверяется
 
-- Машина: `Specification/Workflow_machine/workflow_schema.v4.json`. JSON в чат вставлять не нужно — проверяется файл в репозитории.
+- Машина: `Specification/Workflow_machine/workflow_schema.v1.json`. JSON в чат вставлять не нужно — проверяется файл в репозитории.
 - Вместе с ней: контракт `openapi.json` (обязательные поля, перечни значений), правила `Specification/State_rules/States rules IM.md` (§2, §3, §6, §9, §14.3, §14.8), перечень переходов словами `TRANSITIONS.md`.
 - Исполнитель прототипа `prototype/engine.js` — только чтобы понять, как машина исполняется (порядок автоматических переходов, моменты срабатывания). Ошибки исполнителя — находки `BUG`, ошибки модели — `RULE`.
 
@@ -76,7 +76,7 @@ description: Формальная проверка машин состояний
 ```bash
 python3 - <<'EOF'
 import json, collections
-w = json.load(open("Specification/Workflow_machine/workflow_schema.v4.json", encoding="utf-8"))
+w = json.load(open("Specification/Workflow_machine/workflow_schema.v1.json", encoding="utf-8"))
 for s in w["states"]:
     kind = "initial" if s.get("initial") else "terminal" if s.get("terminal") else "normal"
     print(f"| {s['id']} | {s['label']} | {kind} |")
@@ -110,7 +110,7 @@ EOF
 ```bash
 python3 - <<'EOF'
 import json, collections
-w = json.load(open("Specification/Workflow_machine/workflow_schema.v4.json", encoding="utf-8"))
+w = json.load(open("Specification/Workflow_machine/workflow_schema.v1.json", encoding="utf-8"))
 words = collections.Counter(p for t in w["transitions"] for p in t["id"].split("_"))
 print("Слова в идентификаторах переходов:", dict(words))
 for t in w["transitions"]:

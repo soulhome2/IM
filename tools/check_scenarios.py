@@ -9,7 +9,7 @@
 - сценарии эталонного набора (fixtures/scenarios/<тип события>.v<версия>.json, имя — по scenario.id и version) —
   то же; scenario совпадает с guid и версией строки, у типа события — существующий сценарий, прохождения инцидентов
   ссылаются на сценарий своего типа события, существующую версию и её шаги;
-- стык: наборы обязательных шагов, на которые ссылается workflow_schema.v4.json, есть в профиле МИ.
+- стык: наборы обязательных шагов, на которые ссылается workflow_schema.v1.json, есть в профиле МИ.
 Смысл (спецификация, раздел 11, уровень 2) — проверки редактора продукта с его кодами (validation.ts): первый шаг,
 id шагов и вариантов, goto, goto: null только у финального шага, хотя бы один финальный шаг, достижимость, границы
 Checkbox, ссылки условий на варианты и списки. Сверх них — проверки МИ: правила только у RadioButton, Checkbox и
@@ -35,7 +35,7 @@ except ImportError:
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINE = os.path.join(ROOT, "Specification", "Scenario_machine")
 EXAMPLES = os.path.join(MACHINE, "examples")
-WORKFLOW = os.path.join(ROOT, "Specification", "Workflow_machine", "workflow_schema.v4.json")
+WORKFLOW = os.path.join(ROOT, "Specification", "Workflow_machine", "workflow_schema.v1.json")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fixture  # noqa: E402
 
@@ -602,7 +602,7 @@ def check_junction(err):
     w = load(WORKFLOW)
     declared = {k for k in w["stepSets"] if not k.startswith("$")}
     for k in declared - PROFILE_SETS:
-        err.append(f"workflow_schema.v4.json: набор {k} — в профиле МИ такого нет (README машины сценариев)")
+        err.append(f"workflow_schema.v1.json: набор {k} — в профиле МИ такого нет (README машины сценариев)")
     used = set()
 
     def walk(node):
@@ -617,7 +617,7 @@ def check_junction(err):
 
     walk({k: v for k, v in w.items() if k != "registries"})
     for k in sorted(used - declared - {"byCloseResult"}):
-        err.append(f"workflow_schema.v4.json: ссылка на набор {k}, которого нет в stepSets")
+        err.append(f"workflow_schema.v1.json: ссылка на набор {k}, которого нет в stepSets")
 
 
 def main():

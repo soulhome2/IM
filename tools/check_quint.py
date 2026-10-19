@@ -300,7 +300,7 @@ def check_catalogs(w, src, err):
 
 
 def main():
-    with open(os.path.join(DIR, "workflow_schema.v4.json"), encoding="utf-8") as f:
+    with open(os.path.join(DIR, "workflow_schema.v1.json"), encoding="utf-8") as f:
         w = json.load(f)
     with open(MODEL, encoding="utf-8") as f:
         src = f.read()

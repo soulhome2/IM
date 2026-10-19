@@ -16,8 +16,8 @@
 | [fixtures/demo.json](Specification/Workflow_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы; сценарии — файлами рядом, в [fixtures/scenarios/](Specification/Workflow_machine/fixtures/scenarios/). На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
 | [BACKEND.md](Specification/Workflow_machine/BACKEND.md) | Памятка для команды бэкенда: что реализовать, как проверить на тестовом стенде, когда готово |
 | [FRONTEND.md](Specification/Workflow_machine/FRONTEND.md) | Памятка для команды фронтенда: что из прототипа — требование, что только демо, что ещё за вами, когда готово |
-| [TRANSITIONS.md](Specification/Workflow_machine/TRANSITIONS.md) | Переходы машины словами — собраны из `workflow_schema.v4.json`. Рядом с §6 правил: что задумано и что сделано |
-| [SETTINGS.md](Specification/Workflow_machine/SETTINGS.md) | Настройки администратора по вкладкам будущей админки с текущими значениями — собраны из `workflow_schema.v4.json` (§20). В прототипе — меню пользователя → «Настройки администратора» |
+| [TRANSITIONS.md](Specification/Workflow_machine/TRANSITIONS.md) | Переходы машины словами — собраны из `workflow_schema.v1.json`. Рядом с §6 правил: что задумано и что сделано |
+| [SETTINGS.md](Specification/Workflow_machine/SETTINGS.md) | Настройки администратора по вкладкам будущей админки с текущими значениями — собраны из `workflow_schema.v1.json` (§20). В прототипе — меню пользователя → «Настройки администратора» |
 | [prototype/colleagues.js](prototype/colleagues.js) | Эмуляция коллег во встроенном сервере для живости демо: коллеги действуют через те же переходы машины, со своими правами и лимитами |
 | [prototype/styles.css](prototype/styles.css) | Оформление, светлая и тёмная темы, адаптивные раскладки |
 | [prototype/bridge.css](prototype/bridge.css) | Restyle в семью ONE PSIM: маппинг на [theme/one-psim.css](theme/one-psim.css), без правок разметки и JS. Как смотреть и что подтвердить — [prototype/README.md](prototype/README.md) |
@@ -36,7 +36,7 @@
 | 2 | [Axxon Incident Manager Vision.md](Specification/Axxon%20Incident%20Manager%20Vision.md) | Исходное видение продукта: требования к клиентской части, функционалу, группировке, кастомизации интерфейса, панелям, карте и серверной части |
 | 3 | [Vision coverage.md](Specification/Vision%20coverage.md) | Что из видения покрыто правилами и прототипом, что отложено, а что делается вне этого репозитория |
 | 4 | [States rules IM.md](Specification/State_rules/States%20rules%20IM.md) | **Действующие правила** перехода состояний инцидента, сейчас версия 10: состояния, переходы, права, нормативы, автоэскалация, кнопки, групповая обработка. Один файл, правится на месте; журнал изменений — в §16 |
-| 5 | [Workflow_machine/](Specification/Workflow_machine/README.md) | Машина состояний: единая JSON-модель workflow (`workflow_schema.v4.json`) и контракт API операторской части (`openapi.json`). Предложение фронтенда по задаче CLOUD-23465. Приведена к правилам v10; прототип её исполняет |
+| 5 | [Workflow_machine/](Specification/Workflow_machine/README.md) | Машина состояний: единая JSON-модель workflow (`workflow_schema.v1.json`) и контракт API операторской части (`openapi.json`). Предложение фронтенда по задаче CLOUD-23465. Приведена к правилам v10; прототип её исполняет |
 | 6 | [archive/](Specification/State_rules/archive/) | Прошлые версии правил v1–v4 и разбор v1. История решений: почему модель стала такой. Не правятся |
 
 ### Как связаны документы
