@@ -82,15 +82,16 @@
     const env = await makeEnv();
     const [inc] = await newOf(env, "intrusion");
     await env.act(inc.guid, "claim", {}, "queue");
-    // Кратчайший путь: подтверждение, «Персонал / ложная», комментарий
+    // INC-1839 — «Проникновение» v2. Кратчайший путь: подтверждение, «Персонал / ложная», описание, «Доложил»
     const first = await scenarioOf(env, inc.guid);
-    assert.eq([first.progress, first.ahead], [{ filled: 0, total: 3, step: 1 }, ["verdict", "note"]], "в начале: шаги впереди — кратчайший путь (RULE-95)");
-    assert.eq((await answerOk(env, inc.guid, "visual", ["confirmed"])).progress, { filled: 1, total: 3, step: 2 }, "после подтверждения");
-    // «Реальное проникновение» ведёт через зону — путь длиннее
+    assert.eq(first.scenarioVersion, 2, "версия сценария");
+    assert.eq([first.progress, first.ahead], [{ filled: 0, total: 4, step: 1 }, ["verdict", "note", "report"]], "в начале: шаги впереди — кратчайший путь (RULE-95)");
+    assert.eq((await answerOk(env, inc.guid, "visual", ["confirmed"])).progress, { filled: 1, total: 4, step: 2 }, "после подтверждения");
+    // «Реальное проникновение» ведёт через «Сообщил охране» и зону — путь длиннее
     const real = await answerOk(env, inc.guid, "verdict", "real");
-    assert.eq([real.progress, real.ahead], [{ filled: 2, total: 4, step: 3 }, ["note"]], "после ветвления: впереди — другой путь");
+    assert.eq([real.progress, real.ahead], [{ filled: 2, total: 6, step: 3 }, ["zone", "note", "report"]], "после ветвления: впереди — другой путь");
     const row = (await env.all("mine")).find((e) => e.guid === inc.guid);
-    assert.eq([row.scenarioProgress.filled, row.scenarioProgress.total], [2, 4], "строка очереди");
+    assert.eq([row.scenarioProgress.filled, row.scenarioProgress.total], [2, 6], "строка очереди");
   });
 
   test("Курсор: «Взять» и «Переоткрыть» ставят его на текущий шаг прохождения; ответы после закрытия и переоткрытия сохранены (§14.5, в10)", async () => {
@@ -134,10 +135,11 @@
     await env.act(intr.guid, "claim", {}, "queue");
     await answerOk(env, intr.guid, "visual", ["confirmed"]);
     await answerOk(env, intr.guid, "verdict", "real");
+    await answerOk(env, intr.guid, "notify", null);
     await answerOk(env, intr.guid, "zone", "warehouse");
     const sc = await answerOk(env, intr.guid, "verdict", "staff");
     assert.eq([sc.path, sc.result.currentStepId], [["visual", "verdict", "note"], "note"], "путь по новой ветке");
-    assert.ok(!sc.result.state.zone, "ответ выпавшего шага убран");
+    assert.ok(!sc.result.state.zone && !sc.result.state.notify, "ответы выпавших шагов убраны");
     assert.ok(sc.result.history.some((h) => h.stepId === "zone" && h.action === "answer"), "в history он остался");
     const [fire] = await newOf(env, "fire");
     await env.act(fire.guid, "claim", {}, "queue");

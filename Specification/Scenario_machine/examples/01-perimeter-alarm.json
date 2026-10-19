@@ -10,7 +10,7 @@
       "RadioButton",
       "Image (camera source)",
       "Comment",
-      "Button с finish action"
+      "Message с finish action"
     ],
     "complexity": "basic",
     "tags": [
@@ -123,7 +123,7 @@
     },
     {
       "id": "btn_close_real",
-      "type": "Button",
+      "type": "Message",
       "title": "Шаг 4. Завершение",
       "view": {
         "label": "Закрыть инцидент (тревога подтверждена)",
@@ -145,7 +145,7 @@
     },
     {
       "id": "btn_close_false",
-      "type": "Button",
+      "type": "Message",
       "title": "Шаг 4. Завершение",
       "view": {
         "label": "Закрыть как ложное срабатывание",

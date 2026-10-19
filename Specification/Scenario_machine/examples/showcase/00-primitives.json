@@ -12,7 +12,7 @@
       "Select: короткий список и длинный список (>5 опций) с placeholder",
       "Datetime: kind=date, kind=time, kind=datetime с min/max",
       "Image: source=camera, source=map, source=operator (+ allowMultiple), source=fixed (+ fixedSrc)",
-      "Button: emphasis=primary, secondary, destructive"
+      "Message: emphasis=primary, secondary, destructive"
     ],
     "purpose": "architecture-demo",
     "category": "primitives-showcase",
@@ -36,7 +36,7 @@
 
     {
       "id": "next_to_radios",
-      "type": "Button",
+      "type": "Message",
       "view": { "label": "Далее → RadioButton" },
       "transitions": { "default": { "goto": "radio_vertical" } }
     },
@@ -273,8 +273,8 @@
 
     {
       "id": "btn_primary",
-      "type": "Button",
-      "title": "Button, emphasis=primary",
+      "type": "Message",
+      "title": "Message, emphasis=primary",
       "view": {
         "label": "Подтвердить (primary)",
         "emphasis": "primary"
@@ -284,8 +284,8 @@
 
     {
       "id": "btn_secondary",
-      "type": "Button",
-      "title": "Button, emphasis=secondary",
+      "type": "Message",
+      "title": "Message, emphasis=secondary",
       "view": {
         "label": "Отложить (secondary)",
         "emphasis": "secondary"
@@ -295,8 +295,8 @@
 
     {
       "id": "btn_destructive",
-      "type": "Button",
-      "title": "Button, emphasis=destructive",
+      "type": "Message",
+      "title": "Message, emphasis=destructive",
       "view": {
         "label": "Сбросить и закрыть (destructive)",
         "emphasis": "destructive"

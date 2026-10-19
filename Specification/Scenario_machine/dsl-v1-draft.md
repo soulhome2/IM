@@ -32,7 +32,7 @@
    - [6.4. Comment](#64-comment)
    - [6.5. Image](#65-image)
    - [6.6. Datetime](#66-datetime)
-   - [6.7. Button](#67-button)
+   - [6.7. Message](#67-message)
 7. [Условные переходы (`transitions` + JSONLogic)](#7-условные-переходы-transitions--jsonlogic)
 8. [Действия (`actions`)](#8-действия-actions)
 9. [Прохождение оператора (`scenarioResult`)](#9-прохождение-оператора-scenarioresult)
@@ -269,7 +269,7 @@ JSON Schema опциональна и может быть включена по�
 | Поле | Тип | Описание |
 | --- | --- | --- |
 | `id` | StepId | стабильный идентификатор; snake_case, ASCII, ≤64 |
-| `type` | string enum | дискриминатор: `RadioButton` / `Checkbox` / `Select` / `Comment` / `Image` / `Datetime` / `Button` |
+| `type` | string enum | дискриминатор: `RadioButton` / `Checkbox` / `Select` / `Comment` / `Image` / `Datetime` / `Message` |
 | `title` | Label | заголовок карточки (опционально) |
 | `editable` | boolean | можно ли вернуться и поменять ответ; default `true` |
 | `view` | object | специфично для типа |
@@ -289,13 +289,13 @@ JSON Schema опциональна и может быть включена по�
     "Step": {
       "description": "Discriminated union over `type`. Each variant defines its own `view` shape.",
       "oneOf": [
-        { "$ref": "#/$defs/RadioButtonStep" },
+        { "$ref": "#/$defs/RadioMessageStep" },
         { "$ref": "#/$defs/CheckboxStep" },
         { "$ref": "#/$defs/SelectStep" },
         { "$ref": "#/$defs/CommentStep" },
         { "$ref": "#/$defs/ImageStep" },
         { "$ref": "#/$defs/DatetimeStep" },
-        { "$ref": "#/$defs/ButtonStep" }
+        { "$ref": "#/$defs/MessageStep" }
       ]
     },
 ```
@@ -316,7 +316,7 @@ JSON Schema опциональна и может быть включена по�
 используйте [`Select`](#63-select).
 
 ```141:170:dsl-v1-schema.json
-    "RadioButtonStep": {
+    "RadioMessageStep": {
       "description": "Single-choice from a fixed list. Operator picks exactly one option.",
       "type": "object",
       "required": ["id", "type", "view"],
@@ -640,20 +640,20 @@ JSON Schema опциональна и может быть включена по�
 | `time` | `"14:30:00"` |
 | `datetime` | `"2026-04-29T14:30:00+03:00"` |
 
-### 6.7. Button
+### 6.7. Message
 
 Кнопка-действие. У кнопки **нет собственного значения** — нажатие просто
 запускает `transitions`.
 
 ```331:351:dsl-v1-schema.json
-    "ButtonStep": {
+    "MessageStep": {
       "description": "Action button. Has no answer value of its own — pressing the button triggers transitions. Maps to legacy IM/ Helper_button (with `is_finish` / `is_report` replaced by explicit Actions on the transition).",
       "type": "object",
       "required": ["id", "type", "view"],
       "additionalProperties": false,
       "properties": {
         "id":       { "$ref": "#/$defs/StepId" },
-        "type":     { "const": "Button" },
+        "type":     { "const": "Message" },
         "title":    { "$ref": "#/$defs/Label" },
         "editable": { "type": "boolean", "default": true },
         "view": {
@@ -676,7 +676,7 @@ JSON Schema опциональна и может быть включена по�
 ```jsonc
 {
   "id": "btn_close",
-  "type": "Button",
+  "type": "Message",
   "view": { "label": "Закрыть инцидент", "emphasis": "primary" },
   "transitions": {
     "default": {
@@ -690,7 +690,7 @@ JSON Schema опциональна и может быть включена по�
 ```
 
 Это даёт расширяемость: нужен новый эффект — добавляешь action в Registry
-платформы, не трогая схему DSL. И один и тот же `Button` может в одном
+платформы, не трогая схему DSL. И один и тот же `Message` может в одном
 сценарии быть финальным, в другом — нет.
 
 ---
@@ -1087,7 +1087,7 @@ actionRegistry.register('sendEmail', (args, ctx) => {
 | Comment | string (текст оператора) | `"Прибыли пожарные..."` |
 | Image | array of string (attachment id) | `["att-uuid-1"]` |
 | Datetime | ISO-8601 string | `"2026-04-29T14:30:00Z"` |
-| Button | `null` (у кнопки нет значения) | `null` |
+| Message | `null` (у кнопки нет значения) | `null` |
 
 ### Side-таблица `attachments`
 
@@ -1277,7 +1277,7 @@ actionRegistry.register('sendEmail', (args, ctx) => {
 
     {
       "id": "btn_close",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть инцидент",

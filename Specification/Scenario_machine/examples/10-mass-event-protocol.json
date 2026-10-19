@@ -292,7 +292,7 @@
     },
     {
       "id": "btn_start_monitoring",
-      "type": "Button",
+      "type": "Message",
       "title": "Шаг 9. Старт мониторинга",
       "view": {
         "label": "Запустить активный мониторинг",
@@ -407,7 +407,7 @@
     },
     {
       "id": "btn_postpone",
-      "type": "Button",
+      "type": "Message",
       "title": "Перенос",
       "view": {
         "label": "Закрыть с переносом мероприятия",
@@ -429,7 +429,7 @@
     },
     {
       "id": "btn_close_event",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение мероприятия",
       "view": {
         "label": "Закрыть мероприятие и сформировать сводный отчёт",

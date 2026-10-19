@@ -196,7 +196,7 @@
     },
     {
       "id": "btn_finish_real",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть инцидент с генерацией отчёта",
@@ -224,7 +224,7 @@
     },
     {
       "id": "btn_finish_false",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть как ложное срабатывание",

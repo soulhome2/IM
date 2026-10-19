@@ -161,13 +161,13 @@
     "Step": {
       "description": "Discriminated union over `type`. Each variant defines its own `view` shape. 7 interactive step types.",
       "oneOf": [
-        { "$ref": "#/$defs/RadioButtonStep" },
+        { "$ref": "#/$defs/RadioMessageStep" },
         { "$ref": "#/$defs/CheckboxStep" },
         { "$ref": "#/$defs/SelectStep" },
         { "$ref": "#/$defs/CommentStep" },
         { "$ref": "#/$defs/ImageStep" },
         { "$ref": "#/$defs/DatetimeStep" },
-        { "$ref": "#/$defs/ButtonStep" }
+        { "$ref": "#/$defs/MessageStep" }
       ]
     },
 
@@ -189,7 +189,7 @@
       }
     },
 
-    "RadioButtonStep": {
+    "RadioMessageStep": {
       "description": "Single-choice from a fixed list. Operator picks exactly one option.",
       "type": "object",
       "required": ["id", "type", "view"],
@@ -389,14 +389,14 @@
       }
     },
 
-    "ButtonStep": {
+    "MessageStep": {
       "description": "Action button. Has no answer value of its own — pressing the button triggers transitions. Maps to legacy IM/ Helper_button (with `is_finish` / `is_report` replaced by explicit Actions on the transition).",
       "type": "object",
       "required": ["id", "type", "view"],
       "additionalProperties": false,
       "properties": {
         "id":       { "$ref": "#/$defs/StepId" },
-        "type":     { "const": "Button" },
+        "type":     { "const": "Message" },
         "title":    { "$ref": "#/$defs/Label" },
         "editable": { "type": "boolean", "default": true },
         "view": {

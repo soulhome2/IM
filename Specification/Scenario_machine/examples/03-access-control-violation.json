@@ -221,7 +221,7 @@
     },
     {
       "id": "btn_close_real",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть с генерацией отчёта",
@@ -249,7 +249,7 @@
     },
     {
       "id": "btn_close_false",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть как сбой оборудования",

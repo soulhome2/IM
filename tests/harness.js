@@ -188,7 +188,7 @@
   function answerFor(step, variant) {
     const v = step.view;
     const ids = (v.options || []).map((o) => o.id);
-    const required = step.type !== "Button" && (v.required !== undefined ? v.required : ["RadioButton", "Select", "Datetime"].includes(step.type));
+    const required = step.type !== "Message" && (v.required !== undefined ? v.required : ["RadioButton", "Select", "Datetime"].includes(step.type));
     switch (step.type) {
       case "RadioButton":
       case "Select":

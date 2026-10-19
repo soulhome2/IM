@@ -169,7 +169,7 @@
     },
     {
       "id": "btn_close_self_resolved",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть (камера восстановилась сама)",
@@ -191,7 +191,7 @@
     },
     {
       "id": "btn_close_resolved",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть (восстановлена удалённым перезапуском)",
@@ -213,7 +213,7 @@
     },
     {
       "id": "btn_close_escalated",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть (передано в техподдержку)",

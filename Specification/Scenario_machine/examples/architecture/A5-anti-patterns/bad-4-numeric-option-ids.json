@@ -53,7 +53,7 @@
     },
     {
       "id": "btn",
-      "type": "Button",
+      "type": "Message",
       "view": {
         "label": "Закрыть"
       },

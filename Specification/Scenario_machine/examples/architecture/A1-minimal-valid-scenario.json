@@ -15,7 +15,7 @@
   "steps": [
     {
       "id": "ack",
-      "type": "Button",
+      "type": "Message",
       "view": {
         "label": "Подтвердить и закрыть"
       },

@@ -1,0 +1,175 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+    "version": 2,
+    "name": "Проникновение"
+  },
+  "initialStepId": "visual",
+  "steps": [
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Нарушитель виден в кадре",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Классификация",
+      "view": {
+        "label": "Классификация",
+        "options": [
+          {
+            "id": "real",
+            "label": "Реальное проникновение"
+          },
+          {
+            "id": "staff",
+            "label": "Персонал / ложная"
+          },
+          {
+            "id": "unclear",
+            "label": "Недостаточно данных"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "real"
+              ]
+            },
+            "goto": "notify",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Включить сирену"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Переключить PTZ на зону"
+                }
+              }
+            ]
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "staff"
+              ]
+            },
+            "goto": "note"
+          }
+        ],
+        "default": {
+          "goto": "zone"
+        }
+      }
+    },
+    {
+      "id": "notify",
+      "type": "Message",
+      "title": "Сообщите охране объекта",
+      "view": {
+        "label": "Сообщил охране"
+      },
+      "transitions": {
+        "default": {
+          "goto": "zone"
+        }
+      }
+    },
+    {
+      "id": "zone",
+      "type": "Select",
+      "title": "Зона",
+      "view": {
+        "label": "Зона",
+        "options": [
+          {
+            "id": "perimeter",
+            "label": "Периметр"
+          },
+          {
+            "id": "service_entrance",
+            "label": "Служебный вход"
+          },
+          {
+            "id": "warehouse",
+            "label": "Склад"
+          },
+          {
+            "id": "office",
+            "label": "Офисная зона"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Описание",
+      "view": {
+        "label": "Описание",
+        "required": false,
+        "placeholder": "Маршрут, приметы, действия охраны"
+      },
+      "transitions": {
+        "default": {
+          "goto": "report"
+        }
+      }
+    },
+    {
+      "id": "report",
+      "type": "Message",
+      "title": "Доложите старшему смены",
+      "view": {
+        "label": "Доложил"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

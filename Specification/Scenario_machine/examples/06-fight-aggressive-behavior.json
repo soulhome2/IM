@@ -239,7 +239,7 @@
     },
     {
       "id": "btn_close",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть инцидент с отчётом",
@@ -267,7 +267,7 @@
     },
     {
       "id": "btn_close_minor",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть как лёгкий инцидент",

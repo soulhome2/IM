@@ -335,7 +335,7 @@ def var_steps(expr, item_scope=False):
 
 
 def required(step):
-    if step["type"] == "Button":
+    if step["type"] == "Message":
         return True
     v = step["view"].get("required")
     return v if v is not None else step["type"] in ("RadioButton", "Select", "Datetime")
@@ -353,7 +353,7 @@ def answers_of(step):
         lo = max(step["view"].get("minSelected", 0), 1 if required(step) else 0)
         hi = step["view"].get("maxSelected") or len(ids)
         out = [[ids[i] for i in range(len(ids)) if m >> i & 1] for m in range(1 << len(ids)) if lo <= bin(m).count("1") <= hi]
-    elif step["type"] == "Button":
+    elif step["type"] == "Message":
         out = [None]
     else:
         return None

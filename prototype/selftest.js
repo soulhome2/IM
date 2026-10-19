@@ -521,7 +521,7 @@
         el.dispatchEvent(new Event(type, { bubbles: true }));
         await wait();
       };
-      if (step.type === "Button") return click(one("[data-press]"));
+      if (step.type === "Message") return click(one("[data-press]"));
       if (step.type === "RadioButton") return click(one('input[type="radio"][data-ans]'));
       if (step.type === "Select") return put(one("select[data-ans]"), one("select[data-ans]").options[1].value, "change");
       if (step.type === "Checkbox" && one("[data-confirm]")) return one("[data-confirm].on") ? null : click(one("[data-confirm]"));
@@ -587,14 +587,14 @@
           await fillStep(st).catch((err) => {
             throw new Error(`шаг «${st.id}» (${st.type}): ${err.message}`);
           });
-          if (st.type === "Button") continue;
+          if (st.type === "Message") continue;
           const next = $("stepNext");
           expect(next && !next.disabled, `шаг «${st.id}»: «Далее» недоступна`);
           await click(next);
         }
         const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
         expect(sc.result.completedAt, "сценарий не пройден до конца");
-        const missed = ["Button", "RadioButton", "Checkbox", "Select", "Comment", "Image", "Datetime"].filter((x) => !seen.has(x));
+        const missed = ["Message", "RadioButton", "Checkbox", "Select", "Comment", "Image", "Datetime"].filter((x) => !seen.has(x));
         expect(!missed.length, `не встретились типы шагов: ${missed.join(", ")}`);
         // Ответы «дата и время» на шагах пути — местными датой и временем, не строкой ISO (BUG-71)
         await click(root().querySelectorAll(".crumb")[0]);
@@ -604,6 +604,60 @@
         expect(atts.some((a) => a.source === "operator" && a.fileName === "selftest.png") && atts.some((a) => a.source === "camera"), "нет вложений: файл оператора и снимок камеры");
         return `${sc.path.length} шагов, ${seen.size} типов`;
       } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Шаги-кнопки (Message) в сценарии набора: INC-1839 на второй версии «Проникновения» — «Сообщил охране», «Доложил»; последняя открывает «Закрыть» с «Обработан» (§14.5)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo" });
+      await wait(300);
+      try {
+        const inc = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.number === "INC-1839");
+        expect(inc, "в наборе нет INC-1839");
+        const guid = inc.guid;
+        const first = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+        expect(first.scenarioVersion === 2, `INC-1839 на версии ${first.scenarioVersion}, а не 2`);
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", guid);
+        expect(claim, "INC-1839 нельзя взять");
+        await click(claim);
+        expect(mode() === "work", "карточка не открылась");
+        const pressed = [];
+        for (let i = 0; i < 10; i++) {
+          const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+          if (sc.result.completedAt) break;
+          const st = sc.script.steps.find((x) => x.id === sc.result.currentStepId);
+          const shown = () => (root().querySelector(".step-h strong") || {}).textContent === (st.title || st.view.label);
+          for (let k = 0; k < 25 && !shown(); k++) await wait();
+          expect(shown(), `карточка не показала шаг «${st.id}»`);
+          // Классификация — первый вариант, «Реальное проникновение»: ветка с «Сообщите охране»
+          await fillStep(st);
+          if (st.type === "Message") {
+            pressed.push(st.view.label);
+            await wait(200);
+            if (!$("modalDialog").hidden) break;
+            continue;
+          }
+          const next = $("stepNext");
+          expect(next && !next.disabled, `шаг «${st.id}»: «Далее» недоступна`);
+          await click(next);
+        }
+        expect(pressed.join(", ") === "Сообщил охране, Доложил", `нажаты кнопки шагов: «${pressed.join(", ")}»`);
+        const card = await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`);
+        expect(card.scenario.result.completedAt, "сценарий не пройден до конца");
+        const macros = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").length;
+        expect(macros === 2, `макросов в журнале ${macros}, а не 2`);
+        expect(!$("modalDialog").hidden && field("resultId").value === "processed", "после «Доложил» не открылась «Закрыть» с «Обработан»");
+        await confirmDialog();
+        expect(mode() === "queue", "после закрытия карточка не закрылась");
+        return pressed.join(", ");
+      } finally {
+        if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await wait(300);

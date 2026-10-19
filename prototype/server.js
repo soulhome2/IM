@@ -230,7 +230,7 @@
     function answerText(step, entry) {
       if (!entry || entry.skipped) return "—";
       const label = (id) => ((step.view.options || []).find((o) => o.id === id) || { label: id }).label;
-      if (step.type === "Button") return step.view.label;
+      if (step.type === "Message") return step.view.label;
       if (Array.isArray(entry.value)) return step.type === "Image" ? String(entry.value.length) : entry.value.map(label).join(", ");
       return step.view.options ? label(entry.value) : String(entry.value == null ? "" : entry.value);
     }

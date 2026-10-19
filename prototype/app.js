@@ -916,7 +916,7 @@
   // Обязательность — по формату DSL v1: у RadioButton, Select и Datetime по умолчанию да; кнопку надо нажать
   const REQUIRED_BY_DEFAULT = { RadioButton: true, Select: true, Datetime: true };
   const stepRequired = (step) =>
-    step.type === "Button" || (step.view.required !== undefined ? step.view.required === true : Boolean(REQUIRED_BY_DEFAULT[step.type]));
+    step.type === "Message" || (step.view.required !== undefined ? step.view.required === true : Boolean(REQUIRED_BY_DEFAULT[step.type]));
   // Макросы, запущенные ответом на шаг (callMacro), — из прохождения
   const macrosOf = (ev, id) =>
     scenarioOf(ev) ? scenarioOf(ev).result.history.filter((h) => h.stepId === id && h.action === "callMacro").map((h) => h.macroId) : [];
@@ -929,7 +929,7 @@
       const o = (step.view.options || []).find((x) => x.id === id);
       return o ? t(o.label) : id;
     };
-    if (step.type === "Button") return t(step.view.label);
+    if (step.type === "Message") return t(step.view.label);
     if (step.type === "Image") return t("Фото: {n}", { n: entry.value.length });
     if (Array.isArray(entry.value)) return entry.value.map(label).join(", ");
     if (step.view.options) return label(entry.value);
@@ -994,7 +994,7 @@
     const step = stepOf(ev, path[i]);
     if (!step) return false;
     if (stepEditable(ev, i, editable) && changed(ev, step)) return filled(step, valueOf(ev, step)) || !stepRequired(step);
-    if (editable && isCurrentStep(ev, i)) return step.type !== "Button" && (!stepRequired(step) || filled(step, valueOf(ev, step)));
+    if (editable && isCurrentStep(ev, i)) return step.type !== "Message" && (!stepRequired(step) || filled(step, valueOf(ev, step)));
     return i < path.length - 1;
   }
 
@@ -1035,7 +1035,7 @@
     const d = draftOf(ev, step.id);
     const value = valueOf(ev, step);
     const body = { stepId: step.id };
-    if (step.type === "Button") body.value = null;
+    if (step.type === "Message") body.value = null;
     else if (!filled(step, value) && !stepRequired(step)) body.skip = true;
     else Object.assign(body, { value }, d && d.attachments ? { attachments: d.attachments } : {});
     try {
@@ -2315,7 +2315,7 @@
             ? `<input type="file" accept="image/*" data-file="${id}" ${view.allowMultiple ? "multiple" : ""} ${dis} />`
             : `<button type="button" class="btn outline" data-snap="${id}" ${dis}>${te(view.source === "map" ? "Снимок карты" : "Снимок с камеры")}</button>`;
       control = `<div class="macro-row">${pick}${n ? `<span class="btn ok" aria-disabled="true">${te("Фото: {n}", { n })}</span>` : ""}</div>`;
-    } else if (step.type === "Button") {
+    } else if (step.type === "Message") {
       const style = view.emphasis === "destructive" ? "danger" : view.emphasis === "secondary" ? "outline" : "primary";
       control = `<button type="button" class="btn ${style}" data-press="${id}" ${dis}>${te(view.label)}</button>`;
     }
@@ -2323,7 +2323,7 @@
     const launched = macros.length
       ? `<div class="macro-row">${macros.map((m) => `<span class="btn ok" aria-disabled="true">${te("Запущено")} · ${te(m)}</span>`).join("")}</div>`
       : "";
-    return (step.type === "Button" ? "" : question) + control + launched;
+    return (step.type === "Message" ? "" : question) + control + launched;
   }
 
   // Дата и время шага Datetime: в прохождении — ISO-8601 по kind, в поле — местное время браузера

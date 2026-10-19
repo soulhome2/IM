@@ -22,8 +22,8 @@
 
   // Кнопка — ответ нажатием: обязательности у неё нет, пропустить её нельзя
   const isRequired = (step) =>
-    step.type !== "Button" && (step.view.required !== undefined ? step.view.required === true : REQUIRED_BY_DEFAULT[step.type] === true);
-  const canSkip = (step) => step.type !== "Button" && !isRequired(step);
+    step.type !== "Message" && (step.view.required !== undefined ? step.view.required === true : REQUIRED_BY_DEFAULT[step.type] === true);
+  const canSkip = (step) => step.type !== "Message" && !isRequired(step);
 
   function start(script, at) {
     const major = Number(String(script.dslVersion).split(".")[0]);
@@ -54,7 +54,7 @@
     const v = step.view;
     const ids = (v.options || []).map((o) => o.id);
     switch (step.type) {
-      case "Button":
+      case "Message":
         return null;
       case "RadioButton":
       case "Select":
@@ -93,7 +93,7 @@
   }
 
   // Каноническое значение (спецификация, раздел 9): у кнопки и у шага «только для показа» значения нет
-  const canonical = (step, raw) => (step.type === "Button" || (step.type === "Comment" && step.view.readonly) ? null : raw);
+  const canonical = (step, raw) => (step.type === "Message" || (step.type === "Comment" && step.view.readonly) ? null : raw);
 
   // Путь — шаги, пройденные к текущему, по журналу прогона. Ответ на шаг пути и события того же ответа
   // (переход, finish) решают, что дальше: переход на следующий шаг пути — путь остаётся; на другой —

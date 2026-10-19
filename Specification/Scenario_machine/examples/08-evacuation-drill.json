@@ -138,7 +138,7 @@
     },
     {
       "id": "btn_close",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть учение и сформировать отчёт",

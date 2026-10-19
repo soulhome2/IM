@@ -2551,7 +2551,7 @@
       "slaBreached": false,
       "breaches": [],
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
-      "scenarioVersion": 1,
+      "scenarioVersion": 2,
       "scenarioResult": {
         "dslVersion": "1.0",
         "state": {},

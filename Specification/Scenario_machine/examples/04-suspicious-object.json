@@ -254,7 +254,7 @@
     },
     {
       "id": "btn_close_high",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть с эскалацией (высокий риск)",
@@ -282,7 +282,7 @@
     },
     {
       "id": "btn_close_medium",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть инцидент",
@@ -304,7 +304,7 @@
     },
     {
       "id": "btn_close_low",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть с наблюдением",
@@ -326,7 +326,7 @@
     },
     {
       "id": "btn_close_resolved",
-      "type": "Button",
+      "type": "Message",
       "title": "Завершение",
       "view": {
         "label": "Закрыть (объект разрешён сам собой)",
