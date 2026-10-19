@@ -182,7 +182,7 @@ EOF
 
 ## Машина сценариев
 
-Сценарий обработки — свой автомат у каждого сценария: [`Specification/Scenario_machine/`](../../../Specification/Scenario_machine/README.md), формат DSL v1, исполнитель [`prototype/scenario.js`](../../../prototype/scenario.js), стык с машиной инцидента — §14.5 правил. Проверяются сценарии эталонного набора (`fixtures/demo.json` → `scenarios.rows`, каждая версия) и примеры машины сценариев; примеры — копия исходника, их находки — замечания исходнику, а не пункты плана (`ORIGIN.md`).
+Сценарий обработки — свой автомат у каждого сценария: [`Specification/Scenario_machine/`](../../../Specification/Scenario_machine/README.md), формат DSL v1, исполнитель [`prototype/scenario.js`](../../../prototype/scenario.js), стык с машиной инцидента — §14.5 правил. Проверяются сценарии эталонного набора (`Specification/State_machine/fixtures/scenarios/<тип события>.v<версия>.json`, каждая версия) и примеры машины сценариев; примеры — копия исходника, их находки — замечания исходнику, а не пункты плана (`ORIGIN.md`).
 
 | Термин чек‑листа | В машине сценариев |
 |---|---|

@@ -6,7 +6,7 @@
 Нужен пакет jsonschema (в CI ставится в checks.yml). Проверяет:
 - примеры Specification/Scenario_machine/examples/ — схему и смысл; отрицательные примеры A5 — что их
   отвергает то, что должно (README машины сценариев, «Примеры»);
-- сценарии эталонного набора (fixtures/demo.json → scenarios.rows) — то же и профиль МИ: нет escalate и assign,
+- сценарии эталонного набора (fixtures/scenarios/<тип события>.v<версия>.json, имя — по metadata) — то же и профиль МИ: нет escalate и assign,
   metadata совпадает с guid и версией строки, у типа события — существующий сценарий, прогоны инцидентов ссылаются
   на сценарий своего типа события, существующую версию и её шаги;
 - стык: наборы обязательных шагов, на которые ссылается workflow.v4.json, есть в профиле МИ.
@@ -33,7 +33,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINE = os.path.join(ROOT, "Specification", "Scenario_machine")
 EXAMPLES = os.path.join(MACHINE, "examples")
 WORKFLOW = os.path.join(ROOT, "Specification", "State_machine", "workflow.v4.json")
-FIXTURE = os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fixture  # noqa: E402
 
 # Белый список JSONLogic (спецификация, раздел 7)
 OPERATORS = {"var", "==", "!=", ">", ">=", "<", "<=", "and", "or", "!", "if", "in", "none", "some", "all", "missing", "missing_some"}
@@ -485,9 +486,16 @@ def check_examples(validator, err, warn):
 
 
 def check_fixture(validator, err):
-    """Сценарии эталонного набора (scenarios.rows — строки как на сервере) и прогоны инцидентов."""
-    fx = load(FIXTURE)
+    """Сценарии эталонного набора — файлы fixtures/scenarios/ (строки как на сервере собирает tools/fixture.py) —
+    и прогоны инцидентов. Имя файла — <тип события>.v<версия>.json по metadata сценария (DATA-09)."""
+    fx = fixture.load()
     rows = fx["scenarios"]["rows"]
+    kind = {guid: k for k, guid in fx["scenarios"]["byEventType"].items()}
+    for name, script in fixture.scenario_files():
+        meta = script.get("metadata", {})
+        want = f"{kind.get(meta.get('scenarioGuid'), '?')}.v{meta.get('version')}.json"
+        if name != want:
+            err.append(f"набор: файл сценария {name} — по metadata должен называться {want}")
     versions = {}
     for row in rows:
         name = f"набор: сценарий {row.get('guid')} v{row.get('version')}"

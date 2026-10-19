@@ -83,10 +83,12 @@
     const [inc] = await newOf(env, "intrusion");
     await env.act(inc.guid, "claim", {}, "queue");
     // Кратчайший путь: подтверждение, «Персонал / ложная», комментарий
-    assert.eq((await scenarioOf(env, inc.guid)).progress, { filled: 0, total: 3, step: 1 }, "в начале");
+    const first = await scenarioOf(env, inc.guid);
+    assert.eq([first.progress, first.ahead], [{ filled: 0, total: 3, step: 1 }, ["verdict", "note"]], "в начале: шаги впереди — кратчайший путь (RULE-95)");
     assert.eq((await answerOk(env, inc.guid, "visual", ["confirmed"])).progress, { filled: 1, total: 3, step: 2 }, "после подтверждения");
     // «Реальное проникновение» ведёт через зону — путь длиннее
-    assert.eq((await answerOk(env, inc.guid, "verdict", "real")).progress, { filled: 2, total: 4, step: 3 }, "после ветвления");
+    const real = await answerOk(env, inc.guid, "verdict", "real");
+    assert.eq([real.progress, real.ahead], [{ filled: 2, total: 4, step: 3 }, ["note"]], "после ветвления: впереди — другой путь");
     const row = (await env.all("mine")).find((e) => e.guid === inc.guid);
     assert.eq([row.scenarioProgress.filled, row.scenarioProgress.total], [2, 4], "строка очереди");
   });

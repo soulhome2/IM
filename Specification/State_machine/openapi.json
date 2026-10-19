@@ -4672,6 +4672,7 @@
           "script",
           "result",
           "path",
+          "ahead",
           "cursorStepId",
           "progress",
           "requiredStepsFilled"
@@ -4707,6 +4708,13 @@
               "type": "string"
             },
             "description": "Шаги, пройденные к текущему, по порядку; последний — текущий шаг или, у завершённого, шаг с `finish` (профиль МИ)"
+          },
+          "ahead": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Шаги впереди: кратчайший путь от текущего шага до конца сценария, без самого текущего; у пройденного — пусто. Могут измениться от ответов. `path` и `ahead` вместе — M в «N из M» (RULE-95)"
           },
           "cursorStepId": {
             "type": "string",

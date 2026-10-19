@@ -14,6 +14,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fixture  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUIDE = "Specification/Operator guide.md"
 NAME = re.compile(r"«([^«»]+)»|\*\*([^*]+)\*\*")
@@ -42,7 +45,7 @@ def json_strings(value):
 
 def ui_texts():
     texts = set(json_strings(json.loads(read("Specification/State_machine/strings/ru.json"))))
-    texts |= set(json_strings(json.loads(read("Specification/State_machine/fixtures/demo.json"))))
+    texts |= set(json_strings(fixture.load()))
     for path in ("prototype/i18n-ui.js", "prototype/app.js", "prototype/index.html"):
         source = read(path)
         texts |= set(QUOTED.findall(source))

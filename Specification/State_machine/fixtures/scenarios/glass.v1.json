@@ -1,0 +1,126 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000003",
+    "version": 1,
+    "name": "Звук разбития стекла"
+  },
+  "initialStepId": "audio",
+  "steps": [
+    {
+      "id": "audio",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Звуковое событие прослушано оператором",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "visual"
+        }
+      }
+    },
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Повреждение",
+      "view": {
+        "label": "Повреждение видно на камерах зоны",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Классификация",
+      "view": {
+        "label": "Классификация",
+        "options": [
+          {
+            "id": "broken",
+            "label": "Разбитие витрины или стекла"
+          },
+          {
+            "id": "noise",
+            "label": "Бытовой шум: посуда, погрузка"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Ложная сработка детектора"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "broken"
+              ]
+            },
+            "goto": "note",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Включить сирену зоны"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Направить охрану к витрине"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий",
+      "view": {
+        "label": "Комментарий",
+        "required": false,
+        "placeholder": "Что повреждено, вызвана ли охрана"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

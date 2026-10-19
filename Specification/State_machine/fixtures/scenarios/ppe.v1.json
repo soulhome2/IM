@@ -1,0 +1,149 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000006",
+    "version": 1,
+    "name": "Отсутствие СИЗ"
+  },
+  "initialStepId": "visual",
+  "steps": [
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Отсутствие каски подтверждено по видео",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Классификация",
+      "view": {
+        "label": "Классификация",
+        "options": [
+          {
+            "id": "violation",
+            "label": "Реальное нарушение"
+          },
+          {
+            "id": "detector_error",
+            "label": "Ошибка детектора"
+          },
+          {
+            "id": "outside_zone",
+            "label": "Сотрудник вне рабочей зоны"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "violation"
+              ]
+            },
+            "goto": "who",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Голосовое оповещение в зону"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Уведомить инженера по охране труда"
+                }
+              }
+            ]
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "detector_error"
+              ]
+            },
+            "goto": "note"
+          }
+        ],
+        "default": {
+          "goto": "who"
+        }
+      }
+    },
+    {
+      "id": "who",
+      "type": "Select",
+      "title": "Кто нарушитель",
+      "view": {
+        "label": "Кто нарушитель",
+        "options": [
+          {
+            "id": "warehouse_staff",
+            "label": "Сотрудник склада"
+          },
+          {
+            "id": "supplier_driver",
+            "label": "Водитель поставщика"
+          },
+          {
+            "id": "contractor",
+            "label": "Подрядчик"
+          },
+          {
+            "id": "unidentified",
+            "label": "Не идентифицирован"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий / кому передано",
+      "view": {
+        "label": "Комментарий / кому передано",
+        "required": false,
+        "placeholder": "Табельный номер, бригадир, номер акта"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

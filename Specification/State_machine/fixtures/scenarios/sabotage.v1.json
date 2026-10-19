@@ -1,0 +1,103 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+    "version": 1,
+    "name": "Саботаж камеры"
+  },
+  "initialStepId": "lost",
+  "steps": [
+    {
+      "id": "lost",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Подтверждена потеря видео / закрытие объектива",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Причина",
+      "view": {
+        "label": "Причина",
+        "options": [
+          {
+            "id": "deliberate",
+            "label": "Умышленное воздействие"
+          },
+          {
+            "id": "malfunction",
+            "label": "Неисправность"
+          },
+          {
+            "id": "weather",
+            "label": "Погодные условия"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "in": [
+                {
+                  "var": "state.verdict.value"
+                },
+                [
+                  "deliberate",
+                  "malfunction"
+                ]
+              ]
+            },
+            "goto": "note",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Создать заявку на ремонт"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий",
+      "view": {
+        "label": "Комментарий",
+        "required": false,
+        "placeholder": "Камера, симптомы, заявка в сервис"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

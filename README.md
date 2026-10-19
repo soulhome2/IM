@@ -13,7 +13,7 @@
 | [prototype/server.js](prototype/server.js) | Встроенный сервер: отвечает по контракту `openapi.json`, хранит инциденты, журнал, прохождение сценариев и сессию, выполняет переходы машины и автоматические переходы, эмулирует коллег |
 | [Specification/Scenario_machine/](Specification/Scenario_machine/README.md) | Машина сценариев: формат сценария (DSL v1), схема, примеры, профиль МИ и откуда перенесено. Исполнитель — [prototype/scenario.js](prototype/scenario.js), стык с машиной инцидента — §14.5 правил |
 | [prototype/api.js](prototype/api.js) | Клиент API: запросы интерфейса уходят во встроенный сервер, а с `?api=https://…` — на настоящий бэкенд |
-| [fixtures/demo.json](Specification/State_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы, сценарии в формате машины сценариев. На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
+| [fixtures/demo.json](Specification/State_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы; сценарии — файлами DSL рядом, в [fixtures/scenarios/](Specification/State_machine/fixtures/scenarios/). На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
 | [BACKEND.md](Specification/State_machine/BACKEND.md) | Памятка для команды бэкенда: что реализовать, как проверить на тестовом стенде, когда готово |
 | [FRONTEND.md](Specification/State_machine/FRONTEND.md) | Памятка для команды фронтенда: что из прототипа — требование, что только демо, что ещё за вами, когда готово |
 | [TRANSITIONS.md](Specification/State_machine/TRANSITIONS.md) | Переходы машины словами — собраны из `workflow.v4.json`. Рядом с §6 правил: что задумано и что сделано |

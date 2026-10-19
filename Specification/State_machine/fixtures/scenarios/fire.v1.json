@@ -1,0 +1,138 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+    "version": 1,
+    "name": "Пожарная тревога"
+  },
+  "initialStepId": "visual",
+  "steps": [
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Тревога подтверждена по видео",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Классификация",
+      "view": {
+        "label": "Классификация",
+        "options": [
+          {
+            "id": "real",
+            "label": "Реальная"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Ложная"
+          },
+          {
+            "id": "dispatch",
+            "label": "Требует выезда"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "real"
+              ]
+            },
+            "goto": "kind",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Оповещение по площадке"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Разблокировать эвакуационные выходы"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "kind"
+        }
+      }
+    },
+    {
+      "id": "kind",
+      "type": "Select",
+      "title": "Тип сработки",
+      "view": {
+        "label": "Тип сработки",
+        "options": [
+          {
+            "id": "smoke",
+            "label": "Задымление"
+          },
+          {
+            "id": "open_fire",
+            "label": "Открытое пламя"
+          },
+          {
+            "id": "no_visual",
+            "label": "Датчик без визуального подтверждения"
+          },
+          {
+            "id": "system_test",
+            "label": "Тест системы"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий / номер наряда",
+      "view": {
+        "label": "Комментарий / номер наряда",
+        "required": false,
+        "placeholder": "Что сделано, кого вызвали"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

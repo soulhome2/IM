@@ -907,6 +907,8 @@
 
   const scenarioOf = (ev) => (ev && ev.scenario) || null;
   const pathOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).path : []);
+  // Шаги впереди по кратчайшему пути до конца — серым, перейти на них нельзя: могут измениться от ответов (RULE-95)
+  const aheadOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).ahead || [] : []);
   const stepOf = (ev, id) => (scenarioOf(ev) ? scenarioOf(ev).script.steps.find((s) => s.id === id) || null : null);
   const entryOf = (ev, id) => (scenarioOf(ev) && scenarioOf(ev).result.state[id]) || null;
   const runDone = (ev) => Boolean(scenarioOf(ev) && scenarioOf(ev).result.completedAt);
@@ -931,7 +933,18 @@
     if (step.type === "Image") return t("Фото: {n}", { n: entry.value.length });
     if (Array.isArray(entry.value)) return entry.value.map(label).join(", ");
     if (step.view.options) return label(entry.value);
+    if (step.type === "Datetime") return fmtWhen(step.view.kind, entry.value);
     return entry.value == null ? t("Прочитано") : String(entry.value);
+  }
+
+  // Ответ «дата и время» — местными датой и временем на языке интерфейса, а не строкой ISO (BUG-71)
+  function fmtWhen(kind, value) {
+    const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+    if (kind === "time") return String(value).slice(0, 5);
+    const d = new Date(kind === "date" ? `${value}T00:00:00` : value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    if (kind === "date") return d.toLocaleDateString(locale);
+    return d.toLocaleString(locale, { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
   // Черновик ответа — до «Далее»: { value, attachments } по инциденту и шагу
@@ -1002,6 +1015,8 @@
       renderStatus();
       return;
     }
+    // Ушли с шага без «Далее» — его черновик не сохранён и сбрасывается: в поле всегда записанный ответ (BUG-70)
+    state.drafts.delete(draftKey(ev, path[cursorOf(ev)]));
     try {
       ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: path[index] });
     } catch (err) {
@@ -2138,6 +2153,21 @@
                 </li>
               `;
             })
+            .join("")}
+          ${aheadOf(ev)
+            .map(
+              (id, k) => `
+                <li class="crumb locked ahead" title="${te("Может измениться от ответов")}">
+                  <span class="crumb-track">
+                    <span class="crumb-n">${path.length + k + 1}</span>
+                    <span class="crumb-line" aria-hidden="true"></span>
+                  </span>
+                  <span class="crumb-body">
+                    <span class="crumb-name">${te(stepShort(stepOf(ev, id)))}</span>
+                  </span>
+                </li>
+              `
+            )
             .join("")}
           </ol>`
           }

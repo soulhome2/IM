@@ -369,6 +369,14 @@
       closedId = b.dataset.ev;
       await click(b);
       expect(mode() === "work", "карточка не открылась");
+      // Одиночная отметка до нажатия — утверждение «Подтверждаю», верное и до отметки, и после (BUG-69)
+      const confirm = root().querySelector("[data-confirm]");
+      if (confirm) expect(!confirm.classList.contains("on") && /Подтверждаю/.test(confirm.textContent), `до отметки на кнопке «${confirm.textContent.trim()}»`);
+      // Шаги впереди серым (RULE-95): на экране столько шагов, сколько M в «Шаг N из M»; на шаги впереди не перейти
+      const m = $("statusSteps").textContent.match(/из (\d+)/);
+      const crumbs = root().querySelectorAll(".crumb");
+      expect(m && crumbs.length === Number(m[1]), `шагов на экране ${crumbs.length}, а в строке состояния «${$("statusSteps").textContent}»`);
+      expect([...root().querySelectorAll(".crumb.ahead")].every((c) => c.dataset.crumb === undefined) && root().querySelector(".crumb.ahead"), "шагов впереди нет или на них можно перейти");
       return closedId;
     });
 
@@ -441,6 +449,27 @@
       }
       throw new Error("в сценарии не нашлось шага с вариантами");
     }, "Взять новое событие");
+
+    await step("Невыданный ответ на пройденном шаге не остаётся после ухода с шага: в поле — записанный (BUG-70)", async () => {
+      await openOwn(closedId);
+      const count = root().querySelectorAll(".crumb").length;
+      for (let n = 1; n <= count; n++) {
+        const crumb = root().querySelectorAll(".crumb")[n - 1];
+        if (crumb.dataset.crumb === undefined) continue;
+        await click(crumb);
+        const radios = [...root().querySelectorAll('input[type="radio"][data-ans]')];
+        const saved = radios.find((r) => r.checked);
+        if (!saved) continue;
+        // Выбрать другой вариант и уйти на соседний шаг пути, не нажимая «Далее»
+        await click(radios.find((r) => !r.checked));
+        await click(n > 1 ? $("stepBack") : $("stepNext"));
+        await click(root().querySelectorAll(".crumb")[n - 1]);
+        const now = root().querySelector('input[type="radio"][data-ans]:checked');
+        expect(now && now.value === saved.value, `в поле «${now && now.value}», а записан «${saved.value}»`);
+        return `шаг ${n}: ${saved.value}`;
+      }
+      throw new Error("на пути нет пройденного шага с вариантами");
+    }, "Ответ с вариантами сохраняется после «Далее»");
 
     await step("Макрос по ответу сценария: переответ «Реальная» на пройденном шаге запускает макрос, на шаге — «Запущено» (§14.5)", async () => {
       await openOwn(closedId);
@@ -567,6 +596,10 @@
         expect(sc.result.completedAt, "сценарий не пройден до конца");
         const missed = ["Button", "RadioButton", "Checkbox", "Select", "Comment", "Image", "Datetime"].filter((x) => !seen.has(x));
         expect(!missed.length, `не встретились типы шагов: ${missed.join(", ")}`);
+        // Ответы «дата и время» на шагах пути — местными датой и временем, не строкой ISO (BUG-71)
+        await click(root().querySelectorAll(".crumb")[0]);
+        const iso = [...root().querySelectorAll(".crumb-ans")].map((x) => x.textContent).find((x) => /\d{4}-\d{2}-\d{2}T|\d{2}:\d{2}:\d{2}/.test(x));
+        expect(!iso, `ответ на пути строкой ISO: «${iso}»`);
         const atts = sc.result.attachments || [];
         expect(atts.some((a) => a.source === "operator" && a.fileName === "selftest.png") && atts.some((a) => a.source === "camera"), "нет вложений: файл оператора и снимок камеры");
         return `${sc.path.length} шагов, ${seen.size} типов`;

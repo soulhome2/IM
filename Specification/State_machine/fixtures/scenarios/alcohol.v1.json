@@ -1,0 +1,138 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000001",
+    "version": 1,
+    "name": "Превышение уровня алкоголя"
+  },
+  "initialStepId": "visual",
+  "steps": [
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Личность на точке прохода подтверждена по видео",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Результат проверки",
+      "view": {
+        "label": "Результат проверки",
+        "options": [
+          {
+            "id": "excess",
+            "label": "Превышение подтверждено"
+          },
+          {
+            "id": "retest_ok",
+            "label": "Повторный тест в норме"
+          },
+          {
+            "id": "gate_failure",
+            "label": "Сбой алкорамки"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verdict.value"
+                },
+                "excess"
+              ]
+            },
+            "goto": "level",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Заблокировать турникет"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "Вызвать медпункт"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "level",
+      "type": "Select",
+      "title": "Показание прибора",
+      "view": {
+        "label": "Показание прибора",
+        "options": [
+          {
+            "id": "from_03",
+            "label": "0,3–0,5 ‰"
+          },
+          {
+            "id": "from_05",
+            "label": "0,5–1,0 ‰"
+          },
+          {
+            "id": "over_10",
+            "label": "Более 1,0 ‰"
+          },
+          {
+            "id": "not_read",
+            "label": "Показание не считано"
+          }
+        ],
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий",
+      "view": {
+        "label": "Комментарий",
+        "required": false,
+        "placeholder": "ФИО, смена, кому передан сотрудник"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

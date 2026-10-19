@@ -5,7 +5,8 @@
    машины сценариев (scenario.js) через стык §14.5. Интерфейс (app.js)
    разговаривает с ним только через api.js, теми же запросами, что с настоящим бэкендом.
    Работает в той же вкладке: страница открывается и с диска (file://), и с сайта.
-   Данные — эталонный набор Specification/State_machine/fixtures/demo.json (prototype/fixture.js):
+   Данные — эталонный набор Specification/State_machine/fixtures/demo.json со сценариями fixtures/scenarios/
+   (prototype/fixture.js):
    его же загружает бэкенд на тестовом стенде. Демо: один оператор, права — весь каталог,
    эмуляция коллег (§17).
 
@@ -634,6 +635,8 @@
         script: JSON.parse(JSON.stringify(row.script)),
         result: JSON.parse(JSON.stringify(ev.run)),
         path: pathOf(ev),
+        // Шаги впереди по кратчайшему пути — карточка показывает их серым (RULE-95)
+        ahead: IMScenario.ahead(row.script, ev.run),
         cursorStepId: viewStepOf(ev),
         progress: progressOf(ev),
         requiredStepsFilled: Object.fromEntries(

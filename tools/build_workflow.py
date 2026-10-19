@@ -21,6 +21,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fixture  # noqa: E402
 import settings_doc  # noqa: E402
 import transitions_doc  # noqa: E402
 
@@ -34,8 +35,13 @@ TARGETS = [
 
 
 def build(source, var, indent):
-    with open(os.path.join(MACHINE, source), encoding="utf-8") as f:
-        data = json.load(f)
+    if source == "fixtures/demo.json":
+        # Эталонный набор — с файлами сценариев fixtures/scenarios/ (DATA-09)
+        data = fixture.load()
+        source = "fixtures/demo.json и fixtures/scenarios/*.json"
+    else:
+        with open(os.path.join(MACHINE, source), encoding="utf-8") as f:
+            data = json.load(f)
     header = (
         f"// Собрано из Specification/State_machine/{source} скриптом tools/build_workflow.py.\n"
         "// Руками не править: правится исходник, затем сборка.\n"

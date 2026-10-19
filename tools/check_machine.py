@@ -17,6 +17,9 @@ import re
 import sys
 from collections import Counter
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fixture  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, "Specification", "State_machine")
 
@@ -175,11 +178,9 @@ def check_api(w, o, err):
 
 
 def check_fixture(w, err):
-    """Эталонный набор fixtures/demo.json: время — UTC и не позже снимка, ссылки на людей,
-    устройства, состояния, справочники и сценарии существуют, таймеры соответствуют состоянию."""
-    path = os.path.join(ROOT, "Specification", "State_machine", "fixtures", "demo.json")
-    with open(path, encoding="utf-8") as f:
-        fx = json.load(f)
+    """Эталонный набор fixtures/demo.json с файлами сценариев (tools/fixture.py): время — UTC и не позже снимка,
+    ссылки на людей, устройства, состояния, справочники и сценарии существуют, таймеры соответствуют состоянию."""
+    fx = fixture.load()
     utc = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
     captured = fx.get("capturedAt")
     if not captured or not utc.match(captured):
@@ -366,7 +367,10 @@ def check_fixture(w, err):
             "on_hold": ("resolution", "hold"),
             "closed": (),
         }.get(st, ())
-        running = tuple(n for n in ("reaction", "resolution", "hold") if t.get(n))
+        # Норматив закрытия, однажды запущенный, у нового и ожидающего принятия стоит с остатком (§4, правило 6):
+        # инцидент брали в работу и вернули или передали — он не идёт, а leftSec
+        paused = st in ("new", "pending_acceptance") and "leftSec" in (t.get("resolution") or {})
+        running = tuple(n for n in ("reaction", "resolution", "hold") if t.get(n) and not (n == "resolution" and paused))
         if running != expect:
             err.append(f"{where}: в состоянии {st} должны идти таймеры: {', '.join(expect) or 'никакие'}, а заданы: {', '.join(running) or 'никакие'}")
         if st == "on_hold" and "leftSec" not in (t.get("resolution") or {}):

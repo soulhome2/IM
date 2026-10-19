@@ -238,6 +238,33 @@
     return null;
   }
 
+  // Шаги впереди: кратчайший путь от текущего шага до конца, без самого текущего; у пройденного — пусто.
+  // Обход тот же, что у remaining: путь и шаги впереди вместе дают M в «N из M» (RULE-95)
+  function ahead(script, result) {
+    if (result.completedAt) return [];
+    const from = result.currentStepId;
+    const prev = new Map([[from, null]]);
+    const queue = [from];
+    while (queue.length) {
+      const id = queue.shift();
+      const step = stepOf(script, id);
+      if (!step) continue;
+      const outs = outcomesOf(step);
+      if (outs.includes("finish")) {
+        const out = [];
+        for (let x = id; x !== from; x = prev.get(x)) out.unshift(x);
+        return out;
+      }
+      outs.forEach((g) => {
+        if (g && !prev.has(g) && stepOf(script, g)) {
+          prev.set(g, id);
+          queue.push(g);
+        }
+      });
+    }
+    return [];
+  }
+
   // Курсор: текущий шаг прогона; у завершённого — последний шаг пути (решение в5)
   function cursor(script, result) {
     if (!result.completedAt) return result.currentStepId;
@@ -297,5 +324,5 @@
     return { result: r, moved };
   }
 
-  window.IMScenario = { start, answer, path, cursor, progress, stepsFilled, share, evaluate, checkValue, isRequired, canSkip, remaining };
+  window.IMScenario = { start, answer, path, ahead, cursor, progress, stepsFilled, share, evaluate, checkValue, isRequired, canSkip, remaining };
 })();

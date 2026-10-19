@@ -59,6 +59,10 @@
     const prog = S.progress(script, result);
     assert.ok(prog.total === null || prog.filled <= prog.total, `${where}: прогресс ${prog.filled} из ${prog.total}`);
     if (result.completedAt) assert.eq(prog.filled, prog.total, `${where}: завершённый — N из N`);
+    // Шаги впереди (RULE-95): путь и они вместе — M в «N из M»; у завершённого впереди ничего
+    const ahead = S.ahead(script, result);
+    if (prog.total !== null) assert.eq(p.length + ahead.length, prog.total, `${where}: шагов на пути и впереди — M`);
+    if (result.completedAt) assert.eq(ahead, [], `${where}: у завершённого шагов впереди нет`);
     assert.eq(S.stepsFilled(script, result, "closing"), Boolean(result.completedAt), `${where}: набор closing — прогон завершён`);
     assert.ok(S.stepsFilled(script, result, "none"), `${where}: набор none — всегда`);
   }
@@ -214,6 +218,14 @@
     assert.ok(S.stepsFilled(script, r, "closing"));
   });
 
+  test("Шаги впереди — кратчайший путь до конца без текущего шага; меняются от ответа (RULE-95)", () => {
+    const script = ex("01-perimeter-alarm.json");
+    let r = S.start(script, at());
+    assert.eq(S.ahead(script, r), ["btn_close_false"], "в начале — ложная тревога и кнопка");
+    r = answerOk(script, r, "verify_event", "real_intrusion").result;
+    assert.eq(S.ahead(script, r), ["operator_note", "btn_close_real"], "после «реального проникновения»");
+  });
+
   /* ===== «Назад» и переответ (решение в7) ===== */
 
   function toNote(script) {
@@ -366,6 +378,14 @@
       });
       assert.eq(r, stored, `${inc.number}: прохождение`);
       consistent(script, r, inc.number);
+      // Отвечать может только тот, кто ведёт инцидент (scenarioEdit): у каждого ответа есть by, и к этому моменту
+      // по журналу он взял инцидент в работу — «Взято», «Принято», «Перехват» или «Возобновлено» (DATA-08)
+      const took = ["workflow.journal.claim", "workflow.journal.accept", "workflow.journal.takeover", "workflow.journal.resume"];
+      stored.history.filter((h) => h.action === "answer" || h.action === "skip").forEach((h) => {
+        assert.ok(h.by, `${inc.number}: ответ на ${h.stepId} без by`);
+        const last = inc.journal.filter((j) => j.at <= h.ts && took.includes(j.template)).pop();
+        assert.ok(last && last.actor === h.by, `${inc.number}: ответ ${h.by} на ${h.stepId}, а в работе по журналу — ${last && last.actor}`);
+      });
     });
   });
 

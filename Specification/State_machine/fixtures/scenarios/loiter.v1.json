@@ -1,0 +1,78 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+    "version": 1,
+    "name": "Скопление / праздношатание"
+  },
+  "initialStepId": "visual",
+  "steps": [
+    {
+      "id": "visual",
+      "type": "Checkbox",
+      "title": "Подтверждение",
+      "view": {
+        "label": "Ситуация подтверждена",
+        "options": [
+          {
+            "id": "confirmed",
+            "label": "Подтверждаю"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "verdict"
+        }
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "RadioButton",
+      "title": "Решение",
+      "view": {
+        "label": "Решение",
+        "options": [
+          {
+            "id": "send_guard",
+            "label": "Направить охрану"
+          },
+          {
+            "id": "observe",
+            "label": "Наблюдать"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Ложная"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "note"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "Comment",
+      "title": "Комментарий",
+      "view": {
+        "label": "Комментарий",
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

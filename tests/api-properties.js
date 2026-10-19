@@ -89,9 +89,35 @@
       // Объединение (§11): привязанные в списках не показываются; связь у открытого — только у привязанного
       if (inc.state === "linked") say(inc, "привязанный инцидент в списке");
       if (inc.linkedTo && inc.state !== "closed") say(inc, "открытый со ссылкой на основной");
+      // Прогресс сценария в строке очереди (§14.5): отвечено не больше, чем шагов до конца
+      const prog = inc.scenarioProgress;
+      if (prog && prog.total != null && prog.filled > prog.total) say(inc, `прогресс сценария ${prog.filled} из ${prog.total}`);
     });
     if (maxActive != null && session.usage.activeCount > maxActive) bad.push(`активных у меня ${session.usage.activeCount} > ${maxActive}`);
     return bad;
+  }
+
+  // Инварианты прохождения сценария (§14.5, профиль машины сценариев) — по карточке инцидента (PROC-30)
+  function scenarioInvariants(card) {
+    const bad = [];
+    const say = (msg) => bad.push(`${card.guid} (${card.state}): сценарий — ${msg}`);
+    const sc = card.scenario;
+    const done = Boolean(sc.result.completedAt);
+    const last = sc.path[sc.path.length - 1];
+    if (sc.requiredStepsFilled.closing !== done) say(`набор «закрытие» ${sc.requiredStepsFilled.closing}, а прохождение ${done ? "завершено" : "не завершено"}`);
+    if (done && sc.result.currentStepId !== null) say("у завершённого есть текущий шаг");
+    if (!done && sc.result.currentStepId !== last) say(`текущий шаг ${sc.result.currentStepId} — не конец пути ${last}`);
+    if (!sc.path.includes(sc.cursorStepId)) say(`курсор показа ${sc.cursorStepId} не на пути`);
+    if (sc.progress.total != null && sc.progress.filled > sc.progress.total) say(`прогресс ${sc.progress.filled} из ${sc.progress.total}`);
+    if (sc.progress.step !== sc.path.length) say(`номер шага ${sc.progress.step}, а шагов на пути ${sc.path.length}`);
+    if ((card.state === "closed" || card.state === "linked") && !card.readOnly) say("закрытый или привязанный можно править");
+    return bad;
+  }
+
+  // Прохождение по карточке; инцидент, которого оператору не видно (роли сменились, §5), — не проверяется
+  async function scenarioOf(env, guid) {
+    const res = await env.call("GET", `/operator/incidents/${enc(guid)}`);
+    return res.status === 200 ? scenarioInvariants(res.body) : [];
   }
 
   async function walk(seed) {
@@ -104,6 +130,8 @@
     const journals = new Map();
     const roles = new Map(FX.people.operators.map((o) => [o.id, o.roles.slice()]));
     let checked = 0;
+    // Инциденты, которых коснулся шаг, — их прохождение проверяется по карточке
+    let touched = new Set();
     const fail = (step, msg) => {
       throw new Error(`зерно ${seed}, шаг ${step}: ${msg}. Последние шаги: ${history.slice(-6).join(" → ")}`);
     };
@@ -139,6 +167,7 @@
               : await env.answerCurrent(card.guid, variant);
           if (res.status !== undefined && res.status !== 200 && !card.readOnly) fail(step, `ответы сценария отклонены: ${res.status} ${res.body && res.body.message}`);
           history.push(`ответы ${card.guid}`);
+          touched.add(card.guid);
         }
       } else if (x < 0.29) {
         // «Объединить» (§11): два-три случайных открытых — отказ или основной со привязанными
@@ -148,6 +177,7 @@
           const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: picked.map((e) => e.guid) });
           if (![200, 403, 422].includes(res.status)) fail(step, `объединение: ${res.status}`);
           history.push(`объединить ${picked.map((e) => e.guid).join("+")}: ${res.status}`);
+          picked.forEach((e) => touched.add(e.guid));
         }
       } else {
         const all = await env.all();
@@ -159,6 +189,7 @@
         const action = pick(r, actions);
         const res = await env.act(inc.guid, action.id, formFor(action), surface, inc.state);
         history.push(`${action.id} ${inc.guid} [${surface}${action.enabled ? "" : ", недоступно"}] → ${res.status}`);
+        touched.add(inc.guid);
         // Главное свойство API: доступное выполняется, недоступное отклоняется
         if (action.enabled && res.status !== 200) {
           fail(step, `«${action.id}» показано доступным, а сервер ответил ${res.status} ${res.body && res.body.message}`);
@@ -191,9 +222,15 @@
           if (total !== counters[f.id]) bad.push(`счётчик «${f.id}» ${counters[f.id]}, а в очереди ${total}`);
         }
       }
+      for (const guid of touched) bad.push(...(await scenarioOf(env, guid)));
+      touched = new Set();
       if (bad.length) fail(step, bad.slice(0, 3).join("; "));
       checked += 1;
     }
+    // В конце — прохождение у всех инцидентов набора, в том числе привязанных и закрытых
+    const end = [];
+    for (const inc of FX.incidents) end.push(...(await scenarioOf(env, inc.guid)));
+    if (end.length) fail(STEPS, end.slice(0, 3).join("; "));
     const states = new Set((await env.all()).map((e) => e.state));
     return `${checked} шагов, состояния в конце: ${[...states].join(", ")}`;
   }
@@ -205,6 +242,7 @@
   test("Инварианты верны на начальных демо-данных", async () => {
     const env = await makeEnv();
     const bad = invariants(await env.all(), await env.session(), W.limits.maxActive);
+    for (const inc of FX.incidents) bad.push(...(await scenarioOf(env, inc.guid)));
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });
 })();

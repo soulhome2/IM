@@ -1456,7 +1456,7 @@
     }
   ],
   "scenarios": {
-    "$comment": "Машина сценариев (§14.5, Specification/Scenario_machine/): строки сценариев — как на сервере (guid, version, name, script), script — сценарий DSL v1. byEventType — какой сценарий у типа события, как правило инцидента на сервере (incidentRule.scenarios); новый инцидент получает последнюю версию. Инцидент ссылается на сценарий и версию, прохождение — scenarioResult (спецификация DSL, раздел 9).",
+    "$comment": "Машина сценариев (§14.5, Specification/Scenario_machine/): сценарии — файлами DSL v1 рядом, fixtures/scenarios/<сценарий>.v<версия>.json, по файлу на версию (DATA-09). Набор для стенда собирается с ними: строки scenarios.rows — как на сервере (guid, version, name, script), из metadata файла (tools/fixture.py). byEventType — какой сценарий у типа события, как правило инцидента на сервере (incidentRule.scenarios); новый инцидент получает последнюю версию. Инцидент ссылается на сценарий и версию, прохождение — scenarioResult (спецификация DSL, раздел 9).",
     "byEventType": {
       "fire": "60000000-0000-4000-8000-000000000002",
       "intrusion": "60000000-0000-4000-8000-000000000004",
@@ -1465,1092 +1465,7 @@
       "ppe": "60000000-0000-4000-8000-000000000006",
       "alcohol": "60000000-0000-4000-8000-000000000001",
       "glass": "60000000-0000-4000-8000-000000000003"
-    },
-    "rows": [
-      {
-        "guid": "60000000-0000-4000-8000-000000000002",
-        "version": 1,
-        "name": "Пожарная тревога",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000002",
-            "version": 1,
-            "name": "Пожарная тревога"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Тревога подтверждена по видео",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Классификация",
-              "view": {
-                "label": "Классификация",
-                "options": [
-                  {
-                    "id": "real",
-                    "label": "Реальная"
-                  },
-                  {
-                    "id": "false_alarm",
-                    "label": "Ложная"
-                  },
-                  {
-                    "id": "dispatch",
-                    "label": "Требует выезда"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "real"
-                      ]
-                    },
-                    "goto": "kind",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Оповещение по площадке"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Разблокировать эвакуационные выходы"
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "default": {
-                  "goto": "kind"
-                }
-              }
-            },
-            {
-              "id": "kind",
-              "type": "Select",
-              "title": "Тип сработки",
-              "view": {
-                "label": "Тип сработки",
-                "options": [
-                  {
-                    "id": "smoke",
-                    "label": "Задымление"
-                  },
-                  {
-                    "id": "open_fire",
-                    "label": "Открытое пламя"
-                  },
-                  {
-                    "id": "no_visual",
-                    "label": "Датчик без визуального подтверждения"
-                  },
-                  {
-                    "id": "system_test",
-                    "label": "Тест системы"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий / номер наряда",
-              "view": {
-                "label": "Комментарий / номер наряда",
-                "required": false,
-                "placeholder": "Что сделано, кого вызвали"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000002",
-        "version": 2,
-        "name": "Пожарная тревога",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000002",
-            "version": 2,
-            "name": "Пожарная тревога"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Тревога подтверждена по видео",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Классификация",
-              "view": {
-                "label": "Классификация",
-                "options": [
-                  {
-                    "id": "real",
-                    "label": "Реальная"
-                  },
-                  {
-                    "id": "false_alarm",
-                    "label": "Ложная"
-                  },
-                  {
-                    "id": "dispatch",
-                    "label": "Требует выезда"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "real"
-                      ]
-                    },
-                    "goto": "kind",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Оповещение по площадке"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Разблокировать эвакуационные выходы"
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "default": {
-                  "goto": "kind"
-                }
-              }
-            },
-            {
-              "id": "kind",
-              "type": "Select",
-              "title": "Тип сработки",
-              "view": {
-                "label": "Тип сработки",
-                "options": [
-                  {
-                    "id": "smoke",
-                    "label": "Задымление"
-                  },
-                  {
-                    "id": "open_fire",
-                    "label": "Открытое пламя"
-                  },
-                  {
-                    "id": "no_visual",
-                    "label": "Датчик без визуального подтверждения"
-                  },
-                  {
-                    "id": "system_test",
-                    "label": "Тест системы"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "evacuation"
-                }
-              }
-            },
-            {
-              "id": "evacuation",
-              "type": "RadioButton",
-              "title": "Эвакуация",
-              "view": {
-                "label": "Эвакуация объявлена",
-                "options": [
-                  {
-                    "id": "yes",
-                    "label": "Да"
-                  },
-                  {
-                    "id": "no",
-                    "label": "Нет"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий / номер наряда",
-              "view": {
-                "label": "Комментарий / номер наряда",
-                "required": false,
-                "placeholder": "Что сделано, кого вызвали"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000004",
-        "version": 1,
-        "name": "Проникновение",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000004",
-            "version": 1,
-            "name": "Проникновение"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Нарушитель виден в кадре",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Классификация",
-              "view": {
-                "label": "Классификация",
-                "options": [
-                  {
-                    "id": "real",
-                    "label": "Реальное проникновение"
-                  },
-                  {
-                    "id": "staff",
-                    "label": "Персонал / ложная"
-                  },
-                  {
-                    "id": "unclear",
-                    "label": "Недостаточно данных"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "real"
-                      ]
-                    },
-                    "goto": "zone",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Включить сирену"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Переключить PTZ на зону"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "staff"
-                      ]
-                    },
-                    "goto": "note"
-                  }
-                ],
-                "default": {
-                  "goto": "zone"
-                }
-              }
-            },
-            {
-              "id": "zone",
-              "type": "Select",
-              "title": "Зона",
-              "view": {
-                "label": "Зона",
-                "options": [
-                  {
-                    "id": "perimeter",
-                    "label": "Периметр"
-                  },
-                  {
-                    "id": "service_entrance",
-                    "label": "Служебный вход"
-                  },
-                  {
-                    "id": "warehouse",
-                    "label": "Склад"
-                  },
-                  {
-                    "id": "office",
-                    "label": "Офисная зона"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Описание",
-              "view": {
-                "label": "Описание",
-                "required": false,
-                "placeholder": "Маршрут, приметы, действия охраны"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000007",
-        "version": 1,
-        "name": "Саботаж камеры",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000007",
-            "version": 1,
-            "name": "Саботаж камеры"
-          },
-          "initialStepId": "lost",
-          "steps": [
-            {
-              "id": "lost",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Подтверждена потеря видео / закрытие объектива",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Причина",
-              "view": {
-                "label": "Причина",
-                "options": [
-                  {
-                    "id": "deliberate",
-                    "label": "Умышленное воздействие"
-                  },
-                  {
-                    "id": "malfunction",
-                    "label": "Неисправность"
-                  },
-                  {
-                    "id": "weather",
-                    "label": "Погодные условия"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "in": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        [
-                          "deliberate",
-                          "malfunction"
-                        ]
-                      ]
-                    },
-                    "goto": "note",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Создать заявку на ремонт"
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий",
-              "view": {
-                "label": "Комментарий",
-                "required": false,
-                "placeholder": "Камера, симптомы, заявка в сервис"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000005",
-        "version": 1,
-        "name": "Скопление / праздношатание",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000005",
-            "version": 1,
-            "name": "Скопление / праздношатание"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Ситуация подтверждена",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Решение",
-              "view": {
-                "label": "Решение",
-                "options": [
-                  {
-                    "id": "send_guard",
-                    "label": "Направить охрану"
-                  },
-                  {
-                    "id": "observe",
-                    "label": "Наблюдать"
-                  },
-                  {
-                    "id": "false_alarm",
-                    "label": "Ложная"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий",
-              "view": {
-                "label": "Комментарий",
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000006",
-        "version": 1,
-        "name": "Отсутствие СИЗ",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000006",
-            "version": 1,
-            "name": "Отсутствие СИЗ"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Отсутствие каски подтверждено по видео",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Классификация",
-              "view": {
-                "label": "Классификация",
-                "options": [
-                  {
-                    "id": "violation",
-                    "label": "Реальное нарушение"
-                  },
-                  {
-                    "id": "detector_error",
-                    "label": "Ошибка детектора"
-                  },
-                  {
-                    "id": "outside_zone",
-                    "label": "Сотрудник вне рабочей зоны"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "violation"
-                      ]
-                    },
-                    "goto": "who",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Голосовое оповещение в зону"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Уведомить инженера по охране труда"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "detector_error"
-                      ]
-                    },
-                    "goto": "note"
-                  }
-                ],
-                "default": {
-                  "goto": "who"
-                }
-              }
-            },
-            {
-              "id": "who",
-              "type": "Select",
-              "title": "Кто нарушитель",
-              "view": {
-                "label": "Кто нарушитель",
-                "options": [
-                  {
-                    "id": "warehouse_staff",
-                    "label": "Сотрудник склада"
-                  },
-                  {
-                    "id": "supplier_driver",
-                    "label": "Водитель поставщика"
-                  },
-                  {
-                    "id": "contractor",
-                    "label": "Подрядчик"
-                  },
-                  {
-                    "id": "unidentified",
-                    "label": "Не идентифицирован"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий / кому передано",
-              "view": {
-                "label": "Комментарий / кому передано",
-                "required": false,
-                "placeholder": "Табельный номер, бригадир, номер акта"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000001",
-        "version": 1,
-        "name": "Превышение уровня алкоголя",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000001",
-            "version": 1,
-            "name": "Превышение уровня алкоголя"
-          },
-          "initialStepId": "visual",
-          "steps": [
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Личность на точке прохода подтверждена по видео",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Результат проверки",
-              "view": {
-                "label": "Результат проверки",
-                "options": [
-                  {
-                    "id": "excess",
-                    "label": "Превышение подтверждено"
-                  },
-                  {
-                    "id": "retest_ok",
-                    "label": "Повторный тест в норме"
-                  },
-                  {
-                    "id": "gate_failure",
-                    "label": "Сбой алкорамки"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "excess"
-                      ]
-                    },
-                    "goto": "level",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Заблокировать турникет"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Вызвать медпункт"
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "level",
-              "type": "Select",
-              "title": "Показание прибора",
-              "view": {
-                "label": "Показание прибора",
-                "options": [
-                  {
-                    "id": "from_03",
-                    "label": "0,3–0,5 ‰"
-                  },
-                  {
-                    "id": "from_05",
-                    "label": "0,5–1,0 ‰"
-                  },
-                  {
-                    "id": "over_10",
-                    "label": "Более 1,0 ‰"
-                  },
-                  {
-                    "id": "not_read",
-                    "label": "Показание не считано"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий",
-              "view": {
-                "label": "Комментарий",
-                "required": false,
-                "placeholder": "ФИО, смена, кому передан сотрудник"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "guid": "60000000-0000-4000-8000-000000000003",
-        "version": 1,
-        "name": "Звук разбития стекла",
-        "script": {
-          "dslVersion": "1.0",
-          "locale": "ru",
-          "metadata": {
-            "scenarioGuid": "60000000-0000-4000-8000-000000000003",
-            "version": 1,
-            "name": "Звук разбития стекла"
-          },
-          "initialStepId": "audio",
-          "steps": [
-            {
-              "id": "audio",
-              "type": "Checkbox",
-              "title": "Подтверждение",
-              "view": {
-                "label": "Звуковое событие прослушано оператором",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "default": {
-                  "goto": "visual"
-                }
-              }
-            },
-            {
-              "id": "visual",
-              "type": "Checkbox",
-              "title": "Повреждение",
-              "view": {
-                "label": "Повреждение видно на камерах зоны",
-                "options": [
-                  {
-                    "id": "confirmed",
-                    "label": "Подтверждено"
-                  }
-                ],
-                "required": false
-              },
-              "transitions": {
-                "default": {
-                  "goto": "verdict"
-                }
-              }
-            },
-            {
-              "id": "verdict",
-              "type": "RadioButton",
-              "title": "Классификация",
-              "view": {
-                "label": "Классификация",
-                "options": [
-                  {
-                    "id": "broken",
-                    "label": "Разбитие витрины или стекла"
-                  },
-                  {
-                    "id": "noise",
-                    "label": "Бытовой шум: посуда, погрузка"
-                  },
-                  {
-                    "id": "false_alarm",
-                    "label": "Ложная сработка детектора"
-                  }
-                ],
-                "required": true
-              },
-              "transitions": {
-                "rules": [
-                  {
-                    "when": {
-                      "==": [
-                        {
-                          "var": "state.verdict.value"
-                        },
-                        "broken"
-                      ]
-                    },
-                    "goto": "note",
-                    "actions": [
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Включить сирену зоны"
-                        }
-                      },
-                      {
-                        "type": "callMacro",
-                        "args": {
-                          "macroId": "Направить охрану к витрине"
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "default": {
-                  "goto": "note"
-                }
-              }
-            },
-            {
-              "id": "note",
-              "type": "Comment",
-              "title": "Комментарий",
-              "view": {
-                "label": "Комментарий",
-                "required": false,
-                "placeholder": "Что повреждено, вызвана ли охрана"
-              },
-              "transitions": {
-                "default": {
-                  "actions": [
-                    {
-                      "type": "finish"
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      }
-    ]
+    }
   },
   "incidents": [
     {
@@ -3011,6 +1926,24 @@
           "actorName": null,
           "template": "workflow.journal.claim",
           "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:58:16Z",
+          "actor": "sidorov",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Голосовое оповещение в зону"
+          }
+        },
+        {
+          "at": "2026-10-03T11:58:16Z",
+          "actor": "sidorov",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Уведомить инженера по охране труда"
+          }
         }
       ]
     },
@@ -3241,7 +2174,9 @@
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
         },
-        "resolution": null,
+        "resolution": {
+          "leftSec": 300
+        },
         "hold": null
       },
       "slaBreached": false,
@@ -3255,53 +2190,53 @@
             "value": [
               "confirmed"
             ],
-            "answeredAt": "2026-10-03T11:46:31Z",
-            "by": null
+            "answeredAt": "2026-10-03T11:52:00Z",
+            "by": "noc"
           },
           "verdict": {
             "value": "real",
-            "answeredAt": "2026-10-03T11:53:15Z",
-            "by": null
+            "answeredAt": "2026-10-03T11:54:00Z",
+            "by": "noc"
           }
         },
         "history": [
           {
-            "ts": "2026-10-03T11:46:31Z",
+            "ts": "2026-10-03T11:52:00Z",
             "stepId": "visual",
             "action": "answer",
             "value": [
               "confirmed"
             ],
-            "by": null
+            "by": "noc"
           },
           {
-            "ts": "2026-10-03T11:46:31Z",
+            "ts": "2026-10-03T11:52:00Z",
             "stepId": "visual",
             "action": "transition",
             "to": "verdict",
             "matchedRule": null
           },
           {
-            "ts": "2026-10-03T11:53:15Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "answer",
             "value": "real",
-            "by": null
+            "by": "noc"
           },
           {
-            "ts": "2026-10-03T11:53:15Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "callMacro",
             "macroId": "Включить сирену"
           },
           {
-            "ts": "2026-10-03T11:53:15Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "callMacro",
             "macroId": "Переключить PTZ на зону"
           },
           {
-            "ts": "2026-10-03T11:53:15Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "transition",
             "to": "zone",
@@ -3318,6 +2253,31 @@
           "actorName": "Диспетчер",
           "template": "workflow.journal.create",
           "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:50:00Z",
+          "actor": "noc",
+          "actorName": null,
+          "template": "workflow.journal.claim",
+          "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:54:00Z",
+          "actor": "noc",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Включить сирену"
+          }
+        },
+        {
+          "at": "2026-10-03T11:54:00Z",
+          "actor": "noc",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Переключить PTZ на зону"
+          }
         },
         {
           "at": "2026-10-03T12:00:00Z",
@@ -3837,7 +2797,9 @@
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
         },
-        "resolution": null,
+        "resolution": {
+          "leftSec": 300
+        },
         "hold": null
       },
       "slaBreached": false,
@@ -3851,41 +2813,41 @@
             "value": [
               "confirmed"
             ],
-            "answeredAt": "2026-10-03T11:13:18Z",
-            "by": null
+            "answeredAt": "2026-10-03T11:52:00Z",
+            "by": "sidorov"
           },
           "verdict": {
             "value": "unclear",
-            "answeredAt": "2026-10-03T11:36:39Z",
-            "by": null
+            "answeredAt": "2026-10-03T11:54:00Z",
+            "by": "sidorov"
           }
         },
         "history": [
           {
-            "ts": "2026-10-03T11:13:18Z",
+            "ts": "2026-10-03T11:52:00Z",
             "stepId": "visual",
             "action": "answer",
             "value": [
               "confirmed"
             ],
-            "by": null
+            "by": "sidorov"
           },
           {
-            "ts": "2026-10-03T11:13:18Z",
+            "ts": "2026-10-03T11:52:00Z",
             "stepId": "visual",
             "action": "transition",
             "to": "verdict",
             "matchedRule": null
           },
           {
-            "ts": "2026-10-03T11:36:39Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "answer",
             "value": "unclear",
-            "by": null
+            "by": "sidorov"
           },
           {
-            "ts": "2026-10-03T11:36:39Z",
+            "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
             "action": "transition",
             "to": "zone",
@@ -3901,6 +2863,13 @@
           "actor": null,
           "actorName": "Диспетчер",
           "template": "workflow.journal.create",
+          "vars": {}
+        },
+        {
+          "at": "2026-10-03T11:50:00Z",
+          "actor": "sidorov",
+          "actorName": null,
+          "template": "workflow.journal.claim",
           "vars": {}
         },
         {
@@ -4111,6 +3080,24 @@
           "actorName": null,
           "template": "workflow.journal.claim",
           "vars": {}
+        },
+        {
+          "at": "2026-10-03T10:35:49Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Оповещение по площадке"
+          }
+        },
+        {
+          "at": "2026-10-03T10:35:49Z",
+          "actor": "me",
+          "actorName": null,
+          "template": "workflow.journal.macro.launched",
+          "vars": {
+            "name": "Разблокировать эвакуационные выходы"
+          }
         },
         {
           "at": "2026-10-03T10:36:36Z",
