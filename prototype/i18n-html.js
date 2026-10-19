@@ -3,7 +3,6 @@ window.IM_DICT_HTML = {
   en: {
     "Выделить": "Select",
     "Действия с отмеченными": "Actions on ticked",
-    "Основной инцидент": "Primary incident",
     "Настройки администратора": "Administrator settings",
     "Только просмотр: что настраивает администратор с правом incident:schema:admin и какое значение сейчас. В продукте — вкладка администрирования бэкенда, правка там (§20).": "View only: what an administrator with the incident:schema:admin right configures and the current value. In the product — the backend administration tab, editing is done there (§20).",
     "Оператор": "Operator",
