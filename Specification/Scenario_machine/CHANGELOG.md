@@ -27,4 +27,4 @@
 | `timers` и `concurrency` убраны; флаг шага `multitasking` — МИ его не исполняет | решение joynickray 2026-10-19, № 13 | `142eaed` |
 | Прохождение (`scenarioResult`) — формат МИ: без `dslVersion`; `value` по новым типам (Select — объект списков, Image — строка, Datetime — UTC); в `history` — `answer`, `skip`, `transition`, `macro` (`name`, `args`), `finish`. Контракт `ScenarioResult`, `ScenarioHistoryEvent` — следом | решение joynickray 2026-10-19, № 14 | `142eaed` |
 | Единые имена двух машин: спецификация `dsl-v1-draft.md` → `scenario_spec.v1.md`, схема `dsl-v1-schema.json` → `scenario_schema.v1.json` (`$id` — `…/im/scenario/v1/scenario_schema.json`); «DSL v1» в текстах — «формат сценария v1». Машина инцидента — `Specification/Workflow_machine/workflow_schema.v4.json`. Содержание не менялось | решение joynickray 2026-10-19 | `c417294` |
-| Машина инцидента — `workflow_schema.v1.json`: в имени версия формата, как у `scenario_schema.v1.json` | решение joynickray 2026-10-19 | |
+| Машина инцидента — `workflow_schema.v1.json`: в имени версия формата, как у `scenario_schema.v1.json` | решение joynickray 2026-10-19 | `fab540f` |
