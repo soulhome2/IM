@@ -67,7 +67,10 @@
     assert.eq(sc.requiredStepsFilled, { closing: false, none: true }, "обязательные отвечены, до finish не дошли");
     let field = actionOf(await env.card(inc.guid), "close").fieldOptions.resultId;
     assert.ok(field.options.find((o) => o.id === "processed").disabled && field.defaultValue === null, "«Обработан» недоступен");
-    assert.status(await env.act(inc.guid, "close", { resultId: "processed" }), 403, null, "закрыть «Обработан»");
+    // Код — «не выполнен набор», а не общий отказ условия: по нему клиент подсказывает пройти сценарий (BUG-68)
+    const refused = await env.act(inc.guid, "close", { resultId: "processed" });
+    assert.status(refused, 403, "REQUIRED_STEPS_NOT_FILLED", "закрыть «Обработан»");
+    assert.eq(refused.body.guard, "closeResultAllowed", "условие");
     await env.answer(inc.guid, { stepId: "kind", skip: true });
     sc = (await env.answer(inc.guid, { stepId: "note", skip: true })).body;
     assert.eq([sc.result.currentStepId, Boolean(sc.result.completedAt), sc.requiredStepsFilled.closing], [null, true, true], "пройден до finish");

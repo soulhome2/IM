@@ -70,6 +70,7 @@ MUTATIONS = [
     ("new-incident-oldest-version", "server.js", ".sort((a, b) => b.version - a.version)[0]", ".sort((a, b) => a.version - b.version)[0]", "api"),
     ("cursor-off-path", "server.js", "if (!body || !pathOf(ev).includes(body.stepId))", "if (!body)", "api"),
     ("finish-no-close-form", "app.js", '    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");\n', "", "ui"),
+    ("required-steps-code-lost", "server.js", 'const code = REASON_CODE[check.why && check.why[0]] || GUARD_CODE[check.guard] || "GUARD_FAILED";', 'const code = GUARD_CODE[check.guard] || "GUARD_FAILED";', "api"),
     ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),
     ("answers-if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          const res = answerStep", "const res = answerStep", "api"),
     ("if-match-optional", "server.js", "if (!sent) return problem(428,", "if (!sent) return null;\n      if (false) return problem(428,", "api"),

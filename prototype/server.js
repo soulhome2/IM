@@ -1068,9 +1068,13 @@
       requiredStepsFilled: "REQUIRED_STEPS_NOT_FILLED",
       withinReopenWindow: "REOPEN_WINDOW_EXPIRED",
     };
+    // Причина, у которой свой код, где бы её ни дало условие: не выполнен набор обязательных шагов — и у
+    // «Закрыть» с «Обработан», где его проверяет closeResultAllowed (BUG-68)
+    const REASON_CODE = { "workflow.guard.required_steps": "REQUIRED_STEPS_NOT_FILLED" };
     function guardProblem(check) {
       if (check.notFrom) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", check.why);
-      return problem(403, GUARD_CODE[check.guard] || "GUARD_FAILED", check.why, check.guard ? { guard: check.guard } : {});
+      const code = REASON_CODE[check.why && check.why[0]] || GUARD_CODE[check.guard] || "GUARD_FAILED";
+      return problem(403, code, check.why, check.guard ? { guard: check.guard } : {});
     }
 
     /* ===== Маршруты API ===== */
