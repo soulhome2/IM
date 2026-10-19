@@ -6,36 +6,69 @@
 
 | Репозиторий | Коммит | Дата коммита | Что взято |
 |---|---|---|---|
-| `incident-manager-dsl` | `bbe12d597bc24962a4958f964969a66502b9a89d` | 2026-05-13 | спецификация, схема, примеры — как есть; исполнитель runner-web — переписан на JS |
-| `incident-manager` | `1fcfa25880e6cc6daeabcd1fe57dad2b78e57ee0` | 2026-10-04 | ничего: формат продукта сверен и не перенесён (решение ARCH-06 в1) |
+| `incident-manager-dsl` | `bbe12d597bc24962a4958f964969a66502b9a89d` | 2026-05-13 | спецификация, схема, примеры — перенесены, 2026-10-19 приведены к формату редактора продукта; исполнитель runner-web — переписан на JS |
+| `incident-manager` | `1fcfa25880e6cc6daeabcd1fe57dad2b78e57ee0` | 2026-10-04 | формат сценария редактора продукта — с 2026-10-19 это формат машины сценариев (CHANGELOG); при переносе в ARCH-06 был только сверен (решение в1) |
 | `incident-manager-server` | `b743797a38daeb3beaa44ef901b26c3ce924290f` | 2026-10-13 | ничего: из контракта взяты идентичность и версия сценария, ссылка инцидента на версию и `scenarioResult` (`api/im/backend.openapi.yaml`) |
 
-Файлы взяты из коммита (`git show <коммит>:<путь>`), а не из рабочей копии: в рабочей копии `incident-manager-dsl` переводы строк CRLF, в коммите — LF.
+Файлы взяты из коммита (`git show <коммит>:<путь>`), а не из рабочей копии: в рабочих копиях `incident-manager-dsl` и `incident-manager` переводы строк CRLF, в коммите — LF; содержимое то же.
 
-## Скопированы как есть
+## Перенесены и приведены к формату редактора продукта
 
-Совпадают с исходником байт в байт, кроме отступлений из [CHANGELOG.md](CHANGELOG.md): тип шага `Button` переименован в `Message` (схема — `MessageStep`) в спецификации, схеме и примерах. Хэши ниже — исходника. Не правятся: отступление от исходника — только по решению и строкой в CHANGELOG.
+Взяты из `incident-manager-dsl` как есть; 2026-10-19 приведены к формату редактора сценариев продукта (решения — [CHANGELOG.md](CHANGELOG.md)). Хэши ниже — исходника: по ним видно, откуда файл, но с ним он уже не совпадает.
 
-| Файл в IM | Путь в `incident-manager-dsl` | sha256 |
+| Файл в IM | Путь в `incident-manager-dsl` | sha256 исходника | Что сделано |
+|---|---|---|---|
+| `dsl-v1-draft.md` | `dsl-v1-draft.md` | `47b7c0e49602a3216286c7c1936528c623153e48f13b05aa833a4e2c2efede43` | переписан |
+| `dsl-v1-schema.json` | `dsl-v1-schema.json` | `26bab84c41ee64c594b7f2292b01d3e97130a39bc2e1a0a2f1f9b0d7ad1cd465` | переписана по `scenario.zod.ts` |
+| `examples/01-perimeter-alarm.json` | то же | `cda5f3ec2708207f70f50806d52de7012a380f5c7f84efb344e82e051596b941` | переведён |
+| `examples/02-fire-alarm.json` | то же | `263cc84d552c45c7f880f947a20e6dfaa1d369ce665ceb09d5ca07af3fae197a` | переведён |
+| `examples/03-access-control-violation.json` | то же | `f4f1cb9078abd8114bcba8d70317d4eab9028d6ef187fcbe1bbb5c86161b7e70` | переведён |
+| `examples/04-suspicious-object.json` | то же | `8493de6300e186ccf21eb295cfb7254d274f2516f7457f0fe3f0fbba62f03ab1` | переведён |
+| `examples/05-camera-offline.json` | то же | `a04687560bcce41783c6dc440ac1ceff5d77fc1b07e3adc05eae77f8d72e154b` | переведён |
+| `examples/06-fight-aggressive-behavior.json` | то же | `2f2412b786231cf0ba462cd7b63f4478702244b6d9dac94f58d1d796aaab0e93` | переведён |
+| `examples/07-restricted-area-breach.json` | то же | `1babc5608b3bbba682722856d2f612a976b0c5d99514f2a442bcf52a9979dda9` | переведён; у шага `behavior` убраны условия на шаг `intruder_count` |
+| `examples/08-evacuation-drill.json` | то же | `f3bdf7d32cf47d90cc00fb9b2671827f3be90094348ddc949a541471108cef96` | переведён |
+| `examples/09-camera-sabotage-suspicion.json` | то же | `f2c1f9ae08b43349f274612d2f3ece1680a9d33b528d2de7997bc564c7184aa3` | переведён |
+| `examples/10-mass-event-protocol.json` | то же | `6d66eeefbab8e49c3b7991b1fc61eb4f8622e8677517ea7080a148e796b64e4b` | переведён |
+| `examples/showcase/00-primitives.json` | то же | `235db0b10399051e4d757e57dbf8ca302f5ab5ac5ea9aaed6c3e63ff4f34039f` | переведён |
+| `examples/architecture/A1-minimal-valid-scenario.json` | то же | `e73c1d46c6e26a26b8ff2142f08871ce42e431208a2a2a739adab0c29f0d1341` | переведён |
+| `examples/architecture/A5-anti-patterns/bad-1-schema-broken-goto.json` | то же | `4f1dbc11abd77f6a5dade142b62d2f033ff274d7240954e936ce8c326dd0b25d` | переведён |
+| `examples/architecture/A5-anti-patterns/bad-3-unknown-step-type.json` | `…/bad-3-unknown-action.json` | `75e91aef45409a1ad6c4671d78c4672984086f9139429b378707d188e28a8e2d` | заменён: действий в формате нет — теперь «неизвестный тип шага `Button`» |
+| `examples/architecture/A5-anti-patterns/bad-4-numeric-option-ids.json` | то же | `f601aa25bce6f5b481dfc0cfaba24933b8cfba3a07724ed623b776a778febf9c` | переведён |
+| `examples/architecture/A5-anti-patterns/bad-5-deeply-nested-rules.json` | то же | `a40ac62eb1408039017447c301af0e998c19376d65726e017b88530954848c42` | переведён; конец на правилах — переходы на новый финальный шаг `everything_done` |
+
+**Как переведены примеры** (одним скриптом, затем сверены глазами):
+
+| Было | Стало |
+|---|---|
+| `dslVersion`, `locale`, `metadata`, `initialStepId`, `timers`, `concurrency` | `scenario` (`id` — `metadata.scenarioGuid`; даты — 2026-04-29, дата черновика); остальное убрано |
+| пояснение антипаттерна в `metadata` (`warning`, `expectedRejection`) | `scenario.description` |
+| нет `title` | `title` — подпись шага |
+| `editable` | `revisitable` (по умолчанию `true`) |
+| `placeholder` | `description` шага |
+| Select: `label`, `options` | один список: id — id шага, подпись — `label`; ответ — `{ <id шага>: [...] }` |
+| Checkbox `required: true` | `minSelected` не меньше 1 |
+| Datetime `kind` | убран: всегда дата и время |
+| Image `fixedSrc`, `allowMultiple`, `required` | `image` — бывший `fixedSrc`; остальное убрано |
+| `layout`, `hint`, `emphasis`, `minRows`, `maxRows` | убраны |
+| `when` над `state.<свой шаг>.value` | `condition` над `value` / `selected` / id списка |
+| условие на чужой шаг | убрано из `and` / `or` (только `07`) |
+| `default` с действием `finish` и без правил | флаг шага `finish: true`, переходы `{ goto: null, macro: null }` |
+| `finish` на правиле | переход на новый финальный шаг `<шаг>_done` (только `bad-5`) |
+| несколько `callMacro` на исходе | один макрос, имена через « + » (`02`, `06`, `07`) |
+| `callMacro` на финальном шаге | перенесён на переходы, ведущие к нему (`07`, `08`, `10`): переходы финального шага не читаются |
+| `generateReport` | флаг шага `report: true` |
+| `escalate`, `assign` | убраны (`03`, `04`, `06`, `07`, `09`, `10`, `bad-5`) |
+
+Формат редактора продукта сверен по файлам `incident-manager` `1fcfa25`:
+
+| Файл | sha256 | Что из него |
 |---|---|---|
-| `dsl-v1-draft.md` | `dsl-v1-draft.md` | `47b7c0e49602a3216286c7c1936528c623153e48f13b05aa833a4e2c2efede43` |
-| `dsl-v1-schema.json` | `dsl-v1-schema.json` | `26bab84c41ee64c594b7f2292b01d3e97130a39bc2e1a0a2f1f9b0d7ad1cd465` |
-| `examples/01-perimeter-alarm.json` | то же | `cda5f3ec2708207f70f50806d52de7012a380f5c7f84efb344e82e051596b941` |
-| `examples/02-fire-alarm.json` | то же | `263cc84d552c45c7f880f947a20e6dfaa1d369ce665ceb09d5ca07af3fae197a` |
-| `examples/03-access-control-violation.json` | то же | `f4f1cb9078abd8114bcba8d70317d4eab9028d6ef187fcbe1bbb5c86161b7e70` |
-| `examples/04-suspicious-object.json` | то же | `8493de6300e186ccf21eb295cfb7254d274f2516f7457f0fe3f0fbba62f03ab1` |
-| `examples/05-camera-offline.json` | то же | `a04687560bcce41783c6dc440ac1ceff5d77fc1b07e3adc05eae77f8d72e154b` |
-| `examples/06-fight-aggressive-behavior.json` | то же | `2f2412b786231cf0ba462cd7b63f4478702244b6d9dac94f58d1d796aaab0e93` |
-| `examples/07-restricted-area-breach.json` | то же | `1babc5608b3bbba682722856d2f612a976b0c5d99514f2a442bcf52a9979dda9` |
-| `examples/08-evacuation-drill.json` | то же | `f3bdf7d32cf47d90cc00fb9b2671827f3be90094348ddc949a541471108cef96` |
-| `examples/09-camera-sabotage-suspicion.json` | то же | `f2c1f9ae08b43349f274612d2f3ece1680a9d33b528d2de7997bc564c7184aa3` |
-| `examples/10-mass-event-protocol.json` | то же | `6d66eeefbab8e49c3b7991b1fc61eb4f8622e8677517ea7080a148e796b64e4b` |
-| `examples/showcase/00-primitives.json` | то же | `235db0b10399051e4d757e57dbf8ca302f5ab5ac5ea9aaed6c3e63ff4f34039f` |
-| `examples/architecture/A1-minimal-valid-scenario.json` | то же | `e73c1d46c6e26a26b8ff2142f08871ce42e431208a2a2a739adab0c29f0d1341` |
-| `examples/architecture/A5-anti-patterns/bad-1-schema-broken-goto.json` | то же | `4f1dbc11abd77f6a5dade142b62d2f033ff274d7240954e936ce8c326dd0b25d` |
-| `examples/architecture/A5-anti-patterns/bad-3-unknown-action.json` | то же | `75e91aef45409a1ad6c4671d78c4672984086f9139429b378707d188e28a8e2d` |
-| `examples/architecture/A5-anti-patterns/bad-4-numeric-option-ids.json` | то же | `f601aa25bce6f5b481dfc0cfaba24933b8cfba3a07724ed623b776a778febf9c` |
-| `examples/architecture/A5-anti-patterns/bad-5-deeply-nested-rules.json` | то же | `a40ac62eb1408039017447c301af0e998c19376d65726e017b88530954848c42` |
+| `src/shared/schema/scenario.zod.ts` | `e2efb680df21b1bd1bc49920b39b8668210df2f561ff7bb9cd1d9370f585c47c` | поля и типы — схема |
+| `src/shared/lib/jsonLogic.ts` | `48b887c129b1598d4d653b6ee8389f52e49cae518405461998f41483c08bd989` | операторы `==`, `!=`, `in` |
+| `src/shared/lib/validation.ts` | `57444b94b42788f6ff1ada440f9f6fc19971f51374b4a1d59125bb1402c5658b` | смысловые проверки и их коды |
+| `src/features/preview/lib/playerEngine.ts` | `61c543d302b45cb1ee8d90afdb584e1c1d5c5b66a9f26ad89e26bb7f782f3307` | переходы: финальный шаг, контекст условия |
+| `src/features/editor/store/defaultViews.ts` | `3df16230921296cf327b459626c9695c60b9d2ffa9296a73b5b9318c5cc18a07` | значения нового шага |
 
 ## Переписаны или заменены
 
@@ -51,7 +84,7 @@
 
 ## Копия json-logic-js
 
-Условия JSONLogic в runner-web вычисляет библиотека `json-logic-js` 2.0.5 (`runner-web/package-lock.json`). В IM — её копия той же версии, без изменений (решение в3): `prototype/vendor/json-logic-js/`.
+Условия JSONLogic в runner-web вычисляет библиотека `json-logic-js` 2.0.5 (`runner-web/package-lock.json`). В IM — её копия той же версии, без изменений (решение в3): `prototype/vendor/json-logic-js/`. Операторы `==`, `!=`, `in` над массивами исполнитель подменяет поверх копии — как редактор продукта в `jsonLogic.ts` (спецификация, раздел 7); сама копия не правится.
 
 | Что | Значение |
 |---|---|
@@ -72,9 +105,11 @@
 | `runner-web/src/engine/envelope.ts` | выгрузка результата из демо-runner, в IM не нужна |
 | `server-analysis.md`, `proposal-versioning.md`, `market-research.md`, обзоры конкурентов | обоснования и предложения команде сервера; на них ссылается спецификация — читать в исходном репозитории |
 
-## Как подтянуть изменения исходника
+## Как подтянуть изменения
 
-1. В исходном репозитории: `git diff bbe12d5..<новый коммит> -- dsl-v1-draft.md dsl-v1-schema.json examples runner-web/src/engine runner-web/src/types`.
-2. Файлы «как есть» — заменить из нового коммита (`git show`), обновить хэши выше.
-3. Изменения исполнителя — перенести руками в `prototype/scenario.js`, обновить хэши.
-4. Записать строку в [CHANGELOG.md](CHANGELOG.md) и новый коммит-источник в таблицу «Откуда»; прогнать проверки (README, «Проверки»).
+Формат сценария теперь следует за редактором продукта, а не за `incident-manager-dsl`.
+
+1. В `incident-manager`: `git diff 1fcfa25..<новый коммит> --` по файлам из таблицы «Формат редактора продукта сверен…».
+2. Изменения формата — в схему, спецификацию, примеры и исполнитель `prototype/scenario.js`; каждое — строкой в [CHANGELOG.md](CHANGELOG.md).
+3. Обновить коммит и хэши в таблицах выше, прогнать проверки (README, «Проверки»).
+4. `incident-manager-dsl` — только для справки: исполнитель runner-web и обоснования формата.

@@ -1,30 +1,39 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "60000000-0000-4000-8000-000000000003",
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000003",
+    "name": "Звук разбития стекла",
+    "description": "",
     "version": 1,
-    "name": "Звук разбития стекла"
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "audio"
   },
-  "initialStepId": "audio",
   "steps": [
     {
       "id": "audio",
       "type": "Checkbox",
       "title": "Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Звуковое событие прослушано оператором",
+        "minSelected": 1,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "visual"
+          "goto": "visual",
+          "macro": null
         }
       }
     },
@@ -32,19 +41,27 @@
       "id": "visual",
       "type": "Checkbox",
       "title": "Повреждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Повреждение видно на камерах зоны",
+        "minSelected": 0,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": false
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "verdict"
+          "goto": "verdict",
+          "macro": null
         }
       }
     },
@@ -52,8 +69,15 @@
       "id": "verdict",
       "type": "RadioButton",
       "title": "Классификация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Классификация",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "broken",
@@ -67,58 +91,53 @@
             "id": "false_alarm",
             "label": "Ложная сработка детектора"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "note",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 "broken"
               ]
             },
             "goto": "note",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Включить сирену зоны"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Направить охрану к витрине"
-                }
-              }
-            ]
+            "macro": {
+              "name": "Сирена зоны и охрана к витрине",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "note"
-        }
+        ]
       }
     },
     {
       "id": "note",
       "type": "Comment",
       "title": "Комментарий",
+      "description": "Что повреждено, вызвана ли охрана",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Комментарий",
+        "default": "",
         "required": false,
-        "placeholder": "Что повреждено, вызвана ли охрана"
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Проверка машины сценариев: сценарии проходят схему DSL v1 и смысловые проверки, стык с машиной
-инцидента цел.
+"""Проверка машины сценариев: сценарии проходят схему и смысловые проверки, стык с машиной инцидента цел.
 
 Запуск из корня репозитория: python3 tools/check_scenarios.py
-Нужен пакет jsonschema (в CI ставится в checks.yml). Проверяет:
+Нужен пакет jsonschema (в CI ставится в checks.yml). Формат сценария — формат редактора продукта
+(Specification/Scenario_machine/, спецификация и схема DSL v1). Проверяет:
 - примеры Specification/Scenario_machine/examples/ — схему и смысл; отрицательные примеры A5 — что их
   отвергает то, что должно (README машины сценариев, «Примеры»);
-- сценарии эталонного набора (fixtures/scenarios/<тип события>.v<версия>.json, имя — по metadata) — то же и профиль МИ: нет escalate и assign,
-  metadata совпадает с guid и версией строки, у типа события — существующий сценарий, прогоны инцидентов ссылаются
-  на сценарий своего типа события, существующую версию и её шаги;
+- сценарии эталонного набора (fixtures/scenarios/<тип события>.v<версия>.json, имя — по scenario.id и version) —
+  то же; scenario совпадает с guid и версией строки, у типа события — существующий сценарий, прохождения инцидентов
+  ссылаются на сценарий своего типа события, существующую версию и её шаги;
 - стык: наборы обязательных шагов, на которые ссылается workflow.v4.json, есть в профиле МИ.
-Смысл (спецификация, раздел 11, уровень 2): initialStepId и goto ведут на существующие шаги, у каждого шага
-есть переходы, id шагов и вариантов не повторяются, нет недостижимых шагов и шагов, откуда не дойти до finish,
-в условиях — только операторы из белого списка (раздел 7), var — на существующие шаги.
-Формальная проверка (PROC-28): перебором ответов на шаги с выбором — правило или default, которые не срабатывают
-ни при каком ответе, правило, заслонённое более ранним; условие на шаг, которого может не быть на пути. В примерах
-это замечания исходнику (копия не правится), в сценариях набора — ошибки. --fsm — карта «ответ → исход» и циклы.
+Смысл (спецификация, раздел 11, уровень 2) — проверки редактора продукта с его кодами (validation.ts): первый шаг,
+id шагов и вариантов, goto, goto: null только у финального шага, хотя бы один финальный шаг, достижимость, границы
+Checkbox, ссылки условий на варианты и списки. Сверх них — проверки МИ: правила только у RadioButton, Checkbox и
+Select; операторы — из белого списка (раздел 7); var — только на ответ своего шага; значения по умолчанию — из
+вариантов; из каждого достижимого шага можно дойти до конца.
+Формальная проверка (PROC-28): перебором ответов своего шага — правило или default, которые не срабатывают ни при
+каком ответе, правило, заслонённое более ранним. В примерах это замечания, в сценариях набора — ошибки.
+--fsm — карта «ответ → исход» и циклы.
 Код выхода 1, если есть ошибки.
 """
 import json
 import os
 import sys
 from collections import Counter
+from itertools import product
 
 try:
     import jsonschema
@@ -39,11 +42,12 @@ import fixture  # noqa: E402
 # Белый список JSONLogic (спецификация, раздел 7)
 OPERATORS = {"var", "==", "!=", ">", ">=", "<", "<=", "and", "or", "!", "if", "in", "none", "some", "all", "missing", "missing_some"}
 ARRAY_OPERATORS = {"none", "some", "all"}
-STATE_FIELDS = {"value", "answeredAt", "by", "skipped"}
+WITH_RULES = ("RadioButton", "Checkbox", "Select")
+# Строки условия, которые редактор не сверяет с вариантами (validation.ts, isOperator)
+NOT_OPTIONS = {"value", "selected", "accumulator", "current"}
 # Наборы обязательных шагов профиля МИ (README машины сценариев, решение ARCH-06 в5); byCloseResult —
 # не набор, а «по результату закрытия»: набор берётся из справочника результатов
 PROFILE_SETS = {"closing", "none"}
-NOT_EXECUTED = {"escalate", "assign"}
 
 # --fsm: карта «ответ → исход» по шагам с правилами и циклы (для /im-fsm)
 FSM = [] if "--fsm" in sys.argv else None
@@ -51,7 +55,7 @@ FSM = [] if "--fsm" in sys.argv else None
 # Чего ждать от примеров A5 (README машины сценариев, «Примеры»): schema — отвергает схема, meaning — смысловая проверка
 EXPECTED = {
     "architecture/A5-anti-patterns/bad-1-schema-broken-goto.json": "meaning",
-    "architecture/A5-anti-patterns/bad-3-unknown-action.json": "schema",
+    "architecture/A5-anti-patterns/bad-3-unknown-step-type.json": "schema",
 }
 
 
@@ -60,22 +64,56 @@ def load(path):
         return json.load(f)
 
 
-def outcomes(step):
-    t = step.get("transitions")
-    if not t:
+def rules_of(step):
+    """Правила, которые читает исполнитель: только у RadioButton, Checkbox и Select и не у финального шага."""
+    return [] if step["finish"] or step["type"] not in WITH_RULES else step["transitions"].get("rules", [])
+
+
+def targets(step):
+    """Все исходы шага, как их видит редактор: default и правила."""
+    return [step["transitions"]["default"]] + step["transitions"].get("rules", [])
+
+
+def var_names(step):
+    """Переменные, которые условие шага может читать (спецификация, раздел 7)."""
+    if step["type"] == "RadioButton":
+        return {"value"}
+    if step["type"] == "Checkbox":
+        return {"selected"}
+    return {lst["id"] for lst in step["view"]["lists"]}
+
+
+def option_ids(step):
+    if step["type"] == "Select":
+        return {o["id"] for lst in step["view"]["lists"] for o in lst["options"]}
+    return {o["id"] for o in step["view"]["options"]}
+
+
+def strings(x):
+    """Все строки условия — как extractStringValues редактора."""
+    if isinstance(x, str):
+        return [x]
+    if isinstance(x, list):
+        return [s for i in x for s in strings(i)]
+    if isinstance(x, dict):
+        return [s for v in x.values() for s in strings(v)]
+    return []
+
+
+def var_refs(x):
+    """Имена var строкой — как extractVarRefs редактора."""
+    if not isinstance(x, dict):
         return []
-    return list(t.get("rules", [])) + ([t["default"]] if "default" in t else [])
+    if isinstance(x.get("var"), str):
+        return [x["var"]]
+    return [r for v in x.values() for r in var_refs(v)]
 
 
-def has_finish(outcome):
-    return any(a.get("type") == "finish" for a in outcome.get("actions", []))
-
-
-def check_logic(expr, steps, where, err, item_scope=False):
-    """Операторы — из белого списка; var — на шаги сценария (кроме var элемента внутри some/all/none)."""
+def check_logic(expr, names, where, err, item_scope=False):
+    """Операторы — из белого списка; var — на ответ своего шага (кроме var элемента внутри some/all/none)."""
     if isinstance(expr, list):
         for x in expr:
-            check_logic(x, steps, where, err, item_scope)
+            check_logic(x, names, where, err, item_scope)
         return
     if not isinstance(expr, dict):
         return
@@ -85,60 +123,100 @@ def check_logic(expr, steps, where, err, item_scope=False):
             continue
         if op == "var":
             name = args[0] if isinstance(args, list) and args else args
-            if item_scope or name in ("", None):
-                continue
-            parts = str(name).split(".")
-            if parts[0] != "state" or len(parts) < 2 or parts[1] not in steps or (len(parts) > 2 and parts[2] not in STATE_FIELDS):
-                err.append(f"{where}: var {name} — не ответ на шаг сценария")
+            if not item_scope and name not in ("", None) and name not in names:
+                err.append(f"{where}: var {name} — не ответ своего шага (можно: {', '.join(sorted(names))})")
             continue
         if op in ("missing", "missing_some"):
             keys = args[-1] if op == "missing_some" and isinstance(args, list) else args
             for key in keys if isinstance(keys, list) else [keys]:
                 if isinstance(key, str):
-                    check_logic({"var": key}, steps, where, err, item_scope)
+                    check_logic({"var": key}, names, where, err, item_scope)
             continue
         if op in ARRAY_OPERATORS and isinstance(args, list) and len(args) == 2:
-            check_logic(args[0], steps, where, err, item_scope)
-            check_logic(args[1], steps, where, err, True)
+            check_logic(args[0], names, where, err, item_scope)
+            check_logic(args[1], names, where, err, True)
             continue
-        check_logic(args, steps, where, err, item_scope)
+        check_logic(args, names, where, err, item_scope)
 
 
 def meaning(script, name):
-    """Смысловые проверки сценария (спецификация, раздел 11, уровень 2)."""
+    """Смысловые проверки сценария (спецификация, раздел 11, уровень 2): коды редактора продукта и проверки МИ."""
     err = []
     steps = {s["id"]: s for s in script["steps"]}
+    initial = script["scenario"]["initialStep"]
+    if not any(s["finish"] for s in script["steps"]):
+        err.append(f"{name}: NO_FINISH_STEP — нет шага с finish: true")
+    if not initial:
+        err.append(f"{name}: EMPTY_INITIAL_STEP — первый шаг не задан")
+    elif initial not in steps:
+        err.append(f"{name}: INVALID_INITIAL_STEP — первого шага {initial} нет")
     for sid in [k for k, n in Counter(s["id"] for s in script["steps"]).items() if n > 1]:
-        err.append(f"{name}: шаг {sid} повторяется")
-    if script["initialStepId"] not in steps:
-        err.append(f"{name}: начального шага {script['initialStepId']} нет")
+        err.append(f"{name}: DUPLICATE_STEP_ID — шаг {sid} повторяется")
     for s in script["steps"]:
         where = f"{name}: шаг {s['id']}"
-        ids = [o["id"] for o in s["view"].get("options", [])]
-        for oid in [k for k, n in Counter(ids).items() if n > 1]:
-            err.append(f"{where}: вариант {oid} повторяется")
-        if "transitions" not in s:
-            err.append(f"{where}: нет переходов")
-        for i, o in enumerate(outcomes(s)):
-            if o.get("goto") and o["goto"] not in steps:
-                err.append(f"{where}: переход на несуществующий шаг {o['goto']}")
-            if "when" in o:
-                check_logic(o["when"], steps, f"{where}, правило {i}", err)
-    if err or script["initialStepId"] not in steps:
+        if not s["id"]:
+            err.append(f"{name}: EMPTY_STEP_ID — у шага нет id")
+        if not s["title"].strip():
+            err.append(f"{where}: EMPTY_STEP_TITLE — нет заголовка")
+        for t in targets(s):
+            if t["goto"] is not None and t["goto"] not in steps:
+                err.append(f"{where}: INVALID_GOTO — переход на несуществующий шаг {t['goto']}")
+            if t["goto"] is None and not s["finish"]:
+                err.append(f"{where}: GOTO_NULL_WITHOUT_FINISH — goto: null у шага без finish")
+        if s["transitions"].get("rules") and s["type"] not in WITH_RULES:
+            err.append(f"{where}: правила у {s['type']} не читаются — только у RadioButton, Checkbox и Select")
+        if s["type"] in ("RadioButton", "Checkbox"):
+            ids = [o["id"] for o in s["view"]["options"]]
+            for oid in [k for k, n in Counter(ids).items() if n > 1]:
+                err.append(f"{where}: DUPLICATE_OPTION_ID — вариант {oid} повторяется")
+            for i, r in enumerate(s["transitions"].get("rules", [])):
+                for ref in strings(r["condition"]):
+                    if ref and ref not in ids and ref not in NOT_OPTIONS:
+                        err.append(f"{where}, правило {i + 1}: INVALID_CONDITION_OPTION_ID — варианта {ref} нет")
+        if s["type"] == "Checkbox":
+            n, lo, hi = len(s["view"]["options"]), s["view"]["minSelected"], s["view"]["maxSelected"]
+            if lo > n:
+                err.append(f"{where}: CHECKBOX_MIN_EXCEEDS_OPTIONS — минимум {lo} больше числа вариантов {n}")
+            if hi is not None and hi < lo:
+                err.append(f"{where}: CHECKBOX_MAX_LESS_THAN_MIN — максимум {hi} меньше минимума {lo}")
+            if hi is not None and hi > n:
+                err.append(f"{where}: CHECKBOX_MAX_EXCEEDS_OPTIONS — максимум {hi} больше числа вариантов {n}")
+        if s["type"] == "RadioButton" and s["view"]["default"] is not None and s["view"]["default"] not in option_ids(s):
+            err.append(f"{where}: значение по умолчанию {s['view']['default']} — не вариант шага")
+        if s["type"] == "Select":
+            lists = [lst["id"] for lst in s["view"]["lists"]]
+            for lid in [k for k, n in Counter(lists).items() if n > 1]:
+                err.append(f"{where}: список {lid} повторяется")
+            for lst in s["view"]["lists"]:
+                ids = [o["id"] for o in lst["options"]]
+                for oid in [k for k, n in Counter(ids).items() if n > 1]:
+                    err.append(f"{where}, список {lst['id']}: DUPLICATE_OPTION_ID — вариант {oid} повторяется")
+                for d in lst.get("default", []):
+                    if d not in ids:
+                        err.append(f"{where}, список {lst['id']}: значение по умолчанию {d} — не вариант списка")
+            for i, r in enumerate(s["transitions"].get("rules", [])):
+                for ref in var_refs(r["condition"]):
+                    if ref not in lists:
+                        err.append(f"{where}, правило {i + 1}: INVALID_CONDITION_LIST_KEY — списка {ref} нет")
+        if s["type"] in WITH_RULES:
+            for i, r in enumerate(s["transitions"].get("rules", [])):
+                check_logic(r["condition"], var_names(s), f"{where}, правило {i + 1}", err)
+    if err or initial not in steps:
         return err
-    # Достижимость из начального и выход к finish из каждого достижимого
-    edges = {sid: {o["goto"] for o in outcomes(s) if o.get("goto") and o["goto"] != sid and not has_finish(o)} for sid, s in steps.items()}
-    finishing = {sid for sid, s in steps.items() if any(has_finish(o) for o in outcomes(s))}
-    seen, queue = {script["initialStepId"]}, [script["initialStepId"]]
+    # Достижимость — как в редакторе: по всем исходам от первого шага
+    seen, queue = {initial}, [initial]
     while queue:
-        for nxt in edges[queue.pop()]:
-            if nxt not in seen:
-                seen.add(nxt)
-                queue.append(nxt)
+        for t in targets(steps[queue.pop()]):
+            if t["goto"] in steps and t["goto"] not in seen:
+                seen.add(t["goto"])
+                queue.append(t["goto"])
     for sid in steps:
         if sid not in seen:
-            err.append(f"{name}: шаг {sid} недостижим из начального")
-    exits = set(finishing)
+            err.append(f"{name}: STEP_NOT_REACHABLE — шаг {sid} недостижим из первого")
+    # МИ: из каждого достижимого шага можно дойти до финального по исходам, которые читает исполнитель
+    edges = {sid: {t["goto"] for t in [s["transitions"]["default"]] + rules_of(s) if t["goto"] in steps} if not s["finish"] else set()
+             for sid, s in steps.items()}
+    exits = {sid for sid, s in steps.items() if s["finish"]}
     changed = True
     while changed:
         changed = False
@@ -147,16 +225,15 @@ def meaning(script, name):
                 exits.add(sid)
                 changed = True
     for sid in sorted(seen - exits):
-        err.append(f"{name}: из шага {sid} не дойти до finish")
+        err.append(f"{name}: из шага {sid} не дойти до финального")
     return err
 
 
-# ===== Формальная проверка: перебор ответов (PROC-28) =====
-# Условия вычисляются так же, как json-logic-js 2.0.5 в исполнителе (prototype/vendor/json-logic-js):
-# нестрогое == JavaScript, «истинность» JSONLogic (пустой массив — ложь), итог правила — Boolean() runner-web.
+# ===== Вычислитель условий =====
+# Так же, как исполнитель prototype/scenario.js: json-logic-js 2.0.5 (нестрогое == JavaScript, «истинность»
+# JSONLogic: пустой массив — ложь) и операторы ==, !=, in над массивами — как в редакторе продукта (jsonLogic.ts).
 
-MISSING = object()  # шага нет в state: ответа не было или шаг выпал из пути
-LIMIT = 50000  # больше сочетаний ответов — шаг не перебирается
+LIMIT = 50000  # больше ответов — шаг не перебирается
 
 
 def js_str(v):
@@ -201,6 +278,21 @@ def js_loose_eq(a, b):
     return js_num(a) == js_num(b)
 
 
+def same_value_zero(a, b):
+    """Array.prototype.includes: строгое равенство, без приведения типов."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b or (a != a and b != b)
+    if isinstance(a, (list, dict)) or isinstance(b, (list, dict)):
+        return a is b
+    return type(a) is type(b) and a == b
+
+
+def includes(xs, v):
+    return any(same_value_zero(x, v) for x in xs)
+
+
 def js_bool(v):
     return not (v is None or v is False or v == "" or (isinstance(v, (int, float)) and not isinstance(v, bool) and (v == 0 or v != v)))
 
@@ -232,7 +324,7 @@ def jl_var(data, name, default=None):
             cur = cur[int(part)]
         else:
             return default
-    return default if cur is MISSING else cur
+    return cur
 
 
 def jl_apply(logic, data):
@@ -277,91 +369,95 @@ def jl_apply(logic, data):
         need, keys = vals[0], vals[1]
         miss = [k for k in keys if jl_var(data, k) in (None, "")]
         return [] if len(keys) - len(miss) >= need else miss
+    a, b = (vals + [None, None])[:2]
     if op == "==":
-        return js_loose_eq(vals[0], vals[1])
+        if isinstance(a, list) and not isinstance(b, list):
+            return includes(a, b)
+        if isinstance(b, list) and not isinstance(a, list):
+            return includes(b, a)
+        return js_loose_eq(a, b)
     if op == "!=":
-        return not js_loose_eq(vals[0], vals[1])
+        if isinstance(a, list) and not isinstance(b, list):
+            return not includes(a, b)
+        if isinstance(b, list) and not isinstance(a, list):
+            return not includes(b, a)
+        return not js_loose_eq(a, b)
     if op == "!":
         return not jl_truthy(vals[0])
     if op in ("<", "<=") and len(vals) == 3:
         return js_compare(vals[0], vals[1], op) and js_compare(vals[1], vals[2], op)
     if op in ("<", "<=", ">", ">="):
-        return js_compare(vals[0], vals[1], op)
+        return js_compare(a, b, op)
     if op == "in":
-        a, b = vals[0], vals[1]
         if isinstance(b, list):
-            return any(type(x) is type(a) and x == a for x in b)
+            if isinstance(a, list):
+                return bool(b) and bool(a) and all(includes(a, x) for x in b)
+            return includes(b, a)
         if isinstance(b, str):
+            if isinstance(a, list):
+                return any(js_str(x) in b for x in a)
             return js_str(a) in b
         return False
     raise ValueError(op)
 
 
+def fires(condition, context):
+    """Срабатывает ли условие — как IMScenario.apply: пустое не срабатывает, ошибка — ложь."""
+    if not isinstance(condition, dict) or not condition:
+        return False
+    try:
+        return js_bool(jl_apply(condition, context))
+    except (ValueError, TypeError, KeyError, IndexError):
+        return False
+
+
 def check_evaluator(err):
-    """Вычислитель условий на Python совпадает с json-logic-js на крайних случаях (tests/jsonlogic-cases.js)."""
+    """Вычислитель условий на Python совпадает с исполнителем на крайних случаях (tests/jsonlogic-cases.js)."""
     path = os.path.join(ROOT, "tests", "jsonlogic-cases.js")
     with open(path, encoding="utf-8") as f:
         text = f.read()
     cases = json.loads(text[text.index("= ") + 2:].rstrip().rstrip(";"))
     for c in cases:
-        got = js_bool(jl_apply(c["when"], {"state": c["state"]}))
-        if got != c["fires"]:
-            err.append(f"вычислитель условий расходится с json-logic-js: {json.dumps(c['when'], ensure_ascii=False)} при {json.dumps(c['state'], ensure_ascii=False)}")
+        if fires(c["when"], c["data"]) != c["fires"]:
+            err.append(f"вычислитель условий расходится с исполнителем: {json.dumps(c['when'], ensure_ascii=False)} при {json.dumps(c['data'], ensure_ascii=False)}")
     return len(cases)
 
 
-def var_steps(expr, item_scope=False):
-    """Шаги, на ответы которых смотрит условие (var «state.<шаг>…»)."""
-    found = set()
-    if isinstance(expr, list):
-        for x in expr:
-            found |= var_steps(x, item_scope)
-    elif isinstance(expr, dict):
-        for op, args in expr.items():
-            if op == "var" and not item_scope:
-                name = args[0] if isinstance(args, list) and args else args
-                parts = str(name).split(".")
-                if parts[0] == "state" and len(parts) > 1:
-                    found.add(parts[1])
-            elif op in ("missing", "missing_some"):
-                keys = args[-1] if op == "missing_some" and isinstance(args, list) else args
-                for k in keys if isinstance(keys, list) else [keys]:
-                    found |= var_steps({"var": k}, item_scope)
-            elif op in ("some", "all", "none") and isinstance(args, list) and len(args) == 2:
-                found |= var_steps(args[0], item_scope) | var_steps(args[1], True)
-            else:
-                found |= var_steps(args, item_scope)
-    return found
+# ===== Формальная проверка: перебор ответов своего шага (PROC-28) =====
 
-
-def required(step):
-    if step["type"] == "Message":
-        return True
-    v = step["view"].get("required")
-    return v if v is not None else step["type"] in ("RadioButton", "Select", "Datetime")
-
-
-def answers_of(step):
-    """Все ответы шага с выбором (значения state.<шаг>.value) и пропуск; у остальных — None: не перебираются."""
-    ids = [o["id"] for o in step["view"].get("options", [])]
-    out = []
-    if step["type"] in ("RadioButton", "Select"):
-        out = list(ids)
-    elif step["type"] == "Checkbox":
-        if len(ids) > 12:
-            return None
-        lo = max(step["view"].get("minSelected", 0), 1 if required(step) else 0)
-        hi = step["view"].get("maxSelected") or len(ids)
-        out = [[ids[i] for i in range(len(ids)) if m >> i & 1] for m in range(1 << len(ids)) if lo <= bin(m).count("1") <= hi]
-    elif step["type"] == "Message":
-        out = [None]
-    else:
+def subsets(ids, lo, hi):
+    if len(ids) > 12:
         return None
-    return [(v, False) for v in out] + ([(None, True)] if not required(step) else [])
+    return [[ids[i] for i in range(len(ids)) if m >> i & 1] for m in range(1 << len(ids)) if lo <= bin(m).count("1") <= hi]
+
+
+def contexts(step):
+    """Все контексты условия шага (спецификация, раздел 7): ответы и пропуск. Не перебирается — None."""
+    v = step["view"]
+    if step["type"] == "RadioButton":
+        out = [{"value": o["id"]} for o in v["options"]]
+        return out + ([] if v["required"] else [{"value": None}])
+    if step["type"] == "Checkbox":
+        ids = [o["id"] for o in v["options"]]
+        picks = subsets(ids, v["minSelected"], v["maxSelected"] if v["maxSelected"] is not None else len(ids))
+        return None if picks is None else [{"selected": p} for p in picks]
+    lists = []
+    for lst in v["lists"]:
+        picks = subsets([o["id"] for o in lst["options"]], 1 if v["required"] else 0, len(lst["options"]))
+        if picks is None:
+            return None
+        lists.append((lst["id"], picks))
+    total = 1
+    for _, picks in lists:
+        total *= len(picks)
+    if total > LIMIT:
+        return None
+    out = [dict(zip([k for k, _ in lists], combo)) for combo in product(*[p for _, p in lists])]
+    return out + ([] if v["required"] else [{}])
 
 
 def dominators(steps, edges, start):
-    """Шаги, через которые проходит каждый путь от начального к шагу."""
+    """Шаги, через которые проходит каждый путь от первого к шагу."""
     dom = {sid: set(steps) for sid in steps}
     dom[start] = {start}
     preds = {sid: [p for p in steps if sid in edges[p]] for sid in steps}
@@ -379,76 +475,48 @@ def dominators(steps, edges, start):
 
 
 def formal(script, name, fsm=None):
-    """Перебор ответов по шагам с правилами: правило, которое не срабатывает ни при каком ответе или
-    заслонено более ранним; условие на шаг, которого может не быть на пути. fsm — список строк карты для --fsm."""
+    """Перебор ответов по шагам с правилами: правило, которое не срабатывает ни при каком ответе или заслонено
+    более ранним; default, до которого не дойти. fsm — список строк карты для --fsm."""
     err = []
     steps = {s["id"]: s for s in script["steps"]}
-    edges = {sid: {o["goto"] for o in outcomes(s) if o.get("goto") and o["goto"] != sid and not has_finish(o)} for sid, s in steps.items()}
-    dom = dominators(steps, edges, script["initialStepId"])
     for sid, step in steps.items():
-        rules = (step.get("transitions") or {}).get("rules", [])
+        rules = rules_of(step)
         if not rules:
             continue
         where = f"{name}: шаг {sid}"
-        refs = set().union(*(var_steps(r["when"]) for r in rules))
-        for ref in sorted(refs - {sid}):
-            if ref in steps and ref not in dom[sid]:
-                err.append(f"{where}: условие смотрит на шаг {ref}, которого может не быть на пути к этому шагу")
-        domains = {}
-        for ref in sorted(refs | {sid}):
-            if ref not in steps:
-                continue
-            a = answers_of(steps[ref])
-            if a is None:
-                domains = None
-                break
-            # Шаг, не стоящий на каждом пути, может быть без ответа
-            domains[ref] = a + ([MISSING] if ref != sid and ref not in dom[sid] else [])
-        total = 1
-        for d in (domains or {}).values():
-            total *= len(d)
-        if domains is None or total > LIMIT:
+        domain = contexts(step)
+        if domain is None:
             if fsm is not None:
-                fsm.append(f"{where}: не перебирается — условие смотрит на ответ без конечного выбора или сочетаний больше {LIMIT}")
+                fsm.append(f"{where}: не перебирается — вариантов больше 12 или сочетаний больше {LIMIT}")
             continue
-        first = Counter()
-        ever = Counter()
-        hits = {}
-        keys = list(domains)
-        def walk(i, state):
-            if i == len(keys):
-                fired = None
-                for k, r in enumerate(rules):
-                    if js_bool(jl_apply(r["when"], {"state": state})):
-                        ever[k] += 1
-                        if fired is None:
-                            fired = k
-                first[fired] += 1
-                hits.setdefault(fired, []).append({x: (state[x]["value"] if x in state else "—") for x in keys})
-                return
-            for v in domains[keys[i]]:
-                nxt = dict(state)
-                if v is not MISSING:
-                    value, skipped = v
-                    nxt[keys[i]] = dict({"value": value, "answeredAt": "2026-01-01T00:00:00Z", "by": None}, **({"skipped": True} if skipped else {}))
-                walk(i + 1, nxt)
-        walk(0, {})
+        first, ever, hits = Counter(), Counter(), {}
+        for ctx in domain:
+            fired = None
+            for k, r in enumerate(rules):
+                if fires(r["condition"], ctx):
+                    ever[k] += 1
+                    if fired is None:
+                        fired = k
+            first[fired] += 1
+            hits.setdefault(fired, []).append(ctx)
         for k in range(len(rules)):
             if not ever[k]:
-                err.append(f"{where}: правило {k} не срабатывает ни при каком ответе")
+                err.append(f"{where}: правило {k + 1} не срабатывает ни при каком ответе")
             elif not first[k]:
-                err.append(f"{where}: правило {k} заслонено более ранним — срабатывает только вместе с ним")
+                err.append(f"{where}: правило {k + 1} заслонено более ранним — срабатывает только вместе с ним")
         if not first[None]:
-            to = step["transitions"]["default"].get("goto") or "finish"
-            err.append(f"{where}: default не срабатывает ни при каком ответе — по нему ({to}) не пройти")
+            err.append(f"{where}: default не срабатывает ни при каком ответе — по нему ({step['transitions']['default']['goto']}) не пройти")
         if fsm is not None:
             for k in list(range(len(rules))) + [None]:
                 outcome = rules[k] if k is not None else step["transitions"]["default"]
-                to = "finish" if has_finish(outcome) else outcome.get("goto") or "остаться"
-                label = f"правило {k}" if k is not None else "default"
-                fsm.append(f"{where}: {label} → {to}: {first[k]} из {total}" + (f", напр. {hits[k][0]}" if hits.get(k) else ""))
+                label = f"правило {k + 1}" if k is not None else "default"
+                macro = f" + макрос «{outcome['macro']['name']}»" if outcome.get("macro") else ""
+                fsm.append(f"{where}: {label} → {outcome['goto']}{macro}: {first[k]} из {len(domain)}" + (f", напр. {json.dumps(hits[k][0], ensure_ascii=False)}" if hits.get(k) else ""))
     if fsm is not None:
         # Циклы: переход на шаг, через который уже прошли (шаг доминирует над источником)
+        edges = {sid: {t["goto"] for t in [s["transitions"]["default"]] + rules_of(s) if t["goto"] in steps} if not s["finish"] else set()
+                 for sid, s in steps.items()}
+        dom = dominators(steps, edges, script["scenario"]["initialStep"])
         for sid in steps:
             for to in edges[sid]:
                 if to in dom[sid]:
@@ -457,7 +525,7 @@ def formal(script, name, fsm=None):
 
 
 def verdict(validator, script, name):
-    """Что не так со сценарием: (ошибки схемы, смысловые ошибки)."""
+    """Что не так со сценарием: (ошибки схемы, смысловые ошибки, находки перебора)."""
     schema = [f"{name}: {'/'.join(map(str, e.absolute_path)) or '(корень)'}: {e.message[:160]}" for e in validator.iter_errors(script)]
     sense = [] if schema else meaning(script, name)
     return schema, sense, (formal(script, name, FSM) if not schema and not sense else [])
@@ -479,7 +547,7 @@ def check_examples(validator, err, warn):
                 err.append(f"examples/{name}: этот пример должна отвергать смысловая проверка, а не схема")
             elif not expected:
                 err += schema + sense
-                # Перебор ответов в примерах — замечания исходнику: копия не правится (ORIGIN.md)
+                # Перебор ответов в примерах — замечания: примеры только показывают формат
                 warn += found
             count += 1
     return count
@@ -487,29 +555,24 @@ def check_examples(validator, err, warn):
 
 def check_fixture(validator, err):
     """Сценарии эталонного набора — файлы fixtures/scenarios/ (строки как на сервере собирает tools/fixture.py) —
-    и прогоны инцидентов. Имя файла — <тип события>.v<версия>.json по metadata сценария (DATA-09)."""
+    и прохождения инцидентов. Имя файла — <тип события>.v<версия>.json по scenario.id и version (DATA-09)."""
     fx = fixture.load()
     rows = fx["scenarios"]["rows"]
     kind = {guid: k for k, guid in fx["scenarios"]["byEventType"].items()}
     for name, script in fixture.scenario_files():
-        meta = script.get("metadata", {})
-        want = f"{kind.get(meta.get('scenarioGuid'), '?')}.v{meta.get('version')}.json"
+        meta = script.get("scenario", {})
+        want = f"{kind.get(meta.get('id'), '?')}.v{meta.get('version')}.json"
         if name != want:
-            err.append(f"набор: файл сценария {name} — по metadata должен называться {want}")
+            err.append(f"набор: файл сценария {name} — по scenario должен называться {want}")
     versions = {}
     for row in rows:
         name = f"набор: сценарий {row.get('guid')} v{row.get('version')}"
         script = row.get("script") or {}
         schema, sense, found = verdict(validator, script, name)
         err += schema + sense + found
-        meta = script.get("metadata", {})
-        if (meta.get("scenarioGuid"), meta.get("version")) != (row.get("guid"), row.get("version")):
-            err.append(f"{name}: metadata.scenarioGuid и version не совпадают со строкой")
-        for s in script.get("steps", []):
-            for o in outcomes(s):
-                for a in o.get("actions", []):
-                    if a.get("type") in NOT_EXECUTED:
-                        err.append(f"{name}: шаг {s['id']} — действие {a['type']} в МИ не исполняется (профиль МИ)")
+        meta = script.get("scenario", {})
+        if (meta.get("id"), meta.get("version")) != (row.get("guid"), row.get("version")):
+            err.append(f"{name}: scenario.id и version не совпадают со строкой")
         key = (row.get("guid"), row.get("version"))
         if key in versions:
             err.append(f"{name}: версия повторяется")

@@ -1,39 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "dd01c3be-c9aa-7bbe-849b-9953751d5c24",
-    "version": 1,
+  "scenario": {
+    "id": "dd01c3be-c9aa-7bbe-849b-9953751d5c24",
     "name": "Драка / агрессивное поведение",
     "description": "Видеоаналитика обнаружила потасовку или агрессивное поведение. Оператор оценивает обстановку, при необходимости назначает старшего смены и собирает доказательную базу.",
-    "demonstrates": [
-      "Множественные правила (JSONLogic and/or)",
-      "Несколько действий на одном переходе (callMacro + assign)",
-      "Сбор доказательств: Image + Comment"
-    ],
-    "complexity": "advanced",
-    "tags": [
-      "public-safety",
-      "fight",
-      "investigation"
-    ]
-  },
-  "initialStepId": "severity",
-  "timers": {
-    "escalateAfterSec": 90,
-    "maxDurationSec": 1800
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": false
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "severity"
   },
   "steps": [
     {
       "id": "severity",
       "type": "RadioButton",
       "title": "Шаг 1. Оценка тяжести",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что именно происходит на видео?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "verbal_only",
@@ -55,43 +43,36 @@
             "id": "ended",
             "label": "Инцидент уже завершён, расходятся"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "verbal_protocol",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.severity.value"
+                  "var": "value"
                 },
                 "weapon_visible"
               ]
             },
             "goto": "supervisor_briefing",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_DISPATCH_GUARD_TEAM"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_CALL_POLICE"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_DISPATCH_GUARD_TEAM + MACRO_CALL_POLICE",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "or": [
                 {
                   "==": [
                     {
-                      "var": "state.severity.value"
+                      "var": "value"
                     },
                     "fight"
                   ]
@@ -99,7 +80,7 @@
                 {
                   "==": [
                     {
-                      "var": "state.severity.value"
+                      "var": "value"
                     },
                     "shoving"
                   ]
@@ -107,44 +88,47 @@
               ]
             },
             "goto": "supervisor_briefing",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_DISPATCH_GUARD_TEAM"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_DISPATCH_GUARD_TEAM",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.severity.value"
+                  "var": "value"
                 },
                 "ended"
               ]
             },
-            "goto": "evidence_snapshot"
+            "goto": "evidence_snapshot",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "verbal_protocol"
-        }
+        ]
       }
     },
     {
       "id": "verbal_protocol",
       "type": "Comment",
       "title": "Шаг 2. Протокол словесного конфликта",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите ситуацию (для словесного конфликта обычно не требуется выезд)",
+        "default": "",
         "required": true,
-        "minLength": 20
+        "readonly": false,
+        "minLength": 20,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_minor"
+          "goto": "btn_close_minor",
+          "macro": null
         }
       }
     },
@@ -152,24 +136,23 @@
       "id": "supervisor_briefing",
       "type": "Comment",
       "title": "Шаг 2. Доклад старшему смены",
+      "description": "Например: драка двух человек у входа, направил группу 2, полиция вызвана.",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Кратко доложите старшему смены: что происходит, кто из охраны направлен, нужна ли полиция.",
-        "placeholder": "Например: драка двух человек у входа, направил группу 2, полиция вызвана.",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 20,
-        "minRows": 3
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
           "goto": "evidence_snapshot",
-          "actions": [
-            {
-              "type": "assign",
-              "args": {
-                "to": "shift-supervisor"
-              }
-            }
-          ]
+          "macro": null
         }
       }
     },
@@ -177,15 +160,20 @@
       "id": "evidence_snapshot",
       "type": "Image",
       "title": "Шаг 3a. Снимок с камеры",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимок ключевого момента происшествия (с камеры)",
         "source": "camera",
-        "allowMultiple": true,
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "evidence_notes"
+          "goto": "evidence_notes",
+          "macro": null
         }
       }
     },
@@ -193,15 +181,23 @@
       "id": "evidence_notes",
       "type": "Comment",
       "title": "Шаг 3b. Описание для протокола",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите участников, их действия, время и место происшествия (для протокола).",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 50,
-        "minRows": 4
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "follow_up"
+          "goto": "follow_up",
+          "macro": null
         }
       }
     },
@@ -209,8 +205,15 @@
       "id": "follow_up",
       "type": "RadioButton",
       "title": "Шаг 4. Последствия",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какие действия предприняты после прибытия охраны?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "detained",
@@ -228,12 +231,12 @@
             "id": "dispersed",
             "label": "Разогнаны, ушли мирно"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "btn_close"
+          "goto": "btn_close",
+          "macro": null
         }
       }
     },
@@ -241,27 +244,18 @@
       "id": "btn_close",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть инцидент с отчётом",
-        "emphasis": "destructive"
+        "label": "Закрыть инцидент с отчётом"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "violence_incident_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -269,21 +263,18 @@
       "id": "btn_close_minor",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как лёгкий инцидент",
-        "emphasis": "secondary"
+        "label": "Закрыть как лёгкий инцидент"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed_minor"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

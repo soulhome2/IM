@@ -1,30 +1,39 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000007",
+    "name": "Саботаж камеры",
+    "description": "",
     "version": 1,
-    "name": "Саботаж камеры"
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "lost"
   },
-  "initialStepId": "lost",
   "steps": [
     {
       "id": "lost",
       "type": "Checkbox",
       "title": "Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Подтверждена потеря видео / закрытие объектива",
+        "minSelected": 0,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": false
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "verdict"
+          "goto": "verdict",
+          "macro": null
         }
       }
     },
@@ -32,8 +41,15 @@
       "id": "verdict",
       "type": "RadioButton",
       "title": "Причина",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Причина",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "deliberate",
@@ -47,16 +63,19 @@
             "id": "weather",
             "label": "Погодные условия"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "note",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "in": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 [
                   "deliberate",
@@ -65,37 +84,35 @@
               ]
             },
             "goto": "note",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Создать заявку на ремонт"
-                }
-              }
-            ]
+            "macro": {
+              "name": "Создать заявку на ремонт",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "note"
-        }
+        ]
       }
     },
     {
       "id": "note",
       "type": "Comment",
       "title": "Комментарий",
+      "description": "Камера, симптомы, заявка в сервис",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Комментарий",
+        "default": "",
         "required": false,
-        "placeholder": "Камера, симптомы, заявка в сервис"
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

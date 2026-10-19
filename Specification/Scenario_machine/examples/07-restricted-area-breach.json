@@ -1,76 +1,67 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "fa5186ee-3c02-7cdb-801c-5dbfa099392e",
-    "version": 1,
+  "scenario": {
+    "id": "fa5186ee-3c02-7cdb-801c-5dbfa099392e",
     "name": "Проникновение в режимный объект",
     "description": "Серьёзный инцидент: на режимный объект (серверная, склад опасных материалов, кабинет руководства) проникло неавторизованное лицо. Комбинированная угроза: нарушение СКУД + видеофиксация.",
-    "demonstrates": [
-      "сложный JSONLogic с and+or+in",
-      "Image source=fixed (заводская картинка для сравнения)",
-      "emphasis: destructive",
-      "editable: false для критических шагов"
-    ],
-    "complexity": "advanced",
-    "tags": [
-      "restricted-area",
-      "high-priority",
-      "multi-system"
-    ]
-  },
-  "initialStepId": "facility_type",
-  "timers": {
-    "escalateAfterSec": 60,
-    "maxDurationSec": 1800
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": false
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "facility_type"
   },
   "steps": [
     {
       "id": "facility_type",
       "type": "Select",
       "title": "Шаг 1. Тип объекта",
+      "description": "Выберите...",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Тип режимного объекта, на который произошло проникновение",
-        "placeholder": "Выберите...",
-        "options": [
+        "required": true,
+        "lists": [
           {
-            "id": "server_room",
-            "label": "Серверная"
-          },
-          {
-            "id": "datacenter",
-            "label": "ЦОД"
-          },
-          {
-            "id": "weapons_storage",
-            "label": "Склад оружия / боеприпасов"
-          },
-          {
-            "id": "hazmat_storage",
-            "label": "Хранилище опасных веществ"
-          },
-          {
-            "id": "exec_office",
-            "label": "Кабинет руководства"
-          },
-          {
-            "id": "money_room",
-            "label": "Кассовый узел"
-          },
-          {
-            "id": "control_room",
-            "label": "Пункт управления / диспетчерская"
+            "id": "facility_type",
+            "label": "Тип режимного объекта, на который произошло проникновение",
+            "options": [
+              {
+                "id": "server_room",
+                "label": "Серверная"
+              },
+              {
+                "id": "datacenter",
+                "label": "ЦОД"
+              },
+              {
+                "id": "weapons_storage",
+                "label": "Склад оружия / боеприпасов"
+              },
+              {
+                "id": "hazmat_storage",
+                "label": "Хранилище опасных веществ"
+              },
+              {
+                "id": "exec_office",
+                "label": "Кабинет руководства"
+              },
+              {
+                "id": "money_room",
+                "label": "Кассовый узел"
+              },
+              {
+                "id": "control_room",
+                "label": "Пункт управления / диспетчерская"
+              }
+            ],
+            "default": []
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "intruder_count"
+          "goto": "intruder_count",
+          "macro": null
         }
       }
     },
@@ -78,8 +69,15 @@
       "id": "intruder_count",
       "type": "RadioButton",
       "title": "Шаг 2. Количество нарушителей",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Сколько неавторизованных лиц видно на объекте?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "one",
@@ -97,12 +95,12 @@
             "id": "uncertain",
             "label": "Невозможно определить"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "behavior"
+          "goto": "behavior",
+          "macro": null
         }
       }
     },
@@ -110,163 +108,125 @@
       "id": "behavior",
       "type": "Checkbox",
       "title": "Шаг 3. Поведение нарушителей",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что делают нарушители? (отметьте все применимые признаки)",
+        "minSelected": 1,
+        "maxSelected": null,
         "options": [
           {
             "id": "looking_around",
-            "label": "Осматриваются, явно не знакомы с объектом"
+            "label": "Осматриваются, явно не знакомы с объектом",
+            "default": false
           },
           {
             "id": "carrying_bags",
-            "label": "Несут сумки / контейнеры"
+            "label": "Несут сумки / контейнеры",
+            "default": false
           },
           {
             "id": "armed",
-            "label": "Видны оружие или похожие предметы"
+            "label": "Видны оружие или похожие предметы",
+            "default": false
           },
           {
             "id": "taking_items",
-            "label": "Берут вещи / документы / оборудование"
+            "label": "Берут вещи / документы / оборудование",
+            "default": false
           },
           {
             "id": "destroying",
-            "label": "Намеренно повреждают оборудование"
+            "label": "Намеренно повреждают оборудование",
+            "default": false
           },
           {
             "id": "looking_for",
-            "label": "Целенаправленно что-то ищут"
+            "label": "Целенаправленно что-то ищут",
+            "default": false
           },
           {
             "id": "calm",
-            "label": "Ведут себя спокойно (возможно, ошибка СКУД)"
+            "label": "Ведут себя спокойно (возможно, ошибка СКУД)",
+            "default": false
           }
-        ],
-        "minSelected": 1,
-        "required": true
+        ]
       },
       "transitions": {
-        "rules": [
-          {
-            "when": {
-              "and": [
-                {
-                  "or": [
-                    {
-                      "in": [
-                        "armed",
-                        {
-                          "var": "state.behavior.value"
-                        }
-                      ]
-                    },
-                    {
-                      "in": [
-                        "destroying",
-                        {
-                          "var": "state.behavior.value"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "!=": [
-                    {
-                      "var": "state.intruder_count.value"
-                    },
-                    "uncertain"
-                  ]
-                }
-              ]
-            },
-            "goto": "compare_with_normal",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_FULL_LOCKDOWN"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_CALL_POLICE_URGENT"
-                }
-              },
-              {
-                "type": "assign",
-                "args": {
-                  "to": "security-chief"
-                }
-              }
-            ]
-          },
-          {
-            "when": {
-              "and": [
-                {
-                  "in": [
-                    "calm",
-                    {
-                      "var": "state.behavior.value"
-                    }
-                  ]
-                },
-                {
-                  "==": [
-                    {
-                      "var": "state.intruder_count.value"
-                    },
-                    "one"
-                  ]
-                }
-              ]
-            },
-            "goto": "compare_with_normal",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_DISPATCH_GUARD"
-                }
-              }
-            ]
-          }
-        ],
         "default": {
           "goto": "compare_with_normal",
-          "actions": [
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_FULL_LOCKDOWN"
-              }
+          "macro": {
+            "name": "MACRO_FULL_LOCKDOWN + MACRO_DISPATCH_GUARD_TEAM",
+            "args": {}
+          }
+        },
+        "rules": [
+          {
+            "condition": {
+              "or": [
+                {
+                  "in": [
+                    "armed",
+                    {
+                      "var": "selected"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "destroying",
+                    {
+                      "var": "selected"
+                    }
+                  ]
+                }
+              ]
             },
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_DISPATCH_GUARD_TEAM"
-              }
+            "goto": "compare_with_normal",
+            "macro": {
+              "name": "MACRO_FULL_LOCKDOWN + MACRO_CALL_POLICE_URGENT",
+              "args": {}
             }
-          ]
-        }
+          },
+          {
+            "condition": {
+              "in": [
+                "calm",
+                {
+                  "var": "selected"
+                }
+              ]
+            },
+            "goto": "compare_with_normal",
+            "macro": {
+              "name": "MACRO_DISPATCH_GUARD",
+              "args": {}
+            }
+          }
+        ]
       }
     },
     {
       "id": "compare_with_normal",
       "type": "Image",
       "title": "Шаг 4. Эталонное состояние",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Эталонная картинка (как объект выглядит в норме). Сравните с текущим состоянием.",
         "source": "fixed",
-        "fixedSrc": "https://assets.example.com/im/restricted_area_normal.jpg",
-        "required": false
+        "image": "https://assets.example.com/im/restricted_area_normal.jpg"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "goto": "current_state_photo"
+          "goto": "current_state_photo",
+          "macro": null
         }
       }
     },
@@ -274,15 +234,20 @@
       "id": "current_state_photo",
       "type": "Image",
       "title": "Шаг 5. Текущее состояние",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимки текущего состояния объекта (сделайте 3+ кадра с разных камер)",
         "source": "camera",
-        "allowMultiple": true,
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "incident_summary"
+          "goto": "incident_summary",
+          "macro": null
         }
       }
     },
@@ -290,16 +255,26 @@
       "id": "incident_summary",
       "type": "Comment",
       "title": "Шаг 6. Сводка для протокола",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Полное описание инцидента для протокола службы безопасности",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 100,
-        "minRows": 5,
-        "maxRows": 15
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close"
+          "goto": "btn_close",
+          "macro": {
+            "name": "MACRO_LOCK_ALL_VIDEO_FRAGMENTS",
+            "args": {}
+          }
         }
       }
     },
@@ -307,33 +282,18 @@
       "id": "btn_close",
       "type": "Message",
       "title": "Передача в расследование",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть и передать в расследование",
-        "emphasis": "destructive"
+        "label": "Закрыть и передать в расследование"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_LOCK_ALL_VIDEO_FRAGMENTS"
-              }
-            },
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "restricted_breach_critical_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "investigation_required"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

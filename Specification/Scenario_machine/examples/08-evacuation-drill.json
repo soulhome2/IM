@@ -1,47 +1,35 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "a86f2f1a-6a44-7f17-8f0e-01f60933b362",
-    "version": 1,
+  "scenario": {
+    "id": "a86f2f1a-6a44-7f17-8f0e-01f60933b362",
     "name": "Эвакуация (плановая отработка)",
     "description": "Плановое учение по эвакуации. Оператор получает инструкцию (readonly Comment), фиксирует время старта/окончания, отмечает результаты по контрольным точкам.",
-    "demonstrates": [
-      "Comment readonly: true (инструкция оператору)",
-      "Datetime kind=time",
-      "timers escalate/maxDuration",
-      "generateReport с явным templateId"
-    ],
-    "complexity": "intermediate",
-    "tags": [
-      "evacuation",
-      "drill",
-      "compliance"
-    ]
-  },
-  "initialStepId": "instruction",
-  "timers": {
-    "escalateAfterSec": 900,
-    "maxDurationSec": 5400
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": false
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "instruction"
   },
   "steps": [
     {
       "id": "instruction",
       "type": "Comment",
       "title": "Шаг 1. Инструктаж",
+      "description": "1. По сигналу — запустить оповещение по громкой связи.\n2. Зафиксировать время старта.\n3. Контролировать прохождение точек по этажам.\n4. После сбора всех на сборном пункте — зафиксировать время окончания.\n5. Отметить отсутствующих, если есть.\n6. Сформировать отчёт для службы охраны труда.",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Регламент учения (только для ознакомления)",
-        "readonly": true,
+        "default": "",
         "required": false,
-        "placeholder": "1. По сигналу — запустить оповещение по громкой связи.\n2. Зафиксировать время старта.\n3. Контролировать прохождение точек по этажам.\n4. После сбора всех на сборном пункте — зафиксировать время окончания.\n5. Отметить отсутствующих, если есть.\n6. Сформировать отчёт для службы охраны труда."
+        "readonly": true,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "drill_started_at"
+          "goto": "drill_started_at",
+          "macro": null
         }
       }
     },
@@ -49,22 +37,24 @@
       "id": "drill_started_at",
       "type": "Datetime",
       "title": "Шаг 2. Время старта",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Точное время начала эвакуации (по громкой связи)",
-        "kind": "time",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
       "transitions": {
         "default": {
           "goto": "checkpoints",
-          "actions": [
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_PA_EVACUATION_START"
-              }
-            }
-          ]
+          "macro": {
+            "name": "MACRO_PA_EVACUATION_START",
+            "args": {}
+          }
         }
       }
     },
@@ -72,37 +62,47 @@
       "id": "checkpoints",
       "type": "Checkbox",
       "title": "Шаг 3. Контрольные точки",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какие контрольные точки прошли согласно нормативам?",
+        "minSelected": 0,
+        "maxSelected": null,
         "options": [
           {
             "id": "floor_1_cleared",
-            "label": "1-й этаж — пуст"
+            "label": "1-й этаж — пуст",
+            "default": false
           },
           {
             "id": "floor_2_cleared",
-            "label": "2-й этаж — пуст"
+            "label": "2-й этаж — пуст",
+            "default": false
           },
           {
             "id": "floor_3_cleared",
-            "label": "3-й этаж — пуст"
+            "label": "3-й этаж — пуст",
+            "default": false
           },
           {
             "id": "parking_cleared",
-            "label": "Парковка — пуста"
+            "label": "Парковка — пуста",
+            "default": false
           },
           {
             "id": "everyone_at_assembly",
-            "label": "Все собрались на сборном пункте"
+            "label": "Все собрались на сборном пункте",
+            "default": false
           }
-        ],
-        "minSelected": 0,
-        "required": false,
-        "layout": "vertical"
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "absentees"
+          "goto": "absentees",
+          "macro": null
         }
       }
     },
@@ -110,14 +110,23 @@
       "id": "absentees",
       "type": "Comment",
       "title": "Шаг 4. Отсутствующие",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Список отсутствующих на сборном пункте (если все пришли — оставьте пустым)",
+        "default": "",
         "required": false,
-        "maxRows": 8
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "drill_ended_at"
+          "goto": "drill_ended_at",
+          "macro": null
         }
       }
     },
@@ -125,14 +134,24 @@
       "id": "drill_ended_at",
       "type": "Datetime",
       "title": "Шаг 5. Время окончания",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Точное время завершения учения",
-        "kind": "time",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
       "transitions": {
         "default": {
-          "goto": "btn_close"
+          "goto": "btn_close",
+          "macro": {
+            "name": "MACRO_PA_DRILL_END",
+            "args": {}
+          }
         }
       }
     },
@@ -140,33 +159,18 @@
       "id": "btn_close",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть учение и сформировать отчёт",
-        "emphasis": "primary"
+        "label": "Закрыть учение и сформировать отчёт"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_PA_DRILL_END"
-              }
-            },
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "evacuation_drill_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "drill_completed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

@@ -1,37 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "7550062e-7865-7bad-857b-871d1b31f7c1",
-    "version": 1,
+  "scenario": {
+    "id": "7550062e-7865-7bad-857b-871d1b31f7c1",
     "name": "Авария оборудования: камера офлайн",
     "description": "Камера видеонаблюдения перестала отвечать. Оператор быстро определяет причину; если своими силами не решается — оформляется заявка в техподдержку.",
-    "demonstrates": [
-      "Условные переходы (RadioButton + JSONLogic)",
-      "Действия на переходах (callMacro, generateReport, finish)"
-    ],
-    "complexity": "intermediate",
-    "tags": [
-      "infrastructure",
-      "camera-offline"
-    ]
-  },
-  "initialStepId": "diagnostic",
-  "timers": {
-    "escalateAfterSec": 600,
-    "maxDurationSec": 3600
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": true
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "diagnostic"
   },
   "steps": [
     {
       "id": "diagnostic",
       "type": "RadioButton",
       "title": "Шаг 1. Первичная диагностика",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что показывает быстрая проверка камеры?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "ping_ok_no_video",
@@ -49,34 +39,42 @@
             "id": "physical_damage",
             "label": "Видны механические повреждения по соседней камере"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "try_restart",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.diagnostic.value"
+                  "var": "value"
                 },
                 "back_online"
               ]
             },
-            "goto": "btn_close_self_resolved"
+            "goto": "btn_close_self_resolved",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "try_restart"
-        }
+        ]
       }
     },
     {
       "id": "try_restart",
       "type": "RadioButton",
       "title": "Шаг 2. Попытка удалённого перезапуска",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Удалённый перезапуск помог?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "fixed",
@@ -90,52 +88,53 @@
             "id": "no_remote",
             "label": "Удалённый перезапуск недоступен"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "tech_support_details",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.try_restart.value"
+                  "var": "value"
                 },
                 "fixed"
               ]
             },
             "goto": "btn_close_resolved",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_LOG_REMOTE_RESTART"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_LOG_REMOTE_RESTART",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "tech_support_details"
-        }
+        ]
       }
     },
     {
       "id": "tech_support_details",
       "type": "Comment",
       "title": "Шаг 3. Заявка в техподдержку",
+      "description": "Например: после перезапуска камера всё ещё не отвечает, на коммутаторе порт UP, питание есть.",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите проблему для инженера техподдержки (что произошло, что попробовали, текущее состояние)",
-        "placeholder": "Например: после перезапуска камера всё ещё не отвечает, на коммутаторе порт UP, питание есть.",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 30,
-        "maxLength": 2000,
-        "minRows": 4,
-        "maxRows": 12
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "tech_support_priority"
+          "goto": "tech_support_priority",
+          "macro": null
         }
       }
     },
@@ -143,8 +142,15 @@
       "id": "tech_support_priority",
       "type": "RadioButton",
       "title": "Шаг 4. Приоритет заявки",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какой приоритет назначить заявке?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "low",
@@ -158,12 +164,12 @@
             "id": "high",
             "label": "Высокий — критическая зона"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_escalated"
+          "goto": "btn_close_escalated",
+          "macro": null
         }
       }
     },
@@ -171,21 +177,18 @@
       "id": "btn_close_self_resolved",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть (камера восстановилась сама)",
-        "emphasis": "secondary"
+        "label": "Закрыть (камера восстановилась сама)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "self_resolved"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -193,21 +196,18 @@
       "id": "btn_close_resolved",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть (восстановлена удалённым перезапуском)",
-        "emphasis": "primary"
+        "label": "Закрыть (восстановлена удалённым перезапуском)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "fixed_remotely"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -215,27 +215,18 @@
       "id": "btn_close_escalated",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть (передано в техподдержку)",
-        "emphasis": "primary"
+        "label": "Закрыть (передано в техподдержку)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "infra_failure_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "tech_support_assigned"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

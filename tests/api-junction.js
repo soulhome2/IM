@@ -41,8 +41,8 @@
     const env = await makeEnv();
     const card = await created(env, "fire");
     const sc = card.scenario;
-    assert.eq([sc.scenarioGuid, sc.scenarioVersion, sc.script.metadata.version], [FIRE, LATEST_FIRE, LATEST_FIRE], "версия — последняя");
-    assert.eq([sc.path, sc.result.state, sc.result.completedAt], [[sc.script.initialStepId], {}, null], "прохождение с начала");
+    assert.eq([sc.scenarioGuid, sc.scenarioVersion, sc.script.scenario.version], [FIRE, LATEST_FIRE, LATEST_FIRE], "версия — последняя");
+    assert.eq([sc.path, sc.result.state, sc.result.completedAt], [[sc.script.scenario.initialStep], {}, null], "прохождение с начала");
     const old = (await newOf(env, "fire")).find((e) => e.guid !== card.guid);
     assert.eq((await scenarioOf(env, old.guid)).scenarioVersion, 1, "инцидент из набора — на версии 1");
     // Версия 2 — с шагом «Эвакуация» после типа сработки; версия 1 — без него
@@ -50,7 +50,7 @@
       assert.status(await env.act(guid, "claim", {}, "queue"), 200, null, "взять");
       await answerOk(env, guid, "visual", ["confirmed"]);
       await answerOk(env, guid, "verdict", "dispatch");
-      const after = await answerOk(env, guid, "kind", "smoke");
+      const after = await answerOk(env, guid, "kind", { kind: ["smoke"] });
       assert.eq(after.result.currentStepId, next, `после типа сработки — ${next}`);
       if (guid === card.guid) await env.act(guid, "release", { comment: "тест" });
     }
@@ -129,14 +129,14 @@
     assert.eq((await scenarioOf(env, inc.guid)).result.currentStepId, "verdict", "прохождение не сдвинулось");
   });
 
-  test("Пройденный шаг: переответ меняет ветку — выпавшие шаги без ответа, в history остаются; шаг с editable: false — 409 (в7)", async () => {
-    const env = await makeEnv({ fixturePatch: fireV1With((sc, step) => (step("visual").editable = false)) });
+  test("Пройденный шаг: переответ меняет ветку — выпавшие шаги без ответа, в history остаются; шаг с revisitable: false — 409 (в7)", async () => {
+    const env = await makeEnv({ fixturePatch: fireV1With((sc, step) => (step("visual").revisitable = false)) });
     const [intr] = await newOf(env, "intrusion");
     await env.act(intr.guid, "claim", {}, "queue");
     await answerOk(env, intr.guid, "visual", ["confirmed"]);
     await answerOk(env, intr.guid, "verdict", "real");
     await answerOk(env, intr.guid, "notify", null);
-    await answerOk(env, intr.guid, "zone", "warehouse");
+    await answerOk(env, intr.guid, "zone", { zone: ["warehouse"] });
     const sc = await answerOk(env, intr.guid, "verdict", "staff");
     assert.eq([sc.path, sc.result.currentStepId], [["visual", "verdict", "note"], "note"], "путь по новой ветке");
     assert.ok(!sc.result.state.zone && !sc.result.state.notify, "ответы выпавших шагов убраны");
@@ -144,29 +144,26 @@
     const [fire] = await newOf(env, "fire");
     await env.act(fire.guid, "claim", {}, "queue");
     await answerOk(env, fire.guid, "visual", ["confirmed"]);
-    assert.status(await answer(env, fire.guid, "visual", ["confirmed"]), 409, "STEP_NOT_EDITABLE", "переответ на editable: false");
+    assert.status(await answer(env, fire.guid, "visual", ["confirmed"]), 409, "STEP_NOT_EDITABLE", "переответ на revisitable: false");
   });
 
-  test("Действия сценария: escalate и assign инцидент не меняют; callMacro — по условиям run_macro (§14.5, в8)", async () => {
-    const patch = fireV1With((sc, step) => {
-      step("verdict").transitions.rules[0].actions.push({ type: "escalate", args: { reason: "тест" } }, { type: "assign", args: { to: "petrova" } });
-    });
-    const env = await makeEnv({ fixturePatch: patch });
+  test("Макрос исхода — один, по условиям run_macro; инцидент ответ не меняет (§14.5, в8)", async () => {
+    const env = await makeEnv();
     const [inc] = await newOf(env, "fire");
     await env.act(inc.guid, "claim", {}, "queue");
     await answerOk(env, inc.guid, "visual", ["confirmed"]);
     const sc = await answerOk(env, inc.guid, "verdict", "real");
     const card = await env.card(inc.guid);
     assert.eq([card.state, card.owner.id, card.escalationLevel], ["in_progress", ME, 0], "инцидент тот же: в работе у меня, без эскалации");
-    assert.ok(!sc.result.history.some((h) => h.action === "escalate" || h.action === "assign"), "escalate и assign не в прохождении");
-    assert.eq(card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").length, 2, "два макроса в журнале");
+    assert.eq(sc.result.history.filter((h) => h.action === "macro").map((h) => h.name), ["Оповещение и эвакуационные выходы"], "макрос — в прохождении");
+    assert.eq(card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").map((j) => j.vars.name), ["Оповещение и эвакуационные выходы"], "один макрос в журнале");
     // Без права запускать макросы ответ принят, а макрос — нет: ответы на переходы и права не влияют
     const noRun = await makeEnv({ permissions: all.filter((k) => k !== "incident:run_action") });
     const [other] = await newOf(noRun, "fire");
     await noRun.act(other.guid, "claim", {}, "queue");
     await answerOk(noRun, other.guid, "visual", ["confirmed"]);
     const res = await answerOk(noRun, other.guid, "verdict", "real");
-    assert.ok(res.result.history.some((h) => h.action === "callMacro"), "намерение — в прохождении");
+    assert.ok(res.result.history.some((h) => h.action === "macro"), "намерение — в прохождении");
     assert.ok(!(await noRun.card(other.guid)).journal.some((j) => j.templateKey === "workflow.journal.macro.launched"), "макрос не запущен");
   });
 
@@ -179,16 +176,16 @@
     await answerOk(env, inc.guid, "visual", ["confirmed"]);
     const before = values(await answerOk(env, inc.guid, "verdict", "real"));
     assert.status(await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
-    assert.status(await answer(env, inc.guid, "kind", "smoke"), 403, "PERMISSION_DENIED", "ответ в отложенном");
+    assert.status(await answer(env, inc.guid, "kind", { kind: ["smoke"] }), 403, "PERMISSION_DENIED", "ответ в отложенном");
     assert.eq(values(await scenarioOf(env, inc.guid)), before, "отложен — ответы те же");
     await env.act(inc.guid, "resume", {});
     assert.eq((await scenarioOf(env, inc.guid)).cursorStepId, "kind", "возобновлён — курсор на текущем шаге");
     await env.act(inc.guid, "release", { comment: "тест" });
     assert.eq(values(await scenarioOf(env, inc.guid)), before, "в очереди — ответы те же");
     await env.act(inc.guid, "claim", {}, "queue");
-    await answerOk(env, inc.guid, "kind", "smoke");
+    await answerOk(env, inc.guid, "kind", { kind: ["smoke"] });
     assert.status(await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "тест" }), 200, null, "передать");
-    assert.eq(values(await scenarioOf(env, inc.guid)).kind, "smoke", "передан — ответы те же");
+    assert.eq(values(await scenarioOf(env, inc.guid)).kind, { kind: ["smoke"] }, "передан — ответы те же");
     assert.ok((await env.card(inc.guid)).readOnly, "у меня — на просмотр");
   });
 
@@ -197,7 +194,7 @@
     const v2 = await created(env, "fire");
     const [v1] = await newOf(env, "fire");
     assert.status(await env.act(v2.guid, "claim", {}, "queue"), 200, null, "взять v2");
-    for (const [id, value] of [["visual", ["confirmed"]], ["verdict", "dispatch"], ["kind", "smoke"], ["evacuation", "yes"]]) await answerOk(env, v2.guid, id, value);
+    for (const [id, value] of [["visual", ["confirmed"]], ["verdict", "dispatch"], ["kind", { kind: ["smoke"] }], ["evacuation", "yes"]]) await answerOk(env, v2.guid, id, value);
     assert.status(await env.act(v2.guid, "release", { comment: "тест" }), 200, null, "v2 — в очередь");
     assert.status(await env.act(v1.guid, "claim", {}, "queue"), 200, null, "взять v1");
     await answerOk(env, v1.guid, "visual", ["confirmed"]);
@@ -205,7 +202,7 @@
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [v1.guid, v2.guid], primaryGuid: v1.guid });
     const primary = await scenarioOf(env, res.incident.guid);
     assert.eq(primary.scenarioVersion, 1, "основной — на своей версии");
-    assert.eq(values(primary), { visual: ["confirmed"], verdict: "dispatch", kind: "smoke" }, "перенесены классификация и тип; эвакуации в версии 1 нет");
+    assert.eq(values(primary), { visual: ["confirmed"], verdict: "dispatch", kind: { kind: ["smoke"] } }, "перенесены классификация и тип; эвакуации в версии 1 нет");
     assert.eq(primary.result.currentStepId, "note", "прохождение основного — до первого неотвеченного");
     const entry = (await env.card(v1.guid)).journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
     assert.ok(entry && entry.vars.n === 2, `в журнале основного перенесено 2: ${entry && entry.text}`);

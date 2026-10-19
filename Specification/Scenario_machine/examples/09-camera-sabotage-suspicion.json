@@ -1,40 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "edaa6418-51d3-721b-8872-462a7dfae577",
-    "version": 1,
+  "scenario": {
+    "id": "edaa6418-51d3-721b-8872-462a7dfae577",
     "name": "Подозрение на саботаж камеры",
     "description": "Камера показывает аномальное изображение: чёрный экран, статичный кадр, или отклонение угла. Оператор сравнивает с эталоном и принимает одно из 5 решений.",
-    "demonstrates": [
-      "5 разных путей через transitions.rules (matchedRule на каждый)",
-      "Image source=fixed для эталона",
-      "сравнение с эталоном через два Image-шага подряд",
-      "JSONLogic missing для проверки факта ответа"
-    ],
-    "complexity": "advanced",
-    "tags": [
-      "sabotage",
-      "video-quality",
-      "security"
-    ]
-  },
-  "initialStepId": "anomaly_type",
-  "timers": {
-    "escalateAfterSec": 240,
-    "maxDurationSec": 1200
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": true
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "anomaly_type"
   },
   "steps": [
     {
       "id": "anomaly_type",
       "type": "RadioButton",
       "title": "Шаг 1. Тип аномалии",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что именно показывает камера сейчас?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "black_screen",
@@ -56,12 +43,12 @@
             "id": "image_distorted",
             "label": "Сильные искажения изображения"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "reference_image"
+          "goto": "reference_image",
+          "macro": null
         }
       }
     },
@@ -69,16 +56,20 @@
       "id": "reference_image",
       "type": "Image",
       "title": "Шаг 2. Эталон",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Эталонный кадр с этой камеры (как должно быть)",
         "source": "fixed",
-        "fixedSrc": "https://assets.example.com/im/cam_reference_normal.jpg",
-        "required": false
+        "image": "https://assets.example.com/im/cam_reference_normal.jpg"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "goto": "current_image"
+          "goto": "current_image",
+          "macro": null
         }
       }
     },
@@ -86,14 +77,20 @@
       "id": "current_image",
       "type": "Image",
       "title": "Шаг 3. Текущее изображение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Текущее изображение с этой же камеры",
         "source": "camera",
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "decision"
+          "goto": "decision",
+          "macro": null
         }
       }
     },
@@ -101,8 +98,15 @@
       "id": "decision",
       "type": "RadioButton",
       "title": "Шаг 4. Решение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Ваша оценка ситуации?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "deliberate_sabotage",
@@ -124,104 +128,95 @@
             "id": "unable_to_decide",
             "label": "Невозможно определить — нужна выездная проверка"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "field_check_path",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.decision.value"
+                  "var": "value"
                 },
                 "deliberate_sabotage"
               ]
             },
             "goto": "sabotage_path",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_LOCK_VIDEO_FRAGMENT"
-                }
-              },
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "security-chief",
-                  "reason": "Намеренный саботаж камеры"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_LOCK_VIDEO_FRAGMENT",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.decision.value"
+                  "var": "value"
                 },
                 "vandalism"
               ]
             },
             "goto": "vandalism_path",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_DISPATCH_GUARD"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_DISPATCH_GUARD",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.decision.value"
+                  "var": "value"
                 },
                 "weather"
               ]
             },
-            "goto": "weather_path"
+            "goto": "weather_path",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.decision.value"
+                  "var": "value"
                 },
                 "tech_fault"
               ]
             },
             "goto": "tech_fault_path",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_CREATE_SUPPORT_TICKET"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_CREATE_SUPPORT_TICKET",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "field_check_path"
-        }
+        ]
       }
     },
     {
       "id": "sabotage_path",
       "type": "Comment",
       "title": "Действия — саботаж",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите признаки намеренного вмешательства",
+        "default": "",
         "required": true,
-        "minLength": 30
+        "readonly": false,
+        "minLength": 30,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_sabotage"
+          "goto": "btn_close_sabotage",
+          "macro": null
         }
       }
     },
@@ -229,14 +224,23 @@
       "id": "vandalism_path",
       "type": "Comment",
       "title": "Действия — вандализм",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Кратко опишите вандализм и принятые меры",
+        "default": "",
         "required": true,
-        "minLength": 20
+        "readonly": false,
+        "minLength": 20,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_vandalism"
+          "goto": "btn_close_vandalism",
+          "macro": null
         }
       }
     },
@@ -244,14 +248,23 @@
       "id": "weather_path",
       "type": "Comment",
       "title": "Действия — погода",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какое погодное явление наблюдается",
+        "default": "",
         "required": false,
-        "minLength": 5
+        "readonly": false,
+        "minLength": 5,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_weather"
+          "goto": "btn_close_weather",
+          "macro": null
         }
       }
     },
@@ -259,14 +272,23 @@
       "id": "tech_fault_path",
       "type": "Comment",
       "title": "Действия — неисправность",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Описание неисправности (тикет создан автоматически)",
+        "default": "",
         "required": true,
-        "minLength": 20
+        "readonly": false,
+        "minLength": 20,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_tech"
+          "goto": "btn_close_tech",
+          "macro": null
         }
       }
     },
@@ -274,14 +296,23 @@
       "id": "field_check_path",
       "type": "Comment",
       "title": "Действия — выезд",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Кому передан вызов на выездную проверку",
+        "default": "",
         "required": true,
-        "minLength": 10
+        "readonly": false,
+        "minLength": 10,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_field"
+          "goto": "btn_close_field",
+          "macro": null
         }
       }
     },
@@ -289,27 +320,18 @@
       "id": "btn_close_sabotage",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть с эскалацией",
-        "emphasis": "destructive"
+        "label": "Закрыть с эскалацией"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "sabotage_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "investigation_required"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -317,21 +339,18 @@
       "id": "btn_close_vandalism",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как вандализм",
-        "emphasis": "primary"
+        "label": "Закрыть как вандализм"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -339,21 +358,18 @@
       "id": "btn_close_weather",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как погодные условия",
-        "emphasis": "secondary"
+        "label": "Закрыть как погодные условия"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "weather"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -361,21 +377,18 @@
       "id": "btn_close_tech",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть (техподдержка примет тикет)",
-        "emphasis": "secondary"
+        "label": "Закрыть (техподдержка примет тикет)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "tech_support_assigned"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -383,21 +396,18 @@
       "id": "btn_close_field",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть (передано на выездную проверку)",
-        "emphasis": "primary"
+        "label": "Закрыть (передано на выездную проверку)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "field_check_assigned"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

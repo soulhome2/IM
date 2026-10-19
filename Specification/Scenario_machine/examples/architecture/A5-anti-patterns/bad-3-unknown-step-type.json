@@ -1,0 +1,32 @@
+{
+  "scenario": {
+    "id": "9fee26b1-4a16-72f8-8a85-651c6ce8824b",
+    "name": "[A5/bad-3] Неизвестный тип шага 'Button'",
+    "description": "Отвергает схема (уровень 1): типа шага Button нет — это прежнее имя Message, переименован 2026-10-19 (CHANGELOG машины сценариев). Список типов закрытый: новый тип — сначала в редакторе продукта, потом в схеме.",
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "btn"
+  },
+  "steps": [
+    {
+      "id": "btn",
+      "type": "Button",
+      "title": "Кнопка",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
+      "view": {
+        "label": "Кнопка"
+      },
+      "transitions": {
+        "default": {
+          "goto": null,
+          "macro": null
+        }
+      }
+    }
+  ]
+}

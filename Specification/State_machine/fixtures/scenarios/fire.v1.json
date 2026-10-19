@@ -1,30 +1,39 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000002",
+    "name": "Пожарная тревога",
+    "description": "",
     "version": 1,
-    "name": "Пожарная тревога"
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "visual"
   },
-  "initialStepId": "visual",
   "steps": [
     {
       "id": "visual",
       "type": "Checkbox",
       "title": "Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Тревога подтверждена по видео",
+        "minSelected": 1,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "verdict"
+          "goto": "verdict",
+          "macro": null
         }
       }
     },
@@ -32,8 +41,15 @@
       "id": "verdict",
       "type": "RadioButton",
       "title": "Классификация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Классификация",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "real",
@@ -47,71 +63,73 @@
             "id": "dispatch",
             "label": "Требует выезда"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "kind",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 "real"
               ]
             },
             "goto": "kind",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Оповещение по площадке"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Разблокировать эвакуационные выходы"
-                }
-              }
-            ]
+            "macro": {
+              "name": "Оповещение и эвакуационные выходы",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "kind"
-        }
+        ]
       }
     },
     {
       "id": "kind",
       "type": "Select",
       "title": "Тип сработки",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Тип сработки",
-        "options": [
+        "required": false,
+        "lists": [
           {
-            "id": "smoke",
-            "label": "Задымление"
-          },
-          {
-            "id": "open_fire",
-            "label": "Открытое пламя"
-          },
-          {
-            "id": "no_visual",
-            "label": "Датчик без визуального подтверждения"
-          },
-          {
-            "id": "system_test",
-            "label": "Тест системы"
+            "id": "kind",
+            "label": "Тип сработки",
+            "options": [
+              {
+                "id": "smoke",
+                "label": "Задымление"
+              },
+              {
+                "id": "open_fire",
+                "label": "Открытое пламя"
+              },
+              {
+                "id": "no_visual",
+                "label": "Датчик без визуального подтверждения"
+              },
+              {
+                "id": "system_test",
+                "label": "Тест системы"
+              }
+            ],
+            "default": []
           }
-        ],
-        "required": false
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "note"
+          "goto": "note",
+          "macro": null
         }
       }
     },
@@ -119,18 +137,23 @@
       "id": "note",
       "type": "Comment",
       "title": "Комментарий / номер наряда",
+      "description": "Что сделано, кого вызвали",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Комментарий / номер наряда",
+        "default": "",
         "required": false,
-        "placeholder": "Что сделано, кого вызвали"
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

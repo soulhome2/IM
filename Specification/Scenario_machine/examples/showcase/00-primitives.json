@@ -1,311 +1,555 @@
 {
-  "dslVersion": "1.0",
-  "metadata": {
-    "scenarioGuid": "04316e46-bf57-4cef-94f5-78412d0c967c",
-    "version": 1,
+  "scenario": {
+    "id": "04316e46-bf57-4cef-94f5-78412d0c967c",
     "name": "Витрина всех примитивов рендеринга DSL v1",
     "description": "Стартовая демонстрация: последовательно проходит через КАЖДЫЙ рендеримый тип шага DSL v1 во всех его подвариантах. Удобно начать знакомство с DSL именно отсюда, увидеть весь набор UI-элементов сразу. Используется как regression-эталон для UI-runner'ов (Web/iOS/Android): после реализации рендеринга прогонка этой витрины должна показать все экраны без ошибок. Это design-time артефакт, в продакшн-инциденты не уходит.",
-    "demonstrates": [
-      "Comment: readonly, обычный, многострочный (min/maxLength, min/maxRows, placeholder)",
-      "RadioButton: layout=vertical и layout=horizontal",
-      "Checkbox: одиночный (одна опция, как 'согласие') и группа (несколько опций, min/maxSelected)",
-      "Select: короткий список и длинный список (>5 опций) с placeholder",
-      "Datetime: kind=date, kind=time, kind=datetime с min/max",
-      "Image: source=camera, source=map, source=operator (+ allowMultiple), source=fixed (+ fixedSrc)",
-      "Message: emphasis=primary, secondary, destructive"
-    ],
-    "purpose": "architecture-demo",
-    "category": "primitives-showcase",
-    "notes": "Контент шагов намеренно нейтральный (без привязки к доменной модели инцидента). Витрина не пытается рассказать сюжет — её цель показать UI-примитивы.",
-    "createdAt": "2026-04-29T00:00:00Z"
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "intro"
   },
-  "initialStepId": "intro",
   "steps": [
     {
       "id": "intro",
       "type": "Comment",
       "title": "О витрине",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Это демо-сценарий, проходящий через все примитивы DSL v1. Нажмите 'Далее' чтобы начать.",
-        "readonly": true
+        "default": "",
+        "required": false,
+        "readonly": true,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
-        "default": { "goto": "next_to_radios" }
+        "default": {
+          "goto": "next_to_radios",
+          "macro": null
+        }
       }
     },
-
     {
       "id": "next_to_radios",
       "type": "Message",
-      "view": { "label": "Далее → RadioButton" },
-      "transitions": { "default": { "goto": "radio_vertical" } }
+      "title": "Далее → RadioButton",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Далее → RadioButton"
+      },
+      "transitions": {
+        "default": {
+          "goto": "radio_vertical",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "radio_vertical",
       "type": "RadioButton",
       "title": "RadioButton, layout=vertical",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Выберите один вариант (вертикальная раскладка):",
-        "layout": "vertical",
         "required": true,
+        "default": null,
         "options": [
-          { "id": "low",    "label": "Низкий"  },
-          { "id": "medium", "label": "Средний", "hint": "наиболее частый случай" },
-          { "id": "high",   "label": "Высокий" }
+          {
+            "id": "low",
+            "label": "Низкий"
+          },
+          {
+            "id": "medium",
+            "label": "Средний"
+          },
+          {
+            "id": "high",
+            "label": "Высокий"
+          }
         ]
       },
-      "transitions": { "default": { "goto": "radio_horizontal" } }
+      "transitions": {
+        "default": {
+          "goto": "radio_horizontal",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "radio_horizontal",
       "type": "RadioButton",
       "title": "RadioButton, layout=horizontal",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Выберите один вариант (горизонтальная раскладка):",
-        "layout": "horizontal",
         "required": true,
+        "default": null,
         "options": [
-          { "id": "yes",   "label": "Да"   },
-          { "id": "no",    "label": "Нет"  },
-          { "id": "skip",  "label": "Пропустить" }
+          {
+            "id": "yes",
+            "label": "Да"
+          },
+          {
+            "id": "no",
+            "label": "Нет"
+          },
+          {
+            "id": "skip",
+            "label": "Пропустить"
+          }
         ]
       },
-      "transitions": { "default": { "goto": "checkbox_single" } }
+      "transitions": {
+        "default": {
+          "goto": "checkbox_single",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "checkbox_single",
       "type": "Checkbox",
       "title": "Checkbox, одиночный (как 'согласие')",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Подтвердите ознакомление:",
-        "required": true,
         "minSelected": 1,
+        "maxSelected": null,
         "options": [
-          { "id": "ack", "label": "Я ознакомился с инструкцией" }
+          {
+            "id": "ack",
+            "label": "Я ознакомился с инструкцией",
+            "default": false
+          }
         ]
       },
-      "transitions": { "default": { "goto": "checkbox_group" } }
+      "transitions": {
+        "default": {
+          "goto": "checkbox_group",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "checkbox_group",
       "type": "Checkbox",
       "title": "Checkbox-группа, multi-select",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какие признаки наблюдаются? (выберите от 1 до 3):",
-        "layout": "vertical",
-        "required": true,
         "minSelected": 1,
         "maxSelected": 3,
         "options": [
-          { "id": "smoke",      "label": "Задымление"      },
-          { "id": "smell",      "label": "Запах гари"      },
-          { "id": "alarm",      "label": "Сработала сигнализация" },
-          { "id": "people",     "label": "Скопление людей" },
-          { "id": "noise",      "label": "Посторонний шум" }
+          {
+            "id": "smoke",
+            "label": "Задымление",
+            "default": false
+          },
+          {
+            "id": "smell",
+            "label": "Запах гари",
+            "default": false
+          },
+          {
+            "id": "alarm",
+            "label": "Сработала сигнализация",
+            "default": false
+          },
+          {
+            "id": "people",
+            "label": "Скопление людей",
+            "default": false
+          },
+          {
+            "id": "noise",
+            "label": "Посторонний шум",
+            "default": false
+          }
         ]
       },
-      "transitions": { "default": { "goto": "select_single" } }
+      "transitions": {
+        "default": {
+          "goto": "select_single",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "select_single",
       "type": "Select",
       "title": "Select, короткий список",
+      "description": "— выберите —",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Тип объекта:",
-        "placeholder": "— выберите —",
         "required": true,
-        "options": [
-          { "id": "office",     "label": "Офис"              },
-          { "id": "warehouse",  "label": "Склад"             },
-          { "id": "datacenter", "label": "Серверная"         }
+        "lists": [
+          {
+            "id": "select_single",
+            "label": "Тип объекта:",
+            "options": [
+              {
+                "id": "office",
+                "label": "Офис"
+              },
+              {
+                "id": "warehouse",
+                "label": "Склад"
+              },
+              {
+                "id": "datacenter",
+                "label": "Серверная"
+              }
+            ],
+            "default": []
+          }
         ]
       },
-      "transitions": { "default": { "goto": "select_long_list" } }
+      "transitions": {
+        "default": {
+          "goto": "select_long_list",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "select_long_list",
       "type": "Select",
       "title": "Select, длинный список (>5)",
+      "description": "— выберите этаж —",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Этаж:",
-        "placeholder": "— выберите этаж —",
         "required": true,
-        "options": [
-          { "id": "f_minus_1", "label": "Подвал"   },
-          { "id": "f_1",       "label": "1 этаж"   },
-          { "id": "f_2",       "label": "2 этаж"   },
-          { "id": "f_3",       "label": "3 этаж"   },
-          { "id": "f_4",       "label": "4 этаж"   },
-          { "id": "f_5",       "label": "5 этаж"   },
-          { "id": "f_6",       "label": "6 этаж"   },
-          { "id": "f_roof",    "label": "Крыша"    }
+        "lists": [
+          {
+            "id": "select_long_list",
+            "label": "Этаж:",
+            "options": [
+              {
+                "id": "f_minus_1",
+                "label": "Подвал"
+              },
+              {
+                "id": "f_1",
+                "label": "1 этаж"
+              },
+              {
+                "id": "f_2",
+                "label": "2 этаж"
+              },
+              {
+                "id": "f_3",
+                "label": "3 этаж"
+              },
+              {
+                "id": "f_4",
+                "label": "4 этаж"
+              },
+              {
+                "id": "f_5",
+                "label": "5 этаж"
+              },
+              {
+                "id": "f_6",
+                "label": "6 этаж"
+              },
+              {
+                "id": "f_roof",
+                "label": "Крыша"
+              }
+            ],
+            "default": []
+          }
         ]
       },
-      "transitions": { "default": { "goto": "comment_short" } }
+      "transitions": {
+        "default": {
+          "goto": "comment_short",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "comment_short",
       "type": "Comment",
       "title": "Comment, однострочный, required",
+      "description": "не более 80 символов",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Краткая пометка:",
-        "placeholder": "не более 80 символов",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 1,
-        "maxLength": 80,
-        "minRows": 1,
-        "maxRows": 1
+        "maxLength": 80
       },
-      "transitions": { "default": { "goto": "comment_multiline" } }
+      "transitions": {
+        "default": {
+          "goto": "comment_multiline",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "comment_multiline",
       "type": "Comment",
       "title": "Comment, многострочный",
+      "description": "Опишите что произошло, кто участвовал, какие были предпринятые действия…",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Подробное описание ситуации:",
-        "placeholder": "Опишите что произошло, кто участвовал, какие были предпринятые действия…",
+        "default": "",
         "required": false,
+        "readonly": false,
         "minLength": 0,
-        "maxLength": 2000,
-        "minRows": 4,
-        "maxRows": 12
+        "maxLength": 2000
       },
-      "transitions": { "default": { "goto": "datetime_date" } }
+      "transitions": {
+        "default": {
+          "goto": "datetime_date",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "datetime_date",
       "type": "Datetime",
       "title": "Datetime, kind=date",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Дата происшествия:",
-        "kind": "date",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
-      "transitions": { "default": { "goto": "datetime_time" } }
+      "transitions": {
+        "default": {
+          "goto": "datetime_time",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "datetime_time",
       "type": "Datetime",
       "title": "Datetime, kind=time",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Время происшествия (часы:минуты):",
-        "kind": "time",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
-      "transitions": { "default": { "goto": "datetime_full" } }
+      "transitions": {
+        "default": {
+          "goto": "datetime_full",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "datetime_full",
       "type": "Datetime",
       "title": "Datetime, kind=datetime, с min/max",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Дата и время (только в пределах суток):",
-        "kind": "datetime",
         "required": true,
         "min": "2026-01-01T00:00:00",
         "max": "2026-12-31T23:59:00"
       },
-      "transitions": { "default": { "goto": "image_camera" } }
+      "transitions": {
+        "default": {
+          "goto": "image_camera",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "image_camera",
       "type": "Image",
       "title": "Image, source=camera",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимок с камеры:",
         "source": "camera",
-        "required": false,
-        "allowMultiple": false
+        "image": null
       },
-      "transitions": { "default": { "goto": "image_map" } }
+      "transitions": {
+        "default": {
+          "goto": "image_map",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "image_map",
       "type": "Image",
       "title": "Image, source=map",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Скриншот карты в точке инцидента:",
         "source": "map",
-        "required": false
+        "image": null
       },
-      "transitions": { "default": { "goto": "image_operator" } }
+      "transitions": {
+        "default": {
+          "goto": "image_operator",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "image_operator",
       "type": "Image",
       "title": "Image, source=operator, allowMultiple=true",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Прикрепите фотографии (можно несколько):",
         "source": "operator",
-        "required": false,
-        "allowMultiple": true
+        "image": null
       },
-      "transitions": { "default": { "goto": "image_fixed" } }
+      "transitions": {
+        "default": {
+          "goto": "image_fixed",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "image_fixed",
       "type": "Image",
       "title": "Image, source=fixed (статическая картинка)",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Эталонное фото объекта (предзагружено в сценарий):",
         "source": "fixed",
-        "fixedSrc": "https://example.com/im/static/reference-floorplan.png",
-        "required": false
+        "image": "https://example.com/im/static/reference-floorplan.png"
       },
-      "transitions": { "default": { "goto": "btn_primary" } }
+      "transitions": {
+        "default": {
+          "goto": "btn_primary",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "btn_primary",
       "type": "Message",
       "title": "Message, emphasis=primary",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Подтвердить (primary)",
-        "emphasis": "primary"
+        "label": "Подтвердить (primary)"
       },
-      "transitions": { "default": { "goto": "btn_secondary" } }
+      "transitions": {
+        "default": {
+          "goto": "btn_secondary",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "btn_secondary",
       "type": "Message",
       "title": "Message, emphasis=secondary",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Отложить (secondary)",
-        "emphasis": "secondary"
+        "label": "Отложить (secondary)"
       },
-      "transitions": { "default": { "goto": "btn_destructive" } }
+      "transitions": {
+        "default": {
+          "goto": "btn_destructive",
+          "macro": null
+        }
+      }
     },
-
     {
       "id": "btn_destructive",
       "type": "Message",
       "title": "Message, emphasis=destructive",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Сбросить и закрыть (destructive)",
-        "emphasis": "destructive"
+        "label": "Сбросить и закрыть (destructive)"
       },
       "transitions": {
         "default": {
-          "actions": [
-            { "type": "finish" }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

@@ -203,7 +203,7 @@
     /* ===== Сценарий: исполняет машина сценариев (prototype/scenario.js, §14.5) ===== */
 
     // Сценарий инцидента — версия, с которой он появился (§14.5): строка сценария как на сервере
-    // (guid, version, name, script DSL v1), прохождение — ev.run (scenarioResult, спецификация DSL, раздел 9)
+    // (guid, version, name, script — формат машины сценариев), прохождение — ev.run (scenarioResult, спецификация, раздел 9)
     const rowKey = (guid, version) => `${guid}/${version}`;
     const rowOf = (ev) => SCENARIO_ROWS[rowKey(ev.scenarioGuid, ev.scenarioVersion)];
     const scriptOf = (ev) => rowOf(ev).script;
@@ -226,17 +226,21 @@
     const stepsFilledOf = (ev, setId) => IMScenario.stepsFilled(scriptOf(ev), ev.run, setId);
     // Короткое имя шага — для журнала: название, иначе вопрос
     const stepName = (step) => step.title || step.view.label;
-    // Ответ словами — для журнала: подписи вариантов, текст, число вложений; пропуск — тире
+    // Ответ словами — для журнала: подписи вариантов (у Select — всех списков), текст, вложение; пропуск — тире
     function answerText(step, entry) {
       if (!entry || entry.skipped) return "—";
-      const label = (id) => ((step.view.options || []).find((o) => o.id === id) || { label: id }).label;
-      if (step.type === "Message") return step.view.label;
-      if (Array.isArray(entry.value)) return step.type === "Image" ? String(entry.value.length) : entry.value.map(label).join(", ");
-      return step.view.options ? label(entry.value) : String(entry.value == null ? "" : entry.value);
+      const v = step.view;
+      const label = (options, id) => (options.find((o) => o.id === id) || { label: id }).label;
+      if (step.type === "Message") return v.label;
+      if (step.type === "Image") return "1";
+      if (step.type === "Select") return v.lists.flatMap((l) => (entry.value[l.id] || []).map((id) => label(l.options, id))).join(", ");
+      if (step.type === "Checkbox") return entry.value.map((id) => label(v.options, id)).join(", ");
+      if (step.type === "RadioButton") return label(v.options, entry.value);
+      return String(entry.value == null ? "" : entry.value);
     }
 
     // Ответ на шаг — событие машины сценариев. Курсор показа — на шаг пути после отвеченного.
-    // Макросы (callMacro) запускаются по условиям run_macro того, кто ответил (§14.5, профиль МИ)
+    // Макрос исхода запускается по условиям run_macro того, кто ответил (§14.5, профиль МИ)
     function answerStep(ev, actor, actorEngine, body) {
       const res = IMScenario.answer(scriptOf(ev), ev.run, body.stepId, body.value, {
         at: iso(now()),
@@ -248,14 +252,15 @@
       ev.run = res.result;
       const path = pathOf(ev);
       ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];
-      res.effects.filter((e) => e.type === "callMacro").forEach((e) => launchMacro(ev, actor, actorEngine, e.macroId));
+      res.effects.filter((e) => e.type === "macro").forEach((e) => launchMacro(ev, actor, actorEngine, e.name));
       return res;
     }
-    function launchMacro(ev, actor, actorEngine, macroId) {
+    function launchMacro(ev, actor, actorEngine, name) {
       if (!actorEngine.availability("run_macro", ev).ok) return;
-      log(ev, actor, "workflow.journal.macro.launched", { name: macroId });
-      // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен»
-      emit("macro.completed", ev, actor, { macroId, executionGuid: uuid(9, ++serial.macro), status: "delivered" });
+      log(ev, actor, "workflow.journal.macro.launched", { name });
+      // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен».
+      // macroId события — имя макроса из сценария
+      emit("macro.completed", ev, actor, { macroId: name, executionGuid: uuid(9, ++serial.macro), status: "delivered" });
     }
     // Ответ не принят — код ошибки по контракту
     function answerProblem(ev, body, error) {
@@ -1766,20 +1771,18 @@
       }
     }
 
-    // Ответ коллеги на шаг: вариант — случайный, отметки — сколько нужно, текст — из заметок эмуляции;
-    // необязательное вложение коллега пропускает
+    // Ответ коллеги на шаг: вариант — случайный (в каждом списке Select — один), отметки — сколько нужно,
+    // текст — из заметок эмуляции; вложение (необязательное) коллега пропускает
     function colleagueAnswer(step) {
       const v = step.view;
-      const ids = (v.options || []).map((o) => o.id);
       const any = (list) => list[Math.floor(Math.random() * list.length)];
-      if (step.type === "RadioButton" || step.type === "Select") return { stepId: step.id, value: any(ids) };
-      if (step.type === "Checkbox") return { stepId: step.id, value: ids.slice(0, Math.max(1, v.minSelected || 0)) };
+      const ids = (options) => options.map((o) => o.id);
+      if (step.type === "RadioButton") return { stepId: step.id, value: any(ids(v.options)) };
+      if (step.type === "Select") return { stepId: step.id, value: Object.fromEntries(v.lists.map((l) => [l.id, [any(ids(l.options))]])) };
+      if (step.type === "Checkbox") return { stepId: step.id, value: ids(v.options).slice(0, Math.max(1, v.minSelected)) };
       if (step.type === "Comment") return { stepId: step.id, value: v.readonly ? "" : any(opts.colleagues.SIM_NOTES) };
-      if (step.type === "Datetime") {
-        const at = new Date(now()).toISOString();
-        return { stepId: step.id, value: v.kind === "date" ? at.slice(0, 10) : v.kind === "time" ? at.slice(11, 19) : at.slice(0, 19) + "Z" };
-      }
-      if (step.type === "Image") return IMScenario.isRequired(step) ? null : { stepId: step.id, skip: true };
+      if (step.type === "Datetime") return { stepId: step.id, value: new Date(now()).toISOString().slice(0, 19) + "Z" };
+      if (step.type === "Image") return { stepId: step.id, skip: true };
       return { stepId: step.id, value: null };
     }
 

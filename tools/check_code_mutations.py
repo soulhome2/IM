@@ -4,7 +4,8 @@
 В копии репозитория по одному портится место в коде (engine.js, server.js, scenario.js, app.js) —
 так, как мог бы ошибиться разработчик: строгое сравнение вместо нестрогого, забытая
 проверка, таймер без остатка. Затем запускаются тесты API (tests/api.html), а для
-интерфейса — самопроверка прототипа. Каждая порча должна уронить тесты (KILLED).
+интерфейса — самопроверка прототипа, для исполнителя сценариев — его тесты (tests/scenario.html).
+Каждая порча должна уронить тесты (KILLED).
 Если тесты прошли (SURVIVED) — в них дыра: такую ошибку никто бы не заметил.
 
 Отличие от tools/check_mutations.py: там меняется машина состояний и проверяется,
@@ -30,7 +31,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка)
+# (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
     ("active-limit", "engine.js", "if (u.size < W.limits.maxActive) return null;", "if (u.size <= W.limits.maxActive) return null;", "api"),
     ("hold-limit", "engine.js", "units(\"on_hold\", ev).size < W.limits.maxOnHold ?", "units(\"on_hold\", ev).size <= W.limits.maxOnHold ?", "api"),
@@ -60,7 +61,7 @@ MUTATIONS = [
     ("if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          if (body", "if (body", "api"),
     # Машина сценариев и стык (§14.5, ARCH-06): исполнитель scenario.js и его вызовы в сервере
     ("answer-off-path-accepted", "scenario.js", 'if (i < 0) return { ok: false, error: "not_on_path" };\n', "", "api"),
-    ("answer-editable-ignored", "scenario.js", 'if (!isCurrent && step.editable === false) return { ok: false, error: "not_editable" };\n', "", "api"),
+    ("answer-editable-ignored", "scenario.js", 'if (!isCurrent && step.revisitable === false) return { ok: false, error: "not_editable" };\n', "", "api"),
     ("branch-answers-kept", "scenario.js", "dropped.forEach((id) => delete r.state[id]);", "", "api"),
     ("closing-without-finish", "scenario.js", 'setId === "closing" && Boolean(result.completedAt)', 'setId === "closing"', "api"),
     ("progress-from-start", "scenario.js", "const rest = remaining(script, result.currentStepId);", "const rest = remaining(script, script.initialStepId);", "api"),
@@ -72,7 +73,17 @@ MUTATIONS = [
     ("finish-no-close-form", "app.js", '    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");\n', "", "ui"),
     ("ahead-with-current", "scenario.js", "for (let x = id; x !== from; x = prev.get(x)) out.unshift(x);", "for (let x = id; x !== null; x = prev.get(x)) out.unshift(x);", "api"),
     ("ahead-not-shown", "app.js", "  const aheadOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).ahead || [] : []);", "  const aheadOf = () => [];", "ui"),
-    ("datetime-iso-on-path", "app.js", '    if (step.type === "Datetime") return fmtWhen(step.view.kind, entry.value);\n', "", "ui"),
+    ("datetime-iso-on-path", "app.js", '    if (step.type === "Datetime") return fmtWhen(entry.value);\n', "", "ui"),
+    # Формат редактора продукта (Scenario_machine/CHANGELOG): финальный шаг, условие своего шага, операторы, Select, умолчания
+    ("finish-step-reads-transitions", "scenario.js", "    if (step.finish) return null;\n", "", "scenario"),
+    ("condition-context-lost", "scenario.js", 'if (step.type === "RadioButton") return { value: value == null ? null : value };', 'if (step.type === "RadioButton") return {};', "scenario"),
+    ("in-standard", "scenario.js", 'logic.add_operation("in", (needle, haystack) => {', 'logic.add_operation("in_off", (needle, haystack) => {', "scenario"),
+    ("eq-standard", "scenario.js", 'logic.add_operation("==", (a, b) => {', 'logic.add_operation("==_off", (a, b) => {', "scenario"),
+    ("empty-condition-fires", "scenario.js", 'if (!condition || typeof condition !== "object" || !Object.keys(condition).length) return false;', 'if (!condition || typeof condition !== "object") return false;', "scenario"),
+    ("rules-on-any-type", "scenario.js", "const rules = WITH_RULES.includes(step.type) ? step.transitions.rules || [] : [];\n    const context", "const rules = step.transitions.rules || [];\n    const context", "scenario"),
+    ("select-required-ignored", "scenario.js", 'return v.required && v.lists.some((l) => !(value[l.id] || []).length) ? "required" : null;', "return null;", "scenario"),
+    ("macro-effect-ignored", "server.js", 'res.effects.filter((e) => e.type === "macro")', 'res.effects.filter((e) => e.type === "callMacro")', "api"),
+    ("ui-default-ignored", "app.js", "    return defaultOf(step);\n", "    return null;\n", "ui"),
     ("draft-kept-on-leave", "app.js", "    state.drafts.delete(draftKey(ev, path[cursorOf(ev)]));\n", "", "ui"),
     ("required-steps-code-lost", "server.js", 'const code = REASON_CODE[check.why && check.why[0]] || GUARD_CODE[check.guard] || "GUARD_FAILED";', 'const code = GUARD_CODE[check.guard] || "GUARD_FAILED";', "api"),
     ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),
@@ -335,6 +346,10 @@ def run_tests(site, kind, profile, failfast=False):
         page = chrome(f"file://{site}/tests/api.html" + ("?failfast" if failfast else ""), profile, 120000)
         passed = 'data-apitest="pass"' in page
         log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
+    elif kind == "scenario":
+        page = chrome(f"file://{site}/tests/scenario.html", profile, 60000)
+        passed = 'data-scenariotest="pass"' in page
+        log = re.search(r'<pre id="scenariotest-log">(.*?)</pre>', page, re.S)
     else:
         page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 60000)
         passed = 'data-selftest="pass"' in page
@@ -379,7 +394,7 @@ def main():
                 print(f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}")
         # Контроль: без порчи тесты проходят — полный прогон
         if not wanted:
-            for kind in ("api", "ui"):
+            for kind in ("api", "ui", "scenario"):
                 passed, fails, _ = run_tests(site, kind, profile)
                 if not passed:
                     survived += 1

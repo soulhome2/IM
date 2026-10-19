@@ -902,7 +902,7 @@
   }
 
   /* ===== Сценарий: сценарий и прохождение приходят в карточке (IncidentScenario, §14.5) =====
-     Сценарий — формат DSL v1 (Specification/Scenario_machine/), прохождение ведёт сервер машиной сценариев:
+     Сценарий — формат машины сценариев (Specification/Scenario_machine/), прохождение ведёт сервер машиной сценариев:
      путь, курсор, прогресс, что дальше после ответа. Карточка показывает шаги пути и отправляет ответ. */
 
   const scenarioOf = (ev) => (ev && ev.scenario) || null;
@@ -913,37 +913,39 @@
   const entryOf = (ev, id) => (scenarioOf(ev) && scenarioOf(ev).result.state[id]) || null;
   const runDone = (ev) => Boolean(scenarioOf(ev) && scenarioOf(ev).result.completedAt);
   const stepShort = (step) => step.title || step.view.label;
-  // Обязательность — по формату DSL v1: у RadioButton, Select и Datetime по умолчанию да; кнопку надо нажать
-  const REQUIRED_BY_DEFAULT = { RadioButton: true, Select: true, Datetime: true };
-  const stepRequired = (step) =>
-    step.type === "Message" || (step.view.required !== undefined ? step.view.required === true : Boolean(REQUIRED_BY_DEFAULT[step.type]));
-  // Макросы, запущенные ответом на шаг (callMacro), — из прохождения
+  // Обязательность (спецификация, раздел 9): Checkbox — minSelected > 0, Image — никогда, кнопку надо нажать
+  function stepRequired(step) {
+    if (step.type === "Message") return true;
+    if (step.type === "Checkbox") return step.view.minSelected > 0;
+    return step.type !== "Image" && step.view.required === true;
+  }
+  // Макрос, запущенный ответом на шаг, — из прохождения
   const macrosOf = (ev, id) =>
-    scenarioOf(ev) ? scenarioOf(ev).result.history.filter((h) => h.stepId === id && h.action === "callMacro").map((h) => h.macroId) : [];
+    scenarioOf(ev) ? scenarioOf(ev).result.history.filter((h) => h.stepId === id && h.action === "macro").map((h) => h.name) : [];
 
   // Ответ словами — у шагов пути
   function answerText(step, entry) {
     if (!entry) return "";
     if (entry.skipped) return t("Пропущено");
-    const label = (id) => {
-      const o = (step.view.options || []).find((x) => x.id === id);
+    const label = (options, id) => {
+      const o = options.find((x) => x.id === id);
       return o ? t(o.label) : id;
     };
-    if (step.type === "Message") return t(step.view.label);
-    if (step.type === "Image") return t("Фото: {n}", { n: entry.value.length });
-    if (Array.isArray(entry.value)) return entry.value.map(label).join(", ");
-    if (step.view.options) return label(entry.value);
-    if (step.type === "Datetime") return fmtWhen(step.view.kind, entry.value);
+    const v = step.view;
+    if (step.type === "Message") return t(v.label);
+    if (step.type === "Image") return t("Фото: {n}", { n: 1 });
+    if (step.type === "Select") return v.lists.flatMap((l) => (entry.value[l.id] || []).map((id) => label(l.options, id))).join(", ");
+    if (step.type === "Checkbox") return entry.value.map((id) => label(v.options, id)).join(", ");
+    if (step.type === "RadioButton") return label(v.options, entry.value);
+    if (step.type === "Datetime") return fmtWhen(entry.value);
     return entry.value == null ? t("Прочитано") : String(entry.value);
   }
 
   // Ответ «дата и время» — местными датой и временем на языке интерфейса, а не строкой ISO (BUG-71)
-  function fmtWhen(kind, value) {
+  function fmtWhen(value) {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
-    if (kind === "time") return String(value).slice(0, 5);
-    const d = new Date(kind === "date" ? `${value}T00:00:00` : value);
+    const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
-    if (kind === "date") return d.toLocaleDateString(locale);
     return d.toLocaleString(locale, { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
@@ -953,18 +955,35 @@
   function setDraft(ev, id, value, attachments) {
     state.drafts.set(draftKey(ev, id), attachments ? { value, attachments } : { value });
   }
-  // Что в поле шага: черновик, иначе записанный ответ
+  // Значение по умолчанию из сценария — у шага, на который ещё не отвечали (спецификация, раздел 6)
+  function defaultOf(step) {
+    const v = step.view;
+    if (step.type === "RadioButton") return v.default;
+    if (step.type === "Checkbox") return v.options.filter((o) => o.default).map((o) => o.id);
+    if (step.type === "Select") return Object.fromEntries(v.lists.map((l) => [l.id, (l.default || []).slice()]));
+    if (step.type === "Comment") return v.readonly ? null : v.default || null;
+    return null;
+  }
+  // Что в поле шага: черновик, иначе записанный ответ, иначе значение по умолчанию. Ответом оно станет по «Далее»
   function valueOf(ev, step) {
     const d = draftOf(ev, step.id);
     if (d) return d.value;
     const e = entryOf(ev, step.id);
-    return e && !e.skipped ? e.value : null;
+    if (e) return e.skipped ? null : e.value;
+    return defaultOf(step);
   }
   // Есть ли ответ в поле: отмечено, выбрано, написано; у шага «только для показа» отвечать нечего
   function filled(step, value) {
     if (step.type === "Comment" && step.view.readonly) return true;
+    if (step.type === "Select") return Boolean(value) && Object.values(value).some((ids) => ids.length > 0);
     if (Array.isArray(value)) return value.length > 0;
     return value != null && String(value).trim() !== "";
+  }
+  // Ответа в поле хватает обязательному шагу: у Select — в каждом списке, у Checkbox — не меньше minSelected
+  function complete(step, value) {
+    if (step.type === "Select") return Boolean(value) && step.view.lists.every((l) => (value[l.id] || []).length > 0);
+    if (step.type === "Checkbox") return Array.isArray(value) && value.length >= Math.max(step.view.minSelected, 1);
+    return filled(step, value);
   }
   // Черновик отличается от записанного ответа
   function changed(ev, step) {
@@ -984,8 +1003,8 @@
   }
   // Текущий шаг прохождения — последний шаг пути, пока сценарий не пройден
   const isCurrentStep = (ev, i) => !runDone(ev) && i === pathOf(ev).length - 1;
-  // Ответ можно менять: на текущем шаге — всегда, на пройденном — если шаг editable (профиль МИ)
-  const stepEditable = (ev, i, editable) => editable && (isCurrentStep(ev, i) || stepOf(ev, pathOf(ev)[i]).editable !== false);
+  // Ответ можно менять: на текущем шаге — всегда, на пройденном — если шаг revisitable (профиль МИ)
+  const stepEditable = (ev, i, editable) => editable && (isCurrentStep(ev, i) || stepOf(ev, pathOf(ev)[i]).revisitable !== false);
 
   // «Далее»: на текущем шаге — есть ответ или шаг можно пропустить (кнопку — только нажать); на пройденном —
   // ответ изменён или впереди есть шаг пути. На последнем шаге пройденного сценария идти некуда (RULE-89)
@@ -993,8 +1012,8 @@
     const path = pathOf(ev);
     const step = stepOf(ev, path[i]);
     if (!step) return false;
-    if (stepEditable(ev, i, editable) && changed(ev, step)) return filled(step, valueOf(ev, step)) || !stepRequired(step);
-    if (editable && isCurrentStep(ev, i)) return step.type !== "Message" && (!stepRequired(step) || filled(step, valueOf(ev, step)));
+    if (stepEditable(ev, i, editable) && changed(ev, step)) return complete(step, valueOf(ev, step)) || !stepRequired(step);
+    if (editable && isCurrentStep(ev, i)) return step.type !== "Message" && (!stepRequired(step) || complete(step, valueOf(ev, step)));
     return i < path.length - 1;
   }
 
@@ -2254,13 +2273,14 @@
     `;
   }
 
-  // Поле шага по его типу (DSL v1): вопрос — view.label, ответ — черновик или записанный.
-  // Ниже — макросы, которые ответ на этот шаг запустил
+  // Поле шага по его типу: пояснение — description шага, вопрос — view.label, ответ — черновик, записанный
+  // или значение по умолчанию. Ниже — макрос, который запустил ответ на этот шаг
   function renderStepControl(step, ev, enabled) {
     const dis = enabled ? "" : "disabled";
     const view = step.view || {};
     const value = valueOf(ev, step);
     const id = escapeHtml(step.id);
+    const note = step.description ? `<p class="step-q">${te(step.description)}</p>` : "";
     const question = view.label && view.label !== stepShort(step) ? `<p class="step-q">${te(view.label)}</p>` : "";
     const options = view.options || [];
     let control = "";
@@ -2292,55 +2312,59 @@
         )
         .join("")}</div>`;
     } else if (step.type === "Select") {
-      control = `<select data-ans="${id}" ${dis}><option value="">${te(view.placeholder || "Выберите…")}</option>${options
-        .map((o) => `<option value="${escapeHtml(o.id)}" ${value === o.id ? "selected" : ""}>${te(o.label)}</option>`)
-        .join("")}</select>`;
+      // Несколько списков, в каждом можно отметить несколько вариантов (спецификация, раздел 6.3)
+      const picked = value || {};
+      control = view.lists
+        .map(
+          (l) => `<div class="step-list">${
+            // Подпись единственного списка, совпадающая с названием шага, не повторяется — как вопрос шага
+            view.lists.length === 1 && l.label === stepShort(step) ? "" : `<p class="step-q">${te(l.label)}</p>`
+          }<div class="checks">${l.options
+            .map((o) => {
+              const on = (picked[l.id] || []).includes(o.id);
+              return `<label class="${on ? "picked" : ""}"><input type="checkbox" data-list="${id}" data-list-id="${escapeHtml(l.id)}" value="${escapeHtml(
+                o.id
+              )}" ${on ? "checked" : ""} ${dis} /> ${te(o.label)}</label>`;
+            })
+            .join("")}</div></div>`
+        )
+        .join("");
     } else if (step.type === "Comment" && view.readonly) {
-      control = view.placeholder ? `<p class="step-q">${te(view.placeholder)}</p>` : "";
+      control = view.default ? `<p class="step-q">${te(view.default)}</p>` : "";
     } else if (step.type === "Comment") {
-      control = `<textarea rows="4" data-ans="${id}" placeholder="${te(view.placeholder || (stepRequired(step) ? "" : "Можно пропустить"))}" ${dis}>${escapeHtml(
-        value || ""
-      )}</textarea>`;
+      control = `<textarea rows="4" data-ans="${id}" placeholder="${te(stepRequired(step) ? "" : "Можно пропустить")}" ${dis}>${escapeHtml(value || "")}</textarea>`;
     } else if (step.type === "Datetime") {
-      const type = { date: "date", time: "time", datetime: "datetime-local" }[view.kind];
-      control = `<input type="${type}" data-when="${id}" data-kind="${escapeHtml(view.kind)}" value="${escapeHtml(localWhen(view.kind, value))}" ${dis} />`;
+      control = `<input type="datetime-local" data-when="${id}" value="${escapeHtml(localWhen(value))}" ${dis} />`;
     } else if (step.type === "Image") {
-      const n = Array.isArray(value) ? value.length : 0;
+      // Вложение одно (профиль МИ): новый снимок или файл заменяет прежний
       const pick =
         view.source === "fixed"
-          ? view.fixedSrc
-            ? `<img class="step-img" src="${escapeHtml(view.fixedSrc)}" alt="${te(view.label)}" />`
+          ? view.image
+            ? `<img class="step-img" src="${escapeHtml(view.image)}" alt="${te(view.label)}" />`
             : ""
           : view.source === "operator"
-            ? `<input type="file" accept="image/*" data-file="${id}" ${view.allowMultiple ? "multiple" : ""} ${dis} />`
+            ? `<input type="file" accept="image/*" data-file="${id}" ${dis} />`
             : `<button type="button" class="btn outline" data-snap="${id}" ${dis}>${te(view.source === "map" ? "Снимок карты" : "Снимок с камеры")}</button>`;
-      control = `<div class="macro-row">${pick}${n ? `<span class="btn ok" aria-disabled="true">${te("Фото: {n}", { n })}</span>` : ""}</div>`;
+      control = `<div class="macro-row">${pick}${value ? `<span class="btn ok" aria-disabled="true">${te("Фото: {n}", { n: 1 })}</span>` : ""}</div>`;
     } else if (step.type === "Message") {
-      const style = view.emphasis === "destructive" ? "danger" : view.emphasis === "secondary" ? "outline" : "primary";
-      control = `<button type="button" class="btn ${style}" data-press="${id}" ${dis}>${te(view.label)}</button>`;
+      control = `<button type="button" class="btn primary" data-press="${id}" ${dis}>${te(view.label)}</button>`;
     }
     const macros = macrosOf(ev, step.id);
     const launched = macros.length
       ? `<div class="macro-row">${macros.map((m) => `<span class="btn ok" aria-disabled="true">${te("Запущено")} · ${te(m)}</span>`).join("")}</div>`
       : "";
-    return (step.type === "Message" ? "" : question) + control + launched;
+    return note + (step.type === "Message" ? "" : question) + control + launched;
   }
 
-  // Дата и время шага Datetime: в прохождении — ISO-8601 по kind, в поле — местное время браузера
-  function localWhen(kind, value) {
+  // Дата и время шага Datetime: в прохождении — момент в UTC (ISO-8601), в поле — местное время браузера
+  function localWhen(value) {
     if (!value) return "";
-    if (kind !== "datetime") return kind === "time" ? value.slice(0, 5) : value;
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return "";
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
-  function isoWhen(kind, local) {
-    if (!local) return null;
-    if (kind === "time") return local.length === 5 ? `${local}:00` : local;
-    if (kind === "date") return local;
-    return new Date(local).toISOString().replace(/\.\d+Z$/, "Z");
-  }
+  const isoWhen = (local) => (local ? new Date(local).toISOString().replace(/\.\d+Z$/, "Z") : null);
 
   /* ===== Видео и карта: камеры и устройства — из карточки (IncidentMedia, DeviceRef) ===== */
 
@@ -3090,13 +3114,19 @@
       if (!ev || ev.readOnly) return;
       const ans = e.target.closest("[data-ans]");
       const check = e.target.closest("[data-check]");
+      const list = e.target.closest("[data-list]");
       const when = e.target.closest("[data-when]");
       const file = e.target.closest("[data-file]");
       if (ans && ans.tagName !== "TEXTAREA") setDraft(ev, ans.dataset.ans, ans.value || null);
       else if (check) {
         const boxes = [...$("scenarioRoot").querySelectorAll(`[data-check="${check.dataset.check}"]`)];
         setDraft(ev, check.dataset.check, boxes.filter((b) => b.checked).map((b) => b.value));
-      } else if (when) setDraft(ev, when.dataset.when, isoWhen(when.dataset.kind, when.value));
+      } else if (list) {
+        // Ответ Select — отмеченные во всех списках шага: { <список>: [варианты] }
+        const step = stepOf(ev, list.dataset.list);
+        const boxes = [...$("scenarioRoot").querySelectorAll(`[data-list="${list.dataset.list}"]`)];
+        setDraft(ev, step.id, Object.fromEntries(step.view.lists.map((l) => [l.id, boxes.filter((b) => b.checked && b.dataset.listId === l.id).map((b) => b.value)])));
+      } else if (when) setDraft(ev, when.dataset.when, isoWhen(when.value));
       else if (file) {
         // Вложение — в самом прохождении, как в демо-runner DSL (dataBase64)
         const read = (f) =>
@@ -3107,7 +3137,7 @@
           });
         const at = new Date().toISOString();
         const atts = await Promise.all(
-          [...file.files].map(async (f, n) => ({
+          [...file.files].slice(0, 1).map(async (f, n) => ({
             id: `att-${Date.now()}-${n}`,
             stepId: file.dataset.file,
             source: "operator",
@@ -3118,7 +3148,8 @@
             dataBase64: await read(f),
           }))
         );
-        setDraft(ev, file.dataset.file, atts.map((a) => a.id), atts);
+        if (!atts.length) return;
+        setDraft(ev, file.dataset.file, atts[0].id, atts);
       } else return;
       renderScenario();
     });
@@ -3210,9 +3241,7 @@
       if (snap && !ev.readOnly) {
         const step = stepOf(ev, snap.dataset.snap);
         const att = { id: `att-${Date.now()}`, stepId: step.id, source: step.view.source, mime: "image/png", capturedAt: new Date().toISOString(), dataBase64: "" };
-        const d = draftOf(ev, step.id);
-        const atts = (step.view.allowMultiple && d && d.attachments ? d.attachments : []).concat(att);
-        setDraft(ev, step.id, atts.map((a) => a.id), atts);
+        setDraft(ev, step.id, att.id, [att]);
         renderScenario();
       }
     });

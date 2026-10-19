@@ -1,105 +1,146 @@
-/* Исполнитель машины сценариев в браузере: формат DSL v1 (Specification/Scenario_machine/).
-   Перенос исполнителя runner-web (stateMachine.ts, transitionEvaluator.ts — хэши в ORIGIN.md) и профиль
-   МИ из README машины сценариев: как МИ исполняет то, о чём спецификация молчит.
+/* Исполнитель машины сценариев в браузере: формат сценария — формат редактора продукта
+   (Specification/Scenario_machine/, спецификация и схема DSL v1; CHANGELOG). Переходы — как в предпросмотре
+   редактора (playerEngine.ts), операторы условий — как в его jsonLogic.ts (хэши в ORIGIN.md); прохождение
+   (scenarioResult) — спецификация, раздел 9; где формат молчит — профиль МИ из README машины сценариев.
 
-   Чистые функции над сценарием (script) и прогоном (scenarioResult, спецификация, раздел 9). Об инциденте,
-   владельце и очереди не знает: что можно отвечать (scenarioEdit), решает машина инцидента, а внешние
-   эффекты (запуск макросов) исполняет сервер — здесь они только возвращаются. Условия переходов вычисляет
-   json-logic-js (prototype/vendor/json-logic-js), подключённый раньше этого файла. */
+   Чистые функции над сценарием (script) и прохождением (scenarioResult). Об инциденте, владельце и очереди
+   не знает: что можно отвечать (scenarioEdit), решает машина инцидента, а внешние эффекты (запуск макросов)
+   исполняет сервер — здесь они только возвращаются. Условия вычисляет json-logic-js
+   (prototype/vendor/json-logic-js), подключённый раньше этого файла. */
 (() => {
   const logic = window.jsonLogic;
-  const DSL_MAJOR = 1;
-  // view.required по умолчанию — по схеме: у RadioButton, Select и Datetime да, у остальных нет
-  const REQUIRED_BY_DEFAULT = { RadioButton: true, Select: true, Datetime: true, Checkbox: false, Comment: false, Image: false };
-  const DATE = /^\d{4}-\d{2}-\d{2}$/;
-  const TIME = /^\d{2}:\d{2}(:\d{2})?$/;
   const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+  const WITH_RULES = ["RadioButton", "Checkbox", "Select"];
+
+  /* Операторы над отмеченными вариантами — как в редакторе продукта (jsonLogic.ts, спецификация, раздел 7):
+     стандартный JSONLogic сравнивает массив со строкой через приведение к строке. Остальные — стандартные */
+  logic.add_operation("in", (needle, haystack) => {
+    if (Array.isArray(haystack)) {
+      if (Array.isArray(needle)) return haystack.length > 0 && needle.length > 0 && haystack.every((x) => needle.includes(x));
+      return haystack.includes(needle);
+    }
+    if (typeof haystack === "string") {
+      if (Array.isArray(needle)) return needle.some((x) => haystack.includes(String(x)));
+      return haystack.includes(String(needle));
+    }
+    return false;
+  });
+  logic.add_operation("==", (a, b) => {
+    if (Array.isArray(a) && !Array.isArray(b)) return a.includes(b);
+    if (Array.isArray(b) && !Array.isArray(a)) return b.includes(a);
+    return a == b; // нестрогое сравнение — как в JSONLogic и редакторе
+  });
+  logic.add_operation("!=", (a, b) => {
+    if (Array.isArray(a) && !Array.isArray(b)) return !a.includes(b);
+    if (Array.isArray(b) && !Array.isArray(a)) return !b.includes(a);
+    return a != b;
+  });
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const stepOf = (script, id) => script.steps.find((s) => s.id === id) || null;
   const isAnswer = (ev) => ev.action === "answer" || ev.action === "skip";
   const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const unique = (xs) => new Set(xs).size === xs.length;
 
-  // Кнопка — ответ нажатием: обязательности у неё нет, пропустить её нельзя
-  const isRequired = (step) =>
-    step.type !== "Message" && (step.view.required !== undefined ? step.view.required === true : REQUIRED_BY_DEFAULT[step.type] === true);
+  // Обязательный шаг (спецификация, раздел 9, «Пропуск шага»): Checkbox — minSelected > 0; Image — никогда;
+  // кнопка — ответ нажатием: обязательности у неё нет, но и пропустить её нельзя
+  function isRequired(step) {
+    if (step.type === "Checkbox") return step.view.minSelected > 0;
+    if (step.type === "Image" || step.type === "Message") return false;
+    return step.view.required === true;
+  }
   const canSkip = (step) => step.type !== "Message" && !isRequired(step);
 
-  function start(script, at) {
-    const major = Number(String(script.dslVersion).split(".")[0]);
-    // Спецификация, раздел 13.2 (О3): старшую версию формата выше своей исполнитель не исполняет
-    if (major !== DSL_MAJOR) throw new Error(`DSL ${script.dslVersion}: исполнитель знает только ${DSL_MAJOR}.x`);
-    if (!stepOf(script, script.initialStepId)) throw new Error(`нет начального шага ${script.initialStepId}`);
-    return { dslVersion: script.dslVersion, state: {}, history: [], currentStepId: script.initialStepId, completedAt: null };
+  function start(script) {
+    if (!stepOf(script, script.scenario.initialStep)) throw new Error(`нет начального шага ${script.scenario.initialStep}`);
+    return { state: {}, history: [], currentStepId: script.scenario.initialStep, completedAt: null };
   }
 
-  // Первое правило с истинным when, иначе default (спецификация, раздел 7). Ошибка вычисления — ложь
-  function evaluate(transitions, state) {
-    if (!transitions) return null;
-    const rules = transitions.rules || [];
-    for (let i = 0; i < rules.length; i++) {
-      let truthy = false;
-      try {
-        truthy = Boolean(logic.apply(rules[i].when, { state }));
-      } catch (err) {
-        truthy = false;
-      }
-      if (truthy) return { outcome: rules[i], ruleIndex: i };
+  // Что видит условие: ответ своего шага (спецификация, раздел 7). Пропуск — value null, пустые отметки
+  function contextOf(step, value) {
+    if (step.type === "RadioButton") return { value: value == null ? null : value };
+    if (step.type === "Checkbox") return { selected: Array.isArray(value) ? value : [] };
+    if (step.type === "Select") return value && typeof value === "object" ? value : {};
+    return {};
+  }
+
+  // Условие на контексте: ошибка вычисления — ложь, пустое условие не срабатывает (как в редакторе)
+  function apply(condition, context) {
+    if (!condition || typeof condition !== "object" || !Object.keys(condition).length) return false;
+    try {
+      return Boolean(logic.apply(condition, context));
+    } catch (err) {
+      return false;
     }
-    return { outcome: transitions.default, ruleIndex: "default" };
   }
 
-  // Пригоден ли ответ для шага: null — да, иначе причина. Значения — по таблице спецификации, раздел 9
+  // Первое правило с истинным условием, иначе default; у финального шага переходы не читаются — null
+  function evaluate(step, value) {
+    if (step.finish) return null;
+    const rules = WITH_RULES.includes(step.type) ? step.transitions.rules || [] : [];
+    const context = contextOf(step, value);
+    for (let i = 0; i < rules.length; i++) if (apply(rules[i].condition, context)) return { outcome: rules[i], ruleIndex: i };
+    return { outcome: step.transitions.default, ruleIndex: "default" };
+  }
+
+  // Пригоден ли ответ для шага: null — да, иначе причина. Значения — спецификация, раздел 9
   function checkValue(step, value, attachments) {
     const v = step.view;
-    const ids = (v.options || []).map((o) => o.id);
     switch (step.type) {
       case "Message":
         return null;
       case "RadioButton":
-      case "Select":
-        return typeof value === "string" && ids.includes(value) ? null : "option";
+        return typeof value === "string" && v.options.some((o) => o.id === value) ? null : "option";
       case "Checkbox": {
-        if (!Array.isArray(value) || value.some((x) => !ids.includes(x)) || new Set(value).size !== value.length) return "option";
-        const min = Math.max(v.minSelected || 0, isRequired(step) ? 1 : 0);
-        return value.length < min || (v.maxSelected != null && value.length > v.maxSelected) ? "count" : null;
+        const ids = v.options.map((o) => o.id);
+        if (!Array.isArray(value) || value.some((x) => !ids.includes(x)) || !unique(value)) return "option";
+        return value.length < v.minSelected || (v.maxSelected != null && value.length > v.maxSelected) ? "count" : null;
+      }
+      case "Select": {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return "type";
+        const lists = new Map(v.lists.map((l) => [l.id, l.options.map((o) => o.id)]));
+        for (const [id, picked] of Object.entries(value)) {
+          const ids = lists.get(id);
+          if (!ids || !Array.isArray(picked) || picked.some((x) => !ids.includes(x)) || !unique(picked)) return "option";
+        }
+        return v.required && v.lists.some((l) => !(value[l.id] || []).length) ? "required" : null;
       }
       case "Comment": {
         // Только для показа (readonly): ответа нет, «Далее» его подтверждает
         if (v.readonly) return value == null || value === "" ? null : "readonly";
         if (typeof value !== "string") return "type";
         const len = value.trim().length;
-        if (isRequired(step) && len === 0) return "required";
+        if (v.required && len === 0) return "required";
         if (len > 0 && len < (v.minLength || 0)) return "length";
         return v.maxLength != null && value.length > v.maxLength ? "length" : null;
       }
       case "Datetime": {
-        const format = { date: DATE, time: TIME, datetime: DATETIME }[v.kind];
-        if (typeof value !== "string" || !format || !format.test(value)) return "format";
-        if (v.kind === "datetime" && Number.isNaN(Date.parse(value))) return "format";
-        const key = (x) => (v.kind === "datetime" ? Date.parse(x) : v.kind === "time" && x.length === 5 ? `${x}:00` : x);
-        if ((v.min && key(value) < key(v.min)) || (v.max && key(value) > key(v.max))) return "range";
+        if (typeof value !== "string" || !DATETIME.test(value) || Number.isNaN(Date.parse(value))) return "format";
+        if ((v.min && Date.parse(value) < Date.parse(v.min)) || (v.max && Date.parse(value) > Date.parse(v.max))) return "range";
         return null;
       }
       case "Image": {
-        if (!Array.isArray(value) || value.some((x) => typeof x !== "string")) return "type";
-        if (isRequired(step) && value.length === 0) return "required";
-        if (!v.allowMultiple && value.length > 1) return "count";
-        const known = (attachments || []).filter((a) => a.stepId === step.id).map((a) => a.id);
-        return value.every((id) => known.includes(id)) ? null : "attachments";
+        // Вложение одно (профиль МИ); id — среди вложений этого шага
+        if (typeof value !== "string") return "type";
+        return (attachments || []).some((a) => a.stepId === step.id && a.id === value) ? null : "attachments";
       }
     }
     return "type";
   }
 
-  // Каноническое значение (спецификация, раздел 9): у кнопки и у шага «только для показа» значения нет
-  const canonical = (step, raw) => (step.type === "Message" || (step.type === "Comment" && step.view.readonly) ? null : raw);
+  // Каноническое значение (спецификация, раздел 9): у кнопки и у шага «только для показа» значения нет;
+  // у Select — все списки шага, неотмеченные — пустые
+  function canonical(step, raw) {
+    if (step.type === "Message" || (step.type === "Comment" && step.view.readonly)) return null;
+    if (step.type === "Select") return Object.fromEntries(step.view.lists.map((l) => [l.id, (raw[l.id] || []).slice()]));
+    return raw;
+  }
 
-  // Путь — шаги, пройденные к текущему, по журналу прогона. Ответ на шаг пути и события того же ответа
+  // Путь — шаги, пройденные к текущему, по журналу прохождения. Ответ на шаг пути и события того же ответа
   // (переход, finish) решают, что дальше: переход на следующий шаг пути — путь остаётся; на другой —
   // хвост после шага заменяется; finish или «остаться» — путь кончается этим шагом (профиль МИ, решение в7)
   function path(script, result) {
-    let p = [script.initialStepId];
+    let p = [script.scenario.initialStep];
     const h = result.history;
     for (let k = 0; k < h.length; k++) {
       if (!isAnswer(h[k])) continue;
@@ -118,50 +159,37 @@
     return p;
   }
 
-  // Куда ведёт ответ по найденному правилу: { finished, next, events, effects, warnings }.
-  // withActions = false — при переносе ответов: макросы и отчёт уже были в другом инциденте
-  function follow(script, step, evaluated, at, withActions) {
+  // Куда ведёт ответ: { finished, next, events, effects, warnings }.
+  // withMacro = false — при переносе ответов: макрос уже был в другом инциденте
+  function follow(script, step, value, at, withMacro) {
     const out = { finished: false, next: step.id, events: [], effects: [], warnings: [] };
+    const evaluated = evaluate(step, value);
     if (!evaluated) {
-      // Шаг без переходов runner-web считает концом сценария
       out.finished = true;
+      out.events.push({ ts: at, stepId: step.id, action: "finish" });
       return out;
     }
     const { outcome, ruleIndex } = evaluated;
-    (outcome.actions || []).forEach((a) => {
-      const args = a.args || {};
-      if (a.type === "finish") {
-        out.finished = true;
-        out.events.push(Object.assign({ ts: at, stepId: step.id, action: "finish" }, args.resolution != null ? { resolution: args.resolution } : {}));
-      } else if (!withActions) {
-        return;
-      } else if (a.type === "callMacro") {
-        out.events.push(Object.assign({ ts: at, stepId: step.id, action: "callMacro", macroId: args.macroId }, args.params ? { params: args.params } : {}));
-        out.effects.push({ type: "callMacro", macroId: args.macroId, params: args.params || null, stepId: step.id });
-      } else if (a.type === "generateReport") {
-        out.events.push(Object.assign({ ts: at, stepId: step.id, action: "generateReport" }, args.templateId ? { templateId: args.templateId } : {}));
-      } else {
-        // escalate, assign и неизвестные — не исполняются: ответы на переходы инцидента не влияют (решение в8)
-        out.warnings.push(`${step.id}: действие ${a.type} не исполняется`);
-      }
-    });
-    if (out.finished) return out;
-    const hasGoto = Object.prototype.hasOwnProperty.call(outcome, "goto");
-    const goto = outcome.goto == null ? null : outcome.goto;
-    if (!hasGoto && ruleIndex === "default") {
-      out.warnings.push(`${step.id}: default без goto и без finish — остаёмся на шаге`);
-    } else if (goto && goto !== step.id) {
-      if (!stepOf(script, goto)) {
-        out.warnings.push(`${step.id}: переход на несуществующий шаг ${goto} — остаёмся на шаге`);
-      } else {
-        out.events.push({ ts: at, stepId: step.id, action: "transition", to: goto, matchedRule: ruleIndex === "default" ? null : ruleIndex });
-        out.next = goto;
-      }
+    if (outcome.macro && withMacro) {
+      const m = outcome.macro;
+      const args = m.args && Object.keys(m.args).length ? { args: m.args } : {};
+      out.events.push(Object.assign({ ts: at, stepId: step.id, action: "macro", name: m.name }, args));
+      out.effects.push({ type: "macro", name: m.name, args: m.args || {}, stepId: step.id });
+    }
+    const goto = outcome.goto;
+    if (goto == null || goto === step.id) {
+      // goto: null бывает только у финального шага — проверка сценария такое не пропускает
+      out.warnings.push(`${step.id}: перехода нет — остаёмся на шаге`);
+    } else if (!stepOf(script, goto)) {
+      out.warnings.push(`${step.id}: переход на несуществующий шаг ${goto} — остаёмся на шаге`);
+    } else {
+      out.events.push({ ts: at, stepId: step.id, action: "transition", to: goto, matchedRule: ruleIndex === "default" ? null : ruleIndex });
+      out.next = goto;
     }
     return out;
   }
 
-  // Ответ на шаг пути: текущий — всегда; пройденный — если он editable (решение в7).
+  // Ответ на шаг пути: текущий — всегда; пройденный — если он revisitable (решение в7).
   // opts: at, by, skip, attachments (для Image). Ответ: { ok, result, effects, warnings } или { ok: false, error }
   function answer(script, result, stepId, raw, opts) {
     const o = opts || {};
@@ -173,7 +201,7 @@
     const i = before.lastIndexOf(stepId);
     if (i < 0) return { ok: false, error: "not_on_path" };
     const isCurrent = !result.completedAt && i === before.length - 1;
-    if (!isCurrent && step.editable === false) return { ok: false, error: "not_editable" };
+    if (!isCurrent && step.revisitable === false) return { ok: false, error: "not_editable" };
     if (o.skip && !canSkip(step)) return { ok: false, error: "required" };
     const attachments = (o.attachments || []).filter((a) => a.stepId === stepId);
     const error = o.skip ? null : checkValue(step, raw, attachments);
@@ -183,12 +211,12 @@
     const value = o.skip ? null : canonical(step, raw);
     r.state[stepId] = o.skip ? { value: null, answeredAt: at, by, skipped: true } : { value, answeredAt: at, by };
     if (step.type === "Image") {
-      // Повторный ответ заменяет вложения шага: прежние id в state больше не действуют
+      // Повторный ответ заменяет вложение шага: прежний id в state больше не действует
       const kept = (r.attachments || []).filter((a) => a.stepId !== stepId);
-      r.attachments = o.skip ? kept : kept.concat(clone(attachments.filter((a) => value.includes(a.id))));
+      r.attachments = o.skip ? kept : kept.concat(clone(attachments.filter((a) => a.id === value)));
     }
     r.history.push(o.skip ? { ts: at, stepId, action: "skip", by } : { ts: at, stepId, action: "answer", value, by });
-    const res = follow(script, step, evaluate(step.transitions, r.state), at, true);
+    const res = follow(script, step, value, at, true);
     r.history.push(...res.events);
 
     // Шаги, выпавшие из пути, — без ответа: ответы остаются только в history (решение в7)
@@ -210,15 +238,14 @@
     return { ok: true, result: r, effects: res.effects, warnings: res.warnings };
   }
 
-  // Шаги, по которым ответ может уйти дальше: goto или "finish"
+  // Куда может уйти ответ: id шагов или "finish" у финального шага
   function outcomesOf(step) {
-    if (!step.transitions) return ["finish"];
-    return (step.transitions.rules || []).concat(step.transitions.default ? [step.transitions.default] : []).map((o) =>
-      (o.actions || []).some((a) => a.type === "finish") ? "finish" : o.goto && o.goto !== step.id ? o.goto : null
-    );
+    if (step.finish) return ["finish"];
+    const rules = WITH_RULES.includes(step.type) ? step.transitions.rules || [] : [];
+    return rules.concat([step.transitions.default]).map((o) => (o.goto && o.goto !== step.id ? o.goto : null));
   }
 
-  // Сколько шагов от этого до конца по кратчайшему пути, считая его и шаг с finish; конца нет — null
+  // Сколько шагов от этого до конца по кратчайшему пути, считая его и финальный шаг; конца нет — null
   function remaining(script, from) {
     const dist = new Map([[from, 1]]);
     const queue = [from];
@@ -265,14 +292,14 @@
     return [];
   }
 
-  // Курсор: текущий шаг прогона; у завершённого — последний шаг пути (решение в5)
+  // Курсор: текущий шаг прохождения; у завершённого — последний шаг пути (решение в5)
   function cursor(script, result) {
     if (!result.completedAt) return result.currentStepId;
     const p = path(script, result);
     return p[p.length - 1];
   }
 
-  // «N из M»: N — отвеченные шаги пути, M — N плюс кратчайший остаток до finish; step — номер курсора в пути (решение в6)
+  // «N из M»: N — отвеченные шаги пути, M — N плюс кратчайший остаток до конца; step — номер курсора в пути (решение в6)
   function progress(script, result) {
     const p = path(script, result);
     const filled = p.filter((id) => result.state[id]).length;
@@ -282,12 +309,12 @@
     return { filled, total: rest == null ? null : filled + rest - done, step: p.length };
   }
 
-  // Наборы обязательных шагов (решение в5): closing — прогон дошёл до finish, none — всегда
+  // Наборы обязательных шагов (решение в5): closing — прохождение завершено, none — всегда
   const stepsFilled = (script, result, setId) => setId === "none" || (setId === "closing" && Boolean(result.completedAt));
 
   // Перенос ответов при объединении (решение в11): ответы шагов с тем же id и типом, допустимые в сценарии
   // основного, — в его неотвеченные шаги. Пропущенные не переносятся. Если текущий шаг основного получил
-  // ответ, прогон идёт дальше по перенесённым ответам: макросы и отчёт не повторяются, finish — да.
+  // ответ, прохождение идёт дальше по перенесённым ответам: макросы не повторяются, конец — да.
   // Ответ: { result, moved }
   function share(fromScript, fromResult, toScript, toResult, opts) {
     const at = (opts && opts.at) || new Date().toISOString();
@@ -310,7 +337,7 @@
       const entry = r.state[step.id];
       settled.push(step.id);
       r.history.push({ ts: at, stepId: step.id, action: "answer", value: entry.value, by: entry.by == null ? null : entry.by });
-      const res = follow(toScript, step, evaluate(step.transitions, r.state), at, false);
+      const res = follow(toScript, step, entry.value, at, false);
       r.history.push(...res.events);
       if (res.finished) {
         r.currentStepId = null;
@@ -324,5 +351,5 @@
     return { result: r, moved };
   }
 
-  window.IMScenario = { start, answer, path, ahead, cursor, progress, stepsFilled, share, evaluate, checkValue, isRequired, canSkip, remaining };
+  window.IMScenario = { start, answer, path, ahead, cursor, progress, stepsFilled, share, evaluate, apply, contextOf, checkValue, isRequired, canSkip, remaining };
 })();

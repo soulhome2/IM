@@ -1,30 +1,39 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000004",
+    "name": "Проникновение",
+    "description": "",
     "version": 2,
-    "name": "Проникновение"
+    "createdAt": "2026-10-01T09:00:00Z",
+    "updatedAt": "2026-10-01T09:00:00Z",
+    "initialStep": "visual"
   },
-  "initialStepId": "visual",
   "steps": [
     {
       "id": "visual",
       "type": "Checkbox",
       "title": "Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Нарушитель виден в кадре",
+        "minSelected": 1,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "verdict"
+          "goto": "verdict",
+          "macro": null
         }
       }
     },
@@ -32,8 +41,15 @@
       "id": "verdict",
       "type": "RadioButton",
       "title": "Классификация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Классификация",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "real",
@@ -47,63 +63,60 @@
             "id": "unclear",
             "label": "Недостаточно данных"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "zone",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 "real"
               ]
             },
             "goto": "notify",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Включить сирену"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Переключить PTZ на зону"
-                }
-              }
-            ]
+            "macro": {
+              "name": "Сирена и PTZ на зону",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 "staff"
               ]
             },
-            "goto": "note"
+            "goto": "note",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "zone"
-        }
+        ]
       }
     },
     {
       "id": "notify",
       "type": "Message",
       "title": "Сообщите охране объекта",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Сообщил охране"
       },
       "transitions": {
         "default": {
-          "goto": "zone"
+          "goto": "zone",
+          "macro": null
         }
       }
     },
@@ -111,31 +124,43 @@
       "id": "zone",
       "type": "Select",
       "title": "Зона",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Зона",
-        "options": [
+        "required": false,
+        "lists": [
           {
-            "id": "perimeter",
-            "label": "Периметр"
-          },
-          {
-            "id": "service_entrance",
-            "label": "Служебный вход"
-          },
-          {
-            "id": "warehouse",
-            "label": "Склад"
-          },
-          {
-            "id": "office",
-            "label": "Офисная зона"
+            "id": "zone",
+            "label": "Зона",
+            "options": [
+              {
+                "id": "perimeter",
+                "label": "Периметр"
+              },
+              {
+                "id": "service_entrance",
+                "label": "Служебный вход"
+              },
+              {
+                "id": "warehouse",
+                "label": "Склад"
+              },
+              {
+                "id": "office",
+                "label": "Офисная зона"
+              }
+            ],
+            "default": []
           }
-        ],
-        "required": false
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "note"
+          "goto": "note",
+          "macro": null
         }
       }
     },
@@ -143,14 +168,23 @@
       "id": "note",
       "type": "Comment",
       "title": "Описание",
+      "description": "Маршрут, приметы, действия охраны",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Описание",
+        "default": "",
         "required": false,
-        "placeholder": "Маршрут, приметы, действия охраны"
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "report"
+          "goto": "report",
+          "macro": null
         }
       }
     },
@@ -158,16 +192,18 @@
       "id": "report",
       "type": "Message",
       "title": "Доложите старшему смены",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Доложил"
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

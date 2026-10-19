@@ -1,21 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "metadata": {
-    "scenarioGuid": "3f1e32e4-2a17-7b8d-8665-2126e42c0d8e",
-    "version": 1,
+  "scenario": {
+    "id": "3f1e32e4-2a17-7b8d-8665-2126e42c0d8e",
     "name": "[A5/bad-4] Использование числового индекса вместо семантического id опции",
-    "purpose": "anti-pattern",
-    "kind": "schema-passes-but-bad-style",
-    "warning": "Этот файл ВАЛИДЕН по JSON Schema: pattern OptionId '^[a-z0-9][a-z0-9_]{0,63}$' разрешает '0','1','2'. Но это повторяет фундаментальный баг legacy IM/, где опции идентифицировались индексом — удаление одной сдвигало все ссылки в условиях. В DSL v1 этот случай НЕ ловится автоматически. Лекарство: design-time linter в редакторе должен предупреждать про опции с id из одних цифр. См. принцип П5 в dsl-v1-draft.md §1.",
-    "expectedRejection": "Не отвергается. Это именно тот случай, где linter полезнее схемы."
+    "description": "Проходит схему и проверки: id вариантов из одних цифр ('0', '1', '2') — как индексы legacy IM/, где удаление варианта сдвигало ссылки в условиях. Ловится только на ревью.",
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "ask"
   },
-  "initialStepId": "ask",
   "steps": [
     {
       "id": "ask",
       "type": "RadioButton",
+      "title": "Тип события",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Тип события",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "0",
@@ -29,41 +35,45 @@
             "id": "2",
             "label": "Прочее"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "btn",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.ask.value"
+                  "var": "value"
                 },
                 "0"
               ]
             },
-            "goto": "btn"
+            "goto": "btn",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "btn"
-        }
+        ]
       }
     },
     {
       "id": "btn",
       "type": "Message",
+      "title": "Закрыть",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Закрыть"
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

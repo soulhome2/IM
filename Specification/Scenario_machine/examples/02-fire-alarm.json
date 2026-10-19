@@ -1,52 +1,35 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "ab689e2f-ddb6-75a6-8987-119d22ff759e",
-    "version": 1,
+  "scenario": {
+    "id": "ab689e2f-ddb6-75a6-8987-119d22ff759e",
     "name": "Срабатывание пожарной сигнализации",
     "description": "Срабатывание датчика пожарной сигнализации. Оператор подтверждает по видео, при подтверждении вызываются MACRO для оповещения и блокировки лифтов.",
-    "demonstrates": [
-      "условные переходы (3 ветви)",
-      "RadioButton",
-      "Image (multiple)",
-      "Datetime kind=time",
-      "callMacro action",
-      "цепочка actions"
-    ],
-    "complexity": "intermediate",
-    "tags": [
-      "fire",
-      "safety",
-      "macro"
-    ]
-  },
-  "initialStepId": "confirm_fire",
-  "timers": {
-    "escalateAfterSec": 120,
-    "maxDurationSec": 1200
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": false
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "confirm_fire"
   },
   "steps": [
     {
       "id": "confirm_fire",
       "type": "RadioButton",
       "title": "Шаг 1. Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что показывает видео с камер в зоне срабатывания датчика?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "fire_visible",
-            "label": "Видны открытое пламя или дым",
-            "hint": "Немедленно вызвать пожарных"
+            "label": "Видны открытое пламя или дым"
           },
           {
             "id": "smoke_only",
-            "label": "Только дым (возможен очаг)",
-            "hint": "Запустить локальное оповещение"
+            "label": "Только дым (возможен очаг)"
           },
           {
             "id": "no_fire",
@@ -54,88 +37,79 @@
           },
           {
             "id": "no_video",
-            "label": "Видео недоступно (камера офлайн)",
-            "hint": "Действовать по протоколу без видео"
+            "label": "Видео недоступно (камера офлайн)"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "no_video_protocol",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.confirm_fire.value"
+                  "var": "value"
                 },
                 "no_fire"
               ]
             },
-            "goto": "operator_note_false"
+            "goto": "operator_note_false",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.confirm_fire.value"
+                  "var": "value"
                 },
                 "fire_visible"
               ]
             },
             "goto": "fire_photo",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_CALL_FIRE_DEPT"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_LOCK_ELEVATORS"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_CALL_FIRE_DEPT + MACRO_LOCK_ELEVATORS",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.confirm_fire.value"
+                  "var": "value"
                 },
                 "smoke_only"
               ]
             },
             "goto": "fire_photo",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_LOCAL_ALERT"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_LOCAL_ALERT",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "no_video_protocol"
-        }
+        ]
       }
     },
     {
       "id": "fire_photo",
       "type": "Image",
       "title": "Шаг 2. Доказательная база",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимки с камер в зоне инцидента (минимум один)",
         "source": "camera",
-        "allowMultiple": true,
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "first_observed_at"
+          "goto": "first_observed_at",
+          "macro": null
         }
       }
     },
@@ -143,14 +117,21 @@
       "id": "first_observed_at",
       "type": "Datetime",
       "title": "Шаг 3. Время обнаружения",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Время первого наблюдения возгорания (по видео)",
-        "kind": "time",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
       "transitions": {
         "default": {
-          "goto": "btn_finish_real"
+          "goto": "btn_finish_real",
+          "macro": null
         }
       }
     },
@@ -158,23 +139,26 @@
       "id": "no_video_protocol",
       "type": "Comment",
       "title": "Шаг 2*. Действия без видео",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите принятые меры (видео недоступно — действуем по тревоге датчика)",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 30,
-        "maxRows": 6
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
           "goto": "btn_finish_real",
-          "actions": [
-            {
-              "type": "callMacro",
-              "args": {
-                "macroId": "MACRO_CALL_FIRE_DEPT"
-              }
-            }
-          ]
+          "macro": {
+            "name": "MACRO_CALL_FIRE_DEPT",
+            "args": {}
+          }
         }
       }
     },
@@ -182,15 +166,23 @@
       "id": "operator_note_false",
       "type": "Comment",
       "title": "Шаг 2. Обоснование",
+      "description": "Например: тестирование системы; пыль на датчике",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Почему вы считаете срабатывание ложным?",
-        "placeholder": "Например: тестирование системы; пыль на датчике",
+        "default": "",
         "required": true,
-        "minLength": 20
+        "readonly": false,
+        "minLength": 20,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_finish_false"
+          "goto": "btn_finish_false",
+          "macro": null
         }
       }
     },
@@ -198,27 +190,18 @@
       "id": "btn_finish_real",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть инцидент с генерацией отчёта",
-        "emphasis": "primary"
+        "label": "Закрыть инцидент с генерацией отчёта"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "fire_incident_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -226,21 +209,18 @@
       "id": "btn_finish_false",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как ложное срабатывание",
-        "emphasis": "secondary"
+        "label": "Закрыть как ложное срабатывание"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "false_alarm"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

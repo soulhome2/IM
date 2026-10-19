@@ -1,92 +1,83 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "801c2bf9-f9f3-7943-8b71-bcc637666705",
-    "version": 1,
+  "scenario": {
+    "id": "801c2bf9-f9f3-7943-8b71-bcc637666705",
     "name": "Несанкционированный доступ (СКУД)",
     "description": "Срабатывание системы контроля доступа: попытка прохода без действующей карты или повторный проход. Оператор фиксирует зону и принимает решение об эскалации.",
-    "demonstrates": [
-      "Select из длинного списка зон",
-      "Datetime kind=datetime с min/max",
-      "Image source=map (карта объекта)",
-      "escalate action с указанием получателя"
-    ],
-    "complexity": "intermediate",
-    "tags": [
-      "access-control",
-      "skud",
-      "escalation"
-    ]
-  },
-  "initialStepId": "select_zone",
-  "timers": {
-    "escalateAfterSec": 240,
-    "maxDurationSec": 900
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": true
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "select_zone"
   },
   "steps": [
     {
       "id": "select_zone",
       "type": "Select",
       "title": "Шаг 1. Зона срабатывания",
+      "description": "Выберите зону...",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Зона, в которой произошло нарушение",
-        "placeholder": "Выберите зону...",
-        "options": [
+        "required": true,
+        "lists": [
           {
-            "id": "main_entrance",
-            "label": "Главный вход (КПП-1)"
-          },
-          {
-            "id": "service_entrance",
-            "label": "Служебный вход (КПП-2)"
-          },
-          {
-            "id": "underground",
-            "label": "Подземная парковка"
-          },
-          {
-            "id": "warehouse_a",
-            "label": "Склад A — общий доступ"
-          },
-          {
-            "id": "warehouse_b",
-            "label": "Склад B — ограниченный доступ"
-          },
-          {
-            "id": "warehouse_c",
-            "label": "Склад C — режимный объект"
-          },
-          {
-            "id": "server_room",
-            "label": "Серверная"
-          },
-          {
-            "id": "exec_floor",
-            "label": "Этаж руководства"
-          },
-          {
-            "id": "rooftop",
-            "label": "Кровля / технический этаж"
-          },
-          {
-            "id": "perimeter_gate_1",
-            "label": "Периметральные ворота 1"
-          },
-          {
-            "id": "perimeter_gate_2",
-            "label": "Периметральные ворота 2"
+            "id": "select_zone",
+            "label": "Зона, в которой произошло нарушение",
+            "options": [
+              {
+                "id": "main_entrance",
+                "label": "Главный вход (КПП-1)"
+              },
+              {
+                "id": "service_entrance",
+                "label": "Служебный вход (КПП-2)"
+              },
+              {
+                "id": "underground",
+                "label": "Подземная парковка"
+              },
+              {
+                "id": "warehouse_a",
+                "label": "Склад A — общий доступ"
+              },
+              {
+                "id": "warehouse_b",
+                "label": "Склад B — ограниченный доступ"
+              },
+              {
+                "id": "warehouse_c",
+                "label": "Склад C — режимный объект"
+              },
+              {
+                "id": "server_room",
+                "label": "Серверная"
+              },
+              {
+                "id": "exec_floor",
+                "label": "Этаж руководства"
+              },
+              {
+                "id": "rooftop",
+                "label": "Кровля / технический этаж"
+              },
+              {
+                "id": "perimeter_gate_1",
+                "label": "Периметральные ворота 1"
+              },
+              {
+                "id": "perimeter_gate_2",
+                "label": "Периметральные ворота 2"
+              }
+            ],
+            "default": []
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "violation_type"
+          "goto": "violation_type",
+          "macro": null
         }
       }
     },
@@ -94,8 +85,15 @@
       "id": "violation_type",
       "type": "RadioButton",
       "title": "Шаг 2. Тип нарушения",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что произошло?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "no_card",
@@ -117,49 +115,48 @@
             "id": "forced_entry",
             "label": "Силовое вскрытие двери"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "violation_time",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.violation_type.value"
+                  "var": "value"
                 },
                 "forced_entry"
               ]
             },
             "goto": "violation_time",
-            "actions": [
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "security-shift-supervisor",
-                  "reason": "Силовое вскрытие — требуется немедленный выезд"
-                }
-              }
-            ]
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "violation_time"
-        }
+        ]
       }
     },
     {
       "id": "violation_time",
       "type": "Datetime",
       "title": "Шаг 3. Время события",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Точное время срабатывания (по журналу СКУД)",
-        "kind": "datetime",
-        "required": true
+        "required": true,
+        "min": null,
+        "max": null
       },
       "transitions": {
         "default": {
-          "goto": "scene_map"
+          "goto": "scene_map",
+          "macro": null
         }
       }
     },
@@ -167,14 +164,20 @@
       "id": "scene_map",
       "type": "Image",
       "title": "Шаг 4. Локация на карте",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимок карты объекта с обозначением точки срабатывания",
         "source": "map",
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "operator_action"
+          "goto": "operator_action",
+          "macro": null
         }
       }
     },
@@ -182,8 +185,15 @@
       "id": "operator_action",
       "type": "RadioButton",
       "title": "Шаг 5. Действие",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какое действие выполнено?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "guard_dispatched",
@@ -197,53 +207,45 @@
             "id": "false_alarm",
             "label": "Сбой оборудования — ложное срабатывание"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "btn_close_real",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.operator_action.value"
+                  "var": "value"
                 },
                 "false_alarm"
               ]
             },
-            "goto": "btn_close_false"
+            "goto": "btn_close_false",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "btn_close_real"
-        }
+        ]
       }
     },
     {
       "id": "btn_close_real",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть с генерацией отчёта",
-        "emphasis": "primary"
+        "label": "Закрыть с генерацией отчёта"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "skud_violation_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -251,21 +253,18 @@
       "id": "btn_close_false",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как сбой оборудования",
-        "emphasis": "secondary"
+        "label": "Закрыть как сбой оборудования"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "false_alarm"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

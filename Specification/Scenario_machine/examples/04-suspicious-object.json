@@ -1,39 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "dbeb5a40-5495-7b35-84e5-6c5d7d30b246",
-    "version": 1,
+  "scenario": {
+    "id": "dbeb5a40-5495-7b35-84e5-6c5d7d30b246",
     "name": "Подозрительный предмет",
     "description": "Аналитика обнаружила оставленный предмет в публичной зоне. Оператор оценивает риски по чек-листу. Маршрутизация зависит от количества подтверждённых факторов риска.",
-    "demonstrates": [
-      "Checkbox с minSelected/maxSelected",
-      "JSONLogic some/in для ветвления по подмножествам",
-      "три разных пути в зависимости от факторов риска"
-    ],
-    "complexity": "intermediate",
-    "tags": [
-      "video-analytics",
-      "abandoned-object",
-      "risk-assessment"
-    ]
-  },
-  "initialStepId": "object_visible",
-  "timers": {
-    "escalateAfterSec": 300,
-    "maxDurationSec": 1800
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": true
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "object_visible"
   },
   "steps": [
     {
       "id": "object_visible",
       "type": "RadioButton",
       "title": "Шаг 1. Подтверждение объекта",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Объект действительно присутствует в кадре?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "yes",
@@ -47,16 +35,19 @@
             "id": "false_alarm",
             "label": "Ошибка аналитики — объекта нет"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "risk_factors",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "in": [
                 {
-                  "var": "state.object_visible.value"
+                  "var": "value"
                 },
                 [
                   "removed",
@@ -64,65 +55,77 @@
                 ]
               ]
             },
-            "goto": "btn_close_resolved"
+            "goto": "btn_close_resolved",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "risk_factors"
-        }
+        ]
       }
     },
     {
       "id": "risk_factors",
       "type": "Checkbox",
       "title": "Шаг 2. Чек-лист рисков",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Какие признаки риска присутствуют? (отметьте все применимые)",
+        "minSelected": 1,
+        "maxSelected": 7,
         "options": [
           {
             "id": "crowded_area",
-            "label": "Высокая плотность людей рядом"
+            "label": "Высокая плотность людей рядом",
+            "default": false
           },
           {
             "id": "near_critical",
-            "label": "Рядом с критической инфраструктурой (вентиляция, серверная)"
+            "label": "Рядом с критической инфраструктурой (вентиляция, серверная)",
+            "default": false
           },
           {
             "id": "size_large",
-            "label": "Размер крупный (чемодан, рюкзак, коробка)"
+            "label": "Размер крупный (чемодан, рюкзак, коробка)",
+            "default": false
           },
           {
             "id": "suspicious_owner",
-            "label": "Поведение владельца было подозрительным"
+            "label": "Поведение владельца было подозрительным",
+            "default": false
           },
           {
             "id": "wires_visible",
-            "label": "Видны провода / посторонние элементы"
+            "label": "Видны провода / посторонние элементы",
+            "default": false
           },
           {
             "id": "leaking",
-            "label": "Видна утечка жидкости / запах"
+            "label": "Видна утечка жидкости / запах",
+            "default": false
           },
           {
             "id": "long_unattended",
-            "label": "Объект без присмотра > 15 минут"
+            "label": "Объект без присмотра > 15 минут",
+            "default": false
           }
-        ],
-        "required": true,
-        "minSelected": 0,
-        "maxSelected": 7,
-        "layout": "vertical"
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "low_risk_action",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "or": [
                 {
                   "in": [
                     "wires_visible",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 },
@@ -130,7 +133,7 @@
                   "in": [
                     "leaking",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 },
@@ -138,37 +141,26 @@
                   "in": [
                     "near_critical",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 }
               ]
             },
             "goto": "high_risk_photo",
-            "actions": [
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "security-chief",
-                  "reason": "Высокий риск: критические признаки в чек-листе"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "MACRO_AREA_LOCKDOWN"
-                }
-              }
-            ]
+            "macro": {
+              "name": "MACRO_AREA_LOCKDOWN",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "or": [
                 {
                   "in": [
                     "crowded_area",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 },
@@ -176,7 +168,7 @@
                   "in": [
                     "size_large",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 },
@@ -184,7 +176,7 @@
                   "in": [
                     "suspicious_owner",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 },
@@ -192,33 +184,36 @@
                   "in": [
                     "long_unattended",
                     {
-                      "var": "state.risk_factors.value"
+                      "var": "selected"
                     }
                   ]
                 }
               ]
             },
-            "goto": "medium_risk_action"
+            "goto": "medium_risk_action",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "low_risk_action"
-        }
+        ]
       }
     },
     {
       "id": "high_risk_photo",
       "type": "Image",
       "title": "Шаг 3. Высокий риск — фиксация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимки объекта с разных ракурсов (минимум 2)",
         "source": "camera",
-        "allowMultiple": true,
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_high"
+          "goto": "btn_close_high",
+          "macro": null
         }
       }
     },
@@ -226,14 +221,23 @@
       "id": "medium_risk_action",
       "type": "Comment",
       "title": "Шаг 3. Средний риск — действия",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите принятые меры (вызов охраны, ограждение зоны, оповещение по громкой связи)",
+        "default": "",
         "required": true,
-        "minLength": 30
+        "readonly": false,
+        "minLength": 30,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_medium"
+          "goto": "btn_close_medium",
+          "macro": null
         }
       }
     },
@@ -241,14 +245,23 @@
       "id": "low_risk_action",
       "type": "Comment",
       "title": "Шаг 3. Низкий риск — наблюдение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Краткое описание ситуации",
+        "default": "",
         "required": true,
-        "minLength": 10
+        "readonly": false,
+        "minLength": 10,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_low"
+          "goto": "btn_close_low",
+          "macro": null
         }
       }
     },
@@ -256,27 +269,18 @@
       "id": "btn_close_high",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": true,
+      "finish": true,
       "view": {
-        "label": "Закрыть с эскалацией (высокий риск)",
-        "emphasis": "destructive"
+        "label": "Закрыть с эскалацией (высокий риск)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "generateReport",
-              "args": {
-                "templateId": "high_risk_object_report"
-              }
-            },
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "escalated"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -284,21 +288,18 @@
       "id": "btn_close_medium",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть инцидент",
-        "emphasis": "primary"
+        "label": "Закрыть инцидент"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -306,21 +307,18 @@
       "id": "btn_close_low",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть с наблюдением",
-        "emphasis": "secondary"
+        "label": "Закрыть с наблюдением"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "monitoring"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -328,21 +326,18 @@
       "id": "btn_close_resolved",
       "type": "Message",
       "title": "Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть (объект разрешён сам собой)",
-        "emphasis": "secondary"
+        "label": "Закрыть (объект разрешён сам собой)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "self_resolved"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

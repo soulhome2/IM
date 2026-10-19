@@ -1,21 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "metadata": {
-    "scenarioGuid": "a5ad2488-55d8-7d5a-82d8-8332af443b1a",
-    "version": 1,
+  "scenario": {
+    "id": "a5ad2488-55d8-7d5a-82d8-8332af443b1a",
     "name": "[A5/bad-5] Один шаг с 12 правилами вместо разбиения на шаги",
-    "purpose": "anti-pattern",
-    "kind": "schema-passes-but-bad-style",
-    "warning": "Этот файл ВАЛИДЕН по JSON Schema. Но он демонстрирует частую ошибку: вместо разбиения логики на шаги автор пытается всё сделать в одном шаге через большой rules-массив. Минусы: (1) diff между версиями нечитаем, (2) условия сложно тестировать, (3) JSONLogic становится нечитаемым, (4) теряется визуальная декомпозиция в editor UI. Правильный паттерн: разбить на 2-3 промежуточных шага с явной семантикой. Этот случай не ловит ни схема, ни сервер — лекарство только code review.",
-    "expectedRejection": "Не отвергается. Это вопрос code-review и стиля."
+    "description": "Проходит схему: один шаг с множеством правил вместо разбиения на несколько шагов — diff и условия нечитаемы. Ловится только на ревью.",
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "everything"
   },
-  "initialStepId": "everything",
   "steps": [
     {
       "id": "everything",
       "type": "RadioButton",
+      "title": "Тип события",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": true,
+      "finish": false,
       "view": {
         "label": "Тип события",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "fire",
@@ -49,210 +55,138 @@
             "id": "other",
             "label": "Прочее"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "everything_done",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "fire"
               ]
             },
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "fire_evacuate"
-                }
-              },
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "fire_brigade"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": {
+              "name": "fire_evacuate",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "intrusion"
               ]
             },
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "lock_perimeter"
-                }
-              },
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "security_chief"
-                }
-              },
-              {
-                "type": "generateReport",
-                "args": {
-                  "templateId": "intrusion_v2"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": {
+              "name": "lock_perimeter",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "panic"
               ]
             },
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "panic_response"
-                }
-              },
-              {
-                "type": "escalate",
-                "args": {
-                  "to": "duty_officer"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": {
+              "name": "panic_response",
+              "args": {}
+            }
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "access"
               ]
             },
-            "actions": [
-              {
-                "type": "assign",
-                "args": {
-                  "to": "access_team"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "hardware"
               ]
             },
-            "actions": [
-              {
-                "type": "assign",
-                "args": {
-                  "to": "tech_support"
-                }
-              },
-              {
-                "type": "generateReport",
-                "args": {
-                  "templateId": "hardware_failure"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "false"
               ]
             },
-            "actions": [
-              {
-                "type": "finish",
-                "args": {
-                  "resolution": "false_alarm"
-                }
-              }
-            ]
+            "goto": "everything_done",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "test"
               ]
             },
-            "actions": [
-              {
-                "type": "finish",
-                "args": {
-                  "resolution": "test"
-                }
-              }
-            ]
+            "goto": "everything_done",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.everything.value"
+                  "var": "value"
                 },
                 "other"
               ]
             },
-            "actions": [
-              {
-                "type": "assign",
-                "args": {
-                  "to": "supervisor"
-                }
-              },
-              {
-                "type": "finish"
-              }
-            ]
+            "goto": "everything_done",
+            "macro": null
           }
-        ],
+        ]
+      }
+    },
+    {
+      "id": "everything_done",
+      "type": "Message",
+      "title": "Конец",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
+      "view": {
+        "label": "Готово"
+      },
+      "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

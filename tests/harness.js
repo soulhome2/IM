@@ -183,27 +183,24 @@
     return Object.assign(values, overrides || {});
   }
 
-  // Ответ, который подходит к шагу (машина сценариев, профиль МИ): вариант по счёту, отметок сколько нужно,
-  // текст; вложение — шаг пропускается, если можно, иначе — вложение без содержимого
+  // Ответ, который подходит к шагу (машина сценариев, профиль МИ): вариант по счёту (у Select — в каждом списке),
+  // отметок сколько нужно, текст; вложение необязательно — шаг Image пропускается
   function answerFor(step, variant) {
     const v = step.view;
-    const ids = (v.options || []).map((o) => o.id);
-    const required = step.type !== "Message" && (v.required !== undefined ? v.required : ["RadioButton", "Select", "Datetime"].includes(step.type));
+    const nth = (options) => options[(variant || 0) % options.length].id;
     switch (step.type) {
       case "RadioButton":
+        return { stepId: step.id, value: nth(v.options) };
       case "Select":
-        return { stepId: step.id, value: ids[(variant || 0) % ids.length] };
+        return { stepId: step.id, value: Object.fromEntries(v.lists.map((l) => [l.id, [nth(l.options)]])) };
       case "Checkbox":
-        return { stepId: step.id, value: ids.slice(0, Math.max(1, v.minSelected || 0)) };
+        return { stepId: step.id, value: v.options.map((o) => o.id).slice(0, Math.max(1, v.minSelected)) };
       case "Comment":
         return { stepId: step.id, value: v.readonly ? "" : "тест".padEnd(v.minLength || 0, ".") };
       case "Datetime":
-        return { stepId: step.id, value: { date: "2026-10-19", time: "14:30:00", datetime: "2026-10-19T14:30:00Z" }[v.kind] };
-      case "Image": {
-        if (!required) return { stepId: step.id, skip: true };
-        const att = { id: `att-${step.id}`, stepId: step.id, source: v.source, mime: "image/png", capturedAt: new Date().toISOString(), dataBase64: "" };
-        return { stepId: step.id, value: [att.id], attachments: [att] };
-      }
+        return { stepId: step.id, value: "2026-10-19T14:30:00Z" };
+      case "Image":
+        return { stepId: step.id, skip: true };
       default:
         return { stepId: step.id, value: null };
     }

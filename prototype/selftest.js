@@ -479,7 +479,7 @@
         if (crumb.dataset.crumb !== undefined) await click(crumb);
         const radios = root().querySelectorAll('input[type="radio"][data-ans]');
         if (!radios.length) continue;
-        // Пройденный шаг можно переответить (editable): первый вариант запускает макросы площадки (callMacro)
+        // Пройденный шаг можно переответить (revisitable): первый вариант запускает макрос площадки
         expect(!radios[0].checked, "первый вариант уже выбран — переответа не будет");
         await click(radios[0]);
         await click($("stepNext"));
@@ -523,7 +523,14 @@
       };
       if (step.type === "Message") return click(one("[data-press]"));
       if (step.type === "RadioButton") return click(one('input[type="radio"][data-ans]'));
-      if (step.type === "Select") return put(one("select[data-ans]"), one("select[data-ans]").options[1].value, "change");
+      if (step.type === "Select") {
+        // В каждом списке — первый вариант; карточка перерисовывается после каждой отметки — искать заново
+        for (const list of step.view.lists) {
+          const box = one(`[data-list="${step.id}"][data-list-id="${list.id}"]`);
+          if (!box.checked) await click(box);
+        }
+        return null;
+      }
       if (step.type === "Checkbox" && one("[data-confirm]")) return one("[data-confirm].on") ? null : click(one("[data-confirm]"));
       if (step.type === "Checkbox") return click(one("[data-check]"));
       if (step.type === "Comment" && one("textarea[data-ans]")) return put(one("textarea[data-ans]"), NOTE, "input");
@@ -559,9 +566,9 @@
       const rows = window.IM_FIXTURE.scenarios.rows;
       const version = Math.max(...rows.filter((r) => r.guid === fireGuid).map((r) => r.version)) + 1;
       const show = JSON.parse(JSON.stringify(window.IM_SCENARIO_EXAMPLES["showcase/00-primitives.json"]));
-      show.metadata = Object.assign(show.metadata, { scenarioGuid: fireGuid, version });
+      show.scenario = Object.assign(show.scenario, { id: fireGuid, version });
       if (mode() !== "queue") await click($("backToQueue"));
-      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: show.metadata.name, script: show }) } } });
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: show.scenario.name, script: show }) } } });
       await wait(300);
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
@@ -610,6 +617,52 @@
       }
     });
 
+    await step("Значения по умолчанию и описание шага: поле открывается заполненным, «Далее» доступна, по ней записывается значение по умолчанию (спецификация, раздел 6)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Новая версия пожара: отметка «Подтверждаю» отмечена заранее, у классификации — вариант по умолчанию и описание
+      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const rows = window.IM_FIXTURE.scenarios.rows;
+      const latest = rows.filter((r) => r.guid === fireGuid).sort((a, b) => b.version - a.version)[0];
+      const script = JSON.parse(JSON.stringify(latest.script));
+      const version = latest.version + 1;
+      script.scenario.version = version;
+      const at = (id) => script.steps.find((x) => x.id === id);
+      at("visual").view.options[0].default = true;
+      const verdict = at("verdict");
+      verdict.view.default = verdict.view.options[verdict.view.options.length - 1].id;
+      verdict.description = "Смотрите кадр целиком";
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: latest.name, script }) } } });
+      await wait(300);
+      try {
+        const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+        const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
+        const guid = created.body.guid;
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", guid);
+        expect(claim, "новый инцидент нельзя взять");
+        await click(claim);
+        expect(mode() === "work", "карточка не открылась");
+        expect(root().querySelector("[data-confirm].on"), "«Подтверждаю» не отмечено по умолчанию");
+        expect($("stepNext") && !$("stepNext").disabled, "«Далее» недоступна при значении по умолчанию");
+        await click($("stepNext"));
+        await wait(200);
+        const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+        expect(JSON.stringify(sc.result.state.visual && sc.result.state.visual.value) === '["confirmed"]', "по «Далее» не записалось значение по умолчанию");
+        const picked = root().querySelector('input[type="radio"][data-ans]:checked');
+        expect(picked && picked.value === verdict.view.default, `классификация по умолчанию — «${picked && picked.value}», а не «${verdict.view.default}»`);
+        expect([...root().querySelectorAll(".step-q")].some((p) => p.textContent.includes("Смотрите кадр целиком")), "описание шага не показано");
+        return `${verdict.view.default}, описание показано`;
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Шаги-кнопки (Message) в сценарии набора: INC-1839 на второй версии «Проникновения» — «Сообщил охране», «Доложил»; последняя открывает «Закрыть» с «Обработан» (§14.5)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
@@ -650,8 +703,8 @@
         expect(pressed.join(", ") === "Сообщил охране, Доложил", `нажаты кнопки шагов: «${pressed.join(", ")}»`);
         const card = await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`);
         expect(card.scenario.result.completedAt, "сценарий не пройден до конца");
-        const macros = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").length;
-        expect(macros === 2, `макросов в журнале ${macros}, а не 2`);
+        const macros = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").map((j) => j.vars.name);
+        expect(macros.join() === "Сирена и PTZ на зону", `макросы в журнале: «${macros.join(", ")}», а не один «Сирена и PTZ на зону»`);
         expect(!$("modalDialog").hidden && field("resultId").value === "processed", "после «Доложил» не открылась «Закрыть» с «Обработан»");
         await confirmDialog();
         expect(mode() === "queue", "после закрытия карточка не закрылась");

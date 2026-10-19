@@ -1,30 +1,39 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "60000000-0000-4000-8000-000000000001",
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000001",
+    "name": "Превышение уровня алкоголя",
+    "description": "",
     "version": 1,
-    "name": "Превышение уровня алкоголя"
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "visual"
   },
-  "initialStepId": "visual",
   "steps": [
     {
       "id": "visual",
       "type": "Checkbox",
       "title": "Подтверждение",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Личность на точке прохода подтверждена по видео",
+        "minSelected": 1,
+        "maxSelected": null,
         "options": [
           {
             "id": "confirmed",
-            "label": "Подтверждаю"
+            "label": "Подтверждаю",
+            "default": false
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "verdict"
+          "goto": "verdict",
+          "macro": null
         }
       }
     },
@@ -32,8 +41,15 @@
       "id": "verdict",
       "type": "RadioButton",
       "title": "Результат проверки",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Результат проверки",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "excess",
@@ -47,71 +63,73 @@
             "id": "gate_failure",
             "label": "Сбой алкорамки"
           }
-        ],
-        "required": true
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "note",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verdict.value"
+                  "var": "value"
                 },
                 "excess"
               ]
             },
             "goto": "level",
-            "actions": [
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Заблокировать турникет"
-                }
-              },
-              {
-                "type": "callMacro",
-                "args": {
-                  "macroId": "Вызвать медпункт"
-                }
-              }
-            ]
+            "macro": {
+              "name": "Заблокировать турникет и вызвать медпункт",
+              "args": {}
+            }
           }
-        ],
-        "default": {
-          "goto": "note"
-        }
+        ]
       }
     },
     {
       "id": "level",
       "type": "Select",
       "title": "Показание прибора",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
-        "label": "Показание прибора",
-        "options": [
+        "required": false,
+        "lists": [
           {
-            "id": "from_03",
-            "label": "0,3–0,5 ‰"
-          },
-          {
-            "id": "from_05",
-            "label": "0,5–1,0 ‰"
-          },
-          {
-            "id": "over_10",
-            "label": "Более 1,0 ‰"
-          },
-          {
-            "id": "not_read",
-            "label": "Показание не считано"
+            "id": "level",
+            "label": "Показание прибора",
+            "options": [
+              {
+                "id": "from_03",
+                "label": "0,3–0,5 ‰"
+              },
+              {
+                "id": "from_05",
+                "label": "0,5–1,0 ‰"
+              },
+              {
+                "id": "over_10",
+                "label": "Более 1,0 ‰"
+              },
+              {
+                "id": "not_read",
+                "label": "Показание не считано"
+              }
+            ],
+            "default": []
           }
-        ],
-        "required": false
+        ]
       },
       "transitions": {
         "default": {
-          "goto": "note"
+          "goto": "note",
+          "macro": null
         }
       }
     },
@@ -119,18 +137,23 @@
       "id": "note",
       "type": "Comment",
       "title": "Комментарий",
+      "description": "ФИО, смена, кому передан сотрудник",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
         "label": "Комментарий",
+        "default": "",
         "required": false,
-        "placeholder": "ФИО, смена, кому передан сотрудник"
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish"
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }

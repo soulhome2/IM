@@ -1183,7 +1183,7 @@
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять");
     assert.status(await env.answer(a.guid, { stepId: "visual", value: ["confirmed"] }), 200, null, "ответ сценария");
-    // Ответ «Реальная» запускает макросы площадки (callMacro, §14.5)
+    // Ответ «Реальная» запускает макрос площадки (макрос исхода, §14.5)
     assert.status(await env.answer(a.guid, { stepId: "verdict", value: "real" }), 200, null, "ответ с макросами");
     const macro = true;
     await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === b.priority).sec + GRACE + 1);
@@ -1691,14 +1691,14 @@
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять A");
     await answer(a.guid, "visual", ["confirmed"], "A: подтверждение");
     await answer(a.guid, "verdict", "dispatch", "A: классификация");
-    await answer(a.guid, "kind", "smoke", "A: тип сработки");
+    await answer(a.guid, "kind", { kind: ["smoke"] }, "A: тип сработки");
     assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять B");
     await answer(b.guid, "visual", ["confirmed"], "B: подтверждение");
     await answer(b.guid, "verdict", "false_alarm", "B: классификация");
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: b.guid });
     const primary = await env.card(res.incident.guid);
     const state = primary.scenario.result.state;
-    assert.eq([state.verdict.value, state.kind.value], ["false_alarm", "smoke"], "тип сработки из A перенесён, своя классификация B осталась");
+    assert.eq([state.verdict.value, state.kind.value], ["false_alarm", { kind: ["smoke"] }], "тип сработки из A перенесён, своя классификация B осталась");
     assert.eq(primary.scenario.result.currentStepId, "note", "прохождение основного пошло дальше по перенесённому ответу");
     const entry = primary.journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
     assert.ok(entry && entry.vars.number === a.number && entry.vars.n === 1, `запись в журнале основного: ${entry && entry.text}`);
@@ -1842,8 +1842,8 @@
     assert.eq(back.body.cursorStepId, "visual");
     assert.status(await env.answer(inc.guid, { stepId: "verdict", value: "real" }), 200, null, "ответ «Реальная»");
     const c = await env.card(inc.guid);
-    const name = "Оповещение по площадке";
-    assert.ok(c.scenario.result.history.some((h) => h.action === "callMacro" && h.macroId === name), "макрос — в прохождении");
+    const name = "Оповещение и эвакуационные выходы";
+    assert.ok(c.scenario.result.history.some((h) => h.action === "macro" && h.name === name), "макрос — в прохождении");
     assert.ok(c.journal.some((j) => j.templateKey === "workflow.journal.macro.launched" && j.vars.name === name), "макрос в журнале");
   });
 

@@ -1,8 +1,8 @@
 """Эталонный набор тестового стенда целиком: Specification/State_machine/fixtures/demo.json и сценарии
-fixtures/scenarios/<сценарий>.v<версия>.json — по файлу DSL v1 на версию (DATA-09).
+fixtures/scenarios/<сценарий>.v<версия>.json — по файлу на версию сценария, в формате машины сценариев (DATA-09).
 
 Набор для POST /test/reset и патчей стенда — один объект: строки сценариев (scenarios.rows — как на сервере:
-guid, version, name, script) собираются из файлов, guid, version и name — из metadata сценария. Так набор
+guid, version, name, script) собираются из файлов, guid, version и name — из scenario.id, version и name. Так набор
 читают сборка (build_workflow.py), проверки (check_machine.py, check_scenarios.py, check_guide.py) и бэкенд.
 """
 import json
@@ -22,8 +22,8 @@ def scenario_files():
 
 
 def row(script):
-    meta = script["metadata"]
-    return {"guid": meta["scenarioGuid"], "version": meta["version"], "name": meta["name"], "script": script}
+    meta = script["scenario"]
+    return {"guid": meta["id"], "version": meta["version"], "name": meta["name"], "script": script}
 
 
 def load():

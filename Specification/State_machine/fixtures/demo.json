@@ -1509,7 +1509,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -1565,7 +1564,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -1622,7 +1620,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000003",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "audio",
@@ -1681,7 +1678,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000001",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -1740,7 +1736,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -1848,7 +1843,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000006",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -1890,14 +1884,8 @@
           {
             "ts": "2026-10-03T11:58:16Z",
             "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Голосовое оповещение в зону"
-          },
-          {
-            "ts": "2026-10-03T11:58:16Z",
-            "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Уведомить инженера по охране труда"
+            "action": "macro",
+            "name": "Оповещение в зону и инженер по охране труда"
           },
           {
             "ts": "2026-10-03T11:58:16Z",
@@ -1933,16 +1921,7 @@
           "actorName": null,
           "template": "workflow.journal.macro.launched",
           "vars": {
-            "name": "Голосовое оповещение в зону"
-          }
-        },
-        {
-          "at": "2026-10-03T11:58:16Z",
-          "actor": "sidorov",
-          "actorName": null,
-          "template": "workflow.journal.macro.launched",
-          "vars": {
-            "name": "Уведомить инженера по охране труда"
+            "name": "Оповещение в зону и инженер по охране труда"
           }
         }
       ]
@@ -1988,7 +1967,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000007",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "lost": {
             "value": [
@@ -2091,7 +2069,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000005",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -2184,7 +2161,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -2226,14 +2202,8 @@
           {
             "ts": "2026-10-03T11:54:00Z",
             "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Включить сирену"
-          },
-          {
-            "ts": "2026-10-03T11:54:00Z",
-            "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Переключить PTZ на зону"
+            "action": "macro",
+            "name": "Сирена и PTZ на зону"
           },
           {
             "ts": "2026-10-03T11:54:00Z",
@@ -2267,16 +2237,7 @@
           "actorName": null,
           "template": "workflow.journal.macro.launched",
           "vars": {
-            "name": "Включить сирену"
-          }
-        },
-        {
-          "at": "2026-10-03T11:54:00Z",
-          "actor": "noc",
-          "actorName": null,
-          "template": "workflow.journal.macro.launched",
-          "vars": {
-            "name": "Переключить PTZ на зону"
+            "name": "Сирена и PTZ на зону"
           }
         },
         {
@@ -2332,7 +2293,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -2390,7 +2350,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000005",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -2450,7 +2409,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000007",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "lost": {
             "value": [
@@ -2553,7 +2511,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 2,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -2610,7 +2567,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -2666,7 +2622,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000005",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -2807,7 +2762,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -2923,7 +2877,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000007",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "lost",
@@ -2983,7 +2936,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -2998,7 +2950,11 @@
             "by": "me"
           },
           "kind": {
-            "value": "smoke",
+            "value": {
+              "kind": [
+                "smoke"
+              ]
+            },
             "answeredAt": "2026-10-03T10:36:12Z",
             "by": "me"
           }
@@ -3030,14 +2986,8 @@
           {
             "ts": "2026-10-03T10:35:49Z",
             "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Оповещение по площадке"
-          },
-          {
-            "ts": "2026-10-03T10:35:49Z",
-            "stepId": "verdict",
-            "action": "callMacro",
-            "macroId": "Разблокировать эвакуационные выходы"
+            "action": "macro",
+            "name": "Оповещение и эвакуационные выходы"
           },
           {
             "ts": "2026-10-03T10:35:49Z",
@@ -3050,7 +3000,11 @@
             "ts": "2026-10-03T10:36:12Z",
             "stepId": "kind",
             "action": "answer",
-            "value": "smoke",
+            "value": {
+              "kind": [
+                "smoke"
+              ]
+            },
             "by": "me"
           },
           {
@@ -3087,16 +3041,7 @@
           "actorName": null,
           "template": "workflow.journal.macro.launched",
           "vars": {
-            "name": "Оповещение по площадке"
-          }
-        },
-        {
-          "at": "2026-10-03T10:35:49Z",
-          "actor": "me",
-          "actorName": null,
-          "template": "workflow.journal.macro.launched",
-          "vars": {
-            "name": "Разблокировать эвакуационные выходы"
+            "name": "Оповещение и эвакуационные выходы"
           }
         },
         {
@@ -3154,7 +3099,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000005",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -3213,7 +3157,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -3315,7 +3258,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -3330,7 +3272,11 @@
             "by": "sidorov"
           },
           "kind": {
-            "value": "system_test",
+            "value": {
+              "kind": [
+                "system_test"
+              ]
+            },
             "answeredAt": "2026-10-03T10:13:03Z",
             "by": "sidorov"
           },
@@ -3375,7 +3321,11 @@
             "ts": "2026-10-03T10:13:03Z",
             "stepId": "kind",
             "action": "answer",
-            "value": "system_test",
+            "value": {
+              "kind": [
+                "system_test"
+              ]
+            },
             "by": "sidorov"
           },
           {
@@ -3471,7 +3421,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000007",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "lost",
@@ -3526,7 +3475,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [
@@ -3664,7 +3612,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000002",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -3721,7 +3668,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000005",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {},
         "history": [],
         "currentStepId": "visual",
@@ -3777,7 +3723,6 @@
       "scenarioGuid": "60000000-0000-4000-8000-000000000004",
       "scenarioVersion": 1,
       "scenarioResult": {
-        "dslVersion": "1.0",
         "state": {
           "visual": {
             "value": [

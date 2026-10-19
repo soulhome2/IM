@@ -138,7 +138,8 @@ CHECK = r"""(() => {
   all.forEach((el) => {
     const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
     if (!own || el.closest(IMAGE) || el.matches('input, textarea, select, option, .material-symbols-outlined')) return;
-    if (el.closest(':disabled, [aria-disabled="true"]')) return;
+    // Неактивные элементы управления контрастом не проверяются (WCAG 1.4.3) — и подпись недоступной отметки или варианта
+    if (el.closest(':disabled, [aria-disabled="true"], label:has(input:disabled)')) return;
     const cs = getComputedStyle(el);
     const size = parseFloat(cs.fontSize);
     const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);

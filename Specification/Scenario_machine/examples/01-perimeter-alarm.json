@@ -1,40 +1,27 @@
 {
-  "dslVersion": "1.0",
-  "locale": "ru",
-  "metadata": {
-    "scenarioGuid": "af6671df-bc75-7fdc-8c7d-a6e7abf2bb62",
-    "version": 1,
+  "scenario": {
+    "id": "af6671df-bc75-7fdc-8c7d-a6e7abf2bb62",
     "name": "Тревога периметра",
     "description": "Базовый сценарий: камера зафиксировала движение в зоне периметра в нерабочее время. Оператор подтверждает или отклоняет тревогу.",
-    "demonstrates": [
-      "RadioButton",
-      "Image (camera source)",
-      "Comment",
-      "Message с finish action"
-    ],
-    "complexity": "basic",
-    "tags": [
-      "perimeter",
-      "vms",
-      "intrusion"
-    ]
-  },
-  "initialStepId": "verify_event",
-  "timers": {
-    "escalateAfterSec": 180,
-    "maxDurationSec": 600
-  },
-  "concurrency": {
-    "stepLockable": true,
-    "allowMultitasking": true
+    "version": 1,
+    "createdAt": "2026-04-29T00:00:00Z",
+    "updatedAt": "2026-04-29T00:00:00Z",
+    "initialStep": "verify_event"
   },
   "steps": [
     {
       "id": "verify_event",
       "type": "RadioButton",
       "title": "Шаг 1. Оценка обстановки",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Что видно на видео с камеры периметра?",
+        "required": true,
+        "default": null,
         "options": [
           {
             "id": "real_intrusion",
@@ -52,53 +39,59 @@
             "id": "false_alarm",
             "label": "Ничего подозрительного — ложное срабатывание"
           }
-        ],
-        "required": true,
-        "layout": "vertical"
+        ]
       },
       "transitions": {
+        "default": {
+          "goto": "operator_note",
+          "macro": null
+        },
         "rules": [
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verify_event.value"
+                  "var": "value"
                 },
                 "false_alarm"
               ]
             },
-            "goto": "btn_close_false"
+            "goto": "btn_close_false",
+            "macro": null
           },
           {
-            "when": {
+            "condition": {
               "==": [
                 {
-                  "var": "state.verify_event.value"
+                  "var": "value"
                 },
                 "real_intrusion"
               ]
             },
-            "goto": "snapshot"
+            "goto": "snapshot",
+            "macro": null
           }
-        ],
-        "default": {
-          "goto": "operator_note"
-        }
+        ]
       }
     },
     {
       "id": "snapshot",
       "type": "Image",
       "title": "Шаг 2. Фиксация",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Снимок с камеры периметра в момент срабатывания",
         "source": "camera",
-        "allowMultiple": false,
-        "required": true
+        "image": null
       },
       "transitions": {
         "default": {
-          "goto": "operator_note"
+          "goto": "operator_note",
+          "macro": null
         }
       }
     },
@@ -106,18 +99,23 @@
       "id": "operator_note",
       "type": "Comment",
       "title": "Шаг 3. Комментарий",
+      "description": "Например: вызвал группу быстрого реагирования",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
       "view": {
         "label": "Опишите наблюдаемое и принятые меры",
-        "placeholder": "Например: вызвал группу быстрого реагирования",
+        "default": "",
         "required": true,
+        "readonly": false,
         "minLength": 10,
-        "maxLength": 2000,
-        "minRows": 2,
-        "maxRows": 6
+        "maxLength": 2000
       },
       "transitions": {
         "default": {
-          "goto": "btn_close_real"
+          "goto": "btn_close_real",
+          "macro": null
         }
       }
     },
@@ -125,21 +123,18 @@
       "id": "btn_close_real",
       "type": "Message",
       "title": "Шаг 4. Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть инцидент (тревога подтверждена)",
-        "emphasis": "primary"
+        "label": "Закрыть инцидент (тревога подтверждена)"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "processed"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     },
@@ -147,21 +142,18 @@
       "id": "btn_close_false",
       "type": "Message",
       "title": "Шаг 4. Завершение",
+      "description": "",
+      "revisitable": false,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
       "view": {
-        "label": "Закрыть как ложное срабатывание",
-        "emphasis": "secondary"
+        "label": "Закрыть как ложное срабатывание"
       },
-      "editable": false,
       "transitions": {
         "default": {
-          "actions": [
-            {
-              "type": "finish",
-              "args": {
-                "resolution": "false_alarm"
-              }
-            }
-          ]
+          "goto": null,
+          "macro": null
         }
       }
     }
