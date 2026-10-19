@@ -217,8 +217,8 @@
   },
 
   "stepSets": {
-    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан заполнить оператор перед закрытием с результатом «Обработан». Состав шагов задаёт отдельная машина сценариев (§14.5), здесь только ссылка на набор.",
-    "closing": { "id": "closing", "labelKey": "workflow.stepset.closing", "rule": "all_required_steps_answered" },
+    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан пройти оператор перед закрытием с результатом «Обработан». Выполнен ли набор, отвечает машина сценариев (Specification/Scenario_machine/, профиль МИ): closing — прохождение сценария дошло до finish, none — всегда; других наборов в её формате нет. Здесь только ссылка на набор.",
+    "closing": { "id": "closing", "labelKey": "workflow.stepset.closing", "rule": "scenario_finished" },
     "none": { "id": "none", "labelKey": "workflow.stepset.none", "rule": "always_true" }
   },
 
@@ -645,7 +645,8 @@
         { "kind": "transactional", "fn": "clearLink", "args": ["workflow.journal.reopen_unlinked", "workflow.journal.linked_reopened"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_result", null] },
         { "kind": "transactional", "fn": "setFlag", "args": ["close_cause", null] },
-        { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] }
+        { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
+        { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] }
       ],
       "bulk": { "allowed": false },
       "ui": { "surface": ["queue", "card"], "style": "outline", "navigate": "card" }
@@ -1136,7 +1137,7 @@
   },
 
   "scenarioEdit": {
-    "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (PATCH .../scenario/answers, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
+    "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (POST .../scenario/answer, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
     "guards": [
       { "fn": "stateIs", "args": [["in_progress"]] },
       { "fn": "isOwner" },
@@ -1200,9 +1201,7 @@
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
     "workflow.journal.source": { "vars": ["text"], "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)" },
     "workflow.journal.macro.launched": { "vars": ["name"], "$comment": "§14.5. Запущен макрос сценария" },
-    "workflow.journal.scenario.step": { "vars": ["i", "n", "name", "done"], "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ или ключ ниже" },
-    "workflow.journal.scenario.confirmed": { "vars": [], "$comment": "Значение done: подтверждение" },
-    "workflow.journal.scenario.macro": { "vars": ["name"], "$comment": "Значение done: запущен макрос" },
+    "workflow.journal.scenario.step": { "vars": ["i", "n", "name", "done"], "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ" },
     "workflow.guard.no_permission": { "vars": ["p"] },
     "workflow.guard.not_owner": { "vars": [] },
     "workflow.guard.merge_primary": { "vars": [] },
@@ -1252,7 +1251,9 @@
     "workflow.error.selection_too_large": { "vars": ["n"] },
     "workflow.error.not_found": { "vars": [] },
     "workflow.error.read_only": { "vars": [] },
-    "workflow.error.previous_steps": { "vars": [] },
+    "workflow.error.scenario.not_on_path": { "vars": [] },
+    "workflow.error.scenario.not_editable": { "vars": [] },
+    "workflow.error.scenario.invalid_answer": { "vars": ["step"] },
     "workflow.error.no_schema_admin": { "vars": [] },
     "workflow.error.catalog_not_found": { "vars": [] },
     "workflow.error.no_route": { "vars": ["method", "path"] },
@@ -1267,7 +1268,6 @@
     "workflow.label.nobody_present": { "vars": [] },
     "workflow.label.absent.break": { "vars": ["reason"] },
     "workflow.label.absent.offline": { "vars": [] },
-    "workflow.scenario.confirmation": { "vars": [] },
     "workflow.error.effect_not_implemented": { "vars": ["fn"] }
   },
 
@@ -1329,10 +1329,10 @@
       { "fn": "appendLog", "kind": "transactional" },
       { "fn": "returnToQueue", "kind": "transactional" },
       { "fn": "evictOpenCard", "kind": "transactional", "$comment": "§9, §14.8. Открытая у человека карточка переходит в режим просмотра с уведомлением (incident.card_evicted в потоке); карточка не закрывается." },
-      { "fn": "setCursor", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep). У «Взять», «Принять», «Возобновить», «Перехватить»." },
+      { "fn": "setCursor", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep): текущий шаг прохождения, у завершённого — последний шаг пути. Считает машина сценариев. У «Взять», «Принять», «Возобновить», «Перехватить», «Переоткрыть»." },
       { "fn": "setLinkedTo", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. linked_to — основной инцидент (form.primaryId)" },
       { "fn": "clearLink", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Связь с основным снимается. С шаблонами [событию, основному] — если связь была, запись в журнал события и основного: переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)" },
-      { "fn": "copyAnswersToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента" },
+      { "fn": "copyAnswersToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один, версии могут различаться); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Что переносится, решает машина сценариев (shareAnswers, профиль МИ). Перенесено — запись в журнале основного ключом из аргумента" },
       { "fn": "relinkToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Открытые привязанные объединяемого переходят к новому основному: привязанного у привязанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история" },
       { "fn": "copyCloseFromPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Результат, причина, комментарий и закрывший — от основного" },
       { "fn": "notify", "kind": "external" },

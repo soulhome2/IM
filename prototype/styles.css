@@ -1333,7 +1333,12 @@ select.search-input { padding-right: 36px; }
   cursor: not-allowed;
 }
 
+/* Вопрос шага (view.label сценария), если он не совпадает с названием шага */
+.step-q { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+/* Картинка шага Image с источником fixed — из сценария */
+.step-img { max-width: 100%; max-height: 240px; border-radius: 8px; border: 1px solid var(--stroke); }
 .macro-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.macro-row + .macro-row { margin-top: 8px; }
 .macro-row .btn {
   border: 2px solid var(--stroke-2);
   font-size: 15px;

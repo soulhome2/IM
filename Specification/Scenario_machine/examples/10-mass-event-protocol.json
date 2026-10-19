@@ -1,0 +1,465 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "bb674088-cd09-7de8-8555-7fd75dbaefea",
+    "version": 1,
+    "name": "Массовое мероприятие — комплексный регламент",
+    "description": "Комплексный сценарий обеспечения безопасности на массовом мероприятии (концерт, спортивное событие). Демонстрирует все 7 интерактивных типов шагов. Несколько операторов могут работать с инцидентами параллельно.",
+    "demonstrates": [
+      "все 7 интерактивных типов шагов в одном сценарии",
+      "concurrency.stepLockable=false (несколько операторов параллельно)",
+      "concurrency.allowMultitasking=true",
+      "JSONLogic and/or/in",
+      "Comment readonly как чек-лист",
+      "RadioButton с layout=horizontal",
+      "Image source=operator (загрузка с пользовательского устройства)"
+    ],
+    "complexity": "expert",
+    "tags": [
+      "mass-event",
+      "comprehensive",
+      "all-features"
+    ]
+  },
+  "initialStepId": "checklist",
+  "timers": {
+    "escalateAfterSec": 600,
+    "maxDurationSec": 14400
+  },
+  "concurrency": {
+    "stepLockable": false,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "checklist",
+      "type": "Comment",
+      "title": "Шаг 1. Регламент дежурства",
+      "view": {
+        "label": "Чек-лист оператора (для ознакомления)",
+        "readonly": true,
+        "required": false,
+        "placeholder": "1. Подтвердить готовность всех камер периметра.\n2. Зафиксировать ожидаемое количество посетителей.\n3. Согласовать со старшим смены план реагирования.\n4. Контролировать ключевые зоны (вход, сцена, эвакуационные выходы).\n5. При срабатывании любой системы — действовать по соответствующему регламенту.\n6. По окончании события — собрать отчёт по чек-листу контрольных точек."
+      },
+      "transitions": {
+        "default": {
+          "goto": "expected_visitors"
+        }
+      }
+    },
+    {
+      "id": "expected_visitors",
+      "type": "Select",
+      "title": "Шаг 2. Ожидаемое количество посетителей",
+      "view": {
+        "label": "Ожидаемая численность посетителей по предварительной информации",
+        "options": [
+          {
+            "id": "less_500",
+            "label": "до 500"
+          },
+          {
+            "id": "500_2000",
+            "label": "500–2000"
+          },
+          {
+            "id": "2000_5000",
+            "label": "2000–5000"
+          },
+          {
+            "id": "5000_15000",
+            "label": "5000–15000"
+          },
+          {
+            "id": "more_15000",
+            "label": "более 15000 (массовое скопление)"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "event_start_date"
+        }
+      }
+    },
+    {
+      "id": "event_start_date",
+      "type": "Datetime",
+      "title": "Шаг 3. Дата и время начала",
+      "view": {
+        "label": "Запланированное начало мероприятия",
+        "kind": "datetime",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "key_zones"
+        }
+      }
+    },
+    {
+      "id": "key_zones",
+      "type": "Checkbox",
+      "title": "Шаг 4. Контрольные зоны",
+      "view": {
+        "label": "Какие ключевые зоны находятся под наблюдением (отметьте все)",
+        "options": [
+          {
+            "id": "main_entrance",
+            "label": "Главный вход"
+          },
+          {
+            "id": "vip_entrance",
+            "label": "VIP-вход"
+          },
+          {
+            "id": "stage_area",
+            "label": "Сцена / основная площадка"
+          },
+          {
+            "id": "fan_zone",
+            "label": "Фан-зона"
+          },
+          {
+            "id": "emergency_exits",
+            "label": "Эвакуационные выходы (все)"
+          },
+          {
+            "id": "parking",
+            "label": "Парковка"
+          },
+          {
+            "id": "perimeter",
+            "label": "Периметр объекта"
+          },
+          {
+            "id": "first_aid_point",
+            "label": "Пункт первой помощи"
+          }
+        ],
+        "minSelected": 3,
+        "required": true,
+        "layout": "vertical"
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "and": [
+                {
+                  "in": [
+                    "emergency_exits",
+                    {
+                      "var": "state.key_zones.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "main_entrance",
+                    {
+                      "var": "state.key_zones.value"
+                    }
+                  ]
+                }
+              ]
+            },
+            "goto": "supervisor_briefing"
+          }
+        ],
+        "default": {
+          "goto": "supervisor_briefing",
+          "actions": [
+            {
+              "type": "escalate",
+              "args": {
+                "to": "shift-supervisor",
+                "reason": "Не все обязательные зоны под контролем"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "supervisor_briefing",
+      "type": "Comment",
+      "title": "Шаг 5. Согласование плана со старшим",
+      "view": {
+        "label": "Кратко зафиксируйте согласование плана со старшим смены: канал связи, ключевые риски, договорённости.",
+        "placeholder": "Пример: связь по Talk #5; основные риски — давка у главного входа; решение о посекторном перекрытии — за старшим.",
+        "required": true,
+        "minLength": 30,
+        "minRows": 3
+      },
+      "transitions": {
+        "default": {
+          "goto": "venue_layout",
+          "actions": [
+            {
+              "type": "assign",
+              "args": {
+                "to": "shift-supervisor"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "venue_layout",
+      "type": "Image",
+      "title": "Шаг 6. Карта площадки",
+      "view": {
+        "label": "Карта зон с обозначением рассадки и сценических точек",
+        "source": "map",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "additional_briefing_doc"
+        }
+      }
+    },
+    {
+      "id": "additional_briefing_doc",
+      "type": "Image",
+      "title": "Шаг 7. Дополнительная инструкция",
+      "view": {
+        "label": "Загрузите файл инструкции, если организатор передал свой документ",
+        "source": "operator",
+        "allowMultiple": true,
+        "required": false
+      },
+      "transitions": {
+        "default": {
+          "goto": "ready_check"
+        }
+      }
+    },
+    {
+      "id": "ready_check",
+      "type": "RadioButton",
+      "title": "Шаг 8. Готовность к началу",
+      "view": {
+        "label": "Готовы к началу мероприятия?",
+        "options": [
+          {
+            "id": "ready",
+            "label": "Готовы"
+          },
+          {
+            "id": "delays",
+            "label": "Есть задержки, но мероприятие начинается"
+          },
+          {
+            "id": "postpone",
+            "label": "Требуется отложить"
+          }
+        ],
+        "required": true,
+        "layout": "horizontal"
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.ready_check.value"
+                },
+                "postpone"
+              ]
+            },
+            "goto": "btn_postpone",
+            "actions": [
+              {
+                "type": "escalate",
+                "args": {
+                  "to": "event-organizer",
+                  "reason": "Безопасность не подтверждена; требуется перенос"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "btn_start_monitoring"
+        }
+      }
+    },
+    {
+      "id": "btn_start_monitoring",
+      "type": "Button",
+      "title": "Шаг 9. Старт мониторинга",
+      "view": {
+        "label": "Запустить активный мониторинг",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "goto": "event_end_time",
+          "actions": [
+            {
+              "type": "callMacro",
+              "args": {
+                "macroId": "MACRO_ENABLE_HIGH_DENSITY_ANALYTICS"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "event_end_time",
+      "type": "Datetime",
+      "title": "Шаг 10. Время окончания",
+      "view": {
+        "label": "Фактическое время завершения мероприятия",
+        "kind": "datetime",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "incidents_during_event"
+        }
+      }
+    },
+    {
+      "id": "incidents_during_event",
+      "type": "RadioButton",
+      "title": "Шаг 11. Происшествия в ходе события",
+      "view": {
+        "label": "Произошли ли происшествия, требующие отдельной фиксации?",
+        "options": [
+          {
+            "id": "none",
+            "label": "Никаких происшествий"
+          },
+          {
+            "id": "minor",
+            "label": "Мелкие (помощь зрителям, потеря вещей)"
+          },
+          {
+            "id": "moderate",
+            "label": "Средние (медпомощь, мелкие конфликты)"
+          },
+          {
+            "id": "major",
+            "label": "Серьёзные — нужна доказательная база"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.incidents_during_event.value"
+                },
+                "major"
+              ]
+            },
+            "goto": "evidence_pack_images"
+          }
+        ],
+        "default": {
+          "goto": "btn_close_event"
+        }
+      }
+    },
+    {
+      "id": "evidence_pack_images",
+      "type": "Image",
+      "title": "Шаг 12a. Снимки происшествий",
+      "view": {
+        "label": "Прикрепите снимки серьёзных происшествий с камер мероприятия.",
+        "source": "camera",
+        "allowMultiple": true,
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "evidence_pack_notes"
+        }
+      }
+    },
+    {
+      "id": "evidence_pack_notes",
+      "type": "Comment",
+      "title": "Шаг 12b. Описание для протокола",
+      "view": {
+        "label": "Хронологически опишите серьёзные происшествия: время, зона, участники, действия охраны.",
+        "required": true,
+        "minLength": 50,
+        "minRows": 6
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_event"
+        }
+      }
+    },
+    {
+      "id": "btn_postpone",
+      "type": "Button",
+      "title": "Перенос",
+      "view": {
+        "label": "Закрыть с переносом мероприятия",
+        "emphasis": "destructive"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "postponed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_event",
+      "type": "Button",
+      "title": "Завершение мероприятия",
+      "view": {
+        "label": "Закрыть мероприятие и сформировать сводный отчёт",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "callMacro",
+              "args": {
+                "macroId": "MACRO_DISABLE_HIGH_DENSITY_ANALYTICS"
+              }
+            },
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "mass_event_summary_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "event_completed"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

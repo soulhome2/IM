@@ -1,0 +1,174 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "a86f2f1a-6a44-7f17-8f0e-01f60933b362",
+    "version": 1,
+    "name": "Эвакуация (плановая отработка)",
+    "description": "Плановое учение по эвакуации. Оператор получает инструкцию (readonly Comment), фиксирует время старта/окончания, отмечает результаты по контрольным точкам.",
+    "demonstrates": [
+      "Comment readonly: true (инструкция оператору)",
+      "Datetime kind=time",
+      "timers escalate/maxDuration",
+      "generateReport с явным templateId"
+    ],
+    "complexity": "intermediate",
+    "tags": [
+      "evacuation",
+      "drill",
+      "compliance"
+    ]
+  },
+  "initialStepId": "instruction",
+  "timers": {
+    "escalateAfterSec": 900,
+    "maxDurationSec": 5400
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": false
+  },
+  "steps": [
+    {
+      "id": "instruction",
+      "type": "Comment",
+      "title": "Шаг 1. Инструктаж",
+      "view": {
+        "label": "Регламент учения (только для ознакомления)",
+        "readonly": true,
+        "required": false,
+        "placeholder": "1. По сигналу — запустить оповещение по громкой связи.\n2. Зафиксировать время старта.\n3. Контролировать прохождение точек по этажам.\n4. После сбора всех на сборном пункте — зафиксировать время окончания.\n5. Отметить отсутствующих, если есть.\n6. Сформировать отчёт для службы охраны труда."
+      },
+      "transitions": {
+        "default": {
+          "goto": "drill_started_at"
+        }
+      }
+    },
+    {
+      "id": "drill_started_at",
+      "type": "Datetime",
+      "title": "Шаг 2. Время старта",
+      "view": {
+        "label": "Точное время начала эвакуации (по громкой связи)",
+        "kind": "time",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "checkpoints",
+          "actions": [
+            {
+              "type": "callMacro",
+              "args": {
+                "macroId": "MACRO_PA_EVACUATION_START"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "checkpoints",
+      "type": "Checkbox",
+      "title": "Шаг 3. Контрольные точки",
+      "view": {
+        "label": "Какие контрольные точки прошли согласно нормативам?",
+        "options": [
+          {
+            "id": "floor_1_cleared",
+            "label": "1-й этаж — пуст"
+          },
+          {
+            "id": "floor_2_cleared",
+            "label": "2-й этаж — пуст"
+          },
+          {
+            "id": "floor_3_cleared",
+            "label": "3-й этаж — пуст"
+          },
+          {
+            "id": "parking_cleared",
+            "label": "Парковка — пуста"
+          },
+          {
+            "id": "everyone_at_assembly",
+            "label": "Все собрались на сборном пункте"
+          }
+        ],
+        "minSelected": 0,
+        "required": false,
+        "layout": "vertical"
+      },
+      "transitions": {
+        "default": {
+          "goto": "absentees"
+        }
+      }
+    },
+    {
+      "id": "absentees",
+      "type": "Comment",
+      "title": "Шаг 4. Отсутствующие",
+      "view": {
+        "label": "Список отсутствующих на сборном пункте (если все пришли — оставьте пустым)",
+        "required": false,
+        "maxRows": 8
+      },
+      "transitions": {
+        "default": {
+          "goto": "drill_ended_at"
+        }
+      }
+    },
+    {
+      "id": "drill_ended_at",
+      "type": "Datetime",
+      "title": "Шаг 5. Время окончания",
+      "view": {
+        "label": "Точное время завершения учения",
+        "kind": "time",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close"
+        }
+      }
+    },
+    {
+      "id": "btn_close",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть учение и сформировать отчёт",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "callMacro",
+              "args": {
+                "macroId": "MACRO_PA_DRILL_END"
+              }
+            },
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "evacuation_drill_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "drill_completed"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

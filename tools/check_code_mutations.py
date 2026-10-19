@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Мутации кода: насколько тесты ловят ошибки в исполнителе, сервере и интерфейсе.
 
-В копии репозитория по одному портится место в коде (engine.js, server.js, app.js) —
+В копии репозитория по одному портится место в коде (engine.js, server.js, scenario.js, app.js) —
 так, как мог бы ошибиться разработчик: строгое сравнение вместо нестрогого, забытая
 проверка, таймер без остатка. Затем запускаются тесты API (tests/api.html), а для
 интерфейса — самопроверка прототипа. Каждая порча должна уронить тесты (KILLED).
@@ -58,7 +58,20 @@ MUTATIONS = [
     ("focus-page-missing", "server.js", "      const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;\n      const found", "      const focusPage = null;\n      const found", "api"),
     ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.read_only\"]);\n          const stale", "const stale", "api"),
     ("if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          if (body", "if (body", "api"),
-    ("answers-if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          Object.assign", "Object.assign", "api"),
+    # Машина сценариев и стык (§14.5, ARCH-06): исполнитель scenario.js и его вызовы в сервере
+    ("answer-off-path-accepted", "scenario.js", 'if (i < 0) return { ok: false, error: "not_on_path" };\n', "", "api"),
+    ("answer-editable-ignored", "scenario.js", 'if (!isCurrent && step.editable === false) return { ok: false, error: "not_editable" };\n', "", "api"),
+    ("branch-answers-kept", "scenario.js", "dropped.forEach((id) => delete r.state[id]);", "", "api"),
+    ("closing-without-finish", "scenario.js", 'setId === "closing" && Boolean(result.completedAt)', 'setId === "closing"', "api"),
+    ("progress-from-start", "scenario.js", "const rest = remaining(script, result.currentStepId);", "const rest = remaining(script, script.initialStepId);", "api"),
+    ("share-no-settle", "scenario.js", "while (!r.completedAt && moved.includes(r.currentStepId)", "while (false && moved.includes(r.currentStepId)", "api"),
+    ("required-skip-allowed", "scenario.js", 'if (o.skip && !canSkip(step)) return { ok: false, error: "required" };\n', "", "api"),
+    ("macro-ignores-run-macro", "server.js", '      if (!actorEngine.availability("run_macro", ev).ok) return;\n', "", "api"),
+    ("new-incident-oldest-version", "server.js", ".sort((a, b) => b.version - a.version)[0]", ".sort((a, b) => a.version - b.version)[0]", "api"),
+    ("cursor-off-path", "server.js", "if (!body || !pathOf(ev).includes(body.stepId))", "if (!body)", "api"),
+    ("finish-no-close-form", "app.js", '    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");\n', "", "ui"),
+    ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),
+    ("answers-if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          const res = answerStep", "const res = answerStep", "api"),
     ("if-match-optional", "server.js", "if (!sent) return problem(428,", "if (!sent) return null;\n      if (false) return problem(428,", "api"),
     ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev) } }", "{ status: 200, body: card(ev) }", "api"),
     ("targets-include-self", "server.js", "let list = targets().filter((o) => !engine.isSelf(o.id));", "let list = targets();", "api"),
@@ -181,8 +194,8 @@ MUTATIONS = [
     ("tree-home-end-ignored", "app.js", ", Home: items[0], End: items[items.length - 1] };", " };", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
     # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
-    ("next-on-last-step", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = tab === "scenario" && (editable', "ui"),
-    ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && !last && (editable', 'const canNext = !last && (editable', "ui"),
+    ("next-on-last-step", "app.js", "    return i < path.length - 1;\n  }", "    return true;\n  }", "ui"),
+    ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && canGoNext(ev, i, editable);', "const canNext = canGoNext(ev, i, editable);", "ui"),
     ("back-after-next", "styles.css", ".scenario-actions-end { grid-area: next; display: flex; flex-wrap: nowrap;", ".scenario-actions-end { grid-area: next; display: flex; flex-direction: row-reverse; flex-wrap: nowrap;", "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
@@ -224,8 +237,8 @@ MUTATIONS = [
     ("linked-focus-page-ignored", "server.js", "const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;", "const idx = -1;", "api"),
     ("ui-search-opens-scenario", "app.js", "workTab: foundLinked(ev.guid).length ? \"linked\" : \"scenario\"", "workTab: \"scenario\"", "ui"),
     ("ui-search-found-page-ignored", "app.js", "    if (page && page.focusPage && page.focusPage !== state.linkedPage) {", "    if (false) {", "ui"),
-    ("copy-answers-overwrites", "engine.js", "filled(ev.answers[k]) && !filled((p.answers || {})[k])", "filled(ev.answers[k])", "api"),
-    ("copy-answers-no-log", "engine.js", "          if (template) ctx.log(p, s.actor, template, { number: ev.number, n: moved.length }, at);\n", "", "api"),
+    ("copy-answers-overwrites", "scenario.js", "if (!entry || entry.skipped || r.state[id] || !src", "if (!entry || entry.skipped || !src", "api"),
+    ("copy-answers-no-log", "engine.js", "          if (n && template) ctx.log(p, s.actor, template, { number: ev.number, n }, at);\n", "", "api"),
     ("relink-closed-too", "engine.js", "const children = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));", "const children = ctx.events().filter((e) => e.linkedTo === ev.id);", "api"),
     ("relink-no-log", "engine.js", "            if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);\n", "", "api"),
     ("transfer-restarts-reaction", "engine.js", "if (mode === \"ifStopped\" && dueOf(ev, id)) return;", "if (mode === \"ifStopped\" && false) return;", "api"),

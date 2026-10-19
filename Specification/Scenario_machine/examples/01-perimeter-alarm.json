@@ -1,0 +1,169 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "af6671df-bc75-7fdc-8c7d-a6e7abf2bb62",
+    "version": 1,
+    "name": "Тревога периметра",
+    "description": "Базовый сценарий: камера зафиксировала движение в зоне периметра в нерабочее время. Оператор подтверждает или отклоняет тревогу.",
+    "demonstrates": [
+      "RadioButton",
+      "Image (camera source)",
+      "Comment",
+      "Button с finish action"
+    ],
+    "complexity": "basic",
+    "tags": [
+      "perimeter",
+      "vms",
+      "intrusion"
+    ]
+  },
+  "initialStepId": "verify_event",
+  "timers": {
+    "escalateAfterSec": 180,
+    "maxDurationSec": 600
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "verify_event",
+      "type": "RadioButton",
+      "title": "Шаг 1. Оценка обстановки",
+      "view": {
+        "label": "Что видно на видео с камеры периметра?",
+        "options": [
+          {
+            "id": "real_intrusion",
+            "label": "Человек в запретной зоне"
+          },
+          {
+            "id": "animal",
+            "label": "Животное"
+          },
+          {
+            "id": "weather",
+            "label": "Погодные явления (ветер, осадки)"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Ничего подозрительного — ложное срабатывание"
+          }
+        ],
+        "required": true,
+        "layout": "vertical"
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verify_event.value"
+                },
+                "false_alarm"
+              ]
+            },
+            "goto": "btn_close_false"
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.verify_event.value"
+                },
+                "real_intrusion"
+              ]
+            },
+            "goto": "snapshot"
+          }
+        ],
+        "default": {
+          "goto": "operator_note"
+        }
+      }
+    },
+    {
+      "id": "snapshot",
+      "type": "Image",
+      "title": "Шаг 2. Фиксация",
+      "view": {
+        "label": "Снимок с камеры периметра в момент срабатывания",
+        "source": "camera",
+        "allowMultiple": false,
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "operator_note"
+        }
+      }
+    },
+    {
+      "id": "operator_note",
+      "type": "Comment",
+      "title": "Шаг 3. Комментарий",
+      "view": {
+        "label": "Опишите наблюдаемое и принятые меры",
+        "placeholder": "Например: вызвал группу быстрого реагирования",
+        "required": true,
+        "minLength": 10,
+        "maxLength": 2000,
+        "minRows": 2,
+        "maxRows": 6
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_real"
+        }
+      }
+    },
+    {
+      "id": "btn_close_real",
+      "type": "Button",
+      "title": "Шаг 4. Завершение",
+      "view": {
+        "label": "Закрыть инцидент (тревога подтверждена)",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "processed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_false",
+      "type": "Button",
+      "title": "Шаг 4. Завершение",
+      "view": {
+        "label": "Закрыть как ложное срабатывание",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "false_alarm"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

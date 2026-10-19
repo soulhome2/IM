@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Тесты машины сценариев</title>
+    <style>
+      body { margin: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+      pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
+      @media (prefers-color-scheme: dark) { body { background: #1b1c20; color: #eee; } }
+    </style>
+    <script src="../prototype/vendor/json-logic-js/logic.js"></script>
+    <script src="../prototype/scenario.js"></script>
+    <script src="../prototype/fixture.js"></script>
+    <script src="scenario-examples.js"></script>
+    <script src="scenario-tests.js"></script>
+  </head>
+  <body>
+    <h1>Тесты исполнителя машины сценариев</h1>
+    <p>
+      Исполнитель <code>prototype/scenario.js</code> на примерах <code>Specification/Scenario_machine/examples/</code>:
+      переходы, обязательность и пропуск, «Назад» и переответ, прогресс, действия по профилю МИ, перенос ответов. И прохождения
+      эталонного набора: они такие, какие даёт исполнитель.
+      Открывается двойным кликом. Итог — атрибут <code>data-scenariotest</code> у страницы.
+    </p>
+    <strong id="scenariotest-summary">Идёт прогон…</strong>
+    <pre id="scenariotest-log"></pre>
+  </body>
+</html>

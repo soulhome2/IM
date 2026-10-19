@@ -329,19 +329,23 @@
       return [n === 2, "связанных у нового основного: " + n];
     },
     // Ответы связанного — основному (эффект перехода объединения). INC-1847 и INC-1838 — оба в работе,
-    // основной — старший INC-1838; шаг «visual» заполнен только в INC-1847
+    // основной — старший INC-1838; шаг «visual» отвечен только в INC-1847 (ответ уходит по «Далее»)
     async merge_answers() {
       for (const number of ["INC-1847", "INC-1838"]) {
         await setFilter("open");
         await click(btn($("eventsList"), "claim", guidOf(number)));
-        if (number === "INC-1847") await click(root().querySelector('[data-confirm="visual"]'));
+        if (number === "INC-1847") {
+          await click(root().querySelector('[data-confirm="visual"]'));
+          await click($("stepNext"));
+        }
         await click($("backToQueue"));
       }
       await setFilter("mine");
       for (const number of ["INC-1847", "INC-1838"]) await click($("eventsList").querySelector(`[data-check="${guidOf(number)}"]`));
       await click($("selBar").querySelector('[data-sel-do="merge"]'));
-      const done = Boolean(root().querySelector('[data-confirm="visual"].on'));
-      return [!done, "у основного шаг «visual» заполнен: " + done];
+      // Перенесённый ответ — шаг пути с ответом; прохождение основного идёт дальше по нему
+      const done = Boolean(root().querySelector(".crumb.done"));
+      return [!done, "у основного шаг «visual» отвечен: " + done];
     },
     // «Взять в работу» на выборке: куда дальше — ui.navigate объединения в машине
     async merge_nav() {
@@ -376,6 +380,24 @@
       const b = $("selBar").querySelector('[data-sel-do="merge"]');
       const on = Boolean(b && b.getAttribute("aria-disabled") !== "true");
       return [on, "«Взять в работу» с чужим доступна: " + on];
+    },
+    // «Переоткрыть» ставит курсор сценария на текущий шаг прохождения (setCursor, §14.5): ответили на шаг 1,
+    // вернулись к нему «Назад» и закрыли — после переоткрытия карточка на шаге 2
+    async reopen_cursor() {
+      const id = await claimFirst();
+      await click(root().querySelector("[data-confirm]"));
+      await click($("stepNext"));
+      await click($("stepBack"));
+      await click(anyBtn(root(), "close"));
+      field("resultId").value = "false_alarm";
+      field("resultId").dispatchEvent(new Event("change", { bubbles: true }));
+      await wait();
+      await confirm("проба");
+      await setFilter("done");
+      await click(btn($("eventsList"), "reopen", id));
+      await confirm("проба");
+      const text = $("statusSteps").textContent;
+      return [!/^Шаг 2 /.test(text), "после переоткрытия: " + text];
     },
     async scenario() {
       await claimFirst();

@@ -269,7 +269,7 @@
     if (document.documentElement.dataset.theme !== theme) await click($("themeToggle"));
   }
 
-  // Шаги сценария: подтвердить, выбрать вариант, перейти «Далее»
+  // Шаги сценария: подтвердить, выбрать первый вариант; ответ уходит по «Далее»
   async function answerCurrentStep() {
     const confirm = root().querySelector("[data-confirm]");
     if (confirm && !confirm.classList.contains("on")) await click(confirm);
@@ -442,46 +442,140 @@
       throw new Error("в сценарии не нашлось шага с вариантами");
     }, "Взять новое событие");
 
-    await step("Запустить макрос из сценария", async () => {
+    await step("Макрос по ответу сценария: переответ «Реальная» на пройденном шаге запускает макрос, на шаге — «Запущено» (§14.5)", async () => {
       await openOwn(closedId);
-      for (let i = 0; i < 8; i++) {
-        const macro = root().querySelector("[data-macro]");
-        if (macro) {
-          const name = macro.dataset.macro;
-          await click(macro);
-          const after = root().querySelector(`[data-macro="${name}"]`);
-          expect(after && after.classList.contains("ok"), `макрос «${name}» не отмечен запущенным`);
-          return name;
-        }
-        await answerCurrentStep();
-        const next = $("stepNext");
-        expect(next && !next.disabled, "до шага с макросами не дойти");
-        await click(next);
+      const count = root().querySelectorAll(".crumb").length;
+      for (let n = 1; n <= count; n++) {
+        const crumb = root().querySelectorAll(".crumb")[n - 1];
+        if (crumb.dataset.crumb !== undefined) await click(crumb);
+        const radios = root().querySelectorAll('input[type="radio"][data-ans]');
+        if (!radios.length) continue;
+        // Пройденный шаг можно переответить (editable): первый вариант запускает макросы площадки (callMacro)
+        expect(!radios[0].checked, "первый вариант уже выбран — переответа не будет");
+        await click(radios[0]);
+        await click($("stepNext"));
+        await click($("stepBack"));
+        const launched = root().querySelector(".step-card .macro-row .btn.ok");
+        expect(launched && /Запущено/.test(launched.textContent), `ответ «${radios[0].value}» не запустил макрос`);
+        return `шаг ${n}: ${launched.textContent.trim()}`;
       }
-      throw new Error("в сценарии нет шага с макросами");
+      throw new Error("на пути сценария нет шага с вариантами");
     }, "Ответ с вариантами сохраняется после «Далее»");
 
-    await step("Закрыть инцидент по сценарию: «Далее» до последнего шага, там она серая; «Закрыть» — «Обработан» выбран (RULE-89)", async () => {
+    await step("Закрыть инцидент по сценарию: ответ на последний шаг сам открывает «Закрыть» с «Обработан»; «Далее» там серая (RULE-89, ARCH-06 в18)", async () => {
       await openOwn(closedId);
       const last = () => $("statusSteps").textContent.match(/Шаг (\d+) из (\d+)/);
       for (let i = 0; i < 10; i++) {
         await answerCurrentStep();
         const next = $("stepNext");
-        expect(next, "кнопки «Далее» нет");
-        const [, at, of] = last() || [];
-        if (at && at === of) {
-          expect(next.disabled && next.textContent.trim() === "Далее", `на последнем шаге «${next.textContent.trim()}», ${next.disabled ? "серая" : "доступна"}`);
-          await click(root().querySelector('.work-acts [data-do="close"]'));
-          expect(field("resultId").value === "processed", `результат по умолчанию «${field("resultId").value}», а не «Обработан»`);
-          await confirmDialog();
-          expect(mode() === "queue", "после закрытия карточка не закрылась");
-          return closedId;
-        }
-        expect(!next.disabled, "сценарий не проходится до конца");
+        expect(next && !next.disabled, "сценарий не проходится до конца");
         await click(next);
+        await wait(200);
+        if ($("modalDialog").hidden) continue;
+        // Сценарий пройден: форма «Закрыть» открылась сама, за ней — последний шаг, «Далее» серая
+        const [, at, of] = last() || [];
+        expect(at && at === of, `форма открылась не на последнем шаге: «${$("statusSteps").textContent}»`);
+        expect($("stepNext").disabled, "на последнем шаге «Далее» доступна");
+        expect(field("resultId").value === "processed", `результат по умолчанию «${field("resultId").value}», а не «Обработан»`);
+        await confirmDialog();
+        expect(mode() === "queue", "после закрытия карточка не закрылась");
+        return closedId;
       }
       throw new Error("последний шаг так и не наступил");
-    }, "Запустить макрос из сценария");
+    }, "Макрос по ответу сценария: переответ «Реальная» на пройденном шаге запускает макрос, на шаге — «Запущено» (§14.5)");
+
+    // Поле текущего шага — ответ, который карточка отправит по «Далее» (кнопка шага отправляет сама)
+    async function fillStep(step) {
+      const one = (sel) => root().querySelector(sel);
+      const put = async (el, value, type) => {
+        el.value = value;
+        el.dispatchEvent(new Event(type, { bubbles: true }));
+        await wait();
+      };
+      if (step.type === "Button") return click(one("[data-press]"));
+      if (step.type === "RadioButton") return click(one('input[type="radio"][data-ans]'));
+      if (step.type === "Select") return put(one("select[data-ans]"), one("select[data-ans]").options[1].value, "change");
+      if (step.type === "Checkbox" && one("[data-confirm]")) return one("[data-confirm].on") ? null : click(one("[data-confirm]"));
+      if (step.type === "Checkbox") return click(one("[data-check]"));
+      if (step.type === "Comment" && one("textarea[data-ans]")) return put(one("textarea[data-ans]"), NOTE, "input");
+      if (step.type === "Datetime") {
+        const el = one("[data-when]");
+        return put(el, { date: "2026-10-19", time: "14:30", "datetime-local": "2026-10-19T14:30" }[el.type], "change");
+      }
+      if (step.type === "Image" && one("[data-snap]")) return click(one("[data-snap]"));
+      if (step.type === "Image" && one("[data-file]")) {
+        const files = new DataTransfer();
+        files.items.add(new File(["selftest"], "selftest.png", { type: "image/png" }));
+        one("[data-file]").files = files.files;
+        one("[data-file]").dispatchEvent(new Event("change", { bubbles: true }));
+        // Файл читается асинхронно: ответ готов, когда карточка показывает вложение
+        const attached = () => /Фото: 1/.test((one(".step-card .macro-row") || {}).textContent || "");
+        for (let k = 0; k < 25 && !attached(); k++) await wait();
+        return expect(attached(), "файл не прикрепился");
+      }
+      return null;
+    }
+    const loadScript = (src) =>
+      new Promise((done, fail) => {
+        const el = Object.assign(document.createElement("script"), { src, onload: done, onerror: () => fail(new Error(`не загрузился ${src}`)) });
+        document.head.appendChild(el);
+      });
+
+    await step("Сценарий со всеми типами шагов (showcase машины сценариев) проходится в карточке: отметки, выбор, список, текст, дата и время, снимок, файл, кнопки (§14.5)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (!window.IM_SCENARIO_EXAMPLES) await loadScript("../tests/scenario-examples.js");
+      // Новая версия сценария пожара — showcase: новый инцидент получает последнюю версию
+      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const rows = window.IM_FIXTURE.scenarios.rows;
+      const version = Math.max(...rows.filter((r) => r.guid === fireGuid).map((r) => r.version)) + 1;
+      const show = JSON.parse(JSON.stringify(window.IM_SCENARIO_EXAMPLES["showcase/00-primitives.json"]));
+      show.metadata = Object.assign(show.metadata, { scenarioGuid: fireGuid, version });
+      if (mode() !== "queue") await click($("backToQueue"));
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: show.metadata.name, script: show }) } } });
+      await wait(300);
+      try {
+        const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+        const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
+        const guid = created.body.guid;
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", guid);
+        expect(claim, "новый инцидент нельзя взять");
+        await click(claim);
+        expect(mode() === "work", "карточка не открылась");
+        const seen = new Set();
+        for (let i = 0; i < 40; i++) {
+          const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+          if (sc.result.completedAt) break;
+          const st = sc.script.steps.find((x) => x.id === sc.result.currentStepId);
+          seen.add(st.type);
+          // Карточка перерисовывается после ответа сервера — ждём, пока она покажет этот шаг
+          const shown = () => (root().querySelector(".step-h strong") || {}).textContent === (st.title || st.view.label);
+          for (let k = 0; k < 25 && !shown(); k++) await wait();
+          expect(shown(), `карточка не показала шаг «${st.id}»`);
+          await fillStep(st).catch((err) => {
+            throw new Error(`шаг «${st.id}» (${st.type}): ${err.message}`);
+          });
+          if (st.type === "Button") continue;
+          const next = $("stepNext");
+          expect(next && !next.disabled, `шаг «${st.id}»: «Далее» недоступна`);
+          await click(next);
+        }
+        const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
+        expect(sc.result.completedAt, "сценарий не пройден до конца");
+        const missed = ["Button", "RadioButton", "Checkbox", "Select", "Comment", "Image", "Datetime"].filter((x) => !seen.has(x));
+        expect(!missed.length, `не встретились типы шагов: ${missed.join(", ")}`);
+        const atts = sc.result.attachments || [];
+        expect(atts.some((a) => a.source === "operator" && a.fileName === "selftest.png") && atts.some((a) => a.source === "camera"), "нет вложений: файл оператора и снимок камеры");
+        return `${sc.path.length} шагов, ${seen.size} типов`;
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
 
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
       await setFilter("foreign");
@@ -1464,7 +1558,9 @@
       expect(!wrong.length, `плашка не название сценария: ${wrong.map(([a, b]) => `«${a}» вместо «${b}»`).join(", ")}`);
       // Нет названия — «Без названия»: стенд убирает его у сценария пожара (в Merge Patch null удаляет поле)
       if (mode() !== "queue") await click($("backToQueue"));
-      await standReset({ fixture: "demo", fixturePatch: { scenarios: { fire: { title: null } } } });
+      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const rows = window.IM_FIXTURE.scenarios.rows.map((r) => (r.guid === fireGuid ? Object.assign({}, r, { name: null }) : r));
+      await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows } } });
       // Смена фильтра перечитывает очередь с сервера
       await setFilter("all");
       let untitled = 0;
@@ -1738,7 +1834,7 @@
         // Карточка основного открылась сама — на его текущем шаге сценария
         expect(mode() === "work" && $("statusIncident").textContent.includes(lead.number), `карточка основного не открылась: «${$("statusIncident").textContent}»`);
         const card = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
-        const at = card.scenario.steps.findIndex((x) => x.id === card.scenario.cursorStepId) + 1;
+        const at = card.scenario.path.lastIndexOf(card.scenario.cursorStepId) + 1;
         expect($("statusSteps").textContent.startsWith(`Шаг ${at} из`), `карточка не на шаге ${at}: «${$("statusSteps").textContent}»`);
         await click($("backToQueue"));
         await setFilter("mine");

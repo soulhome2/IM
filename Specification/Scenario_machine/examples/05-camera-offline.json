@@ -1,0 +1,243 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "7550062e-7865-7bad-857b-871d1b31f7c1",
+    "version": 1,
+    "name": "Авария оборудования: камера офлайн",
+    "description": "Камера видеонаблюдения перестала отвечать. Оператор быстро определяет причину; если своими силами не решается — оформляется заявка в техподдержку.",
+    "demonstrates": [
+      "Условные переходы (RadioButton + JSONLogic)",
+      "Действия на переходах (callMacro, generateReport, finish)"
+    ],
+    "complexity": "intermediate",
+    "tags": [
+      "infrastructure",
+      "camera-offline"
+    ]
+  },
+  "initialStepId": "diagnostic",
+  "timers": {
+    "escalateAfterSec": 600,
+    "maxDurationSec": 3600
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "diagnostic",
+      "type": "RadioButton",
+      "title": "Шаг 1. Первичная диагностика",
+      "view": {
+        "label": "Что показывает быстрая проверка камеры?",
+        "options": [
+          {
+            "id": "ping_ok_no_video",
+            "label": "Пинг идёт, видео нет"
+          },
+          {
+            "id": "no_ping",
+            "label": "Нет ответа на пинг (возможно, нет питания)"
+          },
+          {
+            "id": "back_online",
+            "label": "Камера снова в сети — проблема ушла"
+          },
+          {
+            "id": "physical_damage",
+            "label": "Видны механические повреждения по соседней камере"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.diagnostic.value"
+                },
+                "back_online"
+              ]
+            },
+            "goto": "btn_close_self_resolved"
+          }
+        ],
+        "default": {
+          "goto": "try_restart"
+        }
+      }
+    },
+    {
+      "id": "try_restart",
+      "type": "RadioButton",
+      "title": "Шаг 2. Попытка удалённого перезапуска",
+      "view": {
+        "label": "Удалённый перезапуск помог?",
+        "options": [
+          {
+            "id": "fixed",
+            "label": "Да, камера ожила"
+          },
+          {
+            "id": "not_fixed",
+            "label": "Нет, проблема сохраняется"
+          },
+          {
+            "id": "no_remote",
+            "label": "Удалённый перезапуск недоступен"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.try_restart.value"
+                },
+                "fixed"
+              ]
+            },
+            "goto": "btn_close_resolved",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "MACRO_LOG_REMOTE_RESTART"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "tech_support_details"
+        }
+      }
+    },
+    {
+      "id": "tech_support_details",
+      "type": "Comment",
+      "title": "Шаг 3. Заявка в техподдержку",
+      "view": {
+        "label": "Опишите проблему для инженера техподдержки (что произошло, что попробовали, текущее состояние)",
+        "placeholder": "Например: после перезапуска камера всё ещё не отвечает, на коммутаторе порт UP, питание есть.",
+        "required": true,
+        "minLength": 30,
+        "maxLength": 2000,
+        "minRows": 4,
+        "maxRows": 12
+      },
+      "transitions": {
+        "default": {
+          "goto": "tech_support_priority"
+        }
+      }
+    },
+    {
+      "id": "tech_support_priority",
+      "type": "RadioButton",
+      "title": "Шаг 4. Приоритет заявки",
+      "view": {
+        "label": "Какой приоритет назначить заявке?",
+        "options": [
+          {
+            "id": "low",
+            "label": "Низкий — камера некритична"
+          },
+          {
+            "id": "normal",
+            "label": "Обычный — рабочее время"
+          },
+          {
+            "id": "high",
+            "label": "Высокий — критическая зона"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_escalated"
+        }
+      }
+    },
+    {
+      "id": "btn_close_self_resolved",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (камера восстановилась сама)",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "self_resolved"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_resolved",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (восстановлена удалённым перезапуском)",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "fixed_remotely"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_escalated",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (передано в техподдержку)",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "infra_failure_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "tech_support_assigned"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

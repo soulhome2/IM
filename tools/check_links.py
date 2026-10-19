@@ -6,6 +6,8 @@
 Внешние ссылки (http, https, mailto) и якоря внутри файла не проверяются.
 Ссылки «§» не проверяются на Vision (перед ними слово «Vision»), в описании и стилях прототипа —
 там это разделы дизайн-кита, в собранных файлах, архиве правил и прошлых ревью.
+Копии исходника машины сценариев (спецификация, схема, примеры) не проверяются вовсе: «§» там — разделы
+спецификации DSL, а ссылки ведут на документы исходного репозитория (Specification/Scenario_machine/ORIGIN.md).
 Код выхода 1, если есть нерабочие ссылки.
 """
 import os
@@ -28,6 +30,14 @@ SKIP_FILES = {
     os.path.join("prototype", "fixture.js"),
     os.path.join("prototype", "strings.js"),
 }
+# Машина сценариев: спецификация, схема и примеры — копии исходника байт в байт (ORIGIN.md), не правятся.
+# «§» в них — разделы спецификации DSL, ссылки ведут на документы исходного репозитория, не перенесённые в IM
+SCENARIO_MACHINE = os.path.join("Specification", "Scenario_machine")
+SCENARIO_OWN = {"README.md", "CHANGELOG.md", "ORIGIN.md"}
+
+
+def source_copy(rel):
+    return rel.startswith(SCENARIO_MACHINE + os.sep) and os.path.basename(rel) not in SCENARIO_OWN
 
 
 def markdown_files():
@@ -47,7 +57,7 @@ def section_refs():
         for name in sorted(files):
             path = os.path.join(base, name)
             rel = os.path.relpath(path, ROOT)
-            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or rel in SKIP_FILES:
+            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or rel in SKIP_FILES or source_copy(rel):
                 continue
             with open(path, encoding="utf-8") as f:
                 text = f.read()
@@ -61,6 +71,8 @@ def section_refs():
 def main():
     broken = []
     for path in sorted(markdown_files()):
+        if source_copy(os.path.relpath(path, ROOT)):
+            continue
         with open(path, encoding="utf-8") as f:
             text = CODE.sub("", f.read())
         for match in LINK.finditer(text):

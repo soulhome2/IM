@@ -1,0 +1,34 @@
+{
+  "dslVersion": "1.0",
+  "metadata": {
+    "scenarioGuid": "9fee26b1-4a16-72f8-8a85-651c6ce8824b",
+    "version": 1,
+    "name": "[A5/bad-3] Неизвестный action 'sendSlackMessage'",
+    "purpose": "anti-pattern",
+    "kind": "schema-rejects",
+    "warning": "Этот файл должен быть отвергнут JSON Schema на уровне 1 валидации. В DSL v1 список действий ЗАКРЫТЫЙ через oneOf (см. dsl-v1-schema.json $defs/Action). Это сознательное архитектурное решение: расширение Action-моделя — это RFC + bump dslVersion + синхронизированный релиз runner'ов. См. открытый вопрос про forward-compat в README этой папки.",
+    "expectedRejection": "Уровень 1 (JSON Schema): action.type 'sendSlackMessage' не входит в whitelist {callMacro, finish, generateReport, escalate, assign}"
+  },
+  "initialStepId": "btn",
+  "steps": [
+    {
+      "id": "btn",
+      "type": "Button",
+      "view": {
+        "label": "Кнопка"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "sendSlackMessage",
+              "args": {
+                "channel": "#ops"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

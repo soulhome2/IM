@@ -506,18 +506,15 @@
         if (primary) s.after.push(() => ctx.log(p, s.actor, primary, { number: ev.number }, at));
       },
       // Заполненные шаги привязанного — в незаполненные шаги основного (сценарий у них один); у привязанного
-      // ответы остаются как история. Что перенесено — запись в журнале основного
+      // ответы остаются как история. Что переносится, решает машина сценариев (ctx.shareAnswers, §14.5).
+      // Что перенесено — запись в журнале основного
       copyAnswersToPrimary: (ev, [template], s) => {
         const p = byId(s.form && s.form.primaryId);
-        const filled = (v) => v !== undefined && v !== null && v !== "" && v !== false;
-        if (!p || !ev.answers) return;
-        const moved = Object.keys(ev.answers).filter((k) => filled(ev.answers[k]) && !filled((p.answers || {})[k]));
-        if (!moved.length) return;
+        if (!p) return;
         const at = now();
         s.after.push(() => {
-          p.answers = p.answers || {};
-          moved.forEach((k) => (p.answers[k] = JSON.parse(JSON.stringify(ev.answers[k]))));
-          if (template) ctx.log(p, s.actor, template, { number: ev.number, n: moved.length }, at);
+          const n = ctx.shareAnswers(ev, p, at);
+          if (n && template) ctx.log(p, s.actor, template, { number: ev.number, n }, at);
         });
       },
       // Открытые привязанные объединяемого — новому основному: привязанного у привязанного не бывает.

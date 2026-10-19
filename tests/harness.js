@@ -142,10 +142,26 @@
           version === null ? {} : { "If-Match": version }
         );
       },
-      // Ответы сценария — с той же версией записи, что и переход
-      async answer(id, answers, ifMatch) {
+      // Ответ на шаг сценария ({ stepId, value | skip }) — с той же версией записи, что и переход
+      async answer(id, body, ifMatch) {
         const version = ifMatch === undefined ? await env.etag(id) : ifMatch;
-        return raw("PATCH", `/operator/incidents/${enc(id)}/scenario/answers`, { answers }, version === null ? {} : { "If-Match": version });
+        return raw("POST", `/operator/incidents/${enc(id)}/scenario/answer`, body, version === null ? {} : { "If-Match": version });
+      },
+      // Ответ на текущий шаг прохождения — первый вариант или то, что задано (variant — какой по счёту)
+      async answerCurrent(id, variant) {
+        const sc = (await env.card(id)).scenario;
+        const step = sc.script.steps.find((x) => x.id === sc.result.currentStepId);
+        return env.answer(id, answerFor(step, variant || 0));
+      },
+      // Пройти сценарий до finish — чтобы стал доступен «Обработан» (набор closing, §14.5)
+      async passScenario(id, variant) {
+        for (let guard = 0; guard < 30; guard++) {
+          const sc = (await env.card(id)).scenario;
+          if (sc.result.completedAt) return sc;
+          const res = await env.answerCurrent(id, variant);
+          if (res.status !== 200) return res;
+        }
+        throw new Error("сценарий не проходится до конца");
       },
       async find(pred, filter) {
         const list = await env.all(filter);
@@ -167,15 +183,30 @@
     return Object.assign(values, overrides || {});
   }
 
-  // Ответы на все обязательные шаги сценария — чтобы стал доступен «Обработан»
-  function fullAnswers(card) {
-    const answers = {};
-    card.scenario.steps.forEach((s) => {
-      if (s.type === "Checkbox") answers[s.id] = true;
-      else if (s.type === "RadioButton" || s.type === "Select") answers[s.id] = s.view.options[0];
-      else if (s.type === "Comment") answers[s.id] = "тест";
-    });
-    return answers;
+  // Ответ, который подходит к шагу (машина сценариев, профиль МИ): вариант по счёту, отметок сколько нужно,
+  // текст; вложение — шаг пропускается, если можно, иначе — вложение без содержимого
+  function answerFor(step, variant) {
+    const v = step.view;
+    const ids = (v.options || []).map((o) => o.id);
+    const required = step.type !== "Button" && (v.required !== undefined ? v.required : ["RadioButton", "Select", "Datetime"].includes(step.type));
+    switch (step.type) {
+      case "RadioButton":
+      case "Select":
+        return { stepId: step.id, value: ids[(variant || 0) % ids.length] };
+      case "Checkbox":
+        return { stepId: step.id, value: ids.slice(0, Math.max(1, v.minSelected || 0)) };
+      case "Comment":
+        return { stepId: step.id, value: v.readonly ? "" : "тест".padEnd(v.minLength || 0, ".") };
+      case "Datetime":
+        return { stepId: step.id, value: { date: "2026-10-19", time: "14:30:00", datetime: "2026-10-19T14:30:00Z" }[v.kind] };
+      case "Image": {
+        if (!required) return { stepId: step.id, skip: true };
+        const att = { id: `att-${step.id}`, stepId: step.id, source: v.source, mime: "image/png", capturedAt: new Date().toISOString(), dataBase64: "" };
+        return { stepId: step.id, value: [att.id], attachments: [att] };
+      }
+      default:
+        return { stepId: step.id, value: null };
+    }
   }
 
   const actionOf = (inc, id) => (inc.actions || []).find((a) => a.id === id) || null;
@@ -290,5 +321,5 @@
     finish(lines, summary, failed);
   }
 
-  window.IMTest = { test, run, makeEnv, formFor, fullAnswers, actionOf, assert, enc, external: Boolean(apiBase) };
+  window.IMTest = { test, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase) };
 })();

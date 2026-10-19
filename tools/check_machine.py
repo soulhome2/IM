@@ -220,7 +220,7 @@ def check_fixture(w, err):
     entities += [("устройство", d["id"]) for d in fx["devices"]]
     entities += [("группа устройств", g) for g in node_ids(fx["sourceGroups"])]
     entities += [("план", p["id"]) for p in fx.get("plans", [])]
-    entities += [("сценарий", v.get("guid")) for k, v in fx["scenarios"].items() if not k.startswith("$")]
+    entities += [("сценарий", r.get("guid")) for r in fx["scenarios"]["rows"]]
     entities += [("группа доступа", a.get("id")) for a in fx.get("accessGroups", [])]
     entities += [("связь камер", l.get("id")) for l in fx.get("cameraLinks", [])]
     # Группы доступа (§5): роли, группы устройств и устройства существуют
@@ -326,17 +326,7 @@ def check_fixture(w, err):
         st = inc["state"]
         if st not in states:
             err.append(f"{where}: нет состояния {st}")
-        scenario = fx["scenarios"].get(inc["eventType"]["id"])
-        if not scenario:
-            err.append(f"{where}: нет сценария для типа {inc['eventType']['id']}")
-        else:
-            ids = {s["id"] for s in scenario["steps"]}
-            cursor = inc["scenario"].get("cursorStepId")
-            if cursor is not None and cursor not in ids:
-                err.append(f"{where}: в сценарии нет шага {cursor}")
-            for key in inc["scenario"]["answers"]:
-                if key not in ids:
-                    err.append(f"{where}: ответ на несуществующий шаг {key}")
+        # Сценарий и прохождение инцидента проверяет tools/check_scenarios.py (машина сценариев)
         for dev in inc["devices"]:
             if dev not in devices:
                 err.append(f"{where}: неизвестное устройство {dev}")

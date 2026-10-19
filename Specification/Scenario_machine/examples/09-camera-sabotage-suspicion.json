@@ -1,0 +1,405 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "edaa6418-51d3-721b-8872-462a7dfae577",
+    "version": 1,
+    "name": "Подозрение на саботаж камеры",
+    "description": "Камера показывает аномальное изображение: чёрный экран, статичный кадр, или отклонение угла. Оператор сравнивает с эталоном и принимает одно из 5 решений.",
+    "demonstrates": [
+      "5 разных путей через transitions.rules (matchedRule на каждый)",
+      "Image source=fixed для эталона",
+      "сравнение с эталоном через два Image-шага подряд",
+      "JSONLogic missing для проверки факта ответа"
+    ],
+    "complexity": "advanced",
+    "tags": [
+      "sabotage",
+      "video-quality",
+      "security"
+    ]
+  },
+  "initialStepId": "anomaly_type",
+  "timers": {
+    "escalateAfterSec": 240,
+    "maxDurationSec": 1200
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "anomaly_type",
+      "type": "RadioButton",
+      "title": "Шаг 1. Тип аномалии",
+      "view": {
+        "label": "Что именно показывает камера сейчас?",
+        "options": [
+          {
+            "id": "black_screen",
+            "label": "Чёрный экран (полностью)"
+          },
+          {
+            "id": "frozen_frame",
+            "label": "Статичный кадр (зависший)"
+          },
+          {
+            "id": "angle_changed",
+            "label": "Угол обзора изменился"
+          },
+          {
+            "id": "obstruction",
+            "label": "Объектив частично закрыт (краска / наклейка / препятствие)"
+          },
+          {
+            "id": "image_distorted",
+            "label": "Сильные искажения изображения"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "reference_image"
+        }
+      }
+    },
+    {
+      "id": "reference_image",
+      "type": "Image",
+      "title": "Шаг 2. Эталон",
+      "view": {
+        "label": "Эталонный кадр с этой камеры (как должно быть)",
+        "source": "fixed",
+        "fixedSrc": "https://assets.example.com/im/cam_reference_normal.jpg",
+        "required": false
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "goto": "current_image"
+        }
+      }
+    },
+    {
+      "id": "current_image",
+      "type": "Image",
+      "title": "Шаг 3. Текущее изображение",
+      "view": {
+        "label": "Текущее изображение с этой же камеры",
+        "source": "camera",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "decision"
+        }
+      }
+    },
+    {
+      "id": "decision",
+      "type": "RadioButton",
+      "title": "Шаг 4. Решение",
+      "view": {
+        "label": "Ваша оценка ситуации?",
+        "options": [
+          {
+            "id": "deliberate_sabotage",
+            "label": "Намеренный саботаж — видны люди / следы вмешательства"
+          },
+          {
+            "id": "vandalism",
+            "label": "Случайный вандализм без злого умысла"
+          },
+          {
+            "id": "weather",
+            "label": "Погодные условия (снег, грязь, насекомые)"
+          },
+          {
+            "id": "tech_fault",
+            "label": "Техническая неисправность"
+          },
+          {
+            "id": "unable_to_decide",
+            "label": "Невозможно определить — нужна выездная проверка"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.decision.value"
+                },
+                "deliberate_sabotage"
+              ]
+            },
+            "goto": "sabotage_path",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "MACRO_LOCK_VIDEO_FRAGMENT"
+                }
+              },
+              {
+                "type": "escalate",
+                "args": {
+                  "to": "security-chief",
+                  "reason": "Намеренный саботаж камеры"
+                }
+              }
+            ]
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.decision.value"
+                },
+                "vandalism"
+              ]
+            },
+            "goto": "vandalism_path",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "MACRO_DISPATCH_GUARD"
+                }
+              }
+            ]
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.decision.value"
+                },
+                "weather"
+              ]
+            },
+            "goto": "weather_path"
+          },
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.decision.value"
+                },
+                "tech_fault"
+              ]
+            },
+            "goto": "tech_fault_path",
+            "actions": [
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "MACRO_CREATE_SUPPORT_TICKET"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "field_check_path"
+        }
+      }
+    },
+    {
+      "id": "sabotage_path",
+      "type": "Comment",
+      "title": "Действия — саботаж",
+      "view": {
+        "label": "Опишите признаки намеренного вмешательства",
+        "required": true,
+        "minLength": 30
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_sabotage"
+        }
+      }
+    },
+    {
+      "id": "vandalism_path",
+      "type": "Comment",
+      "title": "Действия — вандализм",
+      "view": {
+        "label": "Кратко опишите вандализм и принятые меры",
+        "required": true,
+        "minLength": 20
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_vandalism"
+        }
+      }
+    },
+    {
+      "id": "weather_path",
+      "type": "Comment",
+      "title": "Действия — погода",
+      "view": {
+        "label": "Какое погодное явление наблюдается",
+        "required": false,
+        "minLength": 5
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_weather"
+        }
+      }
+    },
+    {
+      "id": "tech_fault_path",
+      "type": "Comment",
+      "title": "Действия — неисправность",
+      "view": {
+        "label": "Описание неисправности (тикет создан автоматически)",
+        "required": true,
+        "minLength": 20
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_tech"
+        }
+      }
+    },
+    {
+      "id": "field_check_path",
+      "type": "Comment",
+      "title": "Действия — выезд",
+      "view": {
+        "label": "Кому передан вызов на выездную проверку",
+        "required": true,
+        "minLength": 10
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_field"
+        }
+      }
+    },
+    {
+      "id": "btn_close_sabotage",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть с эскалацией",
+        "emphasis": "destructive"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "sabotage_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "investigation_required"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_vandalism",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть как вандализм",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "processed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_weather",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть как погодные условия",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "weather"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_tech",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (техподдержка примет тикет)",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "tech_support_assigned"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_field",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (передано на выездную проверку)",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "field_check_assigned"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

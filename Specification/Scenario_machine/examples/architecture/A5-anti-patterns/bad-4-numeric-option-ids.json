@@ -1,0 +1,71 @@
+{
+  "dslVersion": "1.0",
+  "metadata": {
+    "scenarioGuid": "3f1e32e4-2a17-7b8d-8665-2126e42c0d8e",
+    "version": 1,
+    "name": "[A5/bad-4] Использование числового индекса вместо семантического id опции",
+    "purpose": "anti-pattern",
+    "kind": "schema-passes-but-bad-style",
+    "warning": "Этот файл ВАЛИДЕН по JSON Schema: pattern OptionId '^[a-z0-9][a-z0-9_]{0,63}$' разрешает '0','1','2'. Но это повторяет фундаментальный баг legacy IM/, где опции идентифицировались индексом — удаление одной сдвигало все ссылки в условиях. В DSL v1 этот случай НЕ ловится автоматически. Лекарство: design-time linter в редакторе должен предупреждать про опции с id из одних цифр. См. принцип П5 в dsl-v1-draft.md §1.",
+    "expectedRejection": "Не отвергается. Это именно тот случай, где linter полезнее схемы."
+  },
+  "initialStepId": "ask",
+  "steps": [
+    {
+      "id": "ask",
+      "type": "RadioButton",
+      "view": {
+        "label": "Тип события",
+        "options": [
+          {
+            "id": "0",
+            "label": "Пожар"
+          },
+          {
+            "id": "1",
+            "label": "Кража"
+          },
+          {
+            "id": "2",
+            "label": "Прочее"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.ask.value"
+                },
+                "0"
+              ]
+            },
+            "goto": "btn"
+          }
+        ],
+        "default": {
+          "goto": "btn"
+        }
+      }
+    },
+    {
+      "id": "btn",
+      "type": "Button",
+      "view": {
+        "label": "Закрыть"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

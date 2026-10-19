@@ -517,11 +517,11 @@ window.IM_WORKFLOW = {
     }
   },
   "stepSets": {
-    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан заполнить оператор перед закрытием с результатом «Обработан». Состав шагов задаёт отдельная машина сценариев (§14.5), здесь только ссылка на набор.",
+    "$comment": "§14.5. Наборы обязательных шагов привязаны к переходу, а не к инциденту. closing — то, что обязан пройти оператор перед закрытием с результатом «Обработан». Выполнен ли набор, отвечает машина сценариев (Specification/Scenario_machine/, профиль МИ): closing — прохождение сценария дошло до finish, none — всегда; других наборов в её формате нет. Здесь только ссылка на набор.",
     "closing": {
       "id": "closing",
       "labelKey": "workflow.stepset.closing",
-      "rule": "all_required_steps_answered"
+      "rule": "scenario_finished"
     },
     "none": {
       "id": "none",
@@ -1776,6 +1776,13 @@ window.IM_WORKFLOW = {
           "args": [
             "resolution",
             "limits.reopenResolutionSec"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setCursor",
+          "args": [
+            "firstOpenStep"
           ]
         }
       ],
@@ -3276,7 +3283,7 @@ window.IM_WORKFLOW = {
     "reopenResolutionSec": null
   },
   "scenarioEdit": {
-    "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (PATCH .../scenario/answers, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
+    "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (POST .../scenario/answer, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
     "guards": [
       {
         "fn": "stateIs",
@@ -3460,17 +3467,7 @@ window.IM_WORKFLOW = {
         "name",
         "done"
       ],
-      "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ или ключ ниже"
-    },
-    "workflow.journal.scenario.confirmed": {
-      "vars": [],
-      "$comment": "Значение done: подтверждение"
-    },
-    "workflow.journal.scenario.macro": {
-      "vars": [
-        "name"
-      ],
-      "$comment": "Значение done: запущен макрос"
+      "$comment": "Шаг сценария пройден (эмуляция коллег, §17); done — ответ"
     },
     "workflow.guard.no_permission": {
       "vars": [
@@ -3651,8 +3648,16 @@ window.IM_WORKFLOW = {
     "workflow.error.read_only": {
       "vars": []
     },
-    "workflow.error.previous_steps": {
+    "workflow.error.scenario.not_on_path": {
       "vars": []
+    },
+    "workflow.error.scenario.not_editable": {
+      "vars": []
+    },
+    "workflow.error.scenario.invalid_answer": {
+      "vars": [
+        "step"
+      ]
     },
     "workflow.error.no_schema_admin": {
       "vars": []
@@ -3706,9 +3711,6 @@ window.IM_WORKFLOW = {
       ]
     },
     "workflow.label.absent.offline": {
-      "vars": []
-    },
-    "workflow.scenario.confirmation": {
       "vars": []
     },
     "workflow.error.effect_not_implemented": {
@@ -4145,7 +4147,7 @@ window.IM_WORKFLOW = {
         "fn": "setCursor",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep). У «Взять», «Принять», «Возобновить», «Перехватить»."
+        "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep): текущий шаг прохождения, у завершённого — последний шаг пути. Считает машина сценариев. У «Взять», «Принять», «Возобновить», «Перехватить», «Переоткрыть»."
       },
       {
         "fn": "setLinkedTo",
@@ -4163,7 +4165,7 @@ window.IM_WORKFLOW = {
         "fn": "copyAnswersToPrimary",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Перенесено — запись в журнале основного ключом из аргумента"
+        "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один, версии могут различаться); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Что переносится, решает машина сценариев (shareAnswers, профиль МИ). Перенесено — запись в журнале основного ключом из аргумента"
       },
       {
         "fn": "relinkToPrimary",

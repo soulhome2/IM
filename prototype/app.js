@@ -603,6 +603,8 @@
     checked: new Set(),
     // Шаг, который смотрит оператор в карточке на просмотр: курсор владельца не двигается
     viewStep: new Map(),
+    // Черновики ответов на шаги сценария — до «Далее» (инцидент:шаг → { value, attachments })
+    drafts: new Map(),
     videoMode: "archive",
     activeCam: null,
     full: null,
@@ -899,56 +901,88 @@
     return store.page.items.find((e) => e.guid === state.selectedId) || null;
   }
 
-  /* ===== Сценарий: шаги и ответы приходят в карточке (ScenarioProgress) ===== */
+  /* ===== Сценарий: сценарий и прохождение приходят в карточке (IncidentScenario, §14.5) =====
+     Сценарий — формат DSL v1 (Specification/Scenario_machine/), прохождение ведёт сервер машиной сценариев:
+     путь, курсор, прогресс, что дальше после ответа. Карточка показывает шаги пути и отправляет ответ. */
 
-  const STEP_KIND = { Checkbox: "checkbox", RadioButton: "radio", Select: "combo", Comment: "edit", Macros: "macros" };
-  const stepKind = (step) => STEP_KIND[step.type] || "edit";
-  const stepRequired = (step) => (step.requiredFor || []).includes("closing");
   const scenarioOf = (ev) => (ev && ev.scenario) || null;
-  const stepsOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).steps : []);
-  const answersOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).answers : {});
-  const launchedOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).launchedMacros : []);
-  const stepShort = (step) => step.view.short || step.title;
+  const pathOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).path : []);
+  const stepOf = (ev, id) => (scenarioOf(ev) ? scenarioOf(ev).script.steps.find((s) => s.id === id) || null : null);
+  const entryOf = (ev, id) => (scenarioOf(ev) && scenarioOf(ev).result.state[id]) || null;
+  const runDone = (ev) => Boolean(scenarioOf(ev) && scenarioOf(ev).result.completedAt);
+  const stepShort = (step) => step.title || step.view.label;
+  // Обязательность — по формату DSL v1: у RadioButton, Select и Datetime по умолчанию да; кнопку надо нажать
+  const REQUIRED_BY_DEFAULT = { RadioButton: true, Select: true, Datetime: true };
+  const stepRequired = (step) =>
+    step.type === "Button" || (step.view.required !== undefined ? step.view.required === true : Boolean(REQUIRED_BY_DEFAULT[step.type]));
+  // Макросы, запущенные ответом на шаг (callMacro), — из прохождения
+  const macrosOf = (ev, id) =>
+    scenarioOf(ev) ? scenarioOf(ev).result.history.filter((h) => h.stepId === id && h.action === "callMacro").map((h) => h.macroId) : [];
 
-  function stepAnswerText(ev, step) {
-    const kind = stepKind(step);
-    const answers = answersOf(ev);
-    if (kind === "checkbox") return answers[step.id] ? "Да" : "";
-    if (kind === "macros") return launchedOf(ev).length ? `${launchedOf(ev).length} макрос` : "";
-    return answers[step.id] || "";
+  // Ответ словами — у шагов пути
+  function answerText(step, entry) {
+    if (!entry) return "";
+    if (entry.skipped) return t("Пропущено");
+    const label = (id) => {
+      const o = (step.view.options || []).find((x) => x.id === id);
+      return o ? t(o.label) : id;
+    };
+    if (step.type === "Button") return t(step.view.label);
+    if (step.type === "Image") return t("Фото: {n}", { n: entry.value.length });
+    if (Array.isArray(entry.value)) return entry.value.map(label).join(", ");
+    if (step.view.options) return label(entry.value);
+    return entry.value == null ? t("Прочитано") : String(entry.value);
   }
 
-  // Заполнен ли шаг — проверка формы на клиенте; обязательность шагов сверяет и сервер
-  function isStepValid(ev, step) {
-    if (!stepRequired(step)) return true;
-    const kind = stepKind(step);
-    const answers = answersOf(ev);
-    if (kind === "checkbox") return answers[step.id] === true;
-    if (kind === "macros") return true;
-    return Boolean(answers[step.id]);
+  // Черновик ответа — до «Далее»: { value, attachments } по инциденту и шагу
+  const draftKey = (ev, id) => `${ev.guid}:${id}`;
+  const draftOf = (ev, id) => state.drafts.get(draftKey(ev, id));
+  function setDraft(ev, id, value, attachments) {
+    state.drafts.set(draftKey(ev, id), attachments ? { value, attachments } : { value });
+  }
+  // Что в поле шага: черновик, иначе записанный ответ
+  function valueOf(ev, step) {
+    const d = draftOf(ev, step.id);
+    if (d) return d.value;
+    const e = entryOf(ev, step.id);
+    return e && !e.skipped ? e.value : null;
+  }
+  // Есть ли ответ в поле: отмечено, выбрано, написано; у шага «только для показа» отвечать нечего
+  function filled(step, value) {
+    if (step.type === "Comment" && step.view.readonly) return true;
+    if (Array.isArray(value)) return value.length > 0;
+    return value != null && String(value).trim() !== "";
+  }
+  // Черновик отличается от записанного ответа
+  function changed(ev, step) {
+    const d = draftOf(ev, step.id);
+    if (!d) return false;
+    const e = entryOf(ev, step.id);
+    return JSON.stringify(d.value) !== JSON.stringify(e && !e.skipped ? e.value : null);
   }
 
-  function firstOpenStep(ev) {
-    const steps = stepsOf(ev);
-    const blocked = steps.findIndex((s) => stepRequired(s) && !isStepValid(ev, s));
-    if (blocked !== -1) return blocked;
-    const empty = steps.findIndex((s) => !stepAnswerText(ev, s));
-    return empty === -1 ? steps.length - 1 : empty;
-  }
-
-  function canOpenStep(ev, index) {
-    const steps = stepsOf(ev);
-    if (index < 0 || index >= steps.length) return false;
-    return steps.slice(0, index).every((s) => isStepValid(ev, s));
-  }
-
-  // Шаг на экране: у владельца — курсор сервера, на просмотре — свой, курсор владельца не трогаем
+  // Шаг пути на экране: у владельца — курсор показа сервера, на просмотре — свой, курсор владельца не трогаем
   function cursorOf(ev) {
-    const steps = stepsOf(ev);
-    if (!steps.length) return 0;
-    if (ev.readOnly && state.viewStep.has(ev.guid)) return Math.min(state.viewStep.get(ev.guid), steps.length - 1);
-    const i = steps.findIndex((s) => s.id === ev.scenario.cursorStepId);
-    return i === -1 ? firstOpenStep(ev) : i;
+    const path = pathOf(ev);
+    if (!path.length) return 0;
+    if (ev.readOnly && state.viewStep.has(ev.guid)) return Math.min(state.viewStep.get(ev.guid), path.length - 1);
+    const i = path.lastIndexOf(ev.scenario.cursorStepId);
+    return i === -1 ? path.length - 1 : i;
+  }
+  // Текущий шаг прохождения — последний шаг пути, пока сценарий не пройден
+  const isCurrentStep = (ev, i) => !runDone(ev) && i === pathOf(ev).length - 1;
+  // Ответ можно менять: на текущем шаге — всегда, на пройденном — если шаг editable (профиль МИ)
+  const stepEditable = (ev, i, editable) => editable && (isCurrentStep(ev, i) || stepOf(ev, pathOf(ev)[i]).editable !== false);
+
+  // «Далее»: на текущем шаге — есть ответ или шаг можно пропустить (кнопку — только нажать); на пройденном —
+  // ответ изменён или впереди есть шаг пути. На последнем шаге пройденного сценария идти некуда (RULE-89)
+  function canGoNext(ev, i, editable) {
+    const path = pathOf(ev);
+    const step = stepOf(ev, path[i]);
+    if (!step) return false;
+    if (stepEditable(ev, i, editable) && changed(ev, step)) return filled(step, valueOf(ev, step)) || !stepRequired(step);
+    if (editable && isCurrentStep(ev, i)) return step.type !== "Button" && (!stepRequired(step) || filled(step, valueOf(ev, step)));
+    return i < path.length - 1;
   }
 
   // Название сценария; нет названия — «Без названия». Демо-названия переводит словарь данных, как типы событий
@@ -960,7 +994,8 @@
   }
 
   async function goToStep(ev, index) {
-    if (!canOpenStep(ev, index)) return;
+    const path = pathOf(ev);
+    if (index < 0 || index >= path.length) return;
     if (ev.readOnly) {
       state.viewStep.set(ev.guid, index);
       renderScenario();
@@ -968,7 +1003,7 @@
       return;
     }
     try {
-      ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: stepsOf(ev)[index].id });
+      ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: path[index] });
     } catch (err) {
       toast(problemText(err));
     }
@@ -979,42 +1014,36 @@
   // Версия записи, которую видел оператор (§14.1): изменился инцидент с тех пор — сервер ответит 412
   const ifMatch = (ev) => ({ "If-Match": `"${ev.version}"` });
 
-  // Ответ из поля шага — на сервер (автосохранение, PATCH …/scenario/answers)
-  async function saveAnswers(ev, answers) {
-    if (!ev || ev.readOnly) return;
-    Object.assign(ev.scenario.answers, answers);
+  // Ответ на шаг — серверу (POST …/scenario/answer); пустой необязательный шаг — пропуск. Что дальше — решает сервер
+  async function submitStep(ev, step) {
+    const wasDone = runDone(ev);
+    const d = draftOf(ev, step.id);
+    const value = valueOf(ev, step);
+    const body = { stepId: step.id };
+    if (step.type === "Button") body.value = null;
+    else if (!filled(step, value) && !stepRequired(step)) body.skip = true;
+    else Object.assign(body, { value }, d && d.attachments ? { attachments: d.attachments } : {});
     try {
-      await api.patch(`${incPath(ev.guid)}/scenario/answers`, { answers }, ifMatch(ev));
+      ev.scenario = await api.post(`${incPath(ev.guid)}/scenario/answer`, body, ifMatch(ev));
+      state.drafts.delete(draftKey(ev, step.id));
     } catch (err) {
       toast(problemText(err));
     }
-    // Ответы меняют доступность «Обработан», прогресс и версию записи — карточку заново
+    // Ответ меняет путь, доступность «Обработан», прогресс и версию записи — карточку заново
     await loadCard();
     renderScenario();
     renderStatus();
-  }
-
-  async function flushStepAnswer(ev) {
-    const root = $("scenarioRoot");
-    if (!root || !ev || ev.readOnly) return;
-    const el = root.querySelector("textarea[data-ans]");
-    if (!el || answersOf(ev)[el.dataset.ans] === el.value) return;
-    await saveAnswers(ev, { [el.dataset.ans]: el.value });
+    // Ответ завершил сценарий — сразу форма «Закрыть»: «Обработан» в ней уже выбран, оператор подтверждает (§7, ARCH-06 в18)
+    const after = selected();
+    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");
   }
 
   async function goNextStep(ev) {
-    await flushStepAnswer(ev);
-    ev = selected();
-    const steps = stepsOf(ev);
     const i = cursorOf(ev);
-    const next = i + 1;
-    if (next < steps.length && canOpenStep(ev, next)) return goToStep(ev, next);
-    if (i < steps.length - 1) {
-      renderScenario();
-      renderStatus();
-      return;
-    }
-    goToStep(ev, firstOpenStep(ev));
+    const path = pathOf(ev);
+    const step = stepOf(ev, path[i]);
+    if (!ev.readOnly && (isCurrentStep(ev, i) || (stepEditable(ev, i, true) && changed(ev, step)))) return submitStep(ev, step);
+    return goToStep(ev, i + 1);
   }
 
   /* ===== Слой представления: моё, чужое, бейджи (§2.4) — считает сервер ===== */
@@ -2056,7 +2085,7 @@
       root.innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
       return;
     }
-    const steps = stepsOf(ev);
+    const path = pathOf(ev);
     const editable = !ev.readOnly;
     const acts = cardActions(ev);
     // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если привязанные есть);
@@ -2068,14 +2097,14 @@
     // на месте и с теми же названиями — недоступные серые, в том числе на вкладке привязанных
 
     const i = cursorOf(ev);
-    const step = steps[i];
-    const last = i === steps.length - 1;
-    const canNext = tab === "scenario" && !last && (editable ? isStepValid(ev, step) : canOpenStep(ev, i + 1));
-    // Подсказка на последнем шаге — какой шаг не заполнен, если закрыть «Обработан» пока нельзя (§2.2)
+    const step = stepOf(ev, path[i]);
+    const canNext = tab === "scenario" && canGoNext(ev, i, editable);
+    // Подсказка на пройденном шаге — с какого шага продолжить, если закрыть «Обработан» пока нельзя: набор
+    // «закрытие» — сценарий пройден до конца (§2.2, §14.5)
     const close = actionOf(ev, "close");
     const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
     const canClose = editable && Boolean(close && close.enabled) && results.some((r) => fullyProcessed(r.id) && !r.disabled);
-    const incomplete = steps.findIndex((s) => stepRequired(s) && !isStepValid(ev, s));
+    const total = stepProgress(ev).total || path.length;
 
     root.innerHTML = `
       <div class="work-doc">
@@ -2087,16 +2116,17 @@
             tab !== "scenario"
               ? ""
               : `<ol class="crumbs ${editable ? "live" : ""}" aria-label="${te("Шаги сценария")}">
-          ${steps
-            .map((s, idx) => {
-              const open = canOpenStep(ev, idx);
+          ${path
+            .map((id, idx) => {
+              const s = stepOf(ev, id);
+              const open = true;
               const current = idx === i;
-              const answer = stepAnswerText(ev, s);
+              const answer = answerText(s, entryOf(ev, id));
               const nav = open && !current;
               return `
                 <li class="crumb ${current ? "current" : ""} ${answer ? "done" : ""} ${open ? "" : "locked"} ${nav ? "nav" : ""}" ${
                   current ? 'aria-current="step"' : ""
-                } ${nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""} title="${te(s.title)}">
+                } ${nav ? `data-crumb="${idx}" role="button" tabindex="0"` : ""} title="${te(stepShort(s))}">
                   <span class="crumb-track">
                     <span class="crumb-n">${idx + 1}</span>
                     <span class="crumb-line" aria-hidden="true"></span>
@@ -2118,10 +2148,10 @@
               ? `<div class="step-card lnk-panel">${linkedPanel(ev)}</div>`
               : `<div class="step-card">
             <div class="step-h">
-              <strong>${te(step.title)}</strong>
-              <span>${te("{i} из {n}", { i: i + 1, n: steps.length })}${stepRequired(step) ? "" : ` · ${te("необязательно")}`}</span>
+              <strong>${te(stepShort(step))}</strong>
+              <span>${te("{i} из {n}", { i: i + 1, n: total })}${stepRequired(step) ? "" : ` · ${te("необязательно")}`}</span>
             </div>
-            ${renderStepControl(step, ev, editable)}
+            ${renderStepControl(step, ev, stepEditable(ev, i, editable))}
           </div>`
           }
         </div>
@@ -2150,8 +2180,8 @@
             </div>
           </div>
           ${
-            tab === "scenario" && last && editable && !canClose && incomplete !== -1
-              ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", { n: incomplete + 1, name: t(stepShort(steps[incomplete])) })}</p>`
+            tab === "scenario" && editable && !canClose && !runDone(ev) && !isCurrentStep(ev, i)
+              ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", { n: path.length, name: t(stepShort(stepOf(ev, path[path.length - 1]))) })}</p>`
               : ""
           }
           ${renderLog(ev)}
@@ -2194,49 +2224,92 @@
     `;
   }
 
+  // Поле шага по его типу (DSL v1): вопрос — view.label, ответ — черновик или записанный.
+  // Ниже — макросы, которые ответ на этот шаг запустил
   function renderStepControl(step, ev, enabled) {
     const dis = enabled ? "" : "disabled";
-    const kind = stepKind(step);
-    const answers = answersOf(ev);
     const view = step.view || {};
-    if (kind === "checkbox") {
-      const on = answers[step.id] === true;
-      return `
-        <button type="button" class="confirm-btn ${on ? "on" : ""}" data-confirm="${step.id}" ${dis}>
+    const value = valueOf(ev, step);
+    const id = escapeHtml(step.id);
+    const question = view.label && view.label !== stepShort(step) ? `<p class="step-q">${te(view.label)}</p>` : "";
+    const options = view.options || [];
+    let control = "";
+    if (step.type === "Checkbox" && options.length === 1) {
+      // Одна отметка — кнопкой подтверждения
+      const on = Array.isArray(value) && value.includes(options[0].id);
+      control = `
+        <button type="button" class="confirm-btn ${on ? "on" : ""}" data-confirm="${id}" ${dis}>
           <span class="material-symbols-outlined">${on ? "check_circle" : "radio_button_unchecked"}</span>
-          ${te(on ? "Подтверждено" : "Подтвердить")}
-        </button>
-      `;
-    }
-    if (kind === "radio") {
-      return `<div class="radios">${view.options
+          ${te(options[0].label)}
+        </button>`;
+    } else if (step.type === "Checkbox") {
+      const picked = Array.isArray(value) ? value : [];
+      control = `<div class="checks">${options
         .map(
           (o) =>
-            `<label class="${answers[step.id] === o ? "picked" : ""}"><input type="radio" name="${step.id}" data-ans="${step.id}" value="${escapeHtml(
-              o
-            )}" ${answers[step.id] === o ? "checked" : ""} ${dis} /> ${te(o)}</label>`
+            `<label class="${picked.includes(o.id) ? "picked" : ""}"><input type="checkbox" data-check="${id}" value="${escapeHtml(o.id)}" ${
+              picked.includes(o.id) ? "checked" : ""
+            } ${dis} /> ${te(o.label)}</label>`
         )
         .join("")}</div>`;
-    }
-    if (kind === "combo") {
-      return `<select data-ans="${step.id}" ${dis}><option value="">${te("Выберите…")}</option>${view.options
-        .map((o) => `<option value="${escapeHtml(o)}" ${answers[step.id] === o ? "selected" : ""}>${te(o)}</option>`)
-        .join("")}</select>`;
-    }
-    if (kind === "edit") {
-      return `<textarea rows="4" data-ans="${step.id}" placeholder="${te(view.placeholder || "Можно пропустить")}" ${dis}>${escapeHtml(
-        answers[step.id] || ""
-      )}</textarea>`;
-    }
-    if (kind === "macros") {
-      return `<div class="macro-row">${view.buttons
-        .map((b) => {
-          const on = launchedOf(ev).includes(b);
-          return `<button type="button" class="btn ${on ? "ok" : ""}" data-macro="${escapeHtml(b)}" ${dis}>${on ? `${te("Запущено")} · ` : ""}${te(b)}</button>`;
-        })
+    } else if (step.type === "RadioButton") {
+      control = `<div class="radios">${options
+        .map(
+          (o) =>
+            `<label class="${value === o.id ? "picked" : ""}"><input type="radio" name="${id}" data-ans="${id}" value="${escapeHtml(o.id)}" ${
+              value === o.id ? "checked" : ""
+            } ${dis} /> ${te(o.label)}</label>`
+        )
         .join("")}</div>`;
+    } else if (step.type === "Select") {
+      control = `<select data-ans="${id}" ${dis}><option value="">${te(view.placeholder || "Выберите…")}</option>${options
+        .map((o) => `<option value="${escapeHtml(o.id)}" ${value === o.id ? "selected" : ""}>${te(o.label)}</option>`)
+        .join("")}</select>`;
+    } else if (step.type === "Comment" && view.readonly) {
+      control = view.placeholder ? `<p class="step-q">${te(view.placeholder)}</p>` : "";
+    } else if (step.type === "Comment") {
+      control = `<textarea rows="4" data-ans="${id}" placeholder="${te(view.placeholder || (stepRequired(step) ? "" : "Можно пропустить"))}" ${dis}>${escapeHtml(
+        value || ""
+      )}</textarea>`;
+    } else if (step.type === "Datetime") {
+      const type = { date: "date", time: "time", datetime: "datetime-local" }[view.kind];
+      control = `<input type="${type}" data-when="${id}" data-kind="${escapeHtml(view.kind)}" value="${escapeHtml(localWhen(view.kind, value))}" ${dis} />`;
+    } else if (step.type === "Image") {
+      const n = Array.isArray(value) ? value.length : 0;
+      const pick =
+        view.source === "fixed"
+          ? view.fixedSrc
+            ? `<img class="step-img" src="${escapeHtml(view.fixedSrc)}" alt="${te(view.label)}" />`
+            : ""
+          : view.source === "operator"
+            ? `<input type="file" accept="image/*" data-file="${id}" ${view.allowMultiple ? "multiple" : ""} ${dis} />`
+            : `<button type="button" class="btn outline" data-snap="${id}" ${dis}>${te(view.source === "map" ? "Снимок карты" : "Снимок с камеры")}</button>`;
+      control = `<div class="macro-row">${pick}${n ? `<span class="btn ok" aria-disabled="true">${te("Фото: {n}", { n })}</span>` : ""}</div>`;
+    } else if (step.type === "Button") {
+      const style = view.emphasis === "destructive" ? "danger" : view.emphasis === "secondary" ? "outline" : "primary";
+      control = `<button type="button" class="btn ${style}" data-press="${id}" ${dis}>${te(view.label)}</button>`;
     }
-    return "";
+    const macros = macrosOf(ev, step.id);
+    const launched = macros.length
+      ? `<div class="macro-row">${macros.map((m) => `<span class="btn ok" aria-disabled="true">${te("Запущено")} · ${te(m)}</span>`).join("")}</div>`
+      : "";
+    return (step.type === "Button" ? "" : question) + control + launched;
+  }
+
+  // Дата и время шага Datetime: в прохождении — ISO-8601 по kind, в поле — местное время браузера
+  function localWhen(kind, value) {
+    if (!value) return "";
+    if (kind !== "datetime") return kind === "time" ? value.slice(0, 5) : value;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function isoWhen(kind, local) {
+    if (!local) return null;
+    if (kind === "time") return local.length === 5 ? `${local}:00` : local;
+    if (kind === "date") return local;
+    return new Date(local).toISOString().replace(/\.\d+Z$/, "Z");
   }
 
   /* ===== Видео и карта: камеры и устройства — из карточки (IncidentMedia, DeviceRef) ===== */
@@ -2971,23 +3044,53 @@
       renderMap();
       renderStatus();
     });
+    // Текст шага — в черновик; перерисовывается только «Далее», чтобы поле не теряло фокус
     $("scenarioRoot").addEventListener("input", (e) => {
       const ev = selected();
       if (!ev || ev.readOnly) return;
       const el = e.target.closest("textarea[data-ans]");
       if (!el) return;
-      ev.scenario.answers[el.dataset.ans] = el.value;
+      setDraft(ev, el.dataset.ans, el.value);
       const next = $("stepNext");
-      const step = stepsOf(ev)[cursorOf(ev)];
-      // На последнем шаге «Далее» недоступна: дальше идти некуда (RULE-89)
-      if (next && step) next.disabled = cursorOf(ev) === stepsOf(ev).length - 1 || !isStepValid(ev, step);
+      if (next) next.disabled = !canGoNext(ev, cursorOf(ev), true);
     });
-    $("scenarioRoot").addEventListener("change", (e) => {
+    // Выбор, отметки, дата и файлы — в черновик; ответ уходит по «Далее»
+    $("scenarioRoot").addEventListener("change", async (e) => {
       const ev = selected();
       if (!ev || ev.readOnly) return;
-      const el = e.target.closest("[data-ans]");
-      if (!el) return;
-      saveAnswers(ev, { [el.dataset.ans]: el.type === "checkbox" ? el.checked : el.value });
+      const ans = e.target.closest("[data-ans]");
+      const check = e.target.closest("[data-check]");
+      const when = e.target.closest("[data-when]");
+      const file = e.target.closest("[data-file]");
+      if (ans && ans.tagName !== "TEXTAREA") setDraft(ev, ans.dataset.ans, ans.value || null);
+      else if (check) {
+        const boxes = [...$("scenarioRoot").querySelectorAll(`[data-check="${check.dataset.check}"]`)];
+        setDraft(ev, check.dataset.check, boxes.filter((b) => b.checked).map((b) => b.value));
+      } else if (when) setDraft(ev, when.dataset.when, isoWhen(when.dataset.kind, when.value));
+      else if (file) {
+        // Вложение — в самом прохождении, как в демо-runner DSL (dataBase64)
+        const read = (f) =>
+          new Promise((done) => {
+            const r = new FileReader();
+            r.onload = () => done(String(r.result).replace(/^data:[^,]*,/, ""));
+            r.readAsDataURL(f);
+          });
+        const at = new Date().toISOString();
+        const atts = await Promise.all(
+          [...file.files].map(async (f, n) => ({
+            id: `att-${Date.now()}-${n}`,
+            stepId: file.dataset.file,
+            source: "operator",
+            mime: f.type || "application/octet-stream",
+            fileName: f.name,
+            size: f.size,
+            capturedAt: at,
+            dataBase64: await read(f),
+          }))
+        );
+        setDraft(ev, file.dataset.file, atts.map((a) => a.id), atts);
+      } else return;
+      renderScenario();
     });
     $("scenarioRoot").addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -3057,22 +3160,29 @@
         goNextStep(ev);
         return;
       }
+      // Одна отметка — кнопкой: в черновик, ответ уходит по «Далее»
       const confirm = e.target.closest("[data-confirm]");
       if (confirm && !ev.readOnly) {
-        const id = confirm.dataset.confirm;
-        saveAnswers(ev, { [id]: answersOf(ev)[id] !== true });
+        const step = stepOf(ev, confirm.dataset.confirm);
+        const on = (valueOf(ev, step) || []).includes(step.view.options[0].id);
+        setDraft(ev, step.id, on ? [] : [step.view.options[0].id]);
+        renderScenario();
         return;
       }
-      const macro = e.target.closest("[data-macro]");
-      if (macro) {
-        const name = macro.dataset.macro;
-        try {
-          await api.post(`${incPath(ev.guid)}/macros/${enc(name)}`, { stepId: stepsOf(ev)[cursorOf(ev)].id });
-          toast(t("Макрос: {name}", { name: t(name) }));
-        } catch (err) {
-          toast(problemText(err));
-        }
-        await loadCard();
+      // Кнопка шага — сама ответ: нажатие уходит сразу
+      const press = e.target.closest("[data-press]");
+      if (press && !ev.readOnly) {
+        submitStep(ev, stepOf(ev, press.dataset.press));
+        return;
+      }
+      // Снимок с камеры или карты — в прототипе заглушка: вложение без содержимого
+      const snap = e.target.closest("[data-snap]");
+      if (snap && !ev.readOnly) {
+        const step = stepOf(ev, snap.dataset.snap);
+        const att = { id: `att-${Date.now()}`, stepId: step.id, source: step.view.source, mime: "image/png", capturedAt: new Date().toISOString(), dataBase64: "" };
+        const d = draftOf(ev, step.id);
+        const atts = (step.view.allowMultiple && d && d.attachments ? d.attachments : []).concat(att);
+        setDraft(ev, step.id, atts.map((a) => a.id), atts);
         renderScenario();
       }
     });

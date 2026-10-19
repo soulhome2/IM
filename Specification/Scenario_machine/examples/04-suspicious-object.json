@@ -1,0 +1,350 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "dbeb5a40-5495-7b35-84e5-6c5d7d30b246",
+    "version": 1,
+    "name": "Подозрительный предмет",
+    "description": "Аналитика обнаружила оставленный предмет в публичной зоне. Оператор оценивает риски по чек-листу. Маршрутизация зависит от количества подтверждённых факторов риска.",
+    "demonstrates": [
+      "Checkbox с minSelected/maxSelected",
+      "JSONLogic some/in для ветвления по подмножествам",
+      "три разных пути в зависимости от факторов риска"
+    ],
+    "complexity": "intermediate",
+    "tags": [
+      "video-analytics",
+      "abandoned-object",
+      "risk-assessment"
+    ]
+  },
+  "initialStepId": "object_visible",
+  "timers": {
+    "escalateAfterSec": 300,
+    "maxDurationSec": 1800
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "object_visible",
+      "type": "RadioButton",
+      "title": "Шаг 1. Подтверждение объекта",
+      "view": {
+        "label": "Объект действительно присутствует в кадре?",
+        "options": [
+          {
+            "id": "yes",
+            "label": "Да, объект виден"
+          },
+          {
+            "id": "removed",
+            "label": "Уже убран (владелец вернулся)"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Ошибка аналитики — объекта нет"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "in": [
+                {
+                  "var": "state.object_visible.value"
+                },
+                [
+                  "removed",
+                  "false_alarm"
+                ]
+              ]
+            },
+            "goto": "btn_close_resolved"
+          }
+        ],
+        "default": {
+          "goto": "risk_factors"
+        }
+      }
+    },
+    {
+      "id": "risk_factors",
+      "type": "Checkbox",
+      "title": "Шаг 2. Чек-лист рисков",
+      "view": {
+        "label": "Какие признаки риска присутствуют? (отметьте все применимые)",
+        "options": [
+          {
+            "id": "crowded_area",
+            "label": "Высокая плотность людей рядом"
+          },
+          {
+            "id": "near_critical",
+            "label": "Рядом с критической инфраструктурой (вентиляция, серверная)"
+          },
+          {
+            "id": "size_large",
+            "label": "Размер крупный (чемодан, рюкзак, коробка)"
+          },
+          {
+            "id": "suspicious_owner",
+            "label": "Поведение владельца было подозрительным"
+          },
+          {
+            "id": "wires_visible",
+            "label": "Видны провода / посторонние элементы"
+          },
+          {
+            "id": "leaking",
+            "label": "Видна утечка жидкости / запах"
+          },
+          {
+            "id": "long_unattended",
+            "label": "Объект без присмотра > 15 минут"
+          }
+        ],
+        "required": true,
+        "minSelected": 0,
+        "maxSelected": 7,
+        "layout": "vertical"
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "or": [
+                {
+                  "in": [
+                    "wires_visible",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "leaking",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "near_critical",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                }
+              ]
+            },
+            "goto": "high_risk_photo",
+            "actions": [
+              {
+                "type": "escalate",
+                "args": {
+                  "to": "security-chief",
+                  "reason": "Высокий риск: критические признаки в чек-листе"
+                }
+              },
+              {
+                "type": "callMacro",
+                "args": {
+                  "macroId": "MACRO_AREA_LOCKDOWN"
+                }
+              }
+            ]
+          },
+          {
+            "when": {
+              "or": [
+                {
+                  "in": [
+                    "crowded_area",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "size_large",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "suspicious_owner",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                },
+                {
+                  "in": [
+                    "long_unattended",
+                    {
+                      "var": "state.risk_factors.value"
+                    }
+                  ]
+                }
+              ]
+            },
+            "goto": "medium_risk_action"
+          }
+        ],
+        "default": {
+          "goto": "low_risk_action"
+        }
+      }
+    },
+    {
+      "id": "high_risk_photo",
+      "type": "Image",
+      "title": "Шаг 3. Высокий риск — фиксация",
+      "view": {
+        "label": "Снимки объекта с разных ракурсов (минимум 2)",
+        "source": "camera",
+        "allowMultiple": true,
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_high"
+        }
+      }
+    },
+    {
+      "id": "medium_risk_action",
+      "type": "Comment",
+      "title": "Шаг 3. Средний риск — действия",
+      "view": {
+        "label": "Опишите принятые меры (вызов охраны, ограждение зоны, оповещение по громкой связи)",
+        "required": true,
+        "minLength": 30
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_medium"
+        }
+      }
+    },
+    {
+      "id": "low_risk_action",
+      "type": "Comment",
+      "title": "Шаг 3. Низкий риск — наблюдение",
+      "view": {
+        "label": "Краткое описание ситуации",
+        "required": true,
+        "minLength": 10
+      },
+      "transitions": {
+        "default": {
+          "goto": "btn_close_low"
+        }
+      }
+    },
+    {
+      "id": "btn_close_high",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть с эскалацией (высокий риск)",
+        "emphasis": "destructive"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "high_risk_object_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "escalated"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_medium",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть инцидент",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "processed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_low",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть с наблюдением",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "monitoring"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_resolved",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть (объект разрешён сам собой)",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "self_resolved"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

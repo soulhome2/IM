@@ -147,6 +147,7 @@ MUTATIONS = [
     ("merge_answers", "ответы сценария связанного основному не переносятся", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "copyAnswersToPrimary"])),
     ("merge_nav", "после «Взять в работу» на выборке — к очереди, а не в карточку", lambda w: transition(w, "merge")["ui"].update(navigate="queue")),
     ("merge_foreign", "объединить можно только ничьё или своё", lambda w: transition(w, "merge").update(guards=[g for g in transition(w, "merge")["guards"] if g["fn"] != "isOwnerOrUnowned"])),
+    ("reopen_cursor", "«Переоткрыть» не ставит курсор сценария на текущий шаг", lambda w: transition(w, "reopen").update(effects=[e for e in transition(w, "reopen")["effects"] if e["fn"] != "setCursor"])),
     ("scenario", "править сценарий можно только в «Отложен»", lambda w: w["scenarioEdit"]["guards"].append({"fn": "stateIs", "args": [["on_hold"]]})),
     ("permission", "из каталога убрано право transfer:own", lambda w: w.update(permissions=[p for p in w["permissions"] if p["key"] != "incident:transfer:own"])),
     ("reopen", "срок переоткрытия 24 ч → 1 мин", lambda w: w["limits"].update(reopenWindowMin=1)),

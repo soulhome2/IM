@@ -2,7 +2,7 @@
    ошибок». Это исполняемая спецификация операторской части: те же проверки должен проходить
    и бэкенд. Номера разделов — из Specification/State_rules/States rules IM.md. */
 (() => {
-  const { test, makeEnv, formFor, fullAnswers, actionOf, assert, enc } = IMTest;
+  const { test, makeEnv, formFor, actionOf, assert, enc } = IMTest;
   const ME = "me";
   const W = window.IM_WORKFLOW;
   // Окно после дедлайна (RULE-63): переход по таймеру — через graceSec после дедлайна
@@ -87,9 +87,10 @@
     assert.eq(stale.body.current && stale.body.current.state, "in_progress", "в ответе — актуальная карточка");
     assert.eq((await env.card(inc.guid)).state, "in_progress", "состояние не изменилось");
     // Ответы сценария меняют версию: следующий запрос идёт с той, что пришла в их ETag
-    assert.status(await env.answer(inc.guid, {}, null), 428, "PRECONDITION_REQUIRED", "ответы без If-Match");
     const card = await env.card(inc.guid);
-    const saved = await env.answer(inc.guid, { [card.scenario.steps[0].id]: true }, claimed.headers.etag);
+    const step1 = { stepId: card.scenario.result.currentStepId, value: ["confirmed"] };
+    assert.status(await env.answer(inc.guid, step1, null), 428, "PRECONDITION_REQUIRED", "ответы без If-Match");
+    const saved = await env.answer(inc.guid, step1, claimed.headers.etag);
     assert.status(saved, 200, null, "ответы с версией после взятия");
     assert.ok(saved.headers.etag && saved.headers.etag !== claimed.headers.etag, "ответы меняют версию");
     assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, claimed.headers.etag), 412, "VERSION_CONFLICT", "версия до ответов");
@@ -441,7 +442,7 @@
     const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
     const before = await env.card(foreign.guid);
     assert.ok(before.readOnly, "чужая карточка — просмотр");
-    const patch = await env.answer(foreign.guid, { x: 1 });
+    const patch = await env.answer(foreign.guid, { stepId: before.scenario.result.currentStepId, value: null });
     assert.status(patch, 403, "PERMISSION_DENIED", "править чужой сценарий");
     const res = await env.act(foreign.guid, "takeover", { comment: "срочно" });
     assert.status(res, 200);
@@ -463,7 +464,7 @@
     assert.ok(processed.disabled && processed.reason, "«Обработан» недоступен и объяснено почему");
     assert.eq(results.defaultValue, null, "по умолчанию ничего не выбрано");
     assert.status(await env.act(inc.guid, "close", { resultId: "processed" }), 403, null, "закрыть «Обработан» без шагов");
-    assert.status(await env.answer(inc.guid, fullAnswers(card)), 200, null, "ответы сценария");
+    assert.ok((await env.passScenario(inc.guid)).result.completedAt, "сценарий пройден до finish");
     card = await env.card(inc.guid);
     results = actionOf(card, "close").fieldOptions.resultId;
     assert.eq(results.defaultValue, "processed", "по умолчанию «Обработан»");
@@ -1181,9 +1182,10 @@
     await new Promise((r) => setTimeout(r, 300));
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять");
-    assert.status(await env.answer(a.guid, { visual: true }), 200, null, "ответ сценария");
-    const macro = (await env.call("GET", `/operator/incidents/${enc(a.guid)}/scenario`)).body.steps.find((s) => s.type === "Macros");
-    if (macro) assert.status(await env.call("POST", `/operator/incidents/${enc(a.guid)}/macros/${enc(macro.view.buttons[0])}`), 202, null, "макрос");
+    assert.status(await env.answer(a.guid, { stepId: "visual", value: ["confirmed"] }), 200, null, "ответ сценария");
+    // Ответ «Реальная» запускает макросы площадки (callMacro, §14.5)
+    assert.status(await env.answer(a.guid, { stepId: "verdict", value: "real" }), 200, null, "ответ с макросами");
+    const macro = true;
     await env.advance(W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === b.priority).sec + GRACE + 1);
     await new Promise((r) => setTimeout(r, 300));
     stop();
@@ -1685,16 +1687,22 @@
   test("Ответы сценария привязанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11)", async () => {
     const env = await makeEnv();
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const answer = async (id, stepId, value, why) => assert.status(await env.answer(id, { stepId, value }), 200, null, why);
     assert.status(await env.act(a.guid, "claim", {}, "queue"), 200, null, "взять A");
-    assert.status(await env.answer(a.guid, { visual: true, note: "из A" }), 200, null, "ответы A");
+    await answer(a.guid, "visual", ["confirmed"], "A: подтверждение");
+    await answer(a.guid, "verdict", "dispatch", "A: классификация");
+    await answer(a.guid, "kind", "smoke", "A: тип сработки");
     assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять B");
-    assert.status(await env.answer(b.guid, { note: "из B" }), 200, null, "ответы B");
+    await answer(b.guid, "visual", ["confirmed"], "B: подтверждение");
+    await answer(b.guid, "verdict", "false_alarm", "B: классификация");
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: b.guid });
     const primary = await env.card(res.incident.guid);
-    assert.eq([primary.scenario.answers.visual, primary.scenario.answers.note], [true, "из B"], "флажок из A перенесён, своё поле B осталось");
+    const state = primary.scenario.result.state;
+    assert.eq([state.verdict.value, state.kind.value], ["false_alarm", "smoke"], "тип сработки из A перенесён, своя классификация B осталась");
+    assert.eq(primary.scenario.result.currentStepId, "note", "прохождение основного пошло дальше по перенесённому ответу");
     const entry = primary.journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
     assert.ok(entry && entry.vars.number === a.number && entry.vars.n === 1, `запись в журнале основного: ${entry && entry.text}`);
-    assert.eq((await env.card(a.guid)).scenario.answers.note, "из A", "у привязанного ответы остались как история");
+    assert.eq((await env.card(a.guid)).scenario.result.state.verdict.value, "dispatch", "у привязанного ответы остались как история");
   });
 
   test("Поиск находит привязанный инцидент — строкой основного с «найдено в привязанных»; страница найденного среди привязанных (§11)", async () => {
@@ -1817,25 +1825,25 @@
 
   /* ===== Сценарий (§10.4, §14.5) ===== */
 
-  test("Сценарий: курсор не перепрыгивает незаполненный обязательный шаг; ответы двигают прогресс; макрос в журнале", async () => {
+  test("Сценарий: курсор — только по пути, дальше текущего шага не пройти; ответы двигают прогресс; макрос ответа — в журнале", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     await env.act(inc.guid, "claim", {}, "queue");
     const card = await env.card(inc.guid);
-    const steps = card.scenario.steps;
-    const locked = steps.findIndex((s, i) => i > 0 && steps.slice(0, i).some((p) => p.requiredFor.includes("closing")));
-    const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: steps[locked].id });
-    assert.status(jump, 409, "REQUIRED_STEPS_NOT_FILLED", "переход через незаполненный шаг");
-    const saved = await env.answer(inc.guid, { [steps[0].id]: true });
+    assert.eq(card.scenario.path, ["visual"], "путь — начальный шаг");
+    const jump = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "kind" });
+    assert.status(jump, 409, "STEP_NOT_ON_PATH", "курсор дальше текущего шага");
+    const saved = await env.answer(inc.guid, { stepId: "visual", value: ["confirmed"] });
     assert.status(saved, 200, null, "ответ на шаг");
-    const after = saved.body;
-    assert.eq(after.progress.filled, card.scenario.progress.filled + 1, "прогресс");
-    const macroStep = steps.find((s) => s.type === "Macros");
-    const name = macroStep.view.buttons[0];
-    const run = await env.call("POST", `/operator/incidents/${enc(inc.guid)}/macros/${enc(name)}`, { stepId: macroStep.id });
-    assert.status(run, 202);
+    assert.eq(saved.body.progress.filled, card.scenario.progress.filled + 1, "прогресс");
+    assert.eq([saved.body.path, saved.body.cursorStepId], [["visual", "verdict"], "verdict"], "путь и курсор — следующий шаг");
+    const back = await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual" });
+    assert.status(back, 200, null, "курсор назад по пути");
+    assert.eq(back.body.cursorStepId, "visual");
+    assert.status(await env.answer(inc.guid, { stepId: "verdict", value: "real" }), 200, null, "ответ «Реальная»");
     const c = await env.card(inc.guid);
-    assert.ok(c.scenario.launchedMacros.includes(name), "макрос отмечен запущенным");
+    const name = "Оповещение по площадке";
+    assert.ok(c.scenario.result.history.some((h) => h.action === "callMacro" && h.macroId === name), "макрос — в прохождении");
     assert.ok(c.journal.some((j) => j.templateKey === "workflow.journal.macro.launched" && j.vars.name === name), "макрос в журнале");
   });
 
@@ -2235,7 +2243,9 @@
     // Потеря связи: системный переход машины откладывает инциденты именно этого коллеги
     const dropped = cards.filter((c) => c.state === "on_hold" && c.holdReasonId === "no_link");
     assert.ok(dropped.length > 0, "никто не отложен из-за потери связи");
-    const lost = new Set(dropped.map((c) => before.get(c.guid).owner && before.get(c.guid).owner.id).filter(Boolean));
+    // Чей был инцидент: владелец до эмуляции, а взятый за время эмуляции — тот, кто взял
+    const ownerOf = (c) => (before.get(c.guid).owner && before.get(c.guid).owner.id) || (entry(c, "workflow.journal.claim") || { actor: {} }).actor.id;
+    const lost = new Set(dropped.map(ownerOf).filter(Boolean));
     assert.eq(lost.size, 1, "связь потерял один коллега");
     cards
       .filter((c) => c.state === "in_progress" && c.owner && !lost.has(c.owner.id))

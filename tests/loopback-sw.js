@@ -9,6 +9,8 @@ importScripts(
   "../prototype/workflow.js",
   "../prototype/openapi.js",
   "../prototype/engine.js",
+  "../prototype/vendor/json-logic-js/logic.js",
+  "../prototype/scenario.js",
   "../prototype/fixture.js",
   "../prototype/strings.js",
   "../prototype/server.js"

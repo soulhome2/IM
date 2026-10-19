@@ -1,0 +1,313 @@
+{
+  "dslVersion": "1.0",
+  "metadata": {
+    "scenarioGuid": "04316e46-bf57-4cef-94f5-78412d0c967c",
+    "version": 1,
+    "name": "Витрина всех примитивов рендеринга DSL v1",
+    "description": "Стартовая демонстрация: последовательно проходит через КАЖДЫЙ рендеримый тип шага DSL v1 во всех его подвариантах. Удобно начать знакомство с DSL именно отсюда, увидеть весь набор UI-элементов сразу. Используется как regression-эталон для UI-runner'ов (Web/iOS/Android): после реализации рендеринга прогонка этой витрины должна показать все экраны без ошибок. Это design-time артефакт, в продакшн-инциденты не уходит.",
+    "demonstrates": [
+      "Comment: readonly, обычный, многострочный (min/maxLength, min/maxRows, placeholder)",
+      "RadioButton: layout=vertical и layout=horizontal",
+      "Checkbox: одиночный (одна опция, как 'согласие') и группа (несколько опций, min/maxSelected)",
+      "Select: короткий список и длинный список (>5 опций) с placeholder",
+      "Datetime: kind=date, kind=time, kind=datetime с min/max",
+      "Image: source=camera, source=map, source=operator (+ allowMultiple), source=fixed (+ fixedSrc)",
+      "Button: emphasis=primary, secondary, destructive"
+    ],
+    "purpose": "architecture-demo",
+    "category": "primitives-showcase",
+    "notes": "Контент шагов намеренно нейтральный (без привязки к доменной модели инцидента). Витрина не пытается рассказать сюжет — её цель показать UI-примитивы.",
+    "createdAt": "2026-04-29T00:00:00Z"
+  },
+  "initialStepId": "intro",
+  "steps": [
+    {
+      "id": "intro",
+      "type": "Comment",
+      "title": "О витрине",
+      "view": {
+        "label": "Это демо-сценарий, проходящий через все примитивы DSL v1. Нажмите 'Далее' чтобы начать.",
+        "readonly": true
+      },
+      "transitions": {
+        "default": { "goto": "next_to_radios" }
+      }
+    },
+
+    {
+      "id": "next_to_radios",
+      "type": "Button",
+      "view": { "label": "Далее → RadioButton" },
+      "transitions": { "default": { "goto": "radio_vertical" } }
+    },
+
+    {
+      "id": "radio_vertical",
+      "type": "RadioButton",
+      "title": "RadioButton, layout=vertical",
+      "view": {
+        "label": "Выберите один вариант (вертикальная раскладка):",
+        "layout": "vertical",
+        "required": true,
+        "options": [
+          { "id": "low",    "label": "Низкий"  },
+          { "id": "medium", "label": "Средний", "hint": "наиболее частый случай" },
+          { "id": "high",   "label": "Высокий" }
+        ]
+      },
+      "transitions": { "default": { "goto": "radio_horizontal" } }
+    },
+
+    {
+      "id": "radio_horizontal",
+      "type": "RadioButton",
+      "title": "RadioButton, layout=horizontal",
+      "view": {
+        "label": "Выберите один вариант (горизонтальная раскладка):",
+        "layout": "horizontal",
+        "required": true,
+        "options": [
+          { "id": "yes",   "label": "Да"   },
+          { "id": "no",    "label": "Нет"  },
+          { "id": "skip",  "label": "Пропустить" }
+        ]
+      },
+      "transitions": { "default": { "goto": "checkbox_single" } }
+    },
+
+    {
+      "id": "checkbox_single",
+      "type": "Checkbox",
+      "title": "Checkbox, одиночный (как 'согласие')",
+      "view": {
+        "label": "Подтвердите ознакомление:",
+        "required": true,
+        "minSelected": 1,
+        "options": [
+          { "id": "ack", "label": "Я ознакомился с инструкцией" }
+        ]
+      },
+      "transitions": { "default": { "goto": "checkbox_group" } }
+    },
+
+    {
+      "id": "checkbox_group",
+      "type": "Checkbox",
+      "title": "Checkbox-группа, multi-select",
+      "view": {
+        "label": "Какие признаки наблюдаются? (выберите от 1 до 3):",
+        "layout": "vertical",
+        "required": true,
+        "minSelected": 1,
+        "maxSelected": 3,
+        "options": [
+          { "id": "smoke",      "label": "Задымление"      },
+          { "id": "smell",      "label": "Запах гари"      },
+          { "id": "alarm",      "label": "Сработала сигнализация" },
+          { "id": "people",     "label": "Скопление людей" },
+          { "id": "noise",      "label": "Посторонний шум" }
+        ]
+      },
+      "transitions": { "default": { "goto": "select_single" } }
+    },
+
+    {
+      "id": "select_single",
+      "type": "Select",
+      "title": "Select, короткий список",
+      "view": {
+        "label": "Тип объекта:",
+        "placeholder": "— выберите —",
+        "required": true,
+        "options": [
+          { "id": "office",     "label": "Офис"              },
+          { "id": "warehouse",  "label": "Склад"             },
+          { "id": "datacenter", "label": "Серверная"         }
+        ]
+      },
+      "transitions": { "default": { "goto": "select_long_list" } }
+    },
+
+    {
+      "id": "select_long_list",
+      "type": "Select",
+      "title": "Select, длинный список (>5)",
+      "view": {
+        "label": "Этаж:",
+        "placeholder": "— выберите этаж —",
+        "required": true,
+        "options": [
+          { "id": "f_minus_1", "label": "Подвал"   },
+          { "id": "f_1",       "label": "1 этаж"   },
+          { "id": "f_2",       "label": "2 этаж"   },
+          { "id": "f_3",       "label": "3 этаж"   },
+          { "id": "f_4",       "label": "4 этаж"   },
+          { "id": "f_5",       "label": "5 этаж"   },
+          { "id": "f_6",       "label": "6 этаж"   },
+          { "id": "f_roof",    "label": "Крыша"    }
+        ]
+      },
+      "transitions": { "default": { "goto": "comment_short" } }
+    },
+
+    {
+      "id": "comment_short",
+      "type": "Comment",
+      "title": "Comment, однострочный, required",
+      "view": {
+        "label": "Краткая пометка:",
+        "placeholder": "не более 80 символов",
+        "required": true,
+        "minLength": 1,
+        "maxLength": 80,
+        "minRows": 1,
+        "maxRows": 1
+      },
+      "transitions": { "default": { "goto": "comment_multiline" } }
+    },
+
+    {
+      "id": "comment_multiline",
+      "type": "Comment",
+      "title": "Comment, многострочный",
+      "view": {
+        "label": "Подробное описание ситуации:",
+        "placeholder": "Опишите что произошло, кто участвовал, какие были предпринятые действия…",
+        "required": false,
+        "minLength": 0,
+        "maxLength": 2000,
+        "minRows": 4,
+        "maxRows": 12
+      },
+      "transitions": { "default": { "goto": "datetime_date" } }
+    },
+
+    {
+      "id": "datetime_date",
+      "type": "Datetime",
+      "title": "Datetime, kind=date",
+      "view": {
+        "label": "Дата происшествия:",
+        "kind": "date",
+        "required": true
+      },
+      "transitions": { "default": { "goto": "datetime_time" } }
+    },
+
+    {
+      "id": "datetime_time",
+      "type": "Datetime",
+      "title": "Datetime, kind=time",
+      "view": {
+        "label": "Время происшествия (часы:минуты):",
+        "kind": "time",
+        "required": true
+      },
+      "transitions": { "default": { "goto": "datetime_full" } }
+    },
+
+    {
+      "id": "datetime_full",
+      "type": "Datetime",
+      "title": "Datetime, kind=datetime, с min/max",
+      "view": {
+        "label": "Дата и время (только в пределах суток):",
+        "kind": "datetime",
+        "required": true,
+        "min": "2026-01-01T00:00:00",
+        "max": "2026-12-31T23:59:00"
+      },
+      "transitions": { "default": { "goto": "image_camera" } }
+    },
+
+    {
+      "id": "image_camera",
+      "type": "Image",
+      "title": "Image, source=camera",
+      "view": {
+        "label": "Снимок с камеры:",
+        "source": "camera",
+        "required": false,
+        "allowMultiple": false
+      },
+      "transitions": { "default": { "goto": "image_map" } }
+    },
+
+    {
+      "id": "image_map",
+      "type": "Image",
+      "title": "Image, source=map",
+      "view": {
+        "label": "Скриншот карты в точке инцидента:",
+        "source": "map",
+        "required": false
+      },
+      "transitions": { "default": { "goto": "image_operator" } }
+    },
+
+    {
+      "id": "image_operator",
+      "type": "Image",
+      "title": "Image, source=operator, allowMultiple=true",
+      "view": {
+        "label": "Прикрепите фотографии (можно несколько):",
+        "source": "operator",
+        "required": false,
+        "allowMultiple": true
+      },
+      "transitions": { "default": { "goto": "image_fixed" } }
+    },
+
+    {
+      "id": "image_fixed",
+      "type": "Image",
+      "title": "Image, source=fixed (статическая картинка)",
+      "view": {
+        "label": "Эталонное фото объекта (предзагружено в сценарий):",
+        "source": "fixed",
+        "fixedSrc": "https://example.com/im/static/reference-floorplan.png",
+        "required": false
+      },
+      "transitions": { "default": { "goto": "btn_primary" } }
+    },
+
+    {
+      "id": "btn_primary",
+      "type": "Button",
+      "title": "Button, emphasis=primary",
+      "view": {
+        "label": "Подтвердить (primary)",
+        "emphasis": "primary"
+      },
+      "transitions": { "default": { "goto": "btn_secondary" } }
+    },
+
+    {
+      "id": "btn_secondary",
+      "type": "Button",
+      "title": "Button, emphasis=secondary",
+      "view": {
+        "label": "Отложить (secondary)",
+        "emphasis": "secondary"
+      },
+      "transitions": { "default": { "goto": "btn_destructive" } }
+    },
+
+    {
+      "id": "btn_destructive",
+      "type": "Button",
+      "title": "Button, emphasis=destructive",
+      "view": {
+        "label": "Сбросить и закрыть (destructive)",
+        "emphasis": "destructive"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            { "type": "finish" }
+          ]
+        }
+      }
+    }
+  ]
+}

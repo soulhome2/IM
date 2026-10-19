@@ -1,0 +1,27 @@
+{
+  "dslVersion": "1.0",
+  "metadata": {
+    "scenarioGuid": "6771080f-34d5-7bc0-8114-a20ddaea2385",
+    "version": 1,
+    "name": "[A5/bad-1] Сломанная ссылка goto",
+    "purpose": "anti-pattern",
+    "kind": "schema-passes-but-semantically-broken",
+    "warning": "Этот файл валиден по JSON Schema (goto — просто строка), но семантически сломан: ссылается на 'never_existed'. Должен быть отклонён ВТОРЫМ УРОВНЕМ валидации (см. dsl-v1-draft.md §11 — semantic validation). Реализация — в редакторе и на сервере.",
+    "expectedRejection": "Уровень 2 (семантика) — несуществующий step.id в goto"
+  },
+  "initialStepId": "start",
+  "steps": [
+    {
+      "id": "start",
+      "type": "Button",
+      "view": {
+        "label": "Старт"
+      },
+      "transitions": {
+        "default": {
+          "goto": "never_existed"
+        }
+      }
+    }
+  ]
+}

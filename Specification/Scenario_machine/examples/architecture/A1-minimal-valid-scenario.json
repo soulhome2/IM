@@ -1,0 +1,33 @@
+{
+  "dslVersion": "1.0",
+  "metadata": {
+    "scenarioGuid": "e844f396-dfd9-76e8-8b4c-7dd0b8b295b5",
+    "version": 1,
+    "name": "Минимально возможный валидный сценарий",
+    "description": "Один шаг — кнопка 'Закрыть'. Демонстрирует, что DSL не заставляет писать boilerplate. Этот сценарий пройдёт валидацию по dsl-v1-schema.json без замечаний.",
+    "demonstrates": [
+      "минимальная валидная структура",
+      "отсутствие обязательного boilerplate"
+    ],
+    "purpose": "architecture-demo"
+  },
+  "initialStepId": "ack",
+  "steps": [
+    {
+      "id": "ack",
+      "type": "Button",
+      "view": {
+        "label": "Подтвердить и закрыть"
+      },
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

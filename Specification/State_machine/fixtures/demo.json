@@ -1456,310 +1456,1101 @@
     }
   ],
   "scenarios": {
-    "$comment": "До подключения машины сценариев (§14.5): шаги сценария по типу события.",
-    "fire": {
-      "guid": "60000000-0000-4000-8000-000000000002",
-      "title": "Пожарная тревога",
-      "steps": [
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Тревога подтверждена по видео",
-          "required": true
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Классификация",
-          "required": true,
-          "options": [
-            "Реальная",
-            "Ложная",
-            "Требует выезда"
-          ]
-        },
-        {
-          "id": "kind",
-          "type": "combo",
-          "label": "Тип сработки",
-          "options": [
-            "Задымление",
-            "Открытое пламя",
-            "Датчик без визуального подтверждения",
-            "Тест системы"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий / номер наряда",
-          "placeholder": "Что сделано, кого вызвали"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы площадки",
-          "buttons": [
-            "Оповещение по площадке",
-            "Разблокировать эвакуационные выходы"
-          ]
-        }
-      ]
+    "$comment": "Машина сценариев (§14.5, Specification/Scenario_machine/): строки сценариев — как на сервере (guid, version, name, script), script — сценарий DSL v1. byEventType — какой сценарий у типа события, как правило инцидента на сервере (incidentRule.scenarios); новый инцидент получает последнюю версию. Инцидент ссылается на сценарий и версию, прохождение — scenarioResult (спецификация DSL, раздел 9).",
+    "byEventType": {
+      "fire": "60000000-0000-4000-8000-000000000002",
+      "intrusion": "60000000-0000-4000-8000-000000000004",
+      "sabotage": "60000000-0000-4000-8000-000000000007",
+      "loiter": "60000000-0000-4000-8000-000000000005",
+      "ppe": "60000000-0000-4000-8000-000000000006",
+      "alcohol": "60000000-0000-4000-8000-000000000001",
+      "glass": "60000000-0000-4000-8000-000000000003"
     },
-    "intrusion": {
-      "guid": "60000000-0000-4000-8000-000000000004",
-      "title": "Проникновение",
-      "steps": [
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Нарушитель виден в кадре",
-          "required": true
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Классификация",
-          "required": true,
-          "options": [
-            "Реальное проникновение",
-            "Персонал / ложная",
-            "Недостаточно данных"
-          ]
-        },
-        {
-          "id": "zone",
-          "type": "combo",
-          "label": "Зона",
-          "options": [
-            "Периметр",
-            "Служебный вход",
-            "Склад",
-            "Офисная зона"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Описание",
-          "placeholder": "Маршрут, приметы, действия охраны"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы",
-          "buttons": [
-            "Включить сирену",
-            "Переключить PTZ на зону"
-          ]
-        }
-      ]
-    },
-    "sabotage": {
-      "guid": "60000000-0000-4000-8000-000000000007",
-      "title": "Саботаж камеры",
-      "steps": [
-        {
-          "id": "lost",
-          "type": "checkbox",
-          "label": "Подтверждена потеря видео / закрытие объектива"
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Причина",
-          "required": true,
-          "options": [
-            "Умышленное воздействие",
-            "Неисправность",
-            "Погодные условия"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий",
-          "placeholder": "Камера, симптомы, заявка в сервис"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы",
-          "buttons": [
-            "Создать заявку на ремонт"
-          ]
-        }
-      ]
-    },
-    "loiter": {
-      "guid": "60000000-0000-4000-8000-000000000005",
-      "title": "Скопление / праздношатание",
-      "steps": [
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Ситуация подтверждена",
-          "required": true
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Решение",
-          "required": true,
-          "options": [
-            "Направить охрану",
-            "Наблюдать",
-            "Ложная"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий"
-        }
-      ]
-    },
-    "ppe": {
-      "guid": "60000000-0000-4000-8000-000000000006",
-      "title": "Отсутствие СИЗ",
-      "steps": [
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Отсутствие каски подтверждено по видео",
-          "required": true
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Классификация",
-          "required": true,
-          "options": [
-            "Реальное нарушение",
-            "Ошибка детектора",
-            "Сотрудник вне рабочей зоны"
-          ]
-        },
-        {
-          "id": "who",
-          "type": "combo",
-          "label": "Кто нарушитель",
-          "options": [
-            "Сотрудник склада",
-            "Водитель поставщика",
-            "Подрядчик",
-            "Не идентифицирован"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий / кому передано",
-          "placeholder": "Табельный номер, бригадир, номер акта"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы зоны",
-          "buttons": [
-            "Голосовое оповещение в зону",
-            "Уведомить инженера по охране труда"
+    "rows": [
+      {
+        "guid": "60000000-0000-4000-8000-000000000002",
+        "version": 1,
+        "name": "Пожарная тревога",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+            "version": 1,
+            "name": "Пожарная тревога"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Тревога подтверждена по видео",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Классификация",
+              "view": {
+                "label": "Классификация",
+                "options": [
+                  {
+                    "id": "real",
+                    "label": "Реальная"
+                  },
+                  {
+                    "id": "false_alarm",
+                    "label": "Ложная"
+                  },
+                  {
+                    "id": "dispatch",
+                    "label": "Требует выезда"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "real"
+                      ]
+                    },
+                    "goto": "kind",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Оповещение по площадке"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Разблокировать эвакуационные выходы"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "default": {
+                  "goto": "kind"
+                }
+              }
+            },
+            {
+              "id": "kind",
+              "type": "Select",
+              "title": "Тип сработки",
+              "view": {
+                "label": "Тип сработки",
+                "options": [
+                  {
+                    "id": "smoke",
+                    "label": "Задымление"
+                  },
+                  {
+                    "id": "open_fire",
+                    "label": "Открытое пламя"
+                  },
+                  {
+                    "id": "no_visual",
+                    "label": "Датчик без визуального подтверждения"
+                  },
+                  {
+                    "id": "system_test",
+                    "label": "Тест системы"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий / номер наряда",
+              "view": {
+                "label": "Комментарий / номер наряда",
+                "required": false,
+                "placeholder": "Что сделано, кого вызвали"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
           ]
         }
-      ]
-    },
-    "alcohol": {
-      "guid": "60000000-0000-4000-8000-000000000001",
-      "title": "Превышение уровня алкоголя",
-      "steps": [
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Личность на точке прохода подтверждена по видео",
-          "required": true
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Результат проверки",
-          "required": true,
-          "options": [
-            "Превышение подтверждено",
-            "Повторный тест в норме",
-            "Сбой алкорамки"
-          ]
-        },
-        {
-          "id": "level",
-          "type": "combo",
-          "label": "Показание прибора",
-          "options": [
-            "0,3–0,5 ‰",
-            "0,5–1,0 ‰",
-            "Более 1,0 ‰",
-            "Показание не считано"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий",
-          "placeholder": "ФИО, смена, кому передан сотрудник"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы точки прохода",
-          "buttons": [
-            "Заблокировать турникет",
-            "Вызвать медпункт"
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000002",
+        "version": 2,
+        "name": "Пожарная тревога",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+            "version": 2,
+            "name": "Пожарная тревога"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Тревога подтверждена по видео",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Классификация",
+              "view": {
+                "label": "Классификация",
+                "options": [
+                  {
+                    "id": "real",
+                    "label": "Реальная"
+                  },
+                  {
+                    "id": "false_alarm",
+                    "label": "Ложная"
+                  },
+                  {
+                    "id": "dispatch",
+                    "label": "Требует выезда"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "real"
+                      ]
+                    },
+                    "goto": "kind",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Оповещение по площадке"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Разблокировать эвакуационные выходы"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "default": {
+                  "goto": "kind"
+                }
+              }
+            },
+            {
+              "id": "kind",
+              "type": "Select",
+              "title": "Тип сработки",
+              "view": {
+                "label": "Тип сработки",
+                "options": [
+                  {
+                    "id": "smoke",
+                    "label": "Задымление"
+                  },
+                  {
+                    "id": "open_fire",
+                    "label": "Открытое пламя"
+                  },
+                  {
+                    "id": "no_visual",
+                    "label": "Датчик без визуального подтверждения"
+                  },
+                  {
+                    "id": "system_test",
+                    "label": "Тест системы"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "evacuation"
+                }
+              }
+            },
+            {
+              "id": "evacuation",
+              "type": "RadioButton",
+              "title": "Эвакуация",
+              "view": {
+                "label": "Эвакуация объявлена",
+                "options": [
+                  {
+                    "id": "yes",
+                    "label": "Да"
+                  },
+                  {
+                    "id": "no",
+                    "label": "Нет"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий / номер наряда",
+              "view": {
+                "label": "Комментарий / номер наряда",
+                "required": false,
+                "placeholder": "Что сделано, кого вызвали"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
           ]
         }
-      ]
-    },
-    "glass": {
-      "guid": "60000000-0000-4000-8000-000000000003",
-      "title": "Звук разбития стекла",
-      "steps": [
-        {
-          "id": "audio",
-          "type": "checkbox",
-          "label": "Звуковое событие прослушано оператором",
-          "required": true
-        },
-        {
-          "id": "visual",
-          "type": "checkbox",
-          "label": "Повреждение видно на камерах зоны"
-        },
-        {
-          "id": "verdict",
-          "type": "radio",
-          "label": "Классификация",
-          "required": true,
-          "options": [
-            "Разбитие витрины или стекла",
-            "Бытовой шум: посуда, погрузка",
-            "Ложная сработка детектора"
-          ]
-        },
-        {
-          "id": "note",
-          "type": "edit",
-          "label": "Комментарий",
-          "placeholder": "Что повреждено, вызвана ли охрана"
-        },
-        {
-          "id": "macros",
-          "type": "macros",
-          "label": "Макросы зоны",
-          "buttons": [
-            "Включить сирену зоны",
-            "Направить охрану к витрине"
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000004",
+        "version": 1,
+        "name": "Проникновение",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+            "version": 1,
+            "name": "Проникновение"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Нарушитель виден в кадре",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Классификация",
+              "view": {
+                "label": "Классификация",
+                "options": [
+                  {
+                    "id": "real",
+                    "label": "Реальное проникновение"
+                  },
+                  {
+                    "id": "staff",
+                    "label": "Персонал / ложная"
+                  },
+                  {
+                    "id": "unclear",
+                    "label": "Недостаточно данных"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "real"
+                      ]
+                    },
+                    "goto": "zone",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Включить сирену"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Переключить PTZ на зону"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "staff"
+                      ]
+                    },
+                    "goto": "note"
+                  }
+                ],
+                "default": {
+                  "goto": "zone"
+                }
+              }
+            },
+            {
+              "id": "zone",
+              "type": "Select",
+              "title": "Зона",
+              "view": {
+                "label": "Зона",
+                "options": [
+                  {
+                    "id": "perimeter",
+                    "label": "Периметр"
+                  },
+                  {
+                    "id": "service_entrance",
+                    "label": "Служебный вход"
+                  },
+                  {
+                    "id": "warehouse",
+                    "label": "Склад"
+                  },
+                  {
+                    "id": "office",
+                    "label": "Офисная зона"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Описание",
+              "view": {
+                "label": "Описание",
+                "required": false,
+                "placeholder": "Маршрут, приметы, действия охраны"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
           ]
         }
-      ]
-    }
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000007",
+        "version": 1,
+        "name": "Саботаж камеры",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+            "version": 1,
+            "name": "Саботаж камеры"
+          },
+          "initialStepId": "lost",
+          "steps": [
+            {
+              "id": "lost",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Подтверждена потеря видео / закрытие объектива",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Причина",
+              "view": {
+                "label": "Причина",
+                "options": [
+                  {
+                    "id": "deliberate",
+                    "label": "Умышленное воздействие"
+                  },
+                  {
+                    "id": "malfunction",
+                    "label": "Неисправность"
+                  },
+                  {
+                    "id": "weather",
+                    "label": "Погодные условия"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "in": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        [
+                          "deliberate",
+                          "malfunction"
+                        ]
+                      ]
+                    },
+                    "goto": "note",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Создать заявку на ремонт"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий",
+              "view": {
+                "label": "Комментарий",
+                "required": false,
+                "placeholder": "Камера, симптомы, заявка в сервис"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000005",
+        "version": 1,
+        "name": "Скопление / праздношатание",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+            "version": 1,
+            "name": "Скопление / праздношатание"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Ситуация подтверждена",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Решение",
+              "view": {
+                "label": "Решение",
+                "options": [
+                  {
+                    "id": "send_guard",
+                    "label": "Направить охрану"
+                  },
+                  {
+                    "id": "observe",
+                    "label": "Наблюдать"
+                  },
+                  {
+                    "id": "false_alarm",
+                    "label": "Ложная"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий",
+              "view": {
+                "label": "Комментарий",
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000006",
+        "version": 1,
+        "name": "Отсутствие СИЗ",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000006",
+            "version": 1,
+            "name": "Отсутствие СИЗ"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Отсутствие каски подтверждено по видео",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Классификация",
+              "view": {
+                "label": "Классификация",
+                "options": [
+                  {
+                    "id": "violation",
+                    "label": "Реальное нарушение"
+                  },
+                  {
+                    "id": "detector_error",
+                    "label": "Ошибка детектора"
+                  },
+                  {
+                    "id": "outside_zone",
+                    "label": "Сотрудник вне рабочей зоны"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "violation"
+                      ]
+                    },
+                    "goto": "who",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Голосовое оповещение в зону"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Уведомить инженера по охране труда"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "detector_error"
+                      ]
+                    },
+                    "goto": "note"
+                  }
+                ],
+                "default": {
+                  "goto": "who"
+                }
+              }
+            },
+            {
+              "id": "who",
+              "type": "Select",
+              "title": "Кто нарушитель",
+              "view": {
+                "label": "Кто нарушитель",
+                "options": [
+                  {
+                    "id": "warehouse_staff",
+                    "label": "Сотрудник склада"
+                  },
+                  {
+                    "id": "supplier_driver",
+                    "label": "Водитель поставщика"
+                  },
+                  {
+                    "id": "contractor",
+                    "label": "Подрядчик"
+                  },
+                  {
+                    "id": "unidentified",
+                    "label": "Не идентифицирован"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий / кому передано",
+              "view": {
+                "label": "Комментарий / кому передано",
+                "required": false,
+                "placeholder": "Табельный номер, бригадир, номер акта"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "name": "Превышение уровня алкоголя",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000001",
+            "version": 1,
+            "name": "Превышение уровня алкоголя"
+          },
+          "initialStepId": "visual",
+          "steps": [
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Личность на точке прохода подтверждена по видео",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Результат проверки",
+              "view": {
+                "label": "Результат проверки",
+                "options": [
+                  {
+                    "id": "excess",
+                    "label": "Превышение подтверждено"
+                  },
+                  {
+                    "id": "retest_ok",
+                    "label": "Повторный тест в норме"
+                  },
+                  {
+                    "id": "gate_failure",
+                    "label": "Сбой алкорамки"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "excess"
+                      ]
+                    },
+                    "goto": "level",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Заблокировать турникет"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Вызвать медпункт"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "level",
+              "type": "Select",
+              "title": "Показание прибора",
+              "view": {
+                "label": "Показание прибора",
+                "options": [
+                  {
+                    "id": "from_03",
+                    "label": "0,3–0,5 ‰"
+                  },
+                  {
+                    "id": "from_05",
+                    "label": "0,5–1,0 ‰"
+                  },
+                  {
+                    "id": "over_10",
+                    "label": "Более 1,0 ‰"
+                  },
+                  {
+                    "id": "not_read",
+                    "label": "Показание не считано"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий",
+              "view": {
+                "label": "Комментарий",
+                "required": false,
+                "placeholder": "ФИО, смена, кому передан сотрудник"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "guid": "60000000-0000-4000-8000-000000000003",
+        "version": 1,
+        "name": "Звук разбития стекла",
+        "script": {
+          "dslVersion": "1.0",
+          "locale": "ru",
+          "metadata": {
+            "scenarioGuid": "60000000-0000-4000-8000-000000000003",
+            "version": 1,
+            "name": "Звук разбития стекла"
+          },
+          "initialStepId": "audio",
+          "steps": [
+            {
+              "id": "audio",
+              "type": "Checkbox",
+              "title": "Подтверждение",
+              "view": {
+                "label": "Звуковое событие прослушано оператором",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "default": {
+                  "goto": "visual"
+                }
+              }
+            },
+            {
+              "id": "visual",
+              "type": "Checkbox",
+              "title": "Повреждение",
+              "view": {
+                "label": "Повреждение видно на камерах зоны",
+                "options": [
+                  {
+                    "id": "confirmed",
+                    "label": "Подтверждено"
+                  }
+                ],
+                "required": false
+              },
+              "transitions": {
+                "default": {
+                  "goto": "verdict"
+                }
+              }
+            },
+            {
+              "id": "verdict",
+              "type": "RadioButton",
+              "title": "Классификация",
+              "view": {
+                "label": "Классификация",
+                "options": [
+                  {
+                    "id": "broken",
+                    "label": "Разбитие витрины или стекла"
+                  },
+                  {
+                    "id": "noise",
+                    "label": "Бытовой шум: посуда, погрузка"
+                  },
+                  {
+                    "id": "false_alarm",
+                    "label": "Ложная сработка детектора"
+                  }
+                ],
+                "required": true
+              },
+              "transitions": {
+                "rules": [
+                  {
+                    "when": {
+                      "==": [
+                        {
+                          "var": "state.verdict.value"
+                        },
+                        "broken"
+                      ]
+                    },
+                    "goto": "note",
+                    "actions": [
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Включить сирену зоны"
+                        }
+                      },
+                      {
+                        "type": "callMacro",
+                        "args": {
+                          "macroId": "Направить охрану к витрине"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "default": {
+                  "goto": "note"
+                }
+              }
+            },
+            {
+              "id": "note",
+              "type": "Comment",
+              "title": "Комментарий",
+              "view": {
+                "label": "Комментарий",
+                "required": false,
+                "placeholder": "Что повреждено, вызвана ли охрана"
+              },
+              "transitions": {
+                "default": {
+                  "actions": [
+                    {
+                      "type": "finish"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   },
   "incidents": [
     {
@@ -1800,9 +2591,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -1851,9 +2647,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -1903,9 +2704,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000003",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "audio",
+        "completedAt": null
       },
       "journal": [
         {
@@ -1957,9 +2763,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000001",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2011,12 +2822,58 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Недостаточно данных"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:57:56Z",
+            "by": "petrova"
+          },
+          "verdict": {
+            "value": "unclear",
+            "answeredAt": "2026-10-03T11:58:58Z",
+            "by": "petrova"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T11:57:56Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T11:57:56Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:58:58Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "unclear",
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T11:58:58Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "zone",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "zone",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2073,13 +2930,70 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Реальное нарушение"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000006",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:56:33Z",
+            "by": "sidorov"
+          },
+          "verdict": {
+            "value": "violation",
+            "answeredAt": "2026-10-03T11:58:16Z",
+            "by": "sidorov"
+          }
         },
-        "launchedMacros": [],
-        "cursorStepId": "who"
+        "history": [
+          {
+            "ts": "2026-10-03T11:56:33Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T11:56:33Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:58:16Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "violation",
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T11:58:16Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Голосовое оповещение в зону"
+          },
+          {
+            "ts": "2026-10-03T11:58:16Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Уведомить инженера по охране труда"
+          },
+          {
+            "ts": "2026-10-03T11:58:16Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "who",
+            "matchedRule": 0
+          }
+        ],
+        "currentStepId": "who",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2138,12 +3052,39 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "lost": true
+      "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "lost": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:51:44Z",
+            "by": "me"
+          }
         },
-        "launchedMacros": [],
-        "cursorStepId": "verdict"
+        "history": [
+          {
+            "ts": "2026-10-03T11:51:44Z",
+            "stepId": "lost",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:51:44Z",
+            "stepId": "lost",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "verdict",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2214,12 +3155,39 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true
+      "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:53:50Z",
+            "by": "gusev"
+          }
         },
-        "launchedMacros": [],
-        "cursorStepId": "verdict"
+        "history": [
+          {
+            "ts": "2026-10-03T11:53:50Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "gusev"
+          },
+          {
+            "ts": "2026-10-03T11:53:50Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "verdict",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2278,14 +3246,70 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Реальное проникновение"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:46:31Z",
+            "by": null
+          },
+          "verdict": {
+            "value": "real",
+            "answeredAt": "2026-10-03T11:53:15Z",
+            "by": null
+          }
         },
-        "launchedMacros": [
-          "Включить сирену"
-        ]
+        "history": [
+          {
+            "ts": "2026-10-03T11:46:31Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": null
+          },
+          {
+            "ts": "2026-10-03T11:46:31Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:53:15Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "real",
+            "by": null
+          },
+          {
+            "ts": "2026-10-03T11:53:15Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Включить сирену"
+          },
+          {
+            "ts": "2026-10-03T11:53:15Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Переключить PTZ на зону"
+          },
+          {
+            "ts": "2026-10-03T11:53:15Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "zone",
+            "matchedRule": 0
+          }
+        ],
+        "currentStepId": "zone",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2345,9 +3369,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2398,9 +3427,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2453,11 +3487,39 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "lost": true
+      "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "lost": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:30:11Z",
+            "by": "sidorov"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T11:30:11Z",
+            "stepId": "lost",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T11:30:11Z",
+            "stepId": "lost",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "verdict",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2528,9 +3590,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2580,9 +3647,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2631,13 +3703,75 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Наблюдать",
-          "note": "Очередь на регистрацию, разошлись сами"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T10:59:24Z",
+            "by": "me"
+          },
+          "verdict": {
+            "value": "observe",
+            "answeredAt": "2026-10-03T11:00:34Z",
+            "by": "me"
+          },
+          "note": {
+            "value": "Очередь на регистрацию, разошлись сами",
+            "answeredAt": "2026-10-03T11:01:44Z",
+            "by": "me"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T10:59:24Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T10:59:24Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:00:34Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "observe",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:00:34Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:01:44Z",
+            "stepId": "note",
+            "action": "answer",
+            "value": "Очередь на регистрацию, разошлись сами",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T11:01:44Z",
+            "stepId": "note",
+            "action": "finish"
+          }
+        ],
+        "currentStepId": null,
+        "completedAt": "2026-10-03T11:01:44Z"
       },
       "journal": [
         {
@@ -2708,12 +3842,58 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Недостаточно данных"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T11:13:18Z",
+            "by": null
+          },
+          "verdict": {
+            "value": "unclear",
+            "answeredAt": "2026-10-03T11:36:39Z",
+            "by": null
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T11:13:18Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": null
+          },
+          {
+            "ts": "2026-10-03T11:13:18Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T11:36:39Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "unclear",
+            "by": null
+          },
+          {
+            "ts": "2026-10-03T11:36:39Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "zone",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "zone",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2771,9 +3951,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "lost",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2826,14 +4011,89 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Реальная",
-          "kind": "Задымление"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T10:35:25Z",
+            "by": "me"
+          },
+          "verdict": {
+            "value": "real",
+            "answeredAt": "2026-10-03T10:35:49Z",
+            "by": "me"
+          },
+          "kind": {
+            "value": "smoke",
+            "answeredAt": "2026-10-03T10:36:12Z",
+            "by": "me"
+          }
         },
-        "launchedMacros": [],
-        "cursorStepId": "kind"
+        "history": [
+          {
+            "ts": "2026-10-03T10:35:25Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T10:35:25Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T10:35:49Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "real",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T10:35:49Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Оповещение по площадке"
+          },
+          {
+            "ts": "2026-10-03T10:35:49Z",
+            "stepId": "verdict",
+            "action": "callMacro",
+            "macroId": "Разблокировать эвакуационные выходы"
+          },
+          {
+            "ts": "2026-10-03T10:35:49Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "kind",
+            "matchedRule": 0
+          },
+          {
+            "ts": "2026-10-03T10:36:12Z",
+            "stepId": "kind",
+            "action": "answer",
+            "value": "smoke",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T10:36:12Z",
+            "stepId": "kind",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "note",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2904,9 +4164,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -2958,11 +4223,39 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T10:54:27Z",
+            "by": "petrova"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T10:54:27Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T10:54:27Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          }
+        ],
+        "currentStepId": "verdict",
+        "completedAt": null
       },
       "journal": [
         {
@@ -3032,14 +4325,94 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Ложная",
-          "kind": "Тест системы",
-          "note": "Плановая проверка АПС"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T10:11:04Z",
+            "by": "sidorov"
+          },
+          "verdict": {
+            "value": "false_alarm",
+            "answeredAt": "2026-10-03T10:12:03Z",
+            "by": "sidorov"
+          },
+          "kind": {
+            "value": "system_test",
+            "answeredAt": "2026-10-03T10:13:03Z",
+            "by": "sidorov"
+          },
+          "note": {
+            "value": "Плановая проверка АПС",
+            "answeredAt": "2026-10-03T10:14:02Z",
+            "by": "sidorov"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T10:11:04Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T10:11:04Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T10:12:03Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "false_alarm",
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T10:12:03Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "kind",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T10:13:03Z",
+            "stepId": "kind",
+            "action": "answer",
+            "value": "system_test",
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T10:13:03Z",
+            "stepId": "kind",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T10:14:02Z",
+            "stepId": "note",
+            "action": "answer",
+            "value": "Плановая проверка АПС",
+            "by": "sidorov"
+          },
+          {
+            "ts": "2026-10-03T10:14:02Z",
+            "stepId": "note",
+            "action": "finish"
+          }
+        ],
+        "currentStepId": null,
+        "completedAt": "2026-10-03T10:14:02Z"
       },
       "journal": [
         {
@@ -3108,9 +4481,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000007",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "lost",
+        "completedAt": null
       },
       "journal": [
         {
@@ -3158,13 +4536,75 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Персонал / ложная",
-          "note": "Сотрудник клининга по графику"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T09:54:49Z",
+            "by": "me"
+          },
+          "verdict": {
+            "value": "staff",
+            "answeredAt": "2026-10-03T09:55:28Z",
+            "by": "me"
+          },
+          "note": {
+            "value": "Сотрудник клининга по графику",
+            "answeredAt": "2026-10-03T09:56:07Z",
+            "by": "me"
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T09:54:49Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T09:54:49Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T09:55:28Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "staff",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T09:55:28Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": 1
+          },
+          {
+            "ts": "2026-10-03T09:56:07Z",
+            "stepId": "note",
+            "action": "answer",
+            "value": "Сотрудник клининга по графику",
+            "by": "me"
+          },
+          {
+            "ts": "2026-10-03T09:56:07Z",
+            "stepId": "note",
+            "action": "finish"
+          }
+        ],
+        "currentStepId": null,
+        "completedAt": "2026-10-03T09:56:07Z"
       },
       "journal": [
         {
@@ -3234,9 +4674,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000002",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -3286,9 +4731,14 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {},
-        "launchedMacros": []
+      "scenarioGuid": "60000000-0000-4000-8000-000000000005",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {},
+        "history": [],
+        "currentStepId": "visual",
+        "completedAt": null
       },
       "journal": [
         {
@@ -3337,13 +4787,75 @@
       },
       "slaBreached": false,
       "breaches": [],
-      "scenario": {
-        "answers": {
-          "visual": true,
-          "verdict": "Персонал / ложная",
-          "zone": "Склад"
+      "scenarioGuid": "60000000-0000-4000-8000-000000000004",
+      "scenarioVersion": 1,
+      "scenarioResult": {
+        "dslVersion": "1.0",
+        "state": {
+          "visual": {
+            "value": [
+              "confirmed"
+            ],
+            "answeredAt": "2026-10-03T10:00:07Z",
+            "by": "petrova"
+          },
+          "verdict": {
+            "value": "staff",
+            "answeredAt": "2026-10-03T10:31:45Z",
+            "by": "petrova"
+          },
+          "note": {
+            "value": null,
+            "answeredAt": "2026-10-03T11:03:22Z",
+            "by": "petrova",
+            "skipped": true
+          }
         },
-        "launchedMacros": []
+        "history": [
+          {
+            "ts": "2026-10-03T10:00:07Z",
+            "stepId": "visual",
+            "action": "answer",
+            "value": [
+              "confirmed"
+            ],
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T10:00:07Z",
+            "stepId": "visual",
+            "action": "transition",
+            "to": "verdict",
+            "matchedRule": null
+          },
+          {
+            "ts": "2026-10-03T10:31:45Z",
+            "stepId": "verdict",
+            "action": "answer",
+            "value": "staff",
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T10:31:45Z",
+            "stepId": "verdict",
+            "action": "transition",
+            "to": "note",
+            "matchedRule": 1
+          },
+          {
+            "ts": "2026-10-03T11:03:22Z",
+            "stepId": "note",
+            "action": "skip",
+            "by": "petrova"
+          },
+          {
+            "ts": "2026-10-03T11:03:22Z",
+            "stepId": "note",
+            "action": "finish"
+          }
+        ],
+        "currentStepId": null,
+        "completedAt": "2026-10-03T11:03:22Z"
       },
       "journal": [
         {

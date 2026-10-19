@@ -944,16 +944,16 @@
         "tags": [
           "scenario"
         ],
-        "operationId": "getScenarioProgress",
-        "summary": "Шаги сценария и прогресс",
-        "description": "§14.5. Сценарий версионируется вместе со схемой; уже открытые инциденты доигрывают на своей версии — поэтому шаги приходят с сервера вместе с ответами, а не подтягиваются клиентом из редактора сценариев по текущей версии.\n\nМодель шага совпадает с редактором сценариев (`src/shared/types/scenario.ts`): типы `Message`, `Comment`, `Datetime`, `Image`, `RadioButton`, `Select`, `Checkbox` и условные переходы на JSONLogic.\n\nУ инцидентов в группе ответы общие: изменение через любого участника видно всем.",
+        "operationId": "getIncidentScenario",
+        "summary": "Сценарий инцидента и его прохождение",
+        "description": "§14.5. Сценарии ведёт отдельная машина — `Specification/Scenario_machine/`, формат DSL v1. Инцидент доигрывает на версии сценария, с которой появился, поэтому сценарий (`script`) приходит с сервера вместе с прохождением (`result`), а не подтягивается клиентом по текущей версии.\n\nКроме прохождения — то, что МИ из него считает (профиль МИ в README машины сценариев): путь, курсор показа, прогресс «N из M», выполнены ли наборы обязательных шагов.",
         "responses": {
           "200": {
-            "description": "Прогресс сценария",
+            "description": "Сценарий и прохождение",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScenarioProgress"
+                  "$ref": "#/components/schemas/IncidentScenario"
                 }
               }
             }
@@ -967,19 +967,19 @@
         }
       }
     },
-    "/operator/incidents/{incidentGuid}/scenario/answers": {
+    "/operator/incidents/{incidentGuid}/scenario/answer": {
       "parameters": [
         {
           "$ref": "#/components/parameters/IncidentGuid"
         }
       ],
-      "patch": {
+      "post": {
         "tags": [
           "scenario"
         ],
-        "operationId": "saveScenarioAnswers",
-        "summary": "Автосохранение ответов на шаги",
-        "description": "Частичное обновление: присылаются только изменённые шаги. Нужно, чтобы прогресс не терялся при перехвате, передаче и перезагрузке вкладки — во всех этих сценариях v4 требует сохранения прогресса.\n\nДоступно только владельцу в `in_progress` и не на перерыве (§10.4). Ответ содержит пересчитанные `progress` и `requiredStepsFilled`, чтобы клиент сразу обновил доступность кнопки «Закрыть» без отдельного запроса действий.",
+        "operationId": "answerScenarioStep",
+        "summary": "Ответ на шаг сценария",
+        "description": "§14.5. Ответ на один шаг — событие машины сценариев: ответ, затем переходы шага и их действия (спецификация DSL, раздел 7). Ответить можно на текущий шаг прогона и на пройденный шаг пути с `editable` (профиль МИ). Необязательный шаг можно пропустить (`skip`). Если путь пошёл по другой ветке, ответы выпавших шагов уходят из `state` и остаются в `history`.\n\nДоступно тому, кому машина инцидента разрешает отвечать (`scenarioEdit`): владельцу в `in_progress`, не на перерыве (§10.4). Действие `callMacro` запускает макрос МИ по условиям `run_macro` — результат приходит записью журнала и событием `macro.completed`; `escalate` и `assign` не исполняются: ответы на переходы инцидента не влияют. Ответ содержит пересчитанные путь, прогресс и `requiredStepsFilled` — по ним клиент сразу обновляет кнопку «Закрыть». Курсор показа — на шаг пути после отвеченного.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -990,14 +990,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveAnswersRequest"
+                "$ref": "#/components/schemas/ScenarioAnswerRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Сохранено",
+            "description": "Ответ принят",
             "headers": {
               "ETag": {
                 "required": true,
@@ -1010,7 +1010,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScenarioProgress"
+                  "$ref": "#/components/schemas/IncidentScenario"
                 }
               }
             }
@@ -1018,8 +1018,28 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "description": "Шага нет на пути прогона (`STEP_NOT_ON_PATH`) или ответ на него уже не меняется (`STEP_NOT_EDITABLE`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "412": {
             "$ref": "#/components/responses/VersionConflict"
+          },
+          "422": {
+            "description": "Ответ не подходит к шагу (`INVALID_ANSWER`): `details.reason` — что не так: `option`, `count`, `required`, `length`, `format`, `range`, `readonly`, `attachments`, `type`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "428": {
             "$ref": "#/components/responses/PreconditionRequired"
@@ -1041,8 +1061,8 @@
           "scenario"
         ],
         "operationId": "setScenarioCursor",
-        "summary": "Перейти к шагу",
-        "description": "Курсор хранится на сервере, иначе после перехвата или возобновления новый владелец не знает, где остановился предыдущий (§6.1: «открывается карточка с первого незаполненного шага»). Сервер отклоняет переход на шаг, до которого есть незаполненные обязательные шаги.",
+        "summary": "Показать шаг пути",
+        "description": "Курсор показа хранится на сервере: после перехвата, возобновления или перезагрузки вкладки карточка открывается там же. Переход «Взять», «Принять», «Возобновить», «Перехватить» и «Переоткрыть» ставит его на текущий шаг прогона (`setCursor`, §14.5). Шаг — только из пути прогона (`path`): дальше текущего шага пройти нельзя, не ответив на него. Ставит тот, кому машина разрешает отвечать (`scenarioEdit`); на просмотре курсор у клиента свой.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1059,13 +1079,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScenarioProgress"
+                  "$ref": "#/components/schemas/IncidentScenario"
                 }
               }
             }
           },
           "409": {
-            "description": "Шаг недоступен: предыдущие обязательные не заполнены",
+            "description": "Шага нет на пути прогона (`STEP_NOT_ON_PATH`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1079,57 +1099,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          }
-        }
-      }
-    },
-    "/operator/incidents/{incidentGuid}/macros/{macroId}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/IncidentGuid"
-        },
-        {
-          "name": "macroId",
-          "in": "path",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "tags": [
-          "scenario"
-        ],
-        "operationId": "runMacro",
-        "summary": "Запустить макрос площадки",
-        "description": "§6.3, §14.2. Право `incident:run_action`, владелец, состояние `in_progress`, не на перерыве. Состояние инцидента не меняется.\n\nВнешний эффект: выполняется через очередь исходящих с повторами и идемпотентным ключом. Переход не откатывается при отказе — в журнал пишется неуспех, инцидент получает признак «команда не доставлена». Поэтому ответ `202`, а фактический результат приходит записью журнала и событием в потоке.",
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunMacroRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Команда принята к исполнению",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MacroExecution"
-                }
-              }
-            }
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -2354,6 +2323,9 @@
               "TARGET_NO_ACCESS",
               "TARGET_CANNOT_ACCEPT",
               "REQUIRED_STEPS_NOT_FILLED",
+              "STEP_NOT_ON_PATH",
+              "STEP_NOT_EDITABLE",
+              "INVALID_ANSWER",
               "REOPEN_WINDOW_EXPIRED",
               "BULK_SELECTION_INVALID",
               "SCHEMA_VALIDATION_FAILED",
@@ -3985,15 +3957,7 @@
             }
           },
           "scenarioProgress": {
-            "type": "object",
-            "properties": {
-              "filled": {
-                "type": "integer"
-              },
-              "total": {
-                "type": "integer"
-              }
-            }
+            "$ref": "#/components/schemas/ScenarioProgressCount"
           },
           "scenarioTitle": {
             "type": [
@@ -4374,7 +4338,7 @@
                 }
               },
               "scenario": {
-                "$ref": "#/components/schemas/ScenarioProgress"
+                "$ref": "#/components/schemas/IncidentScenario"
               },
               "journal": {
                 "type": "array",
@@ -4699,190 +4663,323 @@
           }
         }
       },
-      "ScenarioProgress": {
+      "IncidentScenario": {
         "type": "object",
+        "required": [
+          "scenarioGuid",
+          "scenarioVersion",
+          "name",
+          "script",
+          "result",
+          "path",
+          "cursorStepId",
+          "progress",
+          "requiredStepsFilled"
+        ],
         "properties": {
           "scenarioGuid": {
             "type": "string",
             "format": "uuid"
           },
           "scenarioVersion": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1,
+            "description": "Версия сценария, с которой появился инцидент; на ней он и доигрывает (§14.5)"
           },
-          "title": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "array",
-            "description": "Модель шага совпадает с редактором сценариев (`Step` в `src/shared/types/scenario.ts`): дискриминатор `type`, поле `view` с настройками под тип, `transitions` с условиями на JSONLogic.",
-            "items": {
-              "$ref": "#/components/schemas/ScenarioStep"
-            }
-          },
-          "answers": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "stepId → значение. Для группы ответы общие."
-          },
-          "launchedMacros": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "cursorStepId": {
+          "name": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Название сценария — данные, сервер отдаёт его как есть"
+          },
+          "script": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Сценарий DSL v1 этой версии: схема — `Specification/Scenario_machine/dsl-v1-schema.json`"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ScenarioResult"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Шаги, пройденные к текущему, по порядку; последний — текущий шаг или, у завершённого, шаг с `finish` (профиль МИ)"
+          },
+          "cursorStepId": {
+            "type": "string",
+            "description": "Курсор показа — шаг пути, открытый в карточке"
           },
           "progress": {
-            "type": "object",
-            "properties": {
-              "filled": {
-                "type": "integer"
-              },
-              "total": {
-                "type": "integer"
-              }
-            }
+            "$ref": "#/components/schemas/ScenarioProgressCount"
           },
           "requiredStepsFilled": {
             "type": "object",
             "additionalProperties": {
               "type": "boolean"
             },
-            "description": "§14.5. Заполнен ли каждый набор обязательных шагов. Ключ — идентификатор набора (`closing`). По нему клиент включает кнопку «Закрыть»."
+            "description": "§14.5. Выполнен ли набор обязательных шагов: `closing` — прогон дошёл до `finish`, `none` — всегда (профиль МИ). По нему клиент включает «Обработан» в форме закрытия."
           }
         }
       },
-      "ScenarioStep": {
+      "ScenarioProgressCount": {
+        "type": "object",
+        "required": [
+          "filled",
+          "total"
+        ],
+        "properties": {
+          "filled": {
+            "type": "integer",
+            "description": "Отвеченные шаги пути"
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Отвеченные плюс кратчайший остаток до `finish`; при ветвлении может меняться (профиль МИ)"
+          },
+          "step": {
+            "type": "integer",
+            "description": "Номер текущего шага в пути"
+          }
+        }
+      },
+      "ScenarioResult": {
+        "type": "object",
+        "required": [
+          "dslVersion",
+          "state",
+          "history",
+          "currentStepId",
+          "completedAt"
+        ],
+        "description": "Прохождение сценария (`scenarioResult`) — спецификация DSL v1, раздел 9. У сервера МИ — `incident.scenarioResult`.",
+        "properties": {
+          "dslVersion": {
+            "type": "string"
+          },
+          "state": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScenarioStepEntry"
+            },
+            "description": "Последний ответ на каждый шаг пути: stepId → запись"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioHistoryEvent"
+            },
+            "description": "Журнал без правок: ответы, пропуски, переходы, действия"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioAttachment"
+            },
+            "description": "Вложения шагов Image; нет ни одного — поля нет"
+          },
+          "currentStepId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Текущий шаг; `null` — прохождение завершено"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Когда сработал `finish`"
+          }
+        }
+      },
+      "ScenarioStepEntry": {
+        "type": "object",
+        "required": [
+          "value",
+          "answeredAt"
+        ],
+        "properties": {
+          "value": {
+            "description": "Значение по типу шага: RadioButton, Select — id варианта; Checkbox — массив id; Comment — текст; Image — массив id вложений; Datetime — ISO-8601; Button и пропуск — `null`"
+          },
+          "answeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Кто ответил"
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "Шаг пропущен без ответа — только необязательный"
+          }
+        }
+      },
+      "ScenarioHistoryEvent": {
+        "type": "object",
+        "required": [
+          "ts",
+          "stepId",
+          "action"
+        ],
+        "properties": {
+          "ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "skip",
+              "transition",
+              "callMacro",
+              "generateReport",
+              "escalate",
+              "assign",
+              "finish",
+              "timeout"
+            ]
+          },
+          "value": {
+            "description": "`answer`: значение"
+          },
+          "by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "description": "`transition`: на какой шаг; `escalate`, `assign`: кому"
+          },
+          "matchedRule": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "`transition`: номер правила; `null` — `default`"
+          },
+          "macroId": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ScenarioAttachment": {
         "type": "object",
         "required": [
           "id",
-          "type"
+          "stepId",
+          "source",
+          "mime",
+          "capturedAt"
         ],
         "properties": {
           "id": {
             "type": "string"
           },
-          "type": {
+          "stepId": {
+            "type": "string"
+          },
+          "source": {
             "type": "string",
             "enum": [
-              "Message",
-              "Comment",
-              "Datetime",
-              "Image",
-              "RadioButton",
-              "Select",
-              "Checkbox",
-              "Macros"
+              "camera",
+              "map",
+              "operator",
+              "fixed"
             ]
           },
-          "title": {
+          "mime": {
             "type": "string"
           },
-          "description": {
+          "fileName": {
             "type": "string"
           },
-          "revisitable": {
-            "type": "boolean"
+          "size": {
+            "type": "integer"
           },
-          "multitasking": {
-            "type": "boolean"
+          "sha256": {
+            "type": "string"
           },
-          "report": {
-            "type": "boolean"
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
           },
-          "finish": {
-            "type": "boolean"
+          "dataBase64": {
+            "type": "string",
+            "description": "Содержимое; в прототипе вложение хранится в самом прохождении"
           },
-          "requiredFor": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "§14.5. В какие наборы обязательных шагов входит: closing и др."
-          },
-          "view": {
+          "storage": {
             "type": "object",
-            "additionalProperties": true
-          },
-          "transitions": {
-            "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Где хранится вместо `dataBase64`: `{kind: s3, bucket, key}` или `{kind: url, url}`"
           }
         }
       },
-      "SaveAnswersRequest": {
+      "ScenarioAnswerRequest": {
         "type": "object",
         "required": [
-          "answers"
+          "stepId"
         ],
         "properties": {
-          "answers": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Только изменённые шаги: stepId → значение."
+          "stepId": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Ответ по типу шага (ScenarioStepEntry.value). У кнопки и при `skip` не нужен"
+          },
+          "skip": {
+            "type": "boolean",
+            "description": "Пропустить необязательный шаг"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioAttachment"
+            },
+            "description": "Вложения шага Image; их id — в `value`"
           }
         }
       },
       "SetCursorRequest": {
         "type": "object",
+        "required": [
+          "stepId"
+        ],
         "properties": {
           "stepId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "move": {
             "type": "string",
-            "enum": [
-              "next",
-              "prev",
-              "first_open"
-            ],
-            "description": "Альтернатива явному stepId."
-          }
-        }
-      },
-      "RunMacroRequest": {
-        "type": "object",
-        "properties": {
-          "stepId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Из какого шага сценария запущен."
-          },
-          "idempotencyKey": {
-            "type": "string"
-          }
-        }
-      },
-      "MacroExecution": {
-        "type": "object",
-        "properties": {
-          "executionGuid": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "macroId": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "delivered",
-              "failed"
-            ]
-          },
-          "queuedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "Шаг пути прогона"
           }
         }
       },

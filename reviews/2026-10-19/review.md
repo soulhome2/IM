@@ -45,3 +45,43 @@
   Тот же случай с группой. Адресат уровня — дежурная группа, и единственный её участник, который может принять, — текущий адресат инцидента. «Эскалация группе» приходит к тому же человеку.
 
   Предложение — в [плане](plan.md), этап 2.
+
+---
+
+# Второй проход: подключение машины сценариев (исследование)
+
+Проверяемый коммит: `87a06ea`. Роли: архитектор, разработчик. Ссылки этого раздела ведут на `87a06ea`. Соседние репозитории — только для чтения, на коммитах: `incident-manager-dsl` `bbe12d5` (2026-05-13), `incident-manager` `1fcfa25` (2026-10-04), `incident-manager-server` `b743797` (2026-10-13). В их рабочих копиях только шум прав файлов и переводов строк, содержимое равно коммитам.
+
+Задача — перенести машину сценариев в IM и подключить её к прототипу через стык §14.5. Сейчас сценарии прототипа — плоский список шагов в эталонном наборе, а стык с машиной инцидента — демо-логика в `server.js` (§17, отступление «машина сценариев не подключена»).
+
+## Главное
+
+1. **ARCH-06** [высокий] *архитектор, разработчик* **Машина сценариев не подключена, а формат сценария существует в трёх несовместимых видах.**
+   - **DSL v1** (`incident-manager-dsl`): спецификация `dsl-v1-draft.md`, схема `dsl-v1-schema.json`, 10 примеров, исполнитель runner-web. Все примеры проходят схему; отрицательный A5 отвергается.
+   - **Формат продукта** (`incident-manager`, `src/shared/schema/scenario.zod.ts`). Его редактор сейчас пишет в `script` сервера (`imBackendScenarios.dto.ts:65`). От DSL отличается всем: `{scenario, steps}` вместо `dslVersion`/`metadata`/`initialStepId`; `Message` вместо `Button`; флаги шага `finish`/`report`/`revisitable` вместо действий; Select — несколько списков; условия видят только текущий шаг и есть только у шагов с выбором; формата прохождения нет.
+   - **Сервер** (`backend.openapi.yaml`): `script` непрозрачен; `guid` назначает сервер, `version` растёт при каждом сохранении (2368); инцидент ссылается на `(scenario_guid, scenario_version)` внешним ключом, снимка сценария нет (`001_initial_scheme.sql:198–205`); у правила инцидента список сценариев (2086), как выбирается один — не описано.
+   - В IM контракт уже ссылается на модель продукта: описание `ScenarioStep` в [openapi.json](https://github.com/soulhome2/IM/blob/87a06ea/Specification/State_machine/openapi.json) и [README машины:26](https://github.com/soulhome2/IM/blob/87a06ea/Specification/State_machine/README.md?plain=1#L26).
+
+2. **Стык §14.5 с DSL v1 сходится не во всём:**
+   - наборов шагов (`stepSets`) в DSL нет — есть только `required` у шага («не идти дальше без ответа»); правило «все обязательные шаги отвечены» в ветвящемся графе невыполнимо;
+   - «первый незаполненный шаг» и «N из M» в графе не определены: длина пути зависит от ответов;
+   - условий по состоянию и владельцу инцидента в DSL v1 нет сознательно: в контексте условий только ответы (`dsl-v1-draft.md:803`);
+   - действия `finish`, `escalate`, `assign`, таймеры и `concurrency` сценария спорят с §14.5 и §2.2: ответы на переходы инцидента не влияют;
+   - шаг назад и правка ответа (`editable`) в DSL не описаны, в runner-web их нет;
+   - в демо есть шаг `macros` — в DSL такого типа нет, макрос там — действие `callMacro` на переходе.
+
+3. **`ctx.shareAnswers` в коде нет**, хотя §17 его называет: `copyAnswersToPrimary` в исполнителе машины сам читает `ev.answers` ([engine.js:510–520](https://github.com/soulhome2/IM/blob/87a06ea/prototype/engine.js#L510-L520)) — машина инцидента знает устройство ответов. Логика шагов продублирована в клиенте ([app.js:904–1017](https://github.com/soulhome2/IM/blob/87a06ea/prototype/app.js#L904-L1017)).
+
+4. В эталонном наборе не два, а семь сценариев (`fire`, `intrusion`, `sabotage`, `loiter`, `ppe`, `alcohol`, `glass`); ответы есть у 13 из 26 инцидентов.
+
+## Что затронет подключение
+
+- прототип: [server.js](https://github.com/soulhome2/IM/blob/87a06ea/prototype/server.js) 199–235, 263–268, 370–374, 580–600, 694–719, 1131, 1348–1388, 1731–1762; [app.js](https://github.com/soulhome2/IM/blob/87a06ea/prototype/app.js) 904–1017, 2052–2240, 3070; [engine.js:510–520](https://github.com/soulhome2/IM/blob/87a06ea/prototype/engine.js#L510-L520);
+- машина: [workflow.v4.json](https://github.com/soulhome2/IM/blob/87a06ea/Specification/State_machine/workflow.v4.json) 219–222 (`stepSets`), 1138 (`scenarioEdit`), 1203–1205 и 1270 (строки); `openapi.json` — `ScenarioProgress`, `ScenarioStep`, тела ответов и курсора, `RunMacroRequest`;
+- тесты: `harness.js` (`fullAnswers`), `api-scenarios.js`, `api-fsm.js`, `api-properties.js`, `selftest.js`;
+- проверки: `check_machine.py` 223 и 329–337, около 20 мутаций кода по сценариям, `transitions_doc.py`, `check_ui.py`, `build_workflow.py`, `checks.yml`;
+- документы: правила §6.1, §7, §14.5, §15, §17; README машины, `BACKEND.md`, `FRONTEND.md`, руководство оператора, `i18n-data.js`.
+
+## Ограничения
+
+Изменений нет — только чтение. Исполнитель runner-web не запускался: node в окружении нет. Схема проверена Python `jsonschema` 4.19.2 на копиях примеров.

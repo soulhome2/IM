@@ -1,6 +1,12 @@
 // Переводы демонстрационных данных прототипа: устройства, объекты, сценарии, журнал.
 window.IM_DICT_DATA = {
   en: {
+    "Да": "Yes",
+    "Нет": "No",
+    "Повреждение": "Damage",
+    "Эвакуация объявлена": "Evacuation announced",
+    "Эвакуация": "Evacuation",
+    "Подтверждение": "Confirmation",
     "1-й этаж": "1st floor",
     "1-й этаж, витрина у входа": "1st floor, entrance display",
     "1-й этаж, кассовая зона": "1st floor, checkout area",
@@ -123,9 +129,6 @@ window.IM_DICT_DATA = {
     "Магазин 2, витрина у входа": "Store 2, entrance display",
     "Магазин 2, коридор примерочных": "Store 2, fitting room corridor",
     "Макросы": "Macros",
-    "Макросы зоны": "Zone macros",
-    "Макросы площадки": "Site macros",
-    "Макросы точки прохода": "Access point macros",
     "Маркетинг — рабочая зона": "Marketing — work area",
     "Маршрут, приметы, действия охраны": "Route, description, guard actions",
     "Микрофон": "Microphone",

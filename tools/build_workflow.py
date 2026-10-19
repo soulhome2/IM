@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/State_machine/
+"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/State_machine/,
+примеров машины сценариев для её тестов (tests/scenario-examples.js) из Specification/Scenario_machine/examples/,
 таблицы переходов для человека Specification/State_machine/TRANSITIONS.md и перечня настроек
 администратора Specification/State_machine/SETTINGS.md.
 
@@ -58,11 +59,30 @@ def build_strings():
     return f"{header}window.IM_STRINGS = {json.dumps(catalog, ensure_ascii=False, indent=2)};\n"
 
 
+def build_scenario_examples():
+    """Примеры машины сценариев (Specification/Scenario_machine/examples/**) — тестам исполнителя
+    сценариев: { путь от examples/: сценарий }."""
+    folder = os.path.join(ROOT, "Specification", "Scenario_machine", "examples")
+    examples = {}
+    for base, dirs, files in os.walk(folder):
+        dirs.sort()
+        for name in sorted(files):
+            if name.endswith(".json"):
+                with open(os.path.join(base, name), encoding="utf-8") as f:
+                    examples[os.path.relpath(os.path.join(base, name), folder).replace(os.sep, "/")] = json.load(f)
+    header = (
+        "// Собрано из Specification/Scenario_machine/examples/ скриптом tools/build_workflow.py.\n"
+        "// Руками не править: правится исходник, затем сборка.\n"
+    )
+    return f"{header}window.IM_SCENARIO_EXAMPLES = {json.dumps(dict(sorted(examples.items())), ensure_ascii=False)};\n"
+
+
 def outputs():
     """(путь от корня, текст, из чего собран) — всё, что собирает этот скрипт."""
     for source, target, var, indent in TARGETS:
         yield f"prototype/{target}", build(source, var, indent), source
     yield "prototype/strings.js", build_strings(), "strings/*.json"
+    yield "tests/scenario-examples.js", build_scenario_examples(), "Scenario_machine/examples/"
     with open(os.path.join(MACHINE, "workflow.v4.json"), encoding="utf-8") as f:
         w = json.load(f)
     yield "Specification/State_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow.v4.json"

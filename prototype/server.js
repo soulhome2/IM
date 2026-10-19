@@ -1,7 +1,8 @@
 /* Встроенный сервер прототипа. Отвечает на запросы ровно по контракту
    Specification/State_machine/openapi.json и хранит всё, что в продукте хранит бэкенд:
-   инциденты, журнал, ответы сценария, сессию оператора. Переходы выполняет исполнитель
-   машины (engine.js), автоматические — планировщик раз в секунду (§6.2). Интерфейс (app.js)
+   инциденты, журнал, прохождение сценариев, сессию оператора. Переходы выполняет исполнитель
+   машины (engine.js), автоматические — планировщик раз в секунду (§6.2), сценарии — исполнитель
+   машины сценариев (scenario.js) через стык §14.5. Интерфейс (app.js)
    разговаривает с ним только через api.js, теми же запросами, что с настоящим бэкендом.
    Работает в той же вкладке: страница открывается и с диска (file://), и с сайта.
    Данные — эталонный набор Specification/State_machine/fixtures/demo.json (prototype/fixture.js):
@@ -52,7 +53,8 @@
     let DEVICE_CATALOG = {};
     let PLANS = [];
     let TREE = [];
-    let SCENARIOS = {};
+    let SCENARIO_ROWS = {};
+    let SCENARIO_BY_TYPE = {};
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
@@ -197,41 +199,69 @@
     // и другие устройства события тревогой не считаются — ни в счётчиках дерева, ни в фильтре группы
     const touches = (ev, ids) => ids.includes(eventSource(ev));
 
-    /* ===== Сценарий (до подключения машины сценариев, §14.5, §17) ===== */
+    /* ===== Сценарий: исполняет машина сценариев (prototype/scenario.js, §14.5) ===== */
 
-    const scenarioOf = (ev) => SCENARIOS[ev.typeId];
-    const scenarioSteps = (ev) => scenarioOf(ev).steps;
-    // Короткое имя шага: у подтверждения — подпись-ключ (§14.9), у остальных — название из сценария
-    const stepShort = (step) => (step.type === "checkbox" ? ["workflow.scenario.confirmation"] : step.label);
-    // Заполнен ли шаг: подтверждён, запущен макрос или есть ответ
-    function stepAnswerText(ev, step) {
-      if (step.type === "checkbox") return Boolean(ev.answers[step.id]);
-      if (step.type === "macros") return ev.launched.length > 0;
-      return ev.answers[step.id] || "";
+    // Сценарий инцидента — версия, с которой он появился (§14.5): строка сценария как на сервере
+    // (guid, version, name, script DSL v1), прохождение — ev.run (scenarioResult, спецификация DSL, раздел 9)
+    const rowKey = (guid, version) => `${guid}/${version}`;
+    const rowOf = (ev) => SCENARIO_ROWS[rowKey(ev.scenarioGuid, ev.scenarioVersion)];
+    const scriptOf = (ev) => rowOf(ev).script;
+    // Новый инцидент получает последнюю версию сценария своего типа события
+    function latestRow(typeId) {
+      const guid = SCENARIO_BY_TYPE[typeId];
+      return (
+        Object.values(SCENARIO_ROWS)
+          .filter((r) => r.guid === guid)
+          .sort((a, b) => b.version - a.version)[0] || null
+      );
     }
-    function isStepValid(ev, step) {
-      if (!step.required) return true;
-      if (step.type === "checkbox") return ev.answers[step.id] === true;
-      if (step.type === "macros") return true;
-      return Boolean(ev.answers[step.id]);
+    const pathOf = (ev) => IMScenario.path(scriptOf(ev), ev.run);
+    // Курсор показа — шаг пути; выпал из пути или ещё не ставился — текущий шаг прогона
+    function viewStepOf(ev) {
+      if (!pathOf(ev).includes(ev.viewStepId)) ev.viewStepId = IMScenario.cursor(scriptOf(ev), ev.run);
+      return ev.viewStepId;
     }
-    const scenarioDone = (ev) => scenarioSteps(ev).every((s) => isStepValid(ev, s));
-    function firstOpenStep(ev) {
-      const steps = scenarioSteps(ev);
-      const blocked = steps.findIndex((s) => s.required && !isStepValid(ev, s));
-      if (blocked !== -1) return blocked;
-      const empty = steps.findIndex((s) => !stepAnswerText(ev, s));
-      return empty === -1 ? steps.length - 1 : empty;
+    const progressOf = (ev) => IMScenario.progress(scriptOf(ev), ev.run);
+    const stepsFilledOf = (ev, setId) => IMScenario.stepsFilled(scriptOf(ev), ev.run, setId);
+    // Короткое имя шага — для журнала: название, иначе вопрос
+    const stepName = (step) => step.title || step.view.label;
+    // Ответ словами — для журнала: подписи вариантов, текст, число вложений; пропуск — тире
+    function answerText(step, entry) {
+      if (!entry || entry.skipped) return "—";
+      const label = (id) => ((step.view.options || []).find((o) => o.id === id) || { label: id }).label;
+      if (step.type === "Button") return step.view.label;
+      if (Array.isArray(entry.value)) return step.type === "Image" ? String(entry.value.length) : entry.value.map(label).join(", ");
+      return step.view.options ? label(entry.value) : String(entry.value == null ? "" : entry.value);
     }
-    const canOpenStep = (ev, index) =>
-      index >= 0 && index < scenarioSteps(ev).length && scenarioSteps(ev).slice(0, index).every((s) => isStepValid(ev, s));
-    function cursorOf(ev) {
-      if (typeof ev.stepIndex !== "number" || !canOpenStep(ev, ev.stepIndex)) ev.stepIndex = firstOpenStep(ev);
-      return ev.stepIndex;
+
+    // Ответ на шаг — событие машины сценариев. Курсор показа — на шаг пути после отвеченного.
+    // Макросы (callMacro) запускаются по условиям run_macro того, кто ответил (§14.5, профиль МИ)
+    function answerStep(ev, actor, actorEngine, body) {
+      const res = IMScenario.answer(scriptOf(ev), ev.run, body.stepId, body.value, {
+        at: iso(now()),
+        by: actor,
+        skip: Boolean(body.skip),
+        attachments: body.attachments || [],
+      });
+      if (!res.ok) return res;
+      ev.run = res.result;
+      const path = pathOf(ev);
+      ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];
+      res.effects.filter((e) => e.type === "callMacro").forEach((e) => launchMacro(ev, actor, actorEngine, e.macroId));
+      return res;
     }
-    function stepProgress(ev) {
-      const steps = scenarioSteps(ev);
-      return { filled: steps.filter((s) => Boolean(stepAnswerText(ev, s))).length, total: steps.length };
+    function launchMacro(ev, actor, actorEngine, macroId) {
+      if (!actorEngine.availability("run_macro", ev).ok) return;
+      log(ev, actor, "workflow.journal.macro.launched", { name: macroId });
+      // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен»
+      emit("macro.completed", ev, actor, { macroId, executionGuid: uuid(9, ++serial.macro), status: "delivered" });
+    }
+    // Ответ не принят — код ошибки по контракту
+    function answerProblem(ev, body, error) {
+      if (error === "not_on_path" || error === "unknown_step") return problem(409, "STEP_NOT_ON_PATH", ["workflow.error.scenario.not_on_path"]);
+      if (error === "not_editable") return problem(409, "STEP_NOT_EDITABLE", ["workflow.error.scenario.not_editable"]);
+      const step = scriptOf(ev).steps.find((x) => x.id === body.stepId);
+      return problem(422, "INVALID_ANSWER", ["workflow.error.scenario.invalid_answer", { step: stepName(step) }], { details: { reason: error } });
     }
 
     /* ===== Журнал ===== */
@@ -260,11 +290,19 @@
       },
       inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(TREE, groupId))),
       agentState: () => session.agentState,
-      stepsFilled: (ev, setId) => setId === "none" || scenarioDone(ev),
-      progress: (ev) => stepProgress(ev),
-      stepNumber: (ev) => cursorOf(ev) + 1,
+      // Стык с машиной сценариев (§14.5): наборы шагов, прогресс, курсор, перенос ответов при объединении
+      stepsFilled: (ev, setId) => stepsFilledOf(ev, setId),
+      progress: (ev) => progressOf(ev),
+      stepNumber: (ev) => pathOf(ev).lastIndexOf(viewStepOf(ev)) + 1,
       setCursor: (ev) => {
-        ev.stepIndex = firstOpenStep(ev);
+        ev.viewStepId = IMScenario.cursor(scriptOf(ev), ev.run);
+      },
+      // Сколько ответов привязанного перенесено в основной
+      shareAnswers: (from, to, at) => {
+        const res = IMScenario.share(scriptOf(from), from.run, scriptOf(to), to.run, { at: iso(at) });
+        to.run = res.result;
+        if (res.moved.length) to.viewStepId = IMScenario.cursor(scriptOf(to), to.run);
+        return res.moved.length;
       },
       actorName: (id) => rawName(id),
       log,
@@ -332,7 +370,16 @@
       TREE = tree(data.sourceGroups);
       const me = data.people.operators.find((o) => o.id === ME) || {};
       myDevices = accessibleDevices(rolesOverride || me.roles || []);
-      SCENARIOS = data.scenarios;
+      SCENARIO_ROWS = Object.fromEntries(data.scenarios.rows.map((r) => [rowKey(r.guid, r.version), r]));
+      SCENARIO_BY_TYPE = data.scenarios.byEventType;
+      // Прохождение — тоже снимок: его времена сдвигаются вместе с остальными
+      const at = (time) => iso(abs(time));
+      const runOf = (r) =>
+        Object.assign({}, r, {
+          state: Object.fromEntries(Object.entries(r.state).map(([id, e]) => [id, Object.assign({}, e, { answeredAt: at(e.answeredAt) })])),
+          history: r.history.map((h) => Object.assign({}, h, { ts: at(h.ts) })),
+          completedAt: at(r.completedAt),
+        }, r.attachments ? { attachments: r.attachments.map((a) => Object.assign({}, a, { capturedAt: at(a.capturedAt) })) } : {});
       events = data.incidents.map((inc) => ({
         id: inc.guid,
         number: inc.number,
@@ -367,11 +414,12 @@
         slaBreached: inc.slaBreached,
         breaches: (inc.breaches || []).map((b) => ({ kind: b.kind, at: abs(b.at), owner: b.owner || null })),
         linkedTo: inc.linkedGuid || null,
-        answers: inc.scenario.answers,
-        launched: inc.scenario.launchedMacros,
+        scenarioGuid: inc.scenarioGuid,
+        scenarioVersion: inc.scenarioVersion,
+        run: runOf(inc.scenarioResult),
+        // Курсор показа — до первого setCursor на текущем шаге прогона
+        viewStepId: null,
         log: inc.journal.map((j) => ({ at: abs(j.at), whoId: j.actor, who: j.actorName, k: j.template, v: j.vars })),
-        // Шаг, на котором остановился владелец; нет — первый незаполненный
-        stepIndex: inc.scenario.cursorStepId ? SCENARIOS[inc.eventType.id].steps.findIndex((s) => s.id === inc.scenario.cursorStepId) : undefined,
         version: 1,
         // Набор — снимок: время появления в МИ неизвестно, берётся время события
         createdAt: abs(inc.occurredAt),
@@ -567,8 +615,8 @@
         linkedCount: events.filter((e) => e.linkedTo === ev.id).length,
         // Самый ранний идущий срок закрытия среди привязанных (§11.4): истечёт — нарушение на владельца основного
         linkedDueAt: linkedDue(ev),
-        scenarioProgress: stepProgress(ev),
-        scenarioTitle: (scenarioOf(ev) && scenarioOf(ev).title) || null,
+        scenarioProgress: progressOf(ev),
+        scenarioTitle: rowOf(ev).name == null ? null : rowOf(ev).name,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
         schemaVersion: 4,
         version: String(ev.version),
@@ -576,27 +624,23 @@
       };
     }
 
-    const STEP_TYPE = { checkbox: "Checkbox", radio: "RadioButton", combo: "Select", edit: "Comment", macros: "Macros" };
+    // Сценарий карточки: версия инцидента, прохождение и то, что МИ из него считает (профиль МИ)
     function scenarioView(ev) {
-      const sc = scenarioOf(ev);
-      const steps = sc.steps;
+      const row = rowOf(ev);
       return {
-        scenarioGuid: sc.guid,
-        scenarioVersion: 1,
-        title: sc.title,
-        steps: steps.map((s) => ({
-          id: s.id,
-          type: STEP_TYPE[s.type],
-          title: s.label,
-          description: "",
-          requiredFor: s.required ? ["closing"] : [],
-          view: { short: Array.isArray(stepShort(s)) ? render(stepShort(s)[0]) : stepShort(s), options: s.options || null, placeholder: s.placeholder || null, buttons: s.buttons || null },
-        })),
-        answers: JSON.parse(JSON.stringify(ev.answers)),
-        launchedMacros: ev.launched.slice(),
-        cursorStepId: steps[cursorOf(ev)].id,
-        progress: stepProgress(ev),
-        requiredStepsFilled: { closing: scenarioDone(ev) },
+        scenarioGuid: row.guid,
+        scenarioVersion: row.version,
+        name: row.name == null ? null : row.name,
+        script: JSON.parse(JSON.stringify(row.script)),
+        result: JSON.parse(JSON.stringify(ev.run)),
+        path: pathOf(ev),
+        cursorStepId: viewStepOf(ev),
+        progress: progressOf(ev),
+        requiredStepsFilled: Object.fromEntries(
+          Object.keys(W.stepSets)
+            .filter((k) => !k.startsWith("$"))
+            .map((k) => [k, stepsFilledOf(ev, k)])
+        ),
       };
     }
 
@@ -613,7 +657,12 @@
     }
 
     // Сценарий инцидента: «Взять в работу» на выборке — как одно, только с одним сценарием (§11)
-    const scenarioKey = (ev) => (scenarioOf(ev) && scenarioOf(ev).guid) || ev.typeId;
+    const scenarioKey = (ev) => ev.scenarioGuid;
+    // Название сценария по guid — последней версии; нет названия — null
+    const scenarioName = (guid) => {
+      const row = Object.values(SCENARIO_ROWS).find((r) => r.guid === guid);
+      return row && row.name != null ? row.name : null;
+    };
 
     /* ===== «Выделить по фильтру» из дерева (§11) =====
        Узел дерева (или все события) и условия, соединённые «ИЛИ». В условии — «И»: тип устройства
@@ -691,7 +740,7 @@
       // «Одинаковый сценарий» (необязательно): события одного сценария, которые можно взять в работу как одно —
       // основной и те, кого к нему можно присоединить по условиям перехода объединения машины.
       // Чужие и ожидающие принятия не включаются: сколько — excluded. У сценария — сколько можно взять
-      const scenarioLabel = (k) => (Object.values(SCENARIOS).find((x) => x && x.guid === k) || { title: typeName(k) }).title;
+      const scenarioLabel = (k) => scenarioName(k);
       const mergeTr = W.transitions.find((t) => t.bulk && t.bulk.mode === "merge");
       const takeable = (list) => {
         const p = pickPrimary(list);
@@ -1131,7 +1180,7 @@
           const scenarios = [...new Set(list.map(scenarioKey))];
           const primary = list.length ? pickPrimary(list) : null;
           if (scenarios.length > 1) {
-            const titles = scenarios.map((k) => (Object.values(SCENARIOS).find((x) => x && x.guid === k) || { title: k }).title);
+            const titles = scenarios.map((k) => scenarioName(k) || k);
             reason = ["workflow.error.merge.scenarios", { titles: titles.join(", ") }];
           } else if (primary) {
             // Одно отмеченное — просто «Взять»; несколько — как одно. Делать нечего — недоступно.
@@ -1352,20 +1401,20 @@
         },
       ],
       [
-        "PATCH",
-        "/operator/incidents/{incidentGuid}/scenario/answers",
+        "POST",
+        "/operator/incidents/{incidentGuid}/scenario/answer",
         (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          // Ответы пишет только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
+          // Отвечает только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
           const stale = versionProblem(ev, headers);
           if (stale) return stale;
-          Object.assign(ev.answers, (body && body.answers) || {});
-          if (!canOpenStep(ev, cursorOf(ev))) ev.stepIndex = firstOpenStep(ev);
+          const res = answerStep(ev, ME, engine, body || {});
+          if (!res.ok) return answerProblem(ev, body || {}, res.error);
           touch([ev]);
           // Ответы сценария изменились — тем, кто видит инцидент (§9, RULE-60)
-          emit("incident.updated", ev, ME, { stepIds: Object.keys((body && body.answers) || {}) });
+          emit("incident.updated", ev, ME, { stepIds: [body.stepId] });
           return { status: 200, body: scenarioView(ev), headers: { ETag: etag(ev) } };
         },
       ],
@@ -1376,32 +1425,10 @@
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
-          const steps = scenarioSteps(ev);
-          let index = cursorOf(ev);
-          if (body && body.stepId) index = steps.findIndex((s) => s.id === body.stepId);
-          else if (body && body.move === "next") index += 1;
-          else if (body && body.move === "prev") index -= 1;
-          else if (body && body.move === "first_open") index = firstOpenStep(ev);
-          if (!canOpenStep(ev, index)) return problem(409, "REQUIRED_STEPS_NOT_FILLED", ["workflow.error.previous_steps"]);
-          ev.stepIndex = index;
+          // Показать можно только шаг пути: дальше текущего не пройти, не ответив на него
+          if (!body || !pathOf(ev).includes(body.stepId)) return problem(409, "STEP_NOT_ON_PATH", ["workflow.error.scenario.not_on_path"]);
+          ev.viewStepId = body.stepId;
           return { status: 200, body: scenarioView(ev) };
-        },
-      ],
-      [
-        "POST",
-        "/operator/incidents/{incidentGuid}/macros/{macroId}",
-        (p) => {
-          const ev = find(p.incidentGuid);
-          if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          const check = engine.availability("run_macro", ev);
-          if (!check.ok) return guardProblem(check);
-          if (!ev.launched.includes(p.macroId)) ev.launched.push(p.macroId);
-          log(ev, ME, "workflow.journal.macro.launched", { name: p.macroId });
-          touch([ev]);
-          // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен»
-          const execution = { executionGuid: uuid(9, ++serial.macro), macroId: p.macroId, status: "delivered", queuedAt: iso(now()) };
-          emit("macro.completed", ev, ME, { macroId: execution.macroId, executionGuid: execution.executionGuid, status: execution.status });
-          return { status: 202, body: execution };
         },
       ],
       [
@@ -1517,7 +1544,9 @@
       const type = eventTypes().find((t) => t.id === spec.eventTypeId);
       const devices = spec.deviceIds || [];
       const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= SCALE.min && spec.priority <= SCALE.max);
-      if (!type || !SCENARIOS[spec.eventTypeId] || !devices.length || badPriority) return null;
+      // Сценарий — последняя версия сценария типа события: на ней инцидент и доигрывает (§14.5)
+      const row = latestRow(spec.eventTypeId);
+      if (!type || !row || !devices.length || badPriority) return null;
       const last = Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0));
       const ev = {
         id: uuid(6, ++serial.incident),
@@ -1551,8 +1580,10 @@
         slaBreached: false,
         breaches: [],
         linkedTo: null,
-        answers: {},
-        launched: [],
+        scenarioGuid: row.guid,
+        scenarioVersion: row.version,
+        run: IMScenario.start(row.script, iso(now())),
+        viewStepId: null,
         log: [],
         version: 1,
       };
@@ -1728,41 +1759,42 @@
       }
     }
 
-    // Коллега проходит шаг своего сценария — если машина разрешает ему править (scenarioEdit)
+    // Ответ коллеги на шаг: вариант — случайный, отметки — сколько нужно, текст — из заметок эмуляции;
+    // необязательное вложение коллега пропускает
+    function colleagueAnswer(step) {
+      const v = step.view;
+      const ids = (v.options || []).map((o) => o.id);
+      const any = (list) => list[Math.floor(Math.random() * list.length)];
+      if (step.type === "RadioButton" || step.type === "Select") return { stepId: step.id, value: any(ids) };
+      if (step.type === "Checkbox") return { stepId: step.id, value: ids.slice(0, Math.max(1, v.minSelected || 0)) };
+      if (step.type === "Comment") return { stepId: step.id, value: v.readonly ? "" : any(opts.colleagues.SIM_NOTES) };
+      if (step.type === "Datetime") {
+        const at = new Date(now()).toISOString();
+        return { stepId: step.id, value: v.kind === "date" ? at.slice(0, 10) : v.kind === "time" ? at.slice(11, 19) : at.slice(0, 19) + "Z" };
+      }
+      if (step.type === "Image") return IMScenario.isRequired(step) ? null : { stepId: step.id, skip: true };
+      return { stepId: step.id, value: null };
+    }
+
+    // Коллега отвечает на текущий шаг своего сценария — если машина разрешает ему править (scenarioEdit)
     function simAdvanceEvent() {
-      const pool = foreignActive().filter((e) => !scenarioDone(e) && colleague(e.owner).canEditScenario(e));
+      const pool = foreignActive().filter((e) => !e.run.completedAt && colleague(e.owner).canEditScenario(e));
       if (!pool.length) return;
       const ev = pool[Math.floor(Math.random() * pool.length)];
-      const steps = scenarioSteps(ev);
-      const idx = steps.findIndex((s) => !stepAnswerText(ev, s));
-      if (idx === -1) return;
-      const step = steps[idx];
-      let done = "";
-      if (step.type === "checkbox") {
-        ev.answers[step.id] = true;
-        done = ["workflow.journal.scenario.confirmed"];
-      } else if (step.type === "macros") {
-        if (!colleague(ev.owner).availability("run_macro", ev).ok) return;
-        ev.launched.push(step.buttons[0]);
-        done = ["workflow.journal.scenario.macro", { name: step.buttons[0] }];
-      } else if (step.options) {
-        ev.answers[step.id] = step.options[Math.floor(Math.random() * step.options.length)];
-        done = ev.answers[step.id];
-      } else {
-        const notes = opts.colleagues.SIM_NOTES;
-        ev.answers[step.id] = notes[Math.floor(Math.random() * notes.length)];
-        done = ev.answers[step.id];
-      }
-      ev.stepIndex = Math.min(idx + 1, steps.length - 1);
-      log(ev, ev.owner, "workflow.journal.scenario.step", { i: idx + 1, n: steps.length, name: stepShort(step), done });
+      const who = ev.owner;
+      const step = scriptOf(ev).steps.find((x) => x.id === ev.run.currentStepId);
+      const answer = colleagueAnswer(step);
+      if (!answer || !answerStep(ev, who, colleague(who), answer).ok) return;
+      const prog = progressOf(ev);
+      const i = pathOf(ev).lastIndexOf(step.id) + 1;
+      log(ev, who, "workflow.journal.scenario.step", { i, n: prog.total == null ? i : prog.total, name: stepName(step), done: answerText(step, ev.run.state[step.id]) });
       touch([ev]);
-      emit("journal.appended", ev, ev.owner, {});
-      // Сценарий заполнен — коллега закрывает инцидент результатом полной обработки (тем, что
-      // требует обязательных шагов, §2.2) и освобождается для следующего
-      if (scenarioDone(ev)) {
-        const who = ev.owner;
-        const full = W.reasonCatalogs.close_result.items.find((i) => i.requiredStepSet && i.requiredStepSet !== "none");
-        const r = colleague(who).run("close", ev, { resultId: full && full.id }, { surface: "card" });
+      emit("journal.appended", ev, who, {});
+      // Сценарий пройден — коллега закрывает инцидент результатом полной обработки (тем, что
+      // требует набора обязательных шагов, §2.2) и освобождается для следующего
+      const full = W.reasonCatalogs.close_result.items.find((x) => x.requiredStepSet && x.requiredStepSet !== "none");
+      if (full && stepsFilledOf(ev, full.requiredStepSet)) {
+        const r = colleague(who).run("close", ev, { resultId: full.id }, { surface: "card" });
         if (r.ok) {
           touch([ev]);
           emitTransition(ev, "close", who, r.facts);

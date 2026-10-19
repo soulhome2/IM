@@ -1,0 +1,273 @@
+{
+  "dslVersion": "1.0",
+  "locale": "ru",
+  "metadata": {
+    "scenarioGuid": "801c2bf9-f9f3-7943-8b71-bcc637666705",
+    "version": 1,
+    "name": "Несанкционированный доступ (СКУД)",
+    "description": "Срабатывание системы контроля доступа: попытка прохода без действующей карты или повторный проход. Оператор фиксирует зону и принимает решение об эскалации.",
+    "demonstrates": [
+      "Select из длинного списка зон",
+      "Datetime kind=datetime с min/max",
+      "Image source=map (карта объекта)",
+      "escalate action с указанием получателя"
+    ],
+    "complexity": "intermediate",
+    "tags": [
+      "access-control",
+      "skud",
+      "escalation"
+    ]
+  },
+  "initialStepId": "select_zone",
+  "timers": {
+    "escalateAfterSec": 240,
+    "maxDurationSec": 900
+  },
+  "concurrency": {
+    "stepLockable": true,
+    "allowMultitasking": true
+  },
+  "steps": [
+    {
+      "id": "select_zone",
+      "type": "Select",
+      "title": "Шаг 1. Зона срабатывания",
+      "view": {
+        "label": "Зона, в которой произошло нарушение",
+        "placeholder": "Выберите зону...",
+        "options": [
+          {
+            "id": "main_entrance",
+            "label": "Главный вход (КПП-1)"
+          },
+          {
+            "id": "service_entrance",
+            "label": "Служебный вход (КПП-2)"
+          },
+          {
+            "id": "underground",
+            "label": "Подземная парковка"
+          },
+          {
+            "id": "warehouse_a",
+            "label": "Склад A — общий доступ"
+          },
+          {
+            "id": "warehouse_b",
+            "label": "Склад B — ограниченный доступ"
+          },
+          {
+            "id": "warehouse_c",
+            "label": "Склад C — режимный объект"
+          },
+          {
+            "id": "server_room",
+            "label": "Серверная"
+          },
+          {
+            "id": "exec_floor",
+            "label": "Этаж руководства"
+          },
+          {
+            "id": "rooftop",
+            "label": "Кровля / технический этаж"
+          },
+          {
+            "id": "perimeter_gate_1",
+            "label": "Периметральные ворота 1"
+          },
+          {
+            "id": "perimeter_gate_2",
+            "label": "Периметральные ворота 2"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "violation_type"
+        }
+      }
+    },
+    {
+      "id": "violation_type",
+      "type": "RadioButton",
+      "title": "Шаг 2. Тип нарушения",
+      "view": {
+        "label": "Что произошло?",
+        "options": [
+          {
+            "id": "no_card",
+            "label": "Попытка прохода без карты"
+          },
+          {
+            "id": "expired_card",
+            "label": "Карта недействительна"
+          },
+          {
+            "id": "wrong_zone",
+            "label": "Карта не даёт доступа в эту зону"
+          },
+          {
+            "id": "tailgating",
+            "label": "Повторный проход (за чужой картой)"
+          },
+          {
+            "id": "forced_entry",
+            "label": "Силовое вскрытие двери"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.violation_type.value"
+                },
+                "forced_entry"
+              ]
+            },
+            "goto": "violation_time",
+            "actions": [
+              {
+                "type": "escalate",
+                "args": {
+                  "to": "security-shift-supervisor",
+                  "reason": "Силовое вскрытие — требуется немедленный выезд"
+                }
+              }
+            ]
+          }
+        ],
+        "default": {
+          "goto": "violation_time"
+        }
+      }
+    },
+    {
+      "id": "violation_time",
+      "type": "Datetime",
+      "title": "Шаг 3. Время события",
+      "view": {
+        "label": "Точное время срабатывания (по журналу СКУД)",
+        "kind": "datetime",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "scene_map"
+        }
+      }
+    },
+    {
+      "id": "scene_map",
+      "type": "Image",
+      "title": "Шаг 4. Локация на карте",
+      "view": {
+        "label": "Снимок карты объекта с обозначением точки срабатывания",
+        "source": "map",
+        "required": true
+      },
+      "transitions": {
+        "default": {
+          "goto": "operator_action"
+        }
+      }
+    },
+    {
+      "id": "operator_action",
+      "type": "RadioButton",
+      "title": "Шаг 5. Действие",
+      "view": {
+        "label": "Какое действие выполнено?",
+        "options": [
+          {
+            "id": "guard_dispatched",
+            "label": "Отправлен патруль на место"
+          },
+          {
+            "id": "remote_check",
+            "label": "Удалённая проверка по камере (никого нет)"
+          },
+          {
+            "id": "false_alarm",
+            "label": "Сбой оборудования — ложное срабатывание"
+          }
+        ],
+        "required": true
+      },
+      "transitions": {
+        "rules": [
+          {
+            "when": {
+              "==": [
+                {
+                  "var": "state.operator_action.value"
+                },
+                "false_alarm"
+              ]
+            },
+            "goto": "btn_close_false"
+          }
+        ],
+        "default": {
+          "goto": "btn_close_real"
+        }
+      }
+    },
+    {
+      "id": "btn_close_real",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть с генерацией отчёта",
+        "emphasis": "primary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "generateReport",
+              "args": {
+                "templateId": "skud_violation_report"
+              }
+            },
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "processed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "btn_close_false",
+      "type": "Button",
+      "title": "Завершение",
+      "view": {
+        "label": "Закрыть как сбой оборудования",
+        "emphasis": "secondary"
+      },
+      "editable": false,
+      "transitions": {
+        "default": {
+          "actions": [
+            {
+              "type": "finish",
+              "args": {
+                "resolution": "false_alarm"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

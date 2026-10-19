@@ -5,7 +5,7 @@
    Прогон воспроизводим: зерно (seed) задаёт всю последовательность. Свои зёрна —
    tests/api.html?seeds=1,2,3&steps=200. */
 (() => {
-  const { test, makeEnv, formFor, fullAnswers, assert, enc } = IMTest;
+  const { test, makeEnv, formFor, assert, enc } = IMTest;
   const W = window.IM_WORKFLOW;
   const params = new URLSearchParams(location.search);
   const SEEDS = (params.get("seeds") || "11,23,37,41").split(",").map(Number);
@@ -130,9 +130,14 @@
         const mine = (await env.all("mine")).filter((e) => e.state === "in_progress");
         if (mine.length) {
           const card = await env.card(pick(r, mine).guid);
-          const answers = r() < 0.5 ? fullAnswers(card) : { [card.scenario.steps[0].id]: true };
-          const res = await env.answer(card.guid, answers);
-          if (res.status !== 200 && !card.readOnly) fail(step, `ответы сценария отклонены: ${res.status} ${res.body && res.body.message}`);
+          // Пройти сценарий до конца или ответить на текущий шаг — случайным вариантом
+          const variant = Math.floor(r() * 3);
+          const res = card.scenario.result.completedAt
+            ? { status: 200 }
+            : r() < 0.5
+              ? await env.passScenario(card.guid, variant)
+              : await env.answerCurrent(card.guid, variant);
+          if (res.status !== undefined && res.status !== 200 && !card.readOnly) fail(step, `ответы сценария отклонены: ${res.status} ${res.body && res.body.message}`);
           history.push(`ответы ${card.guid}`);
         }
       } else if (x < 0.29) {
