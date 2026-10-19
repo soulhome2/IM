@@ -2280,7 +2280,7 @@
     const value = valueOf(ev, step);
     const id = escapeHtml(step.id);
     const note = step.description ? `<p class="step-q">${te(step.description)}</p>` : "";
-    const question = view.label && view.label !== stepShort(step) ? `<p class="step-q">${te(view.label)}</p>` : "";
+    const question = view.label && view.label !== stepShort(step) ? `<p class="step-ask">${te(view.label)}</p>` : "";
     const options = view.options || [];
     let control = "";
     if (step.type === "Checkbox" && options.length === 1) {

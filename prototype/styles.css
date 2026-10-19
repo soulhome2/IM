@@ -1166,7 +1166,8 @@ select.search-input { padding-right: 36px; }
    поднимаются до --panel. Заодно отделяет верхнюю шапку от нижних кнопок */
 .work-step {
   display: grid;
-  align-content: center;
+  /* Шаг — от верхнего края: глаз сразу на заголовке, свободное место уходит вниз */
+  align-content: start;
   min-height: 0;
   overflow: auto;
   margin: 0 var(--card-x) var(--card-y);
@@ -1287,9 +1288,20 @@ select.search-input { padding-right: 36px; }
   text-overflow: ellipsis;
 }
 
-.step-card { padding: 14px var(--card-x); display: grid; gap: 14px; }
+.step-card { padding: 18px var(--card-x) 22px; display: grid; gap: 16px; }
 .step-card textarea { font-size: 15px; }
-.step-h { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+/* Шаг с полем текста: поле забирает всю свободную высоту области шага, а не стоит узкой полосой */
+.work-step:has(> .step-card > textarea[data-ans]) { align-content: stretch; }
+.step-card:has(> textarea[data-ans]) { display: flex; flex-direction: column; }
+.step-card > textarea[data-ans] { flex: 1 1 auto; min-height: 120px; resize: none; }
+.step-h {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--stroke-2);
+}
 .step-h strong { font-size: 18px; font-weight: 600; }
 .step-h span { color: var(--faint); font-size: 13px; font-weight: 500; flex-shrink: 0; }
 
@@ -1315,7 +1327,8 @@ select.search-input { padding-right: 36px; }
 .confirm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .confirm-btn .material-symbols-outlined { color: inherit; }
 
-.radios, .checks { display: grid; gap: 8px; }
+/* Варианты — сеткой по ширине: на широком экране два-три в ряд, на узком — столбцом */
+.radios, .checks { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .radios label, .checks label {
   display: flex;
   gap: 10px;
@@ -1343,9 +1356,12 @@ select.search-input { padding-right: 36px; }
 }
 
 /* Вопрос шага (view.label сценария), если он не совпадает с названием шага */
-.step-q { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+.step-q { margin: 0; color: var(--muted); font-size: 14px; }
+/* Вопрос шага — то, на что отвечает оператор: обычным цветом и крупнее пояснения */
+.step-ask { margin: 0; color: var(--text); font-size: 15px; font-weight: 500; }
 /* Списки шага Select — друг под другом, у каждого своя подпись */
-.step-list + .step-list { margin-top: 12px; }
+.step-list { display: grid; gap: 8px; }
+.step-list + .step-list { margin-top: 8px; }
 /* Картинка шага Image с источником fixed — из сценария */
 .step-img { max-width: 100%; max-height: 240px; border-radius: 8px; border: 1px solid var(--stroke); }
 .macro-row { display: flex; flex-wrap: wrap; gap: 8px; }
