@@ -10,8 +10,9 @@
    у группы один срок — срок основного, нарушения основного записываются и привязанным (RULE-97).
    Видимость (§5, invariants.actorSeesIncident) — правило сервера, не условие перехода: действует
    только тот, у кого есть доступ к инциденту (sees). Пока не моделируются: состояние оператора
-   (все ready, agentReady выполнено), остальные системные переходы, смена прав и доступа, окно manualWinsOverTimer, журнал, уведомления, сценарий (у всех инцидентов
-   один — sameScenarioAsPrimary выполнено, ответы не переносятся), version.
+   (все ready, agentReady выполнено), остальные системные переходы, смена прав и доступа, окно
+   manualWinsOverTimer, журнал, уведомления, version. Сценарий — без графа: у инцидента сценарий и
+   отвеченные шаги, пройден — отвечены все (набор closing, §14.5); ответ — действие вне машины.
 
    Время абстрактное. У таймера фаза: Before — дедлайн впереди, Due — наступил и ещё не
    сработал (timerExpired), Fired — сработал (firedTimers прототипа: каждый дедлайн
@@ -50,6 +51,8 @@ module im {
     // Служебное поле модели, в машине его нет: сколько нарушений было у основного при присоединении —
     // так инвариант linkedSharesBreaches видит, какие нарушения основного должны быть и у привязанного
     joinedBreaches: int,
+    scenario: str,          // сценарий инцидента: задаётся при появлении (§14.5)
+    answered: Set[str],     // отвеченные шаги прохождения
   }
 
   // Права, доступ и настройки выбираются при старте и дальше не меняются.
@@ -78,6 +81,9 @@ module im {
   pure val OPERATORS = Set("a", "b")
   pure val GROUP = "g"
   pure val TARGETS = OPERATORS.union(Set(GROUP))
+  // Сценарий без графа (§14.5): два сценария, у каждого два шага; пройден — отвечены оба (набор closing)
+  pure val SCENARIOS = Set("fire", "water")
+  pure val STEPS = Set("s1", "s2")
 
   pure val PERMS = Set(
     "incident:bulk", "incident:claim", "incident:accept", "incident:hold", "incident:release",
@@ -107,6 +113,7 @@ module im {
     state: Absent, owner: NOBODY, group: NOBODY, holdReason: NOBODY, level: 0,
     closeResult: NOBODY, closedBy: NOBODY, reopenOpen: false, transfers: 0,
     reaction: IDLE, resolution: IDLE, hold: IDLE, breaches: [], linkedTo: NOBODY, joinedBreaches: 0,
+    scenario: NOBODY, answered: Set(),
   }
 
   /* ===== Состояние ===== */
@@ -188,6 +195,8 @@ module im {
     can(a, if (own) "incident:transfer:own" else "incident:transfer:any")
   }
 
+  // Набор closing выполнен — прохождение дошло до конца сценария (stepsFilled, §14.5)
+  pure def finished(x: Incident): bool = x.answered == STEPS
   def closeResultAllowed(a: str, x: Incident, r: CloseResult, stepsFilled: bool): bool = all {
     can(a, r.perm),
     r.from.contains(x.state),
@@ -344,9 +353,12 @@ module im {
 
   /* ===== Событие: появление инцидента (create) ===== */
 
-  action create(i: str): bool = all {
+  // Сценарий — по правилу инцидента, с появления (§14.5); сценарии im_test.qnt — пожарный
+  action create(i: str): bool = createWith(i, "fire")
+  action createWith(i: str, sc: str): bool = all {
     inc.get(i).state == Absent,
     apply("create", DISPATCHER, i, { ...ABSENT,
+      scenario: sc,
       state: New,
       owner: NOBODY,
       group: NOBODY,
@@ -558,20 +570,20 @@ module im {
     }
   }
 
-  // stepsFilled — заполнены ли шаги набора closing (машина сценариев, §14.5)
-  def closeOk(a: str, i: str, r: CloseResult, stepsFilled: bool): bool = {
+  // Шаги набора closing — по прохождению сценария (машина сценариев, §14.5)
+  def closeOk(a: str, i: str, r: CloseResult): bool = {
     val x = inc.get(i)
     all {
       x.state.in(Set(New, Pending, InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
-      closeResultAllowed(a, x, r, stepsFilled),
+      closeResultAllowed(a, x, r, finished(x)),
     }
   }
-  action close(a: str, i: str, r: CloseResult, stepsFilled: bool): bool = {
+  action close(a: str, i: str, r: CloseResult): bool = {
     val x = inc.get(i)
     all {
-      closeOk(a, i, r, stepsFilled),
+      closeOk(a, i, r),
       apply("close", a, i, { ...x,
         state: Closed,
         owner: a,
@@ -720,8 +732,12 @@ module im {
       can(a, "incident:bulk"),
       isOwnerOrUnowned(a, x),
       mergePrimaryValid(a, i, p),
+      sameScenarioAsPrimary(i, p),
     }
   }
+  def sameScenarioAsPrimary(i: str, p: str): bool = inc.get(i).scenario == inc.get(p).scenario
+  // copyAnswersToPrimary: отвеченное объединяемыми — основному; у них ответы остаются как история
+  def mergedAnswers(x: Incident, others: Set[str]): Set[str] = others.fold(x.answered, (acc, j) => acc.union(inc.get(j).answered))
   // Основной новый — берётся тем же действием (grouping.takeWith = claim)
   def mergeTakes(p: str): bool = inc.get(p).state == New
   // «Взять в работу» на выборке: основной p и остальные others — всё или ничего
@@ -757,8 +773,9 @@ module im {
         owner: a,
         reaction: stopT(x.reaction),
         resolution: resumeT(tightenT(x.resolution)),
+        answered: mergedAnswers(x, others),
       }
-      else if (j == p) { ...x, resolution: tightenT(x.resolution) }
+      else if (j == p) { ...x, resolution: tightenT(x.resolution), answered: mergedAnswers(x, others) }
       else x
     })),
   }
@@ -814,6 +831,26 @@ module im {
         resolution: copyPrimaryT(x),
         reaction: startT(x.reaction),
       }),
+    }
+  }
+
+  /* ===== Ответ на шаг сценария — действие вне машины (scenarioEdit, §10.4) ===== */
+
+  def answerOk(a: str, i: str, st: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == InProgress,
+      isMine(a, x),
+      manualAllowed(i),
+      sees(a, i),
+      not(x.answered.contains(st)),
+    }
+  }
+  action answer(a: str, i: str, st: str): bool = {
+    val x = inc.get(i)
+    all {
+      answerOk(a, i, st),
+      apply("scenario_answer", a, i, { ...x, answered: x.answered.union(Set(st)) }),
     }
   }
 
@@ -883,9 +920,11 @@ module im {
     nondet t = TARGETS.oneOf()
     nondet reason = HOLD_REASONS.oneOf()
     nondet r = CLOSE_RESULTS.oneOf()
-    nondet stepsFilled = Set(true, false).oneOf()
     any {
-      create(i),
+      {
+        nondet sc = SCENARIOS.oneOf()
+        createWith(i, sc)
+      },
       claim(a, i),
       accept(a, i),
       reject(a, i),
@@ -894,7 +933,11 @@ module im {
       release(a, i),
       transfer(a, i, t),
       takeover(a, i),
-      close(a, i, r, stepsFilled),
+      close(a, i, r),
+      {
+        nondet st = STEPS.oneOf()
+        answer(a, i, st)
+      },
       reopen(a, i),
       autoEscalate(i),
       escalationCeiling(i),
@@ -1063,6 +1106,19 @@ module im {
   val systemProgress = systemReady implies
     INCIDENTS.exists(j => closeLinkedOk(j) or linkedLostAccessOk(j) or timerTransitionsReady(j) != Set())
 
+  // 17. Привязанный — того же сценария, что основной (§11.3, sameScenarioAsPrimary)
+  val linkedSameScenario = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    x.state == Linked implies x.scenario == primaryOf(x).scenario
+  })
+
+  // 18. «Обработан» своим «Закрыть» — только у пройденного сценария, в том числе за счёт ответов,
+  //     перенесённых при объединении (§2.2, §14.5). Закрытый вместе с основным берёт его результат (§11.4)
+  val processedOnlyFinished = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    (x.state == Closed and x.closeResult == "processed" and x.linkedTo == NOBODY) implies finished(x)
+  })
+
   // 13. У нарушения закрытия есть чьё: срок группы идёт, только пока основной кто-то ведёт (RULE-97)
   val resolutionBreachHasOwner = INCIDENTS.forall(i =>
     inc.get(i).breaches.select(b => b.kind == "resolution" and b.who == NOBODY).length() == 0
@@ -1098,5 +1154,7 @@ module im {
     linkedSharesBreaches,
     addresseeHasAccess,
     systemProgress,
+    linkedSameScenario,
+    processedOnlyFinished,
   }
 }

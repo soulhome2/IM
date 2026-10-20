@@ -43,7 +43,9 @@ module im_test {
       .expect(x1.state == OnHold and x1.holdReason == "patrol" and x1.hold == RUNNING and x1.resolution.mode == Paused)
       .then(resume("a", "i1"))
       .expect(x1.state == InProgress and x1.holdReason == NOBODY and x1.hold == IDLE and x1.resolution == RUNNING)
-      .then(close("a", "i1", result("processed"), true))
+      .then(answer("a", "i1", "s1"))
+      .then(answer("a", "i1", "s2"))
+      .then(close("a", "i1", result("processed")))
       .expect(x1.state == Closed and x1.closedBy == "a" and x1.closeResult == "processed" and x1.resolution.mode == Paused)
       .then(reopen("a", "i1"))
       .expect(x1.state == InProgress and x1.owner == "a" and x1.closeResult == NOBODY and x1.resolution == RUNNING)
@@ -56,7 +58,7 @@ module im_test {
       .then(claim("a", "i1"))
       .then(expireResolution("i1"))
       .then(resolutionOverdue("i1"))
-      .then(close("a", "i1", result("false_alarm"), false))
+      .then(close("a", "i1", result("false_alarm")))
       .then(reopen("a", "i1"))
       .expect(x1.resolution == RUNNING and breachesOf("resolution") == 1)
       .expect(inv)
@@ -215,14 +217,16 @@ module im_test {
       .expect(x1.state == InProgress and x1.owner == "b" and x1.group == NOBODY)
       .expect(inv)
 
-  // «Обработан» — только владельцем и с заполненными шагами
+  // «Обработан» — только владельцем и когда сценарий пройден: отвечены все шаги (§14.5)
   run processedNeedsStepsTest =
     initWith(BASE)
       .then(create("i1"))
       .then(claim("a", "i1"))
-      .expect(not(closeOk("a", "i1", result("processed"), false)))
-      .expect(not(closeOk("b", "i1", result("processed"), true)))
-      .then(close("a", "i1", result("processed"), true))
+      .then(answer("a", "i1", "s1"))
+      .expect(not(closeOk("a", "i1", result("processed"))))
+      .then(answer("a", "i1", "s2"))
+      .expect(not(closeOk("b", "i1", result("processed"))))
+      .then(close("a", "i1", result("processed")))
       .expect(x1.state == Closed and x1.closeResult == "processed")
       .expect(inv)
 
@@ -230,9 +234,9 @@ module im_test {
   run massCloseFromNewTest =
     initWith({ ...BASE, perms: Map("a" -> PERMS.exclude(Set("incident:close:unprocessed")), "b" -> PERMS) })
       .then(create("i1"))
-      .expect(not(closeOk("a", "i1", result("mass"), false)))
-      .expect(not(closeOk("b", "i1", result("false_alarm"), false)))
-      .then(close("b", "i1", result("mass"), false))
+      .expect(not(closeOk("a", "i1", result("mass"))))
+      .expect(not(closeOk("b", "i1", result("false_alarm"))))
+      .then(close("b", "i1", result("mass")))
       .expect(x1.state == Closed and x1.owner == "b" and x1.closedBy == "b" and x1.resolution == IDLE)
       .expect(inv)
 
@@ -339,7 +343,7 @@ module im_test {
       .then(create("i3"))
       .then(claim("a", "i1"))
       .then(merge("a", "i1", Set("i2")))
-      .then(close("a", "i1", result("false_alarm"), false))
+      .then(close("a", "i1", result("false_alarm")))
       .expect(not(reopenOk("a", "i1")) and not(claimOk("b", "i3")))
       .then(closeLinked("i2"))
       .expect(all {
@@ -473,5 +477,45 @@ module im_test {
       .expect(x1.state == Pending and x1.owner == "b" and x2.breaches == [{ kind: "resolution", who: "a" }])
       .then(linkedLostAccess("i2"))
       .expect(x2.state == New and x2.resolution == { mode: Paused, phase: Fired })
+      .expect(inv)
+
+  /* ===== 9. Сценарий при объединении (§11.3, §14.5) ===== */
+
+  // Отвечать может только владелец в работе (scenarioEdit): не в «Отложен», не чужой
+  run answerRightsTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .expect(not(answerOk("a", "i1", "s1")))
+      .then(claim("a", "i1"))
+      .expect(answerOk("a", "i1", "s1") and not(answerOk("b", "i1", "s1")))
+      .then(hold("a", "i1", "patrol"))
+      .expect(not(answerOk("a", "i1", "s1")))
+      .expect(inv)
+
+  // Разные сценарии одним инцидентом не взять (sameScenarioAsPrimary)
+  run mergeDifferentScenarioTest =
+    initWith(BASE)
+      .then(createWith("i1", "fire"))
+      .then(createWith("i2", "water"))
+      .then(createWith("i3", "fire"))
+      .expect(not(mergeSetOk("a", "i1", Set("i2"))) and mergeSetOk("a", "i1", Set("i3")))
+      .expect(inv)
+
+  // Ответы привязанного — основному: основной пройден, можно «Обработан»; привязанный закрыт вместе с ним
+  // с его результатом, хотя свой сценарий не прошёл (§11.4)
+  run mergeAnswersFinishTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(answer("a", "i1", "s1"))
+      .then(claim("a", "i2"))
+      .then(answer("a", "i2", "s2"))
+      .expect(not(closeOk("a", "i1", result("processed"))))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x1.answered == STEPS and x2.answered == Set("s2"))
+      .then(close("a", "i1", result("processed")))
+      .then(closeLinked("i2"))
+      .expect(x2.state == Closed and x2.closeResult == "processed" and x2.answered == Set("s2"))
       .expect(inv)
 }

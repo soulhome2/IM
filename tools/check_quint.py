@@ -28,18 +28,18 @@ NOT_MODELED = {
     "addressee_lost_access", "addressee_cannot_accept",
 }
 # Действия окружения в модели — не переходы машины
-ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window"}
+ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window",
+               "scenario_answer"}  # ответ на шаг — не переход машины, права — scenarioEdit
 NOT_MODELED_STATES = set()
 NOT_MODELED_PERMS = {"incident:run_action", "incident:schema:admin", "agent:set_not_ready"}
 
 STATES = {"New": "new", "Pending": "pending_acceptance", "InProgress": "in_progress",
           "OnHold": "on_hold", "Closed": "closed", "Linked": "linked"}
 
-# Условия, которых модель не касается: все операторы ready; сценарий объединения пока не моделируется
-IGNORED_GUARDS = {"agentReady", "sameScenarioAsPrimary"}
-# Эффекты, которых модель не касается; перенос ответов сценария при объединении пока не моделируется
-IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor",
-                   "copyAnswersToPrimary"}
+# Условия, которых модель не касается: все операторы ready
+IGNORED_GUARDS = {"agentReady"}
+# Эффекты, которых модель не касается
+IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor"}
 IGNORED_FLAGS = {"close_cause", "result"}
 
 # Атомы условий в модели. Отрицание — раньше утверждения: re.finditer берёт первую подходящую альтернативу
@@ -51,14 +51,14 @@ ATOMS = [
     'transferPermitted(a, x)', 'withinActiveLimit(a, i)', 'withinHoldLimit(a, i)',
     'isTarget(a, x)', 'isMine(a, x)', 'ownership(a, x) != "owner"', 'ownership(a, x) != "target"',
     'not(isSelf(a, t))', 'hasAccess(t, i)', 'canAccept(t, i)',
-    'closeResultAllowed(a, x, r, stepsFilled)', 'x.reopenOpen',
+    'closeResultAllowed(a, x, r, finished(x))', 'x.reopenOpen', 'sameScenarioAsPrimary(i, p)',
     'isOwnerOrUnowned(a, x)', 'mergePrimaryValid(a, i, p)', 'primaryEditable(a, x)', 'primaryClosed(x)',
     'primaryAddresseeLacksAccess(x, i)', 'targetHasAccessToLinked(t, i)',
 ]
 ATOM_RE = re.compile(r'can\(a, "[^"]+"\)|' + "|".join(re.escape(a) for a in ATOMS))
 
 FIELDS = {"owner", "group", "holdReason", "level", "closeResult", "closedBy", "reopenOpen",
-          "transfers", "reaction", "resolution", "hold", "breaches", "linkedTo"}
+          "transfers", "reaction", "resolution", "hold", "breaches", "linkedTo", "answered"}
 
 
 def guard_atom(g):
@@ -91,7 +91,8 @@ def guard_atom(g):
         "targetIsNotSelf": "not(isSelf(a, t))",
         "targetHasAccess": "hasAccess(t, i)",
         "targetCanAccept": "canAccept(t, i)",
-        "closeResultAllowed": "closeResultAllowed(a, x, r, stepsFilled)",
+        "closeResultAllowed": "closeResultAllowed(a, x, r, finished(x))",
+        "sameScenarioAsPrimary": "sameScenarioAsPrimary(i, p)",
         "withinReopenWindow": "x.reopenOpen",
         "isOwnerOrUnowned": "isOwnerOrUnowned(a, x)",
         "mergePrimaryValid": "mergePrimaryValid(a, i, p)",
@@ -144,6 +145,8 @@ def effect_token(e):
         return "resolution", "tightenT("
     if fn == "copyPrimaryDeadline" and arg == "resolution":
         return "resolution", "resolution: copyPrimaryT("
+    if fn == "copyAnswersToPrimary":
+        return "answered", "answered: mergedAnswers("
     if fn == "copyCloseFromPrimary":
         return [("closeResult", "closeResult: px.closeResult"), ("closedBy", "closedBy: px.closedBy")]
     if fn == "increment" and args == ["transfer_count"]:
@@ -271,6 +274,22 @@ def check_transitions(w, src, err):
             err.append(f"переход {tid}: модель меняет {f}, а в машине такого эффекта нет")
 
 
+def check_scenario_edit(w, src, err):
+    """Право отвечать на шаги (scenarioEdit машины) — условие answerOk модели."""
+    body = strip_comments(blocks(src, "def").get("answerOk", ""))
+    if not body:
+        err.append("модель: нет answerOk — ответа на шаг сценария")
+        return
+    want = {"stateIs": lambda a: " or ".join(f"x.state == {k}" for k, v in STATES.items() if v in a[0]), "isOwner": lambda a: "isMine(a, x)"}
+    for g in w["scenarioEdit"]["guards"]:
+        if g["fn"] in IGNORED_GUARDS:
+            continue
+        if g["fn"] not in want:
+            err.append(f"scenarioEdit: условию {g['fn']} нет соответствия в check_quint.py")
+        elif want[g["fn"]](g.get("args", [])) not in body:
+            err.append(f"scenarioEdit: в answerOk нет «{want[g['fn']](g.get('args', []))}» ({g['fn']})")
+
+
 def check_catalogs(w, src, err):
     perms = {p["key"] for p in w["permissions"]} - NOT_MODELED_PERMS
     model = pure_set(src, "PERMS")
@@ -332,6 +351,7 @@ def main():
         src = f.read()
     err = []
     check_transitions(w, src, err)
+    check_scenario_edit(w, src, err)
     check_catalogs(w, src, err)
     for e in err:
         print(e)
