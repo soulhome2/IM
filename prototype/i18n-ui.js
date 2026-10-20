@@ -214,6 +214,9 @@ window.IM_DICT_UI = {
     "Результат уйдёт в AxxonData. Если нужен другой результат — «Закрыть без обработки».": "The result will be sent to AxxonData. For a different result, use «Close without processing».",
     "Итог обработки для отчёта — необязательно": "Handling outcome for the report — optional",
     "Завершить инцидент": "Finish incident",
+    "Свернуть журнал": "Collapse the log",
+    "Показать весь журнал": "Show the whole log",
+    "{n, plural, one {# запись} few {# записи} other {# записей}}": "{n, plural, one {# entry} other {# entries}}",
     "Обработано: {n}": "Handled: {n}",
     "Охрана направлена, время прибытия 2 мин": "Guards dispatched, arrival in 2 min",
     "Панель групп скрыта на время обработки инцидента":

@@ -526,7 +526,8 @@ select.search-input,
 .workspace {
   --split: 1px;
   --w-groups: var(--w-groups-user, 320px);
-  --w-media: var(--w-media-user, 420px);
+  /* Видео и карта по умолчанию — доля ширины: на широком экране крупнее, на обычном — как было */
+  --w-media: var(--w-media-user, clamp(420px, 28vw, 720px));
   --sp-groups: var(--split);
   --sp-media: var(--split);
   display: grid;
@@ -908,7 +909,8 @@ select.search-input { padding-right: 36px; }
 
 .event {
   display: grid;
-  grid-template-columns: 18px 4px minmax(0, 1fr) 132px;
+  /* Колонка кнопок — по самой длинной, «Закрыть без обработки», в одну строку */
+  grid-template-columns: 18px 4px minmax(0, 1fr) 176px;
   align-items: center;
   gap: 12px;
   padding: 12px;
@@ -1060,7 +1062,7 @@ select.search-input { padding-right: 36px; }
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  width: 132px;
+  width: 176px;
   flex-shrink: 0;
 }
 .event-act {
@@ -1112,20 +1114,6 @@ select.search-input { padding-right: 36px; }
 }
 
 .incident-head { padding: var(--card-y) var(--card-x) 8px; }
-.incident-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--faint);
-  margin-bottom: 6px;
-}
-/* Норматив уходит вправо, бейдж и уровень остаются у номера инцидента */
-.incident-kicker .sla,
-.incident-kicker .sla.held,
-.incident-kicker .sla.breached { margin-left: auto; }
 .incident-head h3 { margin: 0 0 3px; font-size: 20px; font-weight: 600; }
 .incident-meta { color: var(--muted); font-size: 14px; }
 .sla { color: var(--warn-text); }
@@ -1136,6 +1124,9 @@ select.search-input { padding-right: 36px; }
 .work-h h2 {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1143,15 +1134,32 @@ select.search-input { padding-right: 36px; }
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
+/* Заголовок карточки: номер, состояние и уровень — слева, нормативы — справа */
+.work-h h2 > * { flex-shrink: 0; }
+.work-h h2 .sla,
+.work-h h2 .sla.held,
+.work-h h2 .sla.breached { margin-left: auto; font-weight: 500; }
+.work-h h2 .chip.linked { cursor: pointer; }
 .scenario-actions #backToQueue { padding: 8px 14px 8px 10px; gap: 6px; flex-shrink: 0; }
 #backToQueue .material-symbols-outlined { font-size: 18px; color: inherit; }
 
 /* Шапка со шагами и кнопки прибиты к краям, по центру — только текущий шаг:
    при переходе между шагами навигация и справка не смещаются */
-#scenarioRoot { display: flex; flex-direction: column; overflow: hidden; }
+#scenarioRoot { display: flex; flex-direction: column; overflow: hidden; container: card / inline-size; }
 #scenarioRoot > .empty { margin: auto; }
+/* Карточка и журнал: обычно — только карточка, журнал строкой под кнопками; карточка шире шага и журнала
+   рядом — журнал колонкой справа на всю высоту, строка под кнопками не нужна */
+.work-wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.side-log { display: none; }
+@container card (min-width: 1250px) {
+  .work-wrap { grid-template-columns: minmax(0, 1fr) clamp(340px, 24cqi, 460px); }
+  .work-doc .log { display: none; }
+  .side-log { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--stroke); background: var(--panel); }
+}
+.side-log-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: var(--card-y) 16px 10px; color: var(--muted); font-size: 13px; }
+.side-log .log-list { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.side-log .log-row { grid-template-columns: 64px minmax(0, 1fr); padding: 7px 16px; }
 .work-doc {
   width: 100%;
   max-width: 920px;
@@ -1433,21 +1441,67 @@ select.search-input { padding-right: 36px; }
   font-size: 14px;
 }
 
-.log {
-  border-top: 1px solid var(--stroke);
-  padding: 10px var(--card-x) 12px;
+/* Журнал — строка под кнопками: «Журнал», последнее событие, сколько записей. Раскрытый — лента поверх шага */
+.log { position: relative; border-top: 1px solid var(--stroke); }
+.log-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px var(--card-x);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
 }
-.log h4 {
-  margin: 0 0 6px;
+.log-bar:hover { background: var(--panel-2); }
+.log-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.log-h {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--faint);
 }
-.log ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.log li { color: var(--muted); font-size: 13px; }
-.log b { color: var(--text); font-weight: 500; }
+.log-last { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 4px; }
+.log-n { flex-shrink: 0; }
+.log-bar .material-symbols-outlined { flex-shrink: 0; font-size: 20px; color: inherit; }
+.log-t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.log-pop {
+  position: absolute;
+  left: var(--card-x);
+  right: var(--card-x);
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  padding: 6px 0;
+  background: var(--panel);
+  border: 1px solid var(--stroke-2);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px var(--overlay);
+}
+/* Лента: время — своей колонкой цифр одной ширины, событие — обычным цветом, кто — приглушённо после */
+.log-list { list-style: none; margin: 0; padding: 0; }
+.log-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; padding: 6px 14px; font-size: 14px; color: var(--text); }
+.log-row + .log-row { border-top: 1px solid var(--stroke); }
+.log-row .log-t { margin: 0; font-size: 13px; padding-top: 1px; }
+.log-who { color: var(--muted); font-size: 12px; margin-left: 4px; white-space: nowrap; }
+/* Новая запись на миг подсвечивается — заметно краем глаза */
+.log-row.fresh,
+.log-last.fresh { animation: log-fresh 2.4s ease-out; }
+@keyframes log-fresh {
+  0%, 30% { background: var(--accent-dim); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .log-row.fresh,
+  .log-last.fresh { animation: none; }
+}
 
 /* Видео и карта не прокручиваются — иначе длинное имя камеры даёт полосу внизу */
 .video-body { display: flex; flex-direction: column; overflow: hidden; }
@@ -2100,7 +2154,7 @@ select.search-input { padding-right: 36px; }
 
   /* На телефоне карточка не делится на зоны — прокручивается целиком */
   #scenarioRoot { overflow: auto; }
-  .work-doc { display: block; }
+  .work-wrap, .work-doc { display: block; }
   .work-step { display: block; overflow: visible; }
 }
 

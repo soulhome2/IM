@@ -607,6 +607,9 @@
     drafts: new Map(),
     // Инциденты, где оператор ушёл с шага «Итог» на шаги сценария: вернётся «Далее» с последнего шага или по «Итогу»
     summaryOff: new Set(),
+    // Журнал карточки: раскрыт у этого инцидента; сколько записей уже видел оператор — новые подсвечиваются
+    logOpen: null,
+    logSeen: new Map(),
     videoMode: "archive",
     activeCam: null,
     full: null,
@@ -2117,12 +2120,21 @@
         `;
   }
 
+  // Заголовок карточки — номер, состояние, уровень и нормативы; название и место — в самой карточке.
+  // Один раз, без повтора номера и названия ниже
   function renderWorkHeader(ev) {
     if (!ev) {
       $("workTitle").textContent = t("Обработка");
       return;
     }
-    $("workTitle").textContent = `${ev.number} · ${t(ev.eventType.name)}`;
+    const badge = badgeView(ev);
+    $("workTitle").innerHTML = `
+      <span class="work-num">${escapeHtml(ev.number)}</span>
+      <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
+      ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
+      ${timerChip(ev, "sla")}
+      ${holdChip(ev, "sla")}
+      ${linkedChip(ev)}${linkedDueChip(ev)}`;
   }
 
   function workNote(ev) {
@@ -2168,6 +2180,7 @@
   function renderScenario() {
     const ev = selected();
     const root = $("scenarioRoot");
+    renderWorkHeader(ev);
     if (!ev || !ev.scenario) {
       root.innerHTML = `<div class="empty">${te("Инцидент не выбран")}</div>`;
       return;
@@ -2192,8 +2205,10 @@
     const close = actionOf(ev, "close");
     const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
     const canClose = editable && Boolean(close && close.enabled) && results.some((r) => fullyProcessed(r.id) && !r.disabled);
+    const log = renderLog(ev);
 
     root.innerHTML = `
+      <div class="work-wrap">
       <div class="work-doc">
         <div class="work-top">
           ${renderIncidentHead(ev)}
@@ -2290,10 +2305,13 @@
               ? `<p class="step-hint">${te("Сначала шаг {n}: {name}", { n: path.length, name: t(stepShort(stepOf(ev, path[path.length - 1]))) })}</p>`
               : ""
           }
-          ${renderLog(ev)}
+          ${log.bar}
         </div>
       </div>
+      ${log.side}
+      </div>
     `;
+    root.querySelectorAll(".log-pop, .side-log .log-list").forEach((list) => (list.scrollTop = list.scrollHeight));
   }
 
   // «Итог» в ленте шагов — после шагов впереди, без номера: в «Шаг N из M» не входит (RULE-95). До конца
@@ -2343,34 +2361,52 @@
       ${why ? `<p class="step-locked">${escapeHtml(why)}</p>` : ""}`;
   }
 
+  // Журнал — одной строкой под кнопками: последнее событие и сколько всего записей. По нажатию — весь журнал
+  // лентой поверх шага, новые снизу; свернуть — тем же нажатием, Esc или щелчком мимо. Новая запись на миг
+  // подсвечивается: заметно краем глаза, читать не обязательно
+  // Карточка шире шага и журнала рядом — журнал колонкой справа на всю высоту (styles.css, @container card):
+  // разметка у обоих видов есть сразу, какой показать — решает ширина
   function renderLog(ev) {
-    const items = (ev.journal || []).slice(-4);
-    if (!items.length) return "";
-    return `
-      <div class="log">
-        <h4>${te("Журнал")}</h4>
-        <ul>
-          ${items
-            .map((l) => `<li><b>${escapeHtml(fmtTime(l.at))}</b> · ${escapeHtml(actorName(l.actor))} — ${escapeHtml(journalText(l))}</li>`)
-            .join("")}
-        </ul>
-      </div>
-    `;
+    const items = ev.journal || [];
+    if (!items.length) return { bar: "", side: "" };
+    const seen = state.logSeen.get(ev.guid);
+    state.logSeen.set(ev.guid, items.length);
+    const fresh = (i) => (seen != null && i >= seen ? "fresh" : "");
+    const open = state.logOpen === ev.guid;
+    const last = items[items.length - 1];
+    const row = (l, i) => `
+      <li class="log-row ${fresh(i)}">
+        <time class="log-t">${escapeHtml(fmtTime(l.at))}</time>
+        <span class="log-x">${escapeHtml(journalText(l))} <span class="log-who">${escapeHtml(actorName(l.actor))}</span></span>
+      </li>`;
+    const count = te("{n, plural, one {# запись} few {# записи} other {# записей}}", { n: items.length });
+    const side = `
+      <aside class="side-log" aria-label="${te("Журнал")}">
+        <div class="side-log-h"><span class="log-h">${te("Журнал")}</span><span class="log-n">${count}</span></div>
+        <ol class="log-list">${items.map(row).join("")}</ol>
+      </aside>`;
+    const bar = `
+      <div class="log ${open ? "open" : ""}">
+        ${open ? `<div class="log-pop" role="region" aria-label="${te("Журнал")}"><ol class="log-list">${items.map(row).join("")}</ol></div>` : ""}
+        <button type="button" class="log-bar" data-log-toggle aria-expanded="${open}" title="${te(open ? "Свернуть журнал" : "Показать весь журнал")}">
+          <span class="log-h">${te("Журнал")}</span>
+          <span class="log-last ${fresh(items.length - 1)}"><time class="log-t">${escapeHtml(fmtTime(last.at))}</time> ${escapeHtml(journalText(last))}</span>
+          <span class="log-n">${count}</span>
+          <span class="material-symbols-outlined" aria-hidden="true">${open ? "expand_more" : "expand_less"}</span>
+        </button>
+      </div>`;
+    return { bar, side };
+  }
+  function closeLog() {
+    state.logOpen = null;
+    renderScenario();
   }
 
-  // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90)
+  // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90). Номер, состояние
+  // и нормативы — в заголовке карточки (renderWorkHeader)
   function renderIncidentHead(ev) {
-    const badge = badgeView(ev);
     return `
       <div class="incident-head">
-        <div class="incident-kicker">
-          <span>${escapeHtml(ev.number)}</span>
-          <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
-          ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
-          ${timerChip(ev, "sla")}
-          ${holdChip(ev, "sla")}
-          ${linkedChip(ev)}${linkedDueChip(ev)}
-        </div>
         <h3>${te(ev.eventType.name)}</h3>
         <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
       </div>
@@ -3279,10 +3315,22 @@
       e.stopPropagation();
       crumb.click();
     });
+    // «+N инцидентов» в заголовке карточки — на вкладку привязанных
+    $("workTitle").addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-work-tab]");
+      if (!tabBtn || !selected()) return;
+      state.workTab = tabBtn.dataset.workTab;
+      renderScenario();
+    });
     $("scenarioRoot").addEventListener("click", async (e) => {
       if (e.target.closest("#backToQueue")) return backToQueue();
       const ev = selected();
       if (!ev) return;
+      if (e.target.closest("[data-log-toggle]")) {
+        state.logOpen = state.logOpen === ev.guid ? null : ev.guid;
+        renderScenario();
+        return;
+      }
       const tabBtn = e.target.closest("[data-work-tab]");
       if (tabBtn) {
         state.workTab = tabBtn.dataset.workTab;
@@ -3460,6 +3508,10 @@
     });
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".menu")) closeMenus();
+    });
+    // Раскрытый журнал сворачивается щелчком мимо; нажатая при этом кнопка карточки тоже срабатывает
+    document.addEventListener("click", (e) => {
+      if (state.logOpen && e.target.isConnected && !e.target.closest(".log")) closeLog();
     });
     document.querySelectorAll("[data-close]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -3909,7 +3961,7 @@
   }
 
   // Горячих клавиш нет. Esc — обычное поведение окон: закрывает то, что сверху, по одному за нажатие —
-  // меню, форму или окно, развёрнутые видео или карту, панель групп поверх узкого экрана, а если
+  // меню, форму или окно, развёрнутые видео или карту, панель групп поверх узкого экрана, раскрытый журнал, а если
   // ничего не открыто — карточку, как «К очереди» (§13, RULE-87, RULE-91)
   function onKey(e) {
     if (e.key !== "Escape") return;
@@ -3925,6 +3977,7 @@
     }
     if (state.groupsOn && narrowQuery.matches) return closeDrawer();
     if (state.mode !== "work") return;
+    if (state.logOpen) return closeLog();
     // Набранный в поле сценария ответ сохраняется при уходе из поля — как при нажатии «К очереди»
     if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
     backToQueue();

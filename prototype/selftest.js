@@ -398,8 +398,15 @@
       "Журнал карточки — текстом из каталога строк, а не ключами (§14.9, RULE-66)",
       async () => {
         await openOwn(closedId);
-        const items = [...document.querySelectorAll(".log li")].map((li) => li.textContent);
-        expect(items.length, "в карточке нет журнала");
+        // Журнал — строкой под кнопками: последняя запись видна сразу, весь — по нажатию, Esc сворачивает
+        const bar = root().querySelector("[data-log-toggle]");
+        expect(bar && /Взято в работу/.test(bar.textContent), `в строке журнала не последняя запись: «${bar ? bar.textContent.trim() : "нет строки"}»`);
+        await click(bar);
+        const items = [...root().querySelectorAll(".log-pop li")].map((li) => li.textContent.replace(/\s+/g, " ").trim());
+        expect(items.length, "журнал не раскрылся");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await wait(100);
+        expect(!root().querySelector(".log-pop") && mode() === "work", "Esc не свернул журнал или закрыл карточку");
         expect(!items.some((x) => /workflow\./.test(x)), `в журнале ключ вместо текста: «${items.find((x) => /workflow\./.test(x))}»`);
         expect(/Взято в работу/.test(items[items.length - 1]), `последняя запись: «${items[items.length - 1]}»`);
         return items[items.length - 1];
@@ -869,7 +876,7 @@
       const id = row.dataset.id;
       await click(button($("eventsList"), "view", id));
       expect(mode() === "work", "чужая карточка не открылась");
-      const card = root().querySelector(".badge.foreign");
+      const card = $("workTitle").querySelector(".badge.foreign");
       expect(card && card.textContent.trim() === text, `бейдж в карточке: «${card ? card.textContent.trim() : "нет"}», а не «${text}»`);
       expect($("statusIncident").textContent.trim().endsWith(text), `строка состояния: «${$("statusIncident").textContent.trim()}»`);
       await click($("backToQueue"));
@@ -2146,7 +2153,7 @@
         expect(sameLine("#backToQueue", "#stepBack") && box("#backToQueue").left < box("#stepBack").left, "«К очереди» не слева в нижнем ряду");
         expect(!document.querySelector(".work-h #backToQueue"), "«К очереди» осталась в шапке");
         const before = actsTop();
-        await click(root().querySelector('.chip.linked[data-work-tab="linked"]'));
+        await click($("workTitle").querySelector('.chip.linked[data-work-tab="linked"]'));
         expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "пометка «+N» не открыла вкладку привязанных");
         expect(actsTop() === before, `действия сдвинулись при переключении вкладок: ${before} → ${actsTop()}`);
         // На вкладке привязанных «Назад» и «Далее» видны, но серые; «К очереди» доступна (RULE-89)
@@ -2174,7 +2181,7 @@
         const running = linkedPage.items.filter((x) => x.timer && x.timer.running).length;
         expect(root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length === running, `отсчётов у привязанных ${root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length}, а идёт норматив у ${running}`);
         const earlier = Boolean(leadCard.linkedDueAt) && (!leadCard.timer || !leadCard.timer.running || Date.parse(leadCard.linkedDueAt) < Date.parse(leadCard.timer.dueAt));
-        expect(Boolean(root().querySelector(".lnk-due")) === earlier, `«Срок привязанного» в заголовке: ${Boolean(root().querySelector(".lnk-due"))}, а должен быть ${earlier}`);
+        expect(Boolean($("workTitle").querySelector(".lnk-due")) === earlier, `«Срок привязанного» в заголовке: ${Boolean($("workTitle").querySelector(".lnk-due"))}, а должен быть ${earlier}`);
         const detach = root().querySelectorAll("[data-detach]");
         // Постранично, по 10 (LINKED_PAGE)
         expect(detach.length === Math.min(picked.length - 1, 10), `на вкладке привязанных ${detach.length}`);
