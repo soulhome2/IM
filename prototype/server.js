@@ -325,6 +325,8 @@
         if (who.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
         return who.length;
       },
+      // Нарушение основного записано тому, кто был в группе (recordBreach, §11.4, BUG-73) — ему новая версия
+      onBreachShared: (ev) => touch([ev]),
       onEvict: (ev, who, transitionId) => {
         if (who === ME) emit("incident.card_evicted", ev, null, { transitionId });
       },
@@ -1090,10 +1092,6 @@
       return ev && canSee(ev) ? ev : null;
     };
     const touch = (list) => list.forEach((e) => (e.version += 1));
-    // Нарушение основного записано и его открытым привязанным (recordBreach, §11.4) — им тоже новая версия
-    const touchLinkedOnBreach = (ev, facts) => {
-      if (facts && facts.breach) touch(events.filter((e) => e.linkedTo === ev.id && !isDone(e)));
-    };
 
     // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
     // Запрос, меняющий инцидент, несёт её в If-Match: нет заголовка — 428, версия старая — 412
@@ -1131,7 +1129,6 @@
       const r = engine.run(id, ev, formValues, { surface });
       if (!r.ok) return problem(422, "FORM_FIELD_REQUIRED", r.why);
       touch([ev]);
-      touchLinkedOnBreach(ev, r.facts);
       emitTransition(ev, id, ME, r.facts);
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
       const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
@@ -1719,7 +1716,6 @@
       fired.forEach(({ id, transition, facts }) => {
         const ev = byId(id);
         touch([ev]);
-        touchLinkedOnBreach(ev, facts);
         const tr = engine.transition(transition);
         if (wasMine.has(id) && !canSee(ev)) {
           wasMine.delete(id);
@@ -1841,7 +1837,6 @@
       fired.forEach(({ id: guid, transition, facts }) => {
         const ev = byId(guid);
         touch([ev]);
-        touchLinkedOnBreach(ev, facts);
         emitTransition(ev, transition, "system", facts);
       });
       return fired;

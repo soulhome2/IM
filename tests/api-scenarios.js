@@ -1707,6 +1707,39 @@
     assert.eq([linked.state, b.length, b[0] && b[0].at], ["closed", 1, due], "привязанный закрыт вместе с основным, нарушение срока группы — на момент срока");
   });
 
+  test("Окно после срока группы: отсоединённому в окне нарушение группы записано, присоединённому в окне — нет (§11.4, BUG-73)", async () => {
+    assert.ok(GRACE > 1, "окно после дедлайна больше секунды");
+    const env = await makeEnv();
+    const { urgent, calm } = await fireTrio(env);
+    for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    const due = (await env.card(calm.guid)).timer.dueAt;
+    await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(urgent.guid)}`), 200, null, "отсоединить в окне");
+    const version = (await env.card(urgent.guid)).version;
+    await env.advance(GRACE + 2);
+    const left = await env.card(urgent.guid);
+    const b = resolutionBreaches(left);
+    assert.eq([b.length, b[0] && b[0].at, b[0] && b[0].owner && b[0].owner.id], [1, due, ME], "отсоединённому в окне — нарушение группы на момент срока, на владельца основного");
+    assert.ok(Number(left.version) > Number(version), "у отсоединённого с нарушением — новая версия");
+    assert.status(await env.act(urgent.guid, "claim", {}, "queue"), 200, null, "взять отсоединённый");
+    await env.advance(5);
+    assert.eq(resolutionBreaches(await env.card(urgent.guid)).length, 1, "взявшему второго нарушения нет");
+    // Присоединённый в окне — нарушение группы ему не достаётся, прежнему привязанному — да. Свой срок
+    // у присоединяемого позже срока группы: норматив длиннее
+    const env2 = await makeEnv();
+    const rain = (await env2.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority < urgent.priority && e.guid !== calm.guid);
+    assert.ok(rain, "есть пожар с нормативом длиннее срочного");
+    for (const e of [urgent, calm, rain]) await env2.act(e.guid, "claim", {}, "queue");
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    const due2 = (await env2.card(calm.guid)).timer.dueAt;
+    await env2.advance(Math.ceil((Date.parse(due2) - env2.now) / 1000) + 1);
+    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, rain.guid], primaryGuid: calm.guid });
+    await env2.advance(GRACE + 2);
+    assert.eq(resolutionBreaches(await env2.card(urgent.guid)).length, 1, "прежнему привязанному — нарушение группы");
+    assert.eq(resolutionBreaches(await env2.card(rain.guid)).length, 0, "присоединённому после срока — нет");
+  });
+
   test("Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42)", async () => {
     const env = await makeEnv();
     const [a, b, c] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");

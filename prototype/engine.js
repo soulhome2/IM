@@ -103,13 +103,22 @@
       hold: { due: "holdDueAt", since: "holdSince" },
     };
     const dueOf = (ev, id) => ev[FIELDS[id].due];
-    // Открытые привязанные основного (§11.4): у группы один срок, нарушения основного — и у них
-    const openLinkedOf = (ev) => ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
-    function shareBreach(ev, record, linked) {
-      (linked || openLinkedOf(ev)).forEach((e) => {
-        e.breaches = (e.breaches || []).concat(Object.assign({}, record));
-        e.slaBreached = true;
-      });
+    // Нарушение основного — тем, кто был в группе в момент нарушения (§11.4, BUG-73): открытым привязанным,
+    // присоединённым не позже него, и вышедшим после него — отсоединённым в окне после дедлайна
+    const inGroupAt = (e, ev, at) =>
+      (e.linkedTo === ev.id && !isDone(e) && (e.linkedAt || 0) <= at) ||
+      Boolean(e.leftGroup && e.leftGroup.primaryId === ev.id && e.leftGroup.linkedAt <= at && e.leftGroup.at > at);
+    function shareBreach(ev, record) {
+      ctx.events()
+        .filter((e) => e.id !== ev.id && inGroupAt(e, ev, record.at))
+        .forEach((e) => {
+          e.breaches = (e.breaches || []).concat(Object.assign({}, record));
+          e.slaBreached = true;
+          // Вышедший с отработанным сроком группы: нарушение записано, при взятии второго не будет (RULE-50)
+          if (leftOf(e, record.kind) === 0) e.firedTimers = Object.assign({}, e.firedTimers, { [record.kind]: record.at });
+          // Инцидент изменился не своим переходом — сервер даёт ему новую версию
+          if (ctx.onBreachShared) ctx.onBreachShared(e);
+        });
     }
     // Остаток таймера с паузой: идёт — до дедлайна, на паузе — остаток, ещё не запускался — null
     function leftOf(ev, id) {
@@ -500,14 +509,19 @@
       returnToQueue: () => {},
       evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
       setCursor: (ev) => ctx.setCursor(ev),
+      // В группе с этого момента: нарушения основного — с него (BUG-73)
       setLinkedTo: (ev, [arg], s) => {
         ev.linkedTo = value(arg, ev, s.form, s);
+        ev.linkedAt = now();
       },
       // Связь с основным снимается. С шаблонами — если связь была, запись в журнал события и основного:
       // переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)
       clearLink: (ev, [own, primary], s) => {
         const p = ev.linkedTo && byId(ev.linkedTo);
+        // Из какой группы и когда вышел: нарушение по сроку, прошедшему до выхода, — и ему (BUG-73)
+        if (ev.linkedTo) ev.leftGroup = { primaryId: ev.linkedTo, linkedAt: ev.linkedAt || 0, at: now() };
         ev.linkedTo = null;
+        ev.linkedAt = null;
         if (!p) return;
         const at = now();
         if (own) ctx.log(ev, s.actor, own, { primaryNumber: p.number }, at);
@@ -534,7 +548,9 @@
         const at = now();
         s.after.push(() =>
           children.forEach((e) => {
+            e.leftGroup = { primaryId: e.linkedTo, linkedAt: e.linkedAt || 0, at };
             e.linkedTo = p.id;
+            e.linkedAt = at;
             if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);
           })
         );
@@ -685,14 +701,14 @@
       return canceled;
     }
     // После эффектов: нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал —
-    // перед записью о самом действии. linked — кому ещё нарушение (§11.4): открытые привязанные на момент дедлайна
-    function windowAfter(ev, canceled, facts, linked) {
+    // перед записью о самом действии
+    function windowAfter(ev, canceled, facts) {
       if (!canceled) return;
       canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
         const record = { kind: x.args[0], at: canceled.due, owner: canceled.owner };
         ev.breaches = (ev.breaches || []).concat(record);
         ev.slaBreached = true;
-        shareBreach(ev, record, linked);
+        shareBreach(ev, record);
         facts.breach = x.args[0];
       });
       ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
@@ -930,17 +946,14 @@
       // Окно после дедлайна — как у одиночного перехода: у каждого привязанного и у основного, если его берут (BUG-62)
       const canceled = others.map((ev) => windowBefore(ev, check.tr.id));
       const primaryCanceled = check.take ? windowBefore(primary, check.take.id) : null;
-      // Дедлайн наступил до объединения — нарушение только тем, кто был привязан тогда (§11.4)
-      const othersLinked = others.map(openLinkedOf);
-      const primaryLinked = openLinkedOf(primary);
       const applied = applyAll(check.tr, others, check.form, ME);
       if (!applied.ok) return applied;
-      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i], othersLinked[i]));
+      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
       applied.transitionId = check.tr.id;
       if (check.take) {
         const r = applyEffects(check.take, primary, {}, ME);
         if (!r.ok) return r;
-        windowAfter(primary, primaryCanceled, r.facts[0], primaryLinked);
+        windowAfter(primary, primaryCanceled, r.facts[0]);
         applied.taken = { transitionId: check.take.id, facts: r.facts[0] };
       }
       return applied;
