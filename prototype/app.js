@@ -2134,7 +2134,7 @@
       ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
       ${timerChip(ev, "sla")}
       ${holdChip(ev, "sla")}
-      ${linkedChip(ev)}${linkedDueChip(ev)}`;
+      ${linkedChip(ev)}`;
   }
 
   function workNote(ev) {
@@ -3678,18 +3678,6 @@
      Панель над очередью — действия, доступные всей выборке (их решает сервер: /incidents/selection).
      «Взять в работу» — одним инцидентом: основной выбирает сервер, остальные станут привязанными */
 
-  // Срок привязанного раньше своего (§11.4): истечёт — нарушение на владельца основного. Отсчёт — как у норматива
-  function linkedDueChip(e) {
-    if (!e.linkedDueAt) return "";
-    const due = Date.parse(e.linkedDueAt);
-    const own = e.timer && e.timer.running && e.timer.dueAt ? Date.parse(e.timer.dueAt) : Infinity;
-    if (due >= own) return "";
-    const left = due - Date.now();
-    return `<span class="event-sla lnk-due ${left < 120000 ? "late" : ""}" data-due="${due}" title="${te("Срок закрытия привязанного инцидента раньше срока основного: истечёт — нарушение на владельца основного")}">${te(
-      "Срок привязанного"
-    )} <b class="sla-t">${fmtSla(left)}</b></span>`;
-  }
-
   function linkedChip(e) {
     if (!e.linkedCount) return "";
     const text = t("+{n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n: e.linkedCount });
@@ -3744,7 +3732,6 @@
             <span class="lnk-num">${escapeHtml(m.number)}</span>
             <span class="lnk-where">${te(m.eventType.name)} · ${te(m.location)}</span>
             <time>${fmtTime(m.occurredAt)}</time>
-            ${timerChip(m, "event-sla lnk-sla") || "<span></span>"}
             <span class="badge ${b.cls}">${escapeHtml(b.text)}</span>
             ${d ? `<button type="button" class="btn ghost small" data-detach="${escapeHtml(m.guid)}" data-number="${escapeHtml(m.number)}" ${off}>${escapeHtml(lbl(transitionDef(d.id)))}</button>` : "<span></span>"}
           </div>`;

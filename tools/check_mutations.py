@@ -151,6 +151,8 @@ MUTATIONS = [
     ("merge_hides", "связанные события в списках не показываются", lambda w: next(s for s in w["states"] if s["id"] == "linked").update(category="pending")),
     ("merge_relink", "связанные прежнего основного не переходят к новому", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "relinkToPrimary"])),
     ("merge_answers", "ответы сценария связанного основному не переносятся", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "copyAnswersToPrimary"])),
+    ("merge_no_tighten", "срок группы не сжимается: у основного остаётся свой", lambda w: transition(w, "merge").update(effects=[e for e in transition(w, "merge")["effects"] if e["fn"] != "tightenPrimaryDeadline"])),
+    ("detach_own_deadline", "отсоединённый — со своим прежним сроком, а не с остатком группы", lambda w: transition(w, "detach").update(effects=[{"kind": "transactional", "fn": "pauseTimer", "args": ["resolution"]} if e["fn"] == "copyPrimaryDeadline" else e for e in transition(w, "detach")["effects"]])),
     ("merge_nav", "после «Взять в работу» на выборке — к очереди, а не в карточку", lambda w: transition(w, "merge")["ui"].update(navigate="queue")),
     ("merge_foreign", "объединить можно только ничьё или своё", lambda w: transition(w, "merge").update(guards=[g for g in transition(w, "merge")["guards"] if g["fn"] != "isOwnerOrUnowned"])),
     ("reopen_cursor", "«Переоткрыть» не ставит курсор сценария на текущий шаг", lambda w: transition(w, "reopen").update(effects=[e for e in transition(w, "reopen")["effects"] if e["fn"] != "setCursor"])),

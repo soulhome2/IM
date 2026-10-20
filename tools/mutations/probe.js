@@ -27,6 +27,34 @@
   const row = (id) => $("eventsList").querySelector(`[data-id="${id}"]`);
   // Инцидент по номеру из эталонного набора: guid — UUID, на экране — номер
   const guidOf = (number) => (window.IM_FIXTURE.incidents.find((i) => i.number === number) || {}).guid;
+  // Срок по нормативу в заголовке карточки — data-due отсчёта инцидента
+  const headDue = (guid) => Number(($("workTitle").querySelector(`[data-timer="${guid}"]`) || { dataset: {} }).dataset.due) || null;
+  const fx = (guid) => window.IM_FIXTURE.incidents.find((i) => i.guid === guid) || {};
+  // Два новых одного сценария в очереди: самый срочный и самый спокойный
+  async function deadlinePair() {
+    await setFilter("open");
+    const ids = [...$("eventsList").querySelectorAll('[data-do="claim"]')].filter((b) => !off(b)).map((b) => b.dataset.ev);
+    const byScenario = {};
+    ids.forEach((id) => (byScenario[fx(id).scenarioGuid] = (byScenario[fx(id).scenarioGuid] || []).concat(id)));
+    const group = Object.values(byScenario).sort((a, b) => b.length - a.length)[0].sort((a, b) => fx(b).priority - fx(a).priority);
+    return { urgent: group[0], calm: group[group.length - 1] };
+  }
+  async function claimCard(guid) {
+    await setFilter("open");
+    await click(btn($("eventsList"), "claim", guid));
+  }
+  async function takeAndHold(guid) {
+    await claimCard(guid);
+    await click(anyBtn(root(), "hold"));
+    await confirm();
+    if (mode() === "work") await click($("backToQueue"));
+  }
+  // «Взять в работу» на выборке из своих: основной выбирает сервер
+  async function mergeMine(guids) {
+    await setFilter("mine");
+    for (const g of guids) await click($("eventsList").querySelector(`[data-check="${g}"]`));
+    await click($("selBar").querySelector('[data-sel-do="merge"]'));
+  }
   async function claimFirst() {
     await setFilter("open");
     const b = btn($("eventsList"), "claim");
@@ -330,6 +358,32 @@
     },
     // Ответы связанного — основному (эффект перехода объединения). INC-1847 и INC-1838 — оба в работе,
     // основной — старший INC-1838; шаг «visual» отвечен только в INC-1847 (ответ уходит по «Далее»)
+    // Срок группы (RULE-97): самый срочный и самый спокойный новые одного сценария; срок основного — из заголовка карточки
+    async merge_no_tighten() {
+      const { urgent, calm } = await deadlinePair();
+      await takeAndHold(urgent);
+      await claimCard(calm);
+      const own = headDue(calm);
+      await click($("backToQueue"));
+      await mergeMine([urgent, calm]);
+      const after = headDue(calm);
+      return [Boolean(own) && after === own, `срок основного до объединения ${own}, после ${after}`];
+    },
+    // Отсоединённый — с остатком срока группы (copyPrimaryDeadline), а не со своим прежним
+    async detach_own_deadline() {
+      const { urgent, calm } = await deadlinePair();
+      await takeAndHold(calm);
+      await claimCard(urgent);
+      const group = headDue(urgent);
+      await click($("backToQueue"));
+      await mergeMine([urgent, calm]);
+      await click($("workTitle").querySelector('.chip.linked[data-work-tab="linked"]'));
+      await click(root().querySelector(`[data-detach="${calm}"]`));
+      if (mode() === "work") await click($("backToQueue"));
+      await claimCard(calm);
+      const own = headDue(calm);
+      return [Boolean(group && own) && own > group + 60000, `срок группы ${group}, у отсоединённого ${own}`];
+    },
     async merge_answers() {
       for (const number of ["INC-1847", "INC-1838"]) {
         await setFilter("open");

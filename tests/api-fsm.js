@@ -171,8 +171,8 @@
     });
   });
 
-  // Каждый вход в «Привязан» (§11.4): норматив закрытия привязанного истёк, его отсоединили и снова
-  // взяли в работу одним с тем же основным — норматив продолжается, второго нарушения нет (PROC-20)
+  // Каждый вход в «Привязан» (§11.4): истёк срок группы, привязанный отсоединили и снова взяли в работу
+  // одним с тем же основным — отработанный срок не возвращается, второго нарушения нет (PROC-20, RULE-97)
   const mergeTwo = async (env) => {
     const linked = await newFire(env);
     assert.status(await env.act(linked.guid, "claim", {}, "queue"), 200, null, "взять будущий привязанный");
@@ -183,7 +183,7 @@
   };
   const REENTRY_LINKED = {
     merge: {
-      name: "истёк у привязанного → «Отсоединить» → снова «Взять в работу» одним",
+      name: "истёк срок группы → «Отсоединить» → снова «Взять в работу» одним",
       async run(env, { linked, primary }) {
         assert.status(await env.call("DELETE", `/operator/incidents/${enc(primary)}/linked/${enc(linked)}`), 200, null, "отсоединить");
         assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, linked], primaryGuid: primary }), 200, null, "снова одним");
@@ -194,12 +194,14 @@
     test(`im-fsm: повторный вход в «Привязан» не даёт нового нарушения: ${c.name}`, async () => {
       const env = await standWith({ workflow: W });
       const pair = await mergeTwo(env);
-      const card = await env.card(pair.linked);
-      const expired = firedFor(await env.advance(untilDue(env, card)), pair.linked);
-      assert.eq(expired, ["linked_resolution_overdue"], "норматив закрытия привязанного истёк");
+      const card = await env.card(pair.primary);
+      const expired = firedFor(await env.advance(untilDue(env, card)), pair.primary);
+      assert.eq(expired, ["resolution_overdue"], "срок группы истёк");
+      assert.eq((await env.card(pair.linked)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение срока группы — и у привязанного");
       await c.run(env, pair);
       assert.eq((await env.card(pair.linked)).state, "linked", `после «${id}» снова привязан`);
-      assert.eq(firedFor(await env.advance(60), pair.linked), [], `после «${id}» ничего не сработало`);
+      const fired = await env.advance(60);
+      assert.eq(firedFor(fired, pair.linked).concat(firedFor(fired, pair.primary)), [], `после «${id}» ничего не сработало`);
       assert.eq((await env.card(pair.linked)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия одно");
     });
   });
@@ -214,19 +216,6 @@
       windowSec: 1500,
       workflow: withEscalation({ onResolutionOverdue: "escalate", maxLevel: 0 }),
       async setup(env) { const inc = await newFire(env); await env.act(inc.guid, "claim", {}, "queue"); return inc.guid; },
-    },
-    linked_resolution_overdue: {
-      windowSec: 1500,
-      workflow: W,
-      // Свой в работе стал привязанным к другому своему — его норматив закрытия идёт дальше (§11.4)
-      async setup(env) {
-        const linked = await newFire(env);
-        await env.act(linked.guid, "claim", {}, "queue");
-        const primary = (await env.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire");
-        await env.act(primary.guid, "claim", {}, "queue");
-        assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, linked.guid], primaryGuid: primary.guid }), 200, null, "взять в работу одним");
-        return linked.guid;
-      },
     },
     hold_overdue: {
       windowSec: 3700,
@@ -307,20 +296,6 @@
       order: ["escalation_ceiling", "addressee_cannot_accept"],
       end: "new",
       breach: "reaction",
-    },
-    {
-      // Закрытие основного — действие человека с другим инцидентом: окно привязанного его не ждёт (PROC-20)
-      name: "норматив закрытия привязанного × закрыт основной: нарушение на владельца основного, потом закрытие вместе с ним",
-      workflow: W,
-      async setup(env) {
-        const pair = await mergeTwo(env);
-        env.primaryGuid = pair.primary;
-        return pair.linked;
-      },
-      system: async (env) => assert.status(await env.act(env.primaryGuid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной"),
-      order: ["linked_resolution_overdue", "close_linked"],
-      end: "closed",
-      breach: "resolution",
     },
   ];
   WINDOW.forEach((c) => {

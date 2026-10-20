@@ -28,6 +28,8 @@ module im_test {
     CLOSE_RESULTS.fold({ id: NOBODY, perm: NOBODY, from: Set(), ownerOnly: Set(), steps: false }, (acc, r) => if (r.id == id) r else acc)
   pure val RUNNING: Timer = { mode: Running, phase: Before }
   def x1 = inc.get("i1")
+  def x2 = inc.get("i2")
+  def x3 = inc.get("i3")
   def breachesOf(kind: str): int = x1.breaches.select(b => b.kind == kind).length()
 
   /* ===== 1. Основной цикл: взять, отложить, возобновить, закрыть, переоткрыть ===== */
@@ -245,5 +247,170 @@ module im_test {
       .expect(not(holdOk("a", "i2")))
       .then(release("a", "i1"))
       .then(hold("a", "i2", "patrol"))
+      .expect(inv)
+
+  /* ===== 6. Объединение (§11.3, §11.4) ===== */
+
+  // Новый — в мой в работе: привязанный без владельца, реакция снята, норматив закрытия не запускался
+  run mergeIntoMineTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x2.state == Linked and x2.linkedTo == "i1" and x2.owner == NOBODY and x2.reaction == IDLE and x2.resolution == IDLE)
+      .expect(x1.state == InProgress and x1.owner == "a")
+      .expect(inv)
+
+  // Два новых: основной берётся тем же действием (grouping.takeWith)
+  run mergeTakesNewPrimaryTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x1.state == InProgress and x1.owner == "a" and x1.reaction == IDLE and x1.resolution == RUNNING)
+      .expect(x2.state == Linked and x2.linkedTo == "i1")
+      .expect(inv)
+
+  // Основной со своим привязанным объединяется в третий: привязанный — к новому основному,
+  // привязанного у привязанного не бывает (relinkToPrimary)
+  run mergeRelinksTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(create("i3"))
+      .then(claim("a", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(merge("a", "i3", Set("i1")))
+      .expect(x3.state == InProgress and x3.owner == "a")
+      .expect(x1.state == Linked and x1.linkedTo == "i3" and x1.resolution == { mode: Paused, phase: Before })
+      .expect(x2.state == Linked and x2.linkedTo == "i3")
+      .expect(inv)
+
+  // Из отложенного: удержание снято, свой норматив закрытия на паузе — идёт срок группы (RULE-97)
+  run mergeFromOnHoldTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(hold("a", "i2", "patrol"))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x2.state == Linked and x2.holdReason == NOBODY and x2.hold == IDLE and x2.resolution == { mode: Paused, phase: Before })
+      .expect(inv)
+
+  // Всё или ничего: чужой в работе не объединить — не проходит и вся выборка. Основным не бывает
+  // отложенный (RULE-78)
+  run mergeAllOrNothingTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(create("i3"))
+      .then(claim("b", "i3"))
+      .expect(not(mergeSetOk("a", "i1", Set("i2", "i3"))))
+      .expect(mergeSetOk("a", "i1", Set("i2")))
+      .then(claim("a", "i1"))
+      .then(hold("a", "i1", "patrol"))
+      .expect(not(mergeSetOk("a", "i1", Set("i2"))))
+      .expect(inv)
+
+  // Отсоединить: пока основной ждёт принятия — никто; после «Принять» — принявший (RULE-78).
+  // Отсоединённый — новый, реакция заново
+  run detachRightsTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(transfer("a", "i1", "b"))
+      .expect(not(detachOk("a", "i2")) and not(detachOk("b", "i2")))
+      .then(accept("b", "i1"))
+      .expect(not(detachOk("a", "i2")))
+      .then(detach("b", "i2"))
+      .expect(x2.state == New and x2.linkedTo == NOBODY and x2.reaction == RUNNING)
+      .expect(inv)
+
+  // Закрытие основного закрывает привязанный с его результатом и закрывшим; до этого ручные ждут.
+  // Переоткрытие основного оставляет привязанный закрытым; переоткрытый привязанный отвязан (BUG-42)
+  run closeLinkedTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(create("i3"))
+      .then(claim("a", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(close("a", "i1", result("false_alarm"), false))
+      .expect(not(reopenOk("a", "i1")) and not(claimOk("b", "i3")))
+      .then(closeLinked("i2"))
+      .expect(all {
+        x2.state == Closed,
+        x2.closeResult == "false_alarm",
+        x2.closedBy == "a",
+        x2.owner == NOBODY,
+        x2.linkedTo == "i1",
+        x2.reopenOpen,
+      })
+      .then(reopen("a", "i1"))
+      .expect(x1.state == InProgress and x2.state == Closed)
+      .then(reopen("b", "i2"))
+      .expect(x2.state == InProgress and x2.owner == "b" and x2.linkedTo == NOBODY)
+      .expect(inv)
+
+  /* ===== 7. Срок группы (§11.4, RULE-97) ===== */
+
+  // Истёк срок группы — нарушение у основного и у привязанного, на владельца основного
+  run groupBreachSharedTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expireResolution("i1"))
+      .expect(not(detachOk("a", "i2")))  // срок группы — и его: ручные ждут перехода по таймеру
+      .then(resolutionOverdue("i1"))
+      .expect(x1.breaches == [{ kind: "resolution", who: "a" }] and x2.breaches == [{ kind: "resolution", who: "a" }])
+      .expect(inv)
+
+  // Основной вернули в очередь — срок группы стоит: у привязанного свой на паузе, наступить нечему
+  run releasedGroupStopsTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(release("a", "i1"))
+      .expect(not(expireResolutionOk("i1")) and not(expireResolutionOk("i2")))
+      .expect(inv)
+
+  // Отсоединённый после срока группы — со сработавшим сроком: взявшему второго нарушения нет (RULE-50)
+  run detachAfterGroupBreachTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expireResolution("i1"))
+      .then(resolutionOverdue("i1"))
+      .then(detach("a", "i2"))
+      .expect(x2.state == New and x2.resolution == { mode: Paused, phase: Fired })
+      .then(claim("b", "i2"))
+      .expect(x2.resolution == { mode: Running, phase: Fired } and not(expireResolutionOk("i2")))
+      .expect(inv)
+
+  // Дедлайн основного наступил — объединение ждёт его срабатывания: присоединённым — только новые нарушения
+  run mergeWaitsForPrimaryDeadlineTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(expireResolution("i1"))
+      .expect(not(mergeSetOk("a", "i1", Set("i2"))))
+      .then(resolutionOverdue("i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x2.breaches == [] and x2.joinedBreaches == 1)
       .expect(inv)
 }

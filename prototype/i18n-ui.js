@@ -14,8 +14,6 @@ window.IM_DICT_UI = {
     "Подходит: {n} · не включены — их нельзя взять в работу: {x}": "Matching: {n} · left out, they cannot be taken as one: {x}",
     "Сценарий": "Scenario",
     "Привязанные инциденты": "Linked incidents",
-    "Срок привязанного": "Linked incident due",
-    "Срок закрытия привязанного инцидента раньше срока основного: истечёт — нарушение на владельца основного": "A linked incident is due earlier than the primary: when it expires, the breach is recorded against the primary's owner",
     "Найдено в привязанных: {ids}": "Found in linked: {ids}",
     "Привязано: {n}": "Linked: {n}",
     "Найдено: {n}": "Found: {n}",

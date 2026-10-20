@@ -2175,13 +2175,13 @@
         const wide = [...lnk.querySelectorAll(".lnk-member, .lnk-head")].filter((x) => x.scrollWidth > x.clientWidth + 1);
         lnk.style.width = "";
         expect(!outside.length && !wide.length, `узкая панель: за краем — ${outside.map((x) => x.textContent.trim()).join(", ") || "ничего"}; шире панели — ${wide.length} строк`);
-        // Срок привязанного виден: у кого норматив закрытия идёт — отсчёт; в заголовке — «Срок привязанного», если раньше своего
+        // Срок у группы один — срок основного в заголовке; у привязанных своего отсчёта нет (§11.4, RULE-97)
         const leadCard = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}`);
         const linkedPage = await stand.get(`/operator/incidents/${encodeURIComponent(lead.guid)}/linked`, { pageSize: 10 });
-        const running = linkedPage.items.filter((x) => x.timer && x.timer.running).length;
-        expect(root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length === running, `отсчётов у привязанных ${root().querySelectorAll(".lnk-member .lnk-sla[data-due]").length}, а идёт норматив у ${running}`);
-        const earlier = Boolean(leadCard.linkedDueAt) && (!leadCard.timer || !leadCard.timer.running || Date.parse(leadCard.linkedDueAt) < Date.parse(leadCard.timer.dueAt));
-        expect(Boolean($("workTitle").querySelector(".lnk-due")) === earlier, `«Срок привязанного» в заголовке: ${Boolean($("workTitle").querySelector(".lnk-due"))}, а должен быть ${earlier}`);
+        expect(linkedPage.items.every((x) => x.timer === null), `у привязанных свой срок в ответе: ${linkedPage.items.filter((x) => x.timer).map((x) => x.number).join(", ")}`);
+        expect(!root().querySelector(".lnk-member [data-timer]") && !$("workTitle").querySelector(".lnk-due"), "у привязанных — свой отсчёт или «Срок привязанного» в заголовке");
+        const leadTimer = $("workTitle").querySelector(`[data-timer="${lead.guid}"]`);
+        expect(!leadCard.timer || (leadTimer && (!leadCard.timer.running || leadTimer.dataset.due === String(Date.parse(leadCard.timer.dueAt)))), "срок группы — срок основного — не виден в заголовке");
         const detach = root().querySelectorAll("[data-detach]");
         // Постранично, по 10 (LINKED_PAGE)
         expect(detach.length === Math.min(picked.length - 1, 10), `на вкладке привязанных ${detach.length}`);

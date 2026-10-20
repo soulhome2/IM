@@ -1313,6 +1313,12 @@
       const c = await env.card(late.guid);
       assert.eq(c.state, asPrimary ? "in_progress" : "linked", "состояние после объединения");
       overriddenAt(c, "reaction", due);
+      // Дедлайн основного прошёл до объединения: присоединённому его нарушение не достаётся (RULE-97)
+      if (asPrimary) {
+        const own = Date.parse(other.timer.dueAt);
+        const foreign = (await env.card(other.guid)).breaches.filter((b) => Date.parse(b.at) !== own);
+        assert.eq(foreign, [], "у только что присоединённого нарушения основного нет");
+      }
     }
     // Срок удержания истёк секунду назад: свой отложенный привязывается к своему в работе
     const env = await makeEnv();
@@ -1589,35 +1595,116 @@
     assert.eq([closed.state, closed.linkedTo], ["closed", e.guid], "закрытый F остался при E как история");
   });
 
-  test("Норматив закрытия привязанного идёт дальше: истёк — нарушение на владельца основного и алерт; у нового привязанного норматива нет; закрыли основной раньше — нарушения нет (§11.4)", async () => {
-    const env = await makeEnv();
+  // Срок у группы один — срок основного, самый ранний из сроков объединённых (§11.3, §11.4, RULE-97)
+  const fireTrio = async (env) => {
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
-    const urgent = fires[0];
-    const calm = fires[fires.length - 1];
-    const fresh = fires[1];
+    const [urgent, fresh, calm] = [fires[0], fires[1], fires[fires.length - 1]];
     assert.ok(urgent.priority > calm.priority, "есть пожары разной срочности");
+    return { urgent, fresh, calm };
+  };
+  const resolutionBreaches = (card) => card.breaches.filter((b) => b.kind === "resolution");
+
+  test("Срок группы — самый ранний из объединённых; у привязанных своего нет; истёк — нарушение у основного и у каждого привязанного, на владельца основного (§11.4, RULE-97)", async () => {
+    const env = await makeEnv();
+    const { urgent, fresh, calm } = await fireTrio(env);
     for (const e of [urgent, calm]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
     await env.advance(30);
-    const before = await env.card(urgent.guid);
+    const early = (await env.card(urgent.guid)).timer.dueAt;
+    assert.ok(Date.parse(early) < Date.parse((await env.card(calm.guid)).timer.dueAt), "у срочного срок раньше");
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid, fresh.guid], primaryGuid: calm.guid });
-    const linked = await env.card(urgent.guid);
-    assert.eq([linked.state, linked.timer.id, linked.timer.running, linked.timer.dueAt], ["linked", "resolution", true, before.timer.dueAt], "у привязанного срок закрытия идёт, тот же");
-    assert.eq((await env.card(fresh.guid)).timer, null, "у нового привязанного норматива нет");
-    assert.eq(res.incident.linkedDueAt, before.timer.dueAt, "у основного — срок привязанного");
-    await env.advance(Math.ceil((Date.parse(before.timer.dueAt) - env.now) / 1000) + 5);
-    const late = await env.card(urgent.guid);
-    assert.eq([late.state, late.breaches.length, late.breaches[0].kind, late.breaches[0].owner && late.breaches[0].owner.id], ["linked", 1, "resolution", ME], "нарушение закрытия — на владельца основного");
-    assert.eq(late.journal[late.journal.length - 1].templateKey, "workflow.journal.linked_resolution_overdue", "запись в журнале привязанного");
-    const primary = await env.card(calm.guid);
-    assert.eq([primary.breaches.length, primary.timer.dueAt], [0, res.incident.timer.dueAt], "у основного нарушений нет, срок свой");
-    // Закрыли основной раньше срока привязанного — нарушения нет
+    assert.eq(res.incident.timer.dueAt, early, "срок основного — самый ранний из объединённых");
+    assert.ok(!("linkedDueAt" in res.incident), "отдельного срока привязанных нет");
+    for (const e of [urgent, fresh]) {
+      const card = await env.card(e.guid);
+      assert.eq([card.state, card.timer], ["linked", null], `у привязанного ${e.number} своего срока нет`);
+    }
+    const versions = await Promise.all([urgent, fresh].map(async (e) => (await env.card(e.guid)).version));
+    await env.advance(Math.ceil((Date.parse(early) - env.now) / 1000) + 5);
+    for (const e of [calm, urgent, fresh]) {
+      const b = resolutionBreaches(await env.card(e.guid));
+      assert.eq([b.length, b[0] && b[0].owner && b[0].owner.id, b[0] && b[0].at], [1, ME, early], `нарушение срока группы у ${e.number} — на владельца основного, на момент срока`);
+    }
+    const after = await Promise.all([urgent, fresh].map(async (e) => (await env.card(e.guid)).version));
+    assert.ok(after.every((v, i) => Number(v) > Number(versions[i])), "у привязанных с нарушением — новая версия");
+    // Более поздний привязанный срок основного не трогает
+    const env2 = await makeEnv();
+    for (const e of [urgent, calm]) await env2.act(e.guid, "claim", {}, "queue");
+    const own = (await env2.card(urgent.guid)).timer.dueAt;
+    const res2 = await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    assert.eq(res2.incident.timer.dueAt, own, "привязанный с более поздним сроком срок основного не меняет");
+    // Основной новый — берётся тем же действием, срок тоже самый ранний
+    const env4 = await makeEnv();
+    await env4.act(urgent.guid, "claim", {}, "queue");
+    await env4.advance(30);
+    const urgentDue = (await env4.card(urgent.guid)).timer.dueAt;
+    const res4 = await env4.ok("POST", "/operator/incidents/merge", { incidentGuids: [fresh.guid, urgent.guid], primaryGuid: fresh.guid });
+    assert.eq([res4.incident.state, res4.incident.timer.dueAt], ["in_progress", urgentDue], "новый основной взят, срок — самый ранний");
+    // Закрыли основной раньше срока — нарушений нет
+    const env3 = await makeEnv();
+    for (const e of [urgent, calm]) await env3.act(e.guid, "claim", {}, "queue");
+    await env3.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    assert.status(await env3.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    await env3.advance(900);
+    const closed = await env3.card(urgent.guid);
+    assert.eq([closed.state, closed.breaches.length], ["closed", 0], "закрыт вместе с основным, нарушения нет");
+  });
+
+  test("Группу никто не ведёт — срок стоит: основной вернули в очередь или передали — нарушения закрытия нет ни у кого; отсоединённый — с остатком срока группы (§11.4, RULE-97)", async () => {
+    for (const away of ["release", "transfer"]) {
+      const env = await makeEnv();
+      const { urgent, calm } = await fireTrio(env);
+      for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
+      await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+      const due = (await env.card(calm.guid)).timer.dueAt;
+      const form = away === "release" ? { comment: "не моё" } : { targetId: "petrova", comment: "тест" };
+      assert.status(await env.act(calm.guid, away, form, "card"), 200, null, `основной: ${away}`);
+      await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 60);
+      for (const e of [calm, urgent]) assert.eq(resolutionBreaches(await env.card(e.guid)).length, 0, `${away}: у ${e.number} нарушения закрытия нет`);
+    }
+    // Отсоединённый получает остаток срока группы, а не свой прежний
+    const env = await makeEnv();
+    const { urgent, calm } = await fireTrio(env);
+    for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    await env.advance(60);
+    const groupDue = (await env.card(urgent.guid)).timer.dueAt;
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(urgent.guid)}/linked/${enc(calm.guid)}`), 200, null, "отсоединить");
+    assert.status(await env.act(calm.guid, "claim", {}, "queue"), 200, null, "взять отсоединённый");
+    assert.eq((await env.card(calm.guid)).timer.dueAt, groupDue, "у отсоединённого — остаток срока группы");
+  });
+
+  test("Просроченный привязанный срок группы не сжимает; основной закрыли в окне после срока — нарушение записано и привязанным, потом закрыты вместе (§11.4, RULE-97, RULE-63)", async () => {
+    const env = await makeEnv();
+    const { urgent, calm } = await fireTrio(env);
+    for (const e of [urgent, calm]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    await env.advance(Math.ceil((Date.parse((await env.card(urgent.guid)).timer.dueAt) - env.now) / 1000) + 5);
+    assert.eq(resolutionBreaches(await env.card(urgent.guid)).length, 1, "у срочного свой срок нарушен");
+    const own = (await env.card(calm.guid)).timer.dueAt;
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    assert.eq(res.incident.timer.dueAt, own, "просроченный срок группы не сжимает");
+    assert.eq(resolutionBreaches(await env.card(urgent.guid)).length, 1, "второго нарушения за свой срок нет");
+    // Срок группы истёк, привязанный отсоединили и взяли: отработанный срок не даёт второго нарушения (RULE-50)
+    const env3 = await makeEnv();
+    for (const e of [urgent, calm]) await env3.act(e.guid, "claim", {}, "queue");
+    await env3.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    await env3.advance(Math.ceil((Date.parse((await env3.card(urgent.guid)).timer.dueAt) - env3.now) / 1000) + 5);
+    assert.eq(resolutionBreaches(await env3.card(calm.guid)).length, 1, "нарушение срока группы у привязанного");
+    assert.status(await env3.call("DELETE", `/operator/incidents/${enc(urgent.guid)}/linked/${enc(calm.guid)}`), 200, null, "отсоединить");
+    assert.status(await env3.act(calm.guid, "claim", {}, "queue"), 200, null, "взять отсоединённый");
+    await env3.advance(5);
+    assert.eq(resolutionBreaches(await env3.card(calm.guid)).length, 1, "после отсоединения и взятия второго нарушения нет");
+    // Окно после дедлайна: закрытие основного выигрывает у таймера, нарушение — на момент срока, и привязанным
     const env2 = await makeEnv();
     for (const e of [urgent, calm]) await env2.act(e.guid, "claim", {}, "queue");
     await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
-    assert.status(await env2.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
-    await env2.advance(900);
-    const closed = await env2.card(urgent.guid);
-    assert.eq([closed.state, closed.breaches.length], ["closed", 0], "закрыт вместе с основным, нарушения нет");
+    const due = (await env2.card(calm.guid)).timer.dueAt;
+    await env2.advance(Math.ceil((Date.parse(due) - env2.now) / 1000) + 1);
+    const closing = await env2.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
+    assert.status(closing, 200, null, "закрыть основной в окне");
+    assert.ok(closing.body.canceledTimerTrigger, "срабатывание по таймеру отменено");
+    const linked = await env2.card(urgent.guid);
+    const b = resolutionBreaches(linked);
+    assert.eq([linked.state, b.length, b[0] && b[0].at], ["closed", 1, due], "привязанный закрыт вместе с основным, нарушение срока группы — на момент срока");
   });
 
   test("Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42)", async () => {

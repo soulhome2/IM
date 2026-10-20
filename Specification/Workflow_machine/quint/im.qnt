@@ -3,25 +3,28 @@
 
    Источник правил — ../workflow_schema.v1.json; смысл условий и эффектов — как в исполнителе
    прототипа (prototype/engine.js). Модель не заменяет машину: она проверяет её правила
-   на маленьком мире — 2 инцидента, 2 оператора, 1 дежурная группа — перебором путей.
+   на маленьком мире — 3 инцидента, 2 оператора, 1 дежурная группа — перебором путей.
 
    Ядро: create, claim, accept, reject, hold, resume, release, transfer, takeover, close,
-   reopen и переходы по таймерам. Пока не моделируются: состояние оператора (все ready,
-   agentReady выполнено), системные переходы, merge / linked, смена прав и доступа,
-   окно manualWinsOverTimer, журнал, уведомления, сценарий, version.
+   reopen и переходы по таймерам. Объединение (§11): merge, detach, close_linked; у группы один
+   срок — срок основного, нарушения основного записываются и привязанным (RULE-97). Пока не моделируются: состояние оператора (все ready,
+   agentReady выполнено), остальные системные переходы, linked_lost_access, смена прав и
+   доступа, окно manualWinsOverTimer, журнал, уведомления, сценарий (у всех инцидентов
+   один — sameScenarioAsPrimary выполнено, ответы не переносятся), version.
 
    Время абстрактное. У таймера фаза: Before — дедлайн впереди, Due — наступил и ещё не
    сработал (timerExpired), Fired — сработал (firedTimers прототипа: каждый дедлайн
    срабатывает один раз). Дедлайн наступает действием окружения expire*.
    Без окна manualWinsOverTimer переход по таймеру срочный: пока он возможен, ручные
-   действия над этим инцидентом ждут (как при graceSec = 0).
+   действия над этим инцидентом ждут (как при graceSec = 0). Системный переход срочный для
+   всех: сервер выполняет его сразу, поэтому, пока он возможен, ждут все ручные действия и время.
 
    Запуск: quint typecheck im.qnt; quint run --max-steps=40 im.qnt */
 module im {
 
   /* ===== Типы ===== */
 
-  type State = Absent | New | Pending | InProgress | OnHold | Closed
+  type State = Absent | New | Pending | InProgress | OnHold | Closed | Linked
   type Run = Idle | Running | Paused
   type Phase = Before | Due | Fired
   type Timer = { mode: Run, phase: Phase }
@@ -42,6 +45,10 @@ module im {
     resolution: Timer,
     hold: Timer,
     breaches: List[Breach],
+    linkedTo: str,     // основной инцидент привязанного (linked_to); NOBODY — связи нет
+    // Служебное поле модели, в машине его нет: сколько нарушений было у основного при присоединении —
+    // так инвариант linkedSharesBreaches видит, какие нарушения основного должны быть и у привязанного
+    joinedBreaches: int,
   }
 
   // Права, доступ и настройки выбираются при старте и дальше не меняются.
@@ -64,13 +71,15 @@ module im {
 
   pure val NOBODY = ""
   pure val DISPATCHER = "dispatcher"
-  pure val INCIDENTS = Set("i1", "i2")
+  pure val SYSTEM = "system"
+  // Три: основной с привязанным объединяется с третьим — relinkToPrimary
+  pure val INCIDENTS = Set("i1", "i2", "i3")
   pure val OPERATORS = Set("a", "b")
   pure val GROUP = "g"
   pure val TARGETS = OPERATORS.union(Set(GROUP))
 
   pure val PERMS = Set(
-    "incident:claim", "incident:accept", "incident:hold", "incident:release",
+    "incident:bulk", "incident:claim", "incident:accept", "incident:hold", "incident:release",
     "incident:close", "incident:close:unprocessed", "incident:reopen",
     "incident:transfer:own", "incident:transfer:any", "incident:reassign",
   )
@@ -96,7 +105,7 @@ module im {
   pure val ABSENT: Incident = {
     state: Absent, owner: NOBODY, group: NOBODY, holdReason: NOBODY, level: 0,
     closeResult: NOBODY, closedBy: NOBODY, reopenOpen: false, transfers: 0,
-    reaction: IDLE, resolution: IDLE, hold: IDLE, breaches: [],
+    reaction: IDLE, resolution: IDLE, hold: IDLE, breaches: [], linkedTo: NOBODY, joinedBreaches: 0,
   }
 
   /* ===== Состояние ===== */
@@ -120,6 +129,9 @@ module im {
     if (t.mode == Paused) { ...t, mode: Running }
     else if (t.mode == Idle) { mode: Running, phase: Before }
     else t
+  // tightenPrimaryDeadline: срок основного — самый ранний из своего и остатка привязываемого. В абстрактном
+  // времени «раньше» не различить: срок основного не меняется, правило проверяют тесты API (RULE-97)
+  pure def tightenT(t: Timer): Timer = t
   // restartTimer: заново, без остатка (RULE-11)
   pure def restartT(t: Timer): Timer = { mode: Running, phase: Before }
   pure def isDue(t: Timer): bool = t.mode == Running and t.phase == Due
@@ -135,6 +147,7 @@ module im {
   def isSelf(a: str, id: str): bool = id != NOBODY and (id == a or (isGroup(id) and cfg.members.contains(a)))
   def isMine(a: str, x: Incident): bool = x.owner == a
   def isTarget(a: str, x: Incident): bool = isSelf(a, addressee(x))
+  def unowned(x: Incident): bool = x.owner == NOBODY and x.group == NOBODY
   // Отношение смотрящего к инциденту: ожидающий моего принятия — «мне адресован», даже если
   // владельцем записан я сам (BUG-60)
   def ownership(a: str, x: Incident): str =
@@ -191,6 +204,28 @@ module im {
     })
   def escalationTargetAvailable(x: Incident, i: str): bool = nextLevels(x, i).length() > 0
 
+  // Объединение (§11): основной привязанного; связи нет — ABSENT
+  def primaryOf(x: Incident): Incident = if (x.linkedTo == NOBODY) ABSENT else inc.get(x.linkedTo)
+  // Ничей (новый) или мой: объединять можно только такие
+  def isOwnerOrUnowned(a: str, x: Incident): bool = isMine(a, x) or unowned(x)
+  // Основной p — другой, не привязанный; новый или мой в работе
+  def mergePrimaryValid(a: str, i: str, p: str): bool = {
+    val px = inc.get(p)
+    p != i and px.linkedTo == NOBODY and (px.state == New or (px.state == InProgress and isMine(a, px)))
+  }
+  // Отсоединять может тот, кто ведёт основной, или любой, пока основной ничей; ожидающий
+  // принятия — ещё ничей не «мой» (RULE-78)
+  def primaryEditable(a: str, x: Incident): bool = {
+    val px = primaryOf(x)
+    x.linkedTo != NOBODY and (ownership(a, px) == "owner" or unowned(px))
+  }
+  // copyPrimaryDeadline: остаток срока основного — на паузе; сработавший — сработавшим (RULE-50)
+  def copyPrimaryT(x: Incident): Timer = {
+    val t = primaryOf(x).resolution
+    if (t.mode == Idle) x.resolution else { mode: Paused, phase: t.phase }
+  }
+  def primaryClosed(x: Incident): bool = x.linkedTo != NOBODY and primaryOf(x).state == Closed
+
   /* ===== Переходы по таймеру: условия ===== */
 
   def autoEscalateOk(i: str): bool = {
@@ -232,7 +267,29 @@ module im {
     if (resolutionCeilingOk(i)) Set("resolution_ceiling") else Set(),
     if (holdOverdueOk(i)) Set("hold_overdue") else Set(),
   ).flatten()
-  def manualAllowed(i: str): bool = timerTransitionsReady(i) == Set()
+
+  /* ===== Системный переход: закрытие вместе с основным (§11.4) =====
+     Срочный: сервер выполняет его сразу после закрытия основного. Наступивший дедлайн самого
+     привязанного — раньше: его переход по таймеру идёт первым (RULE-41), иначе нарушение
+     пропало бы молча */
+
+  def closeLinkedOk(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == Linked,
+      primaryClosed(x),
+      timerTransitionsReady(i) == Set(),
+    }
+  }
+  // Системный переход ждёт выполнения — сразу или после наступившего дедлайна привязанного
+  def systemReady: bool = INCIDENTS.exists(j => inc.get(j).state == Linked and primaryClosed(inc.get(j)))
+
+  // У привязанного срок — срок группы: его ручные действия ждут и переход по таймеру основного
+  def manualAllowed(i: str): bool = all {
+    timerTransitionsReady(i) == Set(),
+    if (inc.get(i).state == Linked) timerTransitionsReady(inc.get(i).linkedTo) == Set() else true,
+    not(systemReady),
+  }
 
   /* ===== Применение перехода ===== */
 
@@ -241,6 +298,22 @@ module im {
   action apply(name: str, actor: str, i: str, x: Incident): bool = all {
     cfg' = cfg,
     inc' = inc.set(i, x),
+    lastAction' = { name: name, actor: actor, incident: i },
+  }
+  // Переход с нарушением: та же запись — каждому открытому привязанному (recordBreach, §11.4)
+  action applyShared(name: str, actor: str, i: str, x: Incident): bool = {
+    val added = x.breaches.slice(inc.get(i).breaches.length(), x.breaches.length())
+    applyAll(name, actor, i, INCIDENTS.mapBy(j => {
+      val y = inc.get(j)
+      if (j == i) x
+      else if (y.state == Linked and y.linkedTo == i) { ...y, breaches: y.breaches.concat(added) }
+      else y
+    }))
+  }
+  // Переход, который меняет несколько инцидентов (объединение); i — основной
+  action applyAll(name: str, actor: str, i: str, m: str -> Incident): bool = all {
+    cfg' = cfg,
+    inc' = m,
     lastAction' = { name: name, actor: actor, incident: i },
   }
 
@@ -483,6 +556,7 @@ module im {
     val x = inc.get(i)
     all {
       x.state == Closed,
+      manualAllowed(i),
       can(a, "incident:reopen"),
       can(a, "incident:claim"),
       x.reopenOpen,
@@ -498,6 +572,7 @@ module im {
         state: InProgress,
         owner: a,
         closeResult: NOBODY,
+        linkedTo: NOBODY,
         resolution: restartT(x.resolution),
       }),
     }
@@ -529,7 +604,7 @@ module im {
     val x = inc.get(i)
     all {
       escalationCeilingOk(i),
-      apply("escalation_ceiling", DISPATCHER, i, { ...x,
+      applyShared("escalation_ceiling", DISPATCHER, i, { ...x,
         breaches: breach(x, "reaction"),
         reaction: stopT(markFired(x.reaction)),
       }),
@@ -540,7 +615,7 @@ module im {
     val x = inc.get(i)
     all {
       reactionOverdueOk(i),
-      apply("reaction_overdue", DISPATCHER, i, { ...x,
+      applyShared("reaction_overdue", DISPATCHER, i, { ...x,
         breaches: breach(x, "reaction"),
         reaction: stopT(markFired(x.reaction)),
       }),
@@ -551,7 +626,7 @@ module im {
     val x = inc.get(i)
     all {
       resolutionOverdueOk(i),
-      apply("resolution_overdue", DISPATCHER, i, { ...x,
+      applyShared("resolution_overdue", DISPATCHER, i, { ...x,
         breaches: breach(x, "resolution"),
         resolution: markFired(x.resolution),
       }),
@@ -563,7 +638,7 @@ module im {
     val l = nextLevels(x, i)[0]
     all {
       resolutionEscalateOk(i),
-      apply("resolution_escalate", DISPATCHER, i, { ...x,
+      applyShared("resolution_escalate", DISPATCHER, i, { ...x,
         state: Pending,
         breaches: breach(x, "resolution"),
         owner: if (isGroup(l.target)) NOBODY else l.target,
@@ -579,7 +654,7 @@ module im {
     val x = inc.get(i)
     all {
       resolutionCeilingOk(i),
-      apply("resolution_ceiling", DISPATCHER, i, { ...x,
+      applyShared("resolution_ceiling", DISPATCHER, i, { ...x,
         breaches: breach(x, "resolution"),
         resolution: markFired(x.resolution),
       }),
@@ -590,16 +665,107 @@ module im {
     val x = inc.get(i)
     all {
       holdOverdueOk(i),
-      apply("hold_overdue", DISPATCHER, i, { ...x,
+      applyShared("hold_overdue", DISPATCHER, i, { ...x,
         breaches: breach(x, "hold"),
         hold: markFired(x.hold),
       }),
     }
   }
 
-  /* ===== Окружение: время ===== */
+  /* ===== Объединение (§11.3, §11.4) ===== */
 
-  def expireReactionOk(i: str): bool = inc.get(i).reaction.mode == Running and inc.get(i).reaction.phase == Before
+  // Условие на каждого объединяемого i с основным p
+  def mergeOk(a: str, i: str, p: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state.in(Set(New, InProgress, OnHold)),
+      manualAllowed(i),
+      can(a, "incident:bulk"),
+      isOwnerOrUnowned(a, x),
+      mergePrimaryValid(a, i, p),
+    }
+  }
+  // Основной новый — берётся тем же действием (grouping.takeWith = claim)
+  def mergeTakes(p: str): bool = inc.get(p).state == New
+  // «Взять в работу» на выборке: основной p и остальные others — всё или ничего
+  def mergeSetOk(a: str, p: str, others: Set[str]): bool = all {
+    others != Set(),
+    not(others.contains(p)),
+    others.forall(i => mergeOk(a, i, p)),
+    // Дедлайн основного срабатывает раньше: присоединённым — только нарушения после присоединения
+    timerTransitionsReady(p) == Set(),
+    not(mergeTakes(p)) or claimOk(a, p),
+  }
+  // Объединяемые — привязанные основного; их открытые привязанные — к нему же (relinkToPrimary);
+  // новый основной — эффекты claim
+  action merge(a: str, p: str, others: Set[str]): bool = all {
+    mergeSetOk(a, p, others),
+    applyAll("merge", a, p, INCIDENTS.mapBy(j => {
+      val x = inc.get(j)
+      if (others.contains(j)) { ...x,
+        state: Linked,
+        linkedTo: p,
+        owner: NOBODY,
+        group: NOBODY,
+        holdReason: NOBODY,
+        reaction: stopT(x.reaction),
+        resolution: pauseT(x.resolution),
+        joinedBreaches: inc.get(p).breaches.length(),
+        hold: stopT(x.hold),
+      }
+      else if (x.state == Linked and others.contains(x.linkedTo)) { ...x, linkedTo: p, joinedBreaches: inc.get(p).breaches.length() }
+      else if (j == p and mergeTakes(p)) { ...x,
+        state: InProgress,
+        owner: a,
+        reaction: stopT(x.reaction),
+        resolution: resumeT(tightenT(x.resolution)),
+      }
+      else if (j == p) { ...x, resolution: tightenT(x.resolution) }
+      else x
+    })),
+  }
+
+  def detachOk(a: str, i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == Linked,
+      manualAllowed(i),
+      primaryEditable(a, x),
+    }
+  }
+  action detach(a: str, i: str): bool = {
+    val x = inc.get(i)
+    all {
+      detachOk(a, i),
+      apply("detach", a, i, { ...x,
+        state: New,
+        linkedTo: NOBODY,
+        resolution: copyPrimaryT(x),
+        reaction: startT(x.reaction),
+      }),
+    }
+  }
+
+  // Результат и закрывший — от основного; владельца не ставит; связь остаётся историей
+  action closeLinked(i: str): bool = {
+    val x = inc.get(i)
+    val px = primaryOf(x)
+    all {
+      closeLinkedOk(i),
+      apply("close_linked", SYSTEM, i, { ...x,
+        state: Closed,
+        closeResult: px.closeResult,
+        closedBy: px.closedBy,
+        resolution: pauseT(x.resolution),
+        reopenOpen: true,
+      }),
+    }
+  }
+
+  /* ===== Окружение: время ===== */
+  // Пока возможен системный переход, время не идёт: сервер выполняет его сразу
+
+  def expireReactionOk(i: str): bool = not(systemReady) and inc.get(i).reaction.mode == Running and inc.get(i).reaction.phase == Before
   action expireReaction(i: str): bool = {
     val x = inc.get(i)
     all {
@@ -608,7 +774,7 @@ module im {
     }
   }
 
-  def expireResolutionOk(i: str): bool = inc.get(i).resolution.mode == Running and inc.get(i).resolution.phase == Before
+  def expireResolutionOk(i: str): bool = not(systemReady) and inc.get(i).resolution.mode == Running and inc.get(i).resolution.phase == Before
   action expireResolution(i: str): bool = {
     val x = inc.get(i)
     all {
@@ -617,7 +783,7 @@ module im {
     }
   }
 
-  def expireHoldOk(i: str): bool = inc.get(i).hold.mode == Running and inc.get(i).hold.phase == Before
+  def expireHoldOk(i: str): bool = not(systemReady) and inc.get(i).hold.mode == Running and inc.get(i).hold.phase == Before
   action expireHold(i: str): bool = {
     val x = inc.get(i)
     all {
@@ -629,6 +795,7 @@ module im {
   action expireReopenWindow(i: str): bool = {
     val x = inc.get(i)
     all {
+      not(systemReady),
       x.state == Closed and x.reopenOpen,
       apply("expire_reopen_window", NOBODY, i, { ...x, reopenOpen: false }),
     }
@@ -681,6 +848,14 @@ module im {
       resolutionEscalate(i),
       resolutionCeiling(i),
       holdOverdue(i),
+      // Основной и выборка — только здесь: каждый nondet в начале step умножает цену шага симуляции
+      {
+        nondet p = INCIDENTS.oneOf()
+        nondet others = INCIDENTS.powerset().oneOf()
+        merge(a, p, others)
+      },
+      detach(a, i),
+      closeLinked(i),
       expireReaction(i),
       expireResolution(i),
       expireHold(i),
@@ -705,7 +880,11 @@ module im {
           or (x.owner == NOBODY and x.group == GROUP)
       | InProgress => OPERATORS.contains(x.owner) and x.group == NOBODY
       | OnHold => OPERATORS.contains(x.owner) and x.group == NOBODY
-      | Closed => OPERATORS.contains(x.owner) and x.owner == x.closedBy and x.group == NOBODY
+      // Закрытый вместе с основным (close_linked) — без владельца, закрывший — закрывший основной
+      | Closed =>
+          OPERATORS.contains(x.closedBy) and x.group == NOBODY
+          and (x.owner == x.closedBy or (x.owner == NOBODY and x.linkedTo != NOBODY))
+      | Linked => x.owner == NOBODY and x.group == NOBODY
     }
   })
 
@@ -719,10 +898,14 @@ module im {
   //    Реакция в new / pending остановлена только потолком или нарушением — тогда
   //    нарушение реакции записано (RULE-84). Сработавшая реакция не идёт дальше: её переходы
   //    либо запускают новый дедлайн, либо останавливают — иначе «Передать» (ifStopped) её не
-  //    перезапустит и инцидент останется без норматива
+  //    перезапустит и инцидент останется без норматива. Наступивший дедлайн норматива закрытия
+  //    не уходит на паузу необработанным: иначе нарушение пропало бы молча (закрытие вместе с
+  //    основным — после дедлайна привязанного, RULE-41)
   val timersByState = INCIDENTS.forall(i => {
     val x = inc.get(i)
-    not(x.reaction.mode == Running and x.reaction.phase == Fired) and match x.state {
+    not(x.reaction.mode == Running and x.reaction.phase == Fired)
+    and not(x.resolution.phase == Due and x.resolution.mode != Running)
+    and match x.state {
       | Absent => true
       | New =>
           x.hold.mode == Idle and x.resolution.mode != Running
@@ -733,6 +916,9 @@ module im {
       | InProgress => x.resolution.mode == Running and x.reaction.mode == Idle and x.hold.mode == Idle
       | OnHold => x.hold.mode == Running and x.resolution.mode == Paused and x.reaction.mode == Idle
       | Closed => x.reaction.mode != Running and x.resolution.mode != Running and x.hold.mode != Running
+      // Норматив закрытия идёт, если уже шёл; на паузе не бывает (resumeTimer … ifStarted)
+      // Свой норматив закрытия на паузе: у группы один срок — срок основного (RULE-97)
+      | Linked => x.reaction.mode == Idle and x.hold.mode == Idle and x.resolution.mode != Running
     }
   })
 
@@ -782,6 +968,45 @@ module im {
   val autoEscalateNotToCurrentAddressee = INCIDENTS.forall(i => autoEscalateOk(i) implies not(escalatesToCurrentAddressee(i)))
   val resolutionEscalateNotToCurrentAddressee = INCIDENTS.forall(i => resolutionEscalateOk(i) implies not(escalatesToCurrentAddressee(i)))
 
+  // 11. Форма связи (§11.3, §11.4): у привязанного нет причины удержания и результата закрытия;
+  //     основной — другой инцидент, сам не привязан и открыт; закрытый основной — привязанный
+  //     сейчас закроется вместе с ним (или сначала сработает его наступивший дедлайн)
+  val linkedShape = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    val px = primaryOf(x)
+    x.state == Linked implies all {
+      x.holdReason == NOBODY,
+      x.closeResult == NOBODY,
+      INCIDENTS.contains(x.linkedTo),
+      x.linkedTo != i,
+      px.state.in(Set(New, Pending, InProgress, OnHold))
+        or (px.state == Closed and (closeLinkedOk(i) or timerTransitionsReady(i) != Set())),
+    }
+  })
+
+  // 12. Открытый непривязанный ни к чему не привязан: отсоединение и переоткрытие снимают связь (BUG-42)
+  val openNotLinked = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    x.state.in(Set(New, Pending, InProgress, OnHold)) implies x.linkedTo == NOBODY
+  })
+
+  // 13. У нарушения закрытия есть чьё: срок группы идёт, только пока основной кто-то ведёт (RULE-97)
+  val resolutionBreachHasOwner = INCIDENTS.forall(i =>
+    inc.get(i).breaches.select(b => b.kind == "resolution" and b.who == NOBODY).length() == 0
+  )
+
+  // 14. Нарушения основного после присоединения — и у привязанного, те же записи (§11.4, RULE-97)
+  val linkedSharesBreaches = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    val pb = primaryOf(x).breaches
+    val k = pb.length() - x.joinedBreaches
+    x.state == Linked implies all {
+      k >= 0,
+      x.breaches.length() >= k,
+      x.breaches.slice(x.breaches.length() - k, x.breaches.length()) == pb.slice(x.joinedBreaches, pb.length()),
+    }
+  })
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -794,5 +1019,9 @@ module im {
     pendingAddresseeCanAccept,
     autoEscalateNotToCurrentAddressee,
     resolutionEscalateNotToCurrentAddressee,
+    linkedShape,
+    openNotLinked,
+    resolutionBreachHasOwner,
+    linkedSharesBreaches,
   }
 }

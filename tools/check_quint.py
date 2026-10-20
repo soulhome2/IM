@@ -26,20 +26,22 @@ NOT_MODELED = {
     "system_hold_break", "system_hold_idle", "system_release_idle",
     "addressee_signed_out_to_group", "addressee_signed_out_to_queue", "owner_signed_out",
     "addressee_lost_access", "addressee_cannot_accept",
-    "merge", "detach", "close_linked", "linked_lost_access", "linked_resolution_overdue",
+    "linked_lost_access",
 }
 # Действия окружения в модели — не переходы машины
 ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window"}
-NOT_MODELED_STATES = {"linked"}
-NOT_MODELED_PERMS = {"incident:bulk", "incident:run_action", "incident:schema:admin", "agent:set_not_ready"}
+NOT_MODELED_STATES = set()
+NOT_MODELED_PERMS = {"incident:run_action", "incident:schema:admin", "agent:set_not_ready"}
 
 STATES = {"New": "new", "Pending": "pending_acceptance", "InProgress": "in_progress",
           "OnHold": "on_hold", "Closed": "closed", "Linked": "linked"}
 
-# Условия, которых модель не касается: в ядре все операторы ready, привязанных нет
-IGNORED_GUARDS = {"agentReady", "targetHasAccessToLinked"}
-# Эффекты, которых модель не касается
-IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor", "clearLink"}
+# Условия, которых модель не касается: все операторы ready; доступ к привязанным и сценарий
+# объединения пока не моделируются
+IGNORED_GUARDS = {"agentReady", "targetHasAccessToLinked", "sameScenarioAsPrimary"}
+# Эффекты, которых модель не касается; перенос ответов сценария при объединении пока не моделируется
+IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor",
+                   "copyAnswersToPrimary"}
 IGNORED_FLAGS = {"close_cause", "result"}
 
 # Атомы условий в модели. Отрицание — раньше утверждения: re.finditer берёт первую подходящую альтернативу
@@ -52,11 +54,12 @@ ATOMS = [
     'isTarget(a, x)', 'isMine(a, x)', 'ownership(a, x) != "owner"', 'ownership(a, x) != "target"',
     'not(isSelf(a, t))', 'hasAccess(t, i)', 'canAccept(t, i)',
     'closeResultAllowed(a, x, r, stepsFilled)', 'x.reopenOpen',
+    'isOwnerOrUnowned(a, x)', 'mergePrimaryValid(a, i, p)', 'primaryEditable(a, x)', 'primaryClosed(x)',
 ]
 ATOM_RE = re.compile(r'can\(a, "[^"]+"\)|' + "|".join(re.escape(a) for a in ATOMS))
 
 FIELDS = {"owner", "group", "holdReason", "level", "closeResult", "closedBy", "reopenOpen",
-          "transfers", "reaction", "resolution", "hold", "breaches"}
+          "transfers", "reaction", "resolution", "hold", "breaches", "linkedTo"}
 
 
 def guard_atom(g):
@@ -89,11 +92,15 @@ def guard_atom(g):
         "targetCanAccept": "canAccept(t, i)",
         "closeResultAllowed": "closeResultAllowed(a, x, r, stepsFilled)",
         "withinReopenWindow": "x.reopenOpen",
+        "isOwnerOrUnowned": "isOwnerOrUnowned(a, x)",
+        "mergePrimaryValid": "mergePrimaryValid(a, i, p)",
+        "primaryEditable": "primaryEditable(a, x)",
+        "primaryClosed": "primaryClosed(x)",
     }[fn]
 
 
 def effect_token(e):
-    """Эффект машины → (поле, начало присваивания в модели); None — модель его не касается."""
+    """Эффект машины → (поле, начало присваивания в модели) или список таких; None — модель его не касается."""
     fn, args = e["fn"], e.get("args", [])
     if fn in IGNORED_EFFECTS:
         return None
@@ -126,6 +133,17 @@ def effect_token(e):
         return arg, "resolution: restartT("
     if fn == "recordBreach" and len(args) == 1:
         return "breaches", f'breaches: breach(x, "{arg}")'
+    if fn in ("setLinkedTo", "relinkToPrimary"):
+        return "linkedTo", "linkedTo: p"
+    if fn == "clearLink":
+        return "linkedTo", "linkedTo: NOBODY"
+    # Срок группы (RULE-97): в абстрактном времени сжатие не видно — tightenT, но эффект на месте
+    if fn == "tightenPrimaryDeadline" and arg == "resolution":
+        return "resolution", "tightenT("
+    if fn == "copyPrimaryDeadline" and arg == "resolution":
+        return "resolution", "resolution: copyPrimaryT("
+    if fn == "copyCloseFromPrimary":
+        return [("closeResult", "closeResult: px.closeResult"), ("closedBy", "closedBy: px.closedBy")]
     if fn == "increment" and args == ["transfer_count"]:
         return "transfers", "transfers: x.transfers + 1"
     if fn == "setFlag":
@@ -177,7 +195,7 @@ def check_transitions(w, src, err):
     step = actions.get("step", "")
     modeled = {}
     for name, body in actions.items():
-        m = re.search(r'apply\("(\w+)"', body)
+        m = re.search(r'apply(?:All|Shared)?\("(\w+)"', body)
         if m and m.group(1) not in ENVIRONMENT:
             modeled[m.group(1)] = (name, body)
 
@@ -236,10 +254,13 @@ def check_transitions(w, src, err):
                 continue
             if not tok:
                 continue
-            field, text = tok
-            covered.add(field)
-            if text not in ebody:
-                err.append(f"переход {tid}: в модели нет эффекта «{text}…» ({e['fn']} {e.get('args', [])})")
+            for field, text in tok if isinstance(tok, list) else [tok]:
+                covered.add(field)
+                if text not in ebody:
+                    err.append(f"переход {tid}: в модели нет эффекта «{text}…» ({e['fn']} {e.get('args', [])})")
+        # Нарушение основного — и каждому открытому привязанному (recordBreach, RULE-97)
+        if any(e["fn"] == "recordBreach" for e in t.get("effects", [])) and "applyShared(" not in ebody:
+            err.append(f"переход {tid}: нарушение не записывается привязанным — нужен applyShared")
         assigned = set(re.findall(r"(?:^|[{,])\s*(\w+): ", ebody, re.M)) & FIELDS
         for f in sorted(assigned - covered):
             err.append(f"переход {tid}: модель меняет {f}, а в машине такого эффекта нет")

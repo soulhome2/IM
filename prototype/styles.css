@@ -972,25 +972,23 @@ select.search-input { padding-right: 36px; }
 .lnk-pager { display: inline-flex; align-items: center; gap: 2px; }
 .lnk-pager .pager-info { margin-right: 4px; }
 .lnk-pager .pager-btn { min-width: 28px; height: 28px; }
-.lnk-member { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 10px; font-size: 13px; }
-.lnk-member .lnk-sla { font-size: 12px; }
+.lnk-member { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px; font-size: 13px; }
 .lnk-num { font-weight: 500; }
 .lnk-where { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lnk-member time { color: var(--faint); font-size: 12px; }
 /* Узкая панель — телефон или узкая колонка карточки (BUG-53): строка привязанного в три ряда —
-   номер, время, бейдж; место; отсчёт и «Отсоединить». Заголовок с «Отсоединить все» переносится */
+   номер, время, бейдж; место и «Отсоединить». Заголовок с «Отсоединить все» переносится */
 .lnk-panel { container-type: inline-size; }
 @container (max-width: 640px) {
   .lnk-head { flex-wrap: wrap; row-gap: 8px; }
   .lnk-member {
     grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "num time badge" "where where where" "sla sla act";
+    grid-template-areas: "num time badge" "where where act";
     row-gap: 4px;
   }
   .lnk-member > .lnk-num { grid-area: num; }
   .lnk-member > .lnk-where { grid-area: where; white-space: normal; }
   .lnk-member > time { grid-area: time; }
-  .lnk-member > .lnk-sla { grid-area: sla; justify-self: start; }
   .lnk-member > .badge { grid-area: badge; justify-self: end; }
   .lnk-member > [data-detach] { grid-area: act; }
   .lnk-member > span:empty { display: none; }

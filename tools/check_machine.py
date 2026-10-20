@@ -58,10 +58,13 @@ def check_workflow(w, err):
         if s["category"] not in cats:
             err.append(f"состояние {s['id']}: нет категории {s['category']}")
     for t in w["timers"]:
-        for key in ("startsOnEnter", "resumesOnEnter", "stopsOnEnter", "pausedInStates"):
+        for key in ("startsOnEnter", "stopsOnEnter", "pausedInStates"):
             for x in t.get(key, []):
                 if x not in states:
                     err.append(f"таймер {t['id']}.{key}: нет состояния {x}")
+        # «Продолжить, если уже шёл» исполнитель не знает (RULE-97): привязанный — на паузе, срок у группы
+        if "resumesOnEnter" in t:
+            err.append(f"таймер {t['id']}: resumesOnEnter не поддерживается")
 
     for t in w["transitions"]:
         tid = t["id"]
@@ -743,8 +746,7 @@ def check_timer_declarations(w, err):
     """Описание таймеров против эффектов переходов, в обе стороны (RULE-51, DOC-25). Если таймер идёт
     в исходном состоянии, а по описанию в новом он запускается, останавливается или встаёт на паузу —
     эффекты перехода должны это делать; исключение — переходы из continuesOn: таймер продолжается
-    (§8.1). При входе в состояние из resumesOnEnter таймер продолжается, только если уже шёл:
-    эффект — resumeTimer с ifStarted, и это не запуск (DOC-31). И наоборот: эффект, который при смене
+    (§8.1). И наоборот: эффект, который при смене
     состояния запускает, останавливает или ставит на паузу таймер, должен быть в описании. Переходы
     без смены состояния — нарушения — не в счёт."""
     timers = {t["id"]: t for t in w["timers"]}
@@ -752,8 +754,7 @@ def check_timer_declarations(w, err):
     start, stop, pause = {"startTimer", "restartTimer", "resumeTimer"}, {"stopTimer", "pauseTimer"}, {"pauseTimer"}
 
     def running(timer, state):
-        on = (timer.get("startsOnEnter") or []) + (timer.get("resumesOnEnter") or [])
-        return state in on and state not in (timer.get("pausedInStates") or [])
+        return state in (timer.get("startsOnEnter") or []) and state not in (timer.get("pausedInStates") or [])
 
     for timer in timers.values():
         for tid in timer.get("continuesOn", []):
@@ -764,10 +765,10 @@ def check_timer_declarations(w, err):
             continue
         done = {}
         for e in tr["effects"]:
+            if e["fn"] == "resumeTimer" and len(e.get("args") or []) > 1:
+                err.append(f"переход {tr['id']}: у resumeTimer один аргумент — таймер, {e['args'][1:]} исполнитель не знает")
             if e["fn"] in start | stop and e.get("args"):
-                # Продолжить, если уже шёл, — не запуск (DOC-31)
-                ifStarted = e["fn"] == "resumeTimer" and "ifStarted" in e["args"][1:]
-                done.setdefault(e["args"][0], set()).add("resumeIfStarted" if ifStarted else e["fn"])
+                done.setdefault(e["args"][0], set()).add(e["fn"])
         for src in tr["from"]:
             for tid, timer in timers.items():
                 if not running(timer, src):
@@ -781,13 +782,6 @@ def check_timer_declarations(w, err):
                     err.append(f"таймер {tid}: по описанию на паузе в {tr['to']}, а {tr['id']} из {src} его не ставит на паузу (RULE-51)")
                 if got & stop and tr["to"] not in (timer.get("stopsOnEnter") or []) + (timer.get("pausedInStates") or []):
                     err.append(f"таймер {tid}: {tr['id']} из {src} останавливает его при входе в {tr['to']}, а в описании этого нет (DOC-25)")
-        # Продолжение — в описании и наоборот: вход в состояние из resumesOnEnter (DOC-31)
-        for tid, timer in timers.items():
-            resumes = "resumeIfStarted" in done.get(tid, set())
-            if tr["to"] in (timer.get("resumesOnEnter") or []) and not resumes:
-                err.append(f"таймер {tid}: по описанию продолжается при входе в {tr['to']}, а {tr['id']} не продолжает его (resumeTimer ifStarted, DOC-31)")
-            if resumes and tr["to"] not in (timer.get("resumesOnEnter") or []):
-                err.append(f"таймер {tid}: {tr['id']} продолжает его, если шёл, при входе в {tr['to']}, а в resumesOnEnter этого нет (DOC-31)")
         # Запуск — в описании: вход в состояние из startsOnEnter
         for tid in done:
             if done[tid] & start and tid in timers and tr["to"] not in (timers[tid].get("startsOnEnter") or []):

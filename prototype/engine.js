@@ -103,11 +103,22 @@
       hold: { due: "holdDueAt", since: "holdSince" },
     };
     const dueOf = (ev, id) => ev[FIELDS[id].due];
-    // Чьё нарушение у привязанного инцидента: владельца основного (§11.4)
-    const breachOwnerOfLinked = (ev) => {
-      const p = ev.linkedTo && ctx.events().find((x) => x.id === ev.linkedTo);
-      return p ? addressee(p) : null;
-    };
+    // Открытые привязанные основного (§11.4): у группы один срок, нарушения основного — и у них
+    const openLinkedOf = (ev) => ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
+    function shareBreach(ev, record, linked) {
+      (linked || openLinkedOf(ev)).forEach((e) => {
+        e.breaches = (e.breaches || []).concat(Object.assign({}, record));
+        e.slaBreached = true;
+      });
+    }
+    // Остаток таймера с паузой: идёт — до дедлайна, на паузе — остаток, ещё не запускался — null
+    function leftOf(ev, id) {
+      const f = FIELDS[id];
+      if (ev[f.due]) return Math.max(0, ev[f.due] - now());
+      return ev[f.left] != null ? ev[f.left] : null;
+    }
+    // Норматив уже нарушен и отработан (RULE-50): остатка нет, дедлайн сработал
+    const spent = (ev, id) => leftOf(ev, id) === 0 && Boolean(ev.firedTimers && ev.firedTimers[id]);
 
     // Длительность таймера: из справочника (secFrom, например срок удержания по причине),
     // по уровню эскалации или по нормативам (§4)
@@ -460,11 +471,7 @@
       },
       stopTimer: (ev, [id]) => stopTimer(ev, id),
       pauseTimer: (ev, [id]) => pauseTimer(ev, id),
-      // ifStarted — только если таймер уже запускался (идёт или на паузе с остатком): ещё не шедший не запускается
-      resumeTimer: (ev, [id, mode]) => {
-        if (mode === "ifStarted" && !dueOf(ev, id) && ev[FIELDS[id].left] == null) return;
-        resumeTimer(ev, id);
-      },
+      resumeTimer: (ev, [id]) => resumeTimer(ev, id),
       // Запуск заново, без остатка: длительность из настройки, иначе обычный норматив (RULE-11)
       restartTimer: (ev, [id, settingPath]) => {
         const f = FIELDS[id];
@@ -475,11 +482,12 @@
       },
       // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
       // Нарушение по таймеру датируется дедлайном, а не моментом выполнения после окна (RULE-63)
-      // primaryOwner — нарушение на владельца основного: у привязанного своего нет (§11.4)
-      recordBreach: (ev, [kind, who], s) => {
-        ev.breaches = ev.breaches || [];
-        ev.breaches.push({ kind, at: s.deadline != null ? s.deadline : now(), owner: who === "primaryOwner" ? breachOwnerOfLinked(ev) : addressee(ev) });
+      // У основного — и каждому открытому привязанному: у группы один срок (§11.4)
+      recordBreach: (ev, [kind], s) => {
+        const record = { kind, at: s.deadline != null ? s.deadline : now(), owner: addressee(ev) };
+        ev.breaches = (ev.breaches || []).concat(record);
         ev.slaBreached = true;
+        s.after.push(() => shareBreach(ev, record));
       },
       increment: (ev, [field]) => {
         const key = FLAG_FIELD[field] || field;
@@ -530,6 +538,31 @@
             if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);
           })
         );
+      },
+      // Срок основного — самый ранний из своего и остатка привязываемого (§11.3): у группы один срок.
+      // Остаток привязываемого — после перехода (свой норматив уже на паузе); нарушенный срок не сжимает.
+      // Основной новый — от полного норматива: grouping.takeWith продолжит с остатка
+      tightenPrimaryDeadline: (ev, [id], s) => {
+        const p = byId(s.form && s.form.primaryId);
+        if (!p) return;
+        s.after.push((linked) => {
+          const left = leftOf(linked, id);
+          if (left == null || spent(linked, id) || spent(p, id)) return;
+          const f = FIELDS[id];
+          if (p[f.due]) p[f.due] = Math.min(p[f.due], now() + left);
+          else p[f.left] = Math.min(leftOf(p, id) != null ? leftOf(p, id) : timerSec(p, id) * 1000, left);
+        });
+      },
+      // Отсоединённому — остаток срока основного, на паузе; отработанный — отработанным, без новой записи (RULE-50)
+      copyPrimaryDeadline: (ev, [id]) => {
+        const p = byId(ev.linkedTo);
+        if (!p) return;
+        const f = FIELDS[id];
+        const left = leftOf(p, id);
+        if (left == null) return;
+        ev[f.due] = null;
+        ev[f.left] = left;
+        if (spent(p, id)) ev.firedTimers = Object.assign({}, ev.firedTimers, { [id]: p.firedTimers[id] });
       },
       copyCloseFromPrimary: (ev) => {
         const p = byId(ev.linkedTo);
@@ -646,18 +679,20 @@
     function windowBefore(ev, id) {
       const canceled = overridden(ev, id);
       if (!canceled) return null;
-      canceled.owner = ev.linkedTo ? breachOwnerOfLinked(ev) : addressee(ev);
+      canceled.owner = addressee(ev);
       canceled.logAt = ev.log.length;
       ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
       return canceled;
     }
     // После эффектов: нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал —
-    // перед записью о самом действии
-    function windowAfter(ev, canceled, facts) {
+    // перед записью о самом действии. linked — кому ещё нарушение (§11.4): открытые привязанные на момент дедлайна
+    function windowAfter(ev, canceled, facts, linked) {
       if (!canceled) return;
       canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
-        ev.breaches = (ev.breaches || []).concat({ kind: x.args[0], at: canceled.due, owner: canceled.owner });
+        const record = { kind: x.args[0], at: canceled.due, owner: canceled.owner };
+        ev.breaches = (ev.breaches || []).concat(record);
         ev.slaBreached = true;
+        shareBreach(ev, record, linked);
         facts.breach = x.args[0];
       });
       ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
@@ -895,14 +930,17 @@
       // Окно после дедлайна — как у одиночного перехода: у каждого привязанного и у основного, если его берут (BUG-62)
       const canceled = others.map((ev) => windowBefore(ev, check.tr.id));
       const primaryCanceled = check.take ? windowBefore(primary, check.take.id) : null;
+      // Дедлайн наступил до объединения — нарушение только тем, кто был привязан тогда (§11.4)
+      const othersLinked = others.map(openLinkedOf);
+      const primaryLinked = openLinkedOf(primary);
       const applied = applyAll(check.tr, others, check.form, ME);
       if (!applied.ok) return applied;
-      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
+      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i], othersLinked[i]));
       applied.transitionId = check.tr.id;
       if (check.take) {
         const r = applyEffects(check.take, primary, {}, ME);
         if (!r.ok) return r;
-        windowAfter(primary, primaryCanceled, r.facts[0]);
+        windowAfter(primary, primaryCanceled, r.facts[0], primaryLinked);
         applied.taken = { transitionId: check.take.id, facts: r.facts[0] };
       }
       return applied;

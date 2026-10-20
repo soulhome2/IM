@@ -89,12 +89,12 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "linked",
-      "$comment": "§11.4. Привязан к основному инциденту (linked_to): владельца нет, в списках не показывается. Норматив закрытия, если уже шёл, продолжает идти: истёк — нарушение на владельца основного (linked_resolution_overdue). Выход — «Отсоединить» (в новые) или закрытие вместе с основным",
+      "$comment": "§11.4. Привязан к основному инциденту (linked_to): владельца нет, в списках не показывается. Свой норматив закрытия на паузе: у группы один срок — срок основного, нарушения основного записываются и привязанному (recordBreach). Выход — «Отсоединить» (в новые, с остатком срока группы) или закрытие вместе с основным",
       "labelKey": "workflow.state.linked",
       "category": "linked",
       "terminal": false,
       "owner": "none",
-      "activeTimer": "resolution"
+      "activeTimer": null
     }
   ],
   "badges": {
@@ -287,12 +287,9 @@ window.IM_WORKFLOW = {
       "labelKey": "workflow.timer.resolution",
       "deadlineField": "resolution_due_at",
       "meaning": "Время от взятия в работу до закрытия",
-      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches. У привязанного (§11.4) идёт дальше, если уже шёл (merge — resumeTimer ifStarted): объединением просрочку не скрыть.",
+      "$comment": "§4, правило 6 (RULE-07, RULE-11). Запускается при первом входе в in_progress. Передача, возврат в очередь, удержание и закрытие его только приостанавливают, взятие и принятие продолжают с остатка — так просрочку не скрыть. Переоткрытие запускает его заново (restartTimer, норматив limits.reopenResolutionSec или обычный): нарушения, записанные до закрытия, остаются в breaches. У привязанного (§11.4) на паузе: у группы один срок — срок основного, при объединении он становится самым ранним из сроков объединённых (tightenPrimaryDeadline); отсоединённый получает остаток срока группы (copyPrimaryDeadline). Объединением не выиграть время и не скрыть просрочку.",
       "startsOnEnter": [
         "in_progress"
-      ],
-      "resumesOnEnter": [
-        "linked"
       ],
       "startsOnce": true,
       "stopsOnEnter": [],
@@ -301,7 +298,8 @@ window.IM_WORKFLOW = {
         "new",
         "pending_acceptance",
         "on_hold",
-        "closed"
+        "closed",
+        "linked"
       ],
       "defaultSec": 900,
       "byPriority": {
@@ -2078,52 +2076,6 @@ window.IM_WORKFLOW = {
       }
     },
     {
-      "id": "linked_resolution_overdue",
-      "labelKey": "workflow.transition.linked_resolution_overdue",
-      "$comment": "§11.4. Истёк норматив закрытия привязанного инцидента (у своего в работе или отложенного он идёт и после объединения): нарушение — на владельца основного, алерт. Эскалации нет: своего владельца у привязанного нет. Так объединением не скрыть близкую просрочку.",
-      "from": [
-        "linked"
-      ],
-      "to": null,
-      "trigger": "timer",
-      "actor": "dispatcher",
-      "guards": [
-        {
-          "fn": "timerExpired",
-          "args": [
-            "resolution"
-          ]
-        }
-      ],
-      "effects": [
-        {
-          "kind": "transactional",
-          "fn": "recordBreach",
-          "args": [
-            "resolution",
-            "primaryOwner"
-          ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "appendLog",
-          "args": [
-            "workflow.journal.linked_resolution_overdue"
-          ]
-        },
-        {
-          "kind": "external",
-          "fn": "notify",
-          "args": [
-            "alerts.target"
-          ]
-        }
-      ],
-      "ui": {
-        "surface": []
-      }
-    },
-    {
       "id": "resolution_escalate",
       "labelKey": "workflow.transition.resolution_escalate",
       "$comment": "§4, правило 4; §9 (RULE-27). Включается настройкой escalation.onResolutionOverdue = escalate: истёк норматив закрытия — нарушение и передача адресату следующего уровня, как автоэскалация по реакции. Три перехода по этому таймеру — алерт, эскалация, потолок — взаимоисключающие по условиям.",
@@ -2864,7 +2816,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "merge",
-      "$comment": "§11. «Взять в работу» на выборке — как одно: отмеченные становятся привязанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Приоритет, норматив и срок основного не меняются. Объединение засчитывается привязанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
+      "$comment": "§11. «Взять в работу» на выборке — как одно: отмеченные становятся привязанными основного (form.primaryId), сценарий у всех один; основной новый — следом grouping.takeWith. Срок у группы один: срок закрытия основного становится самым ранним из сроков объединённых, свой норматив привязанного — на паузе; приоритет основного не меняется. Объединение засчитывается привязанному как реакция. Выполняет POST /operator/incidents/merge — всё или ничего",
       "labelKey": "workflow.transition.merge",
       "hintKey": "workflow.transition.merge.hint",
       "from": [
@@ -2949,10 +2901,16 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "resumeTimer",
+          "fn": "tightenPrimaryDeadline",
           "args": [
-            "resolution",
-            "ifStarted"
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
           ]
         },
         {
@@ -2984,7 +2942,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "detach",
-      "$comment": "§11. «Отсоединить» из карточки основного: привязанный инцидент возвращается в очередь новым, норматив реакции — заново",
+      "$comment": "§11. «Отсоединить» из карточки основного: привязанный инцидент возвращается в очередь новым, норматив реакции — заново, норматив закрытия — на паузе с остатком срока группы",
       "labelKey": "workflow.transition.detach",
       "hintKey": "workflow.transition.detach.hint",
       "from": [
@@ -3016,14 +2974,14 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "clearLink"
-        },
-        {
-          "kind": "transactional",
-          "fn": "pauseTimer",
+          "fn": "copyPrimaryDeadline",
           "args": [
             "resolution"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearLink"
         },
         {
           "kind": "transactional",
@@ -3123,17 +3081,17 @@ window.IM_WORKFLOW = {
       "effects": [
         {
           "kind": "transactional",
-          "fn": "clearLink",
+          "fn": "copyPrimaryDeadline",
           "args": [
-            "workflow.journal.linked_lost_access",
-            "workflow.journal.linked_lost_access_primary"
+            "resolution"
           ]
         },
         {
           "kind": "transactional",
-          "fn": "pauseTimer",
+          "fn": "clearLink",
           "args": [
-            "resolution"
+            "workflow.journal.linked_lost_access",
+            "workflow.journal.linked_lost_access_primary"
           ]
         },
         {
@@ -4115,12 +4073,12 @@ window.IM_WORKFLOW = {
         "fn": "recordBreach",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент; второй аргумент primaryOwner — владелец основного (у привязанного своего нет, §11.4). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
+        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому его открытому привязанному, та же запись: у группы один срок (§11.4). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
       },
       {
         "fn": "resumeTimer",
         "kind": "transactional",
-        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer. Второй аргумент ifStarted — только если таймер уже запускался: ещё не шедший не запускается (merge, §11.4)."
+        "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer."
       },
       {
         "fn": "increment",
@@ -4178,6 +4136,18 @@ window.IM_WORKFLOW = {
         "kind": "transactional",
         "extendsBaseRegistry": true,
         "$comment": "§11. Результат, причина, комментарий и закрывший — от основного"
+      },
+      {
+        "fn": "tightenPrimaryDeadline",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Перед pauseTimer того же таймера"
+      },
+      {
+        "fn": "copyPrimaryDeadline",
+        "kind": "transactional",
+        "extendsBaseRegistry": true,
+        "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Нарушенный у основного — нарушенным и у него, без новой записи (RULE-50). Перед clearLink"
       },
       {
         "fn": "notify",

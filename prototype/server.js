@@ -511,12 +511,9 @@
 
     // Подпись таймера — из машины, на языке оператора (§14.9)
     const timerLabel = (id) => render((W.timers.find((t) => t.id === id) || {}).labelKey || id);
-    function linkedDue(ev) {
-      const due = events.filter((e) => e.linkedTo === ev.id && !isDone(e) && e.resolutionDueAt).map((e) => e.resolutionDueAt);
-      return due.length ? iso(Math.min(...due)) : null;
-    }
+    // У привязанного своего срока нет: у группы один — срок основного (§11.4)
     function timerState(ev) {
-      if (isDone(ev)) return null;
+      if (isDone(ev) || ev.state === "linked") return null;
       const base = { serverTime: iso(now()) };
       if (ev.reactionDueAt) {
         return Object.assign(base, { id: "reaction", label: timerLabel("reaction"), dueAt: iso(ev.reactionDueAt), remainingMs: ev.reactionDueAt - now(), running: true });
@@ -619,8 +616,6 @@
         breaches: (ev.breaches || []).map((b) => ({ kind: b.kind, at: iso(b.at), owner: actorRef(b.owner) })),
         linkedTo: ev.linkedTo || null,
         linkedCount: events.filter((e) => e.linkedTo === ev.id).length,
-        // Самый ранний идущий срок закрытия среди привязанных (§11.4): истечёт — нарушение на владельца основного
-        linkedDueAt: linkedDue(ev),
         scenarioProgress: progressOf(ev),
         scenarioTitle: rowOf(ev).name == null ? null : rowOf(ev).name,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
@@ -1095,6 +1090,10 @@
       return ev && canSee(ev) ? ev : null;
     };
     const touch = (list) => list.forEach((e) => (e.version += 1));
+    // Нарушение основного записано и его открытым привязанным (recordBreach, §11.4) — им тоже новая версия
+    const touchLinkedOnBreach = (ev, facts) => {
+      if (facts && facts.breach) touch(events.filter((e) => e.linkedTo === ev.id && !isDone(e)));
+    };
 
     // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
     // Запрос, меняющий инцидент, несёт её в If-Match: нет заголовка — 428, версия старая — 412
@@ -1132,6 +1131,7 @@
       const r = engine.run(id, ev, formValues, { surface });
       if (!r.ok) return problem(422, "FORM_FIELD_REQUIRED", r.why);
       touch([ev]);
+      touchLinkedOnBreach(ev, r.facts);
       emitTransition(ev, id, ME, r.facts);
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
       const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
@@ -1719,6 +1719,7 @@
       fired.forEach(({ id, transition, facts }) => {
         const ev = byId(id);
         touch([ev]);
+        touchLinkedOnBreach(ev, facts);
         const tr = engine.transition(transition);
         if (wasMine.has(id) && !canSee(ev)) {
           wasMine.delete(id);
@@ -1840,6 +1841,7 @@
       fired.forEach(({ id: guid, transition, facts }) => {
         const ev = byId(guid);
         touch([ev]);
+        touchLinkedOnBreach(ev, facts);
         emitTransition(ev, transition, "system", facts);
       });
       return fired;
