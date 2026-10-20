@@ -23,21 +23,19 @@ MODEL = os.path.join(DIR, "quint", "im.qnt")
 
 # Переходы машины, которых в модели пока нет
 NOT_MODELED = {
-    "system_hold_break", "system_hold_idle", "system_release_idle",
-    "addressee_signed_out_to_group", "addressee_signed_out_to_queue", "owner_signed_out",
     "addressee_lost_access", "addressee_cannot_accept",
 }
 # Действия окружения в модели — не переходы машины
 ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window",
                "scenario_answer"}  # ответ на шаг — не переход машины, права — scenarioEdit
 NOT_MODELED_STATES = set()
-NOT_MODELED_PERMS = {"incident:run_action", "incident:schema:admin", "agent:set_not_ready"}
+NOT_MODELED_PERMS = {"incident:run_action", "incident:schema:admin"}
 
 STATES = {"New": "new", "Pending": "pending_acceptance", "InProgress": "in_progress",
           "OnHold": "on_hold", "Closed": "closed", "Linked": "linked"}
 
-# Условия, которых модель не касается: все операторы ready
-IGNORED_GUARDS = {"agentReady"}
+# Условия, которых модель не касается
+IGNORED_GUARDS = set()
 # Эффекты, которых модель не касается
 IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor"}
 IGNORED_FLAGS = {"close_cause", "result"}
@@ -54,8 +52,15 @@ ATOMS = [
     'closeResultAllowed(a, x, r, finished(x))', 'x.reopenOpen', 'sameScenarioAsPrimary(i, p)',
     'isOwnerOrUnowned(a, x)', 'mergePrimaryValid(a, i, p)', 'primaryEditable(a, x)', 'primaryClosed(x)',
     'primaryAddresseeLacksAccess(x, i)', 'targetHasAccessToLinked(t, i)',
+    'agentReady(a)', 'agentStateIs(x.owner, Break)', 'agentStateIs(x.owner, Offline)', 'agentStateIs(x.owner, Ready)',
+    'agentIdleFor(x.owner, IdleHold)', 'agentIdleFor(x.owner, IdleRelease)',
+    'not(ownerHasDutyGroup(x))', 'ownerHasDutyGroup(x)', 'holdReasonIn(x, Set("break", "no_link"))',
 ]
 ATOM_RE = re.compile(r'can\(a, "[^"]+"\)|' + "|".join(re.escape(a) for a in ATOMS))
+
+# Состояние оператора (session машины) и ступени молчания (session.idleHoldSec, idleReleaseSec) — в модели
+AGENT_STATES = {"ready": "Ready", "not_ready": "Break", "offline": "Offline"}
+SILENCE = {"session.idleHoldSec": "IdleHold", "session.idleReleaseSec": "IdleRelease"}
 
 FIELDS = {"owner", "group", "holdReason", "level", "closeResult", "closedBy", "reopenOpen",
           "transfers", "reaction", "resolution", "hold", "breaches", "linkedTo", "answered"}
@@ -78,6 +83,14 @@ def guard_atom(g):
         return f"isDue(x.{args[0]})"
     if fn == "primaryAddresseeHasAccess" and args == [False]:
         return "primaryAddresseeLacksAccess(x, i)"
+    if fn == "agentStateIs":
+        return f"agentStateIs(x.owner, {AGENT_STATES[args[0]]})"
+    if fn == "agentIdleFor":
+        return f"agentIdleFor(x.owner, {SILENCE[args[0]]})"
+    if fn == "ownerHasDutyGroup":
+        return "ownerHasDutyGroup(x)" if args[0] else "not(ownerHasDutyGroup(x))"
+    if fn == "holdReasonIn":
+        return "holdReasonIn(x, Set(" + ", ".join(f'"{r}"' for r in args[0]) + "))"
     if fn == "escalationTargetAvailable":
         return "escalationTargetAvailable(x, i)" if args[0] else "not(escalationTargetAvailable(x, i))"
     return {
@@ -95,6 +108,7 @@ def guard_atom(g):
         "sameScenarioAsPrimary": "sameScenarioAsPrimary(i, p)",
         "withinReopenWindow": "x.reopenOpen",
         "isOwnerOrUnowned": "isOwnerOrUnowned(a, x)",
+        "agentReady": "agentReady(a)",
         "mergePrimaryValid": "mergePrimaryValid(a, i, p)",
         "primaryEditable": "primaryEditable(a, x)",
         "primaryClosed": "primaryClosed(x)",
@@ -120,8 +134,12 @@ def effect_token(e):
             return "group", "group: NOBODY"
         if str(arg).endswith(".ifGroup"):
             return "group", "group: if (isGroup("
+        if arg == "owner.dutyGroup":
+            return "group", "group: dutyGroupOf("
     if fn == "setHoldReason" and arg == "form.reasonId":
         return "holdReason", "holdReason: reason"
+    if fn == "setHoldReason":
+        return "holdReason", f'holdReason: "{arg}"'
     if fn == "clearHoldReason":
         return "holdReason", "holdReason: NOBODY"
     if fn == "startTimer" and arg in ("reaction", "hold"):
@@ -281,7 +299,8 @@ def check_scenario_edit(w, src, err):
     if not body:
         err.append("модель: нет answerOk — ответа на шаг сценария")
         return
-    want = {"stateIs": lambda a: " or ".join(f"x.state == {k}" for k, v in STATES.items() if v in a[0]), "isOwner": lambda a: "isMine(a, x)"}
+    want = {"stateIs": lambda a: " or ".join(f"x.state == {k}" for k, v in STATES.items() if v in a[0]), "isOwner": lambda a: "isMine(a, x)",
+            "agentReady": lambda a: "agentReady(a)"}
     for g in w["scenarioEdit"]["guards"]:
         if g["fn"] in IGNORED_GUARDS:
             continue

@@ -9,8 +9,8 @@
    reopen и переходы по таймерам. Объединение (§11): merge, detach, close_linked, linked_lost_access;
    у группы один срок — срок основного, нарушения основного записываются и привязанным (RULE-97).
    Видимость (§5, invariants.actorSeesIncident) — правило сервера, не условие перехода: действует
-   только тот, у кого есть доступ к инциденту (sees). Пока не моделируются: состояние оператора
-   (все ready, agentReady выполнено), остальные системные переходы, смена прав и доступа, окно
+   только тот, у кого есть доступ к инциденту (sees). Состояние оператора (§12): на месте, перерыв, вышел,
+   молчание по ступеням — и системные переходы по нему. Пока не моделируются: смена прав и доступа, окно
    manualWinsOverTimer, журнал, уведомления, version. Сценарий — без графа: у инцидента сценарий и
    отвеченные шаги, пройден — отвечены все (набор closing, §14.5); ответ — действие вне машины.
 
@@ -68,6 +68,11 @@ module im {
   }
 
   type Action = { name: str, actor: str, incident: str }
+  // Состояние оператора (session машины, §12): на месте (ready, busy), перерыв (not_ready), вышел (offline).
+  // Молчание — по ступеням: связь есть, молчит дольше idleHoldSec, молчит дольше idleReleaseSec
+  type Presence = Ready | Break | Offline
+  type Silence = Online | IdleHold | IdleRelease
+  type Agent = { presence: Presence, silence: Silence }
   // Строка справочника reasonCatalogs.close_result
   type CloseResult = { id: str, perm: str, from: Set[State], ownerOnly: Set[State], steps: bool }
 
@@ -86,7 +91,7 @@ module im {
   pure val STEPS = Set("s1", "s2")
 
   pure val PERMS = Set(
-    "incident:bulk", "incident:claim", "incident:accept", "incident:hold", "incident:release",
+    "agent:set_not_ready", "incident:bulk", "incident:claim", "incident:accept", "incident:hold", "incident:release",
     "incident:close", "incident:close:unprocessed", "incident:reopen",
     "incident:transfer:own", "incident:transfer:any", "incident:reassign",
   )
@@ -97,6 +102,8 @@ module im {
 
   // reasonCatalogs.hold, setBy: operator
   pure val HOLD_REASONS = Set("third_party", "patrol", "no_data")
+  // reasonCatalogs.hold, setBy: system — системные удержания: перерыв, потеря связи
+  pure val SYSTEM_HOLD_REASONS = Set("break", "no_link")
 
   // reasonCatalogs.close_result
   pure val CLOSE_RESULTS = Set(
@@ -121,6 +128,7 @@ module im {
   var cfg: Config
   var inc: str -> Incident
   var lastAction: Action
+  var agents: str -> Agent
 
   /* ===== Таймеры (§4, §14.8) ===== */
 
@@ -151,6 +159,15 @@ module im {
   pure def addressee(x: Incident): str = if (x.owner != NOBODY) x.owner else x.group
 
   def can(a: str, p: str): bool = cfg.perms.get(a).contains(p)
+  // agentReady: на перерыве и после выхода — только просмотр (session.states.readOnly, §10.1, правило 2)
+  def agentReady(a: str): bool = agents.get(a).presence == Ready
+  // agentStateIs, agentIdleFor — у владельца инцидента (scope: incidents_owned_by_agent)
+  def agentStateIs(who: str, p: Presence): bool = OPERATORS.contains(who) and agents.get(who).presence == p
+  def agentIdleFor(who: str, level: Silence): bool =
+    OPERATORS.contains(who) and (agents.get(who).silence == IdleRelease or agents.get(who).silence == level)
+  // ownerHasDutyGroup, owner.dutyGroup: дежурная группа — та, в которую входит владелец
+  def ownerHasDutyGroup(x: Incident): bool = cfg.members.contains(x.owner)
+  def dutyGroupOf(a: str): str = GROUP
   // «Я» как адресат: сам оператор и группа, в которую он входит
   def isSelf(a: str, id: str): bool = id != NOBODY and (id == a or (isGroup(id) and cfg.members.contains(a)))
   def isMine(a: str, x: Incident): bool = x.owner == a
@@ -312,10 +329,53 @@ module im {
       timerTransitionsReady(x.linkedTo) == Set(),
     }
   }
+  /* ===== Системные переходы по состоянию оператора (§12, scope: incidents_owned_by_agent) =====
+     Срочные, как close_linked; наступивший дедлайн инцидента — раньше них (RULE-41) */
+
+  def systemHoldBreakOk(i: str): bool = {
+    val x = inc.get(i)
+    all { x.state == InProgress, agentStateIs(x.owner, Break), timerTransitionsReady(i) == Set() }
+  }
+  def systemHoldIdleOk(i: str): bool = {
+    val x = inc.get(i)
+    all { x.state == InProgress, agentIdleFor(x.owner, IdleHold), timerTransitionsReady(i) == Set() }
+  }
+  def systemReleaseIdleOk(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == OnHold,
+      agentIdleFor(x.owner, IdleRelease),
+      holdReasonIn(x, Set("break", "no_link")),
+      timerTransitionsReady(i) == Set(),
+    }
+  }
+  def addresseeSignedOutToGroupOk(i: str): bool = {
+    val x = inc.get(i)
+    all { x.state == Pending, agentStateIs(x.owner, Offline), ownerHasDutyGroup(x), timerTransitionsReady(i) == Set() }
+  }
+  def addresseeSignedOutToQueueOk(i: str): bool = {
+    val x = inc.get(i)
+    all { x.state == Pending, agentStateIs(x.owner, Offline), not(ownerHasDutyGroup(x)), timerTransitionsReady(i) == Set() }
+  }
+  def ownerSignedOutOk(i: str): bool = {
+    val x = inc.get(i)
+    all { x.state.in(Set(InProgress, OnHold)), agentStateIs(x.owner, Offline), timerTransitionsReady(i) == Set() }
+  }
+  def holdReasonIn(x: Incident, reasons: Set[str]): bool = reasons.contains(x.holdReason)
+  // Системный переход по состоянию оператора ждёт (без учёта порядка с таймером — его даёт ...Ok)
+  def agentSystemPending(j: str): bool = {
+    val y = inc.get(j)
+    OPERATORS.contains(y.owner) and (
+      (y.state == InProgress and (agentStateIs(y.owner, Break) or agentIdleFor(y.owner, IdleHold)))
+      or (y.state == OnHold and agentIdleFor(y.owner, IdleRelease) and SYSTEM_HOLD_REASONS.contains(y.holdReason))
+      or (y.state.in(Set(Pending, InProgress, OnHold)) and agentStateIs(y.owner, Offline))
+    )
+  }
+
   // Системный переход ждёт выполнения — сразу или после наступившего дедлайна (своего или основного)
   def systemReady: bool = INCIDENTS.exists(j => {
     val y = inc.get(j)
-    y.state == Linked and (primaryClosed(y) or primaryAddresseeLacksAccess(y, j))
+    (y.state == Linked and (primaryClosed(y) or primaryAddresseeLacksAccess(y, j))) or agentSystemPending(j)
   })
 
   // У привязанного срок — срок группы: его ручные действия ждут и переход по таймеру основного
@@ -331,6 +391,7 @@ module im {
   // выполнить и само по себе (сценарии im_test.qnt)
   action apply(name: str, actor: str, i: str, x: Incident): bool = all {
     cfg' = cfg,
+    agents' = agents,
     inc' = inc.set(i, x),
     lastAction' = { name: name, actor: actor, incident: i },
   }
@@ -347,6 +408,7 @@ module im {
   // Переход, который меняет несколько инцидентов (объединение); i — основной
   action applyAll(name: str, actor: str, i: str, m: str -> Incident): bool = all {
     cfg' = cfg,
+    agents' = agents,
     inc' = m,
     lastAction' = { name: name, actor: actor, incident: i },
   }
@@ -377,6 +439,7 @@ module im {
       x.state == New,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:claim"),
       withinActiveLimit(a, i),
     }
@@ -400,6 +463,7 @@ module im {
       x.state == Pending,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:accept"),
       isTarget(a, x),
       withinActiveLimit(a, i),
@@ -425,6 +489,7 @@ module im {
       x.state == Pending,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:release"),
       isTarget(a, x),
     }
@@ -444,6 +509,7 @@ module im {
       x.state == InProgress,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:hold"),
       isMine(a, x),
       withinHoldLimit(a, i),
@@ -468,6 +534,7 @@ module im {
       x.state == OnHold,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:claim"),
       isMine(a, x),
       withinActiveLimit(a, i),
@@ -492,6 +559,7 @@ module im {
       x.state.in(Set(InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:release"),
       isMine(a, x),
     }
@@ -517,6 +585,7 @@ module im {
       x.state.in(Set(New, Pending, InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       transferPermitted(a, x),
       not(isSelf(a, t)),   // targetIsNotSelf
       hasAccess(t, i),     // targetHasAccess
@@ -547,6 +616,7 @@ module im {
       x.state.in(Set(Pending, InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:reassign"),
       can(a, "incident:claim"),
       ownership(a, x) != "owner",   // isNotOwner
@@ -577,6 +647,7 @@ module im {
       x.state.in(Set(New, Pending, InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       closeResultAllowed(a, x, r, finished(x)),
     }
   }
@@ -605,6 +676,7 @@ module im {
       x.state == Closed,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:reopen"),
       can(a, "incident:claim"),
       x.reopenOpen,
@@ -729,6 +801,7 @@ module im {
       x.state.in(Set(New, InProgress, OnHold)),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       can(a, "incident:bulk"),
       isOwnerOrUnowned(a, x),
       mergePrimaryValid(a, i, p),
@@ -786,6 +859,7 @@ module im {
       x.state == Linked,
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       x.linkedTo != NOBODY and sees(a, x.linkedTo),
       primaryEditable(a, x),
     }
@@ -834,6 +908,123 @@ module im {
     }
   }
 
+  /* ===== Системные переходы по состоянию оператора (§12) ===== */
+
+  action systemHoldBreak(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      systemHoldBreakOk(i),
+      apply("system_hold_break", SYSTEM, i, { ...x,
+        state: OnHold,
+        holdReason: "break",
+        resolution: pauseT(x.resolution),
+        hold: startT(x.hold),
+      }),
+    }
+  }
+
+  action systemHoldIdle(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      systemHoldIdleOk(i),
+      apply("system_hold_idle", SYSTEM, i, { ...x,
+        state: OnHold,
+        holdReason: "no_link",
+        resolution: pauseT(x.resolution),
+        hold: startT(x.hold),
+      }),
+    }
+  }
+
+  action systemReleaseIdle(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      systemReleaseIdleOk(i),
+      apply("system_release_idle", SYSTEM, i, { ...x,
+        state: New,
+        owner: NOBODY,
+        holdReason: NOBODY,
+        hold: stopT(x.hold),
+        resolution: pauseT(x.resolution),
+        reaction: startT(x.reaction),
+      }),
+    }
+  }
+
+  action addresseeSignedOutToGroup(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      addresseeSignedOutToGroupOk(i),
+      apply("addressee_signed_out_to_group", SYSTEM, i, { ...x,
+        state: Pending,
+        group: dutyGroupOf(x.owner),
+        owner: NOBODY,
+      }),
+    }
+  }
+
+  action addresseeSignedOutToQueue(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      addresseeSignedOutToQueueOk(i),
+      apply("addressee_signed_out_to_queue", SYSTEM, i, { ...x, state: New, owner: NOBODY }),
+    }
+  }
+
+  action ownerSignedOut(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      ownerSignedOutOk(i),
+      apply("owner_signed_out", SYSTEM, i, { ...x,
+        state: New,
+        owner: NOBODY,
+        holdReason: NOBODY,
+        hold: stopT(x.hold),
+        resolution: pauseT(x.resolution),
+        reaction: startT(x.reaction),
+      }),
+    }
+  }
+
+  /* ===== Окружение: оператор (§12) — перерыв, выход, вход, молчание и связь =====
+     Действия человека и сети, не переходы машины. Пока ждёт системный переход, не происходят */
+
+  action setAgent(a: str, name: str, g: Agent): bool = all {
+    not(systemReady),
+    cfg' = cfg,
+    inc' = inc,
+    agents' = agents.set(a, g),
+    lastAction' = { name: name, actor: a, incident: NOBODY },
+  }
+  // На перерыв — с правом agent:set_not_ready (session.states, permission)
+  action goOnBreak(a: str): bool = all {
+    agents.get(a).presence == Ready,
+    can(a, "agent:set_not_ready"),
+    setAgent(a, "agent_break", { ...agents.get(a), presence: Break }),
+  }
+  action backFromBreak(a: str): bool = all {
+    agents.get(a).presence == Break,
+    setAgent(a, "agent_back", { ...agents.get(a), presence: Ready }),
+  }
+  action signOut(a: str): bool = all {
+    agents.get(a).presence != Offline,
+    setAgent(a, "agent_sign_out", { ...agents.get(a), presence: Offline }),
+  }
+  action signIn(a: str): bool = all {
+    agents.get(a).presence == Offline,
+    setAgent(a, "agent_sign_in", { presence: Ready, silence: Online }),
+  }
+  // Молчание растёт по ступеням: дольше idleHoldSec, затем дольше idleReleaseSec; признак активности — связь есть
+  action silenceGrows(a: str): bool = all {
+    agents.get(a).presence != Offline,
+    agents.get(a).silence != IdleRelease,
+    setAgent(a, "agent_silence", { ...agents.get(a), silence: if (agents.get(a).silence == Online) IdleHold else IdleRelease }),
+  }
+  action heartbeat(a: str): bool = all {
+    agents.get(a).silence != Online,
+    setAgent(a, "agent_heartbeat", { ...agents.get(a), silence: Online }),
+  }
+
   /* ===== Ответ на шаг сценария — действие вне машины (scenarioEdit, §10.4) ===== */
 
   def answerOk(a: str, i: str, st: str): bool = {
@@ -843,6 +1034,7 @@ module im {
       isMine(a, x),
       manualAllowed(i),
       sees(a, i),
+      agentReady(a),
       not(x.answered.contains(st)),
     }
   }
@@ -910,6 +1102,7 @@ module im {
         maxActive: maxActive, maxOnHold: maxOnHold,
       },
       inc' = INCIDENTS.mapBy(i => ABSENT),
+      agents' = OPERATORS.mapBy(a => { presence: Ready, silence: Online }),
       lastAction' = { name: "init", actor: NOBODY, incident: NOBODY },
     }
   }
@@ -955,6 +1148,18 @@ module im {
       detach(a, i),
       closeLinked(i),
       linkedLostAccess(i),
+      systemHoldBreak(i),
+      systemHoldIdle(i),
+      systemReleaseIdle(i),
+      addresseeSignedOutToGroup(i),
+      addresseeSignedOutToQueue(i),
+      ownerSignedOut(i),
+      goOnBreak(a),
+      backFromBreak(a),
+      signOut(a),
+      signIn(a),
+      silenceGrows(a),
+      heartbeat(a),
       expireReaction(i),
       expireResolution(i),
       expireHold(i),
@@ -1039,11 +1244,14 @@ module im {
     (isDue(x.reaction) or isDue(x.resolution) or isDue(x.hold)) implies timerTransitionsReady(i) != Set()
   })
 
-  // 8. Лимиты (§10.2); в ядре все удержания ручные, поэтому maxOnHold — для всех отложенных
+  // 8. Лимиты (§10.2): maxOnHold ограничивает только ручное «Отложить» — системные удержания (перерыв,
+  //    нет связи) откладывают и сверх лимита
   def countMine(a: str, s: State): int = INCIDENTS.filter(j => inc.get(j).state == s and isMine(a, inc.get(j))).size()
+  def countManualHeld(a: str): int =
+    INCIDENTS.filter(j => inc.get(j).state == OnHold and isMine(a, inc.get(j)) and HOLD_REASONS.contains(inc.get(j).holdReason)).size()
   val limitsRespected = OPERATORS.forall(a => all {
     cfg.maxActive == 0 or countMine(a, InProgress) <= cfg.maxActive,
-    cfg.maxOnHold == 0 or countMine(a, OnHold) <= cfg.maxOnHold,
+    cfg.maxOnHold == 0 or countManualHeld(a) <= cfg.maxOnHold,
   })
 
   // 9. У ожидающего принятия адресат может принять (§8.1); в ядре права и доступ не меняются
@@ -1103,8 +1311,21 @@ module im {
 
   // 16. Системный переход не зависает: пока он ждёт, выполним он сам или переход по таймеру, который идёт
   //     раньше него (RULE-41) — иначе ручные действия и время стояли бы вечно
+  def agentSystemOk(j: str): bool = systemHoldBreakOk(j) or systemHoldIdleOk(j) or systemReleaseIdleOk(j)
+    or addresseeSignedOutToGroupOk(j) or addresseeSignedOutToQueueOk(j) or ownerSignedOutOk(j)
   val systemProgress = systemReady implies
-    INCIDENTS.exists(j => closeLinkedOk(j) or linkedLostAccessOk(j) or timerTransitionsReady(j) != Set())
+    INCIDENTS.exists(j => closeLinkedOk(j) or linkedLostAccessOk(j) or agentSystemOk(j) or timerTransitionsReady(j) != Set())
+
+  // 19. Вышедший не держит ни своих в работе и отложенных, ни лично ему адресованных (§8.1, §12.1); на
+  //     перерыве у оператора нет инцидентов «В работе» (§12.2) — или их сейчас снимает системный переход
+  val agentStateRespected = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    all {
+      (x.state.in(Set(Pending, InProgress, OnHold)) and agentStateIs(x.owner, Offline))
+        implies (agentSystemOk(i) or timerTransitionsReady(i) != Set()),
+      (x.state == InProgress and agentStateIs(x.owner, Break)) implies (systemHoldBreakOk(i) or timerTransitionsReady(i) != Set()),
+    }
+  })
 
   // 17. Привязанный — того же сценария, что основной (§11.3, sameScenarioAsPrimary)
   val linkedSameScenario = INCIDENTS.forall(i => {
@@ -1156,5 +1377,6 @@ module im {
     systemProgress,
     linkedSameScenario,
     processedOnlyFinished,
+    agentStateRespected,
   }
 }

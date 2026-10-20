@@ -21,6 +21,7 @@ module im_test {
   action initWith(c: Config): bool = all {
     cfg' = c,
     inc' = INCIDENTS.mapBy(i => ABSENT),
+    agents' = OPERATORS.mapBy(a => { presence: Ready, silence: Online }),
     lastAction' = { name: "init", actor: NOBODY, incident: NOBODY },
   }
 
@@ -517,5 +518,119 @@ module im_test {
       .then(close("a", "i1", result("processed")))
       .then(closeLinked("i2"))
       .expect(x2.state == Closed and x2.closeResult == "processed" and x2.answered == Set("s2"))
+      .expect(inv)
+
+  /* ===== 10. Состояние оператора (§12) ===== */
+
+  def agentOf(a: str): Agent = agents.get(a)
+
+  // Перерыв: свой в работе — отложен системой с причиной «перерыв»; на перерыве — только просмотр
+  run breakHoldsWorkTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(goOnBreak("a"))
+      .expect(systemHoldBreakOk("i1") and not(claimOk("b", "i2")))  // системный переход срочный
+      .then(systemHoldBreak("i1"))
+      .expect(all {
+        x1.state == OnHold,
+        x1.holdReason == "break",
+        x1.resolution.mode == Paused,
+        x1.hold == RUNNING,
+      })
+      .expect(not(resumeOk("a", "i1")) and not(claimOk("a", "i2")))  // agentReady
+      .then(backFromBreak("a"))
+      .expect(resumeOk("a", "i1"))
+      .expect(inv)
+
+  // Молчание: дольше idleHoldSec — «нет связи», дольше idleReleaseSec — в очередь
+  run silenceHoldThenReleaseTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(claim("a", "i1"))
+      .then(silenceGrows("a"))
+      .then(systemHoldIdle("i1"))
+      .expect(x1.state == OnHold and x1.holdReason == "no_link")
+      .then(silenceGrows("a"))
+      .then(systemReleaseIdle("i1"))
+      .expect(all {
+        x1.state == New,
+        x1.owner == NOBODY,
+        x1.holdReason == NOBODY,
+        x1.reaction == RUNNING,
+        x1.resolution.mode == Paused,
+      })
+      .expect(inv)
+
+  // Отложенный вручную молчание в очередь не возвращает: только системные причины (holdReasonIn)
+  run manualHoldStaysOnSilenceTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(claim("a", "i1"))
+      .then(hold("a", "i1", "patrol"))
+      .then(silenceGrows("a"))
+      .then(silenceGrows("a"))
+      .expect(not(systemReleaseIdleOk("i1")) and x1.state == OnHold)
+      .expect(inv)
+
+  // Вышел: свои в работе и отложенные — в очередь
+  run signOutReturnsWorkTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(hold("a", "i2", "patrol"))
+      .then(signOut("a"))
+      .then(ownerSignedOut("i1"))
+      .then(ownerSignedOut("i2"))
+      .expect(x1.state == New and x2.state == New and x2.holdReason == NOBODY and x2.hold == IDLE)
+      .expect(inv)
+
+  // Вышел, не приняв: есть дежурная группа — ей, нет — в очередь, реакция продолжается
+  run signOutPendingTest =
+    initWith({ ...BASE, members: Set("a") })
+      .then(create("i1"))
+      .then(transfer("b", "i1", "a"))
+      .then(signOut("a"))
+      .then(addresseeSignedOutToGroup("i1"))
+      .expect(x1.state == Pending and x1.group == GROUP and x1.owner == NOBODY)
+      .expect(inv)
+  run signOutPendingToQueueTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(transfer("b", "i1", "a"))
+      .then(signOut("a"))
+      .expect(not(addresseeSignedOutToGroupOk("i1")))
+      .then(addresseeSignedOutToQueue("i1"))
+      .expect(x1.state == New and x1.owner == NOBODY and x1.reaction == RUNNING)
+      .expect(inv)
+
+  // Лимит отложенных — только ручной: перерыв откладывает и сверх лимита (§10.2)
+  run systemHoldOverLimitTest =
+    initWith({ ...BASE, maxOnHold: 1 })
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(hold("a", "i1", "patrol"))
+      .then(goOnBreak("a"))
+      .then(systemHoldBreak("i2"))
+      .expect(x1.state == OnHold and x2.state == OnHold and x2.holdReason == "break")
+      .expect(inv)
+
+  // Основной группы ушёл в очередь — вышел владелец: срок группы на паузе, привязанный остаётся привязанным
+  run signOutPausesGroupTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(signOut("a"))
+      .then(ownerSignedOut("i1"))
+      .expect(x1.state == New and x1.resolution.mode == Paused and x2.state == Linked)
+      .expect(not(expireResolutionOk("i1")) and not(expireResolutionOk("i2")))
       .expect(inv)
 }
