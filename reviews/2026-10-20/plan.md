@@ -37,4 +37,4 @@
 
 ## По ходу: модель Quint — сценарий
 
-- [x] **Модель.** Сценарий без графа: у инцидента сценарий и отвеченные шаги, «Обработан» — по пройденному сценарию (было: случайный флаг); ответ на шаг — действие вне машины с правом `scenarioEdit`; `merge` — `sameScenarioAsPrimary` и `copyAnswersToPrimary`; инварианты `linkedSameScenario`, `processedOnlyFinished`; 3 новых сценария, 34 всего. `check_quint.py`: оба места сверяются с машиной (было: «модель не касается»), `answerOk` — с `scenarioEdit`. README модели. Коммит: —
+- [x] **Модель.** Сценарий без графа: у инцидента сценарий и отвеченные шаги, «Обработан» — по пройденному сценарию (было: случайный флаг); ответ на шаг — действие вне машины с правом `scenarioEdit`; `merge` — `sameScenarioAsPrimary` и `copyAnswersToPrimary`; инварианты `linkedSameScenario`, `processedOnlyFinished`; 3 новых сценария, 34 всего. `check_quint.py`: оба места сверяются с машиной (было: «модель не касается»), `answerOk` — с `scenarioEdit`. README модели. Коммит: `8ec9d66`
