@@ -374,7 +374,8 @@
       if (confirm) expect(!confirm.classList.contains("on") && /Подтверждаю/.test(confirm.textContent), `до отметки на кнопке «${confirm.textContent.trim()}»`);
       // Шаги впереди серым (RULE-95): на экране столько шагов, сколько M в «Шаг N из M»; на шаги впереди не перейти
       const m = $("statusSteps").textContent.match(/из (\d+)/);
-      const crumbs = root().querySelectorAll(".crumb");
+      // «Итог» — без номера, в M не входит
+      const crumbs = root().querySelectorAll(".crumb:not(.summary-crumb)");
       expect(m && crumbs.length === Number(m[1]), `шагов на экране ${crumbs.length}, а в строке состояния «${$("statusSteps").textContent}»`);
       expect([...root().querySelectorAll(".crumb.ahead")].every((c) => c.dataset.crumb === undefined) && root().querySelector(".crumb.ahead"), "шагов впереди нет или на них можно перейти");
       return closedId;
@@ -491,23 +492,34 @@
       throw new Error("на пути сценария нет шага с вариантами");
     }, "Ответ с вариантами сохраняется после «Далее»");
 
-    await step("Закрыть инцидент по сценарию: ответ на последний шаг сам открывает «Закрыть» с «Обработан»; «Далее» там серая (RULE-89, ARCH-06 в18)", async () => {
+    await step("Завершить инцидент по сценарию: ответ на последний шаг ведёт на «Итог», форма не открывается; «Назад» — к последнему шагу, «Далее» — снова «Итог»; «Завершить инцидент» закрывает «Обработан» (§7)", async () => {
       await openOwn(closedId);
-      const last = () => $("statusSteps").textContent.match(/Шаг (\d+) из (\d+)/);
+      const finish = () => root().querySelector("[data-finish]");
       for (let i = 0; i < 10; i++) {
         await answerCurrentStep();
         const next = $("stepNext");
         expect(next && !next.disabled, "сценарий не проходится до конца");
         await click(next);
         await wait(200);
-        if ($("modalDialog").hidden) continue;
-        // Сценарий пройден: форма «Закрыть» открылась сама, за ней — последний шаг, «Далее» серая
-        const [, at, of] = last() || [];
-        expect(at && at === of, `форма открылась не на последнем шаге: «${$("statusSteps").textContent}»`);
-        expect($("stepNext").disabled, "на последнем шаге «Далее» доступна");
-        expect(field("resultId").value === "processed", `результат по умолчанию «${field("resultId").value}», а не «Обработан»`);
-        await confirmDialog();
-        expect(mode() === "queue", "после закрытия карточка не закрылась");
+        if (!finish()) continue;
+        expect($("modalDialog").hidden, "после последнего шага открылась форма");
+        expect(root().querySelector(".summary-crumb.current"), "«Итог» в ленте шагов не текущий");
+        expect($("stepNext").disabled, "на «Итоге» «Далее» доступна");
+        expect(!finish().disabled, "«Завершить инцидент» недоступна");
+        await click($("stepBack"));
+        const [, at, of] = $("statusSteps").textContent.match(/Шаг (\d+) из (\d+)/) || [];
+        expect(at && at === of && !finish(), `«Назад» с «Итога» — не на последний шаг: «${$("statusSteps").textContent}»`);
+        expect(!$("stepNext").disabled, "на последнем шаге пройденного сценария «Далее» к «Итогу» недоступна");
+        await click($("stepNext"));
+        expect(finish(), "«Далее» с последнего шага не вернула на «Итог»");
+        const note = root().querySelector("[data-summary-comment]");
+        note.value = NOTE;
+        note.dispatchEvent(new Event("input", { bubbles: true }));
+        await click(finish());
+        await wait(200);
+        expect(mode() === "queue", "после «Завершить инцидент» карточка не закрылась");
+        const card = await window.IM_SELFTEST_API.get(`/operator/incidents/${encodeURIComponent(closedId)}`);
+        expect(card.closeResultId === "processed" && card.result === NOTE, `закрыт «${card.closeResultId}» с комментарием «${card.result}»`);
         return closedId;
       }
       throw new Error("последний шаг так и не наступил");
@@ -752,7 +764,7 @@
       }
     });
 
-    await step("Шаги-кнопки (Message) в сценарии набора: INC-1839 на второй версии «Проникновения» — «Сообщил охране», «Доложил»; последняя открывает «Закрыть» с «Обработан» (§14.5)", async () => {
+    await step("Шаги-кнопки (Message) в сценарии набора: INC-1839 на второй версии «Проникновения» — «Сообщил охране», «Доложил»; последняя ведёт на «Итог» (§14.5)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
@@ -782,7 +794,7 @@
           if (st.type === "Message") {
             pressed.push(st.view.label);
             await wait(200);
-            if (!$("modalDialog").hidden) break;
+            if (root().querySelector("[data-finish]")) break;
             continue;
           }
           const next = $("stepNext");
@@ -794,8 +806,10 @@
         expect(card.scenario.result.completedAt, "сценарий не пройден до конца");
         const macros = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").map((j) => j.vars.name);
         expect(macros.join() === "Сирена и PTZ на зону", `макросы в журнале: «${macros.join(", ")}», а не один «Сирена и PTZ на зону»`);
-        expect(!$("modalDialog").hidden && field("resultId").value === "processed", "после «Доложил» не открылась «Закрыть» с «Обработан»");
-        await confirmDialog();
+        const finish = root().querySelector("[data-finish]");
+        expect($("modalDialog").hidden && finish && !finish.disabled, "после «Доложил» карточка не на «Итоге» с «Завершить инцидент»");
+        await click(finish);
+        await wait(200);
         expect(mode() === "queue", "после закрытия карточка не закрылась");
         return pressed.join(", ");
       } finally {
@@ -1154,9 +1168,9 @@
       const b = button(root(), "close");
       expect(b, "в карточке нет кнопки «Закрыть»");
       await click(b);
-      // «Обработан» доступен, только если сценарий заполнен; у принятого инцидента он может быть уже заполнен
-      const processed = field("resultId").querySelector('option[value="processed"]');
-      expect(processed, "в форме нет результата «Обработан»");
+      // «Закрыть без обработки»: «Обработан» в форме нет — им закрывает «Итог»
+      expect(/без обработки/.test(b.textContent), `кнопка закрытия — «${b.textContent.trim()}»`);
+      expect(!field("resultId").querySelector('option[value="processed"]'), "в форме «Закрыть без обработки» есть «Обработан»");
       await setField("resultId", "false_alarm");
       await click($("dialogConfirm"));
       expect(!$("modalDialog").hidden, "закрылось без обязательного комментария");
@@ -1175,7 +1189,7 @@
       return acceptedId;
     }, "Норматив закрытия не обнуляется при возврате в очередь");
 
-    await step("«Обработан» недоступен, пока сценарий не заполнен", async () => {
+    await step("«Обработан» недоступен, пока сценарий не заполнен: в «Закрыть без обработки» его нет, «Итога» не открыть", async () => {
       await setFilter("open");
       const b = button($("eventsList"), "claim");
       expect(b, "нет доступной кнопки «Взять»");
@@ -1187,7 +1201,8 @@
       await click(close);
       const processed = field("resultId").querySelector('option[value="processed"]');
       const other = field("resultId").querySelector('option[value="false_alarm"]');
-      expect(processed && processed.disabled, "«Обработан» доступен при пустом сценарии");
+      expect(!processed, "в форме «Закрыть без обработки» есть «Обработан»");
+      expect(root().querySelector(".summary-crumb.locked") && !root().querySelector("[data-crumb=summary]"), "на «Итог» можно перейти при пустом сценарии");
       expect(other && !other.disabled, "«Ложная тревога» недоступна");
       expect(field("resultId").value === "", `результат выбран за оператора: «${field("resultId").value}»`);
       await click($("dialogConfirm"));
@@ -1203,7 +1218,7 @@
       expect(mode() === "queue", "«К очереди» не вернула к очереди");
       await setFilter("mine");
       expect(button($("eventsList"), "open_card", freshId), `${freshId} больше не «В работе»`);
-    }, "«Обработан» недоступен, пока сценарий не заполнен");
+    }, "«Обработан» недоступен, пока сценарий не заполнен: в «Закрыть без обработки» его нет, «Итога» не открыть");
 
     await step("Перерыв с открытой карточкой: инцидент отложен, карточка — просмотр", async () => {
       await openOwn(freshId);

@@ -1307,6 +1307,14 @@ select.search-input { padding-right: 36px; }
 .step-h .step-lock,
 .crumb-lock { font-size: 14px; vertical-align: -2px; margin-right: 3px; }
 .step-locked { margin: 0; color: var(--muted); font-size: 14px; }
+/* «Итог» в ленте шагов — флажок вместо номера: в «Шаг N из M» не входит */
+.summary-crumb .crumb-n .material-symbols-outlined { font-size: 15px; color: inherit; }
+/* Шаг «Итог»: комментарий забирает всю свободную высоту, «Завершить инцидент» — крупно, внизу карточки */
+.work-step:has(> .summary-card) { align-content: stretch; }
+.summary-card { display: flex; flex-direction: column; }
+.summary-card .summary-comment { flex: 1 1 auto; min-height: 120px; resize: none; }
+.summary-finish { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; padding: 10px 18px; }
+.summary-finish .material-symbols-outlined { font-size: 20px; color: inherit; }
 
 .confirm-btn {
   display: inline-flex;

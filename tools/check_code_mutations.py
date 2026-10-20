@@ -77,7 +77,8 @@ MUTATIONS = [
     ("macro-ignores-run-macro", "server.js", '      if (!actorEngine.availability("run_macro", ev).ok) return;\n', "", "api"),
     ("new-incident-oldest-version", "server.js", ".sort((a, b) => b.version - a.version)[0]", ".sort((a, b) => a.version - b.version)[0]", "api"),
     ("cursor-off-path", "server.js", "if (!body || !pathOf(ev).includes(body.stepId))", "if (!body)", "api"),
-    ("finish-no-close-form", "app.js", '    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");\n', "", "ui"),
+    ("finish-no-summary", "app.js", "  const atSummary = (ev) => runDone(ev) && !state.summaryOff.has(ev.guid) && cursorOf(ev) === pathOf(ev).length - 1;", "  const atSummary = () => false;", "ui"),
+    ("close-form-offers-processed", "app.js", "const options = opts.options.filter((o) => !fullyProcessed(o.id));", "const options = opts.options;", "ui"),
     ("ahead-with-current", "scenario.js", "for (let x = id; x !== from; x = prev.get(x)) out.unshift(x);", "for (let x = id; x !== null; x = prev.get(x)) out.unshift(x);", "api"),
     ("ahead-not-shown", "app.js", "  const aheadOf = (ev) => (scenarioOf(ev) ? scenarioOf(ev).ahead || [] : []);", "  const aheadOf = () => [];", "ui"),
     ("datetime-iso-on-path", "app.js", '    if (step.type === "Datetime") return fmtWhen(entry.value);\n', "", "ui"),
@@ -221,9 +222,9 @@ MUTATIONS = [
     # Home и End в дереве — первый и последний видимый узел (§13, PROC-27)
     ("tree-home-end-ignored", "app.js", ", Home: items[0], End: items[items.length - 1] };", " };", "ui"),
     ("tree-hit-enter-ignored", "app.js", "      } else if (e.key === \"Enter\") {\n        e.preventDefault();\n        stepTreeHit(e.shiftKey ? -1 : 1);", "      } else if (false) {", "ui"),
-    # «Далее» всегда на месте: на последнем шаге и на вкладке привязанных — серая (RULE-89)
-    ("next-on-last-step", "app.js", "    return i < path.length - 1;\n  }", "    return true;\n  }", "ui"),
-    ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && canGoNext(ev, i, editable);', "const canNext = canGoNext(ev, i, editable);", "ui"),
+    # «Далее» всегда на месте: с последнего шага пройденного сценария — на «Итог», на вкладке привязанных — серая (RULE-89)
+    ("next-not-to-summary", "app.js", "    return i < path.length - 1 || (runDone(ev) && !atSummary(ev));\n  }", "    return i < path.length - 1;\n  }", "ui"),
+    ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && !summary && canGoNext(ev, i, editable);', "const canNext = !summary && canGoNext(ev, i, editable);", "ui"),
     ("back-after-next", "styles.css", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n  flex-direction: row-reverse;\n", "ui"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
@@ -260,7 +261,7 @@ MUTATIONS = [
     ("filter-options-not-viable", "server.js", "        base === pool ? opts : opts.filter(", "        true ? opts : opts.filter(", "api"),
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
-    ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : i === 0 ? "disabled" : ""}', "ui"),
+    ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${tab !== "scenario" || (i === 0 && !summary) ? "disabled" : ""}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : i === 0 && !summary ? "disabled" : ""}', "ui"),
     ("search-ignores-linked", "server.js", "if (!hit(e, needle) && !linkedHits(e, needle).length) return false;", "if (!hit(e, needle)) return false;", "api"),
     ("linked-focus-page-ignored", "server.js", "const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;", "const idx = -1;", "api"),
     ("ui-search-opens-scenario", "app.js", "workTab: foundLinked(ev.guid).length ? \"linked\" : \"scenario\"", "workTab: \"scenario\"", "ui"),

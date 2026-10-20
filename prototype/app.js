@@ -605,6 +605,8 @@
     viewStep: new Map(),
     // Черновики ответов на шаги сценария — до «Далее» (инцидент:шаг → { value, attachments })
     drafts: new Map(),
+    // Инциденты, где оператор ушёл с шага «Итог» на шаги сценария: вернётся «Далее» с последнего шага или по «Итогу»
+    summaryOff: new Set(),
     videoMode: "archive",
     activeCam: null,
     full: null,
@@ -1019,8 +1021,20 @@
     if (!step) return false;
     if (stepEditable(ev, i, editable) && changed(ev, step)) return complete(step, valueOf(ev, step)) || !stepRequired(step);
     if (editable && isCurrentStep(ev, i)) return step.type !== "Message" && (!stepRequired(step) || complete(step, valueOf(ev, step)));
-    return i < path.length - 1;
+    return i < path.length - 1 || (runDone(ev) && !atSummary(ev));
   }
+
+  // Шаг «Итог» — после финального шага пройденного сценария: закрытие результатом «Обработан» кнопкой
+  // «Завершить инцидент». Карточка встаёт на него, когда сценарий пройден, пока оператор не ушёл на шаги
+  const SUMMARY = "__summary__";
+  const atSummary = (ev) => runDone(ev) && !state.summaryOff.has(ev.guid) && cursorOf(ev) === pathOf(ev).length - 1;
+  // Результат полной обработки из ответа сервера (fieldOptions «Закрыть») — с причиной, если он недоступен
+  function processedOption(ev) {
+    const close = actionOf(ev, "close");
+    const results = close && close.fieldOptions && close.fieldOptions.resultId ? close.fieldOptions.resultId.options : [];
+    return results.find((r) => fullyProcessed(r.id)) || null;
+  }
+  const canFinish = (ev) => !ev.readOnly && canDo("close", ev) && Boolean(processedOption(ev)) && !processedOption(ev).disabled;
 
   // Название сценария; нет названия — «Без названия». Демо-названия переводит словарь данных, как типы событий
   const scenarioTitle = (ev) => t(ev.scenarioTitle || "Без названия");
@@ -1033,6 +1047,7 @@
   async function goToStep(ev, index) {
     const path = pathOf(ev);
     if (index < 0 || index >= path.length) return;
+    state.summaryOff.add(ev.guid);
     if (ev.readOnly) {
       state.viewStep.set(ev.guid, index);
       renderScenario();
@@ -1055,7 +1070,6 @@
 
   // Ответ на шаг — серверу (POST …/scenario/answer); пустой необязательный шаг — пропуск. Что дальше — решает сервер
   async function submitStep(ev, step) {
-    const wasDone = runDone(ev);
     const d = draftOf(ev, step.id);
     const value = valueOf(ev, step);
     const body = { stepId: step.id };
@@ -1070,11 +1084,10 @@
     }
     // Ответ меняет путь, доступность «Обработан», прогресс и версию записи — карточку заново
     await loadCard();
+    // Ответ завершил сценарий — карточка на шаге «Итог»: закрывает оператор, «Завершить инцидент» (§7)
+    if (runDone(selected())) state.summaryOff.delete(ev.guid);
     renderScenario();
     renderStatus();
-    // Ответ завершил сценарий — сразу форма «Закрыть»: «Обработан» в ней уже выбран, оператор подтверждает (§7, ARCH-06 в18)
-    const after = selected();
-    if (!wasDone && runDone(after) && canDo("close", after)) trigger("close", after, "card");
   }
 
   async function goNextStep(ev) {
@@ -1082,7 +1095,23 @@
     const path = pathOf(ev);
     const step = stepOf(ev, path[i]);
     if (!ev.readOnly && (isCurrentStep(ev, i) || (stepEditable(ev, i, true) && changed(ev, step)))) return submitStep(ev, step);
+    if (i === path.length - 1 && runDone(ev)) return openSummary(ev);
     return goToStep(ev, i + 1);
+  }
+
+  async function openSummary(ev) {
+    const last = pathOf(ev).length - 1;
+    if (cursorOf(ev) !== last) await goToStep(ev, last);
+    state.summaryOff.delete(ev.guid);
+    renderScenario();
+    renderStatus();
+  }
+
+  // «Завершить инцидент» на шаге «Итог» — переход «Закрыть» с результатом полной обработки, без формы
+  async function finishIncident(ev) {
+    if (!canFinish(ev)) return;
+    const d = state.drafts.get(draftKey(ev, SUMMARY));
+    if (await runTransition("close", ev, { resultId: processedOption(ev).id, comment: d ? d.value.trim() : "" }, "card")) state.drafts.delete(draftKey(ev, SUMMARY));
   }
 
   /* ===== Слой представления: моё, чужое, бейджи (§2.4) — считает сервер ===== */
@@ -1135,12 +1164,17 @@
   const canDo = (id, ev) => Boolean(actionOf(ev, id) && actionOf(ev, id).enabled);
   const actionWhy = (a) => (a && a.reasonKey ? say(a.reasonKey, a.reasonVars) : "");
 
+  // «Закрыть» в ряду действий и в очереди — закрытие без обработки: результатом, кроме «Обработан», на любом этапе.
+  // «Обработан» — «Завершить инцидент» на шаге «Итог»
+  const actionLabel = (a) => (a.id === "close" ? t("Закрыть без обработки") : t(a.label));
+
   function actionView(a) {
     const def = a.kind === "nav" ? navDef(a.id) : transitionDef(a.id);
+    const closeHint = t("Закрыть результатом, кроме «Обработан»: ложная тревога, дубликат и другие — с комментарием");
     return {
       id: a.id,
-      label: t(a.label),
-      hint: a.enabled ? (hasLbl(def, "hint") ? lbl(def, "hint") : t(a.label)) : actionWhy(a),
+      label: actionLabel(a),
+      hint: a.enabled ? (a.id === "close" ? closeHint : hasLbl(def, "hint") ? lbl(def, "hint") : t(a.label)) : actionWhy(a),
       style: a.style || "outline",
       icon: a.icon || null,
       disabled: !a.enabled,
@@ -1170,7 +1204,7 @@
         toast: (form) => t("Передано: {n} → {who}", { n, who: actorName(form.targetId) }),
       },
       close: {
-        title: t("Закрыть {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
+        title: t("Закрыть без обработки {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
         note: t("{n, plural, one {Будет закрыт # инцидент} few {Будут закрыты # инцидента} other {Будут закрыты # инцидентов}} без сценария. Одна причина на всю выборку.", { n }),
         confirm: t("Закрыть {n}", { n }),
         toast: () => t("Закрыто: {n}", { n }),
@@ -1510,11 +1544,25 @@
       return;
     }
     const def = WORKFLOW.forms.find((f) => f.id === tr.form);
+    // Форма «Закрыть» — закрытие без обработки: «Обработан» в ней не предлагается, им закрывает «Итог»
+    const unprocessed = id === "close";
     const fields = def.fields.map((field) => {
       const opts = (a.fieldOptions || {})[field.name];
-      return Object.assign({}, field, opts ? { options: opts.options, defaultValue: opts.defaultValue } : {});
+      if (!opts) return Object.assign({}, field);
+      if (unprocessed && field.name === "resultId") {
+        const options = opts.options.filter((o) => !fullyProcessed(o.id));
+        return Object.assign({}, field, { options, defaultValue: options.some((o) => o.id === opts.defaultValue) ? opts.defaultValue : null });
+      }
+      return Object.assign({}, field, { options: opts.options, defaultValue: opts.defaultValue });
     });
-    const note = a.formNote ? say(a.formNote.key, a.formNote.vars) : "";
+    let note = a.formNote ? say(a.formNote.key, a.formNote.vars) : "";
+    // Пояснение в карточке — точнее, чем у машины: останется ли сценарий незавершённым
+    if (unprocessed) {
+      const prog = stepProgress(ev);
+      if (surface === "card" && runDone(ev)) note = t("Сценарий пройден, но инцидент закроется выбранным результатом, а не «Обработан». Результат уйдёт в AxxonData.");
+      else if (surface === "card" && prog.total)
+        note = t("Сценарий заполнен: {filled} из {total} — останется незавершённым. Результат уйдёт в AxxonData.", { filled: prog.filled, total: prog.total });
+    }
     state.selectedId = ev.guid;
     showForm({ id, eventId: ev.guid, ev, surface }, Object.assign({}, def, { fields, note }));
   }
@@ -2137,7 +2185,8 @@
 
     const i = cursorOf(ev);
     const step = stepOf(ev, path[i]);
-    const canNext = tab === "scenario" && canGoNext(ev, i, editable);
+    const summary = tab === "scenario" && atSummary(ev);
+    const canNext = tab === "scenario" && !summary && canGoNext(ev, i, editable);
     // Подсказка на пройденном шаге — с какого шага продолжить, если закрыть «Обработан» пока нельзя: набор
     // «закрытие» — сценарий пройден до конца (§2.2, §14.5)
     const close = actionOf(ev, "close");
@@ -2158,7 +2207,7 @@
             .map((id, idx) => {
               const s = stepOf(ev, id);
               const open = true;
-              const current = idx === i;
+              const current = idx === i && !summary;
               const answer = answerText(s, entryOf(ev, id));
               const nav = open && !current;
               return `
@@ -2192,6 +2241,7 @@
               `
             )
             .join("")}
+          ${summaryCrumb(ev, summary)}
           </ol>`
           }
         </div>
@@ -2199,6 +2249,8 @@
           ${
             tab === "linked"
               ? `<div class="step-card lnk-panel">${linkedPanel(ev)}</div>`
+              : summary
+              ? `<div class="step-card summary-card">${summaryPanel(ev)}</div>`
               : `<div class="step-card">
             <div class="step-h">
               <strong>${te(stepShort(step))}</strong>
@@ -2229,7 +2281,7 @@
                 : ""
             }
             <div class="scenario-actions-end">
-              <button type="button" class="btn outline" id="stepBack" ${tab !== "scenario" || i === 0 ? "disabled" : ""}>${te("Назад")}</button>
+              <button type="button" class="btn outline" id="stepBack" ${tab !== "scenario" || (i === 0 && !summary) ? "disabled" : ""}>${te("Назад")}</button>
               <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${canNext ? "" : "disabled"}>${te("Далее")}</button>
             </div>
           </div>
@@ -2242,6 +2294,53 @@
         </div>
       </div>
     `;
+  }
+
+  // «Итог» в ленте шагов — после шагов впереди, без номера: в «Шаг N из M» не входит (RULE-95). До конца
+  // сценария — бледный, после — можно перейти
+  function summaryCrumb(ev, current) {
+    const done = runDone(ev);
+    const nav = done && !current;
+    const closed = isDone(ev);
+    const ans = closed ? resultLabel(ev) : nav ? t("Можно завершить") : "";
+    return `
+      <li class="crumb summary-crumb ${current ? "current" : ""} ${closed ? "done" : ""} ${done ? "" : "locked ahead"} ${nav ? "nav" : ""}" ${
+        current ? 'aria-current="step"' : ""
+      } ${nav ? 'data-crumb="summary" role="button" tabindex="0"' : ""} title="${te(done ? "Итог: результат и закрытие" : "Итог — после последнего шага сценария")}">
+        <span class="crumb-track">
+          <span class="crumb-n"><span class="material-symbols-outlined" aria-hidden="true">flag</span></span>
+        </span>
+        <span class="crumb-body">
+          <span class="crumb-name">${te("Итог")}</span>
+          ${ans ? `<span class="crumb-ans">${escapeHtml(ans)}</span>` : ""}
+        </span>
+      </li>
+    `;
+  }
+
+  // Шаг «Итог»: сценарий пройден — результат «Обработан», комментарий необязателен, «Завершить инцидент».
+  // Другой результат — «Закрыть без обработки» в ряду действий
+  function summaryPanel(ev) {
+    const head = `<div class="step-h"><strong>${te("Итог")}</strong></div>`;
+    if (isDone(ev)) {
+      const why = fullyProcessed(ev.closeResultId) ? t("Инцидент закрыт с результатом «Обработан».") : t("Инцидент закрыт: {why}.", { why: resultLabel(ev) });
+      return `${head}<p class="step-ask">${escapeHtml(why)}</p>${ev.result ? `<p class="step-q">${escapeHtml(ev.result)}</p>` : ""}`;
+    }
+    const ok = canFinish(ev);
+    const opt = processedOption(ev);
+    const close = actionOf(ev, "close");
+    const why = ev.readOnly ? "" : opt && opt.disabled ? opt.reason : close && !close.enabled ? actionWhy(close) : "";
+    const d = state.drafts.get(draftKey(ev, SUMMARY));
+    return `${head}
+      <p class="step-ask">${te("Сценарий пройден до конца. Инцидент закроется с результатом «Обработан».")}</p>
+      <p class="step-q">${te("Результат уйдёт в AxxonData. Если нужен другой результат — «Закрыть без обработки».")}</p>
+      <textarea class="summary-comment" rows="3" data-summary-comment placeholder="${te("Итог обработки для отчёта — необязательно")}" ${
+        ok ? "" : "disabled"
+      }>${escapeHtml(d ? d.value : "")}</textarea>
+      <button type="button" class="btn primary summary-finish" data-finish ${ok ? "" : "disabled"}>
+        <span class="material-symbols-outlined" aria-hidden="true">task_alt</span>${te("Завершить инцидент")}
+      </button>
+      ${why ? `<p class="step-locked">${escapeHtml(why)}</p>` : ""}`;
   }
 
   function renderLog(ev) {
@@ -2599,7 +2698,9 @@
     $("statusIncident").textContent =
       state.mode === "work" ? t("Карточка {id} · {badge}", { id: ev.number, badge: badge.text }) : `${ev.number} · ${badge.text}`;
     $("statusSteps").textContent =
-      state.mode === "work" && ev.scenario
+      state.mode === "work" && ev.scenario && atSummary(ev)
+        ? t("Итог")
+        : state.mode === "work" && ev.scenario
         ? t("Шаг {i} из {n}", { i: cursorOf(ev) + 1, n: prog.total })
         : scenarioTitle(ev);
     $("statusSla").textContent = statusTimerText(ev);
@@ -3117,6 +3218,8 @@
     $("scenarioRoot").addEventListener("input", (e) => {
       const ev = selected();
       if (!ev || ev.readOnly) return;
+      const note = e.target.closest("textarea[data-summary-comment]");
+      if (note) return state.drafts.set(draftKey(ev, SUMMARY), { value: note.value });
       const el = e.target.closest("textarea[data-ans]");
       if (!el) return;
       setDraft(ev, el.dataset.ans, el.value);
@@ -3225,11 +3328,21 @@
       }
       const crumb = e.target.closest("[data-crumb]");
       if (crumb) {
-        goToStep(ev, Number(crumb.dataset.crumb));
+        if (crumb.dataset.crumb === "summary") openSummary(ev);
+        else goToStep(ev, Number(crumb.dataset.crumb));
+        return;
+      }
+      if (e.target.closest("[data-finish]")) {
+        finishIncident(ev);
         return;
       }
       if (e.target.closest("#stepBack")) {
-        goToStep(ev, cursorOf(ev) - 1);
+        // С «Итога» — на последний шаг сценария, курсор не двигается
+        if (atSummary(ev)) {
+          state.summaryOff.add(ev.guid);
+          renderScenario();
+          renderStatus();
+        } else goToStep(ev, cursorOf(ev) - 1);
         return;
       }
       if (e.target.closest("#stepNext")) {
@@ -3605,7 +3718,7 @@
           (a) =>
             `<button type="button" class="btn ${escapeHtml(a.style)} small" data-sel-do="${escapeHtml(a.id)}" ${
               a.enabled ? "" : 'aria-disabled="true"'
-            } title="${escapeHtml(a.enabled ? a.label : a.reason || a.label)}">${escapeHtml(a.label)}</button>`
+            } title="${escapeHtml(a.enabled ? actionLabel(a) : a.reason || actionLabel(a))}">${escapeHtml(actionLabel(a))}</button>`
         )
         .join("") +
       `<button type="button" class="btn ghost small sel-clear" data-sel-clear title="${te("Снять выделение")}">${te("Снять")}</button>`;
