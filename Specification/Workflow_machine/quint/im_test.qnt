@@ -413,4 +413,65 @@ module im_test {
       .then(merge("a", "i1", Set("i2")))
       .expect(x2.breaches == [] and x2.joinedBreaches == 1)
       .expect(inv)
+
+  /* ===== 8. Видимость и доступ к привязанным (§5, §11.4, RULE-71) ===== */
+
+  // У b нет доступа к i2: i1 он видит, i2 — нет
+  pure val NO_I2_FOR_B: Config = { ...BASE, access: Map("a" -> INCIDENTS, "b" -> Set("i1", "i3")) }
+
+  // Невидимый инцидент: взять его нельзя — его нет (invariants.actorSeesIncident)
+  run invisibleCannotActTest =
+    initWith(NO_I2_FOR_B)
+      .then(create("i2"))
+      .expect(not(claimOk("b", "i2")) and claimOk("a", "i2"))
+      .expect(inv)
+
+  // Перехватил основной тот, кто не видит привязанный, — привязанный отсоединяется новым, срок — остаток срока группы
+  run takeoverLosesLinkedTest =
+    initWith(NO_I2_FOR_B)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(create("i3"))
+      .expect(claimOk("a", "i3"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(takeover("b", "i1"))
+      .expect(linkedLostAccessOk("i2") and not(claimOk("a", "i3")))  // системный переход срочный
+      .then(linkedLostAccess("i2"))
+      .expect(all {
+        x2.state == New,
+        x2.linkedTo == NOBODY,
+        x2.reaction == RUNNING,
+        x2.resolution == { mode: Paused, phase: Before },
+      })
+      .expect(inv)
+
+  // Вручную передать основной тому, кто не видит привязанный, нельзя (targetHasAccessToLinked)
+  run transferNeedsLinkedAccessTest =
+    initWith(NO_I2_FOR_B)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .expect(transferOk("a", "i1", "b"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(not(transferOk("a", "i1", "b")) and not(transferOk("a", "i1", GROUP)))
+      .expect(inv)
+
+  // Эскалация по нормативу закрытия к тому, кто не видит привязанный: нарушение группы — и ему, затем он
+  // отсоединяется со сработавшим сроком (RULE-50, RULE-97)
+  run escalationLosesLinkedTest =
+    initWith({ ...NO_I2_FOR_B, onResolutionOverdue: "escalate" })
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expireResolution("i1"))
+      .then(resolutionEscalate("i1"))
+      .expect(x1.state == Pending and x1.owner == "b" and x2.breaches == [{ kind: "resolution", who: "a" }])
+      .then(linkedLostAccess("i2"))
+      .expect(x2.state == New and x2.resolution == { mode: Paused, phase: Fired })
+      .expect(inv)
 }

@@ -6,10 +6,11 @@
    на маленьком мире — 3 инцидента, 2 оператора, 1 дежурная группа — перебором путей.
 
    Ядро: create, claim, accept, reject, hold, resume, release, transfer, takeover, close,
-   reopen и переходы по таймерам. Объединение (§11): merge, detach, close_linked; у группы один
-   срок — срок основного, нарушения основного записываются и привязанным (RULE-97). Пока не моделируются: состояние оператора (все ready,
-   agentReady выполнено), остальные системные переходы, linked_lost_access, смена прав и
-   доступа, окно manualWinsOverTimer, журнал, уведомления, сценарий (у всех инцидентов
+   reopen и переходы по таймерам. Объединение (§11): merge, detach, close_linked, linked_lost_access;
+   у группы один срок — срок основного, нарушения основного записываются и привязанным (RULE-97).
+   Видимость (§5, invariants.actorSeesIncident) — правило сервера, не условие перехода: действует
+   только тот, у кого есть доступ к инциденту (sees). Пока не моделируются: состояние оператора
+   (все ready, agentReady выполнено), остальные системные переходы, смена прав и доступа, окно manualWinsOverTimer, журнал, уведомления, сценарий (у всех инцидентов
    один — sameScenarioAsPrimary выполнено, ответы не переносятся), version.
 
    Время абстрактное. У таймера фаза: Before — дедлайн впереди, Due — наступил и ещё не
@@ -160,6 +161,9 @@ module im {
   def hasAccess(who: str, i: str): bool =
     if (isGroup(who)) cfg.members.exists(m => cfg.access.get(m).contains(i))
     else OPERATORS.contains(who) and cfg.access.get(who).contains(i)
+  // Видимость (§5, invariants.actorSeesIncident): оператор видит инцидент и действует над ним, только если
+  // у него есть доступ к объекту. Правило сервера, не условие перехода: невидимого инцидента нет вовсе
+  def sees(a: str, i: str): bool = cfg.access.get(a).contains(i)
   // Принять может: право incident:accept и доступ; у группы — хотя бы один такой участник
   def canAcceptP(m: str, i: str): bool = can(m, "incident:accept") and cfg.access.get(m).contains(i)
   def canAccept(who: str, i: str): bool =
@@ -224,6 +228,16 @@ module im {
     val t = primaryOf(x).resolution
     if (t.mode == Idle) x.resolution else { mode: Paused, phase: t.phase }
   }
+  // primaryAddresseeHasAccess false: основной открыт, у него есть адресат, а у адресата нет доступа к
+  // привязанному; группе хватает одного участника с доступом (§11.4, RULE-71)
+  def primaryAddresseeLacksAccess(x: Incident, i: str): bool = {
+    val px = primaryOf(x)
+    x.linkedTo != NOBODY and px.state.in(Set(New, Pending, InProgress, OnHold)) and addressee(px) != NOBODY
+      and not(hasAccess(addressee(px), i))
+  }
+  // targetHasAccessToLinked: у адресата передачи есть доступ к объектам всех открытых привязанных
+  def targetHasAccessToLinked(t: str, i: str): bool =
+    INCIDENTS.forall(j => (inc.get(j).state == Linked and inc.get(j).linkedTo == i) implies hasAccess(t, j))
   def primaryClosed(x: Incident): bool = x.linkedTo != NOBODY and primaryOf(x).state == Closed
 
   /* ===== Переходы по таймеру: условия ===== */
@@ -281,8 +295,19 @@ module im {
       timerTransitionsReady(i) == Set(),
     }
   }
-  // Системный переход ждёт выполнения — сразу или после наступившего дедлайна привязанного
-  def systemReady: bool = INCIDENTS.exists(j => inc.get(j).state == Linked and primaryClosed(inc.get(j)))
+  def linkedLostAccessOk(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == Linked,
+      primaryAddresseeLacksAccess(x, i),
+      timerTransitionsReady(x.linkedTo) == Set(),
+    }
+  }
+  // Системный переход ждёт выполнения — сразу или после наступившего дедлайна (своего или основного)
+  def systemReady: bool = INCIDENTS.exists(j => {
+    val y = inc.get(j)
+    y.state == Linked and (primaryClosed(y) or primaryAddresseeLacksAccess(y, j))
+  })
 
   // У привязанного срок — срок группы: его ручные действия ждут и переход по таймеру основного
   def manualAllowed(i: str): bool = all {
@@ -339,6 +364,7 @@ module im {
     all {
       x.state == New,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:claim"),
       withinActiveLimit(a, i),
     }
@@ -361,6 +387,7 @@ module im {
     all {
       x.state == Pending,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:accept"),
       isTarget(a, x),
       withinActiveLimit(a, i),
@@ -385,6 +412,7 @@ module im {
     all {
       x.state == Pending,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:release"),
       isTarget(a, x),
     }
@@ -403,6 +431,7 @@ module im {
     all {
       x.state == InProgress,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:hold"),
       isMine(a, x),
       withinHoldLimit(a, i),
@@ -426,6 +455,7 @@ module im {
     all {
       x.state == OnHold,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:claim"),
       isMine(a, x),
       withinActiveLimit(a, i),
@@ -449,6 +479,7 @@ module im {
     all {
       x.state.in(Set(InProgress, OnHold)),
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:release"),
       isMine(a, x),
     }
@@ -473,9 +504,11 @@ module im {
     all {
       x.state.in(Set(New, Pending, InProgress, OnHold)),
       manualAllowed(i),
+      sees(a, i),
       transferPermitted(a, x),
       not(isSelf(a, t)),   // targetIsNotSelf
-      hasAccess(t, i),     // targetHasAccess; targetHasAccessToLinked — привязанных в ядре нет
+      hasAccess(t, i),     // targetHasAccess
+      targetHasAccessToLinked(t, i),
       canAccept(t, i),     // targetCanAccept
     }
   }
@@ -501,6 +534,7 @@ module im {
     all {
       x.state.in(Set(Pending, InProgress, OnHold)),
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:reassign"),
       can(a, "incident:claim"),
       ownership(a, x) != "owner",   // isNotOwner
@@ -530,6 +564,7 @@ module im {
     all {
       x.state.in(Set(New, Pending, InProgress, OnHold)),
       manualAllowed(i),
+      sees(a, i),
       closeResultAllowed(a, x, r, stepsFilled),
     }
   }
@@ -557,6 +592,7 @@ module im {
     all {
       x.state == Closed,
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:reopen"),
       can(a, "incident:claim"),
       x.reopenOpen,
@@ -680,6 +716,7 @@ module im {
     all {
       x.state.in(Set(New, InProgress, OnHold)),
       manualAllowed(i),
+      sees(a, i),
       can(a, "incident:bulk"),
       isOwnerOrUnowned(a, x),
       mergePrimaryValid(a, i, p),
@@ -691,6 +728,7 @@ module im {
   def mergeSetOk(a: str, p: str, others: Set[str]): bool = all {
     others != Set(),
     not(others.contains(p)),
+    sees(a, p),
     others.forall(i => mergeOk(a, i, p)),
     // Дедлайн основного срабатывает раньше: присоединённым — только нарушения после присоединения
     timerTransitionsReady(p) == Set(),
@@ -730,6 +768,8 @@ module im {
     all {
       x.state == Linked,
       manualAllowed(i),
+      sees(a, i),
+      x.linkedTo != NOBODY and sees(a, x.linkedTo),
       primaryEditable(a, x),
     }
   }
@@ -758,6 +798,21 @@ module im {
         closedBy: px.closedBy,
         resolution: pauseT(x.resolution),
         reopenOpen: true,
+      }),
+    }
+  }
+
+  // У адресата основного нет доступа к привязанному — отсоединяется новым: реакция заново, норматив
+  // закрытия — остаток срока группы (RULE-71, RULE-97)
+  action linkedLostAccess(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      linkedLostAccessOk(i),
+      apply("linked_lost_access", SYSTEM, i, { ...x,
+        state: New,
+        linkedTo: NOBODY,
+        resolution: copyPrimaryT(x),
+        reaction: startT(x.reaction),
       }),
     }
   }
@@ -856,6 +911,7 @@ module im {
       },
       detach(a, i),
       closeLinked(i),
+      linkedLostAccess(i),
       expireReaction(i),
       expireResolution(i),
       expireHold(i),
@@ -990,6 +1046,23 @@ module im {
     x.state.in(Set(New, Pending, InProgress, OnHold)) implies x.linkedTo == NOBODY
   })
 
+  // 15. Ни один инцидент не остаётся у того, у кого нет к нему доступа (§5, RULE-71): у адресата открытого —
+  //     доступ к нему, у адресата основного — и к привязанным, иначе сейчас выполняется linked_lost_access
+  val addresseeHasAccess = INCIDENTS.forall(i => {
+    val x = inc.get(i)
+    val px = primaryOf(x)
+    all {
+      (x.state.in(Set(Pending, InProgress, OnHold)) implies hasAccess(addressee(x), i)),
+      (x.state == Linked and px.state != Closed and addressee(px) != NOBODY) implies
+        (hasAccess(addressee(px), i) or linkedLostAccessOk(i) or timerTransitionsReady(x.linkedTo) != Set()),
+    }
+  })
+
+  // 16. Системный переход не зависает: пока он ждёт, выполним он сам или переход по таймеру, который идёт
+  //     раньше него (RULE-41) — иначе ручные действия и время стояли бы вечно
+  val systemProgress = systemReady implies
+    INCIDENTS.exists(j => closeLinkedOk(j) or linkedLostAccessOk(j) or timerTransitionsReady(j) != Set())
+
   // 13. У нарушения закрытия есть чьё: срок группы идёт, только пока основной кто-то ведёт (RULE-97)
   val resolutionBreachHasOwner = INCIDENTS.forall(i =>
     inc.get(i).breaches.select(b => b.kind == "resolution" and b.who == NOBODY).length() == 0
@@ -1023,5 +1096,7 @@ module im {
     openNotLinked,
     resolutionBreachHasOwner,
     linkedSharesBreaches,
+    addresseeHasAccess,
+    systemProgress,
   }
 }

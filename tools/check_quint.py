@@ -26,7 +26,6 @@ NOT_MODELED = {
     "system_hold_break", "system_hold_idle", "system_release_idle",
     "addressee_signed_out_to_group", "addressee_signed_out_to_queue", "owner_signed_out",
     "addressee_lost_access", "addressee_cannot_accept",
-    "linked_lost_access",
 }
 # Действия окружения в модели — не переходы машины
 ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window"}
@@ -36,9 +35,8 @@ NOT_MODELED_PERMS = {"incident:run_action", "incident:schema:admin", "agent:set_
 STATES = {"New": "new", "Pending": "pending_acceptance", "InProgress": "in_progress",
           "OnHold": "on_hold", "Closed": "closed", "Linked": "linked"}
 
-# Условия, которых модель не касается: все операторы ready; доступ к привязанным и сценарий
-# объединения пока не моделируются
-IGNORED_GUARDS = {"agentReady", "targetHasAccessToLinked", "sameScenarioAsPrimary"}
+# Условия, которых модель не касается: все операторы ready; сценарий объединения пока не моделируется
+IGNORED_GUARDS = {"agentReady", "sameScenarioAsPrimary"}
 # Эффекты, которых модель не касается; перенос ответов сценария при объединении пока не моделируется
 IGNORED_EFFECTS = {"appendLog", "notify", "externalCommand", "evictOpenCard", "returnToQueue", "setCursor",
                    "copyAnswersToPrimary"}
@@ -55,6 +53,7 @@ ATOMS = [
     'not(isSelf(a, t))', 'hasAccess(t, i)', 'canAccept(t, i)',
     'closeResultAllowed(a, x, r, stepsFilled)', 'x.reopenOpen',
     'isOwnerOrUnowned(a, x)', 'mergePrimaryValid(a, i, p)', 'primaryEditable(a, x)', 'primaryClosed(x)',
+    'primaryAddresseeLacksAccess(x, i)', 'targetHasAccessToLinked(t, i)',
 ]
 ATOM_RE = re.compile(r'can\(a, "[^"]+"\)|' + "|".join(re.escape(a) for a in ATOMS))
 
@@ -77,6 +76,8 @@ def guard_atom(g):
         return f'cfg.onResolutionOverdue == "{args[1]}"'
     if fn == "timerExpired":
         return f"isDue(x.{args[0]})"
+    if fn == "primaryAddresseeHasAccess" and args == [False]:
+        return "primaryAddresseeLacksAccess(x, i)"
     if fn == "escalationTargetAvailable":
         return "escalationTargetAvailable(x, i)" if args[0] else "not(escalationTargetAvailable(x, i))"
     return {
@@ -96,6 +97,7 @@ def guard_atom(g):
         "mergePrimaryValid": "mergePrimaryValid(a, i, p)",
         "primaryEditable": "primaryEditable(a, x)",
         "primaryClosed": "primaryClosed(x)",
+        "targetHasAccessToLinked": "targetHasAccessToLinked(t, i)",
     }[fn]
 
 
@@ -258,6 +260,9 @@ def check_transitions(w, src, err):
                 covered.add(field)
                 if text not in ebody:
                     err.append(f"переход {tid}: в модели нет эффекта «{text}…» ({e['fn']} {e.get('args', [])})")
+        # Видимость (§5, invariants.actorSeesIncident): ручное действие — только над видимым инцидентом
+        if w.get("invariants", {}).get("actorSeesIncident") and t["trigger"] == "manual" and "sees(a, i)" not in gtext:
+            err.append(f"переход {tid}: нет видимости sees(a, i) — invariants.actorSeesIncident")
         # Нарушение основного — и каждому открытому привязанному (recordBreach, RULE-97)
         if any(e["fn"] == "recordBreach" for e in t.get("effects", [])) and "applyShared(" not in ebody:
             err.append(f"переход {tid}: нарушение не записывается привязанным — нужен applyShared")
