@@ -830,13 +830,16 @@ def fsm_terms(w, err):
 
 def compatible(a, b):
     """Могут ли условия двух переходов выполняться одновременно: нет переменной с разными значениями.
-    Доступа нет — значит и принять нельзя."""
+    Доступа нет — значит и принять нельзя; доступ адресата основного — только у открытого основного."""
     va, vb = dict(a), dict(b)
     for k in set(va) & set(vb):
         if k != "timer" and va[k] != vb[k]:
             return False
     merged = {**va, **vb}
     if merged.get("у адресата есть доступ") is False and merged.get("адресат может принять") is True:
+        return False
+    # Доступ адресата основного проверяется только у открытого основного (primaryAddresseeHasAccess, PROC-38)
+    if "у адресата основного есть доступ" in merged and merged.get("основной закрыт") is True:
         return False
     return True
 
