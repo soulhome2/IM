@@ -1757,6 +1757,24 @@
     assert.eq(resolutionBreaches(await env2.card(rain.guid)).length, 0, "присоединённому после срока — нет");
   });
 
+  test("Окно после срока группы: основной со своими привязанными присоединили в окне после его срока — его привязанные получают его нарушение (BUG-73, PROC-37)", async () => {
+    const env = await makeEnv();
+    const { urgent, fresh, calm } = await fireTrio(env);
+    for (const e of [urgent, fresh, calm]) await env.act(e.guid, "claim", {}, "queue");
+    // Группа «срочный + привязанный»; её срок проходит, в окне срочный присоединяют к спокойному
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, fresh.guid], primaryGuid: urgent.guid });
+    const due = (await env.card(urgent.guid)).timer.dueAt;
+    await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await env.advance(GRACE + 2);
+    const moved = await env.card(fresh.guid);
+    assert.eq(moved.linkedTo, calm.guid, "привязанный перешёл к новому основному");
+    const b = resolutionBreaches(moved);
+    assert.eq([b.length, b[0] && b[0].at], [1, due], "нарушение прежнего основного — и его привязанному, на момент срока");
+    assert.ok(moved.journal.some((j) => j.templateKey === "workflow.journal.group_breach" && j.vars.primaryNumber === urgent.number), "запись «Нарушен срок группы …» прежнего основного");
+    assert.eq(resolutionBreaches(await env.card(calm.guid)).length, 0, "у нового основного нарушения нет: его срок позже");
+  });
+
   test("Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42)", async () => {
     const env = await makeEnv();
     const [a, b, c] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");

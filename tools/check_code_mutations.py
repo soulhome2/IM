@@ -287,6 +287,7 @@ MUTATIONS = [
     ("left-breach-not-spent", "engine.js", "          if (leftOf(e, record.kind) === 0) e.firedTimers", "          if (false) e.firedTimers", "api"),
     ("link-time-not-set", "engine.js", "        ev.linkedAt = now();\n", "", "api"),
     ("left-group-not-recorded", "engine.js", "        if (ev.linkedTo) ev.leftGroup = ", "        if (false) ev.leftGroup = ", "api"),
+    ("relink-forgets-group", "engine.js", "            e.leftGroup = { primaryId: e.linkedTo, linkedAt: e.linkedAt || 0, at };\n", "", "api"),
     # Журнал срока группы (RULE-98)
     ("group-breach-no-log", "engine.js", "          if (template) ctx.log(e, \"dispatcher\", template,", "          if (false) ctx.log(e, \"dispatcher\", template,", "api"),
     ("window-breach-no-log", "engine.js", "        shareBreach(ev, record, x.args[1]);", "        shareBreach(ev, record);", "api"),

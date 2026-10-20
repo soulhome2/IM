@@ -82,6 +82,8 @@
       if (inc.state === "closed" && (t || inc.holdTimer)) say(inc, "закрыт — таймеры должны стоять");
       if (inc.holdTimer && inc.state !== "on_hold") say(inc, "срок удержания вне «Отложен»");
       if (inc.slaBreached !== inc.breaches.length > 0) say(inc, "sla_breached не совпадает с записями нарушений");
+      // Срок группы идёт, только пока основной кто-то ведёт: у нарушения закрытия всегда есть чьё (RULE-97)
+      if (inc.breaches.some((b) => b.kind === "resolution" && !b.owner)) say(inc, "нарушение закрытия ни на кого (RULE-97)");
       if (inc.ownership === "target" && inc.state !== "pending_acceptance") say(inc, "«адресован мне» вне ожидания принятия");
       if (inc.owner && inc.owner.id === session.operator.guid && inc.state !== "pending_acceptance" && inc.state !== "closed" && inc.ownership !== "owner") {
         say(inc, `мой, а отношение «${inc.ownership}»`);
@@ -111,6 +113,21 @@
     if (sc.progress.total != null && sc.progress.filled > sc.progress.total) say(`прогресс ${sc.progress.filled} из ${sc.progress.total}`);
     if (sc.progress.step !== sc.path.length) say(`номер шага ${sc.progress.step}, а шагов на пути ${sc.path.length}`);
     if ((card.state === "closed" || card.state === "linked") && !card.readOnly) say("закрытый или привязанный можно править");
+    return bad;
+  }
+
+  // Привязанные (§11.4, RULE-97) — их нет в списках, смотрятся у основного: своего срока нет, у нарушения
+  // закрытия есть чьё (PROC-35)
+  async function linkedInvariants(env, list) {
+    const bad = [];
+    for (const p of list.filter((e) => e.linkedCount && e.state !== "closed")) {
+      const res = await env.call("GET", `/operator/incidents/${enc(p.guid)}/linked?pageSize=100`);
+      const items = res.status === 200 ? res.body.items || [] : [];
+      items.filter((x) => x.state === "linked").forEach((x) => {
+        if (x.timer !== null) bad.push(`${x.guid} (linked): свой срок у привязанного (RULE-97)`);
+        if (x.breaches.some((b) => b.kind === "resolution" && !b.owner)) bad.push(`${x.guid} (linked): нарушение закрытия ни на кого (RULE-97)`);
+      });
+    }
     return bad;
   }
 
@@ -209,7 +226,7 @@
         }
       }
       const [list, session] = await Promise.all([env.all(), env.session()]);
-      const bad = invariants(list, session, maxActive).concat(accessInvariants(list, session, roles));
+      const bad = invariants(list, session, maxActive).concat(accessInvariants(list, session, roles), await linkedInvariants(env, list));
       list.forEach((inc) => {
         const v = Number(inc.version);
         if (v < (versions.get(inc.guid) || 0)) bad.push(`${inc.guid}: версия уменьшилась`);
