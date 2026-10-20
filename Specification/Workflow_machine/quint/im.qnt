@@ -10,7 +10,8 @@
    у группы один срок — срок основного, нарушения основного записываются и привязанным (RULE-97).
    Видимость (§5, invariants.actorSeesIncident) — правило сервера, не условие перехода: действует
    только тот, у кого есть доступ к инциденту (sees). Состояние оператора (§12): на месте, перерыв, вышел,
-   молчание по ступеням — и системные переходы по нему. Пока не моделируются: смена прав и доступа, окно
+   молчание по ступеням — и системные переходы по нему. Права и доступ меняются на ходу (роли, §5) —
+   addressee_lost_access, addressee_cannot_accept. Пока не моделируются: окно
    manualWinsOverTimer, журнал, уведомления, version. Сценарий — без графа: у инцидента сценарий и
    отвеченные шаги, пройден — отвечены все (набор closing, §14.5); ответ — действие вне машины.
 
@@ -55,7 +56,8 @@ module im {
     answered: Set[str],     // отвеченные шаги прохождения
   }
 
-  // Права, доступ и настройки выбираются при старте и дальше не меняются.
+  // Права, доступ и настройки выбираются при старте; права и доступ потом меняются действием окружения
+  // «сменились роли» (§5), настройки — нет.
   // 0 у лимитов — без ограничения (null в машине)
   type Config = {
     perms: str -> Set[str],
@@ -362,6 +364,39 @@ module im {
     all { x.state.in(Set(InProgress, OnHold)), agentStateIs(x.owner, Offline), timerTransitionsReady(i) == Set() }
   }
   def holdReasonIn(x: Incident, reasons: Set[str]): bool = reasons.contains(x.holdReason)
+  /* ===== Системные переходы по доступу и праву принять (§5, §8.1) ===== */
+
+  // addresseeHasAccess, addresseeCanAccept: у владельца или адресата — доступ к объекту, право принять;
+  // группе-адресату — хотя бы у одного участника. Без адресата — не выполняется ни при каком ожидании
+  def addresseeHasAccess(x: Incident, i: str): bool = hasAccess(addressee(x), i)
+  def addresseeCanAccept(x: Incident, i: str): bool = canAccept(addressee(x), i)
+  def addresseeLostAccessOk(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state.in(Set(Pending, InProgress, OnHold)),
+      addressee(x) != NOBODY,
+      not(addresseeHasAccess(x, i)),
+      timerTransitionsReady(i) == Set(),
+    }
+  }
+  def addresseeCannotAcceptOk(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      x.state == Pending,
+      addressee(x) != NOBODY,
+      addresseeHasAccess(x, i),
+      not(addresseeCanAccept(x, i)),
+      timerTransitionsReady(i) == Set(),
+    }
+  }
+  def accessSystemPending(j: str): bool = {
+    val y = inc.get(j)
+    addressee(y) != NOBODY and (
+      (y.state.in(Set(Pending, InProgress, OnHold)) and not(addresseeHasAccess(y, j)))
+      or (y.state == Pending and addresseeHasAccess(y, j) and not(addresseeCanAccept(y, j)))
+    )
+  }
+
   // Системный переход по состоянию оператора ждёт (без учёта порядка с таймером — его даёт ...Ok)
   def agentSystemPending(j: str): bool = {
     val y = inc.get(j)
@@ -375,7 +410,7 @@ module im {
   // Системный переход ждёт выполнения — сразу или после наступившего дедлайна (своего или основного)
   def systemReady: bool = INCIDENTS.exists(j => {
     val y = inc.get(j)
-    (y.state == Linked and (primaryClosed(y) or primaryAddresseeLacksAccess(y, j))) or agentSystemPending(j)
+    (y.state == Linked and (primaryClosed(y) or primaryAddresseeLacksAccess(y, j))) or agentSystemPending(j) or accessSystemPending(j)
   })
 
   // У привязанного срок — срок группы: его ручные действия ждут и переход по таймеру основного
@@ -986,6 +1021,54 @@ module im {
     }
   }
 
+  action addresseeLostAccess(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      addresseeLostAccessOk(i),
+      apply("addressee_lost_access", SYSTEM, i, { ...x,
+        state: New,
+        owner: NOBODY,
+        group: NOBODY,
+        holdReason: NOBODY,
+        hold: stopT(x.hold),
+        resolution: pauseT(x.resolution),
+        reaction: startT(x.reaction),
+      }),
+    }
+  }
+
+  action addresseeCannotAccept(i: str): bool = {
+    val x = inc.get(i)
+    all {
+      addresseeCannotAcceptOk(i),
+      apply("addressee_cannot_accept", SYSTEM, i, { ...x,
+        state: New,
+        owner: NOBODY,
+        group: NOBODY,
+        reaction: startT(x.reaction),
+      }),
+    }
+  }
+
+  /* ===== Окружение: роли (§5) — у оператора появился или пропал доступ к объекту, право принимать =====
+     Смена ролей во внешней системе, не переход машины. Пока ждёт системный переход, не происходит */
+
+  action setCfg(a: str, name: str, c: Config): bool = all {
+    not(systemReady),
+    cfg' = c,
+    inc' = inc,
+    agents' = agents,
+    lastAction' = { name: name, actor: a, incident: NOBODY },
+  }
+  action toggleAccess(a: str, i: str): bool = {
+    val acc = cfg.access.get(a)
+    setCfg(a, "roles_access", { ...cfg, access: cfg.access.set(a, if (acc.contains(i)) acc.exclude(Set(i)) else acc.union(Set(i))) })
+  }
+  action toggleAccept(a: str): bool = {
+    val ps = cfg.perms.get(a)
+    setCfg(a, "roles_accept", { ...cfg, perms: cfg.perms.set(a, if (ps.contains("incident:accept")) ps.exclude(Set("incident:accept")) else ps.union(Set("incident:accept"))) })
+  }
+
   /* ===== Окружение: оператор (§12) — перерыв, выход, вход, молчание и связь =====
      Действия человека и сети, не переходы машины. Пока ждёт системный переход, не происходят */
 
@@ -1154,6 +1237,10 @@ module im {
       addresseeSignedOutToGroup(i),
       addresseeSignedOutToQueue(i),
       ownerSignedOut(i),
+      addresseeLostAccess(i),
+      addresseeCannotAccept(i),
+      toggleAccess(a, i),
+      toggleAccept(a),
       goOnBreak(a),
       backFromBreak(a),
       signOut(a),
@@ -1255,9 +1342,11 @@ module im {
   })
 
   // 9. У ожидающего принятия адресат может принять (§8.1); в ядре права и доступ не меняются
+  //    Права и доступ меняются (роли): не может — его сейчас возвращает в очередь системный переход
   val pendingAddresseeCanAccept = INCIDENTS.forall(i => {
     val x = inc.get(i)
-    x.state == Pending implies canAccept(addressee(x), i)
+    x.state == Pending implies
+      (canAccept(addressee(x), i) or addresseeCannotAcceptOk(i) or addresseeLostAccessOk(i) or timerTransitionsReady(i) != Set())
   })
 
   // 10. Эскалация не адресует инцидент тому, у кого он уже есть: тому же человеку, той же группе
@@ -1299,11 +1388,12 @@ module im {
 
   // 15. Ни один инцидент не остаётся у того, у кого нет к нему доступа (§5, RULE-71): у адресата открытого —
   //     доступ к нему, у адресата основного — и к привязанным, иначе сейчас выполняется linked_lost_access
-  val addresseeHasAccess = INCIDENTS.forall(i => {
+  val noIncidentWithoutAccess = INCIDENTS.forall(i => {
     val x = inc.get(i)
     val px = primaryOf(x)
     all {
-      (x.state.in(Set(Pending, InProgress, OnHold)) implies hasAccess(addressee(x), i)),
+      (x.state.in(Set(Pending, InProgress, OnHold)) implies
+        (hasAccess(addressee(x), i) or addresseeLostAccessOk(i) or timerTransitionsReady(i) != Set())),
       (x.state == Linked and px.state != Closed and addressee(px) != NOBODY) implies
         (hasAccess(addressee(px), i) or linkedLostAccessOk(i) or timerTransitionsReady(x.linkedTo) != Set()),
     }
@@ -1313,6 +1403,7 @@ module im {
   //     раньше него (RULE-41) — иначе ручные действия и время стояли бы вечно
   def agentSystemOk(j: str): bool = systemHoldBreakOk(j) or systemHoldIdleOk(j) or systemReleaseIdleOk(j)
     or addresseeSignedOutToGroupOk(j) or addresseeSignedOutToQueueOk(j) or ownerSignedOutOk(j)
+    or addresseeLostAccessOk(j) or addresseeCannotAcceptOk(j)
   val systemProgress = systemReady implies
     INCIDENTS.exists(j => closeLinkedOk(j) or linkedLostAccessOk(j) or agentSystemOk(j) or timerTransitionsReady(j) != Set())
 
@@ -1373,7 +1464,7 @@ module im {
     openNotLinked,
     resolutionBreachHasOwner,
     linkedSharesBreaches,
-    addresseeHasAccess,
+    noIncidentWithoutAccess,
     systemProgress,
     linkedSameScenario,
     processedOnlyFinished,

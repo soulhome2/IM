@@ -22,9 +22,7 @@ DIR = os.path.join(ROOT, "Specification", "Workflow_machine")
 MODEL = os.path.join(DIR, "quint", "im.qnt")
 
 # Переходы машины, которых в модели пока нет
-NOT_MODELED = {
-    "addressee_lost_access", "addressee_cannot_accept",
-}
+NOT_MODELED = set()
 # Действия окружения в модели — не переходы машины
 ENVIRONMENT = {"expire_reaction", "expire_resolution", "expire_hold", "expire_reopen_window",
                "scenario_answer"}  # ответ на шаг — не переход машины, права — scenarioEdit
@@ -55,6 +53,7 @@ ATOMS = [
     'agentReady(a)', 'agentStateIs(x.owner, Break)', 'agentStateIs(x.owner, Offline)', 'agentStateIs(x.owner, Ready)',
     'agentIdleFor(x.owner, IdleHold)', 'agentIdleFor(x.owner, IdleRelease)',
     'not(ownerHasDutyGroup(x))', 'ownerHasDutyGroup(x)', 'holdReasonIn(x, Set("break", "no_link"))',
+    'not(addresseeHasAccess(x, i))', 'addresseeHasAccess(x, i)', 'not(addresseeCanAccept(x, i))', 'addresseeCanAccept(x, i)',
 ]
 ATOM_RE = re.compile(r'can\(a, "[^"]+"\)|' + "|".join(re.escape(a) for a in ATOMS))
 
@@ -89,6 +88,8 @@ def guard_atom(g):
         return f"agentIdleFor(x.owner, {SILENCE[args[0]]})"
     if fn == "ownerHasDutyGroup":
         return "ownerHasDutyGroup(x)" if args[0] else "not(ownerHasDutyGroup(x))"
+    if fn in ("addresseeHasAccess", "addresseeCanAccept"):
+        return f"{fn}(x, i)" if args[0] else f"not({fn}(x, i))"
     if fn == "holdReasonIn":
         return "holdReasonIn(x, Set(" + ", ".join(f'"{r}"' for r in args[0]) + "))"
     if fn == "escalationTargetAvailable":

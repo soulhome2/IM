@@ -633,4 +633,61 @@ module im_test {
       .expect(x1.state == New and x1.resolution.mode == Paused and x2.state == Linked)
       .expect(not(expireResolutionOk("i1")) and not(expireResolutionOk("i2")))
       .expect(inv)
+
+  /* ===== 11. Смена ролей и доступа (§5, §8.1) ===== */
+
+  // Пропал доступ у владельца в работе — инцидент в очереди новым, реакция заново, норматив закрытия на паузе;
+  // бывший владелец его больше не видит
+  run lostAccessInWorkTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(toggleAccess("a", "i1"))
+      .expect(addresseeLostAccessOk("i1") and not(claimOk("b", "i2")))  // системный переход срочный
+      .then(addresseeLostAccess("i1"))
+      .expect(all {
+        x1.state == New,
+        x1.owner == NOBODY,
+        x1.reaction == RUNNING,
+        x1.resolution.mode == Paused,
+      })
+      .expect(not(claimOk("a", "i1")) and claimOk("b", "i1"))
+      .expect(inv)
+
+  // Пропал доступ у владельца отложенного — удержание снято
+  run lostAccessOnHoldTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(claim("a", "i1"))
+      .then(hold("a", "i1", "patrol"))
+      .then(toggleAccess("a", "i1"))
+      .then(addresseeLostAccess("i1"))
+      .expect(x1.state == New and x1.holdReason == NOBODY and x1.hold == IDLE)
+      .expect(inv)
+
+  // Адресат больше не может принять (пропало право) — в очередь, реакция заново
+  run cannotAcceptTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(transfer("a", "i1", "b"))
+      .then(toggleAccept("b"))
+      .expect(not(addresseeLostAccessOk("i1")))
+      .then(addresseeCannotAccept("i1"))
+      .expect(x1.state == New and x1.owner == NOBODY and x1.group == NOBODY and x1.reaction == RUNNING)
+      .expect(inv)
+
+  // Владелец основного больше не видит привязанный — привязанный отсоединяется с остатком срока группы
+  run rolesLoseLinkedTest =
+    initWith(BASE)
+      .then(create("i1"))
+      .then(create("i2"))
+      .then(claim("a", "i1"))
+      .then(claim("a", "i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(toggleAccess("a", "i2"))
+      .expect(linkedLostAccessOk("i2") and not(addresseeLostAccessOk("i1")))
+      .then(linkedLostAccess("i2"))
+      .expect(x2.state == New and x2.linkedTo == NOBODY and x1.state == InProgress)
+      .expect(inv)
 }
