@@ -29,4 +29,4 @@
 
 ## По ходу: модель Quint — доступ
 
-- [x] **Модель.** `linked_lost_access`, `targetHasAccessToLinked`, видимость `sees` у ручных действий; инварианты `addresseeHasAccess`, `systemProgress`; 4 сценария; `check_quint.py`; README модели. Машина: флаг `invariants.actorSeesIncident`, README машины («Договорённости», 8), BACKEND.md. Коммит: —
+- [x] **Модель.** `linked_lost_access`, `targetHasAccessToLinked`, видимость `sees` у ручных действий; инварианты `addresseeHasAccess`, `systemProgress`; 4 сценария; `check_quint.py`; README модели. Машина: флаг `invariants.actorSeesIncident`, README машины («Договорённости», 8), BACKEND.md. Коммит: `094a388`
