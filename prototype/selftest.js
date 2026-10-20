@@ -2156,6 +2156,11 @@
         await click($("workTitle").querySelector('.chip.linked[data-work-tab="linked"]'));
         expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "пометка «+N» не открыла вкладку привязанных");
         expect(actsTop() === before, `действия сдвинулись при переключении вкладок: ${before} → ${actsTop()}`);
+        // Вкладки в карточке переключают сами, не только пометка в заголовке (PROC-34)
+        await click(root().querySelector('.work-tab[data-work-tab="scenario"]'));
+        expect(root().querySelector('.work-tab.on[data-work-tab="scenario"]') && root().querySelector(".crumbs"), "вкладка «Сценарий» не вернула шаги");
+        await click(root().querySelector('.work-tab[data-work-tab="linked"]'));
+        expect(root().querySelector('.work-tab.on[data-work-tab="linked"]') && !root().querySelector(".crumbs"), "вкладка «Привязанные инциденты» не открылась");
         // На вкладке привязанных «Назад» и «Далее» видны, но серые; «К очереди» доступна (RULE-89)
         const shown = (sel) => {
           const el = root().querySelector(sel);
