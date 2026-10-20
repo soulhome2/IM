@@ -2688,13 +2688,6 @@
               "$ref": "#/components/schemas/StateId"
             }
           },
-          "resumesOnEnter": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StateId"
-            },
-            "description": "DOC-31. Состояния, при входе в которые таймер продолжается с остатка, только если уже шёл, — не запускается заново и не запускается впервые: у привязанного инцидента (§11.4) норматив закрытия идёт дальше, если его брали в работу. Эффект — resumeTimer с ifStarted; check_machine.py сверяет описание с эффектами"
-          },
           "continuesOn": {
             "type": "array",
             "items": {
