@@ -61,7 +61,8 @@
   }
 
   // Инварианты модели по ответам API — то, что должно быть верно после любого шага
-  function invariants(list, session, maxActive) {
+  // escalationEnabled — как в машине прогона: без эскалации реакция после нарушения тоже стоит (RULE-40)
+  function invariants(list, session, maxActive, escalationEnabled = W.escalation.enabled) {
     const bad = [];
     const say = (inc, msg) => bad.push(`${inc.guid} (${inc.state}): ${msg}`);
     list.forEach((inc) => {
@@ -73,8 +74,8 @@
       if ((inc.state === "closed") !== Boolean(inc.closeResultId)) say(inc, "результат закрытия не совпадает с состоянием");
       const t = inc.timer;
       if (inc.state === "new" || inc.state === "pending_acceptance") {
-        // Реакция не идёт только на потолке эскалации: нарушение записано, выше передавать некому (§9)
-        const ceiling = inc.escalationLevel >= W.escalation.maxLevel && inc.breaches.some((b) => b.kind === "reaction");
+        // Реакция не идёт только на потолке эскалации или без эскалации: нарушение записано (§9, RULE-40)
+        const ceiling = (!escalationEnabled || inc.escalationLevel >= W.escalation.maxLevel) && inc.breaches.some((b) => b.kind === "reaction");
         if ((!t || t.id !== "reaction" || !t.running) && !ceiling) say(inc, `ждёт реакции, а таймер ${JSON.stringify(t && [t.id, t.running])}`);
       }
       if (inc.state === "in_progress" && (!t || t.id !== "resolution" || !t.running)) say(inc, "в работе — норматив закрытия должен идти");
@@ -252,8 +253,92 @@
     return `${checked} шагов, состояния в конце: ${[...states].join(", ")}`;
   }
 
+  // Прогон «объединение» (PROC-39): в обычных прогонах объединение почти всегда отказ — оператор на перерыве,
+  // инцидент чужой, ожидает принятия или другого сценария, — и привязанных они не видят. Здесь эскалация
+  // выключена, состояние и роли оператора не меняются, а шаги — взять, объединить, отсоединить, время и
+  // любое доступное действие. В конце — что объединения были и что привязанный был из своих в работе
+  const MERGE_SEEDS = (params.get("mergeSeeds") || "53,67").split(",").map(Number);
+  const MERGE_STEPS = Number(params.get("mergeSteps") || 120);
+  const workState = (e) => e.state === "in_progress" || e.state === "on_hold";
+  async function mergeWalk(seed) {
+    const r = rng(seed);
+    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { enabled: false }) } });
+    const history = [];
+    let merged = 0;
+    let fromWork = 0;
+    const fail = (step, msg) => {
+      throw new Error(`«объединение», зерно ${seed}, шаг ${step}: ${msg}. Последние шаги: ${history.slice(-6).join(" → ")}`);
+    };
+    // Действие из показанных сервером: доступное выполняется, недоступное — отклоняется
+    const act = async (step, inc, action, surface) => {
+      const res = await env.act(inc.guid, action.id, formFor(action), surface, inc.state);
+      history.push(`${action.id} ${inc.guid} [${surface}${action.enabled ? "" : ", недоступно"}] → ${res.status}`);
+      if (action.enabled && res.status !== 200) fail(step, `«${action.id}» показано доступным, а сервер ответил ${res.status} ${res.body && res.body.message}`);
+      if (!action.enabled && res.status === 200) fail(step, `«${action.id}» показано недоступным (${action.reason}), а сервер его выполнил`);
+    };
+    for (let step = 1; step <= MERGE_STEPS; step++) {
+      const x = r();
+      const open = await env.all("open");
+      if (x < 0.25) {
+        const fresh = open.filter((e) => e.state === "new");
+        const inc = fresh.length && pick(r, fresh);
+        const claim = inc && inc.actions.find((a) => a.id === "claim");
+        if (claim) await act(step, inc, claim, "queue");
+      } else if (x < 0.5) {
+        // 2–3 одного сценария из тех, что объединить можно: новые и свои в работе или отложенные
+        const takeable = open.filter((e) => e.state === "new" || (e.ownership === "owner" && workState(e)));
+        const groups = Object.values(takeable.reduce((m, e) => ((m[e.scenarioTitle] = (m[e.scenarioTitle] || []).concat(e)), m), {})).filter((g) => g.length >= 2);
+        if (!groups.length) continue;
+        const group = pick(r, groups);
+        const picked = [...new Set([pick(r, group), pick(r, group), pick(r, group)])];
+        if (picked.length < 2) continue;
+        const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: picked.map((e) => e.guid) });
+        history.push(`объединить ${picked.map((e) => e.guid).join("+")}: ${res.status}`);
+        if (![200, 403, 422].includes(res.status)) fail(step, `объединение: ${res.status}`);
+        if (res.status === 200) {
+          merged += 1;
+          // Основной — мой в работе, если он есть среди отмеченных: остальные свои в работе — привязанные
+          const work = picked.filter(workState).length;
+          if (work - (picked.some((e) => e.state === "in_progress") ? 1 : 0) > 0) fromWork += 1;
+        }
+      } else if (x < 0.6) {
+        const primaries = open.filter((e) => e.linkedCount);
+        if (!primaries.length) continue;
+        const p = pick(r, primaries);
+        const items = ((await env.ok("GET", `/operator/incidents/${enc(p.guid)}/linked?pageSize=100`)).items || []).filter((e) => e.state === "linked");
+        if (!items.length) continue;
+        const one = pick(r, items);
+        const res = await env.call("DELETE", `/operator/incidents/${enc(p.guid)}/linked/${enc(one.guid)}`);
+        history.push(`отсоединить ${one.guid} от ${p.guid}: ${res.status}`);
+        if (![200, 403, 409].includes(res.status)) fail(step, `отсоединение: ${res.status}`);
+      } else if (x < 0.75) {
+        const sec = 1 + Math.floor(r() * 600);
+        const fired = await env.advance(sec);
+        history.push(`+${sec} с${fired.length ? ` (${fired.map((f) => f.transitionId).join(",")})` : ""}`);
+      } else {
+        const all = await env.all();
+        const inc = pick(r, all);
+        const surface = r() < 0.5 ? "queue" : "card";
+        const view = surface === "card" ? await env.card(inc.guid) : inc;
+        const actions = view.actions.filter((a) => a.kind === "transition");
+        if (actions.length) await act(step, inc, pick(r, actions), surface);
+      }
+      const [list, session] = await Promise.all([env.all(), env.session()]);
+      const bad = invariants(list, session, W.limits.maxActive, false).concat(await linkedInvariants(env, list));
+      if (bad.length) fail(step, bad.slice(0, 3).join("; "));
+    }
+    // Прогон не пустой: объединения были, и хоть раз привязанный — свой в работе, с идущим нормативом
+    if (merged < 5) fail(MERGE_STEPS, `объединений всего ${merged} — прогон не проверяет привязанных`);
+    if (!fromWork) fail(MERGE_STEPS, "ни разу не привязан свой в работе — срок группы (RULE-97) не проверен");
+    return `${MERGE_STEPS} шагов, объединений ${merged}, из них с привязанным из работы ${fromWork}`;
+  }
+
   SEEDS.forEach((seed) => {
     test(`Случайный прогон, зерно ${seed}: инварианты и «доступное выполняется, недоступное — нет»`, () => walk(seed));
+  });
+
+  MERGE_SEEDS.forEach((seed) => {
+    test(`Случайный прогон «объединение», зерно ${seed}: привязанные, срок группы и «доступное выполняется, недоступное — нет»`, () => mergeWalk(seed));
   });
 
   test("Инварианты верны на начальных демо-данных", async () => {
