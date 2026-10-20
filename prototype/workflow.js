@@ -1935,7 +1935,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "reaction"
+            "reaction",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -1995,7 +1996,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "reaction"
+            "reaction",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -2053,7 +2055,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "resolution"
+            "resolution",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -2111,7 +2114,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "resolution"
+            "resolution",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -2220,7 +2224,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "resolution"
+            "resolution",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -2264,7 +2269,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "recordBreach",
           "args": [
-            "hold"
+            "hold",
+            "workflow.journal.group_breach"
           ]
         },
         {
@@ -2903,7 +2909,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "tightenPrimaryDeadline",
           "args": [
-            "resolution"
+            "resolution",
+            "workflow.journal.group_deadline"
           ]
         },
         {
@@ -4073,7 +4080,7 @@ window.IM_WORKFLOW = {
         "fn": "recordBreach",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
+        "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
       },
       {
         "fn": "resumeTimer",
@@ -4141,7 +4148,7 @@ window.IM_WORKFLOW = {
         "fn": "tightenPrimaryDeadline",
         "kind": "transactional",
         "extendsBaseRegistry": true,
-        "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Перед pauseTimer того же таймера"
+        "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера"
       },
       {
         "fn": "copyPrimaryDeadline",

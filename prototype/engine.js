@@ -108,7 +108,8 @@
     const inGroupAt = (e, ev, at) =>
       (e.linkedTo === ev.id && !isDone(e) && (e.linkedAt || 0) <= at) ||
       Boolean(e.leftGroup && e.leftGroup.primaryId === ev.id && e.leftGroup.linkedAt <= at && e.leftGroup.at > at);
-    function shareBreach(ev, record) {
+    // template — запись в журнал каждого, кому нарушение записано так (RULE-98)
+    function shareBreach(ev, record, template) {
       ctx.events()
         .filter((e) => e.id !== ev.id && inGroupAt(e, ev, record.at))
         .forEach((e) => {
@@ -116,6 +117,7 @@
           e.slaBreached = true;
           // Вышедший с отработанным сроком группы: нарушение записано, при взятии второго не будет (RULE-50)
           if (leftOf(e, record.kind) === 0) e.firedTimers = Object.assign({}, e.firedTimers, { [record.kind]: record.at });
+          if (template) ctx.log(e, "dispatcher", template, { primaryNumber: ev.number, timer: [timers[record.kind].labelKey] }, now());
           // Инцидент изменился не своим переходом — сервер даёт ему новую версию
           if (ctx.onBreachShared) ctx.onBreachShared(e);
         });
@@ -492,11 +494,11 @@
       // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
       // Нарушение по таймеру датируется дедлайном, а не моментом выполнения после окна (RULE-63)
       // У основного — и каждому открытому привязанному: у группы один срок (§11.4)
-      recordBreach: (ev, [kind], s) => {
+      recordBreach: (ev, [kind, template], s) => {
         const record = { kind, at: s.deadline != null ? s.deadline : now(), owner: addressee(ev) };
         ev.breaches = (ev.breaches || []).concat(record);
         ev.slaBreached = true;
-        s.after.push(() => shareBreach(ev, record));
+        s.after.push(() => shareBreach(ev, record, template));
       },
       increment: (ev, [field]) => {
         const key = FLAG_FIELD[field] || field;
@@ -558,15 +560,23 @@
       // Срок основного — самый ранний из своего и остатка привязываемого (§11.3): у группы один срок.
       // Остаток привязываемого — после перехода (свой норматив уже на паузе); нарушенный срок не сжимает.
       // Основной новый — от полного норматива: grouping.takeWith продолжит с остатка
-      tightenPrimaryDeadline: (ev, [id], s) => {
+      // Срок стал раньше — запись в журнал основного; при нескольких за одно объединение — одна, по последнему
+      tightenPrimaryDeadline: (ev, [id, template], s) => {
         const p = byId(s.form && s.form.primaryId);
         if (!p) return;
         s.after.push((linked) => {
           const left = leftOf(linked, id);
           if (left == null || spent(linked, id) || spent(p, id)) return;
           const f = FIELDS[id];
-          if (p[f.due]) p[f.due] = Math.min(p[f.due], now() + left);
-          else p[f.left] = Math.min(leftOf(p, id) != null ? leftOf(p, id) : timerSec(p, id) * 1000, left);
+          const was = p[f.due] ? p[f.due] - now() : leftOf(p, id) != null ? leftOf(p, id) : timerSec(p, id) * 1000;
+          if (left >= was) return;
+          if (p[f.due]) p[f.due] = now() + left;
+          else p[f.left] = left;
+          if (!template) return;
+          const at = now();
+          const same = p.log.find((x) => x.k === template && x.at === at);
+          if (same) same.v = { number: linked.number };
+          else ctx.log(p, s.actor, template, { number: linked.number }, at);
         });
       },
       // Отсоединённому — остаток срока основного, на паузе; отработанный — отработанным, без новой записи (RULE-50)
@@ -708,7 +718,7 @@
         const record = { kind: x.args[0], at: canceled.due, owner: canceled.owner };
         ev.breaches = (ev.breaches || []).concat(record);
         ev.slaBreached = true;
-        shareBreach(ev, record);
+        shareBreach(ev, record, x.args[1]);
         facts.breach = x.args[0];
       });
       ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());

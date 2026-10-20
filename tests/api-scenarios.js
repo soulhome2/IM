@@ -1613,6 +1613,9 @@
     assert.ok(Date.parse(early) < Date.parse((await env.card(calm.guid)).timer.dueAt), "у срочного срок раньше");
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid, fresh.guid], primaryGuid: calm.guid });
     assert.eq(res.incident.timer.dueAt, early, "срок основного — самый ранний из объединённых");
+    // Срок стал раньше — запись в журнал основного, одна, по тому, чей срок стал сроком группы (RULE-98)
+    const tightened = (await env.card(calm.guid)).journal.filter((j) => j.templateKey === "workflow.journal.group_deadline");
+    assert.eq(tightened.map((j) => j.vars.number), [urgent.number], "в журнале основного — «Срок закрытия — по …» срочного");
     assert.ok(!("linkedDueAt" in res.incident), "отдельного срока привязанных нет");
     for (const e of [urgent, fresh]) {
       const card = await env.card(e.guid);
@@ -1624,6 +1627,10 @@
       const b = resolutionBreaches(await env.card(e.guid));
       assert.eq([b.length, b[0] && b[0].owner && b[0].owner.id, b[0] && b[0].at], [1, ME, early], `нарушение срока группы у ${e.number} — на владельца основного, на момент срока`);
     }
+    for (const e of [urgent, fresh]) {
+      const rec = (await env.card(e.guid)).journal.filter((j) => j.templateKey === "workflow.journal.group_breach");
+      assert.eq(rec.map((j) => j.vars.primaryNumber), [calm.number], `в журнале ${e.number} — «Нарушен срок группы …» основного (RULE-98)`);
+    }
     const after = await Promise.all([urgent, fresh].map(async (e) => (await env.card(e.guid)).version));
     assert.ok(after.every((v, i) => Number(v) > Number(versions[i])), "у привязанных с нарушением — новая версия");
     // Более поздний привязанный срок основного не трогает
@@ -1632,6 +1639,15 @@
     const own = (await env2.card(urgent.guid)).timer.dueAt;
     const res2 = await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
     assert.eq(res2.incident.timer.dueAt, own, "привязанный с более поздним сроком срок основного не меняет");
+    assert.ok(!(await env2.card(urgent.guid)).journal.some((j) => j.templateKey === "workflow.journal.group_deadline"), "срок не стал раньше — записи о сроке группы нет");
+    // Два присоединённых сжимают срок по очереди — запись одна, по тому, чей срок стал сроком группы (RULE-98)
+    const env5 = await makeEnv();
+    await env5.act(urgent.guid, "claim", {}, "queue");
+    await env5.advance(30);
+    for (const e of [fresh, calm]) await env5.act(e.guid, "claim", {}, "queue");
+    await env5.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, fresh.guid, urgent.guid], primaryGuid: calm.guid });
+    const twice = (await env5.card(calm.guid)).journal.filter((j) => j.templateKey === "workflow.journal.group_deadline");
+    assert.eq(twice.map((j) => j.vars.number), [urgent.number], "одна запись о сроке группы — по самому раннему");
     // Основной новый — берётся тем же действием, срок тоже самый ранний
     const env4 = await makeEnv();
     await env4.act(urgent.guid, "claim", {}, "queue");
@@ -1705,6 +1721,7 @@
     const linked = await env2.card(urgent.guid);
     const b = resolutionBreaches(linked);
     assert.eq([linked.state, b.length, b[0] && b[0].at], ["closed", 1, due], "привязанный закрыт вместе с основным, нарушение срока группы — на момент срока");
+    assert.ok(linked.journal.some((j) => j.templateKey === "workflow.journal.group_breach" && j.vars.primaryNumber === calm.number), "в окне — и запись «Нарушен срок группы …» (RULE-98)");
   });
 
   test("Окно после срока группы: отсоединённому в окне нарушение группы записано, присоединённому в окне — нет (§11.4, BUG-73)", async () => {

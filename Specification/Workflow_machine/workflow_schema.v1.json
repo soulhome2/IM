@@ -689,7 +689,7 @@
         { "fn": "escalationTargetAvailable", "args": [false] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["reaction", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.escalation_ceiling"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
@@ -709,7 +709,7 @@
         { "fn": "timerExpired", "args": ["reaction"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["reaction", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reaction_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
@@ -728,7 +728,7 @@
         { "fn": "settingIs", "args": ["escalation.onResolutionOverdue", "alert"] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
@@ -748,7 +748,7 @@
         { "fn": "escalationTargetAvailable", "args": [true] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "setOwner", "args": ["escalation.level.target.ifPerson"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["escalation.level.target.ifGroup"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["escalation_level", "escalation.level.number"] },
@@ -775,7 +775,7 @@
         { "fn": "escalationTargetAvailable", "args": [false] }
       ],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["resolution", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_ceiling"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
@@ -790,7 +790,7 @@
       "actor": "dispatcher",
       "guards": [{ "fn": "timerExpired", "args": ["hold"] }],
       "effects": [
-        { "kind": "transactional", "fn": "recordBreach", "args": ["hold"] },
+        { "kind": "transactional", "fn": "recordBreach", "args": ["hold", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.hold_overdue"] },
         { "kind": "external", "fn": "notify", "args": ["alerts.target"] }
       ],
@@ -989,7 +989,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": [null] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
-        { "kind": "transactional", "fn": "tightenPrimaryDeadline", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "tightenPrimaryDeadline", "args": ["resolution", "workflow.journal.group_deadline"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.merge"] }
@@ -1304,7 +1304,7 @@
       { "fn": "stopTimer", "kind": "transactional" },
       { "fn": "pauseTimer", "kind": "transactional" },
       { "fn": "restartTimer", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — путь к настройке длительности; не задана (null) — обычный норматив по §4. Переоткрытие запускает так норматив закрытия." },
-      { "fn": "recordBreach", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
+      { "fn": "recordBreach", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
       { "fn": "resumeTimer", "kind": "transactional", "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer." },
       { "fn": "increment", "kind": "transactional" },
       { "fn": "setFlag", "kind": "transactional" },
@@ -1317,7 +1317,7 @@
       { "fn": "copyAnswersToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один, версии могут различаться); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Что переносится, решает машина сценариев (shareAnswers, профиль МИ). Перенесено — запись в журнале основного ключом из аргумента" },
       { "fn": "relinkToPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Открытые привязанные объединяемого переходят к новому основному: привязанного у привязанного не бывает. Каждому — запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история" },
       { "fn": "copyCloseFromPrimary", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11. Результат, причина, комментарий и закрывший — от основного" },
-      { "fn": "tightenPrimaryDeadline", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Перед pauseTimer того же таймера" },
+      { "fn": "tightenPrimaryDeadline", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера" },
       { "fn": "copyPrimaryDeadline", "kind": "transactional", "extendsBaseRegistry": true, "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Нарушенный у основного — нарушенным и у него, без новой записи (RULE-50). Перед clearLink" },
       { "fn": "notify", "kind": "external" },
       { "fn": "externalCommand", "kind": "external" }

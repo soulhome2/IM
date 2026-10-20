@@ -134,7 +134,8 @@ def effect_token(e):
         return arg, "resolution: resumeT("
     if fn == "restartTimer" and arg == "resolution":
         return arg, "resolution: restartT("
-    if fn == "recordBreach" and len(args) == 1:
+    # Второй аргумент — запись в журнал привязанных (RULE-98): журнал модель не моделирует
+    if fn == "recordBreach" and len(args) in (1, 2):
         return "breaches", f'breaches: breach(x, "{arg}")'
     if fn in ("setLinkedTo", "relinkToPrimary"):
         return "linkedTo", "linkedTo: p"
