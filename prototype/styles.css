@@ -2024,6 +2024,9 @@ select.search-input { padding-right: 36px; }
   #toggleMedia { display: none; }
   .events-types { grid-template-columns: minmax(0, 1fr); }
   #panelEvents .panel-h { padding-top: 6px; padding-bottom: 6px; }
+  /* Заголовок карточки — переносом, а не обрезкой: срок и пометки видны при любом их наборе (BUG-74) */
+  .work-h { padding-top: 6px; padding-bottom: 6px; }
+  .work-h h2 { flex-wrap: wrap; row-gap: 4px; overflow: visible; }
   .topbar-cluster { padding-left: 8px; }
   .topbar-actions { gap: 4px; }
   /* Язык — только значок: список тот же, он лежит поверх значка невидимым */

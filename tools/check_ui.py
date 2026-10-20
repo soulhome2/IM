@@ -149,7 +149,9 @@ CHECK = r"""(() => {
 
   // Ширина: страница и элементы управления — внутри экрана и внутри своей прокручиваемой панели
   if (document.documentElement.scrollWidth > vw + 1) out.push({ kind: 'ширина', el: 'html', text: '', detail: 'страница ' + document.documentElement.scrollWidth + ' px при экране ' + vw });
-  all.filter((el) => el.matches('button, a[href], input, select, textarea, [role=tab]')).forEach((el) => {
+  // Нажимаемые без роли кнопки (пометка «+N», лента шагов) и пометки заголовка карточки — срок, уровень,
+  // удержание: обрезанные контейнером, они пропадают молча (PROC-36)
+  all.filter((el) => el.matches('button, a[href], input, select, textarea, [role=tab], [data-work-tab], [data-crumb], .work-h h2 > *')).forEach((el) => {
     const r = el.getBoundingClientRect();
     if (r.right > vw + 1 || r.left < -1) return add('ширина', el, 'за краем экрана: ' + Math.round(r.left) + '…' + Math.round(r.right) + ' px из ' + vw);
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
