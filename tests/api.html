@@ -36,9 +36,11 @@
     <script src="../prototype/contract.js"></script>
     <script src="harness.js"></script>
     <script src="api-scenarios.js"></script>
-    <script src="api-properties.js"></script>
     <script src="api-fsm.js"></script>
     <script src="api-junction.js"></script>
+    <!-- Случайные прогоны — последними: они самые долгие, а ловят порчи редко; мутации кода идут до первого
+         падения, и тесты после прогонов ждали бы их (PROC-41) -->
+    <script src="api-properties.js"></script>
     <script>
       IMTest.run();
     </script>

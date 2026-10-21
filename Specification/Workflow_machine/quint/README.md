@@ -123,7 +123,7 @@ npm i -g @informalsystems/quint
 ```bash
 node tools/gen_quint.mjs              # собрать quint/im.qnt
 node tools/gen_quint.mjs --check      # модель собрана из нынешней машины (это же — в CI)
-node tools/check_quint_mutations.mjs  # порчи машины — каждую ловит модель; около 6 минут
+node tools/check_quint_mutations.mjs  # порчи машины — каждую ловит модель; одновременно (--jobs=N), около 3 минут
 node tools/check_quint_replay.mjs --traces=400   # сверка ядра: истории модели на исполнителе прототипа; около 40 с
 ```
 

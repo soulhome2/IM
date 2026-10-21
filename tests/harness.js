@@ -273,11 +273,15 @@
       return finish(lines, "Тесты API не запущены: стенд недоступен", true);
     }
     // ?only=<имя теста> — только он; ?failfast — до первого падения (так мутации кода проверяются
-    // быстрее: чтобы поймать порчу, хватает одного упавшего теста, PROC-17)
+    // быстрее: чтобы поймать порчу, хватает одного упавшего теста, PROC-17); ?first=<имя теста> — он первым,
+    // потом остальные по порядку (мутации кода: первым — тест, поймавший порчу в прошлый раз). Тесты
+    // независимы — каждый со сброса стенда, поэтому порядок на итог не влияет
     const params = new URLSearchParams(location.search);
     const only = params.get("only");
     const failfast = params.has("failfast");
-    for (const t of tests) {
+    const first = tests.find((t) => t.name === params.get("first"));
+    let firstFailed = null;
+    for (const t of first ? [first].concat(tests.filter((x) => x !== first)) : tests) {
       if (only && t.name !== only) continue;
       if (failfast && failed) break;
       const started = Date.now();
@@ -286,6 +290,7 @@
         lines.push(`PASS  ${t.name}${note ? ` — ${note}` : ""}`);
       } catch (err) {
         failed += 1;
+        if (!firstFailed) firstFailed = t.name;
         lines.push(`FAIL  ${t.name} — ${err instanceof Failure ? err.message : err && err.stack ? err.stack.split("\n").slice(0, 2).join(" ") : err}`);
       }
       if (Date.now() - started > 20000) lines.push(`      (долго: ${Date.now() - started} мс)`);
@@ -296,6 +301,8 @@
       failed += 1;
       lines.push(`FAIL  Ответы соответствуют openapi.json — расхождений ${problems.length}: ${problems.slice(0, 12).join("; ")}`);
     } else lines.push(`PASS  Ответы соответствуют openapi.json — ${recorded.length} ответов`);
+    // Какой тест упал первым — имя целиком, для подсказок мутаций кода (в строке FAIL за ним идёт причина)
+    document.documentElement.dataset.apitestFirstFailed = firstFailed || "";
     if (only || (failfast && failed)) {
       const total = only ? 1 : tests.length;
       return finish(lines, failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: ${total} прошли`, failed);

@@ -18,6 +18,11 @@
 прототипа и свой Chrome (tools/parallel.py). Вердикт тот же: выжившая мутация всегда проходит
 полный набор тестов.
 
+Ещё быстрее (PROC-41): у мутаций тестами API первым идёт тест, поймавший её в прошлый раз
+(tools/mutations/api-killers.json, tests/api.html?first=…) — тесты API независимы, каждый со сброса стенда;
+не упал — дальше весь набор по порядку. Подсказки обновляются после каждого прогона; устаревшая подсказка
+стоит только времени. Контроль без порчи идёт в общей очереди, вместе с мутациями.
+
 Запуск из корня репозитория:
   python3 tools/check_code_mutations.py            — все мутации; на 8 ядрах — несколько минут
   python3 tools/check_code_mutations.py hold-limit — только названные
@@ -25,6 +30,8 @@
   --jobs=N — потоков (по умолчанию три четверти ядер), --shard=K/M — K-я из M частей (так делит CI)
 Код выхода 1, если хоть одна мутация выжила.
 """
+import html
+import json
 import os
 import queue
 import re
@@ -33,11 +40,14 @@ import subprocess
 import sys
 import tempfile
 import threading
+from urllib.parse import quote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import parallel  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Мутация тестами API → тест, который поймал её в прошлый раз (PROC-41)
+KILLERS = os.path.join(ROOT, "tools", "mutations", "api-killers.json")
 
 # (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
@@ -409,12 +419,17 @@ def chrome(url, profile, budget):
     return out.stdout
 
 
-def run_tests(site, kind, profile, failfast=False):
+def run_tests(site, kind, profile, failfast=False, first=None):
+    """(прошли ли, строки FAIL, запустились ли, имя первого упавшего теста API или None)"""
     shutil.rmtree(profile, ignore_errors=True)
+    first_failed = None
     if kind == "api":
-        page = chrome(f"file://{site}/tests/api.html" + ("?failfast" if failfast else ""), profile, 120000)
+        query = "&".join((["failfast"] if failfast else []) + ([f"first={quote(first)}"] if first else []))
+        page = chrome(f"file://{site}/tests/api.html" + (f"?{query}" if query else ""), profile, 120000)
         passed = 'data-apitest="pass"' in page
         log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
+        m = re.search(r'data-apitest-first-failed="([^"]*)"', page)
+        first_failed = html.unescape(m.group(1)) if m and m.group(1) else None
     elif kind == "scenario":
         page = chrome(f"file://{site}/tests/scenario.html", profile, 60000)
         passed = 'data-scenariotest="pass"' in page
@@ -425,38 +440,50 @@ def run_tests(site, kind, profile, failfast=False):
         passed = 'data-selftest="pass"' in page
         log = re.search(r'<pre id="selftest-log"[^>]*>(.*?)</pre>', page, re.S)
     fails = [line for line in (log.group(1).splitlines() if log else []) if line.startswith("FAIL")]
-    return passed, fails, bool(log)
+    return passed, fails, bool(log), first_failed
 
 
-def check(site, profile, mutation, full):
-    """Одна мутация в своей копии прототипа: строка вердикта и выжила ли."""
+def check(site, profile, mutation, full, killers):
+    """Одна мутация в своей копии прототипа: строка вердикта, выжила ли и поймавший тест API."""
     name, file, old, new, kind = mutation
     path = os.path.join(site, "prototype", file)
     with open(path, encoding="utf-8") as f:
         code = f.read()
     if code.count(old) != 1:
-        return f"STALE {name}: в {file} не найдено место порчи — обновите мутацию", True
+        return f"STALE {name}: в {file} не найдено место порчи — обновите мутацию", True, None
     with open(path, "w", encoding="utf-8") as f:
         f.write(code.replace(old, new))
     try:
-        # До первого падения: не упало ничего — значит, пройден весь набор
-        passed, fails, ran = run_tests(site, kind, profile, failfast=not full)
+        # До первого падения: не упало ничего — значит, пройден весь набор. Первым — поймавший в прошлый раз
+        hint = None if full else killers.get(name)
+        passed, fails, ran, killer = run_tests(site, kind, profile, failfast=not full, first=hint)
     finally:
         with open(path, "w", encoding="utf-8") as f:
             f.write(code)
     if not ran:
-        return f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)", False
+        return f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)", False, None
     if passed:
-        return f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}", True
-    return f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}", False
+        return f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}", True, None
+    return f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}", False, killer
 
 
 def main():
     wanted, jobs, shard, shards = parallel.options()
     full = "--full" in sys.argv
     todo = parallel.part([m for m in MUTATIONS if not wanted or m[0] in wanted], shard, shards)
+    try:
+        with open(KILLERS, encoding="utf-8") as f:
+            killers = json.load(f)
+    except FileNotFoundError:
+        killers = {}
+    found = {}
     work = tempfile.mkdtemp(prefix="im-code-mut-")
     tasks = queue.Queue()
+    # Контроль: без порчи тесты проходят — полный прогон; при делении на части — в первой. Первым в очереди,
+    # самый долгий (самопроверка) — раньше всех: идёт вместе с мутациями, а не после них
+    if not wanted and shard == 1:
+        for kind in ("ui", "api", "scenario"):
+            tasks.put(("BASE", kind))
     for m in todo:
         tasks.put(m)
     lock = threading.Lock()
@@ -473,31 +500,36 @@ def main():
                 m = tasks.get_nowait()
             except queue.Empty:
                 return
-            line, bad = check(site, profile, m, full)
+            if m[0] == "BASE":
+                passed, fails, _, _ = run_tests(site, m[1], profile)
+                if not passed:
+                    with lock:
+                        survived.append(f"BASE {m[1]}")
+                        print(f"BASE [{m[1]}] — без порчи тесты не проходят: {fails[:2]}", flush=True)
+                continue
+            line, bad, killer = check(site, profile, m, full, killers)
             with lock:
                 print(line, flush=True)
                 if bad:
                     survived.append(m[0])
+                if killer:
+                    found[m[0]] = killer
 
     try:
-        threads = [threading.Thread(target=worker, args=(n,)) for n in range(min(jobs, len(todo)) or 1)]
+        threads = [threading.Thread(target=worker, args=(n,)) for n in range(min(jobs, tasks.qsize()) or 1)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        # Контроль: без порчи тесты проходят — полный прогон; при делении на части — в первой
-        if not wanted and shard == 1:
-            site, profile = os.path.join(work, "site0"), os.path.join(work, "profile-base")
-            if not os.path.exists(site):
-                for sub in ("prototype", "tests", "theme"):
-                    shutil.copytree(os.path.join(ROOT, sub), os.path.join(site, sub))
-            for kind in ("api", "ui", "scenario"):
-                passed, fails, _ = run_tests(site, kind, profile)
-                if not passed:
-                    survived.append(f"BASE {kind}")
-                    print(f"BASE [{kind}] — без порчи тесты не проходят: {fails[:2]}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    # Подсказки — на следующий прогон: поймавшие сейчас; полный список — без мутаций, которых больше нет
+    known = {m[0] for m in MUTATIONS if m[4] == "api"}
+    updated = {k: v for k, v in dict(killers, **found).items() if k in known}
+    if updated != killers:
+        with open(KILLERS, "w", encoding="utf-8") as f:
+            json.dump(updated, f, ensure_ascii=False, indent=1, sort_keys=True)
+            f.write("\n")
     part = f" (часть {shard} из {shards}: {len(todo)} мутаций)" if shards > 1 else ""
     print(f"Выживших мутаций кода: {len(survived)}{part}")
     return 1 if survived else 0
