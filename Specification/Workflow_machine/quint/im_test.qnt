@@ -33,6 +33,7 @@ module im_test {
     link' = OPERATORS.mapBy(a => true),
     changedAt' = INCIDENTS.mapBy(i => 0),
     lastAction' = act0("init", "init", NOBODY, NOBODY),
+    autoRun' = INCIDENTS.mapBy(i => 0),
   }
   action start = initWith(BASE, BASE_SETTINGS)
 
@@ -52,6 +53,7 @@ module im_test {
     lastBeat' = OPERATORS.mapBy(a => if (link.get(a) and agents.get(a) != "offline") t else lastBeat.get(a)),
     world' = world, cfg' = cfg, settings' = settings, agents' = agents, link' = link, changedAt' = changedAt,
     lastAction' = act0("time", "jump", NOBODY, NOBODY),
+    autoRun' = autoRun,
   }
   def due(i: str, k: str): int = incOf(i).timers.get(k).due
   action expire(i: str, k: str): bool = jump(due(i, k) + GRACE_MS)

@@ -119,7 +119,7 @@ class Doc:
             "closeResultAllowed": lambda: "выбранный результат разрешён по справочнику результатов: право, состояние, владение, шаги",
             "timerExpired": lambda: f"истёк таймер {self.tm(a[0])}",
             "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")
-            + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту; остальные уровни пропускаются",
+            + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту — и не вышел из МИ (вышедшему — если в его дежурной группе кто-то не вышел и может принять); остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",

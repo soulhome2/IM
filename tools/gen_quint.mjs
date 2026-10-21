@@ -3,7 +3,8 @@
 // переходов; руками пишутся мир модели, ядро исполнения, действия окружения и инварианты — части
 // quint/src/*.qnt. Итог — quint/im.qnt, руками его не править.
 // Запуск из корня репозитория: node tools/gen_quint.mjs; --check — im.qnt совпадает со сгенерированным;
-// --machine=путь --out=путь — другая машина и другой файл (порчи машины, tools/check_quint_mutations.mjs)
+// --machine=путь --out=путь — другая машина и другой файл (порчи машины, tools/check_quint_mutations.mjs);
+// --src=папка — другие ручные части
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -417,6 +418,55 @@ function transitions() {
   emit(`  def scenarioEditOk(c: Ctx, iid: str): bool = all {\n    ${(W.scenarioEdit.guards || []).map((x) => guardCall(x, "world", "iid")).join(",\n    ")},\n  }`);
 }
 
+// Настройки, от которых зависят ветки автоматических переходов (PROC-43): аргументы типа setting в их условиях.
+// Значения — логическая: да и нет; иначе — перечень настройки в adminSettings, значения, с которыми её
+// сравнивают условия, и нынешнее. Все сочетания — BRANCH_SETTINGS, init модели берёт любое (withBranches):
+// новая такая настройка попадает в перебор сама. Настройка с одним значением (порог молчания) не ветвит
+function branchSettings(byPath) {
+  const admin = {};
+  (W.adminSettings.tabs || []).forEach((tab) => (tab.items || []).forEach((i) => i.values && (admin[i.path] = Object.keys(i.values).filter((k) => !k.startsWith("$")))));
+  const values = new Map();
+  for (const t of W.transitions.filter((x) => x.trigger === "timer" || x.trigger === "system")) {
+    for (const use of t.guards || []) {
+      const reg = GUARDS[use.fn] || {};
+      (reg.args || []).forEach((name, i) => {
+        if ((reg.argTypes || {})[name] !== "setting") return;
+        const p = use.args[i];
+        if (!settingType(p)) fail(`переход ${t.id}: настройка ${p} — нет её типа в cel.types`);
+        if (!values.has(p)) values.set(p, new Set([byPath(p), ...(admin[p] || [])]));
+        // Значение, с которым условие сравнивает настройку (settingIs)
+        (reg.args || []).forEach((n2, j) => (reg.argTypes || {})[n2] === "dyn" && use.args[j] !== undefined && values.get(p).add(use.args[j]));
+      });
+    }
+  }
+  const branches = [...values]
+    .map(([p, vs]) => [p, settingType(p) === "bool" ? [true, false] : [...vs]])
+    .filter(([, vs]) => vs.length > 1)
+    .sort(([a], [b]) => (a < b ? -1 : 1));
+  // Ни одной — запись из одного служебного поля: пустой записи в Quint нет
+  if (!branches.length) {
+    emit("\n  type Branches = { none: bool }\n  pure val BRANCH_SETTINGS: Set[Branches] = Set({ none: true })\n  pure def withBranches(s: Settings, b: Branches): Settings = s");
+    return;
+  }
+  const field = (p) => p.replace(/\./g, "_");
+  const rec = `{ ${branches.map(([p]) => `${field(p)}: ${qt(settingType(p))}`).join(", ")} }`;
+  let combos = [{}];
+  for (const [p, vs] of branches) combos = combos.flatMap((c) => vs.map((v) => ({ ...c, [p]: v })));
+  emit("\n  // Настройки, от которых зависят ветки автоматических переходов, — все сочетания (PROC-43)");
+  emit(`  type Branches = ${rec}`);
+  emit(`  pure val BRANCH_SETTINGS: Set[Branches] = Set(\n${combos.map((c) => `    { ${branches.map(([p]) => `${field(p)}: ${lit(settingType(p), c[p])}`).join(", ")} }`).join(",\n")}\n  )`);
+  // Подстановка сочетания в настройки: по пути — вложенные записи
+  const tree = {};
+  branches.forEach(([p]) => {
+    const parts = settingQ(p).split(".").slice(1);
+    let node = tree;
+    parts.slice(0, -1).forEach((k) => (node = node[k] = node[k] || {}));
+    node[parts[parts.length - 1]] = `b.${field(p)}`;
+  });
+  const put = (node, at) => `{ ...${at}, ${Object.entries(node).map(([k, v]) => `${k}: ${typeof v === "string" ? v : put(v, `${at}.${k}`)}`).join(", ")} }`;
+  emit(`  pure def withBranches(s: Settings, b: Branches): Settings = ${put(tree, "s")}`);
+}
+
 function header() {
   emit("  /* ===== Типы машины (cel.types) ===== */\n");
   for (const [n, f] of Object.entries(TYPES)) emit(`  type ${n} = { ${own(f).map(([k, t]) => `${k}: ${qt(t)}`).join(", ")} }`);
@@ -428,6 +478,13 @@ function header() {
   // Смены состояния оператора (session.transitions): право — у состояния, куда переходят (ARCH-08 в4)
   const perm = (id) => (W.session.states.find((st) => st.id === id) || {}).permission || "";
   emit(`  pure val AGENT_MOVES: Set[{ id: str, from: Set[str], to: str, permission: str }] = Set(${W.session.transitions.map((t) => `{ id: ${JSON.stringify(t.id)}, from: Set(${t.from.map((x) => JSON.stringify(x)).join(", ")}), to: ${JSON.stringify(t.to)}, permission: ${JSON.stringify(perm(t.to))} }`).join(", ")})`);
+  // С чего начинает оператор (RULE-99): начальное состояние машины или то, куда из него ведёт вход, — модель
+  // проверяет и вход, не тратя на него шаги истории
+  const initial = (W.session.states.find((st) => st.initial) || {}).id;
+  if (!initial) fail("session.states: нет начального состояния (initial)");
+  const starts = new Set([initial, ...W.session.transitions.filter((t) => t.from.includes(initial)).map((t) => t.to)]);
+  emit(`  pure val AGENT_STARTS: Set[str] = Set(${[...starts].map((x) => JSON.stringify(x)).join(", ")})`);
+  branchSettings(byPath);
   emit(`  pure val HOLD_REASONS_BY_OPERATOR: Set[str] = Set(${W.reasonCatalogs.hold.items.filter((i) => i.setBy !== "system").map((i) => JSON.stringify(i.id)).join(", ")})`);
   emit(`  pure val CLOSE_RESULT_IDS: Set[str] = Set(${W.reasonCatalogs.close_result.items.map((i) => JSON.stringify(i.id)).join(", ")})`);
   // Права, которые спрашивают условия машины и справочник результатов закрытия, — их перебирает модель
@@ -453,7 +510,8 @@ function header() {
 header();
 definitions();
 transitions();
-const part = (n) => fs.readFileSync(path.join(Q, "src", n), "utf8").replace(/\s+$/, "");
+// Ручные части — quint/src; --src=папка — другие (порчи ручных частей, tools/check_quint_mutations.mjs)
+const part = (n) => fs.readFileSync(path.join(opt("src") || path.join(Q, "src"), n), "utf8").replace(/\s+$/, "");
 const text = [
   "// -*- mode: Bluespec; -*-",
   "// Собрано скриптом tools/gen_quint.mjs из Specification/Workflow_machine/workflow_schema.v1.json и частей quint/src/.",

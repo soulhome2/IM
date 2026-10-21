@@ -102,6 +102,22 @@
   val autoEscalateNotToCurrentAddressee = INCIDENTS.forall(i => not(escalatesToCurrent("auto_escalate", i)))
   val resolutionEscalateNotToCurrentAddressee = INCIDENTS.forall(i => not(escalatesToCurrent("resolution_escalate", i)))
 
+  // 11. Эскалация не отдаёт инцидент туда, где принять сейчас некому: вышедшему человеку, у которого в дежурной
+  //     группе никто не на месте, кто может принять, и группе, где вышли все, кто может принять (§8.3, RULE-100)
+  def presentAcceptor(m: str, x: Incident): bool =
+    agentState(m) != "offline" and m != x.owner and can(m, "incident:accept") and access(m, x)
+  def escalatesToNobody(tid: str, i: str): bool = {
+    val x = incOf(i)
+    val t = levelUpTarget(x)
+    val g = dutyGroupOf(t)
+    val nobody =
+      if (isGroup(t)) not(cfg.members.get(t).exists(m => presentAcceptor(m, x)))
+      else agentState(t) == "offline" and not(g != "" and cfg.members.get(g).exists(m => m != t and presentAcceptor(m, x)))
+    autoReady(tr(tid), i) and t != "" and nobody
+  }
+  val autoEscalateToSomeone = INCIDENTS.forall(i => not(escalatesToNobody("auto_escalate", i)))
+  val resolutionEscalateToSomeone = INCIDENTS.forall(i => not(escalatesToNobody("resolution_escalate", i)))
+
   // 11. Форма связи (§11.3, §11.4): у привязанного нет причины удержания и результата; основной — другой
   //     инцидент, сам не привязан и открыт; закрытый — привязанный сейчас закроется вместе с ним
   val linkedShape = INCIDENTS.forall(i => {
@@ -171,6 +187,32 @@
     }
   })
 
+  // 12. П1. Наступивший дедлайн обработан не позже окна после него: часы не уходят за дедлайн + graceSec, пока
+  //     срабатывание не выполнено — ни реакция, ни удержание не висят просроченными без нарушения (§4, §10.1, PROC-45)
+  val deadlineFiredInWindow = INCIDENTS.forall(i => TIMER_IDS.forall(k => {
+    val t = incOf(i).timers.get(k)
+    isDueT(t) implies clock <= t.due + GRACE_MS
+  }))
+
+  // 13. П2. Молчащий владелец, который не вышел (§12.3): «В работе» при молчании от idleHoldSec — сейчас
+  //     откладывается; отложенный системой (причины, которые оператор сам не выбирает) при молчании от
+  //     idleReleaseSec — сейчас уходит в очередь (PROC-45)
+  val silentOwnerHandled = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    val idle = if (OPERATORS.contains(x.owner) and agentState(x.owner) != "offline") idleSec(x.owner) else 0
+    all {
+      (x.state == "in_progress" and idle >= settings.session.idleHoldSec) implies autoPending(i),
+      (x.state == "on_hold" and x.holdReasonId != NOBODY and not(HOLD_REASONS_BY_OPERATOR.contains(x.holdReasonId)) and idle >= settings.session.idleReleaseSec) implies autoPending(i),
+    }
+  })
+
+  // 14. П3. Без людей автоматика конечна: подряд, только со временем, у инцидента — не больше AUTO_BOUND
+  //     автоматических переходов; эскалация упирается в потолок, круга нет. Самая длинная цепочка — около 8,
+  //     например resolution_overdue → system_hold_idle → hold_overdue → system_release_idle → auto_escalate → …
+  //     → escalation_ceiling; при пределе 3 модель находит нарушение — у предела есть запас, но не лишний (PROC-45)
+  pure val AUTO_BOUND = 10
+  val autoBounded = INCIDENTS.forall(i => autoRun.get(i) <= AUTO_BOUND)
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -184,6 +226,8 @@
     pendingAddresseeCanAccept,
     autoEscalateNotToCurrentAddressee,
     resolutionEscalateNotToCurrentAddressee,
+    autoEscalateToSomeone,
+    resolutionEscalateToSomeone,
     linkedShape,
     openNotLinked,
     resolutionBreachHasOwner,
@@ -193,4 +237,7 @@
     linkedSameScenario,
     processedOnlyFinished,
     agentStateRespected,
+    deadlineFiredInWindow,
+    silentOwnerHandled,
+    autoBounded,
   }

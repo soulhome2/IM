@@ -224,6 +224,7 @@
     ((W.badges || {}).rules || []).forEach((b, i) => uiRule(`badges.rules.${i}.expr`, b.expr, "bool"));
     (W.queueFilters || []).forEach((q) => uiRule(`queueFilters.${q.id}.expr`, q.expr, "bool"));
     ((W.cardNotes || {}).rules || []).forEach((n, i) => uiRule(`cardNotes.rules.${i}.expr`, n.expr, "bool"));
+    ((W.session || {}).states || []).forEach((s) => s.derived && uiRule(`session.states.${s.id}.derived.expr`, s.derived.expr, "bool"));
     own((W.queueSort || {}).keys).forEach(([id, keys]) => keys.forEach((k, i) => uiRule(`queueSort.keys.${id}.${i}`, k, "int")));
     (W.forms || []).forEach((f) => {
       (f.notes || []).forEach((n, i) => uiRule(`forms.${f.id}.notes.${i}.expr`, n.expr, "bool"));

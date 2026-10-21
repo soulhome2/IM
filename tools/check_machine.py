@@ -293,10 +293,11 @@ def check_fixture(w, err):
     for where, r in used:
         if r not in roles:
             err.append(f"эталон: {where} — роли «{r}» нет в каталоге ролей (roles)")
-    agent_states = {st["id"] for st in w["session"]["states"]}
+    # Хранимое состояние: производное (RULE-99) не хранится
+    agent_states = {st["id"] for st in w["session"]["states"] if not st.get("derived")}
     for o in people["operators"]:
         if o.get("agentState") not in agent_states:
-            err.append(f"эталон: у человека {o['id']} состояние agentState «{o.get('agentState')}» — нет в session.states машины (§12.1)")
+            err.append(f"эталон: у человека {o['id']} состояние agentState «{o.get('agentState')}» — нет среди хранимых в session.states машины (§12.1, RULE-99)")
         needs_reason = any(st["id"] == o.get("agentState") and st.get("requiresReason") for st in w["session"]["states"])
         if needs_reason and o.get("reasonId") not in {r["id"] for r in w["session"]["breakReasons"]}:
             err.append(f"эталон: у человека {o['id']} на перерыве причина reasonId «{o.get('reasonId')}» — нет в session.breakReasons (§12.1)")
@@ -810,7 +811,10 @@ def check_timer_declarations(w, err):
 
 
 # Условия автоматических переходов как «переменная = значение» — для перебора настроек и карты
-# пересечений (im-fsm). Новое условие у автоматического перехода нужно описать здесь
+# пересечений (im-fsm). Новое условие у автоматического перехода нужно описать здесь. Это карта для чтения по
+# именам: смысл условия — его expr в машине (ARCH-07), и «ровно один переход по истёкшему таймеру» на настоящих
+# выражениях проверяет модель Quint — timerTransitionsExclusive и dueDeadlineHandled на всех сочетаниях
+# настроек BRANCH_SETTINGS (PROC-43)
 def guard_terms(g):
     fn, a = g["fn"], g.get("args", [])
     return {
@@ -1246,6 +1250,57 @@ def check_graph(w, err):
             err.append(f"граф: из нетерминального состояния {s} нет перехода в другое состояние — тупик")
 
 
+def check_session_machine(w, err):
+    """Машина состояний оператора (§12, PROC-42): ссылки смен, одно начальное, производное состояние (RULE-99) —
+    от хранимого и вне смен, всё достижимо из начального, из каждого хранимого есть выход; право и причина —
+    только у состояния, куда есть смена."""
+    states = {s["id"]: s for s in w["session"]["states"]}
+    moves = w["session"]["transitions"]
+    for kind, ids in (("состояний", [s["id"] for s in w["session"]["states"]]), ("смен", [t["id"] for t in moves])):
+        for d in duplicates(ids):
+            err.append(f"состояние оператора: повтор {kind} {d}")
+    derived = {s for s in states if states[s].get("derived")}
+    for s in derived:
+        d = states[s]["derived"]
+        if not isinstance(d, dict) or not isinstance(d.get("expr"), str):
+            err.append(f"состояние оператора {s}: derived — запись с of и expr (RULE-99)")
+        elif d.get("of") not in states or d["of"] in derived:
+            err.append(f"состояние оператора {s}: derived.of «{d.get('of')}» — не хранимое состояние машины оператора (RULE-99)")
+        for k in ("initial", "permission", "requiresReason", "readOnly"):
+            if states[s].get(k):
+                err.append(f"состояние оператора {s}: у производного не бывает {k} — оно не хранится и в сменах не участвует (RULE-99)")
+    initial = [s for s in states if states[s].get("initial")]
+    if len(initial) != 1:
+        err.append(f"состояние оператора: начальных {len(initial)}, нужно ровно одно (initial: true, RULE-99)")
+    edges = {}
+    for t in moves:
+        for src in t["from"] + [t["to"]]:
+            if src not in states:
+                err.append(f"смена состояния оператора {t['id']}: состояния {src} нет в session.states")
+            elif src in derived:
+                err.append(f"смена состояния оператора {t['id']}: {src} — производное, смены идут от хранимого (RULE-99)")
+        for src in t["from"]:
+            if src != t["to"]:
+                edges.setdefault(src, set()).add(t["to"])
+    if len(initial) == 1:
+        seen, stack = {initial[0]}, [initial[0]]
+        while stack:
+            for nxt in edges.get(stack.pop(), ()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        for s in states:
+            if s not in derived and s not in seen:
+                err.append(f"состояние оператора {s}: недостижимо из начального {initial[0]}")
+    targets = {t["to"] for t in moves}
+    for s, st in states.items():
+        if s not in derived and not edges.get(s):
+            err.append(f"состояние оператора {s}: из него нет смены — оператор в нём застрянет")
+        for k in ("permission", "requiresReason"):
+            if st.get(k) and s not in targets:
+                err.append(f"состояние оператора {s}: {k} — у состояния, куда нет смены, его никто не проверит")
+
+
 def check_escalation_settings(w, o, err):
     """Настройки, от которых зависит, сработает ли хоть один переход по истёкшему нормативу (RULE-45):
     без них нарушение пропадает молча."""
@@ -1330,6 +1385,7 @@ def main():
     check_fixture_history(w, err)
     check_fixture_media(err)
     check_graph(w, err)
+    check_session_machine(w, err)
     check_state_owners(w, err)
     check_priorities(w, o, err)
     check_priority_literals(err)

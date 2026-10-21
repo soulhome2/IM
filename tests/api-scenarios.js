@@ -398,6 +398,30 @@
     assert.status(await put({ agentState: "ready" }), 200, null, "войти");
   });
 
+  test("«Занят» — производное от «Готов» (derived машины, §12.1, RULE-99): занятый уходит на перерыв и выходит, как из «Готов»", async () => {
+    const env = await makeEnv();
+    const put = (body) => env.call("PUT", "/operator/session/agent-state", body);
+    const reason = W.session.breakReasons[0].id;
+    const busy = W.session.states.find((s) => s.derived);
+    assert.ok(busy && busy.derived.of === "ready", "в машине «Занят» — производное от «Готов»");
+    const makeBusy = async () => {
+      if ((await env.session()).agentState !== busy.id) {
+        const x = (await env.all("open")).find((e) => e.state === "new");
+        assert.status(await env.act(x.guid, "claim", {}, "queue"), 200, null, "взять в работу");
+      }
+      assert.eq((await env.session()).agentState, busy.id, "свой в работе — «Занят»");
+    };
+    await makeBusy();
+    const res = await put({ agentState: "not_ready", reasonId: reason });
+    assert.status(res, 200, null, "перерыв из «Занят»");
+    assert.ok(res.body.affectedIncidents.length > 0, "свои в работе отложены системой");
+    assert.status(await put({ agentState: "ready" }), 200, null, "вернуться с перерыва");
+    assert.eq((await env.session()).agentState, "ready", "своих в работе нет — «Готов»");
+    await makeBusy();
+    assert.status(await put({ agentState: "offline" }), 200, null, "выйти из «Занят»");
+    assert.eq((await env.session()).agentState, "offline", "вышел");
+  });
+
   test("То же состояние оператора — ничего не меняется (§12.2): ни причины перерыва, ни события в потоке", async () => {
     const env = await makeEnv();
     const put = (body) => env.call("PUT", "/operator/session/agent-state", body);
@@ -997,9 +1021,11 @@
     const skip = await escalate(["user:kuznetsov", "user:noc"], (e) => !inMall(e));
     assert.eq([skip.fired, skip.card.owner && skip.card.owner.id, skip.card.escalationLevel], [["auto_escalate"], "noc", 2], "вне ТЦ: уровень 1 без доступа пропущен — сразу уровень 2");
     const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
-    // Кузнецов в наборе вышел: эскалация на него — и сразу его группе «Охрана ТЦ» (RULE-47)
-    assert.eq(keep.fired, ["auto_escalate", "addressee_signed_out_to_group"], "в ТЦ: уровень 1, Кузнецов — он вышел, сразу его группе");
-    assert.eq([keep.card.owner, keep.card.assignmentGroup && keep.card.assignmentGroup.id, keep.card.escalationLevel], [null, "grp-tc", 1], "у «Охраны ТЦ», уровень 1");
+    // Кузнецов в наборе вышел, а в его группе «Охрана ТЦ» больше никого: принять некому — уровень 1 пропущен (RULE-100).
+    // Вышел, а в группе есть кто-то — эскалация на него и сразу его группе: сценарий im-fsm «реакция × адресат вышел»
+    assert.eq([keep.fired, keep.card.owner && keep.card.owner.id, keep.card.escalationLevel], [["auto_escalate"], "noc", 2], "в ТЦ: Кузнецов вышел, в его группе никого — сразу уровень 2");
+    const group = await escalate(["group:grp-tc", "user:noc"], inMall);
+    assert.eq([group.fired, group.card.owner && group.card.owner.id, group.card.escalationLevel], [["auto_escalate"], "noc", 2], "в ТЦ: уровень 1 — группа, где все вышли, — пропущен");
     const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
     assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и алерт");
     assert.eq([none.card.state, none.card.owner, none.card.escalationLevel], ["new", null, 0], "никому не передан");
@@ -2042,7 +2068,10 @@
   test("У адресата основного нет доступа к привязанному — после эскалации или смены ролей привязанный отсоединяется и уходит в очередь (§11.4, §5, RULE-71)", async () => {
     const W = window.IM_WORKFLOW;
     const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to("user:kuznetsov")) : l));
-    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) } });
+    // Кузнецов (только ТЦ) на этот прогон — на месте: вышедшему, у которого в группе никого, эскалация не отдаёт (RULE-100)
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
+    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }, fixturePatch: { people } });
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     const mall = fires.find((e) => e.site === "Торговый центр");
     const office = fires.find((e) => e.site !== "Торговый центр");
@@ -2053,10 +2082,10 @@
     // Вручную Кузнецову (только ТЦ) нельзя: нет доступа к привязанному
     const manual = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
     assert.status(manual, 403, "GUARD_FAILED", "ручная передача без доступа к привязанному");
-    // Норматив закрытия истёк — эскалация Кузнецову, он оффлайн — «Охране ТЦ»: доступа к офису нет ни у кого
+    // Норматив закрытия истёк — эскалация Кузнецову: доступа к офису у него нет
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 10);
     const primary = await env.card(mall.guid);
-    assert.eq([primary.state, primary.assignmentGroup && primary.assignmentGroup.id], ["pending_acceptance", "grp-tc"], "основной — «Охране ТЦ»");
+    assert.eq([primary.state, primary.owner && primary.owner.id], ["pending_acceptance", "kuznetsov"], "основной — Кузнецову");
     const freed = await env.card(office.guid);
     assert.eq([freed.state, freed.linkedTo, freed.owner], ["new", null, null], "привязанный — снова новый, ничей, без связи");
     assert.eq(freed.timer && freed.timer.id, "reaction", "реакция — заново");

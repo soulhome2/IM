@@ -3378,7 +3378,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "session": {
-    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится. readOnly — в этом состоянии доступен только просмотр: переходы отклоняет условие agentReady с текстом readOnlyReason.",
+    "$comment": "§12. Состояние оператора — отдельная машина состояний, к инциденту не относится. readOnly — в этом состоянии доступен только просмотр: переходы отклоняет условие agentReady с текстом readOnlyReason. initial — начальное: оператор ещё не вошёл. derived — производное состояние (RULE-99): не хранится и в сменах не участвует; сервер показывает его вместо хранимого derived.of, когда выражение derived.expr истинно (me — оператор); смены идут от хранимого.",
     "states": [
       {
         "id": "ready",
@@ -3387,7 +3387,10 @@ window.IM_WORKFLOW = {
       {
         "id": "busy",
         "labelKey": "workflow.session.state.busy",
-        "derived": true
+        "derived": {
+          "of": "ready",
+          "expr": "size(mineIn(incidents, me, 'in_progress', '')) > 0"
+        }
       },
       {
         "id": "not_ready",
@@ -3400,6 +3403,7 @@ window.IM_WORKFLOW = {
       {
         "id": "offline",
         "labelKey": "workflow.session.state.offline",
+        "initial": true,
         "readOnly": true,
         "readOnlyReasonKey": "workflow.session.readonly.offline"
       }
@@ -4235,13 +4239,31 @@ window.IM_WORKFLOW = {
         "expr": "cel.bind(gs, dutyGroups().filter(g, who in members(g)), size(gs) > 0 ? gs[0] : '')",
         "$comment": "§8.1. Дежурная группа человека — первая, в которую он входит"
       },
+      "signedIn": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "bool",
+        "expr": "agentState(who) != 'offline'",
+        "$comment": "§12.1. Человек вошёл в МИ: на месте или на перерыве, но не вышел (RULE-100)"
+      },
+      "canAcceptNow": {
+        "params": {
+          "who": "string",
+          "x": "Incident",
+          "except": "string"
+        },
+        "returns": "bool",
+        "expr": "isGroup(who) ? members(who).exists(m, m != except && signedIn(m) && canAcceptPerson(m, x)) : canAcceptPerson(who, x) && (signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))",
+        "$comment": "§8.3, RULE-100. Адресат уровня эскалации может принять сейчас: как canAccept, и принимающий не вышел из МИ; вышедшему человеку инцидент уйдёт его дежурной группе (addressee_signed_out_to_group) — уровень доступен, если в ней кто-то, кроме except, не вышел и может принять. Перерыв не мешает (§12.1)"
+      },
       "nextLevels": {
         "params": {
           "x": "Incident"
         },
         "returns": "list<Level>",
-        "expr": "escalation.levels.filter(l, l.level > x.escalationLevel && l.level <= escalation.maxLevel && l.target != addressee(x) && canAccept(l.target, x, x.owner))",
-        "$comment": "§8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять; уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)"
+        "expr": "escalation.levels.filter(l, l.level > x.escalationLevel && l.level <= escalation.maxLevel && l.target != addressee(x) && canAcceptNow(l.target, x, x.owner))",
+        "$comment": "§8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять сейчас (canAcceptNow, RULE-100); уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)"
       },
       "closeOptions": {
         "params": {

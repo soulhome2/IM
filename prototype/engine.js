@@ -638,6 +638,14 @@
     };
     const inQueueFilter = (ev, filterId) => !W.queueFilters.some((q) => q.id === filterId) || ruleOf(`queueFilters.${filterId}.expr`, celScope(ev));
 
+    // Производное состояние оператора (session.states[].derived машины, §12, RULE-99): не хранится, показывается
+    // вместо хранимого derived.of, когда его выражение истинно; смены состояния идут от хранимого
+    const shownAgentState = (stored) => {
+      const scope = { me: ME, actor: ME, incident: undefined, incidents: () => ctx.events().map(celIncident), form: {}, surface: "", now: now(), world: celWorld };
+      const d = W.session.states.find((s) => s.derived && s.derived.of === stored && ruleOf(`session.states.${s.id}.derived.expr`, scope));
+      return d ? d.id : stored;
+    };
+
     // «Взять в работу» на выборке (§11): переход с bulk.mode merge на каждом, кроме основного,
     // и, если основной новый, — grouping.takeWith на нём. Всё или ничего: сначала проверка всех
     function mergeCheck(primary, others) {
@@ -709,6 +717,7 @@
       ownership,
       inQueueFilter,
       queueFilters,
+      shownAgentState,
       availability,
       actions,
       session: W.session,

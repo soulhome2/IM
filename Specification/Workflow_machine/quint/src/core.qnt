@@ -76,6 +76,8 @@
     lastBeat' = if (OPERATORS.contains(a.actor) and (a.kind == "manual" or a.kind == "merge" or a.kind == "merge_auto" or a.name == "answer")) lastBeat.set(a.actor, clock) else lastBeat,
     cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link,
     lastAction' = a,
+    // Автоматический переход — ещё один подряд; любое другое действие счёт сбрасывает (П3)
+    autoRun' = if (a.kind == "auto") autoRun.set(a.incident, autoRun.get(a.incident) + 1) else INCIDENTS.mapBy(j => 0),
   }
 
   /* ===== Появление инцидента (переход с trigger event) ===== */
@@ -179,6 +181,7 @@
       lastBeat' = OPERATORS.mapBy(o => if (link.get(o) and agents.get(o) != "offline") nextAt else lastBeat.get(o)),
       clock' = nextAt,
       lastAction' = act0("time", "time", NOBODY, NOBODY),
+      autoRun' = autoRun,
     }
   }
 
@@ -187,6 +190,7 @@
     lastBeat' = if (beat) lastBeat.set(a, clock) else lastBeat,
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", name, a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
   }
   // Смена состояния оператора — переход session.transitions машины (AGENT_MOVES, ARCH-08 в4): откуда, куда, право
   // у состояния, куда переходят. На перерыве и после выхода — только просмотр (agentReady машины)
@@ -210,6 +214,7 @@
     link' = link.set(a, false),
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, lastBeat' = lastBeat, changedAt' = changedAt,
     lastAction' = act0("env", "lose_link", a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
   }
   action restoreLink(a: str): bool = all {
     not(link.get(a)),
@@ -217,6 +222,7 @@
     lastBeat' = lastBeat.set(a, clock),
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, changedAt' = changedAt,
     lastAction' = act0("env", "restore_link", a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
   }
 
   // Сменились роли (§5): доступ к объекту инцидента, право «Принимать»
@@ -224,6 +230,7 @@
     cfg' = c,
     world' = world, settings' = settings, clock' = clock, agents' = agents, lastBeat' = lastBeat, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", name, a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
   }
   action toggleAccess(a: str, i: str): bool = {
     val s = cfg.access.get(a)
@@ -248,29 +255,32 @@
     nondet perms = OPERATORS.setOfMaps(USED_PERMISSIONS.powerset()).oneOf()
     nondet access = OPERATORS.setOfMaps(INCIDENTS.powerset()).oneOf()
     nondet grp = OPERATORS.powerset().oneOf()
-    nondet escOn = Set(true, false).oneOf()
-    nondet overdue = Set("alert", "escalate").oneOf()
+    // Настройки, от которых зависят ветки автоматических переходов, — из машины (BRANCH_SETTINGS, PROC-43)
+    nondet branch = BRANCH_SETTINGS.oneOf()
     nondet maxActive = Set(0, 1).oneOf()
     nondet maxOnHold = Set(0, 1).oneOf()
     nondet level1 = OPERATORS.oneOf()
+    nondet starts = OPERATORS.setOfMaps(AGENT_STARTS).oneOf()
     val levels = MACHINE_SETTINGS.escalation.levels
     all {
       cfg' = { perms: perms, access: access, members: Map(GROUP -> grp) },
-      // Настройки — значения машины; перебираются переключатели и лимиты, люди — люди модели:
+      // Настройки — значения машины; перебираются ветки автоматики (withBranches) и лимиты, люди — люди модели:
       // уровень 1 — человек, уровень 2 — дежурная группа, алерты — группе
-      settings' = { ...MACHINE_SETTINGS,
-        escalation: { ...MACHINE_SETTINGS.escalation, enabled: escOn, onResolutionOverdue: overdue,
+      settings' = withBranches({ ...MACHINE_SETTINGS,
+        escalation: { ...MACHINE_SETTINGS.escalation,
           levels: [{ ...levels[0], targetKind: "user", target: level1 }, { ...levels[1], targetKind: "group", target: GROUP }] },
         alerts: { ...MACHINE_SETTINGS.alerts, targetKind: "group", target: GROUP },
         limits: { ...MACHINE_SETTINGS.limits, maxActive: maxActive, maxOnHold: maxOnHold },
-      },
+      }, branch),
       world' = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) },
       clock' = START,
-      agents' = OPERATORS.mapBy(a => "ready"),
+      // Оператор — ещё не вошёл (начальное машины) или уже вошёл (RULE-99)
+      agents' = starts,
       lastBeat' = OPERATORS.mapBy(a => START),
       link' = OPERATORS.mapBy(a => true),
       changedAt' = INCIDENTS.mapBy(i => 0),
       lastAction' = act0("init", "init", NOBODY, NOBODY),
+      autoRun' = INCIDENTS.mapBy(i => 0),
     }
   }
 

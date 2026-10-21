@@ -75,6 +75,12 @@ MUTATIONS = [
     ("pending-target-as-owner", "workflow.js", "x.state == 'pending_acceptance' && isTarget(who, x) ? 'target' : ", "", "api"),
     ("scope-always-own", "workflow.js", "\"expr\": \"can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)\"", "\"expr\": \"can(me, ownKey)\"", "api"),
     ("break-ignored", "workflow.js", "\"expr\": \"!session.states.exists(s, s.id == agentState(me) && s.readOnly)\"", "\"expr\": \"true\"", "api"),
+    # «Занят» — производное: по выражению машины, смены — от хранимого (RULE-99)
+    ("busy-never", "workflow.js", "\"expr\": \"size(mineIn(incidents, me, 'in_progress', '')) > 0\"", "\"expr\": \"false\"", "api"),
+    ("agent-move-from-shown", "server.js", "const from = session.agentState;", "const from = sessionView().agentState;", "api"),
+    # Автоэскалация — только тому, кто может принять сейчас: вышедшему — если в его группе кто-то на месте (RULE-100)
+    ("escalate-to-signed-out", "workflow.js", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))", "api"),
+    ("signed-out-group-ignored", "workflow.js", "canAcceptPerson(who, x) && (signedIn(who) || cel.bind(", "canAcceptPerson(who, x) && (signedIn(who) && cel.bind(", "api"),
     ("scenario-always-editable", "engine.js", "const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);", "const canEditScenario = (ev) => Boolean(ev);", "api"),
     ("filter-ignores-ownership", "workflow.js", "\"incident.state in ['in_progress', 'on_hold'] && ownership(me, incident) == 'owner'\"", "\"incident.state in ['in_progress', 'on_hold']\"", "api"),
     ("badge-ignores-addressee", "workflow.js", "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && isGroup(addressee(incident))\"", "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'\"", "api"),
@@ -96,6 +102,8 @@ MUTATIONS = [
     ("macro-ignores-run-macro", "server.js", '      if (!actorEngine.availability("run_macro", ev).ok) return;\n', "", "api"),
     ("new-incident-oldest-version", "server.js", ".sort((a, b) => b.version - a.version)[0]", ".sort((a, b) => a.version - b.version)[0]", "api"),
     ("cursor-off-path", "server.js", "if (!body || !pathOf(ev).includes(body.stepId))", "if (!body)", "api"),
+    # Набор сдвинут на час вперёд — события «из будущего»: время сравнивается с датой, не только время суток (PROC-46)
+    ("fixture-times-future", "server.js", "const delta = now() - Date.parse(data.capturedAt);", "const delta = now() - Date.parse(data.capturedAt) + 3600000;", "ui"),
     ("finish-no-summary", "app.js", "  const atSummary = (ev) => runDone(ev) && !state.summaryOff.has(ev.guid) && cursorOf(ev) === pathOf(ev).length - 1;", "  const atSummary = () => false;", "ui"),
     ("close-form-offers-processed", "app.js", "const options = opts.options.filter((o) => !fullyProcessed(o.id));", "const options = opts.options;", "ui"),
     ("ahead-with-current", "scenario.js", "for (let x = id; x !== from; x = prev.get(x)) out.unshift(x);", "for (let x = id; x !== null; x = prev.get(x)) out.unshift(x);", "api"),

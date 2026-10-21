@@ -876,8 +876,8 @@
           role: me.role,
           dutyGroupGuids: GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id),
         },
-        // «Только просмотр» (перерыв, вышел) — как есть; иначе «Занят», если есть свои в работе (derived, §12)
-        agentState: (W.session.states.find((st) => st.id === session.agentState) || {}).readOnly ? session.agentState : usage().activeCount ? "busy" : "ready",
+        // Хранимое состояние, а вместо него производное — по выражению машины: «Занят», если есть свои в работе (derived, §12, RULE-99)
+        agentState: engine.shownAgentState(session.agentState),
         agentStateReasonId: session.reasonId,
         permissions: PERMISSIONS.slice(),
         limits: Object.fromEntries(Object.entries(W.limits).filter(([key]) => !key.startsWith("$"))),

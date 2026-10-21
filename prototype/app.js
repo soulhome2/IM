@@ -2061,7 +2061,7 @@
                 )}</span>${title}</button>`
               : title
           }${linkedChip(e)}</span>
-          <time>${fmtTime(e.occurredAt)}</time>
+          <time datetime="${escapeHtml(e.occurredAt)}">${fmtTime(e.occurredAt)}</time>
         </div>
         <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>
         ${

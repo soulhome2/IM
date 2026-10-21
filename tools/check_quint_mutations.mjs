@@ -1,4 +1,4 @@
-// Порчи машины для модели Quint (ARCH-07.6): в копии машины портится одно выражение, модель генерируется
+// Порчи машины для модели Quint (ARCH-07.6): в копии машины (или ручной части модели) портится одно место, модель генерируется
 // заново (tools/gen_quint.mjs), и её инварианты (quint run) или сценарии (quint test) должны порчу поймать.
 // Не поймали — инварианты и сценарии этого правила не проверяют. Нужен quint в PATH.
 // Порчи независимы — каждая в своём каталоге — и идут одновременно (PROC-41): --jobs=N, по умолчанию три
@@ -15,10 +15,12 @@ const MACHINE = path.join(ROOT, "Specification/Workflow_machine/workflow_schema.
 const Q = path.join(ROOT, "Specification/Workflow_machine/quint");
 const T = "incident.timers[timerId]";
 
-// имя, что портится, найти, заменить — текст машины (выражения CEL в JSON)
+// имя, что портится, найти, заменить — текст машины (выражения CEL в JSON); пятое поле — ручная часть модели
+// (quint/src/…): порча ядра или мира, машина не меняется (PROC-45)
 const MUTATIONS = [
-  ["level-current-addressee", "эскалация не пропускает уровень текущего адресата (RULE-93)", "l.target != addressee(x) && canAccept(", "canAccept("],
-  ["level-group-owner", "эскалация считает в группе и владельца (RULE-93)", "canAccept(l.target, x, x.owner)", "canAccept(l.target, x, '')"],
+  ["level-current-addressee", "эскалация не пропускает уровень текущего адресата (RULE-93)", "l.target != addressee(x) && canAcceptNow(", "canAcceptNow("],
+  ["level-signed-out", "эскалация отдаёт вышедшему, у кого в группе никого (RULE-100)", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))"],
+  ["level-group-owner", "эскалация считает в группе и владельца (RULE-93)", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')"],
   ["breach-no-owner", "нарушение записывается ни на кого", "'owner': addressee(before)", "'owner': ''"],
   ["group-breach-not-shared", "нарушение основного привязанным не записывается (RULE-97)", "incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))", "[]"],
   ["window-left-not-in-group", "отсоединённый в окне после срока группы — не в группе (BUG-73)", " || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)", ""],
@@ -30,6 +32,8 @@ const MUTATIONS = [
   ["processed-without-steps", "«Обработан» без пройденного сценария", "\"expr\": \"i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)\"", "\"expr\": \"true\""],
   ["lost-access-ignored", "потеря доступа адресата не замечается (RULE-71)", "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"", "\"expr\": \"addressee(incident) != '' && true == expected\""],
   ["pause-not-paused", "«на паузе» не отмечается — остаток теряется", `{"set": "${T}.paused", "value": "true"}, {"set": "${T}.due", "value": "0"}`, `{"set": "${T}.paused", "value": "false"}, {"set": "${T}.due", "value": "0"}`],
+  ["hold-idle-threshold", "«нет связи» у «В работе» — по порогу возврата в очередь, а не удержания (П2)", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleHoldSec\"] }", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleReleaseSec\"] }"],
+  ["core-timer-late", "ядро: часы не останавливаются в конце окна — переход по таймеру опаздывает (П1)", ".union(ds.map(d => d + GRACE_MS))", "", "core.qnt"],
   ["resume-refires", "отработанный норматив при возврате в работу — новый срок (RULE-50)", `${T}.fired != 0 ? ${T}.fired : now + left`, "false ? 0 : now + left"],
 ];
 
@@ -51,13 +55,17 @@ function run(cmd, argv, cwd) {
 }
 
 // Одна порча: строка итога и поймана ли
-async function check([name, what, find, replace]) {
-  if (src.split(find).length !== 2) return { line: `STALE ${name}: в машине не найдено место порчи (или оно не одно)`, bad: true };
+async function check([name, what, find, replace, part]) {
+  const text = part ? fs.readFileSync(path.join(Q, "src", part), "utf8") : src;
+  if (text.split(find).length !== 2) return { line: `STALE ${name}: в ${part ? `src/${part}` : "машине"} не найдено место порчи (или оно не одно)`, bad: true };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "quint-mut-"));
   try {
-    fs.writeFileSync(path.join(dir, "machine.json"), src.replace(find, replace));
+    fs.writeFileSync(path.join(dir, "machine.json"), part ? src : src.replace(find, replace));
+    // Порча ручной части — в копии quint/src
+    fs.cpSync(path.join(Q, "src"), path.join(dir, "src"), { recursive: true });
+    if (part) fs.writeFileSync(path.join(dir, "src", part), text.replace(find, replace));
     fs.copyFileSync(path.join(Q, "im_test.qnt"), path.join(dir, "im_test.qnt"));
-    execFileSync("node", [path.join(ROOT, "tools/gen_quint.mjs"), `--machine=${path.join(dir, "machine.json")}`, `--out=${path.join(dir, "im.qnt")}`], { stdio: "ignore" });
+    execFileSync("node", [path.join(ROOT, "tools/gen_quint.mjs"), `--machine=${path.join(dir, "machine.json")}`, `--src=${path.join(dir, "src")}`, `--out=${path.join(dir, "im.qnt")}`], { stdio: "ignore" });
     const inv = await run("quint", ["run", "im.qnt", "--invariant", "inv", `--max-samples=${samples}`, "--max-steps=40"], dir);
     const byInv = /\[violation\]/.test(inv.out);
     const test = byInv ? null : await run("quint", ["test", "im_test.qnt"], dir);
