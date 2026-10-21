@@ -223,17 +223,24 @@
 
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
     function applyAll(tr, list, form, actor, extra) {
-      const before = list.map(snap);
+      const r = applySteps([{ tr, list, form, extra }], actor);
+      return r.ok ? Object.assign({ ok: true }, r.steps[0]) : r;
+    }
+    // Несколько переходов одной транзакцией (§11: объединение и «Взять» основного): черновики общие — следующий
+    // переход видит сделанное предыдущим; ошибка в любом — не меняется ничего
+    function applySteps(steps, actor) {
+      const before = steps.map((st) => st.list.map(snap));
+      const tx = { drafts: new Map(), insts: new Map(), after: [] };
       let done;
       try {
-        done = celApply(tr, list, form, actor, extra);
+        done = steps.map((st) => celApply(st.tr, st.list, st.form, actor, st.extra, tx));
       } catch (err) {
         return { ok: false, why: ["workflow.error.transition_failed", { error: err.why || err.message }] };
       }
-      done.commit();
+      done[done.length - 1].commit();
       // Внешние эффекты — только после применения перехода
-      done.after.forEach((fn) => fn());
-      return { ok: true, external: done.external, facts: list.map((ev, i) => factsOf(before[i], ev)) };
+      tx.after.forEach((fn) => fn());
+      return { ok: true, steps: done.map((d, k) => ({ external: d.external, facts: steps[k].list.map((ev, i) => factsOf(before[k][i], ev)) })) };
     }
 
     /* ===== Эффекты машины (do, CEL.md) ===== */
@@ -263,14 +270,12 @@
     // Эффекты перехода на черновиках: инциденты перехода и те, кого эффекты коснулись. Журнал, курсор
     // сценария и перенос ответов — в черновики; уведомления, внешние команды, вытеснение карточки, новая
     // версия — после применения (after). opts.before — инцидент «до» вместо черновика (окно после дедлайна)
-    function celApply(tr, list, form, actor, extra) {
-      const drafts = new Map();
-      const insts = new Map();
+    function celApply(tr, list, form, actor, extra, tx) {
+      const { drafts, insts, after } = tx || { drafts: new Map(), insts: new Map(), after: [] };
       const own = new Map(list.map((ev) => [ev.id, ev]));
       const real = (id) => own.get(id) || byId(id);
       const draft = (id) => drafts.get(id) || (drafts.set(id, draftOf(real(id))), drafts.get(id));
       const inst = (id) => insts.get(id) || (insts.set(id, celIncident(drafts.get(id) || real(id))), insts.get(id));
-      const after = [];
       let cur = null;
       const store = {
         incidents: () => ctx.events().map((e) => inst(e.id)),
@@ -362,7 +367,10 @@
       if (bad) return { ok: false, why: bad };
       const canceled = windowBefore(ev, id);
       const applied = applyEffects(tr, ev, form, ME);
-      if (!applied.ok) return applied;
+      if (!applied.ok) {
+        windowUndo(ev, canceled);
+        return applied;
+      }
       const facts = applied.facts[0];
       windowAfter(ev, canceled, facts);
       return { ok: true, navigate: tr.ui.navigate, external: applied.external[0], facts, canceled: canceled ? canceled.tr.id : null };
@@ -376,8 +384,13 @@
       // Инцидент до действия: нарушение — на того, кто был адресатом в момент дедлайна
       canceled.before = celIncident(ev);
       canceled.logAt = ev.log.length;
+      canceled.firedBefore = ev.firedTimers;
       ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
       return canceled;
+    }
+    // Переход не применился — отметка снимается: таймер по окончании окна сработает, нарушение не теряется
+    function windowUndo(ev, canceled) {
+      if (canceled) ev.firedTimers = canceled.firedBefore;
     }
     // После эффектов: нарушение — то, что записал бы отменённый переход, — его же эффектом recordBreach машины,
     // на момент дедлайна и на адресата до действия; запись в журнал — перед записью о самом действии
@@ -590,9 +603,9 @@
     }
 
     // Пояснение в карточке (cardNotes машины, §6.3): первое правило, чьё выражение истинно; actions — доступные
-    // смотрящему действия карточки. [ключ, подстановки] и вид плашки; нет правила — null
-    function cardNote(ev) {
-      const actionIds = actions(ev, "card").filter((a) => a.enabled).map((a) => a.id);
+    // смотрящему действия карточки (уже посчитаны — переданы, иначе считаются). [ключ, подстановки] и вид плашки; нет правила — null
+    function cardNote(ev, enabledIds) {
+      const actionIds = enabledIds || actions(ev, "card").filter((a) => a.enabled).map((a) => a.id);
       const scope = Object.assign(celScope(ev, { surface: "card" }), { actions: actionIds });
       const i = ((W.cardNotes || {}).rules || []).findIndex((n, k) => ruleOf(`cardNotes.rules.${k}.expr`, scope));
       if (i < 0) return null;
@@ -657,7 +670,10 @@
       }
       const canceled = list.map((ev) => windowBefore(ev, id));
       const applied = applyAll(tr, list, form || {}, ME);
-      if (!applied.ok) return applied;
+      if (!applied.ok) {
+        list.forEach((ev, i) => windowUndo(ev, canceled[i]));
+        return applied;
+      }
       list.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
       return applied;
     }
@@ -667,17 +683,18 @@
       // Окно после дедлайна — как у одиночного перехода: у каждого привязанного и у основного, если его берут (BUG-62)
       const canceled = others.map((ev) => windowBefore(ev, check.tr.id));
       const primaryCanceled = check.take ? windowBefore(primary, check.take.id) : null;
-      const applied = applyAll(check.tr, others, check.form, ME);
-      if (!applied.ok) return applied;
-      others.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
-      applied.transitionId = check.tr.id;
-      if (check.take) {
-        const r = applyEffects(check.take, primary, {}, ME);
-        if (!r.ok) return r;
-        windowAfter(primary, primaryCanceled, r.facts[0]);
-        applied.taken = { transitionId: check.take.id, facts: r.facts[0] };
+      // Объединение и «Взять» основного — одна транзакция: не прошло одно — не меняется ничего
+      const steps = [{ tr: check.tr, list: others, form: check.form }].concat(check.take ? [{ tr: check.take, list: [primary], form: {} }] : []);
+      const applied = applySteps(steps, ME);
+      if (!applied.ok) {
+        others.forEach((ev, i) => windowUndo(ev, canceled[i]));
+        windowUndo(primary, primaryCanceled);
+        return applied;
       }
-      return applied;
+      const [joined, taken] = applied.steps;
+      others.forEach((ev, i) => windowAfter(ev, canceled[i], joined.facts[i]));
+      if (taken) windowAfter(primary, primaryCanceled, taken.facts[0]);
+      return Object.assign({ ok: true, transitionId: check.tr.id }, joined, taken ? { taken: { transitionId: check.take.id, facts: taken.facts[0] } } : {});
     }
 
     return {

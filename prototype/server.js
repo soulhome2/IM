@@ -799,18 +799,20 @@
     }
 
     // Пояснение в карточке — правила cardNotes машины, текстом на языке оператора (§6.3, ARCH-08 в8)
-    function noteView(ev) {
-      const n = engine.cardNote(ev);
+    function noteView(ev, enabledIds) {
+      const n = engine.cardNote(ev, enabledIds);
       const s = n ? say(n.note) : null;
       return s ? { text: s.text, key: s.key, vars: s.vars, style: n.style } : null;
     }
     function card(ev) {
       const src = eventSource(ev);
       const deviceIds = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])];
-      return Object.assign(summary(ev, "card"), {
+      const base = summary(ev, "card");
+      return Object.assign(base, {
         description: null,
         readOnly: !engine.canEditScenario(ev),
-        note: noteView(ev),
+        // Доступные действия карточки уже посчитаны в summary — условия машины второй раз не вычисляются
+        note: noteView(ev, base.actions.filter((a) => a.enabled).map((a) => a.id)),
         source: src ? deviceRef(src) : null,
         devices: deviceIds.filter((id) => myDevices.has(id)).map(deviceRef),
         scenario: scenarioView(ev),
@@ -991,24 +993,26 @@
     // Дерево групп — только группы, где есть доступные оператору устройства, и только они (§5)
     // Счётчики открытых инцидентов — только по запросу (withCounters=true, BUG-37). Открытые — те же, что в
     // фильтре очереди open машины: привязанные в нём не видны (BUG-77)
+    // Фильтр машины — один раз на инцидент за запрос: узлы и устройства считают по готовому списку
     const isOpen = (e) => engine.inQueueFilter(e, "open");
-    function treeView(nodes, withCounters) {
+    function treeView(nodes, withCounters, visibleOpen) {
+      const all = withCounters ? visibleOpen || events.filter((e) => canSee(e) && isOpen(e)) : [];
       return nodes
         .filter((n) => !n.isDevice && collectDeviceIds(n).some((id) => myDevices.has(id)))
         .map((n) => {
           const ids = collectDeviceIds(n);
-          const open = events.filter((e) => canSee(e) && isOpen(e) && touches(e, ids));
+          const open = all.filter((e) => touches(e, ids));
           const devices = (n.children || [])
             .filter((c) => c.isDevice && myDevices.has(c.id))
             .map((c) => {
-              const evs = events.filter((e) => canSee(e) && isOpen(e) && touches(e, [c.id]));
+              const evs = open.filter((e) => touches(e, [c.id]));
               return withCounters ? Object.assign(deviceRef(c.id), { counters: { open: evs.length, topPriority: evs.filter((e) => e.priority === topPriority()).length } }) : deviceRef(c.id);
             });
           return {
             guid: n.id,
             name: n.name,
             description: n.description || null,
-            children: treeView(n.children || [], withCounters),
+            children: treeView(n.children || [], withCounters, all),
             devices,
             counters: withCounters
               ? { open: open.length, topPriority: open.filter((e) => e.priority === topPriority()).length }
@@ -1135,8 +1139,9 @@
       return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
     }
 
-    // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null
-    const pickPrimary = (list) => engine.mergePrimary(list);
+    // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null. Выборка — по возрастанию
+    // номера, а не в порядке отметки: у совсем равных основной — меньший номер, как в модели Quint
+    const pickPrimary = (list) => engine.mergePrimary([...list].sort(byNumber));
     function mergeIncidents(guids, primaryGuid) {
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
@@ -1261,17 +1266,17 @@
         "/operator/session/agent-state",
         (p, q, body) => {
           // Смена — переходом состояния оператора машины (session.transitions, §12, ARCH-08 в4): откуда и куда;
-          // право и причина — у состояния, куда переходит. То же состояние — ничего не меняется
+          // право и причина — у состояния, куда переходит
           const from = session.agentState;
           const to = body.agentState;
           const target = W.session.states.find((s) => s.id === to);
-          if (to !== from) {
-            const move = W.session.transitions.find((t) => t.from.includes(from) && t.to === to);
-            const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || id];
-            if (!move || !target) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
-            if (target.permission && !can(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
-            if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
-          }
+          // То же состояние — ни причины, ни планировщика, ни события: сменить причину перерыва, не вернувшись, нельзя (§12.2)
+          if (to === from) return { status: 200, body: { session: sessionView(), affectedIncidents: [] } };
+          const move = W.session.transitions.find((t) => t.from.includes(from) && t.to === to);
+          const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || id];
+          if (!move || !target) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
+          if (target.permission && !can(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
+          if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
           if (to === "not_ready") {
             session.agentState = "not_ready";
             session.reasonId = body.reasonId || session.reasonId || null;

@@ -2836,8 +2836,8 @@
 
   // Выход из МИ (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
   // адресованные лично — дежурной группе или в очередь (owner_signed_out, addressee_signed_out_*).
-  // Считаются инциденты фильтра «Мои», а не единицы лимита: группа сценария — не один (BUG-25)
-  // Сколько вернётся в очередь — счётчики сессии от сервера (usage, §10.2)
+  // Сколько вернётся — счётчики сессии от сервера (usage, §10.2): mineIn машины — свои в работе и отложенные,
+  // те же, что в «Мои»; привязанные владельца не имеют и не считаются, единица лимита — один инцидент (BUG-25)
   const signOutForm = () => {
     return {
       id: "__signout__",
@@ -3711,10 +3711,13 @@
   async function selectionDo(id) {
     if ((transitionDef(id).bulk || {}).mode === "merge") return takeAsOne();
     // Действие над всеми отмеченными: форма — одна на всех, её варианты — те, что подходят всей выборке, от сервера
-    // (действие выборки, ARCH-08 в14); отмеченного может не быть на странице (BUG-78)
+    // (действие выборки, ARCH-08 в14); отмеченного может не быть на странице (BUG-78). Одно отмеченное — переход
+    // одиночный, ему нужны состояние и версия инцидента: нет на странице — с сервера
     const first = [...state.checked][0];
     const act = ((store.selection && store.selection.actions) || []).find((a) => a.id === id) || null;
-    const row = store.page.items.find((e) => state.checked.has(e.guid)) || { guid: first };
+    const row =
+      store.page.items.find((e) => state.checked.has(e.guid)) ||
+      (state.checked.size === 1 ? await api.get(`/operator/incidents/${enc(first)}`) : { guid: first });
     const ev = Object.assign({}, row, { actions: act ? [act] : [] });
     trigger(id, ev, "queue", [...state.checked]);
   }

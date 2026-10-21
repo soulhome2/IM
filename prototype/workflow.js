@@ -2038,7 +2038,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2099,7 +2100,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2151,7 +2153,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2320,7 +2323,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2365,7 +2369,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2483,7 +2488,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2821,7 +2827,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -2893,7 +2900,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -3197,7 +3205,8 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "alerts.target"
+            "alerts.target",
+            true
           ]
         }
       ],
@@ -4131,7 +4140,7 @@ window.IM_WORKFLOW = {
         },
         "returns": "list<Incident>",
         "expr": "cel.bind(mine, xs.filter(e, e.state == 'in_progress' && e.owner == who), cel.bind(c, size(mine) > 0 ? mine : xs.filter(e, e.state == 'new'), cel.bind(top, c.filter(e, c.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : []))))",
-        "$comment": "§11. Основной при «Взять в работу» на выборке, если его не назвал оператор: свой в работе, иначе новый; из них — самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки. Списком из одного или пустым"
+        "$comment": "§11. Основной при «Взять в работу» на выборке, если его не назвал оператор: свой в работе, иначе новый; из них — самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки: сервер передаёт её по возрастанию номера, а не в порядке отметки (строки в CEL и Quint не упорядочиваются). Списком из одного или пустым"
       },
       "onDuty": {
         "params": {
@@ -5634,10 +5643,15 @@ window.IM_WORKFLOW = {
         "fn": "notify",
         "kind": "external",
         "args": [
-          "whom"
+          "whom",
+          "alert"
         ],
         "argTypes": {
-          "whom": "expr<string>"
+          "whom": "expr<string>",
+          "alert": "bool"
+        },
+        "defaults": {
+          "alert": false
         },
         "do": [
           {
@@ -5649,14 +5663,14 @@ window.IM_WORKFLOW = {
                   "incident": "incident",
                   "to": "whom",
                   "recipients": "recipients(whom, incident)",
-                  "alert": "whom == alerts.target",
-                  "emptyLog": "whom == alerts.target ? alerts.noRecipientLog : ''"
+                  "alert": "alert",
+                  "emptyLog": "alert ? alerts.noRecipientLog : ''"
                 }
               }
             ]
           }
         ],
-        "$comment": "§9, §14.2. Уведомление whom — человеку или дежурной группе: прежнему владельцу (before.owner), новому адресату (addressee(incident)), получателю алертов (alerts.target). Себе и никому — не уведомляется (BUG-30). Получат — recipients; алерт, который некому получить, — запись alerts.noRecipientLog в журнал"
+        "$comment": "§9, §14.2. Уведомление whom — человеку или дежурной группе: прежнему владельцу (before.owner), новому адресату (addressee(incident)), получателю алертов (alerts.target). Себе и никому — не уведомляется (BUG-30). Получат — recipients. Второй аргумент — это алерт: его задаёт переход, а не совпадение получателя с alerts.target — передача или автоэскалация на получателя алертов остаётся обычным уведомлением. Алерт, который некому получить, — запись alerts.noRecipientLog в журнал"
       },
       {
         "fn": "externalCommand",

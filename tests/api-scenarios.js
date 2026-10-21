@@ -398,6 +398,27 @@
     assert.status(await put({ agentState: "ready" }), 200, null, "войти");
   });
 
+  test("То же состояние оператора — ничего не меняется (§12.2): ни причины перерыва, ни события в потоке", async () => {
+    const env = await makeEnv();
+    const put = (body) => env.call("PUT", "/operator/session/agent-state", body);
+    const reason = W.session.breakReasons[0].id;
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    const changes = () => got.filter((m) => m.type === "session.agent_state_changed").length;
+    assert.status(await put({ agentState: "ready" }), 200, null, "«Готов» из «Готов»");
+    assert.status(await put({ agentState: "not_ready", reasonId: reason }), 200, null, "перерыв с причиной");
+    await new Promise((r) => setTimeout(r, 300));
+    const before = changes();
+    for (const reasonId of ["no_such_reason", undefined]) {
+      const res = await put({ agentState: "not_ready", reasonId });
+      assert.status(res, 200, null, `снова перерыв, причина ${reasonId}`);
+      assert.eq([res.body.session.agentState, res.body.session.agentStateReasonId], ["not_ready", reason], `причина прежняя, а не ${reasonId}`);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.eq([before, changes()], [1, 1], "событие смены — только у настоящей смены");
+  });
+
   test("Выход из МИ (§12.1, RULE-37): свои в работе и отложенные сразу возвращаются в очередь; дальше — только просмотр", async () => {
     const env = await makeEnv();
     const taken = (await env.all("open")).find((e) => e.state === "new");
@@ -808,6 +829,42 @@
       assert.ok(c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), `${why}: в журнале «алерт не отправлен»`);
       assert.ok(!got.some((m) => m.type === "incident.alert"), `${why}: алерта в потоке нет`);
     }
+  });
+
+  test("Уведомление получателю алертов (§9) — не алерт: алерт задаёт переход, а не совпадение получателя с alerts.target", async () => {
+    assert.eq(W.alerts.target, "grp-leads", "получатель алертов — группа старших операторов");
+    // Автоэскалация на группу старших операторов, я в ней: уведомление новому адресату доставляется мне, но не алертом
+    const w = JSON.parse(JSON.stringify(W));
+    w.escalation.levels[0] = Object.assign({}, w.escalation.levels[0], { targetKind: "group", target: "grp-leads" });
+    const api = (await standWith({ workflow: w })).api;
+    const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+    const got = [];
+    const stop = api.subscribe((m) => got.push(m));
+    const card = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+    const now = Date.parse((await api.raw("POST", "/test/clock", { advanceSec: 0 })).body.now);
+    const fired = [];
+    for (let left = Math.ceil((Date.parse(card.timer.dueAt) - now) / 1000) + GRACE + 1; left > 0; left -= 240) {
+      await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+      fired.push(...(await api.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) })).body.fired);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "auto_escalate"), "сработала автоэскалация");
+    const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
+    assert.eq([c.state, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", "grp-leads"], "адресован группе старших операторов");
+    assert.ok(!got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid), "алерта в потоке нет");
+
+    // Передача группе старших операторов, в ней только Петрова, она на перерыве: получить некому,
+    // но записи «алерт не отправлен» нет — это не алерт
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
+    fixture.people.operators.find((o) => o.id === "petrova").agentState = "not_ready";
+    const api2 = (await standWith({ fixture })).api;
+    const inc2 = (await api2.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+    const res = await api2.raw("POST", `/operator/incidents/${enc(inc2.guid)}/transitions/transfer`, { expectedState: "new", surface: "queue", formValues: { targetId: "grp-leads", comment: "тест" } }, { "If-Match": `"${inc2.version}"` });
+    assert.status(res, 200, null, "передать группе старших операторов");
+    const c2 = await api2.get(`/operator/incidents/${enc(inc2.guid)}`);
+    assert.ok(!c2.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «алерт не отправлен» нет");
   });
 
   test("Адресат больше не может принять (§8.1, RULE-39): отняли право «Принимать» — не принятый инцидент в очереди; в работе — не трогается", async () => {
@@ -1428,6 +1485,34 @@
     overriddenAt(await env.card(held.guid), "hold", due);
   });
 
+  test("Сбой эффекта перехода — не меняется ничего (§14.1): таймер, отменённый окном после дедлайна, срабатывает потом; объединение с «Взять» основного — целиком", async () => {
+    assert.ok(GRACE > 0, "окно задано в машине");
+    // У «Взять» эффект, которого нет в ядре: переход падает после условий, на эффектах
+    const w = JSON.parse(JSON.stringify(W));
+    w.escalation.enabled = false;
+    w.transitions.find((t) => t.id === "claim").effects.push({ kind: "transactional", fn: "noSuchEffect", args: [] });
+    const env = await standWith({ workflow: w });
+    const [late, primary, other] = (await env.all("open"))
+      .filter((e) => e.state === "new" && e.eventType.id === "fire")
+      .sort((x, y) => Date.parse(x.timer.dueAt) - Date.parse(y.timer.dueAt));
+    // Норматив реакции истёк секунду назад, «Взять» в окне — сбой: срабатывание таймера не отменено
+    const due = Date.parse(late.timer.dueAt);
+    await env.advance(Math.round((due - env.now) / 1000) + 1);
+    const claim = await env.act(late.guid, "claim", {}, "queue");
+    assert.ok(claim.status >= 400, `«Взять» со сбоем эффекта — ошибка, а не ${claim.status}`);
+    const failed = await env.card(late.guid);
+    assert.eq([failed.state, failed.breaches.length], ["new", 0], "после сбоя — как было");
+    const fired = await env.advance(GRACE + 1);
+    assert.ok(fired.some((f) => f.incidentGuid === late.guid && f.transitionId === "reaction_overdue"), "по окончании окна таймер сработал");
+    assert.eq((await env.card(late.guid)).breaches.map((b) => [b.kind, Date.parse(b.at)]), [["reaction", due]], "нарушение реакции записано на момент дедлайна");
+    // Основной новый: объединение и «Взять» основного — одна транзакция; «Взять» падает — привязанного нет
+    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, other.guid], primaryGuid: primary.guid });
+    assert.ok(res.status >= 400, `объединение со сбоем «Взять» — ошибка, а не ${res.status}`);
+    assert.eq([(await env.card(other.guid)).state, (await env.card(primary.guid)).state], ["new", "new"], "оба — новые, как были");
+    const linked = await env.ok("GET", `/operator/incidents/${enc(primary.guid)}/linked?pageSize=10`);
+    assert.eq(linked.items.length, 0, "у основного привязанных нет");
+  });
+
   test("Параметры контракта работают: счётчики дерева групп — только по запросу, журнал постранично (BUG-37)", async () => {
     const env = await makeEnv();
     const plain = await env.ok("GET", "/operator/reference/source-groups");
@@ -1668,7 +1753,7 @@
     assert.ok(!page.items.some((x) => x.guid === office), "офис не виден");
   });
 
-  test("Основного не назвали — сервер выбирает по mergePrimary машины: свой в работе, иначе самый срочный новый, у равных — появившийся раньше (§11)", async () => {
+  test("Основного не назвали — сервер выбирает по mergePrimary машины: свой в работе, иначе самый срочный новый, у равных — появившийся раньше, у совсем равных — меньший номер (§11)", async () => {
     const env = await makeEnv();
     const levels = (await env.ok("GET", "/operator/reference/priorities")).map((p) => p.value).sort((a, b) => b - a);
     const sample = (await env.all("all")).find((e) => e.eventType.id === "fire");
@@ -1690,6 +1775,11 @@
     const later = await fire(levels[0], 0);
     const earlier = await fire(levels[0], 5);
     assert.eq(await primaryOf([later, earlier]), earlier, "у равных — появившийся раньше");
+    // Совсем равные: основной — меньший номер, в каком порядке ни отмечали
+    const twins = [await fire(levels[0], 3), await fire(levels[0], 3)];
+    const numbers = await Promise.all(twins.map(async (g) => (await env.card(g)).number));
+    const lower = numbers[0].localeCompare(numbers[1], undefined, { numeric: true }) < 0 ? twins[0] : twins[1];
+    assert.eq(await primaryOf([lower === twins[0] ? twins[1] : twins[0], lower]), lower, "у совсем равных — меньший номер, отмеченный вторым");
     const mine = await fire(levels[levels.length - 1], 0);
     assert.status(await env.act(mine, "claim", {}, "queue"), 200);
     const fresh = await fire(levels[0], 10);

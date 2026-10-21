@@ -2261,6 +2261,43 @@
       }
     });
 
+    await step("Одно отмеченное не на странице — действие панели выборки выполняется, а не «конфликт версии»", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      const stand = window.IM_SELFTEST_API;
+      let g = null;
+      try {
+        await setFilter("open");
+        g = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find((b) => !off(b)).dataset.ev;
+        const path = `/operator/incidents/${encodeURIComponent(g)}`;
+        const version = (await stand.raw("GET", path)).body.version;
+        const claimed = await stand.raw("POST", `${path}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": `"${version}"` });
+        expect(claimed.status === 200, `взять: ${claimed.status}`);
+        await setFilter("all");
+        await setFilter("open");
+        await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        const next = $("eventsPager").querySelector('[data-page="2"]');
+        expect(next, "в «Открытых» одна страница");
+        await click(next);
+        expect(!$("eventsList").querySelector(`[data-check="${g}"]`), "отмеченный — и на второй странице");
+        const b = $("selBar").querySelector('[data-sel-do="hold"]');
+        expect(b && !off(b), "в панели выборки нет «Отложить»");
+        await click(b);
+        await wait();
+        await confirmDialog(NOTE);
+        await wait();
+        const now = (await stand.raw("GET", path)).body;
+        expect(now.state === "on_hold", `состояние после «Отложить»: ${now.state}; ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+        return now.number;
+      } finally {
+        if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await wait();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     await step("Отмеченное живёт в своём списке: другой узел дерева или фильтр — отметки сняты, листание страниц — нет", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       await setFilter("open");

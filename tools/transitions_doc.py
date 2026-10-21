@@ -164,7 +164,7 @@ class Doc:
             "copyCloseFromPrimary": lambda: "результат, причина, комментарий и закрывший — от основного",
             "tightenPrimaryDeadline": lambda: f"срок основного по {self.tm(a[0])} — самый ранний из своего и остатка привязываемого",
             "copyPrimaryDeadline": lambda: f"{self.tm(a[0])} — остаток срока основного, на паузе",
-            "notify": lambda: f"уведомление {WHO.get(a[0], a[0])}",
+            "notify": lambda: f"{'алерт' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
         }
         if fn not in phrases:
