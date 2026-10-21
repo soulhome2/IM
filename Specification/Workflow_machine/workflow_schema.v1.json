@@ -99,6 +99,33 @@
     ]
   },
 
+  "display": {
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение»",
+    "lateSec": 120
+  },
+
+  "cardNotes": {
+    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный",
+    "rules": [
+      { "expr": "isDone(incident) && closedFinished(incident) && 'reopen' in actions", "textKey": "workflow.card.note.closed_reopen", "style": "ok" },
+      { "expr": "isDone(incident) && closedFinished(incident)", "textKey": "workflow.card.note.closed_view", "style": "ok" },
+      { "expr": "isDone(incident) && 'reopen' in actions", "textKey": "workflow.card.note.closed_why_reopen", "style": "ok" },
+      { "expr": "isDone(incident)", "textKey": "workflow.card.note.closed_why_view", "style": "ok" },
+      { "expr": "incident.state == 'linked'", "textKey": "workflow.card.note.linked", "style": "" },
+      { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && escalatedTo(incident)", "textKey": "workflow.card.note.inbox_escalated", "style": "inbox" },
+      { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'", "textKey": "workflow.card.note.inbox", "style": "inbox" },
+      { "expr": "incident.state == 'new'", "textKey": "workflow.card.note.new", "style": "" },
+      { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other' && 'takeover' in actions", "textKey": "workflow.card.note.pending_takeover", "style": "" },
+      { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other' && 'transfer' in actions", "textKey": "workflow.card.note.pending_transfer", "style": "" },
+      { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other'", "textKey": "workflow.card.note.pending_view", "style": "" },
+      { "expr": "ownership(me, incident) == 'other' && 'takeover' in actions", "textKey": "workflow.card.note.foreign_takeover", "style": "" },
+      { "expr": "ownership(me, incident) == 'other' && 'transfer' in actions", "textKey": "workflow.card.note.foreign_transfer", "style": "" },
+      { "expr": "ownership(me, incident) == 'other'", "textKey": "workflow.card.note.foreign_view", "style": "" },
+      { "expr": "incident.state == 'on_hold'", "textKey": "workflow.card.note.hold", "style": "" },
+      { "expr": "agentState(me) == 'not_ready'", "textKey": "workflow.card.note.break", "style": "" }
+    ]
+  },
+
   "permissions": [
     { "key": "incident:claim", "labelKey": "workflow.permission.incident.claim" },
     { "key": "incident:accept", "labelKey": "workflow.permission.incident.accept" },
@@ -180,11 +207,11 @@
       ]
     },
     "close_result": {
-      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates решены (§2.2, §15). surfaces — где результат предлагается: из очереди только «Массовый сбой», остальные — из карточки (§7).",
+      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates решены (§2.2, §15). surfaces — где результат предлагается: из очереди только «Массовый сбой», остальные — из карточки (§7). finish — результат полной обработки: им закрывает «Итог» («Завершить инцидент»), в форме «Закрыть» без обработки его нет (ARCH-08 в7).",
       "field": "close_result",
       "requiredOnTransition": ["close"],
       "items": [
-        { "id": "processed", "labelKey": "workflow.catalog.close_result.processed", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false , "surfaces": ["card"] },
+        { "id": "processed", "labelKey": "workflow.catalog.close_result.processed", "finish": true, "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false , "surfaces": ["card"] },
         { "id": "false_alarm", "labelKey": "workflow.catalog.close_result.false_alarm", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
         { "id": "duplicate", "labelKey": "workflow.catalog.close_result.duplicate", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
         { "id": "drill", "labelKey": "workflow.catalog.close_result.drill", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
@@ -225,6 +252,9 @@
     {
       "id": "transfer",
       "titleKey": "workflow.form.transfer.title",
+      "bulkTitleKey": "workflow.form.transfer.bulk.title",
+      "bulkNoteKey": "workflow.form.transfer.bulk.note",
+      "bulkConfirmKey": "workflow.form.transfer.bulk.confirm",
       "confirmKey": "workflow.form.transfer.confirm",
       "style": "warn",
       "notes": [
@@ -250,6 +280,9 @@
     {
       "id": "hold",
       "titleKey": "workflow.form.hold.title",
+      "bulkTitleKey": "workflow.form.hold.bulk.title",
+      "bulkNoteKey": "workflow.form.hold.bulk.note",
+      "bulkConfirmKey": "workflow.form.hold.bulk.confirm",
       "confirmKey": "workflow.form.hold.confirm",
       "style": "primary",
       "notes": [{ "expr": "true", "textKey": "workflow.form.hold.note.0" }],
@@ -261,6 +294,9 @@
     {
       "id": "release",
       "titleKey": "workflow.form.release.title",
+      "bulkTitleKey": "workflow.form.release.bulk.title",
+      "bulkNoteKey": "workflow.form.release.bulk.note",
+      "bulkConfirmKey": "workflow.form.release.bulk.confirm",
       "confirmKey": "workflow.form.release.confirm",
       "style": "primary",
       "notes": [{ "expr": "true", "textKey": "workflow.form.release.note.0" }],
@@ -269,6 +305,9 @@
     {
       "id": "reject",
       "titleKey": "workflow.form.reject.title",
+      "bulkTitleKey": "workflow.form.reject.bulk.title",
+      "bulkNoteKey": "workflow.form.reject.bulk.note",
+      "bulkConfirmKey": "workflow.form.reject.bulk.confirm",
       "confirmKey": "workflow.form.reject.confirm",
       "style": "primary",
       "notes": [{ "expr": "true", "textKey": "workflow.form.reject.note.0" }],
@@ -277,6 +316,9 @@
     {
       "id": "close",
       "titleKey": "workflow.form.close.title",
+      "bulkTitleKey": "workflow.form.close.bulk.title",
+      "bulkNoteKey": "workflow.form.close.bulk.note",
+      "bulkConfirmKey": "workflow.form.close.bulk.confirm",
       "confirmKey": "workflow.form.close.confirm",
       "style": "primary",
       "notes": [
@@ -324,6 +366,9 @@
     {
       "id": "takeover",
       "titleKey": "workflow.form.takeover.title",
+      "bulkTitleKey": "workflow.form.takeover.bulk.title",
+      "bulkNoteKey": "workflow.form.takeover.bulk.note",
+      "bulkConfirmKey": "workflow.form.takeover.bulk.confirm",
       "confirmKey": "workflow.form.takeover.confirm",
       "style": "danger",
       "notes": [{ "expr": "true", "textKey": "workflow.form.takeover.note.0" }],
@@ -400,7 +445,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
+      "ui": { "bulkDoneKey": "workflow.transition.accept.bulk.done", "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
     },
     {
       "id": "reject",
@@ -423,7 +468,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reject"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.reject.bulk.done", "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
     },
     {
       "id": "hold",
@@ -449,7 +494,7 @@
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "surface": ["card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.hold.bulk.done", "surface": ["card"], "style": "outline", "navigate": "queue" }
     },
     {
       "id": "resume",
@@ -502,7 +547,7 @@
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "surface": ["card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.release.bulk.done", "surface": ["card"], "style": "outline", "navigate": "queue" }
     },
     {
       "id": "transfer",
@@ -539,11 +584,11 @@
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "byEscalationLevel", true] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.transfer"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["newTarget"] }
+        { "kind": "external", "fn": "notify", "args": ["before.owner"] },
+        { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "sharedForm": true },
-      "ui": { "surface": ["queue", "card"], "style": "warn", "navigate": "queue", "observerNotice": { "key": "workflow.notice.transfer", "audience": "newAddressee" } }
+      "ui": { "bulkDoneKey": "workflow.transition.transfer.bulk.done", "surface": ["queue", "card"], "style": "warn", "navigate": "queue", "observerNotice": { "key": "workflow.notice.transfer", "audience": "newAddressee" } }
     },
     {
       "id": "takeover",
@@ -573,10 +618,11 @@
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.takeover"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["previousOwner"] }
+        { "kind": "external", "fn": "notify", "args": ["before.owner"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
       "ui": {
+        "bulkDoneKey": "workflow.transition.takeover.bulk.done",
         "surface": ["card"],
         "style": "danger",
         "navigate": "card",
@@ -596,7 +642,7 @@
       "requiredStepSet": "byCloseResult",
       "guards": [
         { "fn": "agentReady" },
-        { "fn": "closeResultAllowed", "args": ["form.resultId"] }
+        { "fn": "closeResultAllowed" }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
@@ -621,7 +667,7 @@
         "minItems": 2,
         "sharedForm": true
       },
-      "ui": { "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.close.bulk.done", "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
     },
     {
       "id": "reopen",
@@ -674,7 +720,7 @@
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "byEscalationLevel"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.auto_escalate"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["newTarget"] }
+        { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
       "ui": { "surface": [], "style": null, "navigate": null, "observerNotice": { "key": "workflow.notice.auto_escalate", "audience": "observers" } }
     },
@@ -758,8 +804,8 @@
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "byEscalationLevel"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resolution_escalate"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["previousOwner"] },
-        { "kind": "external", "fn": "notify", "args": ["newTarget"] }
+        { "kind": "external", "fn": "notify", "args": ["before.owner"] },
+        { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
       "ui": { "surface": [] }
     },
@@ -873,7 +919,7 @@
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["dutyGroupOf(incident.owner)"] },
         { "kind": "transactional", "fn": "setOwner", "args": ["''"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_signed_out_to_group"] },
-        { "kind": "external", "fn": "notify", "args": ["newTarget"] }
+        { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
       "ui": { "surface": [] }
     },
@@ -1147,6 +1193,12 @@
       { "id": "not_ready", "labelKey": "workflow.session.state.not_ready", "requiresReason": true, "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.not_ready" },
       { "id": "offline", "labelKey": "workflow.session.state.offline", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.offline" }
     ],
+    "transitions": [
+      { "id": "break", "noteKey": "workflow.session.transition.break.note", "from": ["ready"], "to": "not_ready", "$comment": "Перерыв — право и причина у состояния not_ready (permission, requiresReason — позиция breakReasons)" },
+      { "id": "back", "from": ["not_ready"], "to": "ready" },
+      { "id": "sign_out", "noteKey": "workflow.session.transition.sign_out.note", "from": ["ready", "not_ready"], "to": "offline" },
+      { "id": "sign_in", "from": ["offline"], "to": "ready" }
+    ],
     "breakReasons": [
       { "id": "lunch", "labelKey": "workflow.session.break.lunch" },
       { "id": "briefing", "labelKey": "workflow.session.break.briefing" },
@@ -1179,6 +1231,13 @@
     "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
     "default": "priority_then_oldest",
     "options": ["priority_then_oldest", "priority_then_newest", "oldest_first", "reaction_deadline"],
+    "keys": {
+      "$comment": "ARCH-08 в3. Ключи сортировки каждого порядка — выражения CEL над incident, целые: меньше — выше; первый ключ главный, следующий — при равенстве. При равенстве всех — по номеру инцидента",
+      "priority_then_oldest": ["-incident.priority", "incident.occurredAt"],
+      "priority_then_newest": ["-incident.priority", "-incident.occurredAt"],
+      "oldest_first": ["incident.occurredAt"],
+      "reaction_deadline": ["timerRuns(incident, 'reaction') ? 0 : 1", "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"]
+    },
     "operatorMayChange": false
   },
 
@@ -1191,7 +1250,6 @@
     "workflow.guard.not_owner": { "vars": [] },
     "workflow.guard.merge_primary": { "vars": [] },
     "workflow.guard.merge_scenario": { "vars": [] },
-    "workflow.error.merge.scenarios": { "vars": ["titles"] },
     "workflow.guard.primary_not_editable": { "vars": [] },
     "workflow.guard.primary_open": { "vars": [] },
     "workflow.guard.target_no_access_linked": { "vars": [] },
@@ -1232,8 +1290,10 @@
     "workflow.error.version_conflict": { "vars": ["state"] },
     "workflow.error.selection_unavailable": { "vars": [] },
     "workflow.error.break_no_permission": { "vars": [] },
+    "workflow.error.agent_state_not_allowed": { "vars": ["from", "to"] },
     "workflow.error.selection_empty": { "vars": [] },
     "workflow.error.selection_too_large": { "vars": ["n"] },
+    "workflow.error.selection_too_small": { "vars": ["n"] },
     "workflow.error.not_found": { "vars": [] },
     "workflow.error.read_only": { "vars": [] },
     "workflow.error.scenario.not_on_path": { "vars": [] },
@@ -1259,7 +1319,7 @@
   "cel": {
     "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
     "types": {
-      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string" },
+      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string" },
       "Timer": { "due": "int", "paused": "bool", "left": "int", "fired": "int", "since": "int" },
       "Breach": { "kind": "string", "at": "int", "owner": "string" },
       "LeftGroup": { "primaryId": "string", "linkedAt": "int", "at": "int" },
@@ -1271,7 +1331,7 @@
       "Level": { "level": "int", "targetKind": "string", "target": "string", "reactionSec": "int" },
       "Alerts": { "targetKind": "string", "target": "string", "noRecipientLog": "string" },
       "State": { "id": "string", "category": "string" },
-      "CloseResultItem": { "id": "string", "labelKey": "string", "permission": "string", "fromStates": "list<string>", "ownerOnlyInStates": "list<string>", "surfaces": "list<string>", "requiredStepSet": "string", "commentRequired": "bool" },
+      "CloseResultItem": { "id": "string", "labelKey": "string", "permission": "string", "fromStates": "list<string>", "ownerOnlyInStates": "list<string>", "surfaces": "list<string>", "requiredStepSet": "string", "commentRequired": "bool", "finish": "bool" },
       "ScopeRule": { "own": "ScopeOwn" },
       "ScopeOwn": { "anyOf": "list<ScopeCond>" },
       "ScopeCond": { "state": "string", "ownership": "string" },
@@ -1303,6 +1363,12 @@
       "matchesOwnership": { "params": { "who": "string", "x": "Incident", "role": "string" }, "returns": "bool", "expr": "role == 'owner' ? x.owner == who : role == 'target' ? isTarget(who, x) : ownership(who, x) == role", "$comment": "Условие «отношение ко мне» в scopeRule: владелец — мой инцидент, адресат — адресованный мне" },
       "scopeOwn": { "params": { "who": "string", "x": "Incident", "r": "ScopeRule" }, "returns": "bool", "expr": "r.own.anyOf.exists(c, c.state != '' ? x.state == c.state : c.ownership != '' && matchesOwnership(who, x, c.ownership))", "$comment": "§5. Область права own: выполнено хоть одно из scopeRule.own.anyOf" },
       "inCategory": { "params": { "x": "Incident", "cats": "list<string>" }, "returns": "bool", "expr": "states.exists(s, s.id == x.state && s.category in cats)", "$comment": "Категория состояния инцидента — одна из cats (stateCategories)" },
+      "mergePrimary": { "params": { "xs": "list<Incident>", "who": "string" }, "returns": "list<Incident>", "expr": "cel.bind(mine, xs.filter(e, e.state == 'in_progress' && e.owner == who), cel.bind(c, size(mine) > 0 ? mine : xs.filter(e, e.state == 'new'), cel.bind(top, c.filter(e, c.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : []))))", "$comment": "§11. Основной при «Взять в работу» на выборке, если его не назвал оператор: свой в работе, иначе новый; из них — самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки. Списком из одного или пустым" },
+      "onDuty": { "params": { "who": "string" }, "returns": "bool", "expr": "!session.states.exists(s, s.id == agentState(who) && s.readOnly)", "$comment": "§8.1, §12. Человек на месте: его состояние — не «только просмотр» (перерыв, вышел)" },
+      "recipients": { "params": { "whom": "string", "x": "Incident" }, "returns": "list<string>", "expr": "(isGroup(whom) ? members(whom) : [whom]).filter(m, onDuty(m) && access(m, x))", "$comment": "§9. Кто получит уведомление: человек или участники дежурной группы — на месте и с доступом к объекту инцидента" },
+      "timerRuns": { "params": { "x": "Incident", "id": "string" }, "returns": "bool", "expr": "x.timers[id].due != 0 && x.timers[id].fired != x.timers[id].due", "$comment": "Таймер идёт: дедлайн есть и ещё не сработал (на потолке эскалации реакции — уже сработал)" },
+      "closedFinished": { "params": { "x": "Incident" }, "returns": "bool", "expr": "x.closeResultId == '' || closeResults.exists(i, i.id == x.closeResultId && i.finish)", "$comment": "Закрыт без результата или результатом полной обработки (finish)" },
+      "escalatedTo": { "params": { "x": "Incident" }, "returns": "bool", "expr": "x.escalationLevel > 0 && escalation.levels.exists(l, l.level == x.escalationLevel && l.target == addressee(x))", "$comment": "§8.3. Адресован автоэскалацией: адресат — адресат текущего уровня. Уровень после ручной передачи остаётся (RULE-76), но адресат уже другой" },
       "isDone": { "params": { "x": "Incident" }, "returns": "bool", "expr": "states.exists(s, s.id == x.state && s.category == 'done')" },
       "byId": { "params": { "xs": "list<Incident>", "id": "string" }, "returns": "list<Incident>", "expr": "xs.filter(e, e.id == id)", "$comment": "Инцидент по id — списком из одного или пустым" },
       "hasAccess": { "params": { "who": "string", "x": "Incident" }, "returns": "bool", "expr": "isGroup(who) ? members(who).exists(m, access(m, x)) : isOperator(who) && access(who, x)", "$comment": "§5, §8.1. Доступ к объекту: человеку — по его ролям, группе — хотя бы у одного участника" },
@@ -1333,26 +1399,26 @@
   "registries": {
     "$comment": "§14.8. Фиксированные реестры: продуктовая команда собирает схему из этих функций, разработчики расширяют сами реестры. Отмеченные extendsBaseRegistry добавлены при сборке по правилам v4 и позже сверх списка из §14.8 — их нужно реализовать.",
     "guards": [
-      { "fn": "hasPermission", "args": ["permissionKey"], "argTypes": { "permissionKey": "string" }, "expr": "can(me, permissionKey)", "failVars": { "p": "permissionKey" }, "onFail": "hide", "failKeys": ["workflow.guard.no_permission"] },
-      { "fn": "hasScopedPermission", "args": ["ownKey", "anyKey"], "argTypes": { "ownKey": "string", "anyKey": "string" }, "usage": { "scopeRule": "ScopeRule" }, "expr": "can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)", "failVars": { "p": "scopeOwn(me, incident, scopeRule) ? ownKey : anyKey" }, "onFail": "hide", "failKeys": ["workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§5. Право с областью: ключ ownKey (<действие>:own), если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе anyKey (<действие>:any). Сейчас — у «Передать»." },
+      { "fn": "hasPermission", "errorCode": "PERMISSION_DENIED", "args": ["permissionKey"], "argTypes": { "permissionKey": "string" }, "expr": "can(me, permissionKey)", "failVars": { "p": "permissionKey" }, "onFail": "hide", "failKeys": ["workflow.guard.no_permission"] },
+      { "fn": "hasScopedPermission", "errorCode": "PERMISSION_DENIED", "args": ["ownKey", "anyKey"], "argTypes": { "ownKey": "string", "anyKey": "string" }, "usage": { "scopeRule": "ScopeRule" }, "expr": "can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)", "failVars": { "p": "scopeOwn(me, incident, scopeRule) ? ownKey : anyKey" }, "onFail": "hide", "failKeys": ["workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§5. Право с областью: ключ ownKey (<действие>:own), если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе anyKey (<действие>:any). Сейчас — у «Передать»." },
       { "fn": "isOwner", "args": [], "argTypes": {}, "expr": "incident.owner == me", "onFail": "hide", "failKeys": ["workflow.guard.not_owner"] },
       { "fn": "isNotOwner", "args": [], "argTypes": {}, "expr": "ownership(me, incident) != 'owner'", "onFail": "hide", "failKeys": ["workflow.guard.already_owner"], "extendsBaseRegistry": true, "$comment": "§6.1. Инцидент смотрящему не «мой» (§2.4): «Перехватить» — не для своего. Ожидающий моего принятия — «мне адресован», а не «мой», даже если владельцем записан я." },
       { "fn": "isTarget", "args": [], "argTypes": {}, "expr": "isTarget(me, incident)", "onFail": "hide", "failKeys": ["workflow.guard.not_target"] },
       { "fn": "isNotTarget", "args": [], "argTypes": {}, "expr": "ownership(me, incident) != 'target'", "onFail": "hide", "failKeys": ["workflow.guard.is_target"], "extendsBaseRegistry": true, "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают." },
-      { "fn": "targetIsNotSelf", "args": [], "argTypes": {}, "expr": "!isSelf(me, form.targetId)", "onFail": "disable", "failKeys": ["workflow.guard.transfer_to_self"], "extendsBaseRegistry": true, "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено." },
-      { "fn": "targetCanAccept", "args": [], "argTypes": {}, "expr": "form.targetId == '' || canAccept(form.targetId, incident, '')", "onFail": "disable", "failKeys": ["workflow.guard.target_cannot_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим." },
-      { "fn": "targetHasAccess", "args": [], "argTypes": {}, "expr": "form.targetId == '' || hasAccess(form.targetId, incident)", "onFail": "disable", "failKeys": ["workflow.guard.target_no_access"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)." },
-      { "fn": "agentReady", "args": [], "argTypes": {}, "expr": "!session.states.exists(s, s.id == agentState(me) && s.readOnly)", "failKey": "session.states.filter(s, s.id == agentState(me))[0].readOnlyReasonKey", "onFail": "disable", "failFrom": "session.states[].readOnlyReason" },
+      { "fn": "targetIsNotSelf", "errorCode": "TRANSFER_TO_SELF_FORBIDDEN", "args": [], "argTypes": {}, "expr": "!isSelf(me, form.targetId)", "onFail": "disable", "failKeys": ["workflow.guard.transfer_to_self"], "extendsBaseRegistry": true, "$comment": "§10.1. Адресат из формы — не сам смотрящий и не его дежурная группа. До заполнения формы условие выполнено." },
+      { "fn": "targetCanAccept", "errorCode": "TARGET_CANNOT_ACCEPT", "args": [], "argTypes": {}, "expr": "form.targetId == '' || canAccept(form.targetId, incident, '')", "onFail": "disable", "failKeys": ["workflow.guard.target_cannot_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресат из формы может принять: у человека — право incident:accept и доступ к объекту, у дежурной группы — хотя бы один участник с тем и другим." },
+      { "fn": "targetHasAccess", "errorCode": "TARGET_NO_ACCESS", "args": [], "argTypes": {}, "expr": "form.targetId == '' || hasAccess(form.targetId, incident)", "onFail": "disable", "failKeys": ["workflow.guard.target_no_access"], "extendsBaseRegistry": true, "$comment": "§8.1. Адресату из формы доступно устройство-источник инцидента: человеку — по группам доступа его ролей, дежурной группе — хотя бы одному участнику (§5)." },
+      { "fn": "agentReady", "errorCode": "AGENT_NOT_READY", "args": [], "argTypes": {}, "expr": "!session.states.exists(s, s.id == agentState(me) && s.readOnly)", "failKey": "session.states.filter(s, s.id == agentState(me))[0].readOnlyReasonKey", "onFail": "disable", "failFrom": "session.states[].readOnlyReason" },
       { "fn": "agentStateIs", "args": ["stateId"], "argTypes": { "stateId": "string" }, "expr": "agentState(me) == stateId", "onFail": "disable", "failKeys": ["workflow.guard.agent_state"], "extendsBaseRegistry": true, "$comment": "§10.4, §12.1. Состояние оператора равно аргументу. У системных переходов со scope — состояние того оператора, чьи инциденты проверяются." },
       { "fn": "agentIdleFor", "args": ["seconds"], "argTypes": { "seconds": "setting" }, "expr": "idleSec(me) >= seconds", "onFail": "disable", "failKeys": ["workflow.guard.agent_online"], "extendsBaseRegistry": true, "$comment": "§12.3. Сессия оператора не присылает признак активности не меньше заданного; аргумент — путь к настройке в секундах." },
       { "fn": "addresseeHasAccess", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected", "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_access'", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.addressee_access"], "extendsBaseRegistry": true, "$comment": "§5. Есть ли у владельца или адресата инцидента доступ к его объекту: человеку — по ролям, группе-адресату — хотя бы у одного участника. Инцидент без адресата условию false не отвечает." },
       { "fn": "addresseeCanAccept", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected", "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_can_accept'", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.addressee_can_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Может ли владелец или адресат инцидента принять: право incident:accept и доступ к объекту; группе-адресату — хотя бы у одного участника и то, и другое. Инцидент без адресата условию false не отвечает." },
       { "fn": "ownerHasDutyGroup", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected", "onFail": "hide", "failKeys": ["workflow.guard.owner_duty_group"], "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — определение dutyGroupOf." },
-      { "fn": "withinActiveLimit", "args": [], "argTypes": {}, "expr": "limits.maxActive == 0 || size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive", "failVars": { "n": "limits.maxActive", "id": "mineIn(incidents, me, 'in_progress', incident.id)[0].number" }, "onFail": "disable", "failKeys": ["workflow.guard.active_limit"], "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца." },
-      { "fn": "withinHoldLimit", "args": [], "argTypes": {}, "expr": "limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold", "failVars": { "n": "limits.maxOnHold" }, "onFail": "disable", "failKeys": ["workflow.guard.hold_limit"], "extendsBaseRegistry": true, "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»." },
-      { "fn": "withinReopenWindow", "args": [], "argTypes": {}, "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000", "failVars": { "n": "limits.reopenWindowMin" }, "onFail": "hide", "failKeys": ["workflow.guard.reopen_window"], "extendsBaseRegistry": true, "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут." },
-      { "fn": "requiredStepsFilled", "args": ["stepSetId"], "argTypes": { "stepSetId": "string" }, "expr": "stepsFilled(incident, stepSetId)", "onFail": "disable", "failKeys": ["workflow.guard.required_steps"] },
-      { "fn": "closeResultAllowed", "args": ["resultId"], "argTypes": { "resultId": "string" }, "expr": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? os.exists(o, o.id == resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))", "failKey": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? (os.exists(o, o.id == resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))", "failVars": "resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}", "onFail": "hide", "failKeys": ["workflow.guard.result_unavailable", "workflow.guard.required_steps", "workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без resultId — доступен ли хоть один результат: так решается, показывать ли кнопку." },
+      { "fn": "withinActiveLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxActive == 0 || size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive", "failVars": { "n": "limits.maxActive", "id": "mineIn(incidents, me, 'in_progress', incident.id)[0].number" }, "onFail": "disable", "failKeys": ["workflow.guard.active_limit"], "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца." },
+      { "fn": "withinHoldLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold", "failVars": { "n": "limits.maxOnHold" }, "onFail": "disable", "failKeys": ["workflow.guard.hold_limit"], "extendsBaseRegistry": true, "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»." },
+      { "fn": "withinReopenWindow", "errorCode": "REOPEN_WINDOW_EXPIRED", "args": [], "argTypes": {}, "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000", "failVars": { "n": "limits.reopenWindowMin" }, "onFail": "hide", "failKeys": ["workflow.guard.reopen_window"], "extendsBaseRegistry": true, "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут." },
+      { "fn": "requiredStepsFilled", "errorCode": "REQUIRED_STEPS_NOT_FILLED", "args": ["stepSetId"], "argTypes": { "stepSetId": "string" }, "expr": "stepsFilled(incident, stepSetId)", "onFail": "disable", "failKeys": ["workflow.guard.required_steps"] },
+      { "fn": "closeResultAllowed", "errorCodes": { "workflow.guard.required_steps": "REQUIRED_STEPS_NOT_FILLED" }, "args": [], "argTypes": {}, "expr": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? os.exists(o, o.id == form.resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))", "failKey": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? (os.exists(o, o.id == form.resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))", "failVars": "form.resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}", "onFail": "hide", "failKeys": ["workflow.guard.result_unavailable", "workflow.guard.required_steps", "workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без form.resultId — доступен ли хоть один результат: так решается, показывать ли кнопку." },
       { "fn": "timerExpired", "args": ["timerId"], "argTypes": { "timerId": "string" }, "expr": "cel.bind(t, incident.timers[timerId], t.due != 0 && t.due <= now && t.fired != t.due)", "onFail": "hide", "failKeys": ["workflow.guard.timer_not_expired"], "$comment": "§14.3. Дедлайн наступил и ещё не сработал: каждый дедлайн срабатывает один раз, как у планировщика на сервере. Новый дедлайн того же таймера — новое срабатывание." },
       { "fn": "escalationTargetAvailable", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "(size(nextLevels(incident)) > 0) == expected", "onFail": "hide", "failKeys": ["workflow.guard.no_escalation_level"], "extendsBaseRegistry": true, "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, адресат которого может принять — право incident:accept и доступ к объекту, у группы — хотя бы один такой участник (§8.1, §8.3): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Остальные уровни пропускаются, как и уровень, на котором принять может только тот, у кого инцидент уже есть: адресат уровня — текущий адресат инцидента или группа, где принять может только владелец инцидента (RULE-93, «Исключение владельца» §8.1). Найденный уровень — значения escalation.level.target и escalation.level.number в эффектах." },
       { "fn": "holdReasonIn", "args": ["reasonIds"], "argTypes": { "reasonIds": "list<string>" }, "expr": "incident.holdReasonId in reasonIds", "onFail": "hide", "failKeys": ["workflow.guard.other_hold_reason"], "extendsBaseRegistry": true, "$comment": "§12.3. Причина удержания из списка: возврат в очередь по долгому молчанию касается только отложенных системой." },
@@ -1376,7 +1442,7 @@
       { "fn": "stopTimer", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"if": "timerDef(timerId).startsOnce", "then": [{"call": "pauseTimer", "args": {"timerId": "timerId"}}], "else": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}]}] },
       { "fn": "pauseTimer", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"if": "!timerDef(timerId).pausable", "then": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}], "else": [{"if": "incident.timers[timerId].due != 0", "then": [{"set": "incident.timers[timerId].left", "value": "incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0"}, {"set": "incident.timers[timerId].paused", "value": "true"}, {"set": "incident.timers[timerId].due", "value": "0"}]}]}] },
       { "fn": "restartTimer", "kind": "transactional", "args": ["timerId", "sec"], "argTypes": {"timerId": "string", "sec": "expr<int>"}, "do": [{"set": "incident.timers[timerId].due", "value": "now + (sec > 0 ? sec : norm(incident, timerDef(timerId))) * 1000"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].left", "value": "0"}], "extendsBaseRegistry": true, "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — длительность, с, выражением (limits.reopenResolutionSec); 0 — обычный норматив по §4. Переоткрытие запускает так норматив закрытия." },
-      { "fn": "recordBreach", "kind": "transactional", "args": ["kind", "groupLogKey"], "argTypes": {"kind": "string", "groupLogKey": "string"}, "do": [{"let": "breach", "value": "{'kind': kind, 'at': deadline, 'owner': addressee(before)}"}, {"append": "incident.breaches", "value": "breach"}, {"set": "incident.slaBreached", "value": "true"}, {"forEach": "e", "in": "incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))", "do": [{"append": "e.breaches", "value": "breach"}, {"set": "e.slaBreached", "value": "true"}, {"if": "leftOf(e, kind, now) == 0", "then": [{"set": "e.timers[kind].fired", "value": "deadline"}]}, {"world": "log", "args": {"incident": "e", "key": "groupLogKey", "actor": "'dispatcher'", "vars": "{'primaryNumber': incident.number, 'timer': [timerDef(kind).labelKey]}"}}, {"world": "touch", "args": {"incident": "e"}}]}], "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
+      { "fn": "recordBreach", "kind": "transactional", "args": ["kind", "groupLogKey"], "argTypes": {"kind": "string", "groupLogKey": "string"}, "do": [{"let": "breach", "value": "{'kind': kind, 'at': deadline, 'owner': addressee(before)}"}, {"append": "incident.breaches", "value": "breach"}, {"set": "incident.slaBreached", "value": "true"}, {"forEach": "e", "in": "incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))", "do": [{"append": "e.breaches", "value": "breach"}, {"set": "e.slaBreached", "value": "true"}, {"world": "log", "args": {"incident": "e", "key": "groupLogKey", "actor": "'dispatcher'", "vars": "{'primaryNumber': incident.number, 'timer': [timerDef(kind).labelKey]}"}}, {"world": "touch", "args": {"incident": "e"}}]}], "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },
       { "fn": "resumeTimer", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"if": "!timerDef(timerId).pausable", "then": [{"let": "sec", "value": "timerSec(incident, timerId, '')"}, {"set": "incident.timers[timerId].due", "value": "sec < 0 ? 0 : now + sec * 1000"}, {"set": "incident.timers[timerId].since", "value": "now"}], "else": [{"if": "incident.timers[timerId].due == 0", "then": [{"let": "left", "value": "incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000"}, {"set": "incident.timers[timerId].due", "value": "left == 0 && incident.timers[timerId].fired != 0 ? incident.timers[timerId].fired : now + left"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].left", "value": "0"}]}]}], "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer." },
       { "fn": "increment", "kind": "transactional", "args": ["field"], "argTypes": {"field": "string"}, "do": [{"set": "incident.${field}", "value": "incident.${field} + 1"}] },
       { "fn": "setFlag", "kind": "transactional", "args": ["field", "value"], "argTypes": {"field": "string", "value": "expr<dyn>"}, "do": [{"set": "incident.${field}", "value": "value"}] },
@@ -1391,7 +1457,7 @@
       { "fn": "copyCloseFromPrimary", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"let": "ps", "value": "byId(incidents, incident.linkedTo)"}, {"if": "size(ps) > 0", "then": [{"set": "incident.closeResultId", "value": "ps[0].closeResultId"}, {"set": "incident.closeCauseId", "value": "ps[0].closeCauseId"}, {"set": "incident.result", "value": "ps[0].result"}, {"set": "incident.closedBy", "value": "ps[0].closedBy"}]}], "extendsBaseRegistry": true, "$comment": "§11. Результат, причина, комментарий и закрывший — от основного" },
       { "fn": "tightenPrimaryDeadline", "kind": "transactional", "args": ["timerId", "logKey"], "argTypes": {"timerId": "string", "logKey": "string"}, "do": [{"let": "ps", "value": "byId(incidents, form.primaryId)"}, {"if": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)", "then": [{"let": "t", "value": "ps[0].timers[timerId]"}, {"let": "left", "value": "leftOf(incident, timerId, now)"}, {"let": "was", "value": "t.due != 0 ? t.due - now : (t.paused ? t.left : timerSec(ps[0], timerId, '') * 1000)"}, {"if": "left < was", "then": [{"forEach": "p", "in": "ps", "do": [{"if": "t.due != 0", "then": [{"set": "p.timers[timerId].due", "value": "now + left"}], "else": [{"set": "p.timers[timerId].left", "value": "left"}, {"set": "p.timers[timerId].paused", "value": "true"}]}, {"world": "log", "args": {"incident": "p", "key": "logKey", "vars": "{'number': incident.number}", "once": "true"}}]}]}]}], "extendsBaseRegistry": true, "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера" },
       { "fn": "copyPrimaryDeadline", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"let": "ps", "value": "byId(incidents, incident.linkedTo)"}, {"if": "size(ps) > 0 && leftOf(ps[0], timerId, now) >= 0", "then": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].left", "value": "leftOf(ps[0], timerId, now)"}, {"set": "incident.timers[timerId].paused", "value": "true"}, {"if": "leftOf(ps[0], timerId, now) == 0", "then": [{"set": "incident.timers[timerId].fired", "value": "spent(ps[0], timerId, now) ? ps[0].timers[timerId].fired : ps[0].timers[timerId].due"}]}]}], "extendsBaseRegistry": true, "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Наступивший у основного — отработанным и у него (RULE-50): нарушение группы ему допишется по окончании окна или уже записано, своего не будет (BUG-75). Перед clearLink" },
-      { "fn": "notify", "kind": "external", "args": ["to"], "argTypes": {"to": "string"}, "do": [{"world": "notify", "args": {"incident": "incident", "to": "to"}}] },
+      { "fn": "notify", "kind": "external", "args": ["whom"], "argTypes": {"whom": "expr<string>"}, "do": [{"if": "whom != '' && whom != actor", "then": [{"world": "notify", "args": {"incident": "incident", "to": "whom", "recipients": "recipients(whom, incident)", "alert": "whom == alerts.target", "emptyLog": "whom == alerts.target ? alerts.noRecipientLog : ''"}}]}], "$comment": "§9, §14.2. Уведомление whom — человеку или дежурной группе: прежнему владельцу (before.owner), новому адресату (addressee(incident)), получателю алертов (alerts.target). Себе и никому — не уведомляется (BUG-30). Получат — recipients; алерт, который некому получить, — запись alerts.noRecipientLog в журнал" },
       { "fn": "externalCommand", "kind": "external", "args": ["command"], "argTypes": {"command": "string"}, "do": [{"world": "command", "args": {"incident": "incident", "command": "command"}}] }
     ]
   },
@@ -1558,6 +1624,9 @@
       { "path": "timers.reaction", "why": "кроме нормативов — устройство таймера: когда запускается и останавливается (модель, §4)" },
       { "path": "timers.resolution", "why": "кроме нормативов — устройство таймера (модель, §4)" },
       { "path": "timers.hold", "why": "срок удержания задаёт причина — вкладка «Причины»" },
+      { "path": "display.lateSec", "why": "оформление отсчёта, а не правило поста; меняется вместе с дизайном" },
+      { "path": "session.transitions", "why": "смены состояния оператора — устройство машины оператора (§12), а не настройка; право на перерыв — у состояния not_ready" },
+      { "path": "queueSort.keys", "why": "что значит каждый порядок — устройство порядка, а не настройка: администратор выбирает порядок из queueSort.options" },
       { "path": "alerts.targetKind", "why": "вид адресата — пользователь или дежурная группа — следует из выбранного адресата alerts.target" },
       { "path": "queueSort.options", "why": "список порядков — модель: каждый порядок реализует сервер, администратор выбирает из него (§7)" },
       { "path": "reasonCatalogs.close_result", "why": "результаты закрытия — модель: от них зависят права, состояния и отчёты (§2.2)" },

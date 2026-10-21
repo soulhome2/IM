@@ -633,7 +633,6 @@
     }
     return t(ref.name || "");
   };
-  const addresseeOf = (ev) => (ev && (ev.owner || ev.assignmentGroup)) || null;
 
   // Ответ сервера [шаблон, подстановки] → строка на языке интерфейса
   const say = (key, vars) => (key ? t(key, logVars(vars)) : "");
@@ -1151,11 +1150,11 @@
     return item ? lbl(item) : t("Причина не указана");
   };
   const resultLabel = (ev) => t(ev.closeResultLabel || "");
-  // Результат полной обработки — тот, что требует обязательных шагов сценария (requiredStepSet
-  // в справочнике close_result машины, §2.2), а не названный по имени
+  // Результат полной обработки — с признаком finish в справочнике close_result машины (§2.2, ARCH-08 в7):
+  // им закрывает «Итог», в форме «Закрыть» без обработки его нет
   const fullyProcessed = (resultId) => {
     const item = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === resultId);
-    return Boolean(item && item.requiredStepSet && item.requiredStepSet !== "none");
+    return Boolean(item && item.finish);
   };
 
   /* ===== Действия: какие кнопки доступны, считает сервер (AvailableAction) ===== */
@@ -1197,50 +1196,17 @@
   }
 
 
+  // Тексты действия на выборке: заголовок, пояснение и кнопка — ключами формы машины (bulkTitleKey, bulkNoteKey,
+  // bulkConfirmKey, ARCH-08 в9); итог — уведомлением интерфейса
   function bulkCopy(id, list) {
     const n = list.length;
-    const table = {
-      transfer: {
-        title: t("Передать {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет передан # инцидент} few {Будут переданы # инцидента} other {Будут переданы # инцидентов}} одному адресату. Одна причина на всю выборку.", { n }),
-        confirm: t("Передать {n}", { n }),
-        toast: (form) => t("Передано: {n} → {who}", { n, who: actorName(form.targetId) }),
-      },
-      close: {
-        title: t("Закрыть без обработки {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет закрыт # инцидент} few {Будут закрыты # инцидента} other {Будут закрыты # инцидентов}} без сценария. Одна причина на всю выборку.", { n }),
-        confirm: t("Закрыть {n}", { n }),
-        toast: () => t("Закрыто: {n}", { n }),
-      },
-      hold: {
-        title: t("Отложить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет отложен # инцидент} few {Будут отложены # инцидента} other {Будут отложены # инцидентов}}. Одна причина на всех.", { n }),
-        confirm: t("Отложить {n}", { n }),
-        toast: () => t("Отложено: {n}", { n }),
-      },
-      takeover: {
-        title: t("Перехватить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("{n, plural, one {Будет перехвачен # инцидент} few {Будут перехвачены # инцидента} other {Будут перехвачены # инцидентов}}.", { n }),
-        confirm: t("Перехватить {n}", { n }),
-        toast: () => t("Перехвачено: {n}", { n }),
-      },
-      accept: {
-        toast: () => t("Принято: {n}", { n }),
-      },
-      release: {
-        title: t("Вернуть в очередь {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n }),
-        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}}.", { n }),
-        confirm: t("Вернуть {n}", { n }),
-        toast: () => t("Возвращено в очередь: {n}", { n }),
-      },
-      reject: {
-        title: t("Отклонить {n, plural, one {# передачу} few {# передачи} other {# передач}}", { n }),
-        note: t("В очередь {n, plural, one {вернётся # инцидент} few {вернутся # инцидента} other {вернутся # инцидентов}}. Одна причина на всех.", { n }),
-        confirm: t("Отклонить {n}", { n }),
-        toast: () => t("Отклонено: {n}", { n }),
-      },
-    };
-    return table[id] || null;
+    const tr = transitionDef(id);
+    const form = tr && tr.form ? WORKFLOW.forms.find((f) => f.id === tr.form) : null;
+    // Итог — ключом перехода машины (ui.bulkDoneKey): {n} — сколько, {who} — адресат из формы
+    const done = tr && tr.ui && tr.ui.bulkDoneKey;
+    const copy = done ? { toast: (values) => t(done, { n, who: actorName(values.targetId) }) } : {};
+    if (form && form.bulkTitleKey) Object.assign(copy, { title: t(form.bulkTitleKey, { n }), note: t(form.bulkNoteKey, { n }), confirm: t(form.bulkConfirmKey, { n }) });
+    return Object.keys(copy).length ? copy : null;
   }
 
   function openBulkDialog(id, ev, guids, surface) {
@@ -1321,7 +1287,7 @@
     reject: (ev) => t("{id} возвращён в очередь", { id: ev.number }),
     hold: (ev) => t("{id} отложен", { id: ev.number }),
     release: (ev) => t("{id} возвращён в очередь", { id: ev.number }),
-    transfer: (ev) => t("{id} передан → {who}", { id: ev.number, who: actorName(addresseeOf(ev)) }),
+    transfer: (ev) => t("{id} передан → {who}", { id: ev.number, who: actorName(ev.addressee) }),
     takeover: (ev) => t("Перехвачен {id}", { id: ev.number }),
     close: (ev) => t(fullyProcessed(ev.closeResultId) ? "{id} закрыт" : "{id} закрыт без обработки", { id: ev.number }),
     reopen: (ev) => t("{id} переоткрыт", { id: ev.number }),
@@ -1349,12 +1315,22 @@
   /* ===== Формы переходов: строятся по формам машины (forms) и вариантам из ответа сервера ===== */
 
   // Форма перерыва — не переход инцидента, а состояние оператора (§12): своя, по session машины
+  // Пояснение смены состояния оператора — ключом перехода машины (session.transitions[].noteKey) в состояние to
+  const sessionNote = (to, vars) => {
+    const m = WORKFLOW.session.transitions.find((x) => x.to === to && x.noteKey);
+    return m && m.noteKey ? t(m.noteKey, vars || {}) : "";
+  };
+  // Куда уходит отсоединённый — состояние после «Отсоединить» из машины (to перехода из linked)
+  const detachedLabel = () => {
+    const tr = WORKFLOW.transitions.find((x) => x.trigger === "manual" && x.from.includes("linked"));
+    return tr && STATES[tr.to] ? lbl(STATES[tr.to]) : "";
+  };
   const breakForm = () => ({
     id: "__break__",
     title: "Перерыв",
     confirmLabel: "Уйти на перерыв",
     style: "primary",
-    note: t("Ваши инциденты в работе будут отложены системой. Переданное вам за это время будет ждать в «Мне на принятие»."),
+    note: sessionNote("not_ready"),
     fields: [
       {
         name: "reasonId",
@@ -2009,13 +1985,15 @@
 
   // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
 
+  // «Скоро нарушение» — меньше display.lateSec машины до дедлайна (ARCH-08 в9)
+  const lateMs = () => ((WORKFLOW.display || {}).lateSec || 0) * 1000;
   // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
   function timerChip(ev, extra) {
     const view = timerView(ev.timer);
     if (!view) {
       return ev.slaBreached ? `<span class="event-sla late breached">${te("Норматив нарушен")}</span>` : "";
     }
-    const late = view.running && view.leftMs < 120000;
+    const late = view.running && view.leftMs < lateMs();
     const cls = [extra || "event-sla", late ? "late" : "", view.running ? "" : "held", ev.slaBreached ? "breached" : ""]
       .filter(Boolean)
       .join(" ");
@@ -2031,7 +2009,7 @@
   function holdChip(ev, extra) {
     const view = timerView(ev.holdTimer);
     if (!view) return "";
-    const cls = [extra || "event-sla", view.leftMs < 120000 ? "late" : ""].filter(Boolean).join(" ");
+    const cls = [extra || "event-sla", view.leftMs < lateMs() ? "late" : ""].filter(Boolean).join(" ");
     const hint = t("Время до предельного срока удержания по причине");
     return `<span class="${cls}" data-hold-timer="${escapeHtml(ev.guid)}" data-due="${view.due}" title="${escapeHtml(hint)}">${te(
       "Удержание"
@@ -2136,45 +2114,13 @@
       ${linkedChip(ev)}`;
   }
 
+  // Пояснение в карточке — от сервера, по правилам cardNotes машины (§6.3): интерфейс только показывает
   function workNote(ev) {
-    if (isDone(ev)) {
-      const why =
-        ev.closeResultId && !fullyProcessed(ev.closeResultId) ? t("Инцидент закрыт: {why}.", { why: resultLabel(ev) }) : t("Инцидент закрыт.");
-      const more = canDo("reopen", ev) ? t("Доступно переоткрытие.") : t("Карточка доступна только для просмотра.");
-      return `<div class="work-note ok">${escapeHtml(`${why} ${more}`)}</div>`;
-    }
-    if (ev.state === "pending_acceptance" && isTarget(ev)) {
-      // Уровень — только если инцидент поднят автоэскалацией: ручная передача уровень не меняет (RULE-76)
-      return `<div class="work-note inbox">${
-        ev.escalationLevel > 0
-          ? te("Инцидент адресован вам автоэскалацией, уровень {lvl}. Примите его или отклоните с указанием причины.", { lvl: ev.escalationLevel })
-          : te("Инцидент адресован вам. Примите его или отклоните с указанием причины.")
-      }</div>`;
-    }
-    if (!isMine(ev)) {
-      const rights = canDo("takeover", ev)
-        ? t("при необходимости перехватите")
-        : canDo("transfer", ev)
-          ? t("перехват недоступен по правам, можно передать")
-          : t("перехват и передача недоступны по правам");
-      const holder =
-        ev.state === "pending_acceptance"
-          ? t("Инцидент ожидает принятия: {who}.", { who: actorName(addresseeOf(ev)) })
-          : t("Инцидент обрабатывает {who}.", { who: actorName(ev.owner) });
-      // Имя вида «Петрова М.» уже кончается точкой — вторую не ставим
-      const sentence = holder.replace(/\.\.$/, ".");
-      return `<div class="work-note">${escapeHtml(`${sentence} ${t("Просмотр без изменений")} — ${rights}.`)}</div>`;
-    }
-    if (ev.state === "on_hold") {
-      return `<div class="work-note">${te("Инцидент отложен: {why}. Норматив закрытия приостановлен.", {
-        why: holdLabel(ev.holdReasonId),
-      })}</div>`;
-    }
-    if (onBreak()) {
-      return `<div class="work-note">${te("Вы на перерыве — изменения по сценарию недоступны.")}</div>`;
-    }
-    return "";
+    const n = ev && ev.note;
+    if (!n) return "";
+    return `<div class="work-note${n.style ? ` ${escapeHtml(n.style)}` : ""}">${escapeHtml(say(n.key, n.vars))}</div>`;
   }
+
 
   function renderScenario() {
     const ev = selected();
@@ -2891,17 +2837,14 @@
   // Выход из МИ (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
   // адресованные лично — дежурной группе или в очередь (owner_signed_out, addressee_signed_out_*).
   // Считаются инциденты фильтра «Мои», а не единицы лимита: группа сценария — не один (BUG-25)
-  const signOutForm = (mine) => {
-    const count = (stateId) => mine.filter((e) => e.state === stateId).length;
+  // Сколько вернётся в очередь — счётчики сессии от сервера (usage, §10.2)
+  const signOutForm = () => {
     return {
       id: "__signout__",
       title: "Выйти из МИ",
       confirmLabel: "Выйти",
       style: "danger",
-      note: t("В работе: {active}, отложено: {held} — они вернутся в очередь. Адресованные вам и не принятые уйдут вашей дежурной группе или в очередь.", {
-        active: count("in_progress"),
-        held: count("on_hold"),
-      }),
+      note: sessionNote("offline", { active: store.session.usage.activeCount, held: store.session.usage.onHoldCount }),
       fields: [],
     };
   };
@@ -3348,7 +3291,7 @@
       if (detachAll) {
         try {
           const after = await api.del(`/operator/incidents/${enc(ev.guid)}/linked`);
-          toast(t("Отсоединено: {n} — инциденты вернулись в очередь новыми", { n: ev.linkedCount - after.linkedCount }));
+          toast(t("Отсоединено: {n} — теперь «{state}»", { n: ev.linkedCount - after.linkedCount, state: detachedLabel() }));
         } catch (err) {
           toast(problemText(err));
         }
@@ -3360,7 +3303,7 @@
       if (detach) {
         try {
           await api.del(`/operator/incidents/${enc(ev.guid)}/linked/${enc(detach.dataset.detach)}`);
-          toast(t("{id} отсоединён и вернулся в очередь новым", { id: detach.dataset.number }));
+          toast(t("{id} отсоединён — теперь «{state}»", { id: detach.dataset.number, state: detachedLabel() }));
         } catch (err) {
           toast(problemText(err));
         }
@@ -3465,8 +3408,11 @@
     $("signOutBtn").addEventListener("click", () => {
       closeMenus();
       api
-        .get("/operator/incidents", { filter: "mine", pageSize: 1000 })
-        .then((page) => showForm({ id: "__signout__" }, signOutForm(page.items)))
+        .get("/operator/session")
+        .then((session) => {
+          store.session = session;
+          showForm({ id: "__signout__" }, signOutForm());
+        })
         .catch((err) => toast(problemText(err)));
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
@@ -3764,9 +3710,12 @@
 
   async function selectionDo(id) {
     if ((transitionDef(id).bulk || {}).mode === "merge") return takeAsOne();
-    // Действие над всеми отмеченными: форма — одна на всех, по первому из них
+    // Действие над всеми отмеченными: форма — одна на всех, её варианты — те, что подходят всей выборке, от сервера
+    // (действие выборки, ARCH-08 в14); отмеченного может не быть на странице (BUG-78)
     const first = [...state.checked][0];
-    const ev = store.page.items.find((e) => state.checked.has(e.guid)) || (await api.get(`/operator/incidents/${enc(first)}`));
+    const act = ((store.selection && store.selection.actions) || []).find((a) => a.id === id) || null;
+    const row = store.page.items.find((e) => state.checked.has(e.guid)) || { guid: first };
+    const ev = Object.assign({}, row, { actions: act ? [act] : [] });
     trigger(id, ev, "queue", [...state.checked]);
   }
 
@@ -4123,7 +4072,7 @@
     document.querySelectorAll("[data-due]").forEach((el) => {
       const left = Number(el.dataset.due) - Date.now();
       el.querySelector(".sla-t").textContent = fmtSla(left);
-      el.classList.toggle("late", left < 120000);
+      el.classList.toggle("late", left < lateMs());
     });
     const ev = selected();
     if (ev) $("statusSla").textContent = statusTimerText(ev);
@@ -4165,8 +4114,7 @@
       const tr = transitionDef(tid);
       const notice = tr && tr.ui && tr.ui.observerNotice;
       const p = msg.payload;
-      const toMe = p.addressee && (p.addressee.id === store.session.operator.guid || store.session.operator.dutyGroupGuids.includes(p.addressee.id));
-      if (notice && (notice.audience === "observers" || (notice.audience === "newAddressee" && toMe))) {
+      if (notice && (notice.audience === "observers" || (notice.audience === "newAddressee" && p.addressedToMe))) {
         toast(t(notice.key, { id, who: who(msg.actor), addressee: who(p.addressee), previousOwner: who(p.owner && p.owner.from) }));
       }
     }

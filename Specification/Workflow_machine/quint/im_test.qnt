@@ -240,6 +240,33 @@ module im_test {
       .expect(x1.state == "in_progress" and x1.owner == "a" and x2.state == "linked" and x2.linkedTo == "i1")
       .expect(inv)
 
+  // Основного не назвали — mergePrimary машины: свой в работе, иначе самый срочный, у равных — появившийся раньше
+  run mergeAutoPicksUrgentTest =
+    start
+      .then(create("i1", "fire", 50))
+      .then(newFire("i2"))
+      .then(mergeAuto("a", Set("i1", "i2")))
+      .expect(x2.state == "in_progress" and x1.state == "linked" and x1.linkedTo == "i2")
+      .expect(inv)
+
+  run mergeAutoPicksEarlierTest =
+    start
+      .then(newFire("i1"))
+      .then(jump(clock + 1000))
+      .then(newFire("i2"))
+      .then(mergeAuto("a", Set("i1", "i2")))
+      .expect(x1.state == "in_progress" and x2.state == "linked" and x2.linkedTo == "i1")
+      .expect(inv)
+
+  run mergeAutoPicksMineTest =
+    start
+      .then(newFire("i1"))
+      .then(create("i2", "fire", 50))
+      .then(act("a", "claim", "i2"))
+      .then(mergeAuto("a", Set("i1", "i2")))
+      .expect(x2.state == "in_progress" and x1.state == "linked" and x1.linkedTo == "i2")
+      .expect(inv)
+
   // Привязанные объединяемого — новому основному: привязанного у привязанного не бывает
   run mergeRelinksTest =
     start

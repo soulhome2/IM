@@ -90,12 +90,31 @@ def check_workflow(w, err):
             if e["fn"].endswith("Timer") and e["args"][0] not in timers:
                 err.append(f"переход {tid}: нет таймера {e['args'][0]}")
 
+    # Коды ошибок условий — из перечня Problem.code контракта (ARCH-08 в9)
+    known = set(load("openapi.json")["components"]["schemas"]["Problem"]["properties"]["code"]["enum"])
+    for g in w["registries"]["guards"]:
+        for c in [g.get("errorCode")] + list((g.get("errorCodes") or {}).values()):
+            if c and c not in known:
+                err.append(f"условие {g['fn']}: кода ошибки {c} нет в Problem.code контракта")
+    # Порядок очереди — ключами машины: у каждого порядка из options — свои ключи (ARCH-08 в3)
+    for o in w["queueSort"]["options"]:
+        if not (w["queueSort"].get("keys") or {}).get(o):
+            err.append(f"порядок очереди {o}: нет ключей queueSort.keys")
+    # Массовое действие — от bulk.minItems отмеченных: одно — всегда как одиночное (§11, BUG-79)
+    for t in w["transitions"]:
+        b = t.get("bulk") or {}
+        if b.get("allowed") and not (isinstance(b.get("minItems"), int) and b["minItems"] >= 2):
+            err.append(f"переход {t['id']}: bulk.minItems — целое от 2")
     for f in w["forms"]:
         for field in f["fields"]:
             src = field.get("source", "")
             if src.startswith("reasonCatalog:") and src.split(":", 1)[1] not in catalogs:
                 err.append(f"форма {f['id']}: нет справочника {src}")
 
+    # Результат «Итога» (finish) — один и только с обязательными шагами: им закрывают пройденный сценарий (ARCH-08 в7)
+    finishing = [i for i in w["reasonCatalogs"].get("close_result", {}).get("items", []) if i.get("finish")]
+    if len(finishing) != 1 or finishing[0].get("requiredStepSet") in (None, "none"):
+        err.append("результаты закрытия: finish — ровно у одного, и у него есть набор обязательных шагов")
     for item in w["reasonCatalogs"].get("close_result", {}).get("items", []):
         rid = item["id"]
         if item["permission"] not in perms:

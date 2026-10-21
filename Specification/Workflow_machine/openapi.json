@@ -417,7 +417,7 @@
         ],
         "operationId": "setAgentState",
         "summary": "Перерыв, возврат с перерыва, выход",
-        "description": "§12.2. Право `agent:set_not_ready`. При переходе в `not_ready` сервер сам переводит активные инциденты оператора в `on_hold` с причиной «перерыв оператора» — право `incident:hold` для этого не требуется. Изменённые инциденты возвращаются в ответе, чтобы клиент не перезапрашивал очередь. При переходе в `offline` — оператор вышел из МИ — сервер так же сам возвращает в общую очередь его инциденты в работе и отложенные, а адресованные ему лично и не принятые — его дежурной группе или в очередь (§8.1, §12.1). Права для выхода не нужно.",
+        "description": "§12.2. Право `agent:set_not_ready`. При переходе в `not_ready` сервер сам переводит активные инциденты оператора в `on_hold` с причиной «перерыв оператора» — право `incident:hold` для этого не требуется. Изменённые инциденты возвращаются в ответе, чтобы клиент не перезапрашивал очередь. При переходе в `offline` — оператор вышел из МИ — сервер так же сам возвращает в общую очередь его инциденты в работе и отложенные, а адресованные ему лично и не принятые — его дежурной группе или в очередь (§8.1, §12.1). Права для выхода не нужно. Смены — только переходами `session.transitions` машины: перерыв — из «Готов», возврат — с перерыва, выход — из «Готов» и с перерыва, вход — после выхода; право и обязательная причина — у состояния, куда переходит (`permission`, `requiresReason`, причина — из `breakReasons`). То же состояние — ничего не меняется.",
         "requestBody": {
           "required": true,
           "content": {
@@ -441,6 +441,19 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`TRANSITION_NOT_ALLOWED_FROM_STATE` — из текущего состояния в это перейти нельзя, например из «Вышел» сразу на перерыв (`workflow.error.agent_state_not_allowed`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -2407,6 +2420,22 @@
             "description": "§2.4. Правила вычисления бейджа. Сервер применяет их сам и кладёт результат в `IncidentSummary.badge`; клиенту они нужны только для легенды и админки.",
             "additionalProperties": true
           },
+          "cardNotes": {
+            "type": "object",
+            "description": "§6.3, ARCH-08 в8. Правила пояснения в карточке: `rules[]` — `expr` (CEL), `textKey`, `style`. Сервер применяет их сам и кладёт результат в `IncidentCard.note`; клиенту они нужны только для админки.",
+            "additionalProperties": true
+          },
+          "display": {
+            "type": "object",
+            "description": "ARCH-08 в9. Оформление, которое задаёт машина: `lateSec` — до нарушения норматива меньше стольких секунд — отсчёт выделяется «скоро нарушение».",
+            "properties": {
+              "lateSec": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": true
+          },
           "permissions": {
             "type": "array",
             "items": {
@@ -2510,7 +2539,7 @@
           },
           "queueSort": {
             "type": "object",
-            "description": "§7, RULE-62. Порядок очереди: default — по умолчанию, options — из чего можно выбрать, operatorMayChange — может ли оператор выбрать другой.",
+            "description": "§7, RULE-62. Порядок очереди: default — по умолчанию, options — из чего можно выбрать, operatorMayChange — может ли оператор выбрать другой, keys — что значит каждый порядок: ключи сортировки выражениями CEL над incident (меньше — выше; CEL.md, «Правила интерфейса»).",
             "additionalProperties": true
           },
           "registries": {
@@ -2844,6 +2873,18 @@
           "confirmKey": {
             "type": "string",
             "description": "§14.9. Ключ подписи кнопки подтверждения, например `workflow.form.close.confirm`."
+          },
+          "bulkTitleKey": {
+            "type": "string",
+            "description": "§11, §14.9. Ключ заголовка формы на выборке с подстановкой {n}, например `workflow.form.transfer.bulk.title`."
+          },
+          "bulkNoteKey": {
+            "type": "string",
+            "description": "§11, §14.9. Ключ пояснения формы на выборке с подстановкой {n}."
+          },
+          "bulkConfirmKey": {
+            "type": "string",
+            "description": "§11, §14.9. Ключ подписи кнопки формы на выборке с подстановкой {n}."
           }
         }
       },
@@ -3026,7 +3067,8 @@
                 "description": "§11. `each_allowed` — каждому отмеченному, кому действие доступно; `merge` — «Взять в работу» на выборке как одно: основной и привязанные инциденты (`POST /operator/incidents/merge`)."
               },
               "minItems": {
-                "type": "integer"
+                "type": "integer",
+                "description": "§11. С какого числа отмеченных действие идёт на выборке, не меньше 2. Одно отмеченное — всегда как одиночное действие; от двух, но меньше `minItems` — на панели выборки недоступно с причиной `workflow.error.selection_too_small`, массовый запрос и объединение — `422 BULK_SELECTION_INVALID`."
               },
               "sharedForm": {
                 "type": "boolean"
@@ -3084,6 +3126,10 @@
                     ]
                   }
                 }
+              },
+              "bulkDoneKey": {
+                "type": "string",
+                "description": "§11, §14.9. Ключ итога действия на выборке с подстановками {n} и {who}, например `workflow.transition.transfer.bulk.done`."
               }
             }
           },
@@ -3689,7 +3735,7 @@
               "string",
               "null"
             ],
-            "description": "Причина перерыва: обед, инструктаж, обход."
+            "description": "Причина перерыва — id из `session.breakReasons`: обед, инструктаж, обход. Для `not_ready` обязательна (`requiresReason`)."
           }
         }
       },
@@ -3871,6 +3917,17 @@
               }
             ],
             "description": "§8.1. Инцидент принадлежит дежурной группе, пока кто-то из неё не выполнит «Принять». После «Принять» — null."
+          },
+          "addressee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§8.1. Адресат — определение `addressee` машины: владелец, а пока группа не приняла — дежурная группа. Клиент его не вычисляет"
           },
           "badge": {
             "$ref": "#/components/schemas/Badge"
@@ -4323,6 +4380,45 @@
               "readOnly": {
                 "type": "boolean",
                 "description": "Карточка открыта на просмотр (§6.3): шаги и макросы недоступны."
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "key"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "description": "Пояснение на языке оператора"
+                      },
+                      "key": {
+                        "type": "string",
+                        "description": "§14.9. Ключ каталога, например `workflow.card.note.foreign_takeover`"
+                      },
+                      "vars": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Подстановки. Значение, которое само переводится, — ключ каталога (§14.9)"
+                      },
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "",
+                          "ok",
+                          "inbox"
+                        ],
+                        "description": "Вид плашки: ok — закрыт, inbox — адресован мне, пусто — обычный"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "§6.3, ARCH-08 в8. Пояснение в карточке под смотрящего — по правилам `cardNotes` машины: первое подходящее. Нет подходящего — null. Клиент его не вычисляет"
               },
               "source": {
                 "anyOf": [
@@ -6007,6 +6103,10 @@
               null
             ],
             "description": "Вид нарушения, если переход его записал"
+          },
+          "addressedToMe": {
+            "type": "boolean",
+            "description": "Адресат после перехода — получатель потока или его дежурная группа (`isSelf` машины). По нему клиент показывает уведомление `ui.observerNotice` с `audience: newAddressee`"
           }
         }
       },
@@ -6151,7 +6251,7 @@
               "null"
             ],
             "format": "uuid",
-            "description": "Основной из отмеченных. Нет — сервер выбирает: мой в работе, иначе самый срочный новый, у равных — самый ранний."
+            "description": "Основной из отмеченных. Нет — сервер выбирает по определению машины `mergePrimary`: свой в работе, иначе самый срочный новый, у равных — появившийся раньше, у совсем равных — первый по порядку `incidentGuids`."
           }
         }
       },

@@ -157,6 +157,95 @@ window.IM_WORKFLOW = {
       }
     ]
   },
+  "display": {
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение»",
+    "lateSec": 120
+  },
+  "cardNotes": {
+    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный",
+    "rules": [
+      {
+        "expr": "isDone(incident) && closedFinished(incident) && 'reopen' in actions",
+        "textKey": "workflow.card.note.closed_reopen",
+        "style": "ok"
+      },
+      {
+        "expr": "isDone(incident) && closedFinished(incident)",
+        "textKey": "workflow.card.note.closed_view",
+        "style": "ok"
+      },
+      {
+        "expr": "isDone(incident) && 'reopen' in actions",
+        "textKey": "workflow.card.note.closed_why_reopen",
+        "style": "ok"
+      },
+      {
+        "expr": "isDone(incident)",
+        "textKey": "workflow.card.note.closed_why_view",
+        "style": "ok"
+      },
+      {
+        "expr": "incident.state == 'linked'",
+        "textKey": "workflow.card.note.linked",
+        "style": ""
+      },
+      {
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && escalatedTo(incident)",
+        "textKey": "workflow.card.note.inbox_escalated",
+        "style": "inbox"
+      },
+      {
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'",
+        "textKey": "workflow.card.note.inbox",
+        "style": "inbox"
+      },
+      {
+        "expr": "incident.state == 'new'",
+        "textKey": "workflow.card.note.new",
+        "style": ""
+      },
+      {
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other' && 'takeover' in actions",
+        "textKey": "workflow.card.note.pending_takeover",
+        "style": ""
+      },
+      {
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other' && 'transfer' in actions",
+        "textKey": "workflow.card.note.pending_transfer",
+        "style": ""
+      },
+      {
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other'",
+        "textKey": "workflow.card.note.pending_view",
+        "style": ""
+      },
+      {
+        "expr": "ownership(me, incident) == 'other' && 'takeover' in actions",
+        "textKey": "workflow.card.note.foreign_takeover",
+        "style": ""
+      },
+      {
+        "expr": "ownership(me, incident) == 'other' && 'transfer' in actions",
+        "textKey": "workflow.card.note.foreign_transfer",
+        "style": ""
+      },
+      {
+        "expr": "ownership(me, incident) == 'other'",
+        "textKey": "workflow.card.note.foreign_view",
+        "style": ""
+      },
+      {
+        "expr": "incident.state == 'on_hold'",
+        "textKey": "workflow.card.note.hold",
+        "style": ""
+      },
+      {
+        "expr": "agentState(me) == 'not_ready'",
+        "textKey": "workflow.card.note.break",
+        "style": ""
+      }
+    ]
+  },
   "permissions": [
     {
       "key": "incident:claim",
@@ -359,7 +448,7 @@ window.IM_WORKFLOW = {
       ]
     },
     "close_result": {
-      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates решены (§2.2, §15). surfaces — где результат предлагается: из очереди только «Массовый сбой», остальные — из карточки (§7).",
+      "$comment": "§2.2. Результат закрытия. Конечное состояние одно — closed, итог инцидента — только результат (RULE-02). Право, исходные состояния, владение, обязательные шаги и комментарий зависят от результата; проверяет их guard closeResultAllowed. Значения permission и fromStates решены (§2.2, §15). surfaces — где результат предлагается: из очереди только «Массовый сбой», остальные — из карточки (§7). finish — результат полной обработки: им закрывает «Итог» («Завершить инцидент»), в форме «Закрыть» без обработки его нет (ARCH-08 в7).",
       "field": "close_result",
       "requiredOnTransition": [
         "close"
@@ -368,6 +457,7 @@ window.IM_WORKFLOW = {
         {
           "id": "processed",
           "labelKey": "workflow.catalog.close_result.processed",
+          "finish": true,
           "permission": "incident:close",
           "fromStates": [
             "in_progress"
@@ -514,6 +604,9 @@ window.IM_WORKFLOW = {
     {
       "id": "transfer",
       "titleKey": "workflow.form.transfer.title",
+      "bulkTitleKey": "workflow.form.transfer.bulk.title",
+      "bulkNoteKey": "workflow.form.transfer.bulk.note",
+      "bulkConfirmKey": "workflow.form.transfer.bulk.confirm",
       "confirmKey": "workflow.form.transfer.confirm",
       "style": "warn",
       "notes": [
@@ -554,6 +647,9 @@ window.IM_WORKFLOW = {
     {
       "id": "hold",
       "titleKey": "workflow.form.hold.title",
+      "bulkTitleKey": "workflow.form.hold.bulk.title",
+      "bulkNoteKey": "workflow.form.hold.bulk.note",
+      "bulkConfirmKey": "workflow.form.hold.bulk.confirm",
       "confirmKey": "workflow.form.hold.confirm",
       "style": "primary",
       "notes": [
@@ -583,6 +679,9 @@ window.IM_WORKFLOW = {
     {
       "id": "release",
       "titleKey": "workflow.form.release.title",
+      "bulkTitleKey": "workflow.form.release.bulk.title",
+      "bulkNoteKey": "workflow.form.release.bulk.note",
+      "bulkConfirmKey": "workflow.form.release.bulk.confirm",
       "confirmKey": "workflow.form.release.confirm",
       "style": "primary",
       "notes": [
@@ -604,6 +703,9 @@ window.IM_WORKFLOW = {
     {
       "id": "reject",
       "titleKey": "workflow.form.reject.title",
+      "bulkTitleKey": "workflow.form.reject.bulk.title",
+      "bulkNoteKey": "workflow.form.reject.bulk.note",
+      "bulkConfirmKey": "workflow.form.reject.bulk.confirm",
       "confirmKey": "workflow.form.reject.confirm",
       "style": "primary",
       "notes": [
@@ -625,6 +727,9 @@ window.IM_WORKFLOW = {
     {
       "id": "close",
       "titleKey": "workflow.form.close.title",
+      "bulkTitleKey": "workflow.form.close.bulk.title",
+      "bulkNoteKey": "workflow.form.close.bulk.note",
+      "bulkConfirmKey": "workflow.form.close.bulk.confirm",
       "confirmKey": "workflow.form.close.confirm",
       "style": "primary",
       "notes": [
@@ -688,6 +793,9 @@ window.IM_WORKFLOW = {
     {
       "id": "takeover",
       "titleKey": "workflow.form.takeover.title",
+      "bulkTitleKey": "workflow.form.takeover.bulk.title",
+      "bulkNoteKey": "workflow.form.takeover.bulk.note",
+      "bulkConfirmKey": "workflow.form.takeover.bulk.confirm",
       "confirmKey": "workflow.form.takeover.confirm",
       "style": "danger",
       "notes": [
@@ -915,6 +1023,7 @@ window.IM_WORKFLOW = {
         "minItems": 2
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.accept.bulk.done",
         "surface": [
           "queue",
           "card"
@@ -981,6 +1090,7 @@ window.IM_WORKFLOW = {
         "minItems": 2
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.reject.bulk.done",
         "surface": [
           "queue",
           "card"
@@ -1061,6 +1171,7 @@ window.IM_WORKFLOW = {
         "minItems": 2
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.hold.bulk.done",
         "surface": [
           "card"
         ],
@@ -1227,6 +1338,7 @@ window.IM_WORKFLOW = {
         "minItems": 2
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.release.bulk.done",
         "surface": [
           "card"
         ],
@@ -1359,14 +1471,14 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "previousOwner"
+            "before.owner"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "newTarget"
+            "addressee(incident)"
           ]
         }
       ],
@@ -1377,6 +1489,7 @@ window.IM_WORKFLOW = {
         "sharedForm": true
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.transfer.bulk.done",
         "surface": [
           "queue",
           "card"
@@ -1497,7 +1610,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "previousOwner"
+            "before.owner"
           ]
         }
       ],
@@ -1507,6 +1620,7 @@ window.IM_WORKFLOW = {
         "minItems": 2
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.takeover.bulk.done",
         "surface": [
           "card"
         ],
@@ -1539,10 +1653,7 @@ window.IM_WORKFLOW = {
           "fn": "agentReady"
         },
         {
-          "fn": "closeResultAllowed",
-          "args": [
-            "form.resultId"
-          ]
+          "fn": "closeResultAllowed"
         }
       ],
       "effects": [
@@ -1652,6 +1763,7 @@ window.IM_WORKFLOW = {
         "sharedForm": true
       },
       "ui": {
+        "bulkDoneKey": "workflow.transition.close.bulk.done",
         "surface": [
           "queue",
           "card"
@@ -1855,7 +1967,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "newTarget"
+            "addressee(incident)"
           ]
         }
       ],
@@ -2142,14 +2254,14 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "previousOwner"
+            "before.owner"
           ]
         },
         {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "newTarget"
+            "addressee(incident)"
           ]
         }
       ],
@@ -2506,7 +2618,7 @@ window.IM_WORKFLOW = {
           "kind": "external",
           "fn": "notify",
           "args": [
-            "newTarget"
+            "addressee(incident)"
           ]
         }
       ],
@@ -3283,6 +3395,40 @@ window.IM_WORKFLOW = {
         "readOnlyReasonKey": "workflow.session.readonly.offline"
       }
     ],
+    "transitions": [
+      {
+        "id": "break",
+        "noteKey": "workflow.session.transition.break.note",
+        "from": [
+          "ready"
+        ],
+        "to": "not_ready",
+        "$comment": "Перерыв — право и причина у состояния not_ready (permission, requiresReason — позиция breakReasons)"
+      },
+      {
+        "id": "back",
+        "from": [
+          "not_ready"
+        ],
+        "to": "ready"
+      },
+      {
+        "id": "sign_out",
+        "noteKey": "workflow.session.transition.sign_out.note",
+        "from": [
+          "ready",
+          "not_ready"
+        ],
+        "to": "offline"
+      },
+      {
+        "id": "sign_in",
+        "from": [
+          "offline"
+        ],
+        "to": "ready"
+      }
+    ],
     "breakReasons": [
       {
         "id": "lunch",
@@ -3362,6 +3508,24 @@ window.IM_WORKFLOW = {
       "oldest_first",
       "reaction_deadline"
     ],
+    "keys": {
+      "$comment": "ARCH-08 в3. Ключи сортировки каждого порядка — выражения CEL над incident, целые: меньше — выше; первый ключ главный, следующий — при равенстве. При равенстве всех — по номеру инцидента",
+      "priority_then_oldest": [
+        "-incident.priority",
+        "incident.occurredAt"
+      ],
+      "priority_then_newest": [
+        "-incident.priority",
+        "-incident.occurredAt"
+      ],
+      "oldest_first": [
+        "incident.occurredAt"
+      ],
+      "reaction_deadline": [
+        "timerRuns(incident, 'reaction') ? 0 : 1",
+        "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"
+      ]
+    },
     "operatorMayChange": false
   },
   "messages": {
@@ -3400,11 +3564,6 @@ window.IM_WORKFLOW = {
     },
     "workflow.guard.merge_scenario": {
       "vars": []
-    },
-    "workflow.error.merge.scenarios": {
-      "vars": [
-        "titles"
-      ]
     },
     "workflow.guard.primary_not_editable": {
       "vars": []
@@ -3552,10 +3711,21 @@ window.IM_WORKFLOW = {
     "workflow.error.break_no_permission": {
       "vars": []
     },
+    "workflow.error.agent_state_not_allowed": {
+      "vars": [
+        "from",
+        "to"
+      ]
+    },
     "workflow.error.selection_empty": {
       "vars": []
     },
     "workflow.error.selection_too_large": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.error.selection_too_small": {
       "vars": [
         "n"
       ]
@@ -3645,6 +3815,7 @@ window.IM_WORKFLOW = {
         "number": "string",
         "eventType": "string",
         "priority": "int",
+        "occurredAt": "int",
         "state": "string",
         "owner": "string",
         "assignmentGroup": "string",
@@ -3736,7 +3907,8 @@ window.IM_WORKFLOW = {
         "ownerOnlyInStates": "list<string>",
         "surfaces": "list<string>",
         "requiredStepSet": "string",
-        "commentRequired": "bool"
+        "commentRequired": "bool",
+        "finish": "bool"
       },
       "ScopeRule": {
         "own": "ScopeOwn"
@@ -3952,6 +4124,57 @@ window.IM_WORKFLOW = {
         "expr": "states.exists(s, s.id == x.state && s.category in cats)",
         "$comment": "Категория состояния инцидента — одна из cats (stateCategories)"
       },
+      "mergePrimary": {
+        "params": {
+          "xs": "list<Incident>",
+          "who": "string"
+        },
+        "returns": "list<Incident>",
+        "expr": "cel.bind(mine, xs.filter(e, e.state == 'in_progress' && e.owner == who), cel.bind(c, size(mine) > 0 ? mine : xs.filter(e, e.state == 'new'), cel.bind(top, c.filter(e, c.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : []))))",
+        "$comment": "§11. Основной при «Взять в работу» на выборке, если его не назвал оператор: свой в работе, иначе новый; из них — самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки. Списком из одного или пустым"
+      },
+      "onDuty": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "bool",
+        "expr": "!session.states.exists(s, s.id == agentState(who) && s.readOnly)",
+        "$comment": "§8.1, §12. Человек на месте: его состояние — не «только просмотр» (перерыв, вышел)"
+      },
+      "recipients": {
+        "params": {
+          "whom": "string",
+          "x": "Incident"
+        },
+        "returns": "list<string>",
+        "expr": "(isGroup(whom) ? members(whom) : [whom]).filter(m, onDuty(m) && access(m, x))",
+        "$comment": "§9. Кто получит уведомление: человек или участники дежурной группы — на месте и с доступом к объекту инцидента"
+      },
+      "timerRuns": {
+        "params": {
+          "x": "Incident",
+          "id": "string"
+        },
+        "returns": "bool",
+        "expr": "x.timers[id].due != 0 && x.timers[id].fired != x.timers[id].due",
+        "$comment": "Таймер идёт: дедлайн есть и ещё не сработал (на потолке эскалации реакции — уже сработал)"
+      },
+      "closedFinished": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "x.closeResultId == '' || closeResults.exists(i, i.id == x.closeResultId && i.finish)",
+        "$comment": "Закрыт без результата или результатом полной обработки (finish)"
+      },
+      "escalatedTo": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "x.escalationLevel > 0 && escalation.levels.exists(l, l.level == x.escalationLevel && l.target == addressee(x))",
+        "$comment": "§8.3. Адресован автоэскалацией: адресат — адресат текущего уровня. Уровень после ручной передачи остаётся (RULE-76), но адресат уже другой"
+      },
       "isDone": {
         "params": {
           "x": "Incident"
@@ -4162,6 +4385,7 @@ window.IM_WORKFLOW = {
     "guards": [
       {
         "fn": "hasPermission",
+        "errorCode": "PERMISSION_DENIED",
         "args": [
           "permissionKey"
         ],
@@ -4179,6 +4403,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "hasScopedPermission",
+        "errorCode": "PERMISSION_DENIED",
         "args": [
           "ownKey",
           "anyKey"
@@ -4247,6 +4472,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "targetIsNotSelf",
+        "errorCode": "TRANSFER_TO_SELF_FORBIDDEN",
         "args": [],
         "argTypes": {},
         "expr": "!isSelf(me, form.targetId)",
@@ -4259,6 +4485,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "targetCanAccept",
+        "errorCode": "TARGET_CANNOT_ACCEPT",
         "args": [],
         "argTypes": {},
         "expr": "form.targetId == '' || canAccept(form.targetId, incident, '')",
@@ -4271,6 +4498,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "targetHasAccess",
+        "errorCode": "TARGET_NO_ACCESS",
         "args": [],
         "argTypes": {},
         "expr": "form.targetId == '' || hasAccess(form.targetId, incident)",
@@ -4283,6 +4511,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "agentReady",
+        "errorCode": "AGENT_NOT_READY",
         "args": [],
         "argTypes": {},
         "expr": "!session.states.exists(s, s.id == agentState(me) && s.readOnly)",
@@ -4376,6 +4605,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "withinActiveLimit",
+        "errorCode": "LIMIT_EXCEEDED",
         "args": [],
         "argTypes": {},
         "expr": "limits.maxActive == 0 || size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive",
@@ -4391,6 +4621,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "withinHoldLimit",
+        "errorCode": "LIMIT_EXCEEDED",
         "args": [],
         "argTypes": {},
         "expr": "limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold",
@@ -4406,6 +4637,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "withinReopenWindow",
+        "errorCode": "REOPEN_WINDOW_EXPIRED",
         "args": [],
         "argTypes": {},
         "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000",
@@ -4421,6 +4653,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "requiredStepsFilled",
+        "errorCode": "REQUIRED_STEPS_NOT_FILLED",
         "args": [
           "stepSetId"
         ],
@@ -4435,15 +4668,14 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "closeResultAllowed",
-        "args": [
-          "resultId"
-        ],
-        "argTypes": {
-          "resultId": "string"
+        "errorCodes": {
+          "workflow.guard.required_steps": "REQUIRED_STEPS_NOT_FILLED"
         },
-        "expr": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? os.exists(o, o.id == resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))",
-        "failKey": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? (os.exists(o, o.id == resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))",
-        "failVars": "resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}",
+        "args": [],
+        "argTypes": {},
+        "expr": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? os.exists(o, o.id == form.resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))",
+        "failKey": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? (os.exists(o, o.id == form.resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))",
+        "failVars": "form.resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.result_unavailable",
@@ -4451,7 +4683,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.no_permission"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без resultId — доступен ли хоть один результат: так решается, показывать ли кнопку."
+        "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без form.resultId — доступен ли хоть один результат: так решается, показывать ли кнопку."
       },
       {
         "fn": "timerExpired",
@@ -4892,15 +5124,6 @@ window.IM_WORKFLOW = {
               {
                 "set": "e.slaBreached",
                 "value": "true"
-              },
-              {
-                "if": "leftOf(e, kind, now) == 0",
-                "then": [
-                  {
-                    "set": "e.timers[kind].fired",
-                    "value": "deadline"
-                  }
-                ]
               },
               {
                 "world": "log",
@@ -5411,20 +5634,29 @@ window.IM_WORKFLOW = {
         "fn": "notify",
         "kind": "external",
         "args": [
-          "to"
+          "whom"
         ],
         "argTypes": {
-          "to": "string"
+          "whom": "expr<string>"
         },
         "do": [
           {
-            "world": "notify",
-            "args": {
-              "incident": "incident",
-              "to": "to"
-            }
+            "if": "whom != '' && whom != actor",
+            "then": [
+              {
+                "world": "notify",
+                "args": {
+                  "incident": "incident",
+                  "to": "whom",
+                  "recipients": "recipients(whom, incident)",
+                  "alert": "whom == alerts.target",
+                  "emptyLog": "whom == alerts.target ? alerts.noRecipientLog : ''"
+                }
+              }
+            ]
           }
-        ]
+        ],
+        "$comment": "§9, §14.2. Уведомление whom — человеку или дежурной группе: прежнему владельцу (before.owner), новому адресату (addressee(incident)), получателю алертов (alerts.target). Себе и никому — не уведомляется (BUG-30). Получат — recipients; алерт, который некому получить, — запись alerts.noRecipientLog в журнал"
       },
       {
         "fn": "externalCommand",
@@ -5769,6 +6001,18 @@ window.IM_WORKFLOW = {
       {
         "path": "timers.hold",
         "why": "срок удержания задаёт причина — вкладка «Причины»"
+      },
+      {
+        "path": "display.lateSec",
+        "why": "оформление отсчёта, а не правило поста; меняется вместе с дизайном"
+      },
+      {
+        "path": "session.transitions",
+        "why": "смены состояния оператора — устройство машины оператора (§12), а не настройка; право на перерыв — у состояния not_ready"
+      },
+      {
+        "path": "queueSort.keys",
+        "why": "что значит каждый порядок — устройство порядка, а не настройка: администратор выбирает порядок из queueSort.options"
       },
       {
         "path": "alerts.targetKind",

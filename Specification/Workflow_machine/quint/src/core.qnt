@@ -73,7 +73,7 @@
   action commit(a: Action, w: World): bool = all {
     world' = w,
     changedAt' = INCIDENTS.mapBy(j => if (w.inc.get(j) != world.inc.get(j)) clock else changedAt.get(j)),
-    lastBeat' = if (OPERATORS.contains(a.actor) and (a.kind == "manual" or a.kind == "merge" or a.name == "answer")) lastBeat.set(a.actor, clock) else lastBeat,
+    lastBeat' = if (OPERATORS.contains(a.actor) and (a.kind == "manual" or a.kind == "merge" or a.kind == "merge_auto" or a.name == "answer")) lastBeat.set(a.actor, clock) else lastBeat,
     cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link,
     lastAction' = a,
   }
@@ -83,7 +83,7 @@
   action create(i: str, sc: str, prio: int): bool = {
     val t = ofTrigger("event")[0]
     val w0 = { ...world,
-      inc: world.inc.set(i, { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, scenario: sc }),
+      inc: world.inc.set(i, { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc }),
       answers: world.answers.set(i, Set()) }
     all {
       incOf(i).state == "",
@@ -110,7 +110,8 @@
 
   /* ===== «Взять в работу» на выборке (§11): merge на каждом, кроме основного, и takeWith на основном ===== */
 
-  action merge(a: str, p: str, others: Set[str]): bool = {
+  // kind — merge: основного назвал оператор (primaryGuid); merge_auto — основного выбрал сервер
+  action mergeAs(kind: str, a: str, p: str, others: Set[str]): bool = {
     val list = IDS.select(j => others.contains(j))
     val cm = ctx(a, a, { ...NO_FORM, primaryId: p }, "")
     val take = tr(TAKE_WITH)
@@ -132,8 +133,14 @@
       others.forall(o => sees(a, o)),
       others.forall(o => trOk(MERGE, cm, o)),
       not(taking) or trOk(TAKE_WITH, ct, p),
-      commit({ ...act0("merge", MERGE, a, p), others: list }, w5),
+      commit({ ...act0(kind, MERGE, a, p), others: list }, w5),
     }
+  }
+  action merge(a: str, p: str, others: Set[str]): bool = mergeAs("merge", a, p, others)
+  // Основного не назвали — сервер выбирает по mergePrimary машины (§11, ARCH-08 в1)
+  action mergeAuto(a: str, sel: Set[str]): bool = {
+    val ps = mergePrimary(IDS.select(j => sel.contains(j)).foldl([], (acc, j) => acc.append(incOf(j))), a)
+    all { ps.length() == 1, mergeAs("merge_auto", a, ps[0].id, sel.exclude(Set(ps[0].id))) }
   }
 
   /* ===== Автоматические переходы: планировщик ===== */
@@ -181,11 +188,22 @@
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", name, a, NOBODY),
   }
-  // Перерыв — с правом agent:set_not_ready; на перерыве и после выхода — только просмотр (agentReady машины)
-  action goOnBreak(a: str): bool = all { agents.get(a) == "ready", can(a, "agent:set_not_ready"), agent(a, "break", "not_ready", true) }
-  action backFromBreak(a: str): bool = all { agents.get(a) == "not_ready", agent(a, "back", "ready", true) }
-  action signOut(a: str): bool = all { agents.get(a) != "offline", agent(a, "sign_out", "offline", true) }
-  action signIn(a: str): bool = all { agents.get(a) == "offline", agent(a, "sign_in", "ready", true) }
+  // Смена состояния оператора — переход session.transitions машины (AGENT_MOVES, ARCH-08 в4): откуда, куда, право
+  // у состояния, куда переходят. На перерыве и после выхода — только просмотр (agentReady машины)
+  pure def agentMoveOf(id: str): { id: str, from: Set[str], to: str, permission: str } =
+    AGENT_MOVES.fold({ id: "", from: Set(), to: "", permission: "" }, (acc, m) => if (m.id == id) m else acc)
+  action agentMove(a: str, id: str): bool = {
+    val m = agentMoveOf(id)
+    all {
+      m.from.contains(agents.get(a)),
+      m.permission == "" or can(a, m.permission),
+      agent(a, m.id, m.to, true),
+    }
+  }
+  action goOnBreak(a: str): bool = agentMove(a, "break")
+  action backFromBreak(a: str): bool = agentMove(a, "back")
+  action signOut(a: str): bool = agentMove(a, "sign_out")
+  action signIn(a: str): bool = agentMove(a, "sign_in")
   // Пропала и вернулась связь (§12.3): без неё оператор молчит; вернулась — признак активности сразу
   action loseLink(a: str): bool = all {
     link.get(a),
@@ -288,11 +306,15 @@
         nondet others = INCIDENTS.powerset().oneOf()
         merge(a, p, others)
       },
+      {
+        nondet sel = INCIDENTS.powerset().oneOf()
+        mergeAuto(a, sel)
+      },
       time,
-      goOnBreak(a),
-      backFromBreak(a),
-      signOut(a),
-      signIn(a),
+      {
+        nondet m = AGENT_MOVES.oneOf()
+        agentMove(a, m.id)
+      },
       loseLink(a),
       restoreLink(a),
       toggleAccess(a, i),

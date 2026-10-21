@@ -169,7 +169,8 @@
       } else if (x < 0.19) {
         const session = await env.session();
         const now = session.agentState === "busy" ? "ready" : session.agentState;
-        const to = pick(r, ["ready", "not_ready", "offline"].filter((st) => st !== now));
+        // Только смены, которые разрешает машина (session.transitions)
+        const to = pick(r, W.session.transitions.filter((t) => t.from.includes(now)).map((t) => t.to));
         await env.ok("PUT", "/operator/session/agent-state", { agentState: to, reasonId: to === "not_ready" ? "lunch" : null });
         history.push(`состояние: ${to}`);
       } else if (x < 0.25) {
@@ -305,7 +306,10 @@
         const primaries = open.filter((e) => e.linkedCount);
         if (!primaries.length) continue;
         const p = pick(r, primaries);
-        const items = ((await env.ok("GET", `/operator/incidents/${enc(p.guid)}/linked?pageSize=100`)).items || []).filter((e) => e.state === "linked");
+        const page = await env.ok("GET", `/operator/incidents/${enc(p.guid)}/linked?pageSize=100`);
+        // Счётчик привязанных в строке — те же, что в списке привязанных (ARCH-08 в15)
+        if (page.total !== p.linkedCount) fail(step, `${p.guid}: linkedCount ${p.linkedCount}, а в списке привязанных ${page.total}`);
+        const items = (page.items || []).filter((e) => e.state === "linked");
         if (!items.length) continue;
         const one = pick(r, items);
         const res = await env.call("DELETE", `/operator/incidents/${enc(p.guid)}/linked/${enc(one.guid)}`);

@@ -726,7 +726,7 @@ stateDiagram-v2
     { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
   ],
   "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-  "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
+  "ui": { "bulkDoneKey": "workflow.transition.accept.bulk.done", "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
 }
 ```
 

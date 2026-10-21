@@ -117,8 +117,6 @@ function replay(states, name) {
       log: (ev, whoId, k, v, at) => ev.log.push({ at, whoId, k, v }),
       transferTargets: () => [],
       defaultTransferTarget: () => null,
-      notifyAlert: () => 1,
-      alertRecipients: () => 1,
       onEvict: () => {},
       onBreachShared: () => {},
     });
@@ -157,7 +155,7 @@ function replay(states, name) {
     const a = st.lastAction;
     setFacts(states[k - 1]);
     if (a.kind === "create") {
-      const ev = { id: a.incident, number: a.incident, typeId: "fire", priority: a.prio, scenarioGuid: a.scenario, log: [], breaches: [] };
+      const ev = { id: a.incident, number: a.incident, typeId: "fire", priority: a.prio, occurredAt: facts.clock, scenarioGuid: a.scenario, log: [], breaches: [] };
       events.push(ev);
       events.sort((x, y) => IDS.indexOf(x.id) - IDS.indexOf(y.id));
       const r = engines.a.create(ev);
@@ -165,7 +163,12 @@ function replay(states, name) {
     } else if (a.kind === "manual") {
       const r = engines[a.actor].run(a.name, evOf(a.incident), Object.assign({}, a.form), { surface: a.surface });
       if (!r.ok) problems.push(`${name}, шаг ${k} (${describe(a)}): модель выполнила, исполнитель отказал: ${JSON.stringify(r.why)}`);
-    } else if (a.kind === "merge") {
+    } else if (a.kind === "merge" || a.kind === "merge_auto") {
+      // Основного выбрал сервер (merge_auto) — исполнитель выбирает того же: mergePrimary машины
+      if (a.kind === "merge_auto") {
+        const picked = engines[a.actor].mergePrimary(IDS.filter((id) => id === a.incident || a.others.includes(id)).map(evOf));
+        if (!picked || picked.id !== a.incident) problems.push(`${name}, шаг ${k} (${describe(a)}): основной у модели ${a.incident}, у исполнителя ${picked ? picked.id : "нет"}`);
+      }
       const r = engines[a.actor].merge(evOf(a.incident), a.others.map(evOf));
       if (!r.ok) problems.push(`${name}, шаг ${k} (${describe(a)}): модель объединила, исполнитель отказал: ${JSON.stringify(r.why)}`);
     } else if (a.name === "answer") answers[a.incident] = st.world.answers[a.incident].slice();
@@ -183,7 +186,7 @@ function replay(states, name) {
   }
   return problems;
 }
-const describe = (a) => [a.kind, a.name, a.actor, a.incident, a.kind === "merge" ? a.others.join("+") : ""].filter(Boolean).join(" ");
+const describe = (a) => [a.kind, a.name, a.actor, a.incident, a.others && a.others.length ? a.others.join("+") : ""].filter(Boolean).join(" ");
 const sorted = (v) => (Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted(v[k])])) : v);
 function diff(a, b, p = "", out = []) {
   if (JSON.stringify(a) === JSON.stringify(b)) return out.join("; ");

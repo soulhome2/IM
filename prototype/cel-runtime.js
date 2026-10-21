@@ -202,7 +202,7 @@
 
     /* ===== Правила интерфейса: бейджи, фильтры очереди, формы (CEL.md, «Правила интерфейса») ===== */
 
-    // Имена — как у условий, у вариантов поля ещё option. Разбираются все при загрузке машины: ошибку в любом
+    // Имена — как у условий, у вариантов поля ещё option, у пояснений карточки — actions (доступные действия). Разбираются все при загрузке машины: ошибку в любом
     // видит проверка машины. Ключ правила — путь в машине, например forms.close.fields.comment.requiredExpr
     const rules = {};
     const refs = {};
@@ -214,7 +214,7 @@
       return out;
     };
     function uiRule(where, expr, want) {
-      rules[where] = compile(where, Object.assign({}, TOP, { option: "string" }), expr, want);
+      rules[where] = compile(where, Object.assign({}, TOP, { option: "string", actions: "list<string>" }), expr, want);
       try {
         refs[where] = [...formRefs(CEL.parse(expr).ast, new Set())];
       } catch (e) {
@@ -223,6 +223,8 @@
     }
     ((W.badges || {}).rules || []).forEach((b, i) => uiRule(`badges.rules.${i}.expr`, b.expr, "bool"));
     (W.queueFilters || []).forEach((q) => uiRule(`queueFilters.${q.id}.expr`, q.expr, "bool"));
+    ((W.cardNotes || {}).rules || []).forEach((n, i) => uiRule(`cardNotes.rules.${i}.expr`, n.expr, "bool"));
+    own((W.queueSort || {}).keys).forEach(([id, keys]) => keys.forEach((k, i) => uiRule(`queueSort.keys.${id}.${i}`, k, "int")));
     (W.forms || []).forEach((f) => {
       (f.notes || []).forEach((n, i) => uiRule(`forms.${f.id}.notes.${i}.expr`, n.expr, "bool"));
       f.fields.forEach((field) => {
@@ -233,10 +235,10 @@
         });
       });
     });
-    // Значение правила: scope — как у условий, option — вариант поля
+    // Значение правила: scope — как у условий (и actions — у пояснений карточки), option — вариант поля
     function rule(where, scope, option) {
       if (!rules[where]) throw new Error(`cel: no rule ${where}`);
-      return rules[where](Object.assign(baseContext(scope), { option: value("string", option) }));
+      return rules[where](Object.assign(baseContext(scope), { option: value("string", option), actions: value("list<string>", scope.actions || []) }));
     }
 
     /* ===== Эффекты реестра с do (CEL.md, «Операции эффектов») ===== */

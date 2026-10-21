@@ -163,6 +163,13 @@
       const value = field("targetId").value;
       return [value !== "", "адресат в форме выбран заранее: «" + value + "»"];
     },
+    // Результат «Итога» — признак finish машины: в форме «Закрыть» без обработки его нет
+    async close_finish() {
+      await claimFirst();
+      await click(anyBtn(root(), "close"));
+      const ids = [...field("resultId").querySelectorAll("option")].map((o) => o.value).filter(Boolean);
+      return [ids.length > 0 && !ids.includes("false_alarm"), "варианты формы «Закрыть»: " + ids.join(", ")];
+    },
     async closeEmpty() {
       await claimFirst();
       await click(anyBtn(root(), "close"));
@@ -400,6 +407,23 @@
       // Перенесённый ответ — шаг пути с ответом; прохождение основного идёт дальше по нему
       const done = Boolean(root().querySelector(".crumb.done"));
       return [!done, "у основного шаг «visual» отвечен: " + done];
+    },
+    // Основной при «Взять в работу» на выборке — mergePrimary машины: самый срочный из двух новых
+    async merge_primary() {
+      const { urgent, calm } = await deadlinePair();
+      if (!(fx(urgent).priority > fx(calm).priority)) return [false, "в паре одинаковая срочность"];
+      for (const g of [urgent, calm]) await click($("eventsList").querySelector(`[data-check="${g}"]`));
+      await click($("selBar").querySelector('[data-sel-do="merge"]'));
+      const title = $("workTitle").textContent;
+      return [mode() === "work" && title.includes(fx(calm).number), `карточка основного: ${title.trim().slice(0, 60)}`];
+    },
+    // Минимум выборки — bulk.minItems машины: «Передать» на двух отмеченных новых
+    async bulk_min() {
+      await setFilter("open");
+      const ids = [...$("eventsList").querySelectorAll('[data-do="claim"]')].filter((b) => !off(b)).slice(0, 2).map((b) => b.dataset.ev);
+      for (const id of ids) await click($("eventsList").querySelector(`[data-check="${id}"]`));
+      const b = $("selBar").querySelector('[data-sel-do="transfer"]');
+      return [ids.length === 2 && Boolean(b) && off(b), `«Передать» на двух: ${b ? (off(b) ? "недоступна" : "доступна") : "нет кнопки"}`];
     },
     // «Взять в работу» на выборке: куда дальше — ui.navigate объединения в машине
     async merge_nav() {

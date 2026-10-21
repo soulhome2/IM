@@ -271,7 +271,7 @@
       name: "норматив закрытия с эскалацией × перерыв: эскалация, инцидент не отложен",
       workflow: withEscalation({ onResolutionOverdue: "escalate", levels: levelsTo(["group:grp-leads"]) }),
       setup: claimFire,
-      system: async (env) => assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready" }), 200, null, "перерыв"),
+      system: async (env) => assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id }), 200, null, "перерыв"),
       order: ["resolution_escalate"],
       end: "pending_acceptance",
       breach: "resolution",

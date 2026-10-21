@@ -2195,6 +2195,10 @@
         await wait();
         const back = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.guid === gone);
         expect(back && back.state === "new", "отсоединённый не вернулся в очередь новым");
+        // Уведомление называет состояние после «Отсоединить» — из машины, а не текстом интерфейса
+        const told = [...$("toasts").children].map((x) => x.textContent).find((x) => /отсоединён/.test(x)) || "";
+        const stateLabel = window.IM_STRINGS.ru[window.IM_WORKFLOW.states.find((x) => x.id === back.state).labelKey];
+        expect(told.includes(`«${stateLabel}»`), `уведомление: «${told}»`);
         // «Отсоединить все» — остальные разом, список привязанных в карточке пропадает
         const all = root().querySelector("[data-detach-all]");
         expect(all && !off(all), "нет кнопки «Отсоединить все»");
@@ -2211,6 +2215,48 @@
           await stand.raw("POST", "/operator/incidents/transitions/release/bulk", { incidentGuids: [lead.guid], formValues: { comment: NOTE }, surface: "card" });
         }
         if (mode() === "work") await click($("backToQueue"));
+        await setFilter("open");
+      }
+    });
+
+    await step("Форма действия на выборке — с вариантами очереди, даже когда отмеченных нет на странице (BUG-78)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      const stand = window.IM_SELFTEST_API;
+      // Два своих в работе — без лимита активных; после шага набор — как был
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      // Переход запросом API — с версией инцидента в If-Match (§14.1)
+      const act = async (g, id, formValues) => {
+        const path = `/operator/incidents/${encodeURIComponent(g)}`;
+        const version = (await stand.raw("GET", path)).body.version;
+        const res = await stand.raw("POST", `${path}/transitions/${id}`, { formValues, surface: "queue" }, { "If-Match": `"${version}"` });
+        expect(res.status === 200, `${id} ${g}: ${res.status} ${JSON.stringify(res.body).slice(0, 200)}`);
+      };
+      try {
+        await setFilter("open");
+        const ids = [...$("eventsList").querySelectorAll('[data-do="claim"]')].filter((b) => !off(b)).slice(0, 2).map((b) => b.dataset.ev);
+        expect(ids.length === 2, "на странице нет двух новых");
+        for (const g of ids) await act(g, "claim", {});
+        await setFilter("all");
+        await setFilter("open");
+        for (const g of ids) await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        const next = $("eventsPager").querySelector('[data-page="2"]');
+        expect(next, "в «Открытых» одна страница");
+        await click(next);
+        expect(ids.every((g) => !$("eventsList").querySelector(`[data-check="${g}"]`)), "отмеченные — и на второй странице");
+        const b = $("selBar").querySelector('[data-sel-do="close"]');
+        expect(b && !off(b), "в панели выборки нет «Закрыть»");
+        await click(b);
+        const opts = [...field("resultId").querySelectorAll("option")].filter((o) => o.value && !o.disabled).map((o) => o.value);
+        // В карточке своему в работе предложены и «Ложная тревога», и другие; из очереди — только «Массовый сбой»
+        expect(opts.join(",") === "mass", `варианты результата: ${opts.join(", ")}`);
+        return opts.join(", ");
+      } finally {
+        if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await wait();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(400);
         await setFilter("open");
       }
     });

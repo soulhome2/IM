@@ -238,9 +238,7 @@ function guardCall(use, w, iid) {
   const reg = GUARDS[use.fn];
   const scope = TOP(w, iid);
   (reg.args || []).forEach((name, i) => {
-    let v = (use.args || [])[i];
-    if (v === "form.resultId") return (scope[name] = { t: "string", q: "c.form.resultId" });
-    scope[name] = argValue((reg.argTypes || {})[name], v, scope);
+    scope[name] = argValue((reg.argTypes || {})[name], (use.args || [])[i], scope);
   });
   own(reg.usage).forEach(([f, t]) => (scope[f] = { t, q: lit(t, use[f]) }));
   return expr(reg.expr, scope);
@@ -427,6 +425,9 @@ function header() {
   const byPath = (p) => p.split(".").reduce((o, k) => (o == null ? o : o[k]), W);
   emit(`  pure val MACHINE_SETTINGS: Settings = {\n${Object.entries(SETTINGS).map(([n, s]) => `    ${n}: ${lit(s.type, byPath(s.from))},`).join("\n")}\n  }`);
   emit(`  pure val STATES: Set[str] = Set(${W.states.map((s) => JSON.stringify(s.id)).join(", ")})`);
+  // Смены состояния оператора (session.transitions): право — у состояния, куда переходят (ARCH-08 в4)
+  const perm = (id) => (W.session.states.find((st) => st.id === id) || {}).permission || "";
+  emit(`  pure val AGENT_MOVES: Set[{ id: str, from: Set[str], to: str, permission: str }] = Set(${W.session.transitions.map((t) => `{ id: ${JSON.stringify(t.id)}, from: Set(${t.from.map((x) => JSON.stringify(x)).join(", ")}), to: ${JSON.stringify(t.to)}, permission: ${JSON.stringify(perm(t.to))} }`).join(", ")})`);
   emit(`  pure val HOLD_REASONS_BY_OPERATOR: Set[str] = Set(${W.reasonCatalogs.hold.items.filter((i) => i.setBy !== "system").map((i) => JSON.stringify(i.id)).join(", ")})`);
   emit(`  pure val CLOSE_RESULT_IDS: Set[str] = Set(${W.reasonCatalogs.close_result.items.map((i) => JSON.stringify(i.id)).join(", ")})`);
   // Права, которые спрашивают условия машины и справочник результатов закрытия, — их перебирает модель

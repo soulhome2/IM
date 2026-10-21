@@ -312,18 +312,10 @@
       dutyGroups: () => GROUPS.map((g) => g.id),
       // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
       defaultTransferTarget: () => session.lastTransferTargetId,
-      // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
-      // объекту. Оператору стенда — событие потока; сколько получателей, столько и вернуть
-      // Сколько получателей у алерта — без отправки: тени эффектов машины (ARCH-07)
-      alertRecipients: (ev, targetId) => {
-        const group = GROUPS.find((g) => g.id === targetId);
-        return (group ? membersOf(group) : [targetId]).filter((id) => present({ id }) && hasAccess(id, ev)).length;
-      },
-      notifyAlert: (ev, targetId, transitionId) => {
-        const group = GROUPS.find((g) => g.id === targetId);
-        const who = (group ? membersOf(group) : [targetId]).filter((id) => present({ id }) && hasAccess(id, ev));
-        if (who.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
-        return who.length;
+      // Доставка уведомления (§9): получателей вычисляет машина (recipients). Алерт оператору стенда — событие
+      // потока; остальные уведомления интерфейс выводит из событий о переходах
+      deliver: (ev, recipients, { alert, transitionId }) => {
+        if (alert && recipients.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
       },
       // Нарушение основного записано тому, кто был в группе (recordBreach, §11.4, BUG-73) — ему новая версия
       onBreachShared: (ev) => touch([ev]),
@@ -509,7 +501,8 @@
     const say = (why) => (why ? { text: render(why[0], why[1]), key: why[0], vars: why[1] || {} } : null);
 
     let STATES = Object.fromEntries(W.states.map((s) => [s.id, s]));
-    const isDone = (ev) => STATES[ev.state].category === "done";
+    // Закрыт ли — определение isDone машины
+    const isDone = (ev) => engine.isDone(ev);
 
     // Подпись таймера — из машины, на языке оператора (§14.9)
     const timerLabel = (id) => render((W.timers.find((t) => t.id === id) || {}).labelKey || id);
@@ -607,6 +600,8 @@
         ownership: engine.ownership(ev),
         owner: actorRef(ev.owner),
         assignmentGroup: actorRef(ev.assignmentGroup),
+        // Адресат — определение addressee машины: владелец, а пока группа не приняла — группа (§8.1)
+        addressee: actorRef(engine.addressee(ev)),
         badge: badgeView(ev),
         escalationLevel: ev.escalationLevel,
         transferCount: ev.transferCount || 0,
@@ -620,11 +615,12 @@
         slaBreached: Boolean(ev.slaBreached),
         breaches: (ev.breaches || []).map((b) => ({ kind: b.kind, at: iso(b.at), owner: actorRef(b.owner) })),
         linkedTo: ev.linkedTo || null,
-        linkedCount: events.filter((e) => e.linkedTo === ev.id).length,
+        // Сколько привязанных — те же, что в GET …/linked: только видимые оператору (§5, ARCH-08 в15)
+        linkedCount: events.filter((e) => e.linkedTo === ev.id && canSee(e)).length,
         scenarioProgress: progressOf(ev),
         scenarioTitle: rowOf(ev).name == null ? null : rowOf(ev).name,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
-        schemaVersion: 4,
+        schemaVersion: W.schema.version,
         version: String(ev.version),
         actions: actionsFor(ev, surface || "queue"),
       };
@@ -732,8 +728,7 @@
       // Фильтр очереди (queueFilters машины), как над очередью; нет — открытые
       const qf = body.queueFilter || "open";
       if (!W.queueFilters.some((x) => x.id === qf)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.filter.bad", { name: qf }]);
-      const order = ORDERS[sortOf({})];
-      const pool = visible({ filter: qf }).filter(under).sort((a, b) => order(a, b) || byNumber(a, b));
+      const pool = sortBy(visible({ filter: qf }).filter(under), sortOf({}));
       const facet = (list, value, label, picked) => {
         const counts = new Map();
         list.forEach((e) => {
@@ -803,12 +798,19 @@
       };
     }
 
+    // Пояснение в карточке — правила cardNotes машины, текстом на языке оператора (§6.3, ARCH-08 в8)
+    function noteView(ev) {
+      const n = engine.cardNote(ev);
+      const s = n ? say(n.note) : null;
+      return s ? { text: s.text, key: s.key, vars: s.vars, style: n.style } : null;
+    }
     function card(ev) {
       const src = eventSource(ev);
       const deviceIds = [...new Set([...(ev.deviceIds || []), ...(ev.cameras || [])])];
       return Object.assign(summary(ev, "card"), {
         description: null,
         readOnly: !engine.canEditScenario(ev),
+        note: noteView(ev),
         source: src ? deviceRef(src) : null,
         devices: deviceIds.filter((id) => myDevices.has(id)).map(deviceRef),
         scenario: scenarioView(ev),
@@ -859,7 +861,7 @@
     function usage() {
       const active = engine.units("in_progress");
       const held = engine.units("on_hold");
-      const blocking = events.find((e) => e.state === "in_progress" && e.owner === ME);
+      const blocking = events.find((e) => active.has(e.id));
       return { activeCount: active.size, onHoldCount: held.size, blockingIncidentGuid: blocking ? blocking.id : null };
     }
 
@@ -872,14 +874,15 @@
           role: me.role,
           dutyGroupGuids: GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id),
         },
-        agentState: session.agentState === "not_ready" || session.agentState === "offline" ? session.agentState : usage().activeCount ? "busy" : "ready",
+        // «Только просмотр» (перерыв, вышел) — как есть; иначе «Занят», если есть свои в работе (derived, §12)
+        agentState: (W.session.states.find((st) => st.id === session.agentState) || {}).readOnly ? session.agentState : usage().activeCount ? "busy" : "ready",
         agentStateReasonId: session.reasonId,
         permissions: PERMISSIONS.slice(),
         limits: Object.fromEntries(Object.entries(W.limits).filter(([key]) => !key.startsWith("$"))),
         usage: usage(),
         preferences: JSON.parse(JSON.stringify(session.preferences)),
         lastTransferTargetId: session.lastTransferTargetId || null,
-        workflowSchemaVersion: 4,
+        workflowSchemaVersion: W.schema.version,
         permissionIssues: [],
       };
     }
@@ -887,7 +890,7 @@
     // Состояние человека (§12.1): у оператора стенда — из сессии, у остальных — из набора.
     // На месте — «Готов» или «Занят»; дежурная группа — если на месте хотя бы один участник (§8.1)
     const agentStateOf = (id) => (id === ME ? session.agentState : (OPERATORS.find((o) => o.id === id) || {}).agentState || "offline");
-    const present = (op) => (op.group ? membersOf(op).some((m) => present({ id: m })) : !["not_ready", "offline"].includes(agentStateOf(op.id)));
+    const present = (op) => (op.group ? membersOf(op).some((m) => present({ id: m })) : engine.onDuty(op.id));
     // Почему человека нет на месте (§8.1): перерыв — с причиной, вне МИ — «оффлайн»
     const reasonOf = (id) => (id === ME ? session.reasonId : (OPERATORS.find((o) => o.id === id) || {}).reasonId);
     const absenceLabel = (id) => {
@@ -919,20 +922,17 @@
       const asked = q.sort || session.preferences.queueSort;
       return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;
     }
-    // Больше число — выше в очереди (§2.5, §7)
-    const rank = (ev) => -ev.priority;
     const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
-    // Норматив реакции идёт: дедлайн есть и ещё не сработал (на потолке эскалации — уже сработал)
-    const reactionRunning = (e) => Boolean(e.reactionDueAt) && !(e.firedTimers && e.firedTimers.reaction === e.reactionDueAt);
-    const ORDERS = {
-      priority_then_oldest: (a, b) => rank(a) - rank(b) || a.occurredAt - b.occurredAt,
-      priority_then_newest: (a, b) => rank(a) - rank(b) || b.occurredAt - a.occurredAt,
-      oldest_first: (a, b) => a.occurredAt - b.occurredAt,
-      // Кто без идущего норматива реакции — после тех, у кого он идёт, по времени появления
-      reaction_deadline: (a, b) =>
-        Number(!reactionRunning(a)) - Number(!reactionRunning(b)) ||
-        (reactionRunning(a) ? a.reactionDueAt - b.reactionDueAt : a.occurredAt - b.occurredAt),
-    };
+    // Ключи порядка — выражения машины (queueSort.keys): меньше — выше, следующий — при равенстве
+    function sortBy(list, orderId) {
+      const keys = new Map(list.map((e) => [e, engine.sortKeys(e, orderId)]));
+      const cmp = (a, b) => {
+        const [ka, kb] = [keys.get(a), keys.get(b)];
+        for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+        return 0;
+      };
+      return list.sort((a, b) => cmp(a, b) || byNumber(a, b));
+    }
 
     // Поиск — по номеру, типу, площадке и месту. Привязанные инциденты в списках не видны, но ищутся:
     // их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
@@ -948,7 +948,7 @@
         const ids = node ? collectDeviceIds(node) : [q.sourceGroupGuid];
         list = list.filter((e) => touches(e, ids));
       }
-      return list.filter((e) => {
+      return sortBy(list.filter((e) => {
         if (q.filter && W.queueFilters.some((f) => f.id === q.filter) && !filters.get(e).includes(q.filter)) return false;
         // Типы события и устройства — одно значение или несколько через запятую
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && !String(q.eventTypeGuid).split(",").includes(e.typeGuid)) return false;
@@ -963,7 +963,7 @@
           if (!hit(e, needle) && !linkedHits(e, needle).length) return false;
         }
         return true;
-      }).sort((a, b) => ORDERS[sortOf(q)](a, b) || byNumber(a, b));
+      }), sortOf(q));
     }
 
     function page(q) {
@@ -989,17 +989,19 @@
     }
 
     // Дерево групп — только группы, где есть доступные оператору устройства, и только они (§5)
-    // Счётчики открытых инцидентов — только по запросу (withCounters=true, BUG-37)
+    // Счётчики открытых инцидентов — только по запросу (withCounters=true, BUG-37). Открытые — те же, что в
+    // фильтре очереди open машины: привязанные в нём не видны (BUG-77)
+    const isOpen = (e) => engine.inQueueFilter(e, "open");
     function treeView(nodes, withCounters) {
       return nodes
         .filter((n) => !n.isDevice && collectDeviceIds(n).some((id) => myDevices.has(id)))
         .map((n) => {
           const ids = collectDeviceIds(n);
-          const open = events.filter((e) => canSee(e) && !isDone(e) && touches(e, ids));
+          const open = events.filter((e) => canSee(e) && isOpen(e) && touches(e, ids));
           const devices = (n.children || [])
             .filter((c) => c.isDevice && myDevices.has(c.id))
             .map((c) => {
-              const evs = events.filter((e) => canSee(e) && !isDone(e) && touches(e, [c.id]));
+              const evs = events.filter((e) => canSee(e) && isOpen(e) && touches(e, [c.id]));
               return withCounters ? Object.assign(deviceRef(c.id), { counters: { open: evs.length, topPriority: evs.filter((e) => e.priority === topPriority()).length } }) : deviceRef(c.id);
             });
           return {
@@ -1063,24 +1065,13 @@
 
     // Невыполненное условие → код ошибки по контракту: не из этого состояния — 409,
     // нет права или не выполнено условие — 403 с машинным кодом и именем условия
-    const GUARD_CODE = {
-      hasPermission: "PERMISSION_DENIED",
-      hasScopedPermission: "PERMISSION_DENIED",
-      withinActiveLimit: "LIMIT_EXCEEDED",
-      withinHoldLimit: "LIMIT_EXCEEDED",
-      agentReady: "AGENT_NOT_READY",
-      targetIsNotSelf: "TRANSFER_TO_SELF_FORBIDDEN",
-      targetHasAccess: "TARGET_NO_ACCESS",
-      targetCanAccept: "TARGET_CANNOT_ACCEPT",
-      requiredStepsFilled: "REQUIRED_STEPS_NOT_FILLED",
-      withinReopenWindow: "REOPEN_WINDOW_EXPIRED",
-    };
-    // Причина, у которой свой код, где бы её ни дало условие: не выполнен набор обязательных шагов — и у
-    // «Закрыть» с «Обработан», где его проверяет closeResultAllowed (BUG-68)
-    const REASON_CODE = { "workflow.guard.required_steps": "REQUIRED_STEPS_NOT_FILLED" };
+    // Код ошибки по невыполненному условию — errorCode условия в реестре машины; у причины, у которой свой код,
+    // где бы её ни дало условие, — errorCodes по ключу причины (BUG-68, ARCH-08 в9)
+    const guardOf = (fn) => W.registries.guards.find((g) => g.fn === fn) || {};
     function guardProblem(check) {
       if (check.notFrom) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", check.why);
-      const code = REASON_CODE[check.why && check.why[0]] || GUARD_CODE[check.guard] || "GUARD_FAILED";
+      const g = guardOf(check.guard);
+      const code = (g.errorCodes || {})[check.why && check.why[0]] || g.errorCode || "GUARD_FAILED";
       return problem(403, code, check.why, check.guard ? { guard: check.guard } : {});
     }
 
@@ -1118,6 +1109,8 @@
         state: { from: f.from.state || null, to: ev.state },
         owner: { from: actorRef(f.from.owner), to: actorRef(ev.owner) },
         addressee: actorRef(engine.addressee(ev)),
+        // Адресовано смотрящему — ему или его дежурной группе (isSelf машины): поток у каждого оператора свой
+        addressedToMe: engine.isSelf(engine.addressee(ev)),
         breach: f.breach || null,
       });
     }
@@ -1142,18 +1135,15 @@
       return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
     }
 
-    // Основной при объединении (§11): мой в работе — к нему, иначе самый срочный новый,
-    // у равных — самый ранний. Ни одного подходящего — null
-    function pickPrimary(list) {
-      const order = (a, b) => b.priority - a.priority || a.occurredAt - b.occurredAt || byNumber(a, b);
-      const mine = list.filter((e) => e.state === "in_progress" && e.owner === ME).sort(order);
-      const fresh = list.filter((e) => e.state === "new").sort(order);
-      return mine[0] || fresh[0] || null;
-    }
+    // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null
+    const pickPrimary = (list) => engine.mergePrimary(list);
     function mergeIncidents(guids, primaryGuid) {
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
       if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.merge.too_few"]);
+      // Одно — просто «Взять»; от двух — не меньше bulk.minItems перехода объединения машины
+      const min = (W.transitions.find((t) => t.bulk && t.bulk.mode === "merge") || { bulk: {} }).bulk.minItems;
+      if (list.length > 1 && list.length < min) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: min }]);
       const primary = primaryGuid ? list.find((e) => e.id === primaryGuid) : pickPrimary(list);
       if (!primary) return problem(422, "BULK_SELECTION_INVALID", ["workflow.guard.merge_primary"]);
       const others = list.filter((e) => e !== primary);
@@ -1187,13 +1177,11 @@
         let ok = false;
         let reason = null;
         if (mode.mode === "merge") {
-          // «Взять в работу» как одно: один сценарий у всех, основной можно взять, остальные — объединить
-          const scenarios = [...new Set(list.map(scenarioKey))];
+          // «Взять в работу» как одно: основной можно взять, остальные — объединить. Один ли сценарий — условие
+          // перехода объединения машины (sameScenarioAsPrimary), его причина — с номером того, кто мешает (ARCH-08 в13)
           const primary = list.length ? pickPrimary(list) : null;
-          if (scenarios.length > 1) {
-            const titles = scenarios.map((k) => scenarioName(k) || k);
-            reason = ["workflow.error.merge.scenarios", { titles: titles.join(", ") }];
-          } else if (primary) {
+          if (list.length > 1 && list.length < mode.minItems) reason = ["workflow.error.selection_too_small", { n: mode.minItems }];
+          else if (primary) {
             // Одно отмеченное — просто «Взять»; несколько — как одно. Делать нечего — недоступно.
             // Не проходит — причина того, кто мешает, с его номером
             const check = engine.mergeCheck(primary, list.filter((e) => e !== primary));
@@ -1203,27 +1191,51 @@
             }
           } else if (list.length) reason = ["workflow.guard.merge_primary"];
         } else if (list.length < 2) ok = each;
+        // Меньше bulk.minItems машины — на выборке недоступно
+        else if (mode.allowed && list.length < mode.minItems) reason = ["workflow.error.selection_too_small", { n: mode.minItems }];
         else if (mode.allowed && mode.mode === "each_allowed") ok = each;
         // Причина — одного такого отмеченного: одно отмеченное — как в карточке, несколько — с его номером
         if (!ok && !reason && failed && failed[1].why && (mode.allowed || list.length < 2)) {
           reason = list.length < 2 ? failed[1].why : ["workflow.error.selection.item", { number: failed[0].number, reason: render(failed[1].why[0], failed[1].why[1]) }];
         }
         const why = ok ? null : say(reason || ["workflow.error.selection_unavailable"]);
-        return {
-          id: tr.id,
-          kind: "transition",
-          label: render(tr.labelKey),
-          style: tr.ui.style || "outline",
-          visible,
-          enabled: ok,
-          reason: why ? why.text : null,
-          reasonKey: why ? why.key : null,
-          reasonVars: why ? why.vars : null,
-          formId: tr.form || null,
-          navigate: tr.ui.navigate || null,
-          bulkAllowed: Boolean(mode.allowed),
-        };
+        return Object.assign(
+          {
+            id: tr.id,
+            kind: "transition",
+            label: render(tr.labelKey),
+            style: tr.ui.style || "outline",
+            visible,
+            enabled: ok,
+            reason: why ? why.text : null,
+            reasonKey: why ? why.key : null,
+            reasonVars: why ? why.vars : null,
+            formId: tr.form || null,
+            navigate: tr.ui.navigate || null,
+            bulkAllowed: Boolean(mode.allowed),
+          },
+          ok && tr.form && mode.mode === "each_allowed" ? sharedForm(tr, list) : {}
+        );
       });
+    }
+
+    // Форма действия на выборке — одна на всех (§11, ARCH-08 в14): варианты полей — те, что есть у каждого
+    // отмеченного (выборка — из очереди); недоступный хоть у одного — недоступен; по умолчанию — общее значение
+    function sharedForm(tr, list) {
+      const [first, ...rest] = list.map((e) => formView(tr, e, "queue"));
+      const fieldOptions = {};
+      Object.entries(first.fieldOptions).forEach(([name, f]) => {
+        const others = rest.map((v) => v.fieldOptions[name] || { options: [] });
+        const options = f.options
+          .filter((o) => others.every((x) => x.options.some((y) => y.id === o.id)))
+          .map((o) => {
+            const off = [o].concat(others.map((x) => x.options.find((y) => y.id === o.id))).find((y) => y.disabled);
+            return off ? Object.assign({}, o, { disabled: true, reason: off.reason }) : o;
+          });
+        const d = f.defaultValue;
+        fieldOptions[name] = { options, defaultValue: d && others.every((x) => x.defaultValue === d) && options.some((o) => o.id === d && !o.disabled) ? d : null };
+      });
+      return { fieldOptions, fieldRules: first.fieldRules, formNote: first.formNote };
     }
 
     function selection(body) {
@@ -1248,11 +1260,21 @@
         "PUT",
         "/operator/session/agent-state",
         (p, q, body) => {
-          if (body.agentState === "not_ready") {
-            const notReady = W.session.states.find((s) => s.id === "not_ready");
-            if (notReady.permission && !can(notReady.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
+          // Смена — переходом состояния оператора машины (session.transitions, §12, ARCH-08 в4): откуда и куда;
+          // право и причина — у состояния, куда переходит. То же состояние — ничего не меняется
+          const from = session.agentState;
+          const to = body.agentState;
+          const target = W.session.states.find((s) => s.id === to);
+          if (to !== from) {
+            const move = W.session.transitions.find((t) => t.from.includes(from) && t.to === to);
+            const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || id];
+            if (!move || !target) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
+            if (target.permission && !can(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
+            if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
+          }
+          if (to === "not_ready") {
             session.agentState = "not_ready";
-            session.reasonId = body.reasonId || null;
+            session.reasonId = body.reasonId || session.reasonId || null;
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
             const fired = runScheduler();
             emit("session.agent_state_changed", null, ME, { agentState: "not_ready" });
@@ -1277,8 +1299,8 @@
         "POST",
         "/operator/session/heartbeat",
         (p, q, body) => {
+          // Признак активности — как у любого не-GET запроса оператора (handle, §12.3)
           session.openIncidentGuid = body.openIncidentGuid || null;
-          lastHeartbeat = now();
           return { status: 204, body: null };
         },
       ],
@@ -1305,6 +1327,8 @@
           // На выборке — только переходы с bulk.allowed машины (§11): «Взять» отмеченных — нет
           const bulkTr = engine.transition(p.transitionId);
           if (bulkTr && !(bulkTr.bulk && bulkTr.bulk.allowed)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_unavailable"]);
+          // Одно отмеченное — как одиночное действие; от двух — не меньше bulk.minItems машины
+          if (bulkTr && guids.length > 1 && guids.length < bulkTr.bulk.minItems) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: bulkTr.bulk.minItems }]);
           const succeeded = [];
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
@@ -1393,12 +1417,13 @@
         (p) => {
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          // «Отсоединить все» — тот же переход ко всем привязанным разом: всё или ничего
+          // «Отсоединить все» — тот же переход ко всем привязанным разом, атомарно: всё или ничего (ARCH-08 в6)
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
-          const blocked = linked.find((ev) => !engine.availability(detach.id, ev).ok);
-          if (blocked) return runTransition(detach.id, blocked, {}, "card");
-          linked.forEach((ev) => runTransition(detach.id, ev, {}, "card"));
+          const r = engine.runAll(detach.id, linked, {}, { surface: "card" });
+          if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : problem(422, "FORM_FIELD_REQUIRED", r.why);
+          touch(linked);
+          linked.forEach((ev, i) => emitTransition(ev, detach.id, ME, r.facts[i]));
           return { status: 200, body: card(primary) };
         },
       ],
@@ -1468,8 +1493,10 @@
         "/operator/transfer-targets",
         (p, q) => {
           const ev = q.incidentGuid ? find(q.incidentGuid) : null;
-          let list = targets().filter((o) => !engine.isSelf(o.id));
-          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && engine.hasAccess(o.id, ev) && engine.canAccept(o.id, ev));
+          // Для инцидента — варианты поля адресата формы машины (optionExpr); без инцидента — все, кроме себя
+          const form = W.forms.find((f) => f.fields.some((x) => x.source === "transferTargets"));
+          const field = ev && form ? engine.form(form.id, ev).fields.find((x) => x.source === "transferTargets") : null;
+          const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));
           return { status: 200, body: list.map(({ label, ...rest }) => rest) };
         },
       ],
@@ -1709,10 +1736,9 @@
 
     // Автоматические переходы машины по дедлайнам (§6.2): в продукте их выполняет сервер
     function runScheduler() {
-      // Чьи инциденты были мои — владельцем или адресатом, лично или группой: если после переходов
-      // такой инцидент мне не виден, сервер сообщает об этом (§5)
-      const myGroups = GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id);
-      const wasMine = new Set(events.filter((e) => !isDone(e) && (e.owner === ME || myGroups.includes(e.assignmentGroup))).map((e) => e.id));
+      // Чьи инциденты были мои — владельцем или адресатом, лично или группой (ownership машины): если после
+      // переходов такой инцидент мне не виден, сервер сообщает об этом (§5)
+      const wasMine = new Set(events.filter((e) => !isDone(e) && engine.ownership(e) !== "other").map((e) => e.id));
       const fired = engine.tick();
       // Системные переходы каждого человека — по его состоянию, как на бэкенде, а не только в эмуляции
       // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь

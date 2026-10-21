@@ -60,7 +60,7 @@
       cel.value(
         "Incident",
         {
-          id: ev.id, number: ev.number, eventType: ev.typeId, priority: ev.priority, state: ev.state, owner: ev.owner,
+          id: ev.id, number: ev.number, eventType: ev.typeId, priority: ev.priority, occurredAt: ev.occurredAt, state: ev.state, owner: ev.owner,
           assignmentGroup: ev.assignmentGroup, holdReasonId: ev.holdReason, escalationLevel: ev.escalationLevel,
           transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, result: ev.closeComment,
           closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches,
@@ -117,8 +117,7 @@
       let scope = null;
       for (const g of guards || []) {
         if (!cel.hasGuard(g.fn)) return { why: ["workflow.error.guard_not_implemented", { fn: g.fn }], hidden: false, guard: g.fn };
-        const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
-        const why = cel.guard(g.fn, args, scope || (scope = celScope(ev, opts)), g);
+        const why = cel.guard(g.fn, g.args || [], scope || (scope = celScope(ev, opts)), g);
         if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide", guard: g.fn };
       }
       return null;
@@ -292,14 +291,18 @@
             const n = ctx.shareAnswers ? ctx.shareAnswers(target, p, now()) : 0;
             if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());
           } else if (action === "notify") {
-            // Алерт (§9, RULE-43): кому — решает сервер (на месте и с доступом к объекту); никому — запись в журнал
-            if (a.to !== "alerts.target") return;
-            const { id, actor: who, transitionId } = Object.assign({ id: target.id }, cur);
+            // Уведомление (§9): кому, кто получит и запись «некому» — выражения машины; сервер только доставляет
+            const { actor: who, transitionId } = cur;
+            const id = target.id;
+            const recipients = Array.from(a.recipients || [], String);
+            cur.external.push({ fn: "notify", target: a.to });
             after.push(() => {
               const inc = real(id);
-              const sent = ctx.notifyAlert ? ctx.notifyAlert(inc, setting("alerts.target"), transitionId) : 0;
-              if (!sent) ctx.log(inc, who, W.alerts.noRecipientLog, {}, now());
+              if (ctx.deliver) ctx.deliver(inc, recipients, { alert: Boolean(a.alert), transitionId });
+              if (!recipients.length && a.emptyLog) ctx.log(inc, who, a.emptyLog, {}, now());
             });
+          } else if (action === "command") {
+            cur.external.push({ fn: "externalCommand", target: a.command });
           } else if (action === "evict") {
             const { transitionId } = cur;
             const who = a.who || null;
@@ -315,8 +318,7 @@
         draft(ev.id);
         const d = drafts.get(ev.id);
         const before = (extra && extra.before) || celIncident(d);
-        const previousOwner = cel.out(before.owner) || null;
-        cur = { form: form || {}, actor, transitionId: tr.id, previousOwnerName: ctx.actorName(def("addressee", before) || null) };
+        cur = { form: form || {}, actor, transitionId: tr.id, previousOwnerName: ctx.actorName(def("addressee", before) || null), external: [] };
         if (tr.to) d.state = tr.to;
         insts.set(ev.id, celIncident(d));
         const scope = { me: ME, actor, incident: insts.get(ev.id), before, form: form || {}, now: now(), deadline: extra && extra.deadline != null ? extra.deadline : null, world: celWorld };
@@ -324,17 +326,9 @@
           if (!cel.hasEffect(e.fn)) throw Object.assign(new Error(e.fn), { why: ["workflow.error.effect_not_implemented", { fn: e.fn }] });
           cel.effect(e.fn, e.args, scope, store);
         });
-        // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects): кому или какая
-        // команда. Нет получателя или это сам выполняющий — уведомления нет (BUG-30)
-        const recipient = { owner: d.owner, previousOwner, newTarget: addressee(d) };
-        return tr.effects
-          .filter((e) => e.kind === "external")
-          .map((e) => {
-            const [arg] = e.args || [];
-            const target = e.fn !== "notify" ? arg : arg === "alerts.target" ? setting(arg) : recipient[arg] || null;
-            return { fn: e.fn, target };
-          })
-          .filter((x) => x.target && x.target !== actor);
+        // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects) — те, что выполнили
+        // операции эффектов: кому уведомление или какая команда
+        return cur.external;
       });
       return {
         external,
@@ -595,6 +589,32 @@
       };
     }
 
+    // Пояснение в карточке (cardNotes машины, §6.3): первое правило, чьё выражение истинно; actions — доступные
+    // смотрящему действия карточки. [ключ, подстановки] и вид плашки; нет правила — null
+    function cardNote(ev) {
+      const actionIds = actions(ev, "card").filter((a) => a.enabled).map((a) => a.id);
+      const scope = Object.assign(celScope(ev, { surface: "card" }), { actions: actionIds });
+      const i = ((W.cardNotes || {}).rules || []).findIndex((n, k) => ruleOf(`cardNotes.rules.${k}.expr`, scope));
+      if (i < 0) return null;
+      const n = W.cardNotes.rules[i];
+      const hold = catalogItem("hold", ev.holdReason);
+      const label = closeResultLabel(ev);
+      return {
+        note: [
+          n.textKey,
+          {
+            who: ctx.actorName(addressee(ev)),
+            owner: ctx.actorName(ev.owner),
+            level: ev.escalationLevel || 0,
+            why: label ? [label] : "",
+            holdReason: hold ? [hold.labelKey] : "",
+            primaryNumber: ev.linkedTo && byId(ev.linkedTo) ? byId(ev.linkedTo).number : "",
+          },
+        ],
+        style: n.style || "",
+      };
+    }
+
     const bulk = (id) => (transitions[id] && transitions[id].bulk) || { allowed: false };
 
     // Фильтры очереди машины (queueFilters), которые проходит инцидент для этого оператора. В списках —
@@ -623,6 +643,23 @@
         if (!a.ok) return { ok: false, why: a.why, guard: a.guard, ev: primary };
       }
       return { ok: true, tr, form, take: taking ? take : null };
+    }
+    // Один переход на нескольких инцидентах — всё или ничего (§11, ARCH-08 в6): сначала условия всех, потом
+    // эффекты на одних черновиках; окно после дедлайна — у каждого. Не проходит — какой (ev) и почему
+    function runAll(id, list, form, opts) {
+      const tr = transitions[id];
+      if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
+      for (const ev of list) {
+        const a = availability(id, ev, { form, surface: opts && opts.surface });
+        if (!a.ok) return { ok: false, why: a.why, guard: a.guard, notFrom: a.notFrom, ev };
+        const bad = validateForm(tr, ev, form || {}, opts && opts.surface);
+        if (bad) return { ok: false, why: bad, ev };
+      }
+      const canceled = list.map((ev) => windowBefore(ev, id));
+      const applied = applyAll(tr, list, form || {}, ME);
+      if (!applied.ok) return applied;
+      list.forEach((ev, i) => windowAfter(ev, canceled[i], applied.facts[i]));
+      return applied;
     }
     function merge(primary, others) {
       const check = mergeCheck(primary, others);
@@ -662,10 +699,23 @@
       create,
       form,
       badge,
+      cardNote,
       bulk,
       norm,
       // Инцидент так, как его видят выражения машины: для сверки с моделью Quint (tools/check_quint_replay.mjs)
       celView: (ev) => cel.plain(celIncident(ev)),
+      // Ключи порядка очереди (queueSort.keys машины): меньше — выше
+      sortKeys: (ev, orderId) => {
+        const scope = celScope(ev);
+        return ((W.queueSort.keys || {})[orderId] || []).map((k, i) => Number(cel.rule(`queueSort.keys.${orderId}.${i}`, scope)));
+      },
+      // На месте ли человек (onDuty машины): для подписей «кого нет» у адресатов
+      onDuty: (id) => def("onDuty", id || ""),
+      // Основной при объединении, если его не назвал оператор (§11): mergePrimary машины; нет — null
+      mergePrimary: (list) => {
+        const r = def("mergePrimary", Array.from(list, celIncident), ME);
+        return r.length ? cel.source(r[0]) : null;
+      },
       hasAccess,
       canAccept,
       // Таймеры при загрузке набора — эффектами машины, без перехода
@@ -678,6 +728,7 @@
       closeResultLabel,
       merge,
       mergeCheck,
+      runAll,
       units,
     };
   }

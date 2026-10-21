@@ -46,7 +46,7 @@ function checkUse(use, where) {
     const type = (reg.argTypes || {})[name];
     const v = args[i];
     if (v === undefined) return err.push(`${where}: ${use.fn} — нет аргумента ${name}`);
-    if (v === "form.resultId" || !type) return;
+    if (!type) return;
     if (type === "setting") {
       setting = byPath(v);
       if (setting === undefined) err.push(`${where}: ${use.fn} — настройки ${v} в машине нет`);
