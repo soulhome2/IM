@@ -14,6 +14,11 @@
     copy ? Object.fromEntries(Object.keys(copy).filter((k) => JSON.stringify(copy[k]) !== JSON.stringify(base[k])).map((k) => [k, copy[k]])) : undefined;
   const standWith = ({ workflow, fixture }) => makeEnv({ workflowPatch: changed(W, workflow), fixturePatch: changed(window.IM_FIXTURE, fixture) });
   const lastJournal = (card) => card.journal[card.journal.length - 1];
+  // Адресат уровня эскалации из записи «user:id» / «group:id» — полями targetKind и target (ARCH-07 в7)
+  const to = (ref) => {
+    const [targetKind, target] = ref.split(":");
+    return { targetKind, target };
+  };
   // Запись журнала — ключ каталога (§14.9, RULE-66): для проверок по смыслу — её русская строка
   const jt = (entry) => window.IM_STRINGS.ru[entry.templateKey] || entry.templateKey;
 
@@ -189,7 +194,7 @@
     }
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + GRACE + 1);
     const c = await env.card(inc.guid);
-    const first = W.escalation.levels.find((l) => l.level === 1).targetRef.split(":")[1];
+    const first = W.escalation.levels.find((l) => l.level === 1).target;
     assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel, c.transferCount], ["pending_acceptance", first, 1, 2], "автоэскалация — на уровень 1, а не пропуском на 2 и не потолок");
   });
 
@@ -243,6 +248,28 @@
       assert.eq(inc.badge.template, "workflow.badge.in_progress.other", `${where}: ключ бейджа`);
       assert.eq(inc.badge.label, owner.name, `${where}: текст бейджа`);
     }
+  });
+
+  test("Чужой в работе: не в «Моих»; в форме «Передать» — без владельца, пояснение про чужой (forms машины, §8.1)", async () => {
+    const env = await makeEnv();
+    const guid = await env.guidOf("INC-1846");
+    assert.ok(!(await env.all("mine")).some((e) => e.guid === guid), "чужой не в «Моих»");
+    assert.ok((await env.all("mine")).every((e) => e.owner && e.owner.id === ME), "в «Моих» — только мои");
+    const transfer = actionOf(await env.card(guid), "transfer");
+    assert.ok(transfer && transfer.enabled, "чужой можно передать");
+    const ids = transfer.fieldOptions.targetId.options.map((o) => o.id);
+    assert.ok(ids.length && !ids.includes("petrova"), `без текущего владельца: ${ids.join(", ")}`);
+    assert.eq(transfer.formNote.key, "workflow.form.transfer.note.1", "пояснение — про чужой");
+  });
+
+  test("В форме «Отложить» — только причины оператора: перерыв и потерю связи ставит система (setBy, §4)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const ids = actionOf(await env.card(inc.guid), "hold").fieldOptions.reasonId.options.map((o) => o.id);
+    const own = W.reasonCatalogs.hold.items.filter((i) => i.setBy !== "system").map((i) => i.id);
+    assert.eq(ids, own, "причины");
+    assert.ok(own.length < W.reasonCatalogs.hold.items.length, "в справочнике есть системные");
   });
 
   test("«Перехватить» — не адресату: переданное моей группе принимают, а не перехватывают — ни в карточке, ни на панели выборки (§6.1, §7, BUG-55)", async () => {
@@ -508,6 +535,20 @@
     assert.eq(res.body.incident.result, "уборщик", "комментарий");
   });
 
+  test("Видно ли поле формы и обязательно ли — таблицей сервера по выбранному варианту (fieldRules, CEL.md)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const queue = actionOf(inc, "close").fieldRules;
+    assert.eq([queue.resultId.visible, queue.resultId.required, queue.resultId.dependsOn || null], [true, true, null], "результат — всегда");
+    assert.eq(queue.causeId.dependsOn, "resultId", "причина сбоя зависит от результата");
+    assert.eq([queue.causeId.byValue.mass.visible, queue.causeId.byValue.mass.required], [true, true], "«Массовый сбой» — причина видна и обязательна");
+    assert.eq([queue.causeId.byValue[""].visible, queue.causeId.byValue[""].required], [false, false], "результат не выбран — причины нет");
+    await env.act(inc.guid, "claim", {}, "queue");
+    const card = actionOf(await env.card(inc.guid), "close").fieldRules;
+    assert.eq(card.comment.dependsOn, "resultId", "комментарий зависит от результата");
+    assert.eq([card.comment.byValue.false_alarm.required, card.comment.byValue.processed.required], [true, false], "по commentRequired результата");
+  });
+
   test("Из очереди закрывают только «Массовый сбой»: причина сбоя обязательна, подпись — причина", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
@@ -552,8 +593,8 @@
     assert.status(res, 403, "TARGET_CANNOT_ACCEPT", "передача тому, кто не может принять");
     assert.eq(res.body.guard, "targetCanAccept", "какое условие не выполнено");
     // Адресат первого уровня эскалации — Петрова: уровень пропускается, инцидент уходит на второй
-    const first = W.escalation.levels[0].targetRef.split(":")[1];
-    const second = W.escalation.levels[1].targetRef.split(":")[1];
+    const first = W.escalation.levels[0].target;
+    const second = W.escalation.levels[1].target;
     assert.eq(first, "petrova", "в машине первый уровень — Петрова");
     const left = Math.ceil((Date.parse(inc.timer.dueAt) - env.now) / 1000) + GRACE + 1;
     await env.advance(left);
@@ -786,11 +827,11 @@
     const levels = W.escalation.levels;
     assert.eq(c.state, "pending_acceptance", "после реакции");
     assert.eq(c.escalationLevel, 1, "уровень");
-    assert.eq(c.owner && c.owner.id, levels[0].targetRef.split(":")[1], "адресат уровня 1");
+    assert.eq(c.owner && c.owner.id, levels[0].target, "адресат уровня 1");
     await env.advance(levels[0].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, 2, "уровень 2");
-    assert.eq(c.owner && c.owner.id, levels[1].targetRef.split(":")[1], "адресат уровня 2");
+    assert.eq(c.owner && c.owner.id, levels[1].target, "адресат уровня 2");
     await env.advance(levels[1].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");
@@ -825,7 +866,7 @@
     }
     const up = await overdue(() => {});
     assert.eq(up.fired, ["resolution_escalate"], "сработала эскалация, а не алерт");
-    const level1 = up.w.escalation.levels[0].targetRef.split(":")[1];
+    const level1 = up.w.escalation.levels[0].target;
     assert.eq([up.card.state, up.card.owner && up.card.owner.id, up.card.escalationLevel], ["pending_acceptance", level1, 1], "передан адресату первого уровня");
     assert.eq(up.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
     const top = await overdue((w) => (w.escalation.maxLevel = 0));
@@ -838,7 +879,7 @@
     // Своя копия машины: адресаты уровней — из targets. Ждём ровно до истечения реакции инцидента
     async function escalate(targets, pick) {
       const w = JSON.parse(JSON.stringify(W));
-      targets.forEach((ref, i) => (w.escalation.levels[i].targetRef = ref));
+      targets.forEach((ref, i) => Object.assign(w.escalation.levels[i], to(ref)));
       const stand = await standWith({ workflow: w });
       const api = stand.api;
       const reset = { body: { now: new Date(stand.now).toISOString() } };
@@ -867,8 +908,8 @@
   });
 
   test("Автоэскалация пропускает уровень, где принять может только тот, у кого инцидент уже есть (§8.3, RULE-93)", async () => {
-    const first = W.escalation.levels[0].targetRef.split(":")[1];
-    const second = W.escalation.levels[1].targetRef.split(":")[1];
+    const first = W.escalation.levels[0].target;
+    const second = W.escalation.levels[1].target;
     const firedFor = (fired, guid) => fired.filter((f) => f.incidentGuid === guid).map((f) => f.transitionId);
     // Реакция: передан адресату уровня 1 и не принят — эскалация не возвращает инцидент ему же с новым сроком
     const env = await makeEnv();
@@ -880,7 +921,7 @@
     assert.eq([fired, c.owner && c.owner.id, c.escalationLevel], [["auto_escalate"], second, 2], `реакция: уровень 1 — ${first}, у кого инцидент уже есть, — пропущен`);
     // Закрытие: адресат уровня 1 — тот, кто ведёт инцидент, или группа, где принять может только он
     async function overdue(level1Ref, roles) {
-      const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: level1Ref }) : l));
+      const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to(level1Ref)) : l));
       const esc = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }) });
       if (roles) assert.status(await esc.call("PUT", `/test/operators/${roles.id}/roles`, { roles: roles.roles }), 200, null, `роли ${roles.id}`);
       const fire = await newFire(esc);
@@ -909,7 +950,7 @@
     assert.ok(!again.some((f) => f.incidentGuid === inc.guid), `после возобновления ничего не сработало: ${again.map((f) => f.transitionId)}`);
     assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия одно");
     // Эскалация по закрытию на мою группу: принявший работает с инцидентом, его не уводят дальше
-    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: "group:grp-leads" }) : l));
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to("group:grp-leads")) : l));
     const esc = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }) });
     const fire = await newFire(esc);
     const claimed = await esc.act(fire.guid, "claim", {}, "queue");
@@ -955,6 +996,18 @@
     assert.eq(await silent(W.session.idleReleaseSec - W.session.idleHoldSec), ["system_release_idle"], "после idleReleaseSec — возврат в очередь");
     c = await env.card(inc.guid);
     assert.eq([c.state, c.owner], ["new", null], "снова новый, ничей");
+  });
+
+  test("Действие — признак активности (§12.3, BUG-76): молчал дольше idleHoldSec и взял инцидент — он в работе, не отложен", async () => {
+    // Эскалация выключена: за время молчания инцидент остаётся новым
+    const env = await makeEnv({ workflowPatch: { escalation: { enabled: false } } });
+    const inc = await newFire(env);
+    // Часы идут без heartbeat: оператор не на связи, но инцидентов у него нет — откладывать нечего
+    assert.status(await env.call("POST", "/test/clock", { advanceSec: W.session.idleHoldSec + 60 }), 200, null, "сдвиг часов");
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять после долгого молчания");
+    const res = await env.call("POST", "/test/clock", { advanceSec: 1 });
+    assert.eq(res.body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId), [], "взял — значит, на связи: системного «Отложить» нет");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "в работе");
   });
 
   test("Перерыв: инцидент в работе откладывается системой, действия недоступны; после возврата — доступны", async () => {
@@ -1237,7 +1290,7 @@
     const toDue = (env, inc) => Math.round((Date.parse(inc.timer.dueAt) - env.now) / 1000);
     const levelZero = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
     const [first, second] = W.escalation.levels;
-    const idOf = (level) => level.targetRef.split(":")[1];
+    const idOf = (level) => level.target;
     // «Передать» Сидорову через секунду после дедлайна: эскалация не отменена — по окончании окна уровню 1
     let env = await makeEnv();
     let inc = await levelZero(env);
@@ -1249,7 +1302,7 @@
     let c = await env.card(inc.guid);
     assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", idOf(first), 1], "по окончании окна — автоэскалация уровню 1");
     // «Отклонить» адресатом уровня 1 через секунду после его дедлайна: по окончании окна — уровню 2
-    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, { targetRef: `user:${ME}` }), second] }) }) });
+    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, to(`user:${ME}`)), second] }) }) });
     inc = await levelZero(env);
     await env.advance(toDue(env, inc) + GRACE + 1);
     c = await env.card(inc.guid);
@@ -1279,7 +1332,7 @@
     assert.eq(reactions(await env.card(inc.guid)), 2, "два нарушения реакции");
     // Потолок: единственный уровень — я; не принял — потолок остановил реакцию; «Отклонить» — новый без срока
     const [first] = W.escalation.levels;
-    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, { targetRef: `user:${ME}` })], maxLevel: 1 }) }) });
+    env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels: [Object.assign({}, first, to(`user:${ME}`))], maxLevel: 1 }) }) });
     inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
     assert.eq(firedFor(await env.advance(toDue(env, inc) + GRACE + 1), inc.guid), ["auto_escalate"], "эскалация на меня");
     c = await env.card(inc.guid);
@@ -1576,6 +1629,10 @@
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, c.guid], primaryGuid: a.guid });
     const cards = await Promise.all([b, c, d].map((e) => env.card(e.guid)));
     assert.ok(cards.every((x) => x.state === "linked" && x.linkedTo === a.guid), "B, C и D привязаны к A напрямую");
+    // В списках — инциденты хоть одного фильтра очереди машины: и при фильтре, и без него
+    for (const listed of [(await env.all("all")).map((e) => e.guid), (await env.ok("GET", "/operator/incidents?pageSize=1000")).items.map((e) => e.guid)]) {
+      assert.ok(listed.includes(a.guid) && ![b, c, d].some((e) => listed.includes(e.guid)), "в списках — основной, привязанные — нет");
+    }
     const moved = cards[2].journal[cards[2].journal.length - 1];
     assert.eq([moved.templateKey, moved.vars.primaryNumber], ["workflow.journal.merge", a.number], "у D — запись о новом основном");
     const page = await env.ok("GET", `/operator/incidents/${enc(a.guid)}/linked`);
@@ -1757,6 +1814,21 @@
     assert.eq(resolutionBreaches(await env2.card(rain.guid)).length, 0, "присоединённому после срока — нет");
   });
 
+  test("Окно после срока группы: отсоединённый в окне и взятый в нём же — одно нарушение, группы; своего нет (§11.4, BUG-75)", async () => {
+    assert.ok(GRACE > 1, "окно после дедлайна больше секунды");
+    const env = await makeEnv();
+    const { urgent, calm } = await fireTrio(env);
+    for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    const due = (await env.card(calm.guid)).timer.dueAt;
+    await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(urgent.guid)}`), 200, null, "отсоединить в окне");
+    assert.status(await env.act(urgent.guid, "claim", {}, "queue"), 200, null, "взять отсоединённый, пока окно не кончилось");
+    await env.advance(GRACE + 5);
+    const b = resolutionBreaches(await env.card(urgent.guid));
+    assert.eq([b.length, b[0] && b[0].at], [1, due], "одно нарушение — группы, на момент её срока");
+  });
+
   test("Окно после срока группы: основной со своими привязанными присоединили в окне после его срока — его привязанные получают его нарушение (BUG-73, PROC-37)", async () => {
     const env = await makeEnv();
     const { urgent, fresh, calm } = await fireTrio(env);
@@ -1803,7 +1875,7 @@
 
   test("У адресата основного нет доступа к привязанному — после эскалации или смены ролей привязанный отсоединяется и уходит в очередь (§11.4, §5, RULE-71)", async () => {
     const W = window.IM_WORKFLOW;
-    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetRef: "user:kuznetsov" }) : l));
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to("user:kuznetsov")) : l));
     const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) } });
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     const mall = fires.find((e) => e.site === "Торговый центр");
@@ -1930,8 +2002,8 @@
 
   test("Основной «Ожидает принятия»: отсоединять — только после «Принять», и человеку, и группе (§11.4, RULE-78)", async () => {
     // Основной адресован мне автоэскалацией: первая ступень — я сам или моя группа
-    for (const [who, targetRef, ownership] of [["лично", `user:${ME}`, "target"], ["группе", "group:grp-leads", "target"]]) {
-      const env = await makeEnv({ workflowPatch: { escalation: { levels: [{ level: 1, targetRef, reactionSec: 600 }], maxLevel: 1 } } });
+    for (const [who, ref, ownership] of [["лично", `user:${ME}`, "target"], ["группе", "group:grp-leads", "target"]]) {
+      const env = await makeEnv({ workflowPatch: { escalation: { levels: [Object.assign({ level: 1 }, to(ref), { reactionSec: 600 })], maxLevel: 1 } } });
       const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
       const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires.map((e) => e.guid) });
       const lead = res.incident.guid;
@@ -2459,7 +2531,7 @@
     assert.ok(found, `событие пришло: ${got.map(({ m }) => m.type).join(", ")}`);
     const p = found.m.payload;
     assert.eq([p.trigger, p.state.from, p.state.to], ["timer", "new", "pending_acceptance"], "по таймеру: новое → ожидает принятия");
-    assert.eq(p.addressee.id, W.escalation.levels[0].targetRef.split(":")[1], "адресат в событии");
+    assert.eq(p.addressee.id, W.escalation.levels[0].target, "адресат в событии");
     // Сообщение SSE: id: совпадает с id в data — по нему переподключение с Last-Event-ID
     got.forEach(({ m, meta }) => assert.eq(meta && meta.lastEventId, m.id, `id: сообщения ${m.type}`));
     assert.eq(new Set(got.map(({ m }) => m.id)).size, got.length, "id сообщений не повторяются");

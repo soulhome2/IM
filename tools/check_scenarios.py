@@ -627,7 +627,8 @@ def check_junction(err):
             for v in node:
                 walk(v)
 
-    walk({k: v for k, v in w.items() if k != "registries"})
+    # cel — объявления типов выражений (requiredStepSet: string), не ссылки на наборы
+    walk({k: v for k, v in w.items() if k not in ("registries", "cel")})
     for k in sorted(used - declared - {"byCloseResult"}):
         err.append(f"workflow_schema.v1.json: ссылка на набор {k}, которого нет в stepSets")
 

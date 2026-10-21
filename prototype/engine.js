@@ -28,71 +28,8 @@
     // Окно после дедлайна (§10.1, правило 5; RULE-63): переход по таймеру — через graceSec после дедлайна
     const GRACE_MS = (((W.invariants || {}).manualWinsOverTimer || {}).graceSec || 0) * 1000;
     const isGroup = (id) => Boolean(id) && ctx.isGroup(id);
-    const isMine = (ev) => ev.owner === ME;
-    // «Я» как адресат: сам оператор и группы, в которые он входит (§10.1)
-    const isSelf = (id) => Boolean(id) && (id === ME || (isGroup(id) && ctx.memberOf(id, ME)));
-    // Адресат: владелец-человек, а пока группа не приняла — сама группа (assignment_group, §8.1)
-    const addressee = (ev) => ev.owner || ev.assignmentGroup || null;
-    const isTarget = (ev) => isSelf(addressee(ev));
-    const isDone = (ev) => states[ev.state] && states[ev.state].category === "done";
-    // Объединение (§11): основной инцидент привязанного — по linkedTo
     const byId = (id) => (id ? ctx.events().find((e) => e.id === id) || null : null);
-    const unowned = (ev) => !ev.owner && !ev.assignmentGroup;
-    // Отношение смотрящего к инциденту (§2.4). Инцидент, ожидающий моего принятия, — «мне
-    // адресован», даже если владельцем записан я сам: так передают лично оператору
-    function ownership(ev) {
-      if (ev.state === "pending_acceptance" && isTarget(ev)) return "target";
-      if (isMine(ev)) return "owner";
-      return isTarget(ev) ? "target" : "other";
-    }
-    // Условие «отношение ко мне» в scopeRule: владелец — это мой инцидент, адресат — адресованный мне
-    const matchesOwnership = (ev, role) => (role === "owner" ? isMine(ev) : role === "target" ? isTarget(ev) : ownership(ev) === role);
-    const asList = (v) => (Array.isArray(v) ? v : [v]);
     const catalogItem = (catalog, id) => (catalogs[catalog] ? catalogs[catalog].items.find((i) => i.id === id) : null);
-    const refToId = (ref) => (typeof ref === "string" && ref.includes(":") ? ref.split(":")[1] : ref);
-    // Следующий уровень автоэскалации (§8.3): ближайший выше текущего и не выше потолка, адресат
-    // которого может принять — право «Принимать» и доступ к объекту (§5, §8.1); остальные пропускаются.
-    // Пропускается и уровень, где принять может только тот, у кого инцидент уже есть: его адресат или
-    // группа, где принять может только владелец, — как «Исключение владельца» у передачи (RULE-93)
-    const nextLevel = (ev) =>
-      W.escalation.levels
-        .filter((l) => l.level > ev.escalationLevel && l.level <= W.escalation.maxLevel)
-        .sort((a, b) => a.level - b.level)
-        .find((l) => {
-          const target = refToId(l.targetRef);
-          if (target === addressee(ev)) return false;
-          return !ctx.canAccept || ctx.canAccept(target, ev, ev.owner);
-        }) || null;
-
-    /* ===== Нормативы (§4, правило 2) ===== */
-
-    // Самая специфичная строка overrides, иначе byPriority, иначе defaultSec
-    function baseNorm(ev, timerId) {
-      const t = timers[timerId];
-      let best = null;
-      let bestScore = -1;
-      (t.overrides || []).forEach((o) => {
-        const keys = Object.keys(o).filter((k) => k !== "sec");
-        const match = keys.every((k) =>
-          k === "eventType" ? o[k] === ev.typeId : k === "sourceGroup" ? ctx.inGroup(ev, o[k]) : o[k] === ev[k]
-        );
-        if (match && keys.length > bestScore) {
-          best = o.sec;
-          bestScore = keys.length;
-        }
-      });
-      if (best != null) return best;
-      if (t.byPriority && t.byPriority[ev.priority] != null) return t.byPriority[ev.priority];
-      return t.defaultSec;
-    }
-
-    // Норматив реакции уровня автоэскалации (§8.3)
-    // Уровень 0 — инцидент не эскалировался: обычный норматив (передача уровень не меняет, RULE-76)
-    function levelNorm(ev, level) {
-      const levels = W.escalation.levels;
-      const found = level > 0 ? levels.find((l) => l.level === level) || levels[levels.length - 1] : null;
-      return found ? found.reactionSec : baseNorm(ev, "reaction");
-    }
 
     /* ===== Таймеры: дедлайны — метки времени (§4, правило 1) ===== */
 
@@ -103,255 +40,85 @@
       hold: { due: "holdDueAt", since: "holdSince" },
     };
     const dueOf = (ev, id) => ev[FIELDS[id].due];
-    // Нарушение основного — тем, кто был в группе в момент нарушения (§11.4, BUG-73): открытым привязанным,
-    // присоединённым не позже него, и вышедшим после него — отсоединённым в окне после дедлайна
-    const inGroupAt = (e, ev, at) =>
-      (e.linkedTo === ev.id && !isDone(e) && (e.linkedAt || 0) <= at) ||
-      Boolean(e.leftGroup && e.leftGroup.primaryId === ev.id && e.leftGroup.linkedAt <= at && e.leftGroup.at > at);
-    // template — запись в журнал каждого, кому нарушение записано так (RULE-98)
-    function shareBreach(ev, record, template) {
-      ctx.events()
-        .filter((e) => e.id !== ev.id && inGroupAt(e, ev, record.at))
-        .forEach((e) => {
-          e.breaches = (e.breaches || []).concat(Object.assign({}, record));
-          e.slaBreached = true;
-          // Вышедший с отработанным сроком группы: нарушение записано, при взятии второго не будет (RULE-50)
-          if (leftOf(e, record.kind) === 0) e.firedTimers = Object.assign({}, e.firedTimers, { [record.kind]: record.at });
-          if (template) ctx.log(e, "dispatcher", template, { primaryNumber: ev.number, timer: [timers[record.kind].labelKey] }, now());
-          // Инцидент изменился не своим переходом — сервер даёт ему новую версию
-          if (ctx.onBreachShared) ctx.onBreachShared(e);
-        });
-    }
-    // Остаток таймера с паузой: идёт — до дедлайна, на паузе — остаток, ещё не запускался — null
-    function leftOf(ev, id) {
-      const f = FIELDS[id];
-      if (ev[f.due]) return Math.max(0, ev[f.due] - now());
-      return ev[f.left] != null ? ev[f.left] : null;
-    }
-    // Норматив уже нарушен и отработан (RULE-50): остатка нет, дедлайн сработал
-    const spent = (ev, id) => leftOf(ev, id) === 0 && Boolean(ev.firedTimers && ev.firedTimers[id]);
-
-    // Длительность таймера: из справочника (secFrom, например срок удержания по причине),
-    // по уровню эскалации или по нормативам (§4)
-    function timerSec(ev, id, arg) {
-      const t = timers[id];
-      if (t.secFrom) {
-        const [catalog, attr] = t.secFrom.replace("reasonCatalogs.", "").split("[].");
-        const item = catalogItem(catalog, ev.holdReason);
-        return item ? item[attr] * (attr === "maxMinutes" ? 60 : 1) : null;
-      }
-      if (arg === "byEscalationLevel" || arg === "escalation.level.reactionSec") return levelNorm(ev, ev.escalationLevel);
-      if (typeof arg === "number") return arg;
-      return baseNorm(ev, id);
-    }
-
-    // Таймер с startsOnce запускается один раз за жизнь инцидента: дальше start = продолжить с остатка
-    function startTimer(ev, id, arg) {
-      const t = timers[id];
-      if (t.startsOnce) return resumeTimer(ev, id);
-      const sec = timerSec(ev, id, arg);
-      ev[FIELDS[id].due] = sec == null ? null : now() + sec * 1000;
-      if (FIELDS[id].since) ev[FIELDS[id].since] = now();
-    }
-    function stopTimer(ev, id) {
-      if (timers[id].startsOnce) return pauseTimer(ev, id);
-      ev[FIELDS[id].due] = null;
-      if (FIELDS[id].since) ev[FIELDS[id].since] = null;
-    }
-    // Пауза и продолжение — только у таймеров с pausable (норматив закрытия, RULE-07)
-    function pauseTimer(ev, id) {
-      const f = FIELDS[id];
-      if (!timers[id].pausable || !f.left) return stopTimer(ev, id);
-      if (ev[f.due]) ev[f.left] = Math.max(0, ev[f.due] - now());
-      ev[f.due] = null;
-    }
-    function resumeTimer(ev, id) {
-      const f = FIELDS[id];
-      if (!timers[id].pausable || !f.left) return startTimer(ev, id);
-      if (ev[f.due]) return;
-      const left = ev[f.left] != null ? ev[f.left] : timerSec(ev, id) * 1000;
-      // Истёкший и уже сработавший норматив (RULE-50): возврат в работу не даёт нового срока —
-      // остаётся прежний дедлайн, он отработан. Новый запуск — только restartTimer (переоткрытие)
-      const fired = ev.firedTimers && ev.firedTimers[id];
-      if (left === 0 && fired) {
-        ev[f.due] = fired;
-        ev[f.left] = null;
-        return;
-      }
-      ev[f.due] = now() + left;
-      ev[f.left] = null;
-    }
-
-    // Срабатывание по дедлайну — один раз на каждый дедлайн, как у планировщика на сервере (§14.3)
-    function timerExpired(ev, id) {
-      const due = dueOf(ev, id);
-      if (!due || due > now()) return false;
-      ev.firedTimers = ev.firedTimers || {};
-      return ev.firedTimers[id] !== due;
-    }
+    // Срабатывание отмечается планировщиком: каждый дедлайн срабатывает один раз (§14.3)
     function markFired(ev, id) {
-      ev.firedTimers = ev.firedTimers || {};
-      ev.firedTimers[id] = dueOf(ev, id);
+      ev.firedTimers = Object.assign({}, ev.firedTimers, { [id]: dueOf(ev, id) });
     }
 
-    /* ===== Лимиты (§10.2): привязанные инциденты объединённого в лимит не входят — у них нет владельца ===== */
+    /* ===== Язык выражений машины (CEL.md, ARCH-07) ===== */
 
-    function units(stateId, ev) {
-      const own = ev ? ev.id : null;
-      return new Set(
-        ctx
-          .events()
-          .filter((e) => e.state === stateId && isMine(e))
-          .map((e) => e.id)
-          .filter((u) => u !== own)
-      );
-    }
-
-    /* ===== Условия: реестр машины (§14.8) ===== */
-
-    const GUARDS = {
-      hasPermission: (ev, [key]) => (ctx.can(key) ? null : ["workflow.guard.no_permission", { p: key }]),
-      // Область права — по scopeRule условия: own, если выполнено хоть одно из anyOf (§5)
-      hasScopedPermission: (ev, [prefix], opts, guard) => {
-        const rule = (guard && guard.scopeRule && guard.scopeRule.own) || { anyOf: [] };
-        const own = rule.anyOf.some((c) => (c.state ? ev.state === c.state : c.ownership ? matchesOwnership(ev, c.ownership) : false));
-        const key = `${prefix}:${own ? "own" : "any"}`;
-        return ctx.can(key) ? null : ["workflow.guard.no_permission", { p: key }];
-      },
-      isOwner: (ev) => (isMine(ev) ? null : ["workflow.guard.not_owner"]),
-      // «Не мой» и «не мне адресован» — по отношению смотрящего (§2.4): инцидент, ожидающий моего
-      // принятия, — адресованный мне, даже если владельцем записан я сам (BUG-60)
-      isNotOwner: (ev) => (ownership(ev) === "owner" ? ["workflow.guard.already_owner"] : null),
-      isTarget: (ev) => (isTarget(ev) ? null : ["workflow.guard.not_target"]),
-      isNotTarget: (ev) => (ownership(ev) === "target" ? ["workflow.guard.is_target"] : null),
-      // Адресат передачи из формы — не сам оператор (§10.1). До заполнения формы условие выполнено
-      targetIsNotSelf: (ev, args, opts) => {
-        const target = opts && opts.form ? opts.form.targetId : null;
-        return isSelf(target) ? ["workflow.guard.transfer_to_self"] : null;
-      },
-      targetCanAccept: (ev, args, opts) => {
-        const target = opts && opts.form ? opts.form.targetId : null;
-        return !target || ctx.canAccept(target, ev) ? null : ["workflow.guard.target_cannot_accept"];
-      },
-      targetHasAccess: (ev, args, opts) => {
-        const target = opts && opts.form ? opts.form.targetId : null;
-        return !target || ctx.hasAccess(target, ev) ? null : ["workflow.guard.target_no_access"];
-      },
-      // На перерыве и после выхода — только просмотр (§10.4, §12.1): какие состояния такие, решает машина
-      agentReady: () => {
-        const st = W.session.states.find((s) => s.id === ctx.agentState());
-        return st && st.readOnly ? [st.readOnlyReasonKey] : null;
-      },
-      agentStateIs: (ev, [stateId]) => (ctx.agentState() === stateId ? null : ["workflow.guard.agent_state"]),
-      addresseeHasAccess: (ev, [expected]) => {
-        const who = addressee(ev);
-        if (!who) return ["workflow.guard.no_addressee"];
-        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["workflow.guard.addressee_access"];
-      },
-      // У адресата открытого основного есть ли доступ к объекту привязанного (§11.4, §5, RULE-71)
-      primaryAddresseeHasAccess: (ev, [expected]) => {
-        const p = ev.linkedTo && byId(ev.linkedTo);
-        const who = p && !isDone(p) ? addressee(p) : null;
-        if (!who) return ["workflow.guard.no_addressee"];
-        return Boolean(ctx.hasAccess && ctx.hasAccess(who, ev)) === expected ? null : ["workflow.guard.primary_addressee_access"];
-      },
-      addresseeCanAccept: (ev, [expected]) => {
-        const who = addressee(ev);
-        if (!who) return ["workflow.guard.no_addressee"];
-        return Boolean(ctx.canAccept && ctx.canAccept(who, ev)) === expected ? null : ["workflow.guard.addressee_can_accept"];
-      },
-      escalationTargetAvailable: (ev, [expected]) => (Boolean(nextLevel(ev)) === expected ? null : ["workflow.guard.no_escalation_level"]),
-      ownerHasDutyGroup: (ev, [expected]) => (Boolean(ev.owner && ctx.dutyGroupOf(ev.owner)) === expected ? null : ["workflow.guard.owner_duty_group"]),
-      // Сколько секунд сессия оператора не присылает признак активности (§12.3) — знает сервер (ctx.idleSec)
-      agentIdleFor: (ev, [path]) => (ctx.idleSec && ctx.idleSec() - (ctx.now() - now()) / 1000 >= setting(path) ? null : ["workflow.guard.agent_online"]),
-      // Лимит null — без ограничения (§10.2, RULE-69)
-      withinActiveLimit: (ev) => {
-        if (W.limits.maxActive == null) return null;
-        const u = units("in_progress", ev);
-        if (u.size < W.limits.maxActive) return null;
-        // В подсказке — номер инцидента, который держит лимит
-        const busy = ctx.events().find((e) => e.state === "in_progress" && isMine(e) && u.has(e.id));
-        return ["workflow.guard.active_limit", { n: W.limits.maxActive, id: busy ? busy.number || busy.id : "" }];
-      },
-      withinHoldLimit: (ev) =>
-        W.limits.maxOnHold == null || units("on_hold", ev).size < W.limits.maxOnHold ? null : ["workflow.guard.hold_limit", { n: W.limits.maxOnHold }],
-      // Точно, без округления до минуты (BUG-31): «не больше reopenWindowMin минут»
-      withinReopenWindow: (ev) =>
-        now() - (ev.closedAt || 0) <= W.limits.reopenWindowMin * 60000
-          ? null
-          : ["workflow.guard.reopen_window", { n: W.limits.reopenWindowMin }],
-      requiredStepsFilled: (ev, [setId]) => (ctx.stepsFilled(ev, setId) ? null : ["workflow.guard.required_steps"]),
-      closeResultAllowed: (ev, [resultId], opts) => {
-        const options = closeResults(ev, opts && opts.surface);
-        if (resultId) {
-          const o = options.find((x) => x.id === resultId);
-          if (!o) return ["workflow.guard.result_unavailable"];
-          return o.disabled ? [o.why] : null;
-        }
-        if (options.some((o) => !o.disabled)) return null;
-        return options.length ? [options[0].why] : ["workflow.guard.no_permission", { p: "incident:close" }];
-      },
-      timerExpired: (ev, [id]) => (timerExpired(ev, id) ? null : ["workflow.guard.timer_not_expired"]),
-      holdReasonIn: (ev, [list]) => (asList(list).includes(ev.holdReason) ? null : ["workflow.guard.other_hold_reason"]),
-      stateIs: (ev, [list]) => (asList(list).includes(ev.state) ? null : ["workflow.guard.wrong_state"]),
-      settingEnabled: (ev, [key]) => (setting(key) ? null : ["workflow.guard.setting_off"]),
-      settingIs: (ev, [key, expected]) => (setting(key) === expected ? null : ["workflow.guard.setting_other"]),
-      isOwnerOrUnowned: (ev) => (isMine(ev) || unowned(ev) ? null : ["workflow.guard.not_owner"]),
-      // Основной из формы — другой, открытый, не привязанный; новый или мой в работе. До формы выполнено
-      mergePrimaryValid: (ev, args, opts) => {
-        const id = opts && opts.form ? opts.form.primaryId : null;
-        const p = byId(id);
-        const ok = p && p !== ev && !p.linkedTo && (p.state === "new" || (p.state === "in_progress" && isMine(p)));
-        return ok ? null : ["workflow.guard.merge_primary"];
-      },
-      sameScenarioAsPrimary: (ev, args, opts) => {
-        const p = byId(opts && opts.form ? opts.form.primaryId : null);
-        return p && ctx.scenarioKey(p) === ctx.scenarioKey(ev) ? null : ["workflow.guard.merge_scenario"];
-      },
-      // Основной «мой» (§2.4) — в работе или отложен у меня; ожидающий моего принятия — ещё не мой:
-      // до «Принять» его никто не ведёт, отсоединять нельзя ни человеку, ни группе (RULE-78)
-      primaryEditable: (ev) => {
-        const p = byId(ev.linkedTo);
-        return p && (ownership(p) === "owner" || unowned(p)) ? null : ["workflow.guard.primary_not_editable"];
-      },
-      primaryClosed: (ev) => {
-        const p = byId(ev.linkedTo);
-        return p && isDone(p) ? null : ["workflow.guard.primary_open"];
-      },
-      targetHasAccessToLinked: (ev, args, opts) => {
-        const target = opts && opts.form ? opts.form.targetId : null;
-        if (!target) return null;
-        const linked = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
-        return linked.every((e) => ctx.hasAccess(target, e)) ? null : ["workflow.guard.target_no_access_linked"];
-      },
+    // Смысл условий и эффектов — выражения машины: здесь своих правил нет
+    if (!window.IMCel) throw new Error("cel: prototype/cel-runtime.js is not loaded");
+    const cel = IMCel.create(W);
+    if (cel.errors.length) throw new Error(`cel: ${cel.errors.join("; ")}`);
+    // Мост к данным сервера: инцидент прототипа → Incident машины, таймеры — по FIELDS
+    const celTimer = (ev, id) => {
+      const f = FIELDS[id];
+      return { due: ev[f.due], paused: Boolean(f.left) && ev[f.left] != null, left: f.left ? ev[f.left] : 0, fired: (ev.firedTimers || {})[id], since: f.since ? ev[f.since] : 0 };
     };
+    const celIncident = (ev) =>
+      cel.value(
+        "Incident",
+        {
+          id: ev.id, number: ev.number, eventType: ev.typeId, priority: ev.priority, state: ev.state, owner: ev.owner,
+          assignmentGroup: ev.assignmentGroup, holdReasonId: ev.holdReason, escalationLevel: ev.escalationLevel,
+          transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, result: ev.closeComment,
+          closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches,
+          timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
+          linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
+        },
+        ev
+      );
+    // Факты мира (cel.world машины) — из данных сервера; «я» — оператор этого исполнителя
+    const celWorld = {
+      can: (who, p) => (who === ME ? ctx.can(p) : Boolean(ctx.permsOf && ctx.permsOf(who).includes(p))),
+      access: (who, x) => Boolean(ctx.hasAccess && ctx.hasAccess(who, cel.source(x))),
+      isOperator: (id) => Boolean(ctx.isOperator && ctx.isOperator(id)),
+      isGroup: (id) => isGroup(id),
+      members: (g) => (ctx.membersOf ? ctx.membersOf(g) : []),
+      dutyGroups: () => (ctx.dutyGroups ? ctx.dutyGroups() : []),
+      inSourceGroup: (x, g) => ctx.inGroup(cel.source(x), g),
+      agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
+      idleSec: (who) => (who === ME && ctx.idleSec ? Math.floor(ctx.idleSec() - (ctx.now() - now()) / 1000) : 0),
+      stepsFilled: (x, setId) => ctx.stepsFilled(cel.source(x), setId),
+      lastTransferTarget: (who) => (who === ME && ctx.defaultTransferTarget ? ctx.defaultTransferTarget() || "" : ""),
+    };
+    const celScope = (ev, opts) => ({
+      me: ME,
+      actor: ME,
+      incident: celIncident(ev),
+      incidents: () => ctx.events().map(celIncident),
+      form: (opts && opts.form) || {},
+      surface: (opts && opts.surface) || "",
+      now: now(),
+      world: celWorld,
+    });
+
+    // Определения машины (cel.definitions) для сервера и форм: адресат, отношение смотрящего, «я» как адресат
+    const def = (name, ...args) => cel.call(name, args, celWorld);
+    const addressee = (ev) => def("addressee", celIncident(ev)) || null;
+    const ownership = (ev) => def("ownership", ME, celIncident(ev));
+    const isSelf = (id) => def("isSelf", ME, id || "");
+    const isTarget = (ev) => def("isTarget", ME, celIncident(ev));
+    const isDone = (ev) => def("isDone", celIncident(ev));
+    const hasAccess = (id, ev) => def("hasAccess", id || "", celIncident(ev));
+    const canAccept = (id, ev) => def("canAccept", id || "", celIncident(ev), "");
+    const norm = (ev, timerId) => cel.out(def("norm", celIncident(ev), def("timerDef", timerId)));
+    // Мои инциденты в состоянии — для счётчиков сессии (§10.2): mineIn машины, привязанные не в счёт
+    const units = (stateId) => new Set(Array.from(def("mineIn", ctx.events().map(celIncident), ME, stateId, ""), (x) => x.id));
 
     function setting(path) {
       if (typeof path !== "string") return path;
       return path.split(".").reduce((o, k) => (o == null ? o : o[k]), W);
     }
 
-    // Результаты закрытия, которые этот оператор может выбрать для этого инцидента (§2.2)
-    function closeResults(ev, surface) {
-      const out = [];
-      catalogs.close_result.items.forEach((item) => {
-        if (!ctx.can(item.permission)) return;
-        if (!item.fromStates.includes(ev.state)) return;
-        if (item.ownerOnlyInStates.includes(ev.state) && !isMine(ev)) return;
-        if (surface && item.surfaces && !item.surfaces.includes(surface)) return;
-        const stepsOk = item.requiredStepSet === "none" || ctx.stepsFilled(ev, item.requiredStepSet);
-        out.push({ id: item.id, label: item.labelKey, disabled: !stepsOk, why: stepsOk ? null : "workflow.guard.required_steps" });
-      });
-      return out;
-    }
-
     // Первое невыполненное условие: { why, hidden } по onFail реестра; null — всё выполнено
     function firstFail(ev, guards, opts) {
+      let scope = null;
       for (const g of guards || []) {
-        const fn = GUARDS[g.fn];
-        if (!fn) return { why: ["workflow.error.guard_not_implemented", { fn: g.fn }], hidden: false, guard: g.fn };
+        if (!cel.hasGuard(g.fn)) return { why: ["workflow.error.guard_not_implemented", { fn: g.fn }], hidden: false, guard: g.fn };
         const args = (g.args || []).map((a) => (a === "form.resultId" ? opts && opts.form && opts.form.resultId : a));
-        const why = fn(ev, args, opts, g);
+        const why = cel.guard(g.fn, args, scope || (scope = celScope(ev, opts)), g);
         if (why) return { why, hidden: (guardRegistry[g.fn] || {}).onFail === "hide", guard: g.fn };
       }
       return null;
@@ -423,14 +190,13 @@
       );
     }
 
-    // Обязательность поля: required или requiredFrom "reasonCatalog:<справочник>.<признак>" —
-    // признак позиции, выбранной в поле той же формы с source "reasonCatalog:<справочник>"
-    function fieldRequired(f, field, values) {
-      if (!field.requiredFrom) return Boolean(field.required);
-      const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
-      const source = f.fields.find((x) => x.source === `reasonCatalog:${catalog}`);
-      const item = source ? catalogItem(catalog, values[source.name]) : null;
-      return Boolean(item && item[attr]);
+    // Правило интерфейса машины (CEL.md, «Правила интерфейса»): бейдж, фильтр очереди, пояснение и поля формы
+    const ruleOf = (where, scope, option) => cel.rule(where, scope, option) === true;
+    const fieldAt = (f, field, k) => `forms.${f.id}.fields.${field.name}.${k}`;
+    // Видно ли поле и обязательно ли при значениях формы из scope; невидимое — не обязательно
+    function fieldRule(f, field, scope) {
+      const visible = field.visibleExpr == null || ruleOf(fieldAt(f, field, "visibleExpr"), scope);
+      return { visible, required: visible && ruleOf(fieldAt(f, field, "requiredExpr"), scope) };
     }
 
     // Ключ подписи результата; если у результата есть справочник причин и причина выбрана — подписи причины
@@ -441,207 +207,10 @@
       return cause ? cause.labelKey : item.labelKey;
     }
 
-    function value(arg, ev, form, scope) {
-      // Модификаторы адресата: .ifGroup — только группа, .ifPerson — только человек, иначе null
-      const mod = typeof arg === "string" && arg.match(/^(.+)\.(ifGroup|ifPerson)$/);
-      if (mod) {
-        const v = value(mod[1], ev, form, scope);
-        return v && isGroup(v) === (mod[2] === "ifGroup") ? v : null;
-      }
-      if (arg === "actor") return scope.actor;
-      if (arg === "now") return now();
-      if (typeof arg === "string" && arg.startsWith("form.")) {
-        const v = form ? form[arg.slice(5)] : undefined;
-        return v == null || v === "" ? null : v;
-      }
-      if (arg === "escalation.level.target") return scope.level ? refToId(scope.level.targetRef) : null;
-      if (arg === "escalation.level.number") return scope.level ? scope.level.level : null;
-      if (arg === "owner.dutyGroup") return ev.owner ? ctx.dutyGroupOf(ev.owner) : null;
-      return arg;
-    }
-
-    const FLAG_FIELD = { closed_by: "closedBy", closed_at: "closedAt", close_result: "closeResult", close_cause: "massCause", result: "closeComment", sla_breached: "slaBreached", escalation_level: "escalationLevel", transfer_count: "transferCount" };
-
-    const EFFECTS = {
-      setOwner: (ev, [arg], s) => {
-        ev.owner = value(arg, ev, s.form, s);
-      },
-      setAssignmentGroup: (ev, [arg], s) => {
-        ev.assignmentGroup = value(arg, ev, s.form, s);
-      },
-      setHoldReason: (ev, [arg], s) => {
-        ev.holdReason = value(arg, ev, s.form, s);
-      },
-      clearHoldReason: (ev) => {
-        ev.holdReason = null;
-      },
-      // ifStopped — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» не обнуляет реакцию)
-      startTimer: (ev, [id, arg, mode]) => {
-        if (mode === "ifStopped" && dueOf(ev, id)) return;
-        startTimer(ev, id, arg);
-      },
-      stopTimer: (ev, [id]) => stopTimer(ev, id),
-      pauseTimer: (ev, [id]) => pauseTimer(ev, id),
-      resumeTimer: (ev, [id]) => resumeTimer(ev, id),
-      // Запуск заново, без остатка: длительность из настройки, иначе обычный норматив (RULE-11)
-      restartTimer: (ev, [id, settingPath]) => {
-        const f = FIELDS[id];
-        const configured = settingPath ? setting(settingPath) : null;
-        const sec = configured != null ? configured : baseNorm(ev, id);
-        ev[f.due] = now() + sec * 1000;
-        if (f.left) ev[f.left] = null;
-      },
-      // Нарушение — запись «какое, когда, чьё»; отметка sla_breached — есть хоть одно (RULE-12)
-      // Нарушение по таймеру датируется дедлайном, а не моментом выполнения после окна (RULE-63)
-      // У основного — и каждому открытому привязанному: у группы один срок (§11.4)
-      recordBreach: (ev, [kind, template], s) => {
-        const record = { kind, at: s.deadline != null ? s.deadline : now(), owner: addressee(ev) };
-        ev.breaches = (ev.breaches || []).concat(record);
-        ev.slaBreached = true;
-        s.after.push(() => shareBreach(ev, record, template));
-      },
-      increment: (ev, [field]) => {
-        const key = FLAG_FIELD[field] || field;
-        ev[key] = (ev[key] || 0) + 1;
-      },
-      setFlag: (ev, [field, arg], s) => {
-        ev[FLAG_FIELD[field] || field] = value(arg, ev, s.form, s);
-      },
-      appendLog: (ev, [template], s) => ctx.log(ev, s.actor, template, vars(ev, s.form, s.logVars), now()),
-      returnToQueue: () => {},
-      evictOpenCard: (ev, [who], s) => ctx.onEvict(ev, who === "owner" ? ev.owner : s.previousOwner, s.transitionId),
-      setCursor: (ev) => ctx.setCursor(ev),
-      // В группе с этого момента: нарушения основного — с него (BUG-73)
-      setLinkedTo: (ev, [arg], s) => {
-        ev.linkedTo = value(arg, ev, s.form, s);
-        ev.linkedAt = now();
-      },
-      // Связь с основным снимается. С шаблонами — если связь была, запись в журнал события и основного:
-      // переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)
-      clearLink: (ev, [own, primary], s) => {
-        const p = ev.linkedTo && byId(ev.linkedTo);
-        // Из какой группы и когда вышел: нарушение по сроку, прошедшему до выхода, — и ему (BUG-73)
-        if (ev.linkedTo) ev.leftGroup = { primaryId: ev.linkedTo, linkedAt: ev.linkedAt || 0, at: now() };
-        ev.linkedTo = null;
-        ev.linkedAt = null;
-        if (!p) return;
-        const at = now();
-        if (own) ctx.log(ev, s.actor, own, { primaryNumber: p.number }, at);
-        if (primary) s.after.push(() => ctx.log(p, s.actor, primary, { number: ev.number }, at));
-      },
-      // Заполненные шаги привязанного — в незаполненные шаги основного (сценарий у них один); у привязанного
-      // ответы остаются как история. Что переносится, решает машина сценариев (ctx.shareAnswers, §14.5).
-      // Что перенесено — запись в журнале основного
-      copyAnswersToPrimary: (ev, [template], s) => {
-        const p = byId(s.form && s.form.primaryId);
-        if (!p) return;
-        const at = now();
-        s.after.push(() => {
-          const n = ctx.shareAnswers(ev, p, at);
-          if (n && template) ctx.log(p, s.actor, template, { number: ev.number, n }, at);
-        });
-      },
-      // Открытые привязанные объединяемого — новому основному: привязанного у привязанного не бывает.
-      // Закрытые вместе с прежним основным остаются при нём как история
-      relinkToPrimary: (ev, [template], s) => {
-        const p = byId(s.form && s.form.primaryId);
-        if (!p) return;
-        const children = ctx.events().filter((e) => e.linkedTo === ev.id && !isDone(e));
-        const at = now();
-        s.after.push(() =>
-          children.forEach((e) => {
-            e.leftGroup = { primaryId: e.linkedTo, linkedAt: e.linkedAt || 0, at };
-            e.linkedTo = p.id;
-            e.linkedAt = at;
-            if (template) ctx.log(e, s.actor, template, { primaryNumber: p.number }, at);
-          })
-        );
-      },
-      // Срок основного — самый ранний из своего и остатка привязываемого (§11.3): у группы один срок.
-      // Остаток привязываемого — после перехода (свой норматив уже на паузе); нарушенный срок не сжимает.
-      // Основной новый — от полного норматива: grouping.takeWith продолжит с остатка
-      // Срок стал раньше — запись в журнал основного; при нескольких за одно объединение — одна, по последнему
-      tightenPrimaryDeadline: (ev, [id, template], s) => {
-        const p = byId(s.form && s.form.primaryId);
-        if (!p) return;
-        s.after.push((linked) => {
-          const left = leftOf(linked, id);
-          if (left == null || spent(linked, id) || spent(p, id)) return;
-          const f = FIELDS[id];
-          const was = p[f.due] ? p[f.due] - now() : leftOf(p, id) != null ? leftOf(p, id) : timerSec(p, id) * 1000;
-          if (left >= was) return;
-          if (p[f.due]) p[f.due] = now() + left;
-          else p[f.left] = left;
-          if (!template) return;
-          const at = now();
-          const same = p.log.find((x) => x.k === template && x.at === at);
-          if (same) same.v = { number: linked.number };
-          else ctx.log(p, s.actor, template, { number: linked.number }, at);
-        });
-      },
-      // Отсоединённому — остаток срока основного, на паузе; отработанный — отработанным, без новой записи (RULE-50)
-      copyPrimaryDeadline: (ev, [id]) => {
-        const p = byId(ev.linkedTo);
-        if (!p) return;
-        const f = FIELDS[id];
-        const left = leftOf(p, id);
-        if (left == null) return;
-        ev[f.due] = null;
-        ev[f.left] = left;
-        if (spent(p, id)) ev.firedTimers = Object.assign({}, ev.firedTimers, { [id]: p.firedTimers[id] });
-      },
-      copyCloseFromPrimary: (ev) => {
-        const p = byId(ev.linkedTo);
-        if (!p) return;
-        Object.assign(ev, { closeResult: p.closeResult, massCause: p.massCause, closeComment: p.closeComment, closedBy: p.closedBy });
-      },
-      // Алерт (§9, RULE-43) — внешний эффект: уходит после того, как переход применён. Кому — решает
-      // сервер (на месте и с доступом к объекту); никому — запись в журнал из машины
-      notify: (ev, [who], s) => {
-        if (who !== "alerts.target") return;
-        s.after.push((inc) => {
-          const sent = ctx.notifyAlert ? ctx.notifyAlert(inc, refToId(setting("alerts.target")), s.transitionId) : 0;
-          if (!sent) ctx.log(inc, s.actor, W.alerts.noRecipientLog, {}, now());
-        });
-      },
-      externalCommand: () => {},
-    };
-
-    // Переход атомарен (§14.1, §14.2): эффекты выполняются на черновике инцидента, и только если
-    // все прошли без ошибки, черновик становится инцидентом. Неизвестный эффект — ошибка, а не пропуск
+    // Переход атомарен (§14.1, §14.2): эффекты выполняются на черновиках инцидентов, и только если
+    // все прошли без ошибки, черновики становятся инцидентами. Неизвестный эффект — ошибка, а не пропуск
     function draftOf(ev) {
       return Object.assign({}, ev, { log: ev.log.slice(), breaches: (ev.breaches || []).slice() });
-    }
-    function effectsOn(draft, tr, form, actor, extra) {
-      const scope = {
-        actor,
-        deadline: extra && extra.deadline != null ? extra.deadline : null,
-        form,
-        transitionId: tr.id,
-        after: [],
-        previousOwner: draft.owner,
-        // Состояние до перехода: черновик получает новое раньше эффектов
-        level: nextLevel(draft),
-        logVars: { previousOwnerName: ctx.actorName(addressee(draft)) },
-      };
-      if (tr.to) draft.state = tr.to;
-      tr.effects.forEach((e) => {
-        const fn = EFFECTS[e.fn];
-        if (!fn) throw Object.assign(new Error(e.fn), { why: ["workflow.error.effect_not_implemented", { fn: e.fn }] });
-        fn(draft, e.args || [], scope);
-      });
-      // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects): кому или какая
-      // команда. Нет получателя или это сам выполняющий — уведомления нет (BUG-30)
-      const recipient = { owner: draft.owner, previousOwner: scope.previousOwner, newTarget: addressee(draft) };
-      const external = tr.effects
-        .filter((e) => e.kind === "external")
-        .map((e) => {
-          const [arg] = e.args || [];
-          const target = e.fn !== "notify" ? arg : arg === "alerts.target" ? refToId(setting(arg)) : recipient[arg] || null;
-          return { fn: e.fn, target };
-        })
-        .filter((x) => x.target && x.target !== actor);
-      return { after: scope.after, external };
     }
     function applyEffects(tr, ev, form, actor, extra) {
       return applyAll(tr, [ev], form, actor, extra);
@@ -656,28 +225,133 @@
     // Несколько инцидентов одним действием — тоже атомарно: либо все, либо ни один
     function applyAll(tr, list, form, actor, extra) {
       const before = list.map(snap);
-      const drafts = list.map(draftOf);
       let done;
       try {
-        done = drafts.map((d) => effectsOn(d, tr, form, actor, extra));
+        done = celApply(tr, list, form, actor, extra);
       } catch (err) {
         return { ok: false, why: ["workflow.error.transition_failed", { error: err.why || err.message }] };
       }
-      list.forEach((ev, i) => Object.assign(ev, drafts[i]));
+      done.commit();
       // Внешние эффекты — только после применения перехода
-      list.forEach((ev, i) => done[i].after.forEach((fn) => fn(ev)));
-      return { ok: true, external: done.map((d) => d.external), facts: list.map((ev, i) => factsOf(before[i], ev)) };
+      done.after.forEach((fn) => fn());
+      return { ok: true, external: done.external, facts: list.map((ev, i) => factsOf(before[i], ev)) };
+    }
+
+    /* ===== Эффекты машины (do, CEL.md) ===== */
+
+    // Значение CEL инцидента → поля инцидента прототипа (обратный мост к celIncident)
+    function writeBack(x, ev) {
+      const o = cel.out;
+      Object.assign(ev, {
+        state: x.state, owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
+        escalationLevel: o(x.escalationLevel), transferCount: o(x.transferCount), closeResult: x.closeResultId || null,
+        massCause: x.closeCauseId || null, closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
+        slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
+        linkedTo: x.linkedTo || null, linkedAt: o(x.linkedAt) || null,
+        leftGroup: x.leftGroup.primaryId ? { primaryId: x.leftGroup.primaryId, linkedAt: o(x.leftGroup.linkedAt), at: o(x.leftGroup.at) } : null,
+      });
+      const fired = Object.assign({}, ev.firedTimers);
+      Object.entries(FIELDS).forEach(([id, f]) => {
+        const t = x.timers.get(id);
+        ev[f.due] = o(t.due) || null;
+        if (f.left) ev[f.left] = t.paused ? o(t.left) : null;
+        if (f.since) ev[f.since] = o(t.since) || null;
+        if (t.fired) fired[id] = o(t.fired);
+        else delete fired[id];
+      });
+      ev.firedTimers = fired;
+    }
+    // Эффекты перехода на черновиках: инциденты перехода и те, кого эффекты коснулись. Журнал, курсор
+    // сценария и перенос ответов — в черновики; уведомления, внешние команды, вытеснение карточки, новая
+    // версия — после применения (after). opts.before — инцидент «до» вместо черновика (окно после дедлайна)
+    function celApply(tr, list, form, actor, extra) {
+      const drafts = new Map();
+      const insts = new Map();
+      const own = new Map(list.map((ev) => [ev.id, ev]));
+      const real = (id) => own.get(id) || byId(id);
+      const draft = (id) => drafts.get(id) || (drafts.set(id, draftOf(real(id))), drafts.get(id));
+      const inst = (id) => insts.get(id) || (insts.set(id, celIncident(drafts.get(id) || real(id))), insts.get(id));
+      const after = [];
+      let cur = null;
+      const store = {
+        incidents: () => ctx.events().map((e) => inst(e.id)),
+        touch: (x) => writeBack(x, draft(x.id)),
+        world: (action, a) => {
+          const target = a.incident || a.from ? draft((a.incident || a.from).id) : null;
+          if (action === "log") {
+            const v = a.vars != null ? cel.out(a.vars) : vars(target, cur.form, { previousOwnerName: cur.previousOwnerName });
+            const same = a.once ? target.log.find((x) => x.k === a.key && x.at === now()) : null;
+            if (same) same.v = v;
+            else ctx.log(target, a.actor || cur.actor, a.key, v, now());
+          } else if (action === "setCursor") {
+            if (ctx.setCursor) ctx.setCursor(target);
+          } else if (action === "shareAnswers") {
+            // Перенос — в черновик основного: следующий привязываемый видит уже перенесённое
+            if (!a.to || !real(a.to)) return;
+            const p = draft(a.to);
+            const n = ctx.shareAnswers ? ctx.shareAnswers(target, p, now()) : 0;
+            if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());
+          } else if (action === "notify") {
+            // Алерт (§9, RULE-43): кому — решает сервер (на месте и с доступом к объекту); никому — запись в журнал
+            if (a.to !== "alerts.target") return;
+            const { id, actor: who, transitionId } = Object.assign({ id: target.id }, cur);
+            after.push(() => {
+              const inc = real(id);
+              const sent = ctx.notifyAlert ? ctx.notifyAlert(inc, setting("alerts.target"), transitionId) : 0;
+              if (!sent) ctx.log(inc, who, W.alerts.noRecipientLog, {}, now());
+            });
+          } else if (action === "evict") {
+            const { transitionId } = cur;
+            const who = a.who || null;
+            const id = target.id;
+            after.push(() => ctx.onEvict && ctx.onEvict(real(id), who, transitionId));
+          } else if (action === "touch") {
+            const id = target.id;
+            after.push(() => ctx.onBreachShared && ctx.onBreachShared(real(id)));
+          }
+        },
+      };
+      const external = list.map((ev) => {
+        draft(ev.id);
+        const d = drafts.get(ev.id);
+        const before = (extra && extra.before) || celIncident(d);
+        const previousOwner = cel.out(before.owner) || null;
+        cur = { form: form || {}, actor, transitionId: tr.id, previousOwnerName: ctx.actorName(def("addressee", before) || null) };
+        if (tr.to) d.state = tr.to;
+        insts.set(ev.id, celIncident(d));
+        const scope = { me: ME, actor, incident: insts.get(ev.id), before, form: form || {}, now: now(), deadline: extra && extra.deadline != null ? extra.deadline : null, world: celWorld };
+        tr.effects.forEach((e) => {
+          if (!cel.hasEffect(e.fn)) throw Object.assign(new Error(e.fn), { why: ["workflow.error.effect_not_implemented", { fn: e.fn }] });
+          cel.effect(e.fn, e.args, scope, store);
+        });
+        // Внешние эффекты для ответа перехода (§14.2, TransitionResult.externalEffects): кому или какая
+        // команда. Нет получателя или это сам выполняющий — уведомления нет (BUG-30)
+        const recipient = { owner: d.owner, previousOwner, newTarget: addressee(d) };
+        return tr.effects
+          .filter((e) => e.kind === "external")
+          .map((e) => {
+            const [arg] = e.args || [];
+            const target = e.fn !== "notify" ? arg : arg === "alerts.target" ? setting(arg) : recipient[arg] || null;
+            return { fn: e.fn, target };
+          })
+          .filter((x) => x.target && x.target !== actor);
+      });
+      return {
+        external,
+        after,
+        // Момент последнего перехода инцидента — ядру: переход по молчанию не раньше него (BUG-76)
+        commit: () => drafts.forEach((d, id) => Object.assign(real(id), d, { changedAt: now() })),
+      };
     }
 
     // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
-    function validateForm(tr, ev, form) {
+    function validateForm(tr, ev, form, surface) {
       const f = tr.form ? forms[tr.form] : null;
       if (!f) return null;
+      const scope = celScope(ev, { form, surface });
       for (const field of f.fields) {
-        if (field.visibleWhen && !field.visibleWhen.in.includes(form[field.visibleWhen.field])) continue;
-        const required = fieldRequired(f, field, form);
         const v = form[field.name];
-        if (required && (v == null || String(v).trim() === "")) {
+        if (fieldRule(f, field, scope).required && (v == null || String(v).trim() === "")) {
           return field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: [field.labelKey] }];
         }
       }
@@ -690,7 +364,7 @@
       form = form || {};
       const a = availability(id, ev, { form, surface: opts && opts.surface });
       if (!a.ok) return { ok: false, why: a.why };
-      const bad = validateForm(tr, ev, form);
+      const bad = validateForm(tr, ev, form, opts && opts.surface);
       if (bad) return { ok: false, why: bad };
       const canceled = windowBefore(ev, id);
       const applied = applyEffects(tr, ev, form, ME);
@@ -705,20 +379,20 @@
     function windowBefore(ev, id) {
       const canceled = overridden(ev, id);
       if (!canceled) return null;
-      canceled.owner = addressee(ev);
+      // Инцидент до действия: нарушение — на того, кто был адресатом в момент дедлайна
+      canceled.before = celIncident(ev);
       canceled.logAt = ev.log.length;
       ev.firedTimers = Object.assign({}, ev.firedTimers, { [canceled.timer]: canceled.due });
       return canceled;
     }
-    // После эффектов: нарушение — то, что записал бы отменённый переход, на момент дедлайна; запись в журнал —
-    // перед записью о самом действии
+    // После эффектов: нарушение — то, что записал бы отменённый переход, — его же эффектом recordBreach машины,
+    // на момент дедлайна и на адресата до действия; запись в журнал — перед записью о самом действии
     function windowAfter(ev, canceled, facts) {
       if (!canceled) return;
       canceled.tr.effects.filter((x) => x.fn === "recordBreach").forEach((x) => {
-        const record = { kind: x.args[0], at: canceled.due, owner: canceled.owner };
-        ev.breaches = (ev.breaches || []).concat(record);
-        ev.slaBreached = true;
-        shareBreach(ev, record, x.args[1]);
+        const done = celApply({ id: canceled.tr.id, to: null, effects: [x] }, [ev], {}, "dispatcher", { deadline: canceled.due, before: canceled.before });
+        done.commit();
+        done.after.forEach((fn) => fn());
         facts.breach = x.args[0];
       });
       ctx.log(ev, "dispatcher", "workflow.journal.timer_overridden", { timer: [timers[canceled.timer].labelKey], transition: [canceled.tr.labelKey] }, now());
@@ -776,7 +450,9 @@
           moment = Math.max(moment || 0, due);
         } else if (g.fn === "agentIdleFor") {
           if (!ctx.idleSec) return null;
-          moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000);
+          // Не раньше последнего перехода инцидента: молчание сделало переход возможным, только когда
+          // инцидент уже был таким (RULE-48, BUG-76)
+          moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000, ev.changedAt || 0);
         }
       }
       if (moment == null) return after != null ? after : ctx.now();
@@ -796,7 +472,7 @@
             if (tr.trigger !== "timer" && tr.trigger !== "system") return;
             if (agentOnly && tr.trigger === "system" && tr.scope !== "incidents_owned_by_agent") return;
             if (!tr.from.includes(ev.state)) return;
-            if (tr.scope === "incidents_owned_by_agent" && !isMine(ev)) return;
+            if (tr.scope === "incidents_owned_by_agent" && ev.owner !== ME) return;
             const moment = momentOf(ev, tr, last);
             if (moment == null || moment > ctx.now() || done.has(`${tr.id}@${moment}`)) return;
             at = moment;
@@ -838,19 +514,18 @@
       return changed;
     }
 
+    function timerEffect(fn, ev, args) {
+      const done = celApply({ id: fn, to: null, effects: [{ kind: "transactional", fn, args }] }, [ev], {}, "dispatcher");
+      done.commit();
+    }
+
     // Можно ли править шаги сценария (§10.4, scenarioEdit машины); нет — карточка на просмотр
     const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);
 
     /* ===== Формы, бейджи, массовые действия ===== */
 
-    function noteFor(f, ev, extra) {
-      const role = ownership(ev);
-      const note = (f.notes || []).find((n) => {
-        const w = n.when || {};
-        if (w.state && w.state !== ev.state) return false;
-        if (w.ownership && w.ownership !== role) return false;
-        return true;
-      });
+    function noteFor(f, ev, scope, extra) {
+      const note = (f.notes || []).find((n, i) => ruleOf(`forms.${f.id}.notes.${i}.expr`, scope));
       if (!note) return null;
       const prog = ctx.progress(ev);
       return [
@@ -867,50 +542,51 @@
       ];
     }
 
+    // Варианты поля-списка до отбора: адресаты передачи — от сервера, иначе — позиции справочника
+    function candidates(field, ev) {
+      if (field.source === "transferTargets") return ctx.transferTargets(ev);
+      const catalog = catalogs[String(field.source).replace("reasonCatalog:", "")];
+      return catalog ? catalog.items.map((i) => ({ id: i.id, label: i.labelKey })) : [];
+    }
+
+    // Форма перехода под оператора и инцидент: варианты полей — те, что пропускает optionExpr, недоступные по
+    // enabledExpr — с причиной disabledKey; значение по умолчанию — defaultExpr, если это доступный вариант.
+    // rules — видно ли поле и обязательно ли; зависит от поля формы — таблицей по его вариантам (dependsOn, byValue)
     function form(formId, ev, opts) {
       const f = forms[formId];
       if (!f) return null;
+      const scope = celScope(ev, { surface: opts && opts.surface });
       const fields = f.fields.map((field) => {
-        let options = null;
-        let defaultValue = null;
-        if (field.source === "transferTargets") {
-          const excludes = field.excludes || [];
-          options = ctx
-            .transferTargets(ev)
-            .filter(
-              (o) =>
-                !(excludes.includes("self") && isSelf(o.id)) &&
-                !(excludes.includes("currentOwner") && o.id === addressee(ev)) &&
-                !(excludes.includes("noAccess") && !ctx.hasAccess(o.id, ev)) &&
-                !(excludes.includes("cannotAccept") && !ctx.canAccept(o.id, ev))
-            );
-          if (field.defaultFrom && options.some((o) => o.id === ctx.defaultTransferTarget())) defaultValue = ctx.defaultTransferTarget();
-        } else if (field.source && field.source.startsWith("reasonCatalog:")) {
-          const catalog = field.source.split(":")[1];
-          if (field.optionsFrom === "actions" && catalog === "close_result") {
-            options = closeResults(ev, opts && opts.surface).map((o) => ({ id: o.id, label: o.label, disabled: o.disabled, why: o.why }));
-          } else {
-            options = catalogs[catalog].items
-              .filter((i) => !(field.excludeSystemItems && i.setBy === "system"))
-              .map((i) => ({ id: i.id, label: i.labelKey }));
-          }
-          if (field.defaultWhen && ctx.stepsFilled(ev, field.defaultWhen.requiredStepsFilled)) defaultValue = field.defaultWhen.value;
-        }
-        return Object.assign({}, field, { options, defaultValue });
+        if (!field.source) return { field, options: null, defaultValue: null };
+        const options = candidates(field, ev)
+          .filter((o) => field.optionExpr == null || ruleOf(fieldAt(f, field, "optionExpr"), scope, o.id))
+          .map((o) => (field.enabledExpr == null || ruleOf(fieldAt(f, field, "enabledExpr"), scope, o.id) ? o : Object.assign({}, o, { disabled: true, why: field.disabledKey })));
+        const d = field.defaultExpr != null ? cel.rule(fieldAt(f, field, "defaultExpr"), scope) : "";
+        return { field, options, defaultValue: d && options.some((o) => o.id === d && !o.disabled) ? d : null };
       });
-      return { id: f.id, title: f.titleKey, confirmLabel: f.confirmKey, style: f.style, note: noteFor(f, ev, opts && opts.noteVars), fields };
+      const optionsOf = (name) => (fields.find((x) => x.field.name === name) || {}).options || [];
+      return {
+        id: f.id,
+        title: f.titleKey,
+        confirmLabel: f.confirmKey,
+        style: f.style,
+        note: noteFor(f, ev, scope, opts && opts.noteVars),
+        fields: fields.map(({ field, options, defaultValue }) => {
+          const dep = ["requiredExpr", "visibleExpr"].flatMap((k) => cel.formRefs(fieldAt(f, field, k)))[0];
+          let rules = fieldRule(f, field, scope);
+          if (dep) {
+            const byValue = Object.fromEntries(["", ...optionsOf(dep).map((o) => o.id)].map((v) => [v, fieldRule(f, field, Object.assign({}, scope, { form: { [dep]: v } }))]));
+            rules = Object.assign({ dependsOn: dep, byValue }, byValue[""]);
+          }
+          return { name: field.name, kind: field.kind, labelKey: field.labelKey, source: field.source || null, options, defaultValue, rules };
+        }),
+      };
     }
 
-    // Бейдж под смотрящего оператора (§2.4)
+    // Бейдж под смотрящего оператора (§2.4): первое правило машины, чьё выражение истинно
     function badge(ev) {
-      const role = ownership(ev);
-      const rule = W.badges.rules.find((r) => {
-        if (r.state !== ev.state) return false;
-        if (r.when && r.when.closeResult && r.when.closeResult !== ev.closeResult) return false;
-        // Адресат — группа или человек: передачу группе может принять любой из неё (§2.4)
-        if (r.when && r.when.addressee && r.when.addressee !== (isGroup(addressee(ev)) ? "group" : "person")) return false;
-        return r.viewerRole === "any" || r.viewerRole === role;
-      });
+      const scope = celScope(ev);
+      const rule = W.badges.rules.find((r, i) => ruleOf(`badges.rules.${i}.expr`, scope));
       if (!rule) return { label: [states[ev.state].labelKey], style: ev.state };
       const hold = catalogItem("hold", ev.holdReason);
       return {
@@ -921,15 +597,13 @@
 
     const bulk = (id) => (transitions[id] && transitions[id].bulk) || { allowed: false };
 
-    // Фильтр очереди по описанию из машины (queueFilters): состояния, категории, отношение ко мне
-    function inQueueFilter(ev, filterId) {
-      const f = W.queueFilters.find((q) => q.id === filterId);
-      if (!f) return true;
-      if (f.states && !f.states.includes(ev.state)) return false;
-      if (f.stateCategories && !f.stateCategories.includes(states[ev.state].category)) return false;
-      if (f.ownership && f.ownership !== ownership(ev)) return false;
-      return true;
-    }
+    // Фильтры очереди машины (queueFilters), которые проходит инцидент для этого оператора. В списках —
+    // инциденты хотя бы одного фильтра: привязанные объединённого живут в карточке основного (§11)
+    const queueFilters = (ev) => {
+      const scope = celScope(ev);
+      return W.queueFilters.filter((q) => ruleOf(`queueFilters.${q.id}.expr`, scope)).map((q) => q.id);
+    };
+    const inQueueFilter = (ev, filterId) => !W.queueFilters.some((q) => q.id === filterId) || ruleOf(`queueFilters.${filterId}.expr`, celScope(ev));
 
     // «Взять в работу» на выборке (§11): переход с bulk.mode merge на каждом, кроме основного,
     // и, если основной новый, — grouping.takeWith на нём. Всё или ничего: сначала проверка всех
@@ -971,17 +645,16 @@
 
     return {
       workflow: W,
-      implemented: { guards: Object.keys(GUARDS), effects: Object.keys(EFFECTS) },
       transition: (id) => transitions[id] || null,
       nav: (id) => navActions[id] || null,
       isNav: (id) => Boolean(navActions[id]),
       isDone,
       isTarget,
       isSelf,
-      fieldRequired,
       addressee,
       ownership,
       inQueueFilter,
+      queueFilters,
       availability,
       actions,
       session: W.session,
@@ -990,12 +663,16 @@
       form,
       badge,
       bulk,
-      closeResults,
-      norm: baseNorm,
-      startTimer,
-      stopTimer,
-      pauseTimer,
-      resumeTimer,
+      norm,
+      // Инцидент так, как его видят выражения машины: для сверки с моделью Quint (tools/check_quint_replay.mjs)
+      celView: (ev) => cel.plain(celIncident(ev)),
+      hasAccess,
+      canAccept,
+      // Таймеры при загрузке набора — эффектами машины, без перехода
+      startTimer: (ev, id, mode) => timerEffect("startTimer", ev, [id, mode]),
+      stopTimer: (ev, id) => timerEffect("stopTimer", ev, [id]),
+      pauseTimer: (ev, id) => timerEffect("pauseTimer", ev, [id]),
+      resumeTimer: (ev, id) => timerEffect("resumeTimer", ev, [id]),
       tick,
       canEditScenario,
       closeResultLabel,

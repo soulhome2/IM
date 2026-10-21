@@ -71,7 +71,7 @@ def short_hold(w):
 def transfer_to_self(w):
     form = next(f for f in w["forms"] if f["id"] == "transfer")
     target = next(f for f in form["fields"] if f["name"] == "targetId")
-    target["excludes"].remove("self")
+    target["optionExpr"] = target["optionExpr"].replace("!isSelf(me, option) && ", "")
     transition(w, "transfer")["guards"] = [g for g in transition(w, "transfer")["guards"] if g["fn"] != "targetIsNotSelf"]
 
 
@@ -91,7 +91,7 @@ def escalate_to_my_group(w):
     fast_reaction(w)
     for lvl in w["escalation"]["levels"]:
         lvl["reactionSec"] = 2
-    w["escalation"]["levels"][1]["targetRef"] = "group:grp-leads"
+    w["escalation"]["levels"][1].update(targetKind="group", target="grp-leads")
 
 
 def close_without_placeholder(w):
@@ -107,7 +107,7 @@ def ru(w, key, text):
 
 
 def group_badge(w):
-    rule = next(r for r in w["badges"]["rules"] if r.get("when", {}).get("addressee") == "group")
+    rule = next(r for r in w["badges"]["rules"] if "isGroup(addressee(incident))" in r["expr"])
     ru(w, rule["labelKey"], "Группе на принятие")
 
 
@@ -134,13 +134,13 @@ MUTATIONS = [
             surfaces=["queue", "card"]
         ),
     ),
-    ("filter", "фильтр «Мои» включает закрытые", lambda w: next(q for q in w["queueFilters"] if q["id"] == "mine")["states"].append("closed")),
-    ("badge", "бейдж «Новое» → «Свежее»", lambda w: ru(w, next(b for b in w["badges"]["rules"] if b["state"] == "new")["labelKey"], "Свежее")),
+    ("filter", "фильтр «Мои» включает закрытые", lambda w: next(q for q in w["queueFilters"] if q["id"] == "mine").update(expr="incident.state in ['in_progress', 'on_hold', 'closed'] && ownership(me, incident) == 'owner'")),
+    ("badge", "бейдж «Новое» → «Свежее»", lambda w: ru(w, next(b for b in w["badges"]["rules"] if b["expr"] == "incident.state == 'new'")["labelKey"], "Свежее")),
     (
         "form",
         "причина «Вернуть в очередь» не обязательна",
         lambda w: next(f for f in next(f for f in w["forms"] if f["id"] == "release")["fields"] if f["name"] == "comment").update(
-            required=False
+            requiredExpr="false"
         ),
     ),
     (
@@ -173,7 +173,7 @@ MUTATIONS = [
     ("takeoverTarget", "«Перехватить» и адресату: переданное моей группе можно перехватить", lambda w: transition(w, "takeover").update(guards=[g for g in transition(w, "takeover")["guards"] if g["fn"] != "isNotTarget"])),
     ("readonlyTarget", "«Посмотреть» не адресату: переданное мне не посмотреть до «Принять»", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"].append({"fn": "isNotTarget"})),
     ("viewNew", "«Посмотреть» не у нового: новый не посмотреть, не взяв", lambda w: next(n for n in w["navActions"]["items"] if n["id"] == "view")["guards"][0]["args"][0].remove("new")),
-    ("transferLevel", "«Передать» снова поднимает уровень эскалации", lambda w: transition(w, "transfer")["effects"].append({"kind": "transactional", "fn": "increment", "args": ["escalation_level"]})),
+    ("transferLevel", "«Передать» снова поднимает уровень эскалации", lambda w: transition(w, "transfer")["effects"].append({"kind": "transactional", "fn": "increment", "args": ["escalationLevel"]})),
     ("transferRestarts", "«Передать» нового снова начинает реакцию заново: без ifStopped", lambda w: transition(w, "transfer")["effects"][[e["fn"] for e in transition(w, "transfer")["effects"]].index("startTimer")].update(args=["reaction", "byEscalationLevel"])),
     ("rejectRestarts", "«Отклонить» снова начинает реакцию заново", lambda w: (transition(w, "reject")["effects"].insert(0, {"kind": "transactional", "fn": "startTimer", "args": ["reaction"]}), next(t for t in w["timers"] if t["id"] == "reaction")["continuesOn"].remove("reject"))),
     ("atomic", "у «Отложить» эффект, которого исполнитель не знает: переход не применяется целиком", hold_with_unknown_effect),

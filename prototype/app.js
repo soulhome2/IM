@@ -1366,18 +1366,16 @@
     ],
   });
 
-  // Обязательность поля: required или requiredFrom "reasonCatalog:<справочник>.<признак>" —
-  // признак позиции, выбранной в поле той же формы с source "reasonCatalog:<справочник>"
-  function fieldRequired(form, field, values) {
-    if (!field.requiredFrom) return Boolean(field.required);
-    const [catalog, attr] = field.requiredFrom.replace("reasonCatalog:", "").split(".");
-    const source = form.fields.find((x) => x.source === `reasonCatalog:${catalog}`);
-    const items = (WORKFLOW.reasonCatalogs[catalog] || { items: [] }).items;
-    const item = source ? items.find((i) => i.id === values[source.name]) : null;
-    return Boolean(item && item[attr]);
+  // Видно ли поле и обязательно ли — по таблице сервера (fieldRules действия): правила форм вычисляет он.
+  // Зависит от другого поля — значение по его выбранному варианту (dependsOn, byValue). Формы самого
+  // интерфейса (перерыв, выход) — по required
+  function fieldRule(field, values) {
+    const r = field.rules;
+    if (!r) return { visible: true, required: Boolean(field.required) };
+    return r.dependsOn ? r.byValue[values[r.dependsOn] || ""] || r.byValue[""] : r;
   }
-
-  const fieldVisible = (field, values) => !field.visibleWhen || field.visibleWhen.in.includes(values[field.visibleWhen.field]);
+  const fieldVisible = (field, values) => fieldRule(field, values).visible;
+  const fieldRequired = (field, values) => fieldRule(field, values).required;
 
   const optionLabel = (o) => (o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label));
 
@@ -1509,7 +1507,7 @@
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
-      if (label) label.textContent = lbl(field) + (visible && fieldRequired(open.form, field, values) ? " *" : "");
+      if (label) label.textContent = lbl(field) + (visible && fieldRequired(field, values) ? " *" : "");
     });
   }
 
@@ -1537,7 +1535,7 @@
     ($("dialogFields").querySelector("[data-target-input], [data-field]:not([type='hidden'])") || confirm).focus();
   }
 
-  // Форма — из машины (forms), варианты полей и пояснение — из ответа сервера (fieldOptions, formNote)
+  // Форма — из машины (forms), варианты полей, правила полей и пояснение — из ответа сервера (fieldOptions, fieldRules, formNote)
   function openDialog(id, ev, surface) {
     const tr = transitionDef(id);
     if (!tr || !tr.form || !ev) return;
@@ -1551,12 +1549,13 @@
     const unprocessed = id === "close";
     const fields = def.fields.map((field) => {
       const opts = (a.fieldOptions || {})[field.name];
-      if (!opts) return Object.assign({}, field);
+      const rules = (a.fieldRules || {})[field.name] || null;
+      if (!opts) return Object.assign({}, field, { rules });
       if (unprocessed && field.name === "resultId") {
         const options = opts.options.filter((o) => !fullyProcessed(o.id));
-        return Object.assign({}, field, { options, defaultValue: options.some((o) => o.id === opts.defaultValue) ? opts.defaultValue : null });
+        return Object.assign({}, field, { rules, options, defaultValue: options.some((o) => o.id === opts.defaultValue) ? opts.defaultValue : null });
       }
-      return Object.assign({}, field, { options: opts.options, defaultValue: opts.defaultValue });
+      return Object.assign({}, field, { rules, options: opts.options, defaultValue: opts.defaultValue });
     });
     let note = a.formNote ? say(a.formNote.key, a.formNote.vars) : "";
     // Пояснение в карточке — точнее, чем у машины: останется ли сценарий незавершённым
@@ -1577,7 +1576,7 @@
     open.form.fields.forEach((field) => {
       if (!fieldVisible(field, values)) delete values[field.name];
     });
-    const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(open.form, f, values) && !values[f.name]);
+    const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(f, values) && !values[f.name]);
     if (missing) {
       toast(t("Заполните поле «{name}»", { name: lbl(missing) }));
       const el = $("dialogFields").querySelector(`[data-target-input="${missing.name}"], [data-field="${missing.name}"]:not([type='hidden'])`);
@@ -1620,7 +1619,7 @@
   // Кому уходит автоэскалация — для сведения, в меню оператора (§9)
   function renderAutoLevels() {
     $("autoLevels").textContent = WORKFLOW.escalation.levels
-      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.targetRef.split(":")[1]) }))
+      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.target) }))
       .join(", ");
   }
 
@@ -4021,13 +4020,14 @@
     if (values && typeof v === "string" && values[v]) return te(values[v]);
     if (typeof v === "boolean") return te(v ? "да" : "нет");
     if (typeof v === "number") return /Min(utes)?$/.test(key) ? fmtDuration(v * 60) : sec ? fmtDuration(v) : String(v);
-    if (typeof v === "string") return /^(user|group):/.test(v) ? asData(personName(v.split(":")[1])) : te(v);
+    // Адресат — id пользователя или дежурной группы (alerts.target, ARCH-07 в7)
+    if (typeof v === "string") return key === "target" ? asData(personName(v)) : te(v);
     if (Array.isArray(v)) {
       if (!v.length) return te("нет");
       return v
         .map((x) => {
           if (typeof x !== "object") return fmtSetting(x, key, sec);
-          if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.targetRef).split(":")[1]))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
+          if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.target)))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
           return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit;

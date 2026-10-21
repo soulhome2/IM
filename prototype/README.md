@@ -23,6 +23,8 @@ api.js     клиент API: по умолчанию — во встроенны
 server.js  встроенный сервер: маршруты openapi.json, инциденты, журнал, сессия, планировщик, поток событий
    ▼
 engine.js  исполнитель машины: действия, переходы, формы, бейджи, нормативы, автоматические переходы
+   ▼
+cel-runtime.js  выражения CEL машины: смысл условий и эффектов (CEL.md)
 ```
 
 | Файл | Роль |
@@ -31,6 +33,7 @@ engine.js  исполнитель машины: действия, переход
 | [`api.js`](api.js) | Клиент API. Встроенный режим — запрос в `server.js`, внешний (`index.html?api=https://…`) — HTTP и поток событий SSE к бэкенду; бэкенд должен разрешать запросы со страницы (CORS) |
 | [`server.js`](server.js) | Встроенный сервер: отвечает по `openapi.json`, хранит инциденты, журнал, прохождение сценариев и сессию, раз в секунду выполняет автоматические переходы, эмулирует коллег, шлёт поток событий |
 | [`engine.js`](engine.js) | Исполнитель машины — его вызывает только сервер |
+| [`cel-runtime.js`](cel-runtime.js) | Выражения CEL машины ([`CEL.md`](../Specification/Workflow_machine/CEL.md), ARCH-07): окружение из раздела `cel` машины, условия реестра (`expr`) и операции эффектов (`do`). Правил IM в нём нет — как и в исполнителе. Его вызывает исполнитель; библиотека — копия `cel-js` в [`vendor/cel-js/`](vendor/cel-js/ORIGIN.md) |
 | [`scenario.js`](scenario.js) | Исполнитель машины сценариев ([`Specification/Scenario_machine/`](../Specification/Scenario_machine/README.md)): прохождение, путь, курсор, прогресс, перенос ответов. Его вызывает только сервер — через стык §14.5. Условия — копия `json-logic-js` в [`vendor/`](vendor/json-logic-js/LICENSE) |
 | [`colleagues.js`](colleagues.js) | Настройки эмуляции коллег для живости демо. Коллеги действуют через переходы машины от своего имени; проверяет это тест в `tests/api-scenarios.js` |
 | [`workflow.js`](workflow.js), [`openapi.js`](openapi.js), [`fixture.js`](fixture.js) | Машина, контракт и эталонный набор данных [`fixtures/demo.json`](../Specification/Workflow_machine/fixtures/demo.json), собранные скриптом `tools/build_workflow.py`: из `file://` браузер не читает JSON. Руками не правятся |

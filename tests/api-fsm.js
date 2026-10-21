@@ -18,7 +18,12 @@
   const standWith = ({ workflow, fixture }) => makeEnv({ workflowPatch: changed(W, workflow), fixturePatch: changed(window.IM_FIXTURE, fixture) });
   // Своя копия машины с изменённой эскалацией
   const withEscalation = (patch) => Object.assign({}, W, { escalation: Object.assign({}, W.escalation, patch) });
-  const levelsTo = (refs) => W.escalation.levels.map((l, i) => (refs[i] ? Object.assign({}, l, { targetRef: refs[i] }) : l));
+  // Адресат уровня эскалации из записи «user:id» / «group:id» — полями targetKind и target (ARCH-07 в7)
+  const to = (ref) => {
+    const [targetKind, target] = ref.split(":");
+    return { targetKind, target };
+  };
+  const levelsTo = (refs) => W.escalation.levels.map((l, i) => (refs[i] ? Object.assign({}, l, to(refs[i])) : l));
   // Самый срочный уровень справочника приоритетов (§2.5): тесты не знают уровни по имени
   const TOP = Math.max(...window.IM_FIXTURE.priorities.map((p) => p.value));
   const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP);

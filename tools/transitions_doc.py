@@ -62,34 +62,39 @@ class Doc:
     def tm(self, t):
         return f"«{self.timers.get(t, t)}» (`{t}`)"
 
+    # Аргументы эффектов — выражения CEL машины (CEL.md): пусто — '', строка — в кавычках
+    @staticmethod
+    def lit(v):
+        return v[1:-1] if isinstance(v, str) and len(v) >= 2 and v[0] == v[-1] == "'" else v
+
     def value(self, v):
-        if v is None:
+        if v in (None, "''"):
             return "очищается"
         if v == "actor":
             return "я — кто выполнил"
         if v == "now":
             return "сейчас"
-        if v == "escalation.level.number":
+        if v == "levelUpNumber(before)":
             return "номер найденного уровня эскалации"
         if isinstance(v, str) and v.startswith("form."):
             return f"из формы (`{v[5:]}`)"
-        return f"`{v}`"
+        return f"`{self.lit(v)}`"
 
     def target(self, v, kind):
-        if v is None:
+        if v in (None, "''"):
             return "очищается"
         if v == "actor":
             return "я — кто выполнил"
-        if v == "owner.dutyGroup":
+        if v == "dutyGroupOf(incident.owner)":
             return "дежурная группа владельца"
-        source = "адресат из формы" if v.startswith("form.") else "адресат уровня эскалации"
+        source = "адресат из формы" if "form." in v else "адресат уровня эскалации"
         return f"{source}, если это {kind}"
 
     def guard(self, g):
         fn, a = g["fn"], g.get("args") or []
         phrases = {
             "hasPermission": lambda: f"право `{a[0]}`",
-            "hasScopedPermission": lambda: f"право `{a[0]}:own` — для своего, ничьего и адресованного мне; `{a[0]}:any` — для чужого",
+            "hasScopedPermission": lambda: f"право `{a[0]}` — для своего, ничьего и адресованного мне; `{a[1]}` — для чужого",
             "isOwner": lambda: "я владелец",
             "isNotOwner": lambda: "инцидент не мой (ожидающий моего принятия — не мой, а адресованный мне)",
             "isTarget": lambda: "адресат — я или моя дежурная группа",
@@ -133,11 +138,11 @@ class Doc:
         phrases = {
             "setOwner": lambda: f"владелец: {self.target(a[0], 'человек')}",
             "setAssignmentGroup": lambda: f"группа-адресат: {self.target(a[0], 'группа')}",
-            "setHoldReason": lambda: "причина удержания: " + (self.value(a[0]) if str(a[0]).startswith("form.") else f"«{self.reasons.get(a[0], a[0])}»"),
+            "setHoldReason": lambda: "причина удержания: " + (self.value(a[0]) if str(a[0]).startswith("form.") else f"«{self.reasons.get(self.lit(a[0]), self.lit(a[0]))}»"),
             "clearHoldReason": lambda: "причина удержания очищается",
             "startTimer": lambda: f"запуск {self.tm(a[0])}"
             + ("" if len(a) < 2 else " по нормативу уровня эскалации" if a[1] in ("byEscalationLevel", "escalation.level.reactionSec") else f", норматив {self.setting(a[1])} с")
-            + (" — если не идёт; идущий продолжается" if a[2:] == ["ifStopped"] else ""),
+            + (" — если не идёт; идущий продолжается" if a[2:] == [True] else ""),
             "stopTimer": lambda: f"остановка {self.tm(a[0])}",
             "pauseTimer": lambda: f"пауза {self.tm(a[0])}, остаток сохраняется",
             "resumeTimer": lambda: f"{self.tm(a[0])} продолжается с остатка, при первом запуске — с полного норматива",
@@ -239,7 +244,7 @@ class Doc:
                 a = g.get("args") or []
                 if g["fn"] == "hasPermission" and a and a[0] == key:
                     return True
-                if g["fn"] == "hasScopedPermission" and a and key in (f"{a[0]}:own", f"{a[0]}:any"):
+                if g["fn"] == "hasScopedPermission" and key in a:
                     return True
             return False
 

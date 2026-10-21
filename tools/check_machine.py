@@ -80,8 +80,10 @@ def check_workflow(w, err):
                 err.append(f"переход {tid}: условие {g['fn']} не в реестре")
             if g["fn"] == "hasPermission" and g["args"][0] not in perms:
                 err.append(f"переход {tid}: нет права {g['args'][0]}")
-            if g["fn"] == "hasScopedPermission" and not any(p.startswith(g["args"][0] + ":") for p in perms):
-                err.append(f"переход {tid}: нет прав {g['args'][0]}:*")
+            if g["fn"] == "hasScopedPermission":
+                for key in g["args"]:
+                    if key not in perms:
+                        err.append(f"переход {tid}: нет права {key}")
         for e in t.get("effects", []):
             if e["fn"] not in effects:
                 err.append(f"переход {tid}: эффект {e['fn']} не в реестре")
@@ -113,13 +115,18 @@ def check_workflow(w, err):
         for x in s["permissions"]:
             if x not in perms:
                 err.append(f"типовой набор {s['id']}: нет права {x}")
-    for q in w["queueFilters"]:
-        for x in q.get("states", []):
+    # Состояния и категории в выражениях бейджей, фильтров и форм — словами машины (CEL.md, «Правила интерфейса»)
+    ui = [(f"фильтр {q['id']}", q.get("expr", "")) for q in w["queueFilters"]]
+    ui += [(f"бейдж {i + 1}", b.get("expr", "")) for i, b in enumerate(w["badges"]["rules"])]
+    ui += [(f"форма {f['id']}", json.dumps(f, ensure_ascii=False)) for f in w["forms"]]
+    for where, text in ui:
+        for x in re.findall(r"\.state (?:==|!=) '(\w+)'", text) + [y for l in re.findall(r"\.state in \[([^\]]*)\]", text) for y in re.findall(r"'(\w+)'", l)]:
             if x not in states:
-                err.append(f"фильтр {q['id']}: нет состояния {x}")
-        for x in q.get("stateCategories", []):
-            if x not in cats:
-                err.append(f"фильтр {q['id']}: нет категории {x}")
+                err.append(f"{where}: нет состояния {x}")
+        for l in re.findall(r"inCategory\([^,]+, \[([^\]]*)\]\)", text):
+            for x in re.findall(r"'(\w+)'", l):
+                if x not in cats:
+                    err.append(f"{where}: нет категории {x}")
     guarded = w["navActions"]["items"] + [
         dict(w["scenarioEdit"], id="scenarioEdit"),
         {"id": "grouping.excludeGuards", "guards": w["grouping"].get("excludeGuards", [])},
@@ -131,30 +138,25 @@ def check_workflow(w, err):
     for s in w["session"]["states"]:
         if s.get("permission") and s["permission"] not in perms:
             err.append(f"состояние оператора {s['id']}: нет права {s['permission']}")
-    for b in w["badges"]["rules"]:
-        if b["state"] not in states:
-            err.append(f"бейдж: нет состояния {b['state']}")
+    for i, b in enumerate(w["badges"]["rules"]):
         # Подпись бейджа — только ключом каталога (§14.9): текст без ключа исполнитель не покажет (BUG-51, PROC-25)
         if not b.get("labelKey") or "label" in b:
-            err.append(f"бейдж {b['state']} / {b['viewerRole']}: подпись — не ключом каталога labelKey (BUG-51)")
+            err.append(f"бейдж {i + 1} ({b.get('expr')}): подпись — не ключом каталога labelKey (BUG-51)")
 
 
 def check_engine(w, err):
-    """Всё, что есть в реестрах машины, умеет исполнитель прототипа (BUG-06)."""
+    """Смысл каждого слова реестров — в машине (CEL.md, ARCH-07): у условия expr, у эффекта do. Исполнитель
+    прототипа своих правил не держит — разбор и типы выражений проверяет node tools/check_cel.mjs."""
+    for kind, key in (("guards", "expr"), ("effects", "do")):
+        for item in w["registries"][kind]:
+            if key not in item:
+                err.append(f"{'условие' if kind == 'guards' else 'эффект'} {item['fn']}: нет {key} — смысла слова в машине нет (ARCH-07)")
     path = os.path.join(ROOT, "prototype", "engine.js")
     with open(path, encoding="utf-8") as f:
         src = f.read()
-
-    def names(block):
-        body = src.split(f"const {block} = {{", 1)[1].split("\n    };", 1)[0]
-        return set(re.findall(r"^      (\w+): ", body, re.M))
-
-    for kind, block in (("guards", "GUARDS"), ("effects", "EFFECTS")):
-        implemented = names(block)
-        for item in w["registries"][kind]:
-            if item["fn"] not in implemented:
-                err.append(f"{'условие' if kind == 'guards' else 'эффект'} {item['fn']} есть в реестре, но не реализован в prototype/engine.js")
-
+    for block in ("GUARDS", "EFFECTS"):
+        if f"const {block} = {{" in src:
+            err.append(f"prototype/engine.js: снова таблица {block} — смысл условий и эффектов только в машине (ARCH-07)")
 
 def check_api(w, o, err):
     schemas = o["components"]["schemas"]
@@ -1234,9 +1236,12 @@ def check_escalation_settings(w, o, err):
     allowed = o["components"]["schemas"]["EscalationPolicy"]["properties"]["onResolutionOverdue"]["enum"]
     if esc.get("onResolutionOverdue") not in allowed:
         err.append(f"эскалация: escalation.onResolutionOverdue — одно из {allowed}; иначе истёкший норматив закрытия пропадёт молча (RULE-45)")
-    target = (w.get("alerts") or {}).get("target")
-    if not isinstance(target, str) or not re.match(r"^(user|group):.+", target):
-        err.append("алерты: alerts.target — user:… или group:…; иначе алерты некому отправить (RULE-43, RULE-45)")
+    alerts = w.get("alerts") or {}
+    if alerts.get("targetKind") not in ("user", "group") or not isinstance(alerts.get("target"), str) or not alerts["target"]:
+        err.append("алерты: alerts.targetKind — user или group, alerts.target — id; иначе алерты некому отправить (RULE-43, RULE-45, ARCH-07 в7)")
+    for lvl in esc.get("levels") or []:
+        if lvl.get("targetKind") not in ("user", "group") or not lvl.get("target"):
+            err.append(f"эскалация: уровень {lvl.get('level')} — targetKind user или group и target — id (§8.3, ARCH-07 в7)")
 
 
 def check_admin_settings(w, o, err):

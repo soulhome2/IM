@@ -4,7 +4,8 @@
 # Результат — во вкладке Actions на GitHub. Красный значок у коммита значит,
 # что что-то сломалось; подробности — в журнале шага.
 # Мутации — отдельными задачами, они идут одновременно с основной: мутации кода разложены на 4 части
-# (матрица, --shard), внутри задачи мутации идут в несколько потоков (tools/parallel.py).
+# (матрица, --shard), внутри задачи мутации идут в несколько потоков (tools/parallel.py). Модель Quint
+# и порчи машины для неё — тоже отдельными задачами.
 name: checks
 
 on:
@@ -54,9 +55,13 @@ jobs:
 
       - name: Машина состояний
         if: always()
+        # check_cel.mjs — выражения CEL машины (CEL.md, ARCH-07); gen_quint.mjs --check — модель Quint собрана
+        # из этой машины (сама модель — задачи quint-model и quint-mutations); Node на раннере уже есть
         run: |
           python3 tools/check_machine.py
           python3 tools/build_workflow.py --check
+          node tools/check_cel.mjs
+          node tools/gen_quint.mjs --check
 
       - name: Машина сценариев — схема, смысл, стык
         if: always()
@@ -115,3 +120,40 @@ jobs:
       - uses: actions/checkout@v5
       - name: Тесты ловят порчу кода
         run: python3 tools/check_code_mutations.py --shard=${{ matrix.shard }}/4
+
+  # Модель Quint собирается из машины (Specification/Workflow_machine/quint, ARCH-07): сценарии и случайные
+  # истории с инвариантами. Версия Quint закреплена; ставится в каталог задачи, без прав администратора.
+  # При нарушении quint печатает историю и зерно: повторить локально — quint run … --seed=<зерно>
+  quint-model:
+    name: Модель Quint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Quint 0.33.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/quint" --no-audit --no-fund @informalsystems/quint@0.33.0
+          echo "$RUNNER_TEMP/quint/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Модель собрана из этой машины
+        run: node tools/gen_quint.mjs --check
+      - name: Типы и сценарии
+        working-directory: Specification/Workflow_machine/quint
+        run: |
+          quint typecheck im.qnt
+          quint test im_test.qnt
+      - name: Инварианты — 10 000 случайных историй по 40 шагов
+        working-directory: Specification/Workflow_machine/quint
+        run: quint run im.qnt --invariant inv --max-samples=10000 --max-steps=40
+      - name: Ядро исполнителя прототипа и модели — одни и те же истории (ARCH-07.9)
+        run: node tools/check_quint_replay.mjs --traces=400
+
+  quint-mutations:
+    name: Порчи машины для модели Quint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Quint 0.33.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/quint" --no-audit --no-fund @informalsystems/quint@0.33.0
+          echo "$RUNNER_TEMP/quint/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Каждую порчу ловит инвариант или сценарий
+        run: node tools/check_quint_mutations.mjs

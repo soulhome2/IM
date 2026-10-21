@@ -8,6 +8,8 @@ self.window = self;
 importScripts(
   "../prototype/workflow.js",
   "../prototype/openapi.js",
+  "../prototype/vendor/cel-js/cel.js",
+  "../prototype/cel-runtime.js",
   "../prototype/engine.js",
   "../prototype/vendor/json-logic-js/logic.js",
   "../prototype/scenario.js",

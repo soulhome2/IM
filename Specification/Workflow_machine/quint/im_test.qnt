@@ -1,693 +1,465 @@
 // -*- mode: Bluespec; -*-
-/* Сценарии для модели im.qnt: права и настройки заданы, шаги — по порядку.
-   В конце каждого сценария — инварианты модели (inv).
+/* Сценарии для модели im.qnt: права и настройки заданы, шаги — по порядку, в конце — инварианты (inv).
+   Переходы — те же, что в машине: manual(кто, переход, инцидент, форма, где), автоматические — fire(инцидент).
 
    Запуск: quint test im_test.qnt */
 module im_test {
   import im.* from "./im"
 
   // Оба оператора со всеми правами и доступом ко всему; в дежурной группе — b.
-  // Эскалация: уровень 1 — b, уровень 2 — группа (LEVELS в im.qnt)
+  // Эскалация: уровень 1 — b, уровень 2 — группа; алерты — группе; лимитов нет
   pure val BASE: Config = {
-    perms: Map("a" -> PERMS, "b" -> PERMS),
+    perms: Map("a" -> USED_PERMISSIONS, "b" -> USED_PERMISSIONS),
     access: Map("a" -> INCIDENTS, "b" -> INCIDENTS),
-    members: Set("b"),
-    escalationEnabled: true,
-    onResolutionOverdue: "alert",
-    maxActive: 0,
-    maxOnHold: 0,
+    members: Map(GROUP -> Set("b")),
   }
+  pure val LEVELS = MACHINE_SETTINGS.escalation.levels
+  pure val BASE_SETTINGS: Settings = { ...MACHINE_SETTINGS,
+    escalation: { ...MACHINE_SETTINGS.escalation, enabled: true, onResolutionOverdue: "alert",
+      levels: [{ ...LEVELS[0], targetKind: "user", target: "b" }, { ...LEVELS[1], targetKind: "group", target: GROUP }] },
+    alerts: { ...MACHINE_SETTINGS.alerts, targetKind: "group", target: GROUP },
+    limits: { ...MACHINE_SETTINGS.limits, maxActive: 0, maxOnHold: 0 },
+  }
+  pure def withLevel1(s: Settings, who: str): Settings =
+    { ...s, escalation: { ...s.escalation, levels: [{ ...s.escalation.levels[0], target: who }, s.escalation.levels[1]] } }
 
-  action initWith(c: Config): bool = all {
+  action initWith(c: Config, s: Settings): bool = all {
     cfg' = c,
-    inc' = INCIDENTS.mapBy(i => ABSENT),
-    agents' = OPERATORS.mapBy(a => { presence: Ready, silence: Online }),
-    lastAction' = { name: "init", actor: NOBODY, incident: NOBODY },
+    settings' = s,
+    world' = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) },
+    clock' = START,
+    agents' = OPERATORS.mapBy(a => "ready"),
+    lastBeat' = OPERATORS.mapBy(a => START),
+    link' = OPERATORS.mapBy(a => true),
+    changedAt' = INCIDENTS.mapBy(i => 0),
+    lastAction' = act0("init", "init", NOBODY, NOBODY),
   }
+  action start = initWith(BASE, BASE_SETTINGS)
 
-  pure def result(id: str): CloseResult =
-    CLOSE_RESULTS.fold({ id: NOBODY, perm: NOBODY, from: Set(), ownerOnly: Set(), steps: false }, (acc, r) => if (r.id == id) r else acc)
-  pure val RUNNING: Timer = { mode: Running, phase: Before }
-  def x1 = inc.get("i1")
-  def x2 = inc.get("i2")
-  def x3 = inc.get("i3")
-  def breachesOf(kind: str): int = x1.breaches.select(b => b.kind == kind).length()
+  pure val FORM: Form = { ...NO_FORM, comment: "c" }
+  pure def surfaceOf(tid: str): str = if (tr(tid).surfaces.contains("card")) "card" else "queue"
+  action act(a: str, tid: str, i: str): bool = manual(a, tid, i, FORM, surfaceOf(tid))
+  action actF(a: str, tid: str, i: str, f: Form): bool = manual(a, tid, i, f, surfaceOf(tid))
+  def ok(a: str, tid: str, i: str): bool = sees(a, i) and trOk(tid, ctx(a, a, FORM, surfaceOf(tid)), i)
+  def okF(a: str, tid: str, i: str, f: Form): bool = sees(a, i) and trOk(tid, ctx(a, a, f, surfaceOf(tid)), i)
+  pure def reason(r: str): Form = { ...FORM, reasonId: r }
+  pure def result(r: str): Form = { ...FORM, resultId: r, causeId: if (CAUSE_FOR.keys().contains(r)) CAUSE_FOR.get(r) else "" }
+  pure def target(t: str): Form = { ...FORM, targetId: t }
 
-  /* ===== 1. Основной цикл: взять, отложить, возобновить, закрыть, переоткрыть ===== */
+  // Часы — в момент; у кого связь есть, признак активности приходит и дальше, как в action time модели
+  action jump(t: int): bool = all {
+    clock' = t,
+    lastBeat' = OPERATORS.mapBy(a => if (link.get(a) and agents.get(a) != "offline") t else lastBeat.get(a)),
+    world' = world, cfg' = cfg, settings' = settings, agents' = agents, link' = link, changedAt' = changedAt,
+    lastAction' = act0("time", "jump", NOBODY, NOBODY),
+  }
+  def due(i: str, k: str): int = incOf(i).timers.get(k).due
+  action expire(i: str, k: str): bool = jump(due(i, k) + GRACE_MS)
+  action newFire(i: str): bool = create(i, "fire", 100)
+
+  def x1 = incOf("i1")
+  def x2 = incOf("i2")
+  def x3 = incOf("i3")
+  pure def breachesOf(x: Incident, kind: str): int = x.breaches.select(b => b.kind == kind).length()
+  def resolutionOf(x: Incident): Timer = x.timers.get("resolution")
+  def reactionOf(x: Incident): Timer = x.timers.get("reaction")
+
+  /* ===== 1. Основной цикл ===== */
 
   run mainCycleTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .expect(x1.state == InProgress and x1.owner == "a" and x1.reaction == IDLE and x1.resolution == RUNNING)
-      .then(hold("a", "i1", "patrol"))
-      .expect(x1.state == OnHold and x1.holdReason == "patrol" and x1.hold == RUNNING and x1.resolution.mode == Paused)
-      .then(resume("a", "i1"))
-      .expect(x1.state == InProgress and x1.holdReason == NOBODY and x1.hold == IDLE and x1.resolution == RUNNING)
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .expect(x1.state == "in_progress" and x1.owner == "a" and not(runs(reactionOf(x1))) and runs(resolutionOf(x1)))
+      .then(actF("a", "hold", "i1", reason("patrol")))
+      .expect(x1.state == "on_hold" and x1.holdReasonId == "patrol" and runs(x1.timers.get("hold")) and resolutionOf(x1).paused)
+      .then(act("a", "resume", "i1"))
+      .expect(x1.state == "in_progress" and x1.holdReasonId == "" and not(runs(x1.timers.get("hold"))) and runs(resolutionOf(x1)))
       .then(answer("a", "i1", "s1"))
       .then(answer("a", "i1", "s2"))
-      .then(close("a", "i1", result("processed")))
-      .expect(x1.state == Closed and x1.closedBy == "a" and x1.closeResult == "processed" and x1.resolution.mode == Paused)
-      .then(reopen("a", "i1"))
-      .expect(x1.state == InProgress and x1.owner == "a" and x1.closeResult == NOBODY and x1.resolution == RUNNING)
+      .then(actF("a", "close", "i1", result("processed")))
+      .expect(x1.state == "closed" and x1.closedBy == "a" and x1.closeResultId == "processed" and not(runs(resolutionOf(x1))))
+      .then(act("a", "reopen", "i1"))
+      .expect(x1.state == "in_progress" and x1.owner == "a" and x1.closeResultId == "" and runs(resolutionOf(x1)))
       .expect(inv)
 
-  // Переоткрытие запускает норматив закрытия заново: истёкший до закрытия больше не истёкший (RULE-11)
+  // Переоткрытие запускает норматив закрытия заново (RULE-11)
   run reopenRestartsResolutionTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(expireResolution("i1"))
-      .then(resolutionOverdue("i1"))
-      .then(close("a", "i1", result("false_alarm")))
-      .then(reopen("a", "i1"))
-      .expect(x1.resolution == RUNNING and breachesOf("resolution") == 1)
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "resolution_overdue" and breachesOf(x1, "resolution") == 1)
+      .then(actF("a", "close", "i1", result("false_alarm")))
+      .then(act("a", "reopen", "i1"))
+      .expect(runs(resolutionOf(x1)) and due("i1", "resolution") > clock and breachesOf(x1, "resolution") == 1)
       .expect(inv)
 
-  /* ===== 2. Эскалация по реакции до потолка (§8.3, RULE-84) ===== */
+  /* ===== 2. Эскалация (§8.3) ===== */
 
   // В группе уровня 2 — и a: иначе принять в ней мог бы только b, у кого инцидент уже есть (RULE-93)
   run escalationToCeilingTest =
-    initWith({ ...BASE, members: Set("a", "b") })
-      .then(create("i1"))
-      .then(expireReaction("i1"))
-      .expect(not(claimOk("a", "i1")))  // переход по таймеру срочный — ручные ждут
-      .then(autoEscalate("i1"))
-      .expect(x1.state == Pending and x1.owner == "b" and x1.group == NOBODY and x1.level == 1 and x1.reaction == RUNNING)
-      .then(expireReaction("i1"))
-      .then(autoEscalate("i1"))
-      .expect(x1.state == Pending and x1.owner == NOBODY and x1.group == GROUP and x1.level == 2 and x1.reaction == RUNNING)
-      .then(expireReaction("i1"))
-      .expect(not(autoEscalateOk("i1")))
-      .then(escalationCeiling("i1"))
-      .expect(x1.state == Pending and x1.level == 2 and x1.reaction == IDLE and breachesOf("reaction") == 1)
-      // «Отклонить» остановленную реакцию не запускает…
-      .then(reject("b", "i1"))
-      .expect(x1.state == New and x1.reaction == IDLE)
-      // …а «Передать» запускает (ifStopped)
-      .then(transfer("a", "i1", "b"))
-      .expect(x1.state == Pending and x1.owner == "b" and x1.reaction == RUNNING and x1.transfers == 1)
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) }, BASE_SETTINGS)
+      .then(newFire("i1"))
+      .then(expire("i1", "reaction"))
+      .expect(urgent)
+      .then(fire("i1"))
+      .expect(lastAction.name == "auto_escalate" and x1.state == "pending_acceptance" and x1.owner == "b" and x1.escalationLevel == 1 and runs(reactionOf(x1)))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(x1.owner == "" and x1.assignmentGroup == GROUP and x1.escalationLevel == 2 and runs(reactionOf(x1)))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "escalation_ceiling" and not(runs(reactionOf(x1))) and breachesOf(x1, "reaction") == 1)
+      // «Отклонить» остановленную реакцию не запускает, «Передать» — запускает (ifStopped)
+      .then(act("b", "reject", "i1"))
+      .expect(x1.state == "new" and not(runs(reactionOf(x1))))
+      .then(actF("a", "transfer", "i1", target("b")))
+      .expect(x1.state == "pending_acceptance" and x1.owner == "b" and runs(reactionOf(x1)) and x1.transferCount == 1)
       .expect(inv)
 
-  // Уровень 1 недоступен (у b нет права «Принимать») — пропускается, сразу группа (§8.3)
-  run escalationSkipsLevelTest =
-    initWith({ ...BASE, perms: Map("a" -> PERMS, "b" -> PERMS.exclude(Set("incident:accept"))), members: Set("a") })
-      .then(create("i1"))
-      .then(expireReaction("i1"))
-      .then(autoEscalate("i1"))
-      .expect(x1.owner == NOBODY and x1.group == GROUP and x1.level == 2)
-      .expect(inv)
-
-  // Эскалация выключена: истёкшая реакция — нарушение без передачи (RULE-40)
-  run reactionOverdueWithoutEscalationTest =
-    initWith({ ...BASE, escalationEnabled: false })
-      .then(create("i1"))
-      .then(expireReaction("i1"))
-      .expect(not(autoEscalateOk("i1")))
-      .then(reactionOverdue("i1"))
-      .expect(x1.state == New and x1.reaction == IDLE and breachesOf("reaction") == 1)
-      .expect(inv)
-
-  // Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (§8.3, RULE-93).
-  // Передан b — адресату уровня 1: уровень 1 пропущен; в группе уровня 2 принять может только b —
-  // пропущена и она; дальше уровней нет — потолок: нарушение реакции
+  // RULE-93: уровень, адресат которого уже держит инцидент, пропускается
   run escalationSkipsCurrentAddresseeTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(transfer("a", "i1", "b"))
-      .then(expireReaction("i1"))
-      .expect(not(autoEscalateOk("i1")))
-      .then(escalationCeiling("i1"))
-      .expect(x1.owner == "b" and x1.level == 0 and breachesOf("reaction") == 1)
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) }, BASE_SETTINGS)
+      .then(newFire("i1"))
+      .then(actF("a", "transfer", "i1", target("b")))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "auto_escalate" and x1.assignmentGroup == GROUP and x1.escalationLevel == 2)
       .expect(inv)
 
-  // Та же группа, но принять в ней может и a — уровень 2 не пропускается
-  run escalationGroupWithOthersTest =
-    initWith({ ...BASE, members: Set("a", "b") })
-      .then(create("i1"))
-      .then(transfer("a", "i1", "b"))
-      .then(expireReaction("i1"))
-      .then(autoEscalate("i1"))
-      .expect(x1.owner == NOBODY and x1.group == GROUP and x1.level == 2 and breachesOf("reaction") == 0)
+  // RULE-93: группа, где принять может только тот, у кого инцидент уже есть, — тоже пропускается
+  run escalationGroupOnlyAddresseeTest =
+    start
+      .then(newFire("i1"))
+      .then(actF("a", "transfer", "i1", target("b")))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "escalation_ceiling" and x1.owner == "b" and breachesOf(x1, "reaction") == 1)
       .expect(inv)
 
-  // Закрытие: b ведёт инцидент и сам адресат уровня 1 — уровень пропущен, сразу группа
+  // RULE-93 по нормативу закрытия: уровень 1 — сам владелец, пропущен
   run resolutionEscalateSkipsOwnerTest =
-    initWith({ ...BASE, members: Set("a", "b"), onResolutionOverdue: "escalate" })
-      .then(create("i1"))
-      .then(claim("b", "i1"))
-      .then(expireResolution("i1"))
-      .then(resolutionEscalate("i1"))
-      .expect(x1.state == Pending and x1.group == GROUP and x1.level == 2 and x1.breaches == [{ kind: "resolution", who: "b" }])
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) },
+      withLevel1({ ...BASE_SETTINGS, escalation: { ...BASE_SETTINGS.escalation, onResolutionOverdue: "escalate" } }, "a"))
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "resolution_escalate" and x1.assignmentGroup == GROUP and x1.escalationLevel == 2 and breachesOf(x1, "resolution") == 1)
       .expect(inv)
 
-  /* ===== 3. Остаток норматива закрытия (RULE-07, RULE-50) ===== */
-
+  // Сработавший норматив закрытия второй раз не срабатывает: возврат в работу — с прежним дедлайном (RULE-50)
   run resolutionFiresOnceTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(expireResolution("i1"))
-      .then(resolutionOverdue("i1"))
-      .expect(breachesOf("resolution") == 1 and x1.resolution == { mode: Running, phase: Fired })
-      .then(release("a", "i1"))
-      .expect(x1.state == New and x1.resolution == { mode: Paused, phase: Fired } and x1.reaction == RUNNING)
-      .then(claim("b", "i1"))
-      // взятие продолжает с остатка: срок прежний, отработанный, повторно не срабатывает
-      .expect(x1.resolution == { mode: Running, phase: Fired })
-      .expect(not(resolutionOverdueOk("i1")))
-      .expect(not(expireResolutionOk("i1")))
-      .expect(breachesOf("resolution") == 1)
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .then(act("a", "release", "i1"))
+      .then(act("a", "claim", "i1"))
+      .expect(not(urgent) and breachesOf(x1, "resolution") == 1 and resolutionOf(x1).due == resolutionOf(x1).fired)
       .expect(inv)
 
-  // Пауза до дедлайна сохраняет остаток: удержание не сдвигает и не обнуляет срок
-  run holdPausesResolutionTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(hold("a", "i1", "no_data"))
-      .expect(not(expireResolutionOk("i1")))  // на паузе дедлайн не наступает
-      .then(expireHold("i1"))
-      .then(holdOverdue("i1"))
-      .expect(breachesOf("hold") == 1 and x1.state == OnHold)
-      .then(resume("a", "i1"))
-      .expect(x1.resolution == RUNNING and x1.hold == IDLE)
-      .expect(inv)
+  /* ===== 3. Права и лимиты ===== */
 
-  /* ===== 4. Эскалация по нормативу закрытия (§9, RULE-27) ===== */
-
-  run resolutionEscalateTest =
-    initWith({ ...BASE, onResolutionOverdue: "escalate" })
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(expireResolution("i1"))
-      .expect(not(resolutionOverdueOk("i1")))
-      .then(resolutionEscalate("i1"))
-      .expect(all {
-        x1.state == Pending,
-        x1.owner == "b",
-        x1.level == 1,
-        x1.breaches == [{ kind: "resolution", who: "a" }],
-        x1.resolution == { mode: Paused, phase: Fired },
-        x1.reaction == RUNNING,
-      })
-      .expect(inv)
-
-  /* ===== 5. Запреты ===== */
-
-  // Адресат принимает, а не перехватывает (BUG-60); посторонний с правом — перехватывает
   run targetCannotTakeoverTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(transfer("a", "i1", "b"))
-      .expect(not(takeoverOk("b", "i1")))
-      .expect(not(acceptOk("a", "i1")))
-      .then(takeover("a", "i1"))
-      .expect(x1.state == InProgress and x1.owner == "a")
+    start
+      .then(newFire("i1"))
+      .then(actF("a", "transfer", "i1", target("b")))
+      .expect(not(ok("b", "takeover", "i1")) and ok("b", "accept", "i1"))
       .expect(inv)
 
-  // Участник группы ей не передаёт (targetIsNotSelf); не участник — передаёт
+  // Себе и своей дежурной группе не передают (§10.1)
   run transferToOwnGroupForbiddenTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .expect(not(transferOk("b", "i1", GROUP)))
-      .expect(not(transferOk("a", "i1", "a")))
-      .then(transfer("a", "i1", GROUP))
-      .expect(x1.state == Pending and x1.group == GROUP and x1.owner == NOBODY)
-      .then(accept("b", "i1"))
-      .expect(x1.state == InProgress and x1.owner == "b" and x1.group == NOBODY)
+    start
+      .then(newFire("i1"))
+      .expect(not(okF("b", "transfer", "i1", target(GROUP))) and not(okF("b", "transfer", "i1", target("b"))) and okF("a", "transfer", "i1", target(GROUP)))
       .expect(inv)
 
-  // «Обработан» — только владельцем и когда сценарий пройден: отвечены все шаги (§14.5)
+  // «Обработан» — только у пройденного сценария (§14.5)
   run processedNeedsStepsTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .expect(not(okF("a", "close", "i1", result("processed"))) and okF("a", "close", "i1", result("false_alarm")))
       .then(answer("a", "i1", "s1"))
-      .expect(not(closeOk("a", "i1", result("processed"))))
       .then(answer("a", "i1", "s2"))
-      .expect(not(closeOk("b", "i1", result("processed"))))
-      .then(close("a", "i1", result("processed")))
-      .expect(x1.state == Closed and x1.closeResult == "processed")
+      .expect(okF("a", "close", "i1", result("processed")))
       .expect(inv)
 
-  // «Массовый сбой» из «Новое» — только с incident:close:unprocessed; закрывший становится владельцем
   run massCloseFromNewTest =
-    initWith({ ...BASE, perms: Map("a" -> PERMS.exclude(Set("incident:close:unprocessed")), "b" -> PERMS) })
-      .then(create("i1"))
-      .expect(not(closeOk("a", "i1", result("mass"))))
-      .expect(not(closeOk("b", "i1", result("false_alarm"))))
-      .then(close("b", "i1", result("mass")))
-      .expect(x1.state == Closed and x1.owner == "b" and x1.closedBy == "b" and x1.resolution == IDLE)
+    start
+      .then(newFire("i1"))
+      .then(actF("a", "close", "i1", result("mass")))
+      .expect(x1.state == "closed" and x1.closeResultId == "mass")
       .expect(inv)
 
   // Лимит отложенных — только у ручного «Отложить» (§10.2)
   run holdLimitTest =
-    initWith({ ...BASE, maxOnHold: 1 })
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(hold("a", "i1", "patrol"))
-      .expect(not(holdOk("a", "i2")))
-      .then(release("a", "i1"))
-      .then(hold("a", "i2", "patrol"))
+    initWith(BASE, { ...BASE_SETTINGS, limits: { ...BASE_SETTINGS.limits, maxOnHold: 1 } })
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(actF("a", "hold", "i1", reason("patrol")))
+      .then(act("a", "claim", "i2"))
+      .expect(not(okF("a", "hold", "i2", reason("patrol"))))
       .expect(inv)
 
-  /* ===== 6. Объединение (§11.3, §11.4) ===== */
+  // Видимость (§5): без доступа к объекту — ничего
+  run invisibleCannotActTest =
+    initWith({ ...BASE, access: Map("a" -> Set(), "b" -> INCIDENTS) }, BASE_SETTINGS)
+      .then(newFire("i1"))
+      .expect(not(ok("a", "claim", "i1")) and ok("b", "claim", "i1"))
+      .expect(inv)
 
-  // Новый — в мой в работе: привязанный без владельца, реакция снята, норматив закрытия не запускался
+  run answerRightsTest =
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .expect(scenarioEditOk(ctx("a", "a", NO_FORM, "card"), "i1") and not(scenarioEditOk(ctx("b", "b", NO_FORM, "card"), "i1")))
+      .expect(inv)
+
+  /* ===== 4. Объединение и срок группы (§11, RULE-97) ===== */
+
   run mergeIntoMineTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
       .then(merge("a", "i1", Set("i2")))
-      .expect(x2.state == Linked and x2.linkedTo == "i1" and x2.owner == NOBODY and x2.reaction == IDLE and x2.resolution == IDLE)
-      .expect(x1.state == InProgress and x1.owner == "a")
+      .expect(x2.state == "linked" and x2.linkedTo == "i1" and x2.owner == "" and not(runs(resolutionOf(x2))))
       .expect(inv)
 
-  // Два новых: основной берётся тем же действием (grouping.takeWith)
   run mergeTakesNewPrimaryTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
       .then(merge("a", "i1", Set("i2")))
-      .expect(x1.state == InProgress and x1.owner == "a" and x1.reaction == IDLE and x1.resolution == RUNNING)
-      .expect(x2.state == Linked and x2.linkedTo == "i1")
+      .expect(x1.state == "in_progress" and x1.owner == "a" and x2.state == "linked" and x2.linkedTo == "i1")
       .expect(inv)
 
-  // Основной со своим привязанным объединяется в третий: привязанный — к новому основному,
-  // привязанного у привязанного не бывает (relinkToPrimary)
+  // Привязанные объединяемого — новому основному: привязанного у привязанного не бывает
   run mergeRelinksTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(create("i3"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(newFire("i3"))
       .then(merge("a", "i1", Set("i2")))
       .then(merge("a", "i3", Set("i1")))
-      .expect(x3.state == InProgress and x3.owner == "a")
-      .expect(x1.state == Linked and x1.linkedTo == "i3" and x1.resolution == { mode: Paused, phase: Before })
-      .expect(x2.state == Linked and x2.linkedTo == "i3")
+      .expect(x1.linkedTo == "i3" and x2.linkedTo == "i3" and x2.leftGroup.primaryId == "i1")
       .expect(inv)
 
-  // Из отложенного: удержание снято, свой норматив закрытия на паузе — идёт срок группы (RULE-97)
-  run mergeFromOnHoldTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(hold("a", "i2", "patrol"))
-      .then(merge("a", "i1", Set("i2")))
-      .expect(x2.state == Linked and x2.holdReason == NOBODY and x2.hold == IDLE and x2.resolution == { mode: Paused, phase: Before })
-      .expect(inv)
-
-  // Всё или ничего: чужой в работе не объединить — не проходит и вся выборка. Основным не бывает
-  // отложенный (RULE-78)
+  // Всё или ничего: один из выборки нельзя — нельзя всю
   run mergeAllOrNothingTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(create("i3"))
-      .then(claim("b", "i3"))
-      .expect(not(mergeSetOk("a", "i1", Set("i2", "i3"))))
-      .expect(mergeSetOk("a", "i1", Set("i2")))
-      .then(claim("a", "i1"))
-      .then(hold("a", "i1", "patrol"))
-      .expect(not(mergeSetOk("a", "i1", Set("i2"))))
-      .expect(inv)
-
-  // Отсоединить: пока основной ждёт принятия — никто; после «Принять» — принявший (RULE-78).
-  // Отсоединённый — новый, реакция заново
-  run detachRightsTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(newFire("i3"))
+      .then(actF("b", "transfer", "i3", target("a")))
+      .expect(not(trOk(MERGE, ctx("a", "a", { ...NO_FORM, primaryId: "i1" }, ""), "i3")))
       .then(merge("a", "i1", Set("i2")))
-      .then(transfer("a", "i1", "b"))
-      .expect(not(detachOk("a", "i2")) and not(detachOk("b", "i2")))
-      .then(accept("b", "i1"))
-      .expect(not(detachOk("a", "i2")))
-      .then(detach("b", "i2"))
-      .expect(x2.state == New and x2.linkedTo == NOBODY and x2.reaction == RUNNING)
+      .expect(x3.state == "pending_acceptance")
       .expect(inv)
 
-  // Закрытие основного закрывает привязанный с его результатом и закрывшим; до этого ручные ждут.
-  // Переоткрытие основного оставляет привязанный закрытым; переоткрытый привязанный отвязан (BUG-42)
-  run closeLinkedTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(create("i3"))
-      .then(claim("a", "i1"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(close("a", "i1", result("false_alarm")))
-      .expect(not(reopenOk("a", "i1")) and not(claimOk("b", "i3")))
-      .then(closeLinked("i2"))
-      .expect(all {
-        x2.state == Closed,
-        x2.closeResult == "false_alarm",
-        x2.closedBy == "a",
-        x2.owner == NOBODY,
-        x2.linkedTo == "i1",
-        x2.reopenOpen,
-      })
-      .then(reopen("a", "i1"))
-      .expect(x1.state == InProgress and x2.state == Closed)
-      .then(reopen("b", "i2"))
-      .expect(x2.state == InProgress and x2.owner == "b" and x2.linkedTo == NOBODY)
-      .expect(inv)
-
-  /* ===== 7. Срок группы (§11.4, RULE-97) ===== */
-
-  // Истёк срок группы — нарушение у основного и у привязанного, на владельца основного
-  run groupBreachSharedTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(expireResolution("i1"))
-      .expect(not(detachOk("a", "i2")))  // срок группы — и его: ручные ждут перехода по таймеру
-      .then(resolutionOverdue("i1"))
-      .expect(x1.breaches == [{ kind: "resolution", who: "a" }] and x2.breaches == [{ kind: "resolution", who: "a" }])
-      .expect(inv)
-
-  // Основной вернули в очередь — срок группы стоит: у привязанного свой на паузе, наступить нечему
-  run releasedGroupStopsTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(release("a", "i1"))
-      .expect(not(expireResolutionOk("i1")) and not(expireResolutionOk("i2")))
-      .expect(inv)
-
-  // Отсоединённый после срока группы — со сработавшим сроком: взявшему второго нарушения нет (RULE-50)
-  run detachAfterGroupBreachTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(expireResolution("i1"))
-      .then(resolutionOverdue("i1"))
-      .then(detach("a", "i2"))
-      .expect(x2.state == New and x2.resolution == { mode: Paused, phase: Fired })
-      .then(claim("b", "i2"))
-      .expect(x2.resolution == { mode: Running, phase: Fired } and not(expireResolutionOk("i2")))
-      .expect(inv)
-
-  // Дедлайн основного наступил — объединение ждёт его срабатывания: присоединённым — только новые нарушения
-  run mergeWaitsForPrimaryDeadlineTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(expireResolution("i1"))
-      .expect(not(mergeSetOk("a", "i1", Set("i2"))))
-      .then(resolutionOverdue("i1"))
-      .then(merge("a", "i1", Set("i2")))
-      .expect(x2.breaches == [] and x2.joinedBreaches == 1)
-      .expect(inv)
-
-  /* ===== 8. Видимость и доступ к привязанным (§5, §11.4, RULE-71) ===== */
-
-  // У b нет доступа к i2: i1 он видит, i2 — нет
-  pure val NO_I2_FOR_B: Config = { ...BASE, access: Map("a" -> INCIDENTS, "b" -> Set("i1", "i3")) }
-
-  // Невидимый инцидент: взять его нельзя — его нет (invariants.actorSeesIncident)
-  run invisibleCannotActTest =
-    initWith(NO_I2_FOR_B)
-      .then(create("i2"))
-      .expect(not(claimOk("b", "i2")) and claimOk("a", "i2"))
-      .expect(inv)
-
-  // Перехватил основной тот, кто не видит привязанный, — привязанный отсоединяется новым, срок — остаток срока группы
-  run takeoverLosesLinkedTest =
-    initWith(NO_I2_FOR_B)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(create("i3"))
-      .expect(claimOk("a", "i3"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(takeover("b", "i1"))
-      .expect(linkedLostAccessOk("i2") and not(claimOk("a", "i3")))  // системный переход срочный
-      .then(linkedLostAccess("i2"))
-      .expect(all {
-        x2.state == New,
-        x2.linkedTo == NOBODY,
-        x2.reaction == RUNNING,
-        x2.resolution == { mode: Paused, phase: Before },
-      })
-      .expect(inv)
-
-  // Вручную передать основной тому, кто не видит привязанный, нельзя (targetHasAccessToLinked)
-  run transferNeedsLinkedAccessTest =
-    initWith(NO_I2_FOR_B)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .expect(transferOk("a", "i1", "b"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .expect(not(transferOk("a", "i1", "b")) and not(transferOk("a", "i1", GROUP)))
-      .expect(inv)
-
-  // Эскалация по нормативу закрытия к тому, кто не видит привязанный: нарушение группы — и ему, затем он
-  // отсоединяется со сработавшим сроком (RULE-50, RULE-97)
-  run escalationLosesLinkedTest =
-    initWith({ ...NO_I2_FOR_B, onResolutionOverdue: "escalate" })
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(expireResolution("i1"))
-      .then(resolutionEscalate("i1"))
-      .expect(x1.state == Pending and x1.owner == "b" and x2.breaches == [{ kind: "resolution", who: "a" }])
-      .then(linkedLostAccess("i2"))
-      .expect(x2.state == New and x2.resolution == { mode: Paused, phase: Fired })
-      .expect(inv)
-
-  /* ===== 9. Сценарий при объединении (§11.3, §14.5) ===== */
-
-  // Отвечать может только владелец в работе (scenarioEdit): не в «Отложен», не чужой
-  run answerRightsTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .expect(not(answerOk("a", "i1", "s1")))
-      .then(claim("a", "i1"))
-      .expect(answerOk("a", "i1", "s1") and not(answerOk("b", "i1", "s1")))
-      .then(hold("a", "i1", "patrol"))
-      .expect(not(answerOk("a", "i1", "s1")))
-      .expect(inv)
-
-  // Разные сценарии одним инцидентом не взять (sameScenarioAsPrimary)
   run mergeDifferentScenarioTest =
-    initWith(BASE)
-      .then(createWith("i1", "fire"))
-      .then(createWith("i2", "water"))
-      .then(createWith("i3", "fire"))
-      .expect(not(mergeSetOk("a", "i1", Set("i2"))) and mergeSetOk("a", "i1", Set("i3")))
+    start
+      .then(create("i1", "fire", 100))
+      .then(create("i2", "water", 100))
+      .expect(not(trOk(MERGE, ctx("a", "a", { ...NO_FORM, primaryId: "i1" }, ""), "i2")))
       .expect(inv)
 
-  // Ответы привязанного — основному: основной пройден, можно «Обработан»; привязанный закрыт вместе с ним
-  // с его результатом, хотя свой сценарий не прошёл (§11.4)
+  // Ответы привязанного — основному: «Обработан» доступен по перенесённым ответам
   run mergeAnswersFinishTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(answer("a", "i1", "s1"))
-      .then(claim("a", "i2"))
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i2"))
+      .then(answer("a", "i2", "s1"))
       .then(answer("a", "i2", "s2"))
-      .expect(not(closeOk("a", "i1", result("processed"))))
+      .then(act("a", "claim", "i1"))
       .then(merge("a", "i1", Set("i2")))
-      .expect(x1.answered == STEPS and x2.answered == Set("s2"))
-      .then(close("a", "i1", result("processed")))
-      .then(closeLinked("i2"))
-      .expect(x2.state == Closed and x2.closeResult == "processed" and x2.answered == Set("s2"))
+      .expect(world.answers.get("i1") == STEPS and okF("a", "close", "i1", result("processed")))
       .expect(inv)
 
-  /* ===== 10. Состояние оператора (§12) ===== */
+  // Закрыли основной — привязанный закрывается вместе с ним его результатом (§11.4)
+  run closeLinkedTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(actF("a", "close", "i1", result("false_alarm")))
+      .expect(urgent)
+      .then(fire("i2"))
+      .expect(lastAction.name == "close_linked" and x2.state == "closed" and x2.closeResultId == "false_alarm" and x2.closedBy == "a")
+      .expect(inv)
 
-  def agentOf(a: str): Agent = agents.get(a)
+  // У группы один срок: нарушение основного — и привязанному, на владельца основного (RULE-97)
+  run groupBreachSharedTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(breachesOf(x1, "resolution") == 1 and breachesOf(x2, "resolution") == 1 and x2.breaches[0].owner == "a")
+      .expect(inv)
 
-  // Перерыв: свой в работе — отложен системой с причиной «перерыв»; на перерыве — только просмотр
+  // Группу никто не ведёт — срок стоит (RULE-97)
+  run releasedGroupStopsTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(act("a", "release", "i1"))
+      .expect(not(runs(resolutionOf(x1))) and resolutionOf(x1).paused and not(runs(resolutionOf(x2))))
+      .expect(inv)
+
+  // Отсоединённый после нарушения группы — с отработанным сроком: при взятии второго нарушения нет (RULE-50)
+  run detachAfterGroupBreachTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .then(act("a", "detach", "i2"))
+      .then(act("b", "claim", "i2"))
+      .expect(not(urgent) and breachesOf(x2, "resolution") == 1)
+      .expect(inv)
+
+  // BUG-73: отсоединённому в окне после срока группы нарушение группы записано — тем, кто был в группе в момент срока
+  run detachInGroupWindowTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(jump(due("i1", "resolution") + 1))
+      .expect(not(urgent))
+      .then(act("a", "detach", "i2"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(breachesOf(x1, "resolution") == 1 and breachesOf(x2, "resolution") == 1 and x2.state == "new")
+      .expect(inv)
+
+  // BUG-75: отсоединённый в окне после срока группы и взятый в нём же — одно нарушение, группы, на a; своего нет
+  run detachClaimInGroupWindowTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(jump(due("i1", "resolution") + 1))
+      .then(act("a", "detach", "i2"))
+      .expect(dueNotPausedUnprocessed)
+      .then(act("b", "claim", "i2"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .then(jump(clock + 1000))
+      .expect(not(urgent) and breachesOf(x2, "resolution") == 1 and x2.breaches[0].owner == "a")
+      .expect(inv)
+
+  // BUG-75: отсоединённый ровно в миг срока группы — тоже в группе: нарушение группы ему записано, своего не будет
+  run detachAtGroupDeadlineTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(jump(due("i1", "resolution")))
+      .then(act("a", "detach", "i2"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .then(act("b", "claim", "i2"))
+      .then(jump(clock + 10000))
+      .expect(not(urgent) and breachesOf(x2, "resolution") == 1 and x2.breaches[0].owner == "a")
+      .expect(inv)
+
+  // Перехват основного тем, кто не видит привязанный: привязанный отсоединяется (§11.4, RULE-71)
+  run takeoverLosesLinkedTest =
+    initWith({ ...BASE, access: Map("a" -> INCIDENTS, "b" -> Set("i1")) }, BASE_SETTINGS)
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(act("b", "takeover", "i1"))
+      .expect(urgent)
+      .then(fire("i2"))
+      .expect(lastAction.name == "linked_lost_access" and x2.state == "new" and x2.linkedTo == "")
+      .expect(inv)
+
+  /* ===== 5. Состояние оператора (§12) и роли (§5) ===== */
+
   run breakHoldsWorkTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
       .then(goOnBreak("a"))
-      .expect(systemHoldBreakOk("i1") and not(claimOk("b", "i2")))  // системный переход срочный
-      .then(systemHoldBreak("i1"))
-      .expect(all {
-        x1.state == OnHold,
-        x1.holdReason == "break",
-        x1.resolution.mode == Paused,
-        x1.hold == RUNNING,
-      })
-      .expect(not(resumeOk("a", "i1")) and not(claimOk("a", "i2")))  // agentReady
-      .then(backFromBreak("a"))
-      .expect(resumeOk("a", "i1"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "system_hold_break" and x1.state == "on_hold" and x1.holdReasonId == "break")
       .expect(inv)
 
-  // Молчание: дольше idleHoldSec — «нет связи», дольше idleReleaseSec — в очередь
   run silenceHoldThenReleaseTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(silenceGrows("a"))
-      .then(systemHoldIdle("i1"))
-      .expect(x1.state == OnHold and x1.holdReason == "no_link")
-      .then(silenceGrows("a"))
-      .then(systemReleaseIdle("i1"))
-      .expect(all {
-        x1.state == New,
-        x1.owner == NOBODY,
-        x1.holdReason == NOBODY,
-        x1.reaction == RUNNING,
-        x1.resolution.mode == Paused,
-      })
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .then(loseLink("a"))
+      .then(jump(lastBeat.get("a") + settings.session.idleHoldSec * 1000))
+      .then(fire("i1"))
+      .expect(lastAction.name == "system_hold_idle" and x1.holdReasonId == "no_link")
+      .then(jump(lastBeat.get("a") + settings.session.idleReleaseSec * 1000))
+      .then(fire("i1"))
+      .expect(lastAction.name == "system_release_idle" and x1.state == "new")
       .expect(inv)
 
-  // Отложенный вручную молчание в очередь не возвращает: только системные причины (holdReasonIn)
-  run manualHoldStaysOnSilenceTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(hold("a", "i1", "patrol"))
-      .then(silenceGrows("a"))
-      .then(silenceGrows("a"))
-      .expect(not(systemReleaseIdleOk("i1")) and x1.state == OnHold)
+  // Действие — признак активности (§12.3, BUG-76): молчал дольше порога и взял — не отложен
+  run actingIsNotSilentTest =
+    start
+      .then(newFire("i1"))
+      .then(loseLink("a"))
+      .then(jump(clock + settings.session.idleHoldSec * 1000 + 60000))
+      .then(act("a", "claim", "i1"))
+      .expect(not(urgent) and x1.state == "in_progress" and lastBeat.get("a") == clock)
       .expect(inv)
 
-  // Вышел: свои в работе и отложенные — в очередь
   run signOutReturnsWorkTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(hold("a", "i2", "patrol"))
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
       .then(signOut("a"))
-      .then(ownerSignedOut("i1"))
-      .then(ownerSignedOut("i2"))
-      .expect(x1.state == New and x2.state == New and x2.holdReason == NOBODY and x2.hold == IDLE)
+      .then(fire("i1"))
+      .expect(lastAction.name == "owner_signed_out" and x1.state == "new")
       .expect(inv)
 
-  // Вышел, не приняв: есть дежурная группа — ей, нет — в очередь, реакция продолжается
+  // Вышел адресат лично ему переданного: инцидент — его дежурной группе
   run signOutPendingTest =
-    initWith({ ...BASE, members: Set("a") })
-      .then(create("i1"))
-      .then(transfer("b", "i1", "a"))
-      .then(signOut("a"))
-      .then(addresseeSignedOutToGroup("i1"))
-      .expect(x1.state == Pending and x1.group == GROUP and x1.owner == NOBODY)
-      .expect(inv)
-  run signOutPendingToQueueTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(transfer("b", "i1", "a"))
-      .then(signOut("a"))
-      .expect(not(addresseeSignedOutToGroupOk("i1")))
-      .then(addresseeSignedOutToQueue("i1"))
-      .expect(x1.state == New and x1.owner == NOBODY and x1.reaction == RUNNING)
+    start
+      .then(newFire("i1"))
+      .then(actF("a", "transfer", "i1", target("b")))
+      .then(signOut("b"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "addressee_signed_out_to_group" and x1.assignmentGroup == GROUP and x1.owner == "")
       .expect(inv)
 
-  // Лимит отложенных — только ручной: перерыв откладывает и сверх лимита (§10.2)
-  run systemHoldOverLimitTest =
-    initWith({ ...BASE, maxOnHold: 1 })
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(hold("a", "i1", "patrol"))
-      .then(goOnBreak("a"))
-      .then(systemHoldBreak("i2"))
-      .expect(x1.state == OnHold and x2.state == OnHold and x2.holdReason == "break")
-      .expect(inv)
-
-  // Основной группы ушёл в очередь — вышел владелец: срок группы на паузе, привязанный остаётся привязанным
-  run signOutPausesGroupTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(signOut("a"))
-      .then(ownerSignedOut("i1"))
-      .expect(x1.state == New and x1.resolution.mode == Paused and x2.state == Linked)
-      .expect(not(expireResolutionOk("i1")) and not(expireResolutionOk("i2")))
-      .expect(inv)
-
-  /* ===== 11. Смена ролей и доступа (§5, §8.1) ===== */
-
-  // Пропал доступ у владельца в работе — инцидент в очереди новым, реакция заново, норматив закрытия на паузе;
-  // бывший владелец его больше не видит
   run lostAccessInWorkTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
       .then(toggleAccess("a", "i1"))
-      .expect(addresseeLostAccessOk("i1") and not(claimOk("b", "i2")))  // системный переход срочный
-      .then(addresseeLostAccess("i1"))
-      .expect(all {
-        x1.state == New,
-        x1.owner == NOBODY,
-        x1.reaction == RUNNING,
-        x1.resolution.mode == Paused,
-      })
-      .expect(not(claimOk("a", "i1")) and claimOk("b", "i1"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "addressee_lost_access" and x1.state == "new" and x1.owner == "")
       .expect(inv)
 
-  // Пропал доступ у владельца отложенного — удержание снято
-  run lostAccessOnHoldTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(claim("a", "i1"))
-      .then(hold("a", "i1", "patrol"))
-      .then(toggleAccess("a", "i1"))
-      .then(addresseeLostAccess("i1"))
-      .expect(x1.state == New and x1.holdReason == NOBODY and x1.hold == IDLE)
-      .expect(inv)
-
-  // Адресат больше не может принять (пропало право) — в очередь, реакция заново
   run cannotAcceptTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(transfer("a", "i1", "b"))
+    start
+      .then(newFire("i1"))
+      .then(actF("a", "transfer", "i1", target("b")))
       .then(toggleAccept("b"))
-      .expect(not(addresseeLostAccessOk("i1")))
-      .then(addresseeCannotAccept("i1"))
-      .expect(x1.state == New and x1.owner == NOBODY and x1.group == NOBODY and x1.reaction == RUNNING)
-      .expect(inv)
-
-  // Владелец основного больше не видит привязанный — привязанный отсоединяется с остатком срока группы
-  run rolesLoseLinkedTest =
-    initWith(BASE)
-      .then(create("i1"))
-      .then(create("i2"))
-      .then(claim("a", "i1"))
-      .then(claim("a", "i2"))
-      .then(merge("a", "i1", Set("i2")))
-      .then(toggleAccess("a", "i2"))
-      .expect(linkedLostAccessOk("i2") and not(addresseeLostAccessOk("i1")))
-      .then(linkedLostAccess("i2"))
-      .expect(x2.state == New and x2.linkedTo == NOBODY and x1.state == InProgress)
+      .then(fire("i1"))
+      .expect(lastAction.name == "addressee_cannot_accept" and x1.state == "new")
       .expect(inv)
 }

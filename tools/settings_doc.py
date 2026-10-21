@@ -76,7 +76,7 @@ def element(x, sec):
     if "key" in x and ("label" in x or "labelKey" in x):
         return f"`{x['key']}` — {x.get('label') or RU.get(x.get('labelKey'), x.get('labelKey'))}"
     if "level" in x:
-        return f"уровень {x['level']}: `{x.get('targetRef')}`, реакция {duration(x.get('reactionSec'))}"
+        return f"уровень {x['level']}: `{x.get('targetKind')}:{x.get('target')}`, реакция {duration(x.get('reactionSec'))}"
     head = x.get("label") or RU.get(x.get("labelKey"), x.get("labelKey")) or x.get("id") or ""
     extra = [value(v, k, sec) for k, v in x.items() if k.endswith(("Sec", "Minutes")) and v is not None]
     if "sec" in x:

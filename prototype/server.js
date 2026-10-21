@@ -164,24 +164,15 @@
       const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);
       return [...new Set(byRole.concat(group.members || []))];
     };
-    // Доступ адресата к объекту инцидента (§8.1): человеку — по его ролям, группе — хотя бы
-    // одному участнику
+    // Доступ человека к объекту инцидента — по группам доступа его ролей (§5). Факт мира для выражений
+    // машины (cel.world.access); доступ группы и «может принять» — определения машины (hasAccess, canAccept)
     function hasAccess(id, ev) {
-      const group = GROUPS.find((g) => g.id === id);
-      if (group) return membersOf(group).some((m) => hasAccess(m, ev));
       if (id === ME) return canSee(ev);
       const person = OPERATORS.find((o) => o.id === id);
       return Boolean(person) && accessibleDevices(person.roles || []).has(eventSource(ev));
     }
     // Права человека: у оператора стенда — его набор, у остальных — объединение прав его ролей
     const permsOf = (id) => (id === ME ? PERMISSIONS : [...new Set(rolesOf(id).flatMap((r) => ROLE_RIGHTS[r] || []))]);
-    // Может ли адресат принять (§8.1): право «Принимать» и доступ к объекту; группа — если хотя бы
-    // один участник может. except — участник, который не в счёт: у него инцидент уже есть (RULE-93)
-    function canAccept(id, ev, except) {
-      const group = GROUPS.find((g) => g.id === id);
-      if (group) return membersOf(group).some((m) => m !== except && canAccept(m, ev));
-      return permsOf(id).includes("incident:accept") && hasAccess(id, ev);
-    }
     // Группа устройства-источника: самая глубокая, где оно стоит (первое вхождение по дереву)
     function sourceGroupOf(ev) {
       const src = eventSource(ev);
@@ -277,6 +268,8 @@
       ev.log.push({ at: when != null ? when : now(), whoId, k: template, v: vars || null });
     }
 
+    // Сценарий инцидента — ключ машины сценариев; нужен исполнителю уже при загрузке набора (таймеры)
+    const scenarioKey = (ev) => ev.scenarioGuid;
     // Всё, что исполнитель знает о данных сервера. «Я» (me) у каждого исполнителя своё: у оператора
     // стенда — он сам, у эмулированных коллег — коллега (их действия идут через те же переходы)
     const engineCtx = {
@@ -288,12 +281,6 @@
       scenarioKey: (ev) => scenarioKey(ev),
       can,
       isGroup: (id) => GROUPS.some((g) => g.id === id),
-      // Дежурная группа человека (§8.1): первая, в которую он входит
-      dutyGroupOf: (userId) => (GROUPS.find((g) => membersOf(g).includes(userId)) || {}).id || null,
-      memberOf: (groupId, userId) => {
-        const group = GROUPS.find((g) => g.id === groupId);
-        return Boolean(group && membersOf(group).includes(userId));
-      },
       inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(TREE, groupId))),
       agentState: () => session.agentState,
       // Стык с машиной сценариев (§14.5): наборы шагов, прогресс, курсор, перенос ответов при объединении
@@ -314,11 +301,24 @@
       log,
       transferTargets: () => targets(),
       hasAccess: (id, ev) => hasAccess(id, ev),
-      canAccept: (id, ev, except) => canAccept(id, ev, except),
+      // Факты мира для выражений машины (cel.world, CEL.md): права и состояние любого человека, состав групп
+      permsOf: (id) => permsOf(id),
+      agentStateOf: (id) => agentStateOf(id),
+      isOperator: (id) => OPERATORS.some((o) => o.id === id),
+      membersOf: (groupId) => {
+        const group = GROUPS.find((g) => g.id === groupId);
+        return group ? membersOf(group) : [];
+      },
+      dutyGroups: () => GROUPS.map((g) => g.id),
       // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
       defaultTransferTarget: () => session.lastTransferTargetId,
       // Получатели алерта (§9, RULE-43): человек или участники группы — на месте и с доступом к
       // объекту. Оператору стенда — событие потока; сколько получателей, столько и вернуть
+      // Сколько получателей у алерта — без отправки: тени эффектов машины (ARCH-07)
+      alertRecipients: (ev, targetId) => {
+        const group = GROUPS.find((g) => g.id === targetId);
+        return (group ? membersOf(group) : [targetId]).filter((id) => present({ id }) && hasAccess(id, ev)).length;
+      },
       notifyAlert: (ev, targetId, transitionId) => {
         const group = GROUPS.find((g) => g.id === targetId);
         const who = (group ? membersOf(group) : [targetId]).filter((id) => present({ id }) && hasAccess(id, ev));
@@ -533,12 +533,15 @@
       return { id: "hold", label: timerLabel("hold"), dueAt: iso(ev.holdDueAt), remainingMs: ev.holdDueAt - now(), running: true, serverTime: iso(now()) };
     }
 
-    // Варианты полей формы перехода для этого инцидента и значения по умолчанию (form машины)
+    // Варианты полей формы перехода для этого инцидента и значения по умолчанию, видно ли поле и обязательно ли
+    // (form машины): интерфейс правил форм не вычисляет — смотрит в fieldRules
     function formView(tr, ev, surface) {
       if (!tr || !tr.form) return {};
       const f = engine.form(tr.form, ev, { surface });
       const fieldOptions = {};
+      const fieldRules = {};
       f.fields.forEach((field) => {
+        fieldRules[field.name] = field.rules;
         if (!field.options) return;
         fieldOptions[field.name] = {
           options: field.options.map((o) => {
@@ -552,7 +555,7 @@
         };
       });
       const note = say(f.note);
-      return { fieldOptions, formNote: note ? { text: note.text, key: note.key, vars: note.vars } : null };
+      return { fieldOptions, fieldRules, formNote: note ? { text: note.text, key: note.key, vars: note.vars } : null };
     }
 
     function actionsFor(ev, surface) {
@@ -662,7 +665,6 @@
     }
 
     // Сценарий инцидента: «Взять в работу» на выборке — как одно, только с одним сценарием (§11)
-    const scenarioKey = (ev) => ev.scenarioGuid;
     // Название сценария по guid — последней версии; нет названия — null
     const scenarioName = (guid) => {
       const row = Object.values(SCENARIO_ROWS).find((r) => r.guid === guid);
@@ -936,19 +938,18 @@
     // их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
     const hit = (e, needle) => `${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
     const linkedHits = (e, needle) => events.filter((x) => x.linkedTo === e.id && canSee(x) && hit(x, needle));
-    const listed = () => new Set(W.queueFilters.flatMap((f) => (f.stateCategories || []).concat((f.states || []).map((st) => STATES[st].category))));
     function visible(q) {
-      // В списках — только состояния, которые есть в фильтрах очереди машины: привязанные инциденты
+      // В списках — инциденты, которые проходят хоть один фильтр очереди машины: привязанные инциденты
       // объединённого живут в карточке основного (§11)
-      const shown = listed();
-      let list = events.filter((e) => canSee(e) && shown.has(STATES[e.state].category));
+      const filters = new Map();
+      let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);
       if (q.sourceGroupGuid && q.sourceGroupGuid !== "all") {
         const node = findNode(TREE, q.sourceGroupGuid);
         const ids = node ? collectDeviceIds(node) : [q.sourceGroupGuid];
         list = list.filter((e) => touches(e, ids));
       }
       return list.filter((e) => {
-        if (q.filter && !engine.inQueueFilter(e, q.filter)) return false;
+        if (q.filter && W.queueFilters.some((f) => f.id === q.filter) && !filters.get(e).includes(q.filter)) return false;
         // Типы события и устройства — одно значение или несколько через запятую
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && !String(q.eventTypeGuid).split(",").includes(e.typeGuid)) return false;
         if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;
@@ -982,7 +983,8 @@
     function counters(q) {
       const out = {};
       const list = visible({});
-      W.queueFilters.forEach((f) => (out[f.id] = list.filter((e) => engine.inQueueFilter(e, f.id)).length));
+      const passed = list.map((e) => engine.queueFilters(e));
+      W.queueFilters.forEach((f) => (out[f.id] = passed.filter((ids) => ids.includes(f.id)).length));
       return out;
     }
 
@@ -1467,7 +1469,7 @@
         (p, q) => {
           const ev = q.incidentGuid ? find(q.incidentGuid) : null;
           let list = targets().filter((o) => !engine.isSelf(o.id));
-          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && hasAccess(o.id, ev) && canAccept(o.id, ev));
+          if (ev) list = list.filter((o) => o.id !== engine.addressee(ev) && engine.hasAccess(o.id, ev) && engine.canAccept(o.id, ev));
           return { status: 200, body: list.map(({ label, ...rest }) => rest) };
         },
       ],
@@ -1696,6 +1698,8 @@
       const m = path.match(route.re);
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));
+      // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
+      if (method !== "GET" && path.startsWith("/operator/")) lastHeartbeat = now();
       const res = route.fn(params, q, body || {}, lowerKeys(headers));
       record(method, route.template, res.status, res.body, "http", res.headers);
       return res;

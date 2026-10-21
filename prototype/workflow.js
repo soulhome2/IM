@@ -98,77 +98,60 @@ window.IM_WORKFLOW = {
     }
   ],
   "badges": {
-    "$comment": "§2.4. Бейдж не хранится — вычисляется сервером под смотрящего оператора и отдаётся в поле badge каждой записи очереди.",
+    "$comment": "§2.4. Бейдж не хранится — вычисляется сервером под смотрящего оператора и отдаётся в поле badge каждой записи очереди. Бейдж — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — подпись состояния.",
     "rules": [
       {
-        "state": "linked",
-        "viewerRole": "any",
+        "expr": "incident.state == 'linked'",
         "labelKey": "workflow.badge.linked.any",
         "style": "linked"
       },
       {
-        "state": "new",
-        "viewerRole": "any",
+        "expr": "incident.state == 'new'",
         "labelKey": "workflow.badge.new.any",
         "style": "new"
       },
       {
-        "state": "pending_acceptance",
-        "viewerRole": "target",
-        "when": {
-          "addressee": "group"
-        },
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && isGroup(addressee(incident))",
         "labelKey": "workflow.badge.pending_acceptance.target.group",
         "style": "inbox"
       },
       {
-        "state": "pending_acceptance",
-        "viewerRole": "target",
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'",
         "labelKey": "workflow.badge.pending_acceptance.target",
         "style": "inbox"
       },
       {
-        "state": "pending_acceptance",
-        "viewerRole": "other",
+        "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'other'",
         "labelKey": "workflow.badge.pending_acceptance.other",
         "style": "escalated"
       },
       {
-        "state": "in_progress",
-        "viewerRole": "owner",
+        "expr": "incident.state == 'in_progress' && ownership(me, incident) == 'owner'",
         "labelKey": "workflow.badge.in_progress.owner",
         "style": "mine"
       },
       {
-        "state": "in_progress",
-        "viewerRole": "other",
+        "expr": "incident.state == 'in_progress' && ownership(me, incident) == 'other'",
         "labelKey": "workflow.badge.in_progress.other",
         "style": "foreign"
       },
       {
-        "state": "on_hold",
-        "viewerRole": "owner",
+        "expr": "incident.state == 'on_hold' && ownership(me, incident) == 'owner'",
         "labelKey": "workflow.badge.on_hold.owner",
         "style": "paused"
       },
       {
-        "state": "on_hold",
-        "viewerRole": "other",
+        "expr": "incident.state == 'on_hold' && ownership(me, incident) == 'other'",
         "labelKey": "workflow.badge.on_hold.other",
         "style": "paused"
       },
       {
-        "state": "closed",
-        "viewerRole": "any",
-        "when": {
-          "closeResult": "processed"
-        },
+        "expr": "incident.state == 'closed' && incident.closeResultId == 'processed'",
         "labelKey": "workflow.badge.closed.any.processed",
         "style": "done"
       },
       {
-        "state": "closed",
-        "viewerRole": "any",
+        "expr": "incident.state == 'closed'",
         "labelKey": "workflow.badge.closed.any",
         "style": "done_unprocessed"
       }
@@ -535,19 +518,15 @@ window.IM_WORKFLOW = {
       "style": "warn",
       "notes": [
         {
-          "when": {
-            "state": "new"
-          },
+          "expr": "incident.state == 'new'",
           "textKey": "workflow.form.transfer.note.0"
         },
         {
-          "when": {
-            "ownership": "other"
-          },
+          "expr": "ownership(me, incident) == 'other'",
           "textKey": "workflow.form.transfer.note.1"
         },
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.transfer.note.2"
         }
       ],
@@ -556,22 +535,18 @@ window.IM_WORKFLOW = {
           "name": "targetId",
           "kind": "select",
           "labelKey": "workflow.form.transfer.field.targetId",
-          "required": true,
+          "requiredExpr": "true",
           "placeholderKey": "workflow.form.transfer.field.targetId.placeholder",
           "source": "transferTargets",
-          "defaultFrom": "session.lastTransferTargetId",
-          "excludes": [
-            "self",
-            "currentOwner",
-            "noAccess",
-            "cannotAccept"
-          ]
+          "optionExpr": "!isSelf(me, option) && option != addressee(incident) && canAccept(option, incident, '')",
+          "defaultExpr": "lastTransferTarget(me)",
+          "$comment": "§8.1. Адресаты — без себя и своих групп, без текущего адресата, только кто может принять (canAccept — с правом «Принимать» и доступом к объекту); по умолчанию — последний адресат оператора"
         },
         {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.transfer.field.comment",
-          "required": true,
+          "requiredExpr": "true",
           "placeholderKey": "workflow.form.transfer.field.comment.placeholder"
         }
       ]
@@ -583,7 +558,7 @@ window.IM_WORKFLOW = {
       "style": "primary",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.hold.note.0"
         }
       ],
@@ -592,15 +567,15 @@ window.IM_WORKFLOW = {
           "name": "reasonId",
           "kind": "select",
           "labelKey": "workflow.form.hold.field.reasonId",
-          "required": true,
+          "requiredExpr": "true",
           "source": "reasonCatalog:hold",
-          "excludeSystemItems": true
+          "optionExpr": "holdReasons.exists(r, r.id == option && r.setBy != 'system')"
         },
         {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.hold.field.comment",
-          "required": false,
+          "requiredExpr": "false",
           "placeholderKey": "workflow.form.hold.field.comment.placeholder"
         }
       ]
@@ -612,7 +587,7 @@ window.IM_WORKFLOW = {
       "style": "primary",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.release.note.0"
         }
       ],
@@ -621,7 +596,7 @@ window.IM_WORKFLOW = {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.release.field.comment",
-          "required": true,
+          "requiredExpr": "true",
           "placeholderKey": "workflow.form.release.field.comment.placeholder"
         }
       ]
@@ -633,7 +608,7 @@ window.IM_WORKFLOW = {
       "style": "primary",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.reject.note.0"
         }
       ],
@@ -642,7 +617,7 @@ window.IM_WORKFLOW = {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.reject.field.comment",
-          "required": true,
+          "requiredExpr": "true",
           "placeholderKey": "workflow.form.reject.field.comment.placeholder"
         }
       ]
@@ -654,7 +629,7 @@ window.IM_WORKFLOW = {
       "style": "primary",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.close.note.1"
         }
       ],
@@ -663,35 +638,28 @@ window.IM_WORKFLOW = {
           "name": "resultId",
           "kind": "select",
           "labelKey": "workflow.form.close.field.resultId",
-          "required": true,
+          "requiredExpr": "true",
           "source": "reasonCatalog:close_result",
-          "optionsFrom": "actions",
-          "defaultWhen": {
-            "requiredStepsFilled": "closing",
-            "value": "processed"
-          },
+          "optionExpr": "closeOptions(me, incident, surface).exists(i, i.id == option)",
+          "enabledExpr": "closeResults.exists(i, i.id == option && stepsOk(i, incident))",
+          "disabledKey": "workflow.guard.required_steps",
+          "defaultExpr": "stepsFilled(incident, 'closing') ? 'processed' : ''",
           "placeholderKey": "workflow.form.close.field.resultId.placeholder",
-          "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultWhen или вариант один"
+          "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultExpr или вариант один"
         },
         {
           "name": "causeId",
           "kind": "select",
           "labelKey": "workflow.form.close.field.causeId",
-          "required": true,
+          "requiredExpr": "true",
           "source": "reasonCatalog:mass_fault",
-          "visibleWhen": {
-            "field": "resultId",
-            "in": [
-              "mass"
-            ]
-          }
+          "visibleExpr": "form.resultId == 'mass'"
         },
         {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.close.field.comment",
-          "required": false,
-          "requiredFrom": "reasonCatalog:close_result.commentRequired",
+          "requiredExpr": "closeResults.exists(i, i.id == form.resultId && i.commentRequired)",
           "placeholderKey": "workflow.form.close.field.comment.placeholder"
         }
       ]
@@ -703,7 +671,7 @@ window.IM_WORKFLOW = {
       "style": "primary",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.reopen.note.0"
         }
       ],
@@ -712,7 +680,7 @@ window.IM_WORKFLOW = {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.reopen.field.comment",
-          "required": true,
+          "requiredExpr": "true",
           "placeholderKey": "workflow.form.reopen.field.comment.placeholder"
         }
       ]
@@ -724,7 +692,7 @@ window.IM_WORKFLOW = {
       "style": "danger",
       "notes": [
         {
-          "when": {},
+          "expr": "true",
           "textKey": "workflow.form.takeover.note.0"
         }
       ],
@@ -746,22 +714,22 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "escalation_level",
-            0
+            "escalationLevel",
+            "0"
           ]
         },
         {
@@ -909,7 +877,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -989,14 +957,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -1213,7 +1181,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -1288,7 +1256,8 @@ window.IM_WORKFLOW = {
         {
           "fn": "hasScopedPermission",
           "args": [
-            "incident:transfer"
+            "incident:transfer:own",
+            "incident:transfer:any"
           ],
           "scopeRule": {
             "own": {
@@ -1328,21 +1297,21 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            "form.targetId.ifPerson"
+            "personOf(form.targetId)"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            "form.targetId.ifGroup"
+            "groupOf(form.targetId)"
           ]
         },
         {
           "kind": "transactional",
           "fn": "increment",
           "args": [
-            "transfer_count"
+            "transferCount"
           ]
         },
         {
@@ -1369,7 +1338,7 @@ window.IM_WORKFLOW = {
           "args": [
             "reaction",
             "byEscalationLevel",
-            "ifStopped"
+            true
           ]
         },
         {
@@ -1475,7 +1444,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -1588,14 +1557,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "closed_by",
+            "closedBy",
             "actor"
           ]
         },
@@ -1603,7 +1572,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "closed_at",
+            "closedAt",
             "now"
           ]
         },
@@ -1611,7 +1580,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "close_result",
+            "closeResultId",
             "form.resultId"
           ]
         },
@@ -1619,7 +1588,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "close_cause",
+            "closeCauseId",
             "form.causeId"
           ]
         },
@@ -1756,16 +1725,16 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "close_result",
-            null
+            "closeResultId",
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "close_cause",
-            null
+            "closeCauseId",
+            "''"
           ]
         },
         {
@@ -1831,22 +1800,22 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            "escalation.level.target.ifPerson"
+            "personOf(levelUpTarget(before))"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            "escalation.level.target.ifGroup"
+            "groupOf(levelUpTarget(before))"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "escalation_level",
-            "escalation.level.number"
+            "escalationLevel",
+            "levelUpNumber(before)"
           ]
         },
         {
@@ -1865,7 +1834,7 @@ window.IM_WORKFLOW = {
           "fn": "startTimer",
           "args": [
             "reaction",
-            "escalation.level.reactionSec"
+            "byEscalationLevel"
           ]
         },
         {
@@ -2122,22 +2091,22 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            "escalation.level.target.ifPerson"
+            "personOf(levelUpTarget(before))"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            "escalation.level.target.ifGroup"
+            "groupOf(levelUpTarget(before))"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "escalation_level",
-            "escalation.level.number"
+            "escalationLevel",
+            "levelUpNumber(before)"
           ]
         },
         {
@@ -2152,7 +2121,7 @@ window.IM_WORKFLOW = {
           "fn": "startTimer",
           "args": [
             "reaction",
-            "escalation.level.reactionSec"
+            "byEscalationLevel"
           ]
         },
         {
@@ -2315,7 +2284,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setHoldReason",
           "args": [
-            "break"
+            "'break'"
           ]
         },
         {
@@ -2374,7 +2343,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setHoldReason",
           "args": [
-            "no_link"
+            "'no_link'"
           ]
         },
         {
@@ -2446,7 +2415,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2516,14 +2485,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            "owner.dutyGroup"
+            "dutyGroupOf(incident.owner)"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2575,7 +2544,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2615,7 +2584,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2687,14 +2656,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2777,14 +2746,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2884,14 +2853,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setOwner",
           "args": [
-            null
+            "''"
           ]
         },
         {
           "kind": "transactional",
           "fn": "setAssignmentGroup",
           "args": [
-            null
+            "''"
           ]
         },
         {
@@ -2907,17 +2876,17 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
-          "fn": "tightenPrimaryDeadline",
+          "fn": "pauseTimer",
           "args": [
-            "resolution",
-            "workflow.journal.group_deadline"
+            "resolution"
           ]
         },
         {
           "kind": "transactional",
-          "fn": "pauseTimer",
+          "fn": "tightenPrimaryDeadline",
           "args": [
-            "resolution"
+            "resolution",
+            "workflow.journal.group_deadline"
           ]
         },
         {
@@ -3044,7 +3013,7 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
-            "closed_at",
+            "closedAt",
             "now"
           ]
         },
@@ -3205,7 +3174,9 @@ window.IM_WORKFLOW = {
           {
             "fn": "stateIs",
             "args": [
-              "in_progress"
+              [
+                "in_progress"
+              ]
             ]
           }
         ],
@@ -3221,12 +3192,14 @@ window.IM_WORKFLOW = {
     "levels": [
       {
         "level": 1,
-        "targetRef": "user:petrova",
+        "targetKind": "user",
+        "target": "petrova",
         "reactionSec": 120
       },
       {
         "level": 2,
-        "targetRef": "user:noc",
+        "targetKind": "user",
+        "target": "noc",
         "reactionSec": 90
       }
     ],
@@ -3235,8 +3208,9 @@ window.IM_WORKFLOW = {
     "reasonKey": "workflow.escalation.reason"
   },
   "alerts": {
-    "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь user:… или дежурная группа group:…; группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
-    "target": "group:grp-leads",
+    "$comment": "§9 (RULE-43). Получатель алертов — нарушения нормативов, потолок эскалации, потеря связи, потеря доступа: пользователь (targetKind user) или дежурная группа (group), target — id (ARCH-07 в7); группе — всем участникам на месте. Алерт получают только те, у кого есть доступ к объекту инцидента (§5); если таких нет, нарушение и запись перехода остаются, а в журнал пишется noRecipientLog. Алерт не передаёт инцидент и не меняет владельца. Настройка под правом incident:schema:admin.",
+    "targetKind": "group",
+    "target": "grp-leads",
     "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
   "limits": {
@@ -3331,53 +3305,32 @@ window.IM_WORKFLOW = {
     {
       "id": "open",
       "labelKey": "workflow.filter.open",
-      "stateCategories": [
-        "pending",
-        "active"
-      ]
+      "expr": "inCategory(incident, ['pending', 'active'])"
     },
     {
       "id": "inbox",
       "labelKey": "workflow.filter.inbox",
-      "states": [
-        "pending_acceptance"
-      ],
-      "ownership": "target"
+      "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'"
     },
     {
       "id": "mine",
       "labelKey": "workflow.filter.mine",
-      "states": [
-        "in_progress",
-        "on_hold"
-      ],
-      "ownership": "owner"
+      "expr": "incident.state in ['in_progress', 'on_hold'] && ownership(me, incident) == 'owner'"
     },
     {
       "id": "foreign",
       "labelKey": "workflow.filter.foreign",
-      "states": [
-        "pending_acceptance",
-        "in_progress",
-        "on_hold"
-      ],
-      "ownership": "other"
+      "expr": "incident.state in ['pending_acceptance', 'in_progress', 'on_hold'] && ownership(me, incident) == 'other'"
     },
     {
       "id": "done",
       "labelKey": "workflow.filter.done",
-      "stateCategories": [
-        "done"
-      ]
+      "expr": "inCategory(incident, ['done'])"
     },
     {
       "id": "all",
       "labelKey": "workflow.filter.all",
-      "stateCategories": [
-        "pending",
-        "active",
-        "done"
-      ]
+      "expr": "inCategory(incident, ['pending', 'active', 'done'])"
     }
   ],
   "queueGrouping": {
@@ -3684,6 +3637,526 @@ window.IM_WORKFLOW = {
       ]
     }
   },
+  "cel": {
+    "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
+    "types": {
+      "Incident": {
+        "id": "string",
+        "number": "string",
+        "eventType": "string",
+        "priority": "int",
+        "state": "string",
+        "owner": "string",
+        "assignmentGroup": "string",
+        "holdReasonId": "string",
+        "escalationLevel": "int",
+        "transferCount": "int",
+        "closeResultId": "string",
+        "closeCauseId": "string",
+        "result": "string",
+        "closedBy": "string",
+        "closedAt": "int",
+        "slaBreached": "bool",
+        "breaches": "list<Breach>",
+        "timers": "map<string, Timer>",
+        "linkedTo": "string",
+        "linkedAt": "int",
+        "leftGroup": "LeftGroup",
+        "scenario": "string"
+      },
+      "Timer": {
+        "due": "int",
+        "paused": "bool",
+        "left": "int",
+        "fired": "int",
+        "since": "int"
+      },
+      "Breach": {
+        "kind": "string",
+        "at": "int",
+        "owner": "string"
+      },
+      "LeftGroup": {
+        "primaryId": "string",
+        "linkedAt": "int",
+        "at": "int"
+      },
+      "Form": {
+        "targetId": "string",
+        "primaryId": "string",
+        "resultId": "string",
+        "reasonId": "string",
+        "causeId": "string",
+        "comment": "string"
+      },
+      "Limits": {
+        "maxActive": "int",
+        "maxOnHold": "int",
+        "maxBulk": "int",
+        "reopenWindowMin": "int",
+        "reopenResolutionSec": "int"
+      },
+      "SessionState": {
+        "id": "string",
+        "readOnly": "bool",
+        "readOnlyReasonKey": "string"
+      },
+      "Session": {
+        "states": "list<SessionState>",
+        "heartbeatSec": "int",
+        "idleHoldSec": "int",
+        "idleReleaseSec": "int"
+      },
+      "Escalation": {
+        "enabled": "bool",
+        "levels": "list<Level>",
+        "maxLevel": "int",
+        "onResolutionOverdue": "string"
+      },
+      "Level": {
+        "level": "int",
+        "targetKind": "string",
+        "target": "string",
+        "reactionSec": "int"
+      },
+      "Alerts": {
+        "targetKind": "string",
+        "target": "string",
+        "noRecipientLog": "string"
+      },
+      "State": {
+        "id": "string",
+        "category": "string"
+      },
+      "CloseResultItem": {
+        "id": "string",
+        "labelKey": "string",
+        "permission": "string",
+        "fromStates": "list<string>",
+        "ownerOnlyInStates": "list<string>",
+        "surfaces": "list<string>",
+        "requiredStepSet": "string",
+        "commentRequired": "bool"
+      },
+      "ScopeRule": {
+        "own": "ScopeOwn"
+      },
+      "ScopeOwn": {
+        "anyOf": "list<ScopeCond>"
+      },
+      "ScopeCond": {
+        "state": "string",
+        "ownership": "string"
+      },
+      "TimerDef": {
+        "id": "string",
+        "labelKey": "string",
+        "defaultSec": "int",
+        "byPriority": "map<int, int>",
+        "overrides": "list<Override>",
+        "startsOnce": "bool",
+        "pausable": "bool",
+        "secFrom": "string"
+      },
+      "Override": {
+        "eventType": "opt<string>",
+        "priority": "opt<int>",
+        "sourceGroup": "opt<string>",
+        "escalationLevel": "opt<int>",
+        "sec": "int"
+      },
+      "HoldReason": {
+        "id": "string",
+        "maxMinutes": "int",
+        "setBy": "string"
+      }
+    },
+    "world": {
+      "can": {
+        "params": {
+          "who": "string",
+          "perm": "string"
+        },
+        "returns": "bool",
+        "$comment": "У человека есть право — по его ролям"
+      },
+      "access": {
+        "params": {
+          "who": "string",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "$comment": "У человека есть доступ к объекту инцидента — по группам доступа его ролей (§5). Только человек"
+      },
+      "isOperator": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "bool"
+      },
+      "isGroup": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "bool",
+        "$comment": "id — дежурная группа"
+      },
+      "members": {
+        "params": {
+          "g": "string"
+        },
+        "returns": "list<string>",
+        "$comment": "Состав дежурной группы сейчас: люди с её ролями и записанные в неё (§8.1)"
+      },
+      "dutyGroups": {
+        "params": {},
+        "returns": "list<string>",
+        "$comment": "Дежурные группы по порядку набора"
+      },
+      "inSourceGroup": {
+        "params": {
+          "x": "Incident",
+          "g": "string"
+        },
+        "returns": "bool",
+        "$comment": "Устройство-источник инцидента — в группе устройств g"
+      },
+      "agentState": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "string",
+        "$comment": "Состояние оператора — session.states[].id"
+      },
+      "idleSec": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "int",
+        "$comment": "Сколько секунд сессия оператора не присылает признак активности (§12.3)"
+      },
+      "stepsFilled": {
+        "params": {
+          "x": "Incident",
+          "setId": "string"
+        },
+        "returns": "bool",
+        "$comment": "Набор шагов сценария выполнен — отвечает машина сценариев (§14.5)"
+      },
+      "lastTransferTarget": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "string",
+        "$comment": "§8.2. Кому оператор передавал в последний раз — запоминает сервер; не передавал — ''"
+      }
+    },
+    "settings": {
+      "limits": "Limits",
+      "session": "Session",
+      "escalation": "Escalation",
+      "alerts": "Alerts",
+      "states": "list<State>",
+      "closeResults": {
+        "type": "list<CloseResultItem>",
+        "from": "reasonCatalogs.close_result.items"
+      },
+      "timerDefs": {
+        "type": "list<TimerDef>",
+        "from": "timers"
+      },
+      "holdReasons": {
+        "type": "list<HoldReason>",
+        "from": "reasonCatalogs.hold.items"
+      }
+    },
+    "definitions": {
+      "addressee": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "string",
+        "expr": "x.owner != '' ? x.owner : x.assignmentGroup",
+        "$comment": "§8.1. Адресат: владелец-человек, а пока группа не приняла — сама группа"
+      },
+      "unowned": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "x.owner == '' && x.assignmentGroup == ''"
+      },
+      "isSelf": {
+        "params": {
+          "who": "string",
+          "id": "string"
+        },
+        "returns": "bool",
+        "expr": "id != '' && (id == who || (isGroup(id) && who in members(id)))",
+        "$comment": "§10.1. «Я» как адресат: сам оператор и дежурные группы, в которые он входит"
+      },
+      "isTarget": {
+        "params": {
+          "who": "string",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "isSelf(who, addressee(x))"
+      },
+      "ownership": {
+        "params": {
+          "who": "string",
+          "x": "Incident"
+        },
+        "returns": "string",
+        "expr": "x.state == 'pending_acceptance' && isTarget(who, x) ? 'target' : x.owner == who ? 'owner' : isTarget(who, x) ? 'target' : 'other'",
+        "$comment": "§2.4. Отношение смотрящего к инциденту: ожидающий моего принятия — «мне адресован», даже если владельцем записан я (BUG-60)"
+      },
+      "mineIn": {
+        "params": {
+          "xs": "list<Incident>",
+          "who": "string",
+          "state": "string",
+          "except": "string"
+        },
+        "returns": "list<Incident>",
+        "expr": "xs.filter(e, e.state == state && e.owner == who && e.id != except)",
+        "$comment": "§10.2. Инциденты человека в состоянии, кроме одного — для лимитов; у привязанных владельца нет, в лимит они не входят"
+      },
+      "matchesOwnership": {
+        "params": {
+          "who": "string",
+          "x": "Incident",
+          "role": "string"
+        },
+        "returns": "bool",
+        "expr": "role == 'owner' ? x.owner == who : role == 'target' ? isTarget(who, x) : ownership(who, x) == role",
+        "$comment": "Условие «отношение ко мне» в scopeRule: владелец — мой инцидент, адресат — адресованный мне"
+      },
+      "scopeOwn": {
+        "params": {
+          "who": "string",
+          "x": "Incident",
+          "r": "ScopeRule"
+        },
+        "returns": "bool",
+        "expr": "r.own.anyOf.exists(c, c.state != '' ? x.state == c.state : c.ownership != '' && matchesOwnership(who, x, c.ownership))",
+        "$comment": "§5. Область права own: выполнено хоть одно из scopeRule.own.anyOf"
+      },
+      "inCategory": {
+        "params": {
+          "x": "Incident",
+          "cats": "list<string>"
+        },
+        "returns": "bool",
+        "expr": "states.exists(s, s.id == x.state && s.category in cats)",
+        "$comment": "Категория состояния инцидента — одна из cats (stateCategories)"
+      },
+      "isDone": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "states.exists(s, s.id == x.state && s.category == 'done')"
+      },
+      "byId": {
+        "params": {
+          "xs": "list<Incident>",
+          "id": "string"
+        },
+        "returns": "list<Incident>",
+        "expr": "xs.filter(e, e.id == id)",
+        "$comment": "Инцидент по id — списком из одного или пустым"
+      },
+      "hasAccess": {
+        "params": {
+          "who": "string",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "isGroup(who) ? members(who).exists(m, access(m, x)) : isOperator(who) && access(who, x)",
+        "$comment": "§5, §8.1. Доступ к объекту: человеку — по его ролям, группе — хотя бы у одного участника"
+      },
+      "canAcceptPerson": {
+        "params": {
+          "m": "string",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "can(m, 'incident:accept') && access(m, x)"
+      },
+      "canAccept": {
+        "params": {
+          "who": "string",
+          "x": "Incident",
+          "except": "string"
+        },
+        "returns": "bool",
+        "expr": "isGroup(who) ? members(who).exists(m, m != except && canAcceptPerson(m, x)) : canAcceptPerson(who, x)",
+        "$comment": "§8.1. Может ли принять: право «Принимать» и доступ к объекту; группа — если хотя бы один участник, кроме except: у него инцидент уже есть (RULE-93)"
+      },
+      "dutyGroupOf": {
+        "params": {
+          "who": "string"
+        },
+        "returns": "string",
+        "expr": "cel.bind(gs, dutyGroups().filter(g, who in members(g)), size(gs) > 0 ? gs[0] : '')",
+        "$comment": "§8.1. Дежурная группа человека — первая, в которую он входит"
+      },
+      "nextLevels": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "list<Level>",
+        "expr": "escalation.levels.filter(l, l.level > x.escalationLevel && l.level <= escalation.maxLevel && l.target != addressee(x) && canAccept(l.target, x, x.owner))",
+        "$comment": "§8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять; уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)"
+      },
+      "closeOptions": {
+        "params": {
+          "who": "string",
+          "x": "Incident",
+          "surface": "string"
+        },
+        "returns": "list<CloseResultItem>",
+        "expr": "closeResults.filter(i, can(who, i.permission) && x.state in i.fromStates && !(x.state in i.ownerOnlyInStates && x.owner != who) && (surface == '' || size(i.surfaces) == 0 || surface in i.surfaces))",
+        "$comment": "§2.2. Результаты закрытия, которые этот оператор может выбрать для инцидента"
+      },
+      "stepsOk": {
+        "params": {
+          "i": "CloseResultItem",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)"
+      },
+      "personOf": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "string",
+        "expr": "id != '' && !isGroup(id) ? id : ''",
+        "$comment": "Адресат, если это человек, иначе пусто: так в owner попадает только человек"
+      },
+      "groupOf": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "string",
+        "expr": "id != '' && isGroup(id) ? id : ''",
+        "$comment": "Адресат, если это дежурная группа, иначе пусто: так группа попадает в assignmentGroup"
+      },
+      "levelUp": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "list<Level>",
+        "expr": "cel.bind(ls, nextLevels(x), ls.filter(l, ls.all(k, l.level <= k.level)))",
+        "$comment": "§8.3. Уровень, на который уходит инцидент: ближайший из nextLevels — списком из одного или пустым"
+      },
+      "levelUpTarget": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "string",
+        "expr": "size(levelUp(x)) > 0 ? levelUp(x)[0].target : ''"
+      },
+      "levelUpNumber": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "int",
+        "expr": "size(levelUp(x)) > 0 ? levelUp(x)[0].level : 0"
+      },
+      "timerDef": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "TimerDef",
+        "expr": "timerDefs.filter(t, t.id == id)[0]"
+      },
+      "overrideKeys": {
+        "params": {
+          "o": "Override"
+        },
+        "returns": "int",
+        "expr": "size(o.eventType) + size(o.priority) + size(o.sourceGroup) + size(o.escalationLevel)",
+        "$comment": "Сколько условий у строки overrides: чем больше, тем строка специфичнее"
+      },
+      "overrideMatches": {
+        "params": {
+          "x": "Incident",
+          "o": "Override"
+        },
+        "returns": "bool",
+        "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0])) && (size(o.escalationLevel) == 0 || o.escalationLevel[0] == x.escalationLevel)"
+      },
+      "norm": {
+        "params": {
+          "x": "Incident",
+          "t": "TimerDef"
+        },
+        "returns": "int",
+        "expr": "cel.bind(ms, t.overrides.filter(o, overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))",
+        "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"
+      },
+      "holdSec": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "int",
+        "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 ? rs[0].maxMinutes * 60 : -1)",
+        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет — -1, срок не ставится"
+      },
+      "levelNorm": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "int",
+        "expr": "x.escalationLevel > 0 && size(escalation.levels) > 0 ? cel.bind(ls, escalation.levels.filter(l, l.level == x.escalationLevel), size(ls) > 0 ? ls[0].reactionSec : escalation.levels[size(escalation.levels) - 1].reactionSec) : norm(x, timerDef('reaction'))",
+        "$comment": "§8.3. Норматив реакции уровня автоэскалации: уровня нет — последний; уровень 0 — обычный норматив (RULE-76)"
+      },
+      "timerSec": {
+        "params": {
+          "x": "Incident",
+          "id": "string",
+          "mode": "string"
+        },
+        "returns": "int",
+        "expr": "timerDef(id).secFrom != '' ? holdSec(x) : mode == 'byEscalationLevel' ? levelNorm(x) : norm(x, timerDef(id))",
+        "$comment": "§4. Длительность таймера, с: из справочника (secFrom), по уровню эскалации или по нормативам"
+      },
+      "leftOf": {
+        "params": {
+          "x": "Incident",
+          "id": "string",
+          "now": "int"
+        },
+        "returns": "int",
+        "expr": "cel.bind(t, x.timers[id], t.due != 0 ? (t.due - now > 0 ? t.due - now : 0) : (t.paused ? t.left : -1))",
+        "$comment": "Остаток таймера, мс: идёт — до дедлайна, на паузе — остаток, не запускался — -1"
+      },
+      "spent": {
+        "params": {
+          "x": "Incident",
+          "id": "string",
+          "now": "int"
+        },
+        "returns": "bool",
+        "expr": "leftOf(x, id, now) == 0 && x.timers[id].fired != 0",
+        "$comment": "RULE-50. Норматив нарушен и отработан: остатка нет, дедлайн сработал"
+      },
+      "inGroupAt": {
+        "params": {
+          "e": "Incident",
+          "p": "Incident",
+          "at": "int"
+        },
+        "returns": "bool",
+        "expr": "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at) || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)",
+        "$comment": "§11.4, BUG-73, BUG-75. Был в группе основного p в момент at: открытый привязанный, присоединённый не позже, или вышедший не раньше"
+      }
+    }
+  },
   "registries": {
     "$comment": "§14.8. Фиксированные реестры: продуктовая команда собирает схему из этих функций, разработчики расширяют сами реестры. Отмеченные extendsBaseRegistry добавлены при сборке по правилам v4 и позже сверх списка из §14.8 — их нужно реализовать.",
     "guards": [
@@ -3692,6 +4165,13 @@ window.IM_WORKFLOW = {
         "args": [
           "permissionKey"
         ],
+        "argTypes": {
+          "permissionKey": "string"
+        },
+        "expr": "can(me, permissionKey)",
+        "failVars": {
+          "p": "permissionKey"
+        },
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_permission"
@@ -3700,18 +4180,32 @@ window.IM_WORKFLOW = {
       {
         "fn": "hasScopedPermission",
         "args": [
-          "resourceAction"
+          "ownKey",
+          "anyKey"
         ],
+        "argTypes": {
+          "ownKey": "string",
+          "anyKey": "string"
+        },
+        "usage": {
+          "scopeRule": "ScopeRule"
+        },
+        "expr": "can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)",
+        "failVars": {
+          "p": "scopeOwn(me, incident, scopeRule) ? ownKey : anyKey"
+        },
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_permission"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§5. Право с областью: ключ <действие>:own, если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе <действие>:any. Сейчас — у «Передать»."
+        "$comment": "§5. Право с областью: ключ ownKey (<действие>:own), если выполнено хоть одно из scopeRule.own.anyOf (состояние или владение), иначе anyKey (<действие>:any). Сейчас — у «Передать»."
       },
       {
         "fn": "isOwner",
         "args": [],
+        "argTypes": {},
+        "expr": "incident.owner == me",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.not_owner"
@@ -3720,6 +4214,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "isNotOwner",
         "args": [],
+        "argTypes": {},
+        "expr": "ownership(me, incident) != 'owner'",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.already_owner"
@@ -3730,6 +4226,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "isTarget",
         "args": [],
+        "argTypes": {},
+        "expr": "isTarget(me, incident)",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.not_target"
@@ -3738,6 +4236,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "isNotTarget",
         "args": [],
+        "argTypes": {},
+        "expr": "ownership(me, incident) != 'target'",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.is_target"
@@ -3748,6 +4248,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "targetIsNotSelf",
         "args": [],
+        "argTypes": {},
+        "expr": "!isSelf(me, form.targetId)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.transfer_to_self"
@@ -3758,6 +4260,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "targetCanAccept",
         "args": [],
+        "argTypes": {},
+        "expr": "form.targetId == '' || canAccept(form.targetId, incident, '')",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.target_cannot_accept"
@@ -3768,6 +4272,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "targetHasAccess",
         "args": [],
+        "argTypes": {},
+        "expr": "form.targetId == '' || hasAccess(form.targetId, incident)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.target_no_access"
@@ -3778,14 +4284,21 @@ window.IM_WORKFLOW = {
       {
         "fn": "agentReady",
         "args": [],
+        "argTypes": {},
+        "expr": "!session.states.exists(s, s.id == agentState(me) && s.readOnly)",
+        "failKey": "session.states.filter(s, s.id == agentState(me))[0].readOnlyReasonKey",
         "onFail": "disable",
         "failFrom": "session.states[].readOnlyReason"
       },
       {
         "fn": "agentStateIs",
         "args": [
-          "agentState"
+          "stateId"
         ],
+        "argTypes": {
+          "stateId": "string"
+        },
+        "expr": "agentState(me) == stateId",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.agent_state"
@@ -3798,6 +4311,10 @@ window.IM_WORKFLOW = {
         "args": [
           "seconds"
         ],
+        "argTypes": {
+          "seconds": "setting"
+        },
+        "expr": "idleSec(me) >= seconds",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.agent_online"
@@ -3810,6 +4327,11 @@ window.IM_WORKFLOW = {
         "args": [
           "expected"
         ],
+        "argTypes": {
+          "expected": "bool"
+        },
+        "expr": "addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected",
+        "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_access'",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_addressee",
@@ -3823,6 +4345,11 @@ window.IM_WORKFLOW = {
         "args": [
           "expected"
         ],
+        "argTypes": {
+          "expected": "bool"
+        },
+        "expr": "addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected",
+        "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_can_accept'",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_addressee",
@@ -3836,16 +4363,26 @@ window.IM_WORKFLOW = {
         "args": [
           "expected"
         ],
+        "argTypes": {
+          "expected": "bool"
+        },
+        "expr": "(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.owner_duty_group"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — значение owner.dutyGroup в эффектах."
+        "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — определение dutyGroupOf."
       },
       {
         "fn": "withinActiveLimit",
         "args": [],
+        "argTypes": {},
+        "expr": "limits.maxActive == 0 || size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive",
+        "failVars": {
+          "n": "limits.maxActive",
+          "id": "mineIn(incidents, me, 'in_progress', incident.id)[0].number"
+        },
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.active_limit"
@@ -3855,6 +4392,11 @@ window.IM_WORKFLOW = {
       {
         "fn": "withinHoldLimit",
         "args": [],
+        "argTypes": {},
+        "expr": "limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold",
+        "failVars": {
+          "n": "limits.maxOnHold"
+        },
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.hold_limit"
@@ -3865,6 +4407,11 @@ window.IM_WORKFLOW = {
       {
         "fn": "withinReopenWindow",
         "args": [],
+        "argTypes": {},
+        "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000",
+        "failVars": {
+          "n": "limits.reopenWindowMin"
+        },
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.reopen_window"
@@ -3877,6 +4424,10 @@ window.IM_WORKFLOW = {
         "args": [
           "stepSetId"
         ],
+        "argTypes": {
+          "stepSetId": "string"
+        },
+        "expr": "stepsFilled(incident, stepSetId)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.required_steps"
@@ -3887,6 +4438,12 @@ window.IM_WORKFLOW = {
         "args": [
           "resultId"
         ],
+        "argTypes": {
+          "resultId": "string"
+        },
+        "expr": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? os.exists(o, o.id == resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))",
+        "failKey": "cel.bind(os, closeOptions(me, incident, surface), resultId != '' ? (os.exists(o, o.id == resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))",
+        "failVars": "resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.result_unavailable",
@@ -3901,6 +4458,10 @@ window.IM_WORKFLOW = {
         "args": [
           "timerId"
         ],
+        "argTypes": {
+          "timerId": "string"
+        },
+        "expr": "cel.bind(t, incident.timers[timerId], t.due != 0 && t.due <= now && t.fired != t.due)",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.timer_not_expired"
@@ -3912,6 +4473,10 @@ window.IM_WORKFLOW = {
         "args": [
           "expected"
         ],
+        "argTypes": {
+          "expected": "bool"
+        },
+        "expr": "(size(nextLevels(incident)) > 0) == expected",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_escalation_level"
@@ -3924,6 +4489,10 @@ window.IM_WORKFLOW = {
         "args": [
           "reasonIds"
         ],
+        "argTypes": {
+          "reasonIds": "list<string>"
+        },
+        "expr": "incident.holdReasonId in reasonIds",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.other_hold_reason"
@@ -3936,6 +4505,10 @@ window.IM_WORKFLOW = {
         "args": [
           "stateIds"
         ],
+        "argTypes": {
+          "stateIds": "list<string>"
+        },
+        "expr": "incident.state in stateIds",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.wrong_state"
@@ -3948,6 +4521,10 @@ window.IM_WORKFLOW = {
         "args": [
           "settingKey"
         ],
+        "argTypes": {
+          "settingKey": "setting"
+        },
+        "expr": "settingKey == true",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.setting_off"
@@ -3959,6 +4536,11 @@ window.IM_WORKFLOW = {
           "settingKey",
           "value"
         ],
+        "argTypes": {
+          "settingKey": "setting",
+          "value": "dyn"
+        },
+        "expr": "settingKey == value",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.setting_other"
@@ -3969,6 +4551,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "isOwnerOrUnowned",
         "args": [],
+        "argTypes": {},
+        "expr": "incident.owner == me || unowned(incident)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.not_owner"
@@ -3979,6 +4563,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "mergePrimaryValid",
         "args": [],
+        "argTypes": {},
+        "expr": "cel.bind(ps, byId(incidents, form.primaryId), size(ps) > 0 && ps[0].id != incident.id && ps[0].linkedTo == '' && (ps[0].state == 'new' || (ps[0].state == 'in_progress' && ps[0].owner == me)))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.merge_primary"
@@ -3989,6 +4575,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "sameScenarioAsPrimary",
         "args": [],
+        "argTypes": {},
+        "expr": "cel.bind(ps, byId(incidents, form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.merge_scenario"
@@ -3999,6 +4587,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "primaryEditable",
         "args": [],
+        "argTypes": {},
+        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && (ownership(me, ps[0]) == 'owner' || unowned(ps[0])))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.primary_not_editable"
@@ -4009,6 +4599,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "primaryClosed",
         "args": [],
+        "argTypes": {},
+        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && isDone(ps[0]))",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.primary_open"
@@ -4019,6 +4611,8 @@ window.IM_WORKFLOW = {
       {
         "fn": "targetHasAccessToLinked",
         "args": [],
+        "argTypes": {},
+        "expr": "form.targetId == '' || incidents.all(e, e.linkedTo != incident.id || isDone(e) || hasAccess(form.targetId, e))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.target_no_access_linked"
@@ -4031,6 +4625,11 @@ window.IM_WORKFLOW = {
         "args": [
           "expected"
         ],
+        "argTypes": {
+          "expected": "bool"
+        },
+        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), cel.bind(who, size(ps) > 0 && !isDone(ps[0]) ? addressee(ps[0]) : '', who != '' && hasAccess(who, incident) == expected))",
+        "failKey": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && !isDone(ps[0]) && addressee(ps[0]) != '' ? 'workflow.guard.primary_addressee_access' : 'workflow.guard.no_addressee')",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_addressee",
@@ -4043,126 +4642,808 @@ window.IM_WORKFLOW = {
     "effects": [
       {
         "fn": "setOwner",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "who"
+        ],
+        "argTypes": {
+          "who": "expr<string>"
+        },
+        "do": [
+          {
+            "set": "incident.owner",
+            "value": "who"
+          }
+        ]
       },
       {
         "fn": "setAssignmentGroup",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "group"
+        ],
+        "argTypes": {
+          "group": "expr<string>"
+        },
+        "do": [
+          {
+            "set": "incident.assignmentGroup",
+            "value": "group"
+          }
+        ]
       },
       {
         "fn": "setHoldReason",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "reason"
+        ],
+        "argTypes": {
+          "reason": "expr<string>"
+        },
+        "do": [
+          {
+            "set": "incident.holdReasonId",
+            "value": "reason"
+          }
+        ]
       },
       {
         "fn": "clearHoldReason",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [],
+        "argTypes": {},
+        "do": [
+          {
+            "set": "incident.holdReasonId",
+            "value": "''"
+          }
+        ]
       },
       {
         "fn": "startTimer",
         "kind": "transactional",
-        "$comment": "§14.8. Запускает таймер с полного норматива (второй аргумент — откуда норматив). Третий аргумент ifStopped — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)."
+        "args": [
+          "timerId",
+          "mode",
+          "ifStopped"
+        ],
+        "argTypes": {
+          "timerId": "string",
+          "mode": "string",
+          "ifStopped": "bool"
+        },
+        "defaults": {
+          "mode": "",
+          "ifStopped": false
+        },
+        "do": [
+          {
+            "if": "ifStopped && incident.timers[timerId].due != 0",
+            "then": [],
+            "else": [
+              {
+                "if": "timerDef(timerId).startsOnce",
+                "then": [
+                  {
+                    "call": "resumeTimer",
+                    "args": {
+                      "timerId": "timerId"
+                    }
+                  }
+                ],
+                "else": [
+                  {
+                    "let": "sec",
+                    "value": "timerSec(incident, timerId, mode)"
+                  },
+                  {
+                    "set": "incident.timers[timerId].due",
+                    "value": "sec < 0 ? 0 : now + sec * 1000"
+                  },
+                  {
+                    "set": "incident.timers[timerId].since",
+                    "value": "now"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "$comment": "§14.8. Запускает таймер с полного норматива (mode: '' — норматив, byEscalationLevel — норматив уровня эскалации). ifStopped = true — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)."
       },
       {
         "fn": "stopTimer",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "timerId"
+        ],
+        "argTypes": {
+          "timerId": "string"
+        },
+        "do": [
+          {
+            "if": "timerDef(timerId).startsOnce",
+            "then": [
+              {
+                "call": "pauseTimer",
+                "args": {
+                  "timerId": "timerId"
+                }
+              }
+            ],
+            "else": [
+              {
+                "set": "incident.timers[timerId].due",
+                "value": "0"
+              },
+              {
+                "set": "incident.timers[timerId].since",
+                "value": "0"
+              }
+            ]
+          }
+        ]
       },
       {
         "fn": "pauseTimer",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "timerId"
+        ],
+        "argTypes": {
+          "timerId": "string"
+        },
+        "do": [
+          {
+            "if": "!timerDef(timerId).pausable",
+            "then": [
+              {
+                "set": "incident.timers[timerId].due",
+                "value": "0"
+              },
+              {
+                "set": "incident.timers[timerId].since",
+                "value": "0"
+              }
+            ],
+            "else": [
+              {
+                "if": "incident.timers[timerId].due != 0",
+                "then": [
+                  {
+                    "set": "incident.timers[timerId].left",
+                    "value": "incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0"
+                  },
+                  {
+                    "set": "incident.timers[timerId].paused",
+                    "value": "true"
+                  },
+                  {
+                    "set": "incident.timers[timerId].due",
+                    "value": "0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       {
         "fn": "restartTimer",
         "kind": "transactional",
+        "args": [
+          "timerId",
+          "sec"
+        ],
+        "argTypes": {
+          "timerId": "string",
+          "sec": "expr<int>"
+        },
+        "do": [
+          {
+            "set": "incident.timers[timerId].due",
+            "value": "now + (sec > 0 ? sec : norm(incident, timerDef(timerId))) * 1000"
+          },
+          {
+            "set": "incident.timers[timerId].paused",
+            "value": "false"
+          },
+          {
+            "set": "incident.timers[timerId].left",
+            "value": "0"
+          }
+        ],
         "extendsBaseRegistry": true,
-        "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — путь к настройке длительности; не задана (null) — обычный норматив по §4. Переоткрытие запускает так норматив закрытия."
+        "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — длительность, с, выражением (limits.reopenResolutionSec); 0 — обычный норматив по §4. Переоткрытие запускает так норматив закрытия."
       },
       {
         "fn": "recordBreach",
         "kind": "transactional",
+        "args": [
+          "kind",
+          "groupLogKey"
+        ],
+        "argTypes": {
+          "kind": "string",
+          "groupLogKey": "string"
+        },
+        "do": [
+          {
+            "let": "breach",
+            "value": "{'kind': kind, 'at': deadline, 'owner': addressee(before)}"
+          },
+          {
+            "append": "incident.breaches",
+            "value": "breach"
+          },
+          {
+            "set": "incident.slaBreached",
+            "value": "true"
+          },
+          {
+            "forEach": "e",
+            "in": "incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))",
+            "do": [
+              {
+                "append": "e.breaches",
+                "value": "breach"
+              },
+              {
+                "set": "e.slaBreached",
+                "value": "true"
+              },
+              {
+                "if": "leftOf(e, kind, now) == 0",
+                "then": [
+                  {
+                    "set": "e.timers[kind].fired",
+                    "value": "deadline"
+                  }
+                ]
+              },
+              {
+                "world": "log",
+                "args": {
+                  "incident": "e",
+                  "key": "groupLogKey",
+                  "actor": "'dispatcher'",
+                  "vars": "{'primaryNumber': incident.number, 'timer': [timerDef(kind).labelKey]}"
+                }
+              },
+              {
+                "world": "touch",
+                "args": {
+                  "incident": "e"
+                }
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии."
       },
       {
         "fn": "resumeTimer",
         "kind": "transactional",
+        "args": [
+          "timerId"
+        ],
+        "argTypes": {
+          "timerId": "string"
+        },
+        "do": [
+          {
+            "if": "!timerDef(timerId).pausable",
+            "then": [
+              {
+                "let": "sec",
+                "value": "timerSec(incident, timerId, '')"
+              },
+              {
+                "set": "incident.timers[timerId].due",
+                "value": "sec < 0 ? 0 : now + sec * 1000"
+              },
+              {
+                "set": "incident.timers[timerId].since",
+                "value": "now"
+              }
+            ],
+            "else": [
+              {
+                "if": "incident.timers[timerId].due == 0",
+                "then": [
+                  {
+                    "let": "left",
+                    "value": "incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000"
+                  },
+                  {
+                    "set": "incident.timers[timerId].due",
+                    "value": "left == 0 && incident.timers[timerId].fired != 0 ? incident.timers[timerId].fired : now + left"
+                  },
+                  {
+                    "set": "incident.timers[timerId].paused",
+                    "value": "false"
+                  },
+                  {
+                    "set": "incident.timers[timerId].left",
+                    "value": "0"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
         "$comment": "§14.8. Продолжает таймер с остатка; ещё не запускавшийся — запускает с полного норматива. Поэтому claim, accept, resume и takeover используют один эффект; reopen — restartTimer."
       },
       {
         "fn": "increment",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "field"
+        ],
+        "argTypes": {
+          "field": "string"
+        },
+        "do": [
+          {
+            "set": "incident.${field}",
+            "value": "incident.${field} + 1"
+          }
+        ]
       },
       {
         "fn": "setFlag",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "field",
+          "value"
+        ],
+        "argTypes": {
+          "field": "string",
+          "value": "expr<dyn>"
+        },
+        "do": [
+          {
+            "set": "incident.${field}",
+            "value": "value"
+          }
+        ]
       },
       {
         "fn": "appendLog",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [
+          "key"
+        ],
+        "argTypes": {
+          "key": "string"
+        },
+        "do": [
+          {
+            "world": "log",
+            "args": {
+              "incident": "incident",
+              "key": "key"
+            }
+          }
+        ]
       },
       {
         "fn": "returnToQueue",
-        "kind": "transactional"
+        "kind": "transactional",
+        "args": [],
+        "argTypes": {},
+        "do": []
       },
       {
         "fn": "evictOpenCard",
         "kind": "transactional",
+        "args": [
+          "who"
+        ],
+        "argTypes": {
+          "who": "string"
+        },
+        "do": [
+          {
+            "world": "evict",
+            "args": {
+              "incident": "incident",
+              "who": "who == 'owner' ? incident.owner : before.owner"
+            }
+          }
+        ],
         "$comment": "§9, §14.8. Открытая у человека карточка переходит в режим просмотра с уведомлением (incident.card_evicted в потоке); карточка не закрывается."
       },
       {
         "fn": "setCursor",
         "kind": "transactional",
+        "args": [
+          "mode"
+        ],
+        "argTypes": {
+          "mode": "string"
+        },
+        "do": [
+          {
+            "world": "setCursor",
+            "args": {
+              "incident": "incident"
+            }
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§14.5. Курсор сценария — на первый незаполненный шаг (firstOpenStep): текущий шаг прохождения, у завершённого — последний шаг пути. Считает машина сценариев. У «Взять», «Принять», «Возобновить», «Перехватить», «Переоткрыть»."
       },
       {
         "fn": "setLinkedTo",
         "kind": "transactional",
+        "args": [
+          "primary"
+        ],
+        "argTypes": {
+          "primary": "expr<string>"
+        },
+        "do": [
+          {
+            "set": "incident.linkedTo",
+            "value": "primary"
+          },
+          {
+            "set": "incident.linkedAt",
+            "value": "now"
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11. linked_to — основной инцидент (form.primaryId), linked_at — момент привязки: нарушение группы получают те, кто был в группе в момент срока (§11.4, BUG-73)"
       },
       {
         "fn": "clearLink",
         "kind": "transactional",
+        "args": [
+          "ownLogKey",
+          "primaryLogKey"
+        ],
+        "argTypes": {
+          "ownLogKey": "string",
+          "primaryLogKey": "string"
+        },
+        "defaults": {
+          "ownLogKey": "",
+          "primaryLogKey": ""
+        },
+        "do": [
+          {
+            "if": "incident.linkedTo != ''",
+            "then": [
+              {
+                "let": "ps",
+                "value": "byId(incidents, incident.linkedTo)"
+              },
+              {
+                "set": "incident.leftGroup",
+                "value": "{'primaryId': incident.linkedTo, 'linkedAt': incident.linkedAt, 'at': now}"
+              },
+              {
+                "set": "incident.linkedTo",
+                "value": "''"
+              },
+              {
+                "set": "incident.linkedAt",
+                "value": "0"
+              },
+              {
+                "if": "size(ps) > 0 && ownLogKey != ''",
+                "then": [
+                  {
+                    "world": "log",
+                    "args": {
+                      "incident": "incident",
+                      "key": "ownLogKey",
+                      "vars": "{'primaryNumber': ps[0].number}"
+                    }
+                  }
+                ]
+              },
+              {
+                "if": "primaryLogKey != ''",
+                "then": [
+                  {
+                    "forEach": "p",
+                    "in": "ps",
+                    "do": [
+                      {
+                        "world": "log",
+                        "args": {
+                          "incident": "p",
+                          "key": "primaryLogKey",
+                          "vars": "{'number': incident.number}"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "else": [
+              {
+                "set": "incident.linkedTo",
+                "value": "''"
+              },
+              {
+                "set": "incident.linkedAt",
+                "value": "0"
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11. Связь с основным снимается; если была — запоминается left_group: основной, linked_at, момент выхода — нарушение по сроку, прошедшему до выхода, достаётся и ему (§11.4, BUG-73). С шаблонами [событию, основному] — если связь была, запись в журнал события и основного: переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)"
       },
       {
         "fn": "copyAnswersToPrimary",
         "kind": "transactional",
+        "args": [
+          "logKey"
+        ],
+        "argTypes": {
+          "logKey": "string"
+        },
+        "do": [
+          {
+            "world": "shareAnswers",
+            "args": {
+              "from": "incident",
+              "to": "form.primaryId",
+              "logKey": "logKey"
+            }
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один, версии могут различаться); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Что переносится, решает машина сценариев (shareAnswers, профиль МИ). Перенесено — запись в журнале основного ключом из аргумента"
       },
       {
         "fn": "relinkToPrimary",
         "kind": "transactional",
+        "args": [
+          "logKey"
+        ],
+        "argTypes": {
+          "logKey": "string"
+        },
+        "do": [
+          {
+            "let": "ps",
+            "value": "byId(incidents, form.primaryId)"
+          },
+          {
+            "if": "size(ps) > 0",
+            "then": [
+              {
+                "forEach": "c",
+                "in": "incidents.filter(e, e.linkedTo == incident.id && !isDone(e))",
+                "do": [
+                  {
+                    "set": "c.leftGroup",
+                    "value": "{'primaryId': c.linkedTo, 'linkedAt': c.linkedAt, 'at': now}"
+                  },
+                  {
+                    "set": "c.linkedTo",
+                    "value": "ps[0].id"
+                  },
+                  {
+                    "set": "c.linkedAt",
+                    "value": "now"
+                  },
+                  {
+                    "world": "log",
+                    "args": {
+                      "incident": "c",
+                      "key": "logKey",
+                      "vars": "{'primaryNumber': ps[0].number}"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11. Открытые привязанные объединяемого переходят к новому основному: привязанного у привязанного не бывает. У каждого — left_group прежнего основного и новый linked_at (BUG-73), запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история"
       },
       {
         "fn": "copyCloseFromPrimary",
         "kind": "transactional",
+        "args": [],
+        "argTypes": {},
+        "do": [
+          {
+            "let": "ps",
+            "value": "byId(incidents, incident.linkedTo)"
+          },
+          {
+            "if": "size(ps) > 0",
+            "then": [
+              {
+                "set": "incident.closeResultId",
+                "value": "ps[0].closeResultId"
+              },
+              {
+                "set": "incident.closeCauseId",
+                "value": "ps[0].closeCauseId"
+              },
+              {
+                "set": "incident.result",
+                "value": "ps[0].result"
+              },
+              {
+                "set": "incident.closedBy",
+                "value": "ps[0].closedBy"
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11. Результат, причина, комментарий и закрывший — от основного"
       },
       {
         "fn": "tightenPrimaryDeadline",
         "kind": "transactional",
+        "args": [
+          "timerId",
+          "logKey"
+        ],
+        "argTypes": {
+          "timerId": "string",
+          "logKey": "string"
+        },
+        "do": [
+          {
+            "let": "ps",
+            "value": "byId(incidents, form.primaryId)"
+          },
+          {
+            "if": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
+            "then": [
+              {
+                "let": "t",
+                "value": "ps[0].timers[timerId]"
+              },
+              {
+                "let": "left",
+                "value": "leftOf(incident, timerId, now)"
+              },
+              {
+                "let": "was",
+                "value": "t.due != 0 ? t.due - now : (t.paused ? t.left : timerSec(ps[0], timerId, '') * 1000)"
+              },
+              {
+                "if": "left < was",
+                "then": [
+                  {
+                    "forEach": "p",
+                    "in": "ps",
+                    "do": [
+                      {
+                        "if": "t.due != 0",
+                        "then": [
+                          {
+                            "set": "p.timers[timerId].due",
+                            "value": "now + left"
+                          }
+                        ],
+                        "else": [
+                          {
+                            "set": "p.timers[timerId].left",
+                            "value": "left"
+                          },
+                          {
+                            "set": "p.timers[timerId].paused",
+                            "value": "true"
+                          }
+                        ]
+                      },
+                      {
+                        "world": "log",
+                        "args": {
+                          "incident": "p",
+                          "key": "logKey",
+                          "vars": "{'number': incident.number}",
+                          "once": "true"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
         "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера"
       },
       {
         "fn": "copyPrimaryDeadline",
         "kind": "transactional",
+        "args": [
+          "timerId"
+        ],
+        "argTypes": {
+          "timerId": "string"
+        },
+        "do": [
+          {
+            "let": "ps",
+            "value": "byId(incidents, incident.linkedTo)"
+          },
+          {
+            "if": "size(ps) > 0 && leftOf(ps[0], timerId, now) >= 0",
+            "then": [
+              {
+                "set": "incident.timers[timerId].due",
+                "value": "0"
+              },
+              {
+                "set": "incident.timers[timerId].left",
+                "value": "leftOf(ps[0], timerId, now)"
+              },
+              {
+                "set": "incident.timers[timerId].paused",
+                "value": "true"
+              },
+              {
+                "if": "leftOf(ps[0], timerId, now) == 0",
+                "then": [
+                  {
+                    "set": "incident.timers[timerId].fired",
+                    "value": "spent(ps[0], timerId, now) ? ps[0].timers[timerId].fired : ps[0].timers[timerId].due"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
         "extendsBaseRegistry": true,
-        "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Нарушенный у основного — нарушенным и у него, без новой записи (RULE-50). Перед clearLink"
+        "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Наступивший у основного — отработанным и у него (RULE-50): нарушение группы ему допишется по окончании окна или уже записано, своего не будет (BUG-75). Перед clearLink"
       },
       {
         "fn": "notify",
-        "kind": "external"
+        "kind": "external",
+        "args": [
+          "to"
+        ],
+        "argTypes": {
+          "to": "string"
+        },
+        "do": [
+          {
+            "world": "notify",
+            "args": {
+              "incident": "incident",
+              "to": "to"
+            }
+          }
+        ]
       },
       {
         "fn": "externalCommand",
-        "kind": "external"
+        "kind": "external",
+        "args": [
+          "command"
+        ],
+        "argTypes": {
+          "command": "string"
+        },
+        "do": [
+          {
+            "world": "command",
+            "args": {
+              "incident": "incident",
+              "command": "command"
+            }
+          }
+        ]
       }
     ]
   },
@@ -4488,6 +5769,10 @@ window.IM_WORKFLOW = {
       {
         "path": "timers.hold",
         "why": "срок удержания задаёт причина — вкладка «Причины»"
+      },
+      {
+        "path": "alerts.targetKind",
+        "why": "вид адресата — пользователь или дежурная группа — следует из выбранного адресата alerts.target"
       },
       {
         "path": "queueSort.options",

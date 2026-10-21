@@ -4,7 +4,7 @@
     "title": "Incident Manager — Operator API",
     "version": "0.1.0-draft",
     "summary": "Контракт операторской части МИ: что фронтенд ждёт от бэкенда",
-    "description": "Предложение фронтенда бэкенду по задаче CLOUD-23465.\n\nИсточник требований — действующие правила `Specification/State_rules/States rules IM.md` (v10 и изменения после неё — журнал `State_rules/CHANGELOG.md`, §16). Ссылки вида «§6.1» ведут туда. Контракт исполнен прототипом в этом репозитории: встроенный сервер `prototype/server.js` отвечает по нему, интерфейс говорит с ним только запросами API.\n\nГлавный принцип: **workflow живёт в конфигурации на сервере, а не в коде клиента**. Сервер отдаёт схему (`WorkflowDefinition`) и на каждый инцидент — готовый список доступных действий. Фронтенд рисует кнопки и формы по этим данным и не содержит собственной таблицы переходов. Любой переход выполняется одним запросом `POST /operator/incidents/{guid}/transitions/{transitionId}` атомарно на сервере (§10.1).\n\nЕдиная JSON-модель workflow лежит рядом: `workflow_schema.v1.json` (формат v1; собрана по правилам v4, приведена к действующим правилам). Её схема описана в `components/schemas/WorkflowDefinition`.",
+    "description": "Предложение фронтенда бэкенду по задаче CLOUD-23465.\n\nИсточник требований — действующие правила `Specification/State_rules/States rules IM.md` (v10 и изменения после неё — журнал `State_rules/CHANGELOG.md`, §16). Ссылки вида «§6.1» ведут туда. Контракт исполнен прототипом в этом репозитории: встроенный сервер `prototype/server.js` отвечает по нему, интерфейс говорит с ним только запросами API.\n\nГлавный принцип: **workflow живёт в конфигурации на сервере, а не в коде клиента**. Сервер отдаёт схему (`WorkflowDefinition`) и на каждый инцидент — готовый список доступных действий. Фронтенд рисует кнопки и формы по этим данным и не содержит собственной таблицы переходов. Любой переход выполняется одним запросом `POST /operator/incidents/{guid}/transitions/{transitionId}` атомарно на сервере (§10.1).\n\nЕдиная JSON-модель workflow лежит рядом: `workflow_schema.v1.json` (смысл условий, эффектов и правил интерфейса — выражениями CEL, `CEL.md`; собрана по правилам v4, приведена к действующим правилам). Её схема описана в `components/schemas/WorkflowDefinition`.",
     "contact": {
       "name": "Incident Manager frontend"
     },
@@ -2374,7 +2374,7 @@
       },
       "WorkflowDefinition": {
         "type": "object",
-        "description": "Единая JSON-модель workflow. Готовый экземпляр — файл `workflow_schema.v1.json` рядом с этой спецификацией (формат v1; собран по правилам v4 и приведён к действующим); он же является примером для этой схемы.",
+        "description": "Единая JSON-модель workflow. Готовый экземпляр — файл `workflow_schema.v1.json` рядом с этой спецификацией (смысл условий, эффектов и правил интерфейса — выражениями CEL, `CEL.md`; собран по правилам v4 и приведён к действующим); он же является примером для этой схемы.",
         "required": [
           "schema",
           "states",
@@ -2516,6 +2516,11 @@
           "registries": {
             "type": "object",
             "description": "§14.8. Реестры guard'ов и эффектов — из них редактор схемы собирает выпадающие списки.",
+            "additionalProperties": true
+          },
+          "cel": {
+            "type": "object",
+            "description": "ARCH-07. Язык выражений машины ([CEL.md](CEL.md)): `types` — типы значений выражений, `world` — факты мира, которые даёт сервер, `settings` — разделы машины как константы, `definitions` — общие понятия. Смысл условий и эффектов реестров — выражениями CEL в их полях `expr`, `failKey`, `failVars`, `do`.",
             "additionalProperties": true
           },
           "validation": {
@@ -2812,9 +2817,9 @@
             "items": {
               "type": "object",
               "properties": {
-                "when": {
-                  "type": "object",
-                  "additionalProperties": true
+                "expr": {
+                  "type": "string",
+                  "description": "Выражение CEL (CEL.md, «Правила интерфейса»): пояснение подходит, когда оно истинно; берётся первое подходящее. Имена — me, incident, surface, now"
                 },
                 "text": {
                   "type": "string"
@@ -2847,7 +2852,7 @@
         "required": [
           "name",
           "kind",
-          "required"
+          "requiredExpr"
         ],
         "properties": {
           "name": {
@@ -2865,8 +2870,13 @@
             "type": "string",
             "description": "Устарело (§14.9): в машине — ключ поля …Key, текст — в каталоге строк."
           },
-          "required": {
-            "type": "boolean"
+          "requiredExpr": {
+            "type": "string",
+            "description": "Выражение CEL: поле обязательно. Может читать одно поле-список той же формы (`form.resultId`) — тогда сервер отдаёт таблицу по его вариантам (`AvailableAction.fieldRules`). Пример: `closeResults.exists(i, i.id == form.resultId && i.commentRequired)`"
+          },
+          "visibleExpr": {
+            "type": "string",
+            "description": "Выражение CEL: поле видно; нет — видно всегда. Невидимое поле не обязательно и не отправляется. Пример: `form.resultId == 'mass'`"
           },
           "placeholder": {
             "type": "string",
@@ -2876,39 +2886,21 @@
             "type": "string",
             "description": "Откуда брать варианты: `transferTargets` или `reasonCatalog:{id}`"
           },
-          "defaultFrom": {
-            "type": "string"
-          },
-          "excludes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "optionsFrom": {
+          "optionExpr": {
             "type": "string",
-            "enum": [
-              "actions"
-            ],
-            "description": "Варианты берутся из `fieldOptions` доступного действия, а не из всего справочника"
+            "description": "Выражение CEL над вариантом `option` (id): вариант предлагается. Пример у адресатов передачи: `!isSelf(me, option) && option != addressee(incident) && canAccept(option, incident, '')`"
           },
-          "visibleWhen": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Поле видно и обязательно, только когда другое поле формы имеет одно из значений"
-          },
-          "requiredFrom": {
+          "enabledExpr": {
             "type": "string",
-            "description": "Обязательность берётся из выбранной строки справочника, например `reasonCatalog:close_result.commentRequired`"
+            "description": "Выражение CEL над `option`: вариант можно выбрать; нет — он виден заблокированным с причиной `disabledKey`"
           },
-          "defaultWhen": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Значение по умолчанию при условии, например «Обработан», когда шаги закрытия заполнены"
+          "disabledKey": {
+            "type": "string",
+            "description": "§14.9. Ключ причины, почему вариант заблокирован по `enabledExpr`, например `workflow.guard.required_steps`"
           },
-          "excludeSystemItems": {
-            "type": "boolean",
-            "description": "Не показывать позиции справочника, которые ставит только система (setBy: system), например «Перерыв оператора»"
+          "defaultExpr": {
+            "type": "string",
+            "description": "Выражение CEL, id значения по умолчанию; `''` — нет. Ставится, только если это доступный вариант. Пример: `stepsFilled(incident, 'closing') ? 'processed' : ''`"
           },
           "labelKey": {
             "type": "string",
@@ -2918,7 +2910,8 @@
             "type": "string",
             "description": "§14.9. Ключ подсказки в пустом поле, например `workflow.form.close.field.comment.placeholder`."
           }
-        }
+        },
+        "description": "Поле формы перехода в машине. Правила поля — выражения CEL (CEL.md, «Правила интерфейса»); вычисляет их сервер: варианты и значение по умолчанию — в `AvailableAction.fieldOptions`, видно ли поле и обязательно ли — в `AvailableAction.fieldRules`. Клиент выражений не вычисляет"
       },
       "WorkflowTransition": {
         "type": "object",
@@ -3145,11 +3138,12 @@
           },
           "fn": {
             "type": "string",
-            "description": "Имя из реестра эффектов: setOwner, setAssignmentGroup, setHoldReason, clearHoldReason, startTimer, stopTimer, pauseTimer, resumeTimer, increment, setFlag, appendLog, returnToQueue, evictOpenCard, setCursor, notify, externalCommand."
+            "description": "Имя из реестра эффектов `registries.effects` машины; смысл эффекта — его `do` там же."
           },
           "args": {
             "type": "array",
-            "items": {}
+            "items": {},
+            "description": "ARCH-07. Аргументы по порядку `args` эффекта в реестре, по его `argTypes`: литерал (строка, число, `true`/`false`) или выражение CEL строкой (`expr<T>`) — `actor`, `''`, `form.targetId`, `personOf(form.targetId)` ([CEL.md](CEL.md))."
           }
         }
       },
@@ -3277,12 +3271,21 @@
         "type": "object",
         "description": "§9 (RULE-43). Получатель алертов: нарушения нормативов, потолок эскалации, потеря связи, потеря доступа. Настраивается под правом `incident:schema:admin`. Алерт не передаёт инцидент и не меняет владельца.",
         "required": [
+          "targetKind",
           "target"
         ],
         "properties": {
+          "targetKind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "group"
+            ],
+            "description": "Вид получателя: пользователь или дежурная группа (ARCH-07 в7)."
+          },
           "target": {
             "type": "string",
-            "description": "Пользователь `user:{id}` или дежурная группа `group:{id}`; группе — всем участникам на месте. Получают только те, у кого есть доступ к объекту инцидента (§5)."
+            "description": "id пользователя или дежурной группы; группе — всем участникам на месте. Получают только те, у кого есть доступ к объекту инцидента (§5)."
           },
           "noRecipientLog": {
             "type": "string",
@@ -3306,9 +3309,17 @@
                 "level": {
                   "type": "integer"
                 },
-                "targetRef": {
+                "targetKind": {
                   "type": "string",
-                  "description": "§8.3. Адресат уровня автоэскалации — пользователь `user:{id}` или дежурная группа `group:{id}`. Задаёт администратор схемы"
+                  "enum": [
+                    "user",
+                    "group"
+                  ],
+                  "description": "§8.3. Вид адресата уровня автоэскалации: пользователь или дежурная группа (ARCH-07 в7)"
+                },
+                "target": {
+                  "type": "string",
+                  "description": "§8.3. Адресат уровня автоэскалации — id пользователя или дежурной группы. Задаёт администратор схемы"
                 },
                 "reactionSec": {
                   "type": "integer"
@@ -4224,7 +4235,7 @@
           },
           "fieldOptions": {
             "type": "object",
-            "description": "Только у доступного действия с формой. Варианты полей-списков формы для этого инцидента и этого оператора и значение по умолчанию. Для перехода `close` — `resultId`: только результаты, которые разрешает closeResultAllowed, недоступные — с причиной (§2.2). Для `transfer` — `targetId`: адресаты без себя, своих групп и текущего адресата (§8.1)",
+            "description": "Только у доступного действия с формой. Варианты полей-списков формы для этого инцидента и этого оператора и значение по умолчанию — по `optionExpr`, `enabledExpr`, `defaultExpr` поля машины. Для перехода `close` — `resultId`: только результаты, которые разрешает closeResultAllowed, недоступные — с причиной (§2.2). Для `transfer` — `targetId`: адресаты без себя, своих групп и текущего адресата (§8.1)",
             "additionalProperties": {
               "type": "object",
               "properties": {
@@ -4241,6 +4252,13 @@
                   ]
                 }
               }
+            }
+          },
+          "fieldRules": {
+            "type": "object",
+            "description": "Только у доступного действия с формой. Для каждого поля формы — видно ли оно и обязательно ли, по `visibleExpr` и `requiredExpr` машины. Зависит от поля-списка формы — `dependsOn` и таблица `byValue` по его вариантам (ключ `\"\"` — ничего не выбрано): клиент смотрит значение по выбранному варианту и ничего не вычисляет",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldRule"
             }
           },
           "reasonKey": {
@@ -6327,6 +6345,46 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FilterCondition"
+            }
+          }
+        }
+      },
+      "FieldRule": {
+        "type": "object",
+        "required": [
+          "visible",
+          "required"
+        ],
+        "properties": {
+          "visible": {
+            "type": "boolean",
+            "description": "Поле видно — при значениях формы по умолчанию"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Поле обязательно — при значениях формы по умолчанию; невидимое не обязательно"
+          },
+          "dependsOn": {
+            "type": "string",
+            "description": "Поле-список формы, от значения которого зависят visible и required"
+          },
+          "byValue": {
+            "type": "object",
+            "description": "visible и required по каждому варианту поля dependsOn; ключ `\"\"` — ничего не выбрано",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "visible",
+                "required"
+              ],
+              "properties": {
+                "visible": {
+                  "type": "boolean"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         }
