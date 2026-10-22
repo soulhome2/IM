@@ -161,10 +161,10 @@ MUTATIONS = [
     ("counters-ignore-access", "server.js", "const list = visible({});", "const list = events;", "api"),
     ("target-access-ignored", "workflow.js", "\"expr\": \"form.targetId == '' || hasAccess(form.targetId, incident)\"", "\"expr\": \"true\"", "api"),
     ("group-access-all-members", "workflow.js", "members(who).exists(m, access(m, x))", "members(who).all(m, access(m, x))", "api"),
-    ("level-cannot-accept-ignored", "workflow.js", "l.target != addressee(x) && canAccept(l.target, x, x.owner)", "l.target != addressee(x)", "api"),
+    ("level-cannot-accept-ignored", "workflow.js", "l.target != addressee(x) && canAcceptNow(l.target, x, x.owner)", "l.target != addressee(x)", "api"),
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
-    ("level-current-addressee-ignored", "workflow.js", "l.target != addressee(x) && canAccept(", "canAccept(", "api"),
-    ("level-group-owner-counted", "workflow.js", "canAccept(l.target, x, x.owner)", "canAccept(l.target, x, '')", "api"),
+    ("level-current-addressee-ignored", "workflow.js", "l.target != addressee(x) && canAcceptNow(", "canAcceptNow(", "api"),
+    ("level-group-owner-counted", "workflow.js", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')", "api"),
     ("group-accept-except-ignored", "workflow.js", "m != except && canAcceptPerson(m, x)", "canAcceptPerson(m, x)", "api"),
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "          at = runAt;\n          let facts = null;", "          at = null;\n          let facts = null;", "api"),
