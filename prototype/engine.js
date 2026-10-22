@@ -309,10 +309,11 @@
           } else if (action === "command") {
             cur.external.push({ fn: "externalCommand", target: a.command });
           } else if (action === "evict") {
-            const { transitionId } = cur;
+            // Кто увёл карточку — тот, кто выполнил переход: себе о своей передаче интерфейс не говорит (BUG-86)
+            const { transitionId, actor: by } = cur;
             const who = a.who || null;
             const id = target.id;
-            after.push(() => ctx.onEvict && ctx.onEvict(real(id), who, transitionId));
+            after.push(() => ctx.onEvict && ctx.onEvict(real(id), who, transitionId, by));
           } else if (action === "touch") {
             const id = target.id;
             after.push(() => ctx.onBreachShared && ctx.onBreachShared(real(id)));

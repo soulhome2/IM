@@ -1789,6 +1789,31 @@
       return toast.textContent;
     });
 
+    await step("Карточку увели — у прежнего владельца уведомление с причиной: эскалация по нормативу закрытия (§6.2, §14.8, BUG-86)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const esc = window.IM_WORKFLOW.escalation;
+      await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { onResolutionOverdue: "escalate" }) } });
+      await wait(300);
+      let toast = null;
+      try {
+        const number = await claimFromQueue(() => true);
+        expect(mode() === "work", "карточка взятого инцидента не открылась");
+        const what = window.IM_STRINGS.ru[window.IM_WORKFLOW.transitions.find((x) => x.id === "resolution_escalate").labelKey];
+        // Часы шагами короче порога «нет связи», перед каждым — признак активности
+        for (let i = 0; i < 12 && !toast; i++) {
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+          await stand.raw("POST", "/test/clock", { advanceSec: 240 });
+          await wait(150);
+          toast = toastWith(new RegExp(`${number}: карточка только для просмотра — ${what}`));
+        }
+        expect(toast, `нет уведомления с причиной у прежнего владельца ${number}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return toast.textContent;
+    });
+
     await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");

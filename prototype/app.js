@@ -4107,6 +4107,10 @@
         state.selectedId = null;
         return backToQueue();
       }
+    } else if (msg.type === "incident.card_evicted" && !mine) {
+      // Карточку увели (§6.1, §6.2, §14.8): почему — подпись перехода из машины; своё действие — без уведомления
+      const tr = transitionDef(tid);
+      toast(t("{id}: карточка только для просмотра — {what}", { id, what: tr ? lbl(tr) : tid }));
     } else if (msg.type === "incident.alert") {
       // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
       const tr = transitionDef(tid);

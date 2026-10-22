@@ -411,6 +411,8 @@ MUTATIONS = [
     # Автоматические переходы и запрос оператора (§14.3, ARCH-10): догон перед запросом (BUG-82), системные — сразу после
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
     ("settle-after-request-off", "server.js", "if (acting && res.status < 300 && runScheduler().length && res.again)", "if (false && res.again)", "api"),
+    # Карточку увели — уведомление с причиной (BUG-86)
+    ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
 

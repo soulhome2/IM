@@ -319,8 +319,9 @@
       },
       // Нарушение основного записано тому, кто был в группе (recordBreach, §11.4, BUG-73) — ему новая версия
       onBreachShared: (ev) => touch([ev]),
-      onEvict: (ev, who, transitionId) => {
-        if (who === ME) emit("incident.card_evicted", ev, null, { transitionId });
+      // Карточку увели (§9): в событии — кто выполнил переход и какой, по нему клиент называет причину (BUG-86)
+      onEvict: (ev, who, transitionId, by) => {
+        if (who === ME) emit("incident.card_evicted", ev, by || null, { transitionId });
       },
     };
     // Молчание оператора стенда (§12.3) — с последнего признака активности (heartbeat)

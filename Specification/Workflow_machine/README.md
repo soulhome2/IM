@@ -365,7 +365,7 @@ POST /operator/incidents/{g}/transitions/transfer  formValues: { targetId, comme
 
 ```
 поток: incident.auto_escalated { incident }   → обновить строку очереди
-поток: incident.card_evicted                  → если карточка открыта, перевести в просмотр
+поток: incident.card_evicted                  → если карточка открыта, перевести в просмотр; увёл не я — уведомление с подписью перехода
 ```
 
 **Потеря доступа** — изменились роли или группы доступа (§5):
