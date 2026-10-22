@@ -152,7 +152,6 @@ MUTATIONS = [
     ("merge-primary-first", "server.js", "const pickPrimary = (list) => engine.mergePrimary([...list].sort(byNumber));", "const pickPrimary = (list) => list[0] || null;", "api"),
     ("merge-primary-click-order", "server.js", "engine.mergePrimary([...list].sort(byNumber))", "engine.mergePrimary(list)", "api"),
     ("merge-primary-occurred-lost", "engine.js", "priority: ev.priority, occurredAt: ev.occurredAt, state: ev.state", "priority: ev.priority, state: ev.state", "api"),
-    ("merge-linked-stay-open", "server.js", "if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === \"linked\")) runScheduler();", "", "api"),
     ("ui-linked-chip-hidden", "app.js", "if (!e.linkedCount) return \"\";", "return \"\";", "ui"),
     ("ui-selection-bar-hidden", "app.js", "bar.hidden = !n;", "bar.hidden = true;", "ui"),
     ("card-ignores-access", "server.js", "      return ev && canSee(ev) ? ev : null;", "      return ev;", "api"),
@@ -195,7 +194,7 @@ MUTATIONS = [
     ("agent-state-ignored", "server.js", ": engine.onDuty(op.id));", ": true);", "api"),
     ("ui-bulk-failures-hidden", "app.js", "toast(res.failed.length ? `${okText} ", "toast(false ? `${okText} ", "ui"),
     ("ui-bulk-transfer-copy", "app.js", "title: t(form.bulkTitleKey, { n })", "title: t(form.titleKey)", "ui"),
-    ("external-effects-dropped", "server.js", "journalEntries: journal, externalEffects, canceledTimerTrigger", "journalEntries: journal, externalEffects: [], canceledTimerTrigger", "api"),
+    ("external-effects-dropped", "server.js", "journalEntries: journalView(ev).slice(before), externalEffects, canceledTimerTrigger", "journalEntries: journalView(ev).slice(before), externalEffects: [], canceledTimerTrigger", "api"),
     ("queue-not-sorted", "server.js", "      return list.sort((a, b) => cmp(a, b) || byNumber(a, b));", "      return list;", "api"),
     ("queue-sort-always-open", "server.js", "return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;", "return s.options.includes(asked) ? asked : s.default;", "api"),
     ("queue-filters-ignored", "server.js", 'if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;', "", "api"),
@@ -337,7 +336,7 @@ MUTATIONS = [
     ("detach-keeps-own-deadline", "workflow.js", "\"value\": \"leftOf(ps[0], timerId, now)\"", "\"value\": \"incident.timers[timerId].left\"", "api"),
     ("detach-spent-lost", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"false\"", "api"),
     ("detach-window-not-spent", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"spent(ps[0], timerId, now)\"", "api"),
-    ("action-not-activity", "server.js", "      if (method !== \"GET\" && path.startsWith(\"/operator/\")) lastHeartbeat = now();\n", "", "api"),
+    ("action-not-activity", "server.js", "      if (acting) lastHeartbeat = now();\n", "", "api"),
     ("breach-not-shared", "workflow.js", "\"in\": \"incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))\"", "\"in\": \"[]\"", "api"),
     ("window-breach-not-shared", "engine.js", "canceled.tr.effects.filter((x) => x.fn === \"recordBreach\")", "[]", "api"),
     # Нарушение группы — тем, кто был в группе в момент срока (BUG-73)
@@ -403,6 +402,9 @@ MUTATIONS = [
     ("ui-scenario-chip-count", "app.js", '<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>', '<span class="event-prog">${prog.filled}/${prog.total}</span>', "ui"),
     ("ui-scenario-chip-only-answered", "app.js", "${prog.total ? `<span class=\"event-prog\">", "${prog.filled ? `<span class=\"event-prog\">", "ui"),
     ("ui-scenario-untitled-empty", "app.js", 't(ev.scenarioTitle || "Без названия")', 't(ev.scenarioTitle || "")', "ui"),
+    # Автоматические переходы и запрос оператора (§14.3, ARCH-10): догон перед запросом (BUG-82), системные — сразу после
+    ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
+    ("settle-after-request-off", "server.js", "if (acting && res.status < 300 && runScheduler().length && res.again)", "if (false && res.again)", "api"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
 

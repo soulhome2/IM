@@ -1132,11 +1132,10 @@
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
       const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
       if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];
-      // Основной закрыт — привязанные закрываются сразу, системным переходом машины (§14.3)
-      if (isDone(ev) && events.some((e) => e.linkedTo === ev.id && e.state === "linked")) runScheduler();
-      const journal = journalView(ev).slice(before);
       const externalEffects = (r.external || []).map((x) => ({ fn: x.fn, target: x.target, status: "queued" }));
-      return { status: 200, body: { incident: card(ev), navigate: r.navigate || null, journalEntries: journal, externalEffects, canceledTimerTrigger: r.canceled || null } };
+      // Ответ — заново после системных переходов, которые выполнит handle (ARCH-10): журнал — и их записи
+      const view = () => ({ incident: card(ev), navigate: r.navigate || null, journalEntries: journalView(ev).slice(before), externalEffects, canceledTimerTrigger: r.canceled || null });
+      return { status: 200, body: view(), view };
     }
 
     // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null. Выборка — по возрастанию
@@ -1165,7 +1164,8 @@
       // Основной новый — взят в работу тем же действием (grouping.takeWith)
       if (r.taken) emitTransition(primary, r.taken.transitionId, ME, r.taken.facts);
       else emit("incident.updated", primary, ME, { stepIds: [] });
-      return { status: 200, body: { incident: card(primary) } };
+      const reply = () => ({ status: 200, body: { incident: card(primary) } });
+      return Object.assign(reply(), { again: reply });
     }
 
     function selectionActions(list) {
@@ -1334,7 +1334,6 @@
           if (bulkTr && !(bulkTr.bulk && bulkTr.bulk.allowed)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_unavailable"]);
           // Одно отмеченное — как одиночное действие; от двух — не меньше bulk.minItems машины
           if (bulkTr && guids.length > 1 && guids.length < bulkTr.bulk.minItems) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: bulkTr.bulk.minItems }]);
-          const succeeded = [];
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
           let navigate = null;
@@ -1346,8 +1345,8 @@
               navigate = r.body.navigate || navigate;
             } else failed.push({ incidentGuid: ev.id, problem: r.body });
           });
-          done.forEach((ev) => succeeded.push(summary(ev, "queue")));
-          return { status: 200, body: { succeeded, failed, navigate } };
+          const reply = () => ({ status: 200, body: { succeeded: done.map((ev) => summary(ev, "queue")), failed, navigate } });
+          return Object.assign(reply(), { again: reply });
         },
       ],
       [
@@ -1378,11 +1377,9 @@
             return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
           }
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
-          if (res.status === 200) {
-            res.body.incident = card(ev);
-            res.headers = { ETag: etag(ev) };
-          }
-          return res;
+          if (res.status !== 200) return res;
+          const reply = () => ({ status: 200, body: res.view(), headers: { ETag: etag(ev) } });
+          return Object.assign(reply(), { again: reply });
         },
       ],
       ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.primaryGuid)],
@@ -1396,7 +1393,9 @@
           // «Отсоединить» — ручной переход машины из linked
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const r = runTransition(detach.id, ev, {}, "card");
-          return r.status === 200 ? { status: 200, body: card(primary) } : r;
+          if (r.status !== 200) return r;
+          const reply = () => ({ status: 200, body: card(primary) });
+          return Object.assign(reply(), { again: reply });
         },
       ],
       [
@@ -1429,7 +1428,8 @@
           if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : problem(422, "FORM_FIELD_REQUIRED", r.why);
           touch(linked);
           linked.forEach((ev, i) => emitTransition(ev, detach.id, ME, r.facts[i]));
-          return { status: 200, body: card(primary) };
+          const reply = () => ({ status: 200, body: card(primary) });
+          return Object.assign(reply(), { again: reply });
         },
       ],
       ["POST", "/operator/incidents/filter", (p, q, body) => filterView(body || {})],
@@ -1693,7 +1693,8 @@
             if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.clock_backwards"]);
             if (clock.frozenAt != null) clock.frozenAt += sec * 1000;
             else clock.offset += sec * 1000;
-            const fired = runScheduler();
+            // runScheduler: false — такт планировщика ещё не наступил: что сделает запрос оператора (§14.3, BUG-82)
+            const fired = body.runScheduler === false ? [] : runScheduler();
             return { status: 200, body: { now: iso(now()), fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
           },
         ],
@@ -1730,11 +1731,18 @@
       const m = path.match(route.re);
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));
+      const acting = method !== "GET" && path.startsWith("/operator/");
+      // Перед запросом оператора — всё, что уже наступило по времени (§14.3, ARCH-10): иначе действие между
+      // тактами планировщика стёрло бы нарушение (BUG-82). Окно после дедлайна по-прежнему ждёт человека
+      if (acting) runScheduler();
       // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
-      if (method !== "GET" && path.startsWith("/operator/")) lastHeartbeat = now();
-      const res = route.fn(params, q, body || {}, lowerKeys(headers));
+      if (acting) lastHeartbeat = now();
+      let res = route.fn(params, q, body || {}, lowerKeys(headers));
+      // После — системные переходы, которые запрос сделал возможными (передали вышедшему — сразу его группе), в
+      // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10)
+      if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
       record(method, route.template, res.status, res.body, "http", res.headers);
-      return res;
+      return { status: res.status, body: res.body, headers: res.headers };
     }
 
     /* ===== Планировщик и эмуляция коллег ===== */

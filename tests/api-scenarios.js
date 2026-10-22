@@ -471,9 +471,17 @@
     // Кузнецов в наборе вышел, но передать ему можно: список это показывает, но не запрещает
     const target = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "kuznetsov");
     assert.eq([target && target.available], [false], "Кузнецов в списке, не на месте");
-    assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову");
-    const fired = await env.advance(1);
-    assert.ok(fired.some((f) => f.incidentGuid === mall.guid && f.transitionId === "addressee_signed_out_to_group"), "сработало «адресат вышел»");
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    const sent = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue");
+    assert.status(sent, 200, null, "передать Кузнецову");
+    // Сразу — в том же запросе, без такта планировщика (§14.3, ARCH-10): в ответе уже его группа
+    const r = sent.body.incident;
+    assert.eq([r.state, r.owner, r.assignmentGroup && r.assignmentGroup.id], ["pending_acceptance", null, "grp-tc"], "в ответе передачи — у его группы «Охрана ТЦ»");
+    await new Promise((res) => setTimeout(res, 300));
+    stop();
+    const moves = got.filter((m) => m.type === "incident.transitioned" && m.incidentGuid === mall.guid).map((m) => m.payload.transitionId);
+    assert.eq(moves, ["transfer", "addressee_signed_out_to_group"], "в потоке — передача, затем «адресат вышел»");
     const c = await env.card(mall.guid);
     assert.eq([c.state, c.owner, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", null, "grp-tc"], "у его группы «Охрана ТЦ»");
     assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(jt(j))), "запись в журнале");
@@ -651,10 +659,11 @@
 
   test("Права пути в работу (§5, RULE-36, RULE-38): «Принять» — по праву «Принимать», «Перехватить» и «Переоткрыть» — ещё и по праву взятия", async () => {
     const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
-    // Без права «Принимать»: принять нельзя, взять — можно
+    // Без права «Принимать»: принять нельзя, взять — можно. Инцидент — моей группе, где принять может Петрова:
+    // адресованный лично мне сразу ушёл бы в очередь — адресат не может принять (RULE-39)
     let env = await makeEnv({ permissions: all.filter((k) => k !== "incident:accept") });
-    const personal = await env.guidOf("INC-1843");
-    const accept = await env.act(personal, "accept", {}, "queue");
+    const toGroup = await env.guidOf("INC-1836");
+    const accept = await env.act(toGroup, "accept", {}, "queue");
     assert.status(accept, 403, "PERMISSION_DENIED", "принять без права «Принимать»");
     assert.ok(/incident:accept/.test(accept.body.message), `причина: ${accept.body.message}`);
     assert.status(await env.act((await newFire(env)).guid, "claim", {}, "queue"), 200, null, "взять — по праву взятия");
@@ -1408,6 +1417,44 @@
     await env.advance(norm(inc) + GRACE + 1);
     assert.eq((await env.card(inc.guid)).state, "pending_acceptance", "после окна — автоэскалация");
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "«Взять» после окна");
+  });
+
+  test("Действие после окна, но до такта планировщика, нарушение не стирает: сервер догоняет таймеры перед запросом (§14.3, BUG-82, ARCH-10)", async () => {
+    // Часы — за окно после дедлайна без такта планировщика (runScheduler: false), затем действие оператора
+    // с версией, прочитанной до этого. Переход по таймеру меняет версию: запрос — 412, в актуальной карточке —
+    // нарушение, как если бы такт успел раньше; повтор с новой версией выполняется
+    const past = async (env, due) => {
+      const left = Math.ceil((due - env.now) / 1000);
+      await env.advance(left - 1);
+      assert.status(await env.call("POST", "/test/clock", { advanceSec: GRACE + 2, runScheduler: false }), 200, null, "часы без такта");
+    };
+    const actAfter = async (env, guid, transition, form, surface, kind) => {
+      const stale = await env.act(guid, transition, form, surface);
+      assert.status(stale, 412, "VERSION_CONFLICT", "версия до такта");
+      assert.eq(stale.body.current.breaches.map((b) => b.kind), [kind], "в актуальной карточке — нарушение");
+      return env.act(guid, transition, form, surface);
+    };
+    // Реакция при выключенной автоэскалации: «Взять» после окна — нарушение реакции на момент дедлайна
+    let env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { enabled: false }) } });
+    const inc = await newFire(env);
+    await past(env, Date.parse(inc.timer.dueAt));
+    let res = await actAfter(env, inc.guid, "claim", {}, "queue", "reaction");
+    assert.status(res, 200, null, "«Взять» после окна");
+    let c = res.body.incident;
+    assert.eq([c.state, res.body.canceledTimerTrigger, c.breaches.map((b) => b.kind)], ["in_progress", null, ["reaction"]], "взят, нарушение реакции записано");
+    assert.eq(Date.parse(c.breaches[0].at), Date.parse(inc.timer.dueAt), "нарушение — на момент дедлайна");
+    // Закрытие при настройках по умолчанию: «Закрыть» после окна — нарушение закрытия
+    env = await makeEnv();
+    const fire = await newFire(env);
+    const claimed = await env.act(fire.guid, "claim", {}, "queue");
+    assert.status(claimed, 200, null, "взять");
+    const due = Date.parse(claimed.body.incident.timer.dueAt);
+    await past(env, due);
+    res = await actAfter(env, fire.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card", "resolution");
+    assert.status(res, 200, null, "«Закрыть» после окна");
+    c = res.body.incident;
+    assert.eq([c.state, c.breaches.map((b) => b.kind)], ["closed", ["resolution"]], "закрыт, нарушение закрытия записано");
+    assert.eq(Date.parse(c.breaches[0].at), due, "нарушение — на момент дедлайна");
   });
 
   test("Окно после дедлайна: «Передать» и «Отклонить» таймер не отменяют — реакция продолжается, автоэскалация по окончании окна (RULE-83)", async () => {
