@@ -1848,8 +1848,12 @@
     const back = await env.card(third);
     assert.eq([back.state, back.linkedTo], ["new", null], "отсоединённый — новый, без связи");
     assert.ok((await env.all("open")).some((e) => e.guid === third), "снова в очереди");
+    // В форме Кузнецов есть, но заблокирован с причиной: передача ему не пройдёт (BUG-88)
+    const transfer = actionOf(await env.card(mall), "transfer");
+    const k = transfer.fieldOptions.targetId.options.find((o) => o.id === "kuznetsov");
+    assert.eq([k && k.disabled, k && k.reason], [true, jt({ templateKey: "workflow.guard.target_no_access_linked" })], "Кузнецов в форме — недоступен с причиной");
     const denied = await env.act(mall, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
-    assert.status(denied, 403, null, "у Кузнецова нет доступа к объекту привязанного");
+    assert.status(denied, 403, "TARGET_NO_ACCESS", "у Кузнецова нет доступа к объекту привязанного");
     assert.eq(denied.body.messageKey, "workflow.guard.target_no_access_linked", `причина: ${denied.body.message}`);
     assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     const closed = await env.card(office);
@@ -2166,7 +2170,7 @@
     const due = (await env.card(mall.guid)).timer.dueAt;
     // Вручную Кузнецову (только ТЦ) нельзя: нет доступа к привязанному
     const manual = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
-    assert.status(manual, 403, "GUARD_FAILED", "ручная передача без доступа к привязанному");
+    assert.status(manual, 403, "TARGET_NO_ACCESS", "ручная передача без доступа к привязанному");
     // Норматив закрытия истёк — эскалация Кузнецову: доступа к офису у него нет
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 10);
     const primary = await env.card(mall.guid);

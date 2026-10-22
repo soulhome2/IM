@@ -632,8 +632,10 @@ window.IM_WORKFLOW = {
           "placeholderKey": "workflow.form.transfer.field.targetId.placeholder",
           "source": "transferTargets",
           "optionExpr": "!isSelf(me, option) && option != addressee(incident) && canAccept(option, incident, '')",
+          "enabledExpr": "incidents.all(e, e.linkedTo != incident.id || isDone(e) || hasAccess(option, e))",
+          "disabledKey": "workflow.guard.target_no_access_linked",
           "defaultExpr": "lastTransferTarget(me)",
-          "$comment": "§8.1. Адресаты — без себя и своих групп, без текущего адресата, только кто может принять (canAccept — с правом «Принимать» и доступом к объекту); по умолчанию — последний адресат оператора"
+          "$comment": "§8.1. Адресаты — без себя и своих групп, без текущего адресата, только кто может принять (canAccept — с правом «Принимать» и доступом к объекту); без доступа к объектам привязанных — в списке, но недоступен с причиной, как условие targetHasAccessToLinked (§11, BUG-88); по умолчанию — последний адресат оператора"
         },
         {
           "name": "comment",
@@ -4878,6 +4880,7 @@ window.IM_WORKFLOW = {
       },
       {
         "fn": "targetHasAccessToLinked",
+        "errorCode": "TARGET_NO_ACCESS",
         "args": [],
         "argTypes": {},
         "expr": "form.targetId == '' || incidents.all(e, e.linkedTo != incident.id || isDone(e) || hasAccess(form.targetId, e))",

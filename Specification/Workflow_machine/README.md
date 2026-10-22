@@ -411,7 +411,7 @@ POST /operator/incidents/transitions/close/bulk   { incidentGuids, formValues }
 | `403` | `LIMIT_EXCEEDED` | исчерпан лимит активных или отложенных: `withinActiveLimit`, `withinHoldLimit` |
 | `403` | `AGENT_NOT_READY` | оператор на перерыве или вышел: `agentReady` |
 | `403` | `TRANSFER_TO_SELF_FORBIDDEN` | передача себе или своей дежурной группе: `targetIsNotSelf` |
-| `403` | `TARGET_NO_ACCESS` | у адресата нет доступа к объекту инцидента (§8.1): `targetHasAccess` |
+| `403` | `TARGET_NO_ACCESS` | у адресата нет доступа к объекту инцидента (§8.1): `targetHasAccess`, или к объектам его привязанных (§11): `targetHasAccessToLinked` |
 | `403` | `TARGET_CANNOT_ACCEPT` | адресат не может принять: нет права `incident:accept` или доступа к объекту, у группы — ни у одного участника (§8.1): `targetCanAccept` |
 | `403` | `REQUIRED_STEPS_NOT_FILLED` | набор обязательных шагов не выполнен — сценарий не пройден до конца (§14.5): `requiredStepsFilled`, у «Закрыть» с «Обработан» — `closeResultAllowed` |
 | `403` | `REOPEN_WINDOW_EXPIRED` | истёк срок переоткрытия: `withinReopenWindow` |
