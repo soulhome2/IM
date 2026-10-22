@@ -37,8 +37,9 @@ const MUTATIONS = [
   ["core-window-no-breach", "ядро: ручное действие в окне отменяет переход по таймеру без нарушения (RULE-63, BUG-62)", "windowBreach(t.id, { ...ctx(DISPATCHER, DISPATCHER, NO_FORM, \"\"), deadline: before.timers.get(t.timer).due, before: before }, i, w)", "w", "core.qnt"],
   ["core-system-waits-window", "ядро: системный переход ждёт конца окна, переход по таймеру не идёт первым (RULE-67)", "t.trigger == \"system\" or sys or moment(t, i) + GRACE_MS <= clock", "t.trigger == \"system\" or moment(t, i) + GRACE_MS <= clock", "core.qnt"],
   ["core-continues-ignored", "ядро: «Передать», «Отклонить» в окне отменяют автоэскалацию, хотя реакция продолжается (RULE-83)", "        not(CONTINUES_ON.get(t.timer).contains(tid)),\n", "        true,\n", "core.qnt"],
-  ["core-order-ignored", "ядро: первым — не тот, чей момент раньше, а первый по списку (RULE-41)", "if (not(eligible(t, i, sys))) best\n      else if (best.length() == 0 or moment(t, i) < moment(best[0], i)) [t]", "if (not(eligible(t, i, sys))) best\n      else if (best.length() == 0) [t]", "core.qnt"],
-  ["core-idle-before-change", "ядро: переход по молчанию раньше последнего перехода инцидента (BUG-76)", "if (m > changedAt.get(i)) m else changedAt.get(i)", "m", "core.qnt"],
+  // Порядка по моменту (RULE-41) и момента молчания не раньше последнего перехода (BUG-76) здесь нет: они нужны
+  // после простоя сервиса, а модель шагает от события к событию — в её шагах порча ничего не меняет (20 000
+  // историй). Порядок проверяет мутация кода tick-array-order и тесты API «прыжок часов»
   ["core-merge-primary-no-window", "ядро: у основного, которого берут при объединении, окно не учитывается (BUG-62)", "val pc = if (taking) canceledBy(TAKE_WITH, p) else []", "val pc = if (false) canceledBy(TAKE_WITH, p) else []", "core.qnt"],
   ["resume-refires", "отработанный норматив при возврате в работу — новый срок (RULE-50)", `${T}.fired != 0 ? ${T}.fired : now + left`, "false ? 0 : now + left"],
 ];

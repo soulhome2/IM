@@ -165,7 +165,7 @@ MUTATIONS = [
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
     ("level-current-addressee-ignored", "workflow.js", "l.target != addressee(x) && canAcceptNow(", "canAcceptNow(", "api"),
     ("level-group-owner-counted", "workflow.js", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')", "api"),
-    ("group-accept-except-ignored", "workflow.js", "m != except && canAcceptPerson(m, x)", "canAcceptPerson(m, x)", "api"),
+    ("group-accept-except-ignored", "workflow.js", "m != except && signedIn(m) && canAcceptPerson(m, x)", "signedIn(m) && canAcceptPerson(m, x)", "api"),
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "          at = runAt;\n          let facts = null;", "          at = null;\n          let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),

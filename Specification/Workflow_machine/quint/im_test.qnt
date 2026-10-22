@@ -141,6 +141,16 @@ module im_test {
       .expect(lastAction.name == "escalation_ceiling" and x1.owner == "b" and breachesOf(x1, "reaction") == 1)
       .expect(inv)
 
+  // RULE-100: уровень вышедшего адресата, у которого в дежурной группе принять некому (у a группы нет), пропускается
+  run escalationSkipsSignedOutTest =
+    initWith(BASE, withLevel1(BASE_SETTINGS, "a"))
+      .then(signOut("a"))
+      .then(newFire("i1"))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "auto_escalate" and x1.owner == "" and x1.assignmentGroup == GROUP and x1.escalationLevel == 2)
+      .expect(inv)
+
   // RULE-93 по нормативу закрытия: уровень 1 — сам владелец, пропущен
   run resolutionEscalateSkipsOwnerTest =
     initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) },
@@ -490,5 +500,32 @@ module im_test {
       .then(toggleAccept("b"))
       .then(fire("i1"))
       .expect(lastAction.name == "addressee_cannot_accept" and x1.state == "new")
+      .expect(inv)
+
+  /* ===== 6. Ядро: окно после дедлайна (§10.1, RULE-63) ===== */
+
+  // Без автоэскалации реакция по дедлайну записывает нарушение (reaction_overdue): его окно и проверяется
+  pure val NO_ESCALATION: Settings = { ...BASE_SETTINGS, escalation: { ...BASE_SETTINGS.escalation, enabled: false } }
+
+  // «Взять» в окне после дедлайна выигрывает у таймера, но нарушение записано (RULE-63)
+  run windowClaimBreachTest =
+    initWith(BASE, NO_ESCALATION)
+      .then(newFire("i1"))
+      .then(jump(due("i1", "reaction") + 1))
+      .expect(not(urgent))
+      .then(act("a", "claim", "i1"))
+      .expect(x1.state == "in_progress" and x1.owner == "a" and breachesOf(x1, "reaction") == 1)
+      .then(jump(clock + GRACE_MS))
+      .expect(not(urgent))
+      .expect(inv)
+
+  // «Взять в работу одним» в окне: основного берут — его нарушение тоже не теряется (BUG-62)
+  run mergeWindowPrimaryBreachTest =
+    initWith(BASE, NO_ESCALATION)
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(jump(due("i1", "reaction") + 1))
+      .then(merge("a", "i1", Set("i2")))
+      .expect(x1.state == "in_progress" and breachesOf(x1, "reaction") == 1 and breachesOf(x2, "reaction") == 1)
       .expect(inv)
 }
