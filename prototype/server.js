@@ -1145,6 +1145,8 @@
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
       if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.merge.too_few"]);
+      // Лимит выборки — как у массовых действий (§11, BUG-83); null — без ограничения
+      if (tooLarge(list)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
       // Одно — просто «Взять»; от двух — не меньше bulk.minItems перехода объединения машины
       const min = (W.transitions.find((t) => t.bulk && t.bulk.mode === "merge") || { bulk: {} }).bulk.minItems;
       if (list.length > 1 && list.length < min) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: min }]);
@@ -1168,6 +1170,8 @@
       return Object.assign(reply(), { again: reply });
     }
 
+    // Больше лимита выборки (§11, RULE-69): null — без ограничения
+    const tooLarge = (list) => W.limits.maxBulk != null && list.length > W.limits.maxBulk;
     function selectionActions(list) {
       const manual = W.transitions.filter((t) => t.trigger === "manual");
       return manual.map((tr) => {
@@ -1186,6 +1190,7 @@
           // перехода объединения машины (sameScenarioAsPrimary), его причина — с номером того, кто мешает (ARCH-08 в13)
           const primary = list.length ? pickPrimary(list) : null;
           if (list.length > 1 && list.length < mode.minItems) reason = ["workflow.error.selection_too_small", { n: mode.minItems }];
+          else if (tooLarge(list)) reason = ["workflow.error.selection_too_large", { n: W.limits.maxBulk }];
           else if (primary) {
             // Одно отмеченное — просто «Взять»; несколько — как одно. Делать нечего — недоступно.
             // Не проходит — причина того, кто мешает, с его номером
@@ -1198,6 +1203,7 @@
         } else if (list.length < 2) ok = each;
         // Меньше bulk.minItems машины — на выборке недоступно
         else if (mode.allowed && list.length < mode.minItems) reason = ["workflow.error.selection_too_small", { n: mode.minItems }];
+        else if (mode.allowed && tooLarge(list)) reason = ["workflow.error.selection_too_large", { n: W.limits.maxBulk }];
         else if (mode.allowed && mode.mode === "each_allowed") ok = each;
         // Причина — одного такого отмеченного: одно отмеченное — как в карточке, несколько — с его номером
         if (!ok && !reason && failed && failed[1].why && (mode.allowed || list.length < 2)) {

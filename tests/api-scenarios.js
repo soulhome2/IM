@@ -1240,6 +1240,20 @@
     assert.status(await env.call("POST", "/operator/incidents/transitions/close/bulk", body(guids.slice(0, max))), 200, null, `${max} — в пределах лимита`);
   });
 
+  test("Лимит выборки — и у «Взять в работу» на выборке: больше maxBulk — на панели недоступно, объединение — 422 (§11, BUG-83)", async () => {
+    const max = 2;
+    const env = await makeEnv({ workflowPatch: { limits: { maxBulk: max } } });
+    const fresh = (await env.all("open")).filter((e) => e.state === "new");
+    const three = fresh.slice(0, max + 1).map((e) => e.guid);
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: three });
+    const merge = sel.actions.find((a) => a.id === "merge");
+    assert.eq([merge.enabled, merge.reasonKey], [false, "workflow.error.selection_too_large"], "на панели — недоступно, причина — размер выборки");
+    const over = await env.call("POST", "/operator/incidents/merge", { incidentGuids: three });
+    assert.status(over, 422, "BULK_SELECTION_INVALID", `${max + 1} — больше лимита`);
+    assert.eq(over.body.messageKey, "workflow.error.selection_too_large", "причина — размер выборки");
+    assert.eq((await env.all("open")).filter((e) => three.includes(e.guid)).map((e) => e.state), ["new", "new", "new"], "ничего не взято");
+  });
+
   /* ===== Выборка (§11) ===== */
 
   test("Внешние эффекты перехода — в ответе со статусом queued; себе и некому уведомления нет (§14.2, BUG-30)", async () => {

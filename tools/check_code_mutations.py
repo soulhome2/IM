@@ -398,6 +398,9 @@ MUTATIONS = [
     # Лимиты без ограничения (§10.2, §11, RULE-69) и проверка лимита выборки на сервере (BUG-40)
     ("active-limit-null-blocks", "workflow.js", "\"expr\": \"limits.maxActive == 0 || size(", "\"expr\": \"size(", "api"),
     ("bulk-limit-unchecked", "server.js", "if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(", "if (false) return problem(", "api"),
+    # Лимит выборки и у «Взять в работу» на выборке (BUG-83)
+    ("merge-limit-unchecked", "server.js", "if (tooLarge(list)) return problem(", "if (false) return problem(", "api"),
+    ("selection-merge-limit-ignored", "server.js", "else if (tooLarge(list)) reason", "else if (false) reason", "api"),
     ("selection-truncated-on-null", "server.js", "const max = W.limits.maxBulk;\n      let list = [];", "const max = W.limits.maxBulk ?? 0;\n      let list = [];", "api"),
     ("ui-status-always-of-n", "app.js", 'LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t(', "t(", "ui"),
     ("ui-null-key-ignored", "app.js", 'if (v == null) return nullKey ? te(nullKey) : "—";', 'if (v == null) return "—";', "ui"),
