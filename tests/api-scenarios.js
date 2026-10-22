@@ -1785,6 +1785,24 @@
     assert.ok(two.actions.find((a) => a.id === "close").enabled, "«Закрыть» доступна обоим");
   });
 
+  test("«Взять в работу» на панели выборки — только если относится к кому-то из отмеченных; свои отложенные — бледная с причиной словами кнопки (§11.1, RULE-78, BUG-90)", async () => {
+    const env = await makeEnv();
+    const merge = async (guids) => (await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: guids })).actions.find((a) => a.id === "merge");
+    const closed = (await env.all("all")).filter((e) => e.state === "closed").slice(0, 2).map((e) => e.guid);
+    assert.eq(closed.length, 2, "в наборе два закрытых");
+    const none = await merge(closed);
+    assert.ok(!none || !none.visible, "два закрытых — «Взять в работу» не показана");
+    // Только свои отложенные: основного нет — видна, недоступна, причина про «Взять в работу»
+    const news = (await env.all("open")).filter((e) => e.state === "new").slice(0, 2).map((e) => e.guid);
+    for (const g of news) {
+      assert.status(await env.act(g, "claim", {}, "queue"), 200, null, "взять");
+      assert.status(await env.act(g, "hold", { reasonId: "third_party", comment: "тест" }), 200, null, "отложить");
+    }
+    const held = await merge(news);
+    assert.ok(held && held.visible && !held.enabled, "свои отложенные — видна и недоступна");
+    assert.ok(/Взять в работу/.test(held.reason), `причина словами кнопки: ${held.reason}`);
+  });
+
   test("Взять в работу как одно: основной — самый срочный новый, взят мной; привязанные пропали из списков; лимит — одна единица; сценарии разные — нельзя", async () => {
     const env = await makeEnv();
     // Пожары разной срочности: основной — самый срочный, а не первый попавшийся

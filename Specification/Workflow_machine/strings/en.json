@@ -96,7 +96,7 @@
   "workflow.journal.group_deadline": "Resolution deadline now follows {number}: earlier than its own",
   "workflow.journal.merged_in": "Incidents attached: {ids}",
   "workflow.journal.merged_in_more": "Incidents attached: {ids} and {more} more",
-  "workflow.guard.merge_primary": "You can merge into an open incident that is new or yours in progress",
+  "workflow.guard.merge_primary": "To “Take into work”, select a new incident or one of yours in progress — the others will join it",
   "workflow.guard.primary_not_editable": "Only whoever handles the primary incident can detach",
   "workflow.guard.primary_open": "The primary incident is still open",
   "workflow.guard.primary_addressee_access": "The primary addressee's access does not match",

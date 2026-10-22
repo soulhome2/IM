@@ -1183,7 +1183,9 @@
         const each = avail.every(([, a]) => a.ok);
         // Сначала тот, к кому действие относится, но не проходит (лимит, права), потом — не в том состоянии
         const failed = avail.find(([, a]) => !a.ok && !a.hidden) || avail.find(([, a]) => !a.ok);
-        const visible = mode.mode === "merge" || avail.some(([, a]) => !a.hidden);
+        // «Взять в работу» относится к отмеченному в состоянии, откуда объединяют, — и к своему отложенному, у
+        // которого основного нет (RULE-78): на панели — с причиной. Два закрытых — не показана (§11.1, BUG-90)
+        const visible = mode.mode === "merge" ? avail.some(([, a]) => !a.notFrom) : avail.some(([, a]) => !a.hidden);
         let ok = false;
         let reason = null;
         if (mode.mode === "merge") {
