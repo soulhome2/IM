@@ -629,6 +629,30 @@
     assert.eq(res.body.incident.result, "уборщик", "комментарий");
   });
 
+  test("Значение поля-списка проверяет сервер, а не только форма: вне вариантов или в невидимом поле — 422 FORM_FIELD_INVALID (ARCH-09)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    // Причина удержания: системную ставит только система (setBy, §2.2), неизвестной нет в справочнике (§4, правило 7)
+    for (const reasonId of ["break", "bogus"]) {
+      const res = await env.act(inc.guid, "hold", { reasonId, comment: "тест" });
+      assert.status(res, 422, "FORM_FIELD_INVALID", `«Отложить» с причиной ${reasonId}`);
+      assert.eq((await env.card(inc.guid)).state, "in_progress", `${reasonId}: не отложен`);
+    }
+    // Причина сбоя — только у «Массового сбоя»: у ложной тревоги поля нет
+    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "тест", causeId: "power" });
+    assert.status(res, 422, "FORM_FIELD_INVALID", "«Ложная тревога» с причиной сбоя");
+    // Передать тому, у кого инцидент уже есть (§8.1, «исключение владельца»), — и одиночно, и выборкой
+    const foreign = await env.guidOf("INC-1848");
+    const before = await env.card(foreign);
+    const owner = before.owner.id;
+    assert.status(await env.act(foreign, "transfer", { targetId: owner, comment: "тест" }), 422, "FORM_FIELD_INVALID", "передать владельцу");
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: [foreign], formValues: { targetId: owner, comment: "тест" } });
+    assert.eq([bulk.status, bulk.body.succeeded.length, bulk.body.failed.map((f) => f.problem.code)], [200, 0, ["FORM_FIELD_INVALID"]], "выборкой — тоже нет");
+    const c = await env.card(foreign);
+    assert.eq([c.owner.id, c.transferCount, c.journal.length], [owner, before.transferCount, before.journal.length], "владелец тот же, передач и записей не прибавилось");
+  });
+
   test("Видно ли поле формы и обязательно ли — таблицей сервера по выбранному варианту (fieldRules, CEL.md)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

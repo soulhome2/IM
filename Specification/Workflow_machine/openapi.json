@@ -2331,6 +2331,7 @@
               "PRECONDITION_REQUIRED",
               "LIMIT_EXCEEDED",
               "FORM_FIELD_REQUIRED",
+              "FORM_FIELD_INVALID",
               "AGENT_NOT_READY",
               "TRANSFER_TO_SELF_FORBIDDEN",
               "TARGET_NO_ACCESS",
@@ -4598,7 +4599,7 @@
           },
           "formValues": {
             "type": "object",
-            "description": "Значения полей формы перехода. Имена полей — из `forms[].fields[].name` активной схемы.",
+            "description": "Значения полей формы перехода. Имена полей — из `forms[].fields[].name` активной схемы. Значение поля-списка сервер проверяет по тем же правилам, что варианты формы: поле видно (`visibleExpr`), значение есть среди вариантов (источник и `optionExpr`) и доступно (`enabledExpr`); иначе — `422 FORM_FIELD_INVALID` (ARCH-09).",
             "properties": {
               "targetId": {
                 "type": "string",

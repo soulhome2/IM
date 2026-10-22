@@ -1285,6 +1285,7 @@
     "workflow.error.transition_failed": { "vars": ["error"] },
     "workflow.error.reason_required": { "vars": [] },
     "workflow.error.field_required": { "vars": ["name"] },
+    "workflow.error.field_invalid": { "vars": ["name"] },
     "workflow.error.unknown_action": { "vars": [] },
     "workflow.error.precondition_required": { "vars": [] },
     "workflow.error.version_conflict": { "vars": ["state"] },

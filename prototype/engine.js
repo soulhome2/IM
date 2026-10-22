@@ -343,16 +343,27 @@
       };
     }
 
-    // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника
+    // Проверка формы (§14.8: form.*): обязательные поля и комментарий по строке справочника. Значение поля-списка —
+    // по тем же правилам, что варианты формы (ARCH-09): поле видно, значение — среди вариантов (источник, optionExpr)
+    // и доступно (enabledExpr). Иначе — code: значение недопустимо, а не пропущено
     function validateForm(tr, ev, form, surface) {
       const f = tr.form ? forms[tr.form] : null;
       if (!f) return null;
       const scope = celScope(ev, { form, surface });
       for (const field of f.fields) {
         const v = form[field.name];
-        if (fieldRule(f, field, scope).required && (v == null || String(v).trim() === "")) {
-          return field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: [field.labelKey] }];
+        const empty = v == null || String(v).trim() === "";
+        const rule = fieldRule(f, field, scope);
+        if (rule.required && empty) {
+          return { why: field.kind === "text" ? ["workflow.error.reason_required"] : ["workflow.error.field_required", { name: [field.labelKey] }] };
         }
+        if (!field.source || empty) continue;
+        const offered =
+          rule.visible &&
+          candidates(field, ev).some((o) => o.id === v) &&
+          (field.optionExpr == null || ruleOf(fieldAt(f, field, "optionExpr"), scope, v)) &&
+          (field.enabledExpr == null || ruleOf(fieldAt(f, field, "enabledExpr"), scope, v));
+        if (!offered) return { why: ["workflow.error.field_invalid", { name: [field.labelKey] }], code: "FORM_FIELD_INVALID" };
       }
       return null;
     }
@@ -364,7 +375,7 @@
       const a = availability(id, ev, { form, surface: opts && opts.surface });
       if (!a.ok) return { ok: false, why: a.why };
       const bad = validateForm(tr, ev, form, opts && opts.surface);
-      if (bad) return { ok: false, why: bad };
+      if (bad) return { ok: false, why: bad.why, code: bad.code };
       const canceled = windowBefore(ev, id);
       const applied = applyEffects(tr, ev, form, ME);
       if (!applied.ok) {
@@ -674,7 +685,7 @@
         const a = availability(id, ev, { form, surface: opts && opts.surface });
         if (!a.ok) return { ok: false, why: a.why, guard: a.guard, notFrom: a.notFrom, ev };
         const bad = validateForm(tr, ev, form || {}, opts && opts.surface);
-        if (bad) return { ok: false, why: bad, ev };
+        if (bad) return { ok: false, why: bad.why, code: bad.code, ev };
       }
       const canceled = list.map((ev) => windowBefore(ev, id));
       const applied = applyAll(tr, list, form || {}, ME);

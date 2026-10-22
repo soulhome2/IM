@@ -171,6 +171,7 @@ MUTATIONS = [
     ("selfTarget", "передача себе и своей группе разрешена", transfer_to_self),
     ("groupTarget", "автоэскалация уровня 2 — на группу оператора: адресат — группа, принимает её участник", escalate_to_my_group),
     ("transferEmpty", "у адресата передачи нет placeholder — форма выбирает первого сама", transfer_without_placeholder),
+    ("holdSystemReason", "в «Отложить» доступна системная причина «Перерыв» — и сервер её принимает (ARCH-09)", lambda w: next(f for f in next(x for x in w["forms"] if x["id"] == "hold")["fields"] if f["name"] == "reasonId").update(optionExpr="holdReasons.exists(r, r.id == option)")),
     ("closeEmpty", "у результата закрытия нет placeholder — форма выбирает первый результат сама", close_without_placeholder),
     ("groupBadge", "бейдж передачи группе → «Группе на принятие»", group_badge),
     ("takeoverTarget", "«Перехватить» и адресату: переданное моей группе можно перехватить", lambda w: transition(w, "takeover").update(guards=[g for g in transition(w, "takeover")["guards"] if g["fn"] != "isNotTarget"])),

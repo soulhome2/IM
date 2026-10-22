@@ -59,7 +59,10 @@ MUTATIONS = [
     ("resume-restarts", "workflow.js", "\"value\": \"incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000\"", "\"value\": \"timerSec(incident, timerId, '') * 1000\"", "api"),
     ("deadline-fires-repeatedly", "workflow.js", "t.due != 0 && t.due <= now && t.fired != t.due", "t.due != 0 && t.due <= now", "api"),
     ("if-person-any", "workflow.js", "id != '' && !isGroup(id) ? id : ''", "id", "api"),
-    ("form-not-validated", "engine.js", "if (fieldRule(f, field, scope).required && (v == null || String(v).trim() === \"\")) {", "if (false) {", "api"),
+    ("form-not-validated", "engine.js", "if (rule.required && empty) {", "if (false) {", "api"),
+    # Значение поля-списка — по правилам формы машины (ARCH-09)
+    ("form-list-value-unchecked", "engine.js", "if (!offered) return {", "if (false) return {", "api"),
+    ("form-list-hidden-accepted", "engine.js", "          rule.visible &&\n", "", "api"),
     ("form-comment-required-ignored", "workflow.js", "\"requiredExpr\": \"closeResults.exists(i, i.id == form.resultId && i.commentRequired)\"", "\"requiredExpr\": \"false\"", "api"),
     ("form-cause-always-visible", "workflow.js", "\"visibleExpr\": \"form.resultId == 'mass'\"", "\"visibleExpr\": \"true\"", "api"),
     ("form-transfer-offers-no-access", "workflow.js", " && canAccept(option, incident, '')\"", "\"", "api"),

@@ -3707,6 +3707,11 @@ window.IM_WORKFLOW = {
         "name"
       ]
     },
+    "workflow.error.field_invalid": {
+      "vars": [
+        "name"
+      ]
+    },
     "workflow.error.unknown_action": {
       "vars": []
     },

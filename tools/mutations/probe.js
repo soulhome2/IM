@@ -170,6 +170,25 @@
       const ids = [...field("resultId").querySelectorAll("option")].map((o) => o.value).filter(Boolean);
       return [ids.length > 0 && !ids.includes("false_alarm"), "варианты формы «Закрыть»: " + ids.join(", ")];
     },
+    // Варианты поля — optionExpr машины, и сервер проверяет присланное по нему же (ARCH-09): системная причина
+    // доступна в форме — «Отложить» с ней выполняется
+    async holdSystemReason() {
+      const id = await claimFirst();
+      await click(anyBtn(root(), "hold"));
+      const sel = field("reasonId");
+      const has = [...sel.querySelectorAll("option")].some((o) => o.value === "break");
+      if (has) {
+        sel.value = "break";
+        sel.dispatchEvent(new Event("change"));
+      }
+      await confirm("проба");
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("mine");
+      const item = window.IM_WORKFLOW.reasonCatalogs.hold.items.find((i) => i.id === "break");
+      const badge = row(id) && row(id).querySelector(".badge");
+      const text = badge ? badge.textContent : "";
+      return [has && text.includes(window.IM_STRINGS.ru[item.labelKey]), "«Перерыв» в форме: " + has + ", бейдж: " + text];
+    },
     async closeEmpty() {
       await claimFirst();
       await click(anyBtn(root(), "close"));

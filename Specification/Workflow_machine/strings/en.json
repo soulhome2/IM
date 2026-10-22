@@ -74,6 +74,7 @@
   "workflow.error.transition_failed": "Transition not applied: {error}",
   "workflow.error.reason_required": "Give a reason — the field is mandatory",
   "workflow.error.field_required": "Fill in “{name}”",
+  "workflow.error.field_invalid": "This value can’t be chosen for “{name}”",
   "workflow.error.unknown_action": "Unknown action",
   "workflow.category.linked": "Linked",
   "workflow.state.linked": "Linked",

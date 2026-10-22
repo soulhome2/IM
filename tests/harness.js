@@ -180,7 +180,14 @@
       const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : enabled[0] && enabled[0].id;
       if (pick) values[name] = pick;
     });
-    return Object.assign(values, overrides || {});
+    Object.assign(values, overrides || {});
+    // Невидимое поле не отправляется (README машины, «Формы»): видно ли — по fieldRules и выбранному значению.
+    // Заданное тестом явно остаётся
+    Object.entries((action && action.fieldRules) || {}).forEach(([name, r]) => {
+      const rule = r.dependsOn ? r.byValue[values[r.dependsOn] || ""] || r : r;
+      if (rule.visible === false && !(overrides && name in overrides)) delete values[name];
+    });
+    return values;
   }
 
   // Ответ, который подходит к шагу (машина сценариев, профиль МИ): вариант по счёту (у Select — в каждом списке),

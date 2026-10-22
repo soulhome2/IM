@@ -1126,7 +1126,7 @@
       if (!check.ok) return guardProblem(check);
       const before = ev.log.length;
       const r = engine.run(id, ev, formValues, { surface });
-      if (!r.ok) return problem(422, "FORM_FIELD_REQUIRED", r.why);
+      if (!r.ok) return problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
       touch([ev]);
       emitTransition(ev, id, ME, r.facts);
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
@@ -1425,7 +1425,7 @@
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
           const r = engine.runAll(detach.id, linked, {}, { surface: "card" });
-          if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : problem(422, "FORM_FIELD_REQUIRED", r.why);
+          if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
           touch(linked);
           linked.forEach((ev, i) => emitTransition(ev, detach.id, ME, r.facts[i]));
           const reply = () => ({ status: 200, body: card(primary) });

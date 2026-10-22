@@ -74,6 +74,7 @@
   "workflow.error.transition_failed": "Переход не выполнен: {error}",
   "workflow.error.reason_required": "Укажите причину — поле обязательно",
   "workflow.error.field_required": "Заполните поле «{name}»",
+  "workflow.error.field_invalid": "Такое значение поля «{name}» выбрать нельзя",
   "workflow.error.unknown_action": "Неизвестное действие",
   "workflow.category.linked": "Привязанные",
   "workflow.state.linked": "Привязан",
