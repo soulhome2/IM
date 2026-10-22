@@ -1858,6 +1858,7 @@
     assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     const closed = await env.card(office);
     assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "привязанный закрыт результатом основного, связь — история");
+    assert.eq([closed.owner && closed.owner.id, closed.ownership], [ME, "owner"], "владелец закрытого — тот, кто закрыл основной (§2.1, BUG-89)");
     assert.eq(closed.journal[closed.journal.length - 1].templateKey, "workflow.journal.close_linked", "в журнале — закрыто вместе с основным");
     assert.status(await env.act(mall, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть основной");
     assert.eq((await env.card(office)).state, "closed", "привязанный остался закрытым");

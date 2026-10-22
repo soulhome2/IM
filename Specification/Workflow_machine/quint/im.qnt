@@ -2443,32 +2443,33 @@ module im {
       val w609 = { ...w608, inc: w608.inc.set(iid, { ...w608.inc.get(iid), closeCauseId: ps_606[0].closeCauseId }) }
       val w610 = { ...w609, inc: w609.inc.set(iid, { ...w609.inc.get(iid), result: ps_606[0].result }) }
       val w611 = { ...w610, inc: w610.inc.set(iid, { ...w610.inc.get(iid), closedBy: ps_606[0].closedBy }) }
-      w611
+      val w612 = { ...w611, inc: w611.inc.set(iid, { ...w611.inc.get(iid), owner: ps_606[0].closedBy }) }
+      w612
     } else w0
     w607
   }
 
   def e_close_linked_1(w0: World, c: Ctx, iid: str): World = {
-    val w612 = if (not(timerDef("resolution").pausable)) {
-      val w613 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w614 = { ...w613, inc: w613.inc.set(iid, { ...w613.inc.get(iid), timers: w613.inc.get(iid).timers.set("resolution", { ...w613.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w614
-    } else {
-      val w615 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w616 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w617 = { ...w616, inc: w616.inc.set(iid, { ...w616.inc.get(iid), timers: w616.inc.get(iid).timers.set("resolution", { ...w616.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w618 = { ...w617, inc: w617.inc.set(iid, { ...w617.inc.get(iid), timers: w617.inc.get(iid).timers.set("resolution", { ...w617.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w618
-    } else w0
+    val w613 = if (not(timerDef("resolution").pausable)) {
+      val w614 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w615 = { ...w614, inc: w614.inc.set(iid, { ...w614.inc.get(iid), timers: w614.inc.get(iid).timers.set("resolution", { ...w614.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
       w615
+    } else {
+      val w616 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w617 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w618 = { ...w617, inc: w617.inc.set(iid, { ...w617.inc.get(iid), timers: w617.inc.get(iid).timers.set("resolution", { ...w617.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w619 = { ...w618, inc: w618.inc.set(iid, { ...w618.inc.get(iid), timers: w618.inc.get(iid).timers.set("resolution", { ...w618.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w619
+    } else w0
+      w616
     }
-    w612
+    w613
   }
 
   def e_close_linked_2(w0: World, c: Ctx, iid: str): World = {
-    val value_619 = c.now
-    val w620 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_619 }) }
-    w620
+    val value_620 = c.now
+    val w621 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_620 }) }
+    w621
   }
 
   def e_close_linked_3(w0: World, c: Ctx, iid: str): World = {
@@ -2496,58 +2497,58 @@ module im {
 
   def ok_linked_lost_access(c: Ctx, iid: str): bool = all {
     Set("linked").contains(world.inc.get(iid).state),
-    { val ps_621 = byId(incs(world), world.inc.get(iid).linkedTo)  { val who_622 = (if (((ps_621.length() > 0) and not(isDone(ps_621[0])))) addressee(ps_621[0]) else "")  ((who_622 != "") and (hasAccess(who_622, world.inc.get(iid)) == false)) } },
+    { val ps_622 = byId(incs(world), world.inc.get(iid).linkedTo)  { val who_623 = (if (((ps_622.length() > 0) and not(isDone(ps_622[0])))) addressee(ps_622[0]) else "")  ((who_623 != "") and (hasAccess(who_623, world.inc.get(iid)) == false)) } },
   }
 
   def e_linked_lost_access_0(w0: World, c: Ctx, iid: str): World = {
-    val ps_623 = byId(incs(w0), w0.inc.get(iid).linkedTo)
-    val w624 = if (((ps_623.length() > 0) and (leftOf(ps_623[0], "resolution", c.now) >= 0))) {
-      val w625 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w626 = { ...w625, inc: w625.inc.set(iid, { ...w625.inc.get(iid), timers: w625.inc.get(iid).timers.set("resolution", { ...w625.inc.get(iid).timers.get("resolution"), left: leftOf(ps_623[0], "resolution", c.now) }) }) }
-      val w627 = { ...w626, inc: w626.inc.set(iid, { ...w626.inc.get(iid), timers: w626.inc.get(iid).timers.set("resolution", { ...w626.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w628 = if ((leftOf(ps_623[0], "resolution", c.now) == 0)) {
-      val w629 = { ...w627, inc: w627.inc.set(iid, { ...w627.inc.get(iid), timers: w627.inc.get(iid).timers.set("resolution", { ...w627.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_623[0], "resolution", c.now)) ps_623[0].timers.get("resolution").fired else ps_623[0].timers.get("resolution").due) }) }) }
+    val ps_624 = byId(incs(w0), w0.inc.get(iid).linkedTo)
+    val w625 = if (((ps_624.length() > 0) and (leftOf(ps_624[0], "resolution", c.now) >= 0))) {
+      val w626 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w627 = { ...w626, inc: w626.inc.set(iid, { ...w626.inc.get(iid), timers: w626.inc.get(iid).timers.set("resolution", { ...w626.inc.get(iid).timers.get("resolution"), left: leftOf(ps_624[0], "resolution", c.now) }) }) }
+      val w628 = { ...w627, inc: w627.inc.set(iid, { ...w627.inc.get(iid), timers: w627.inc.get(iid).timers.set("resolution", { ...w627.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w629 = if ((leftOf(ps_624[0], "resolution", c.now) == 0)) {
+      val w630 = { ...w628, inc: w628.inc.set(iid, { ...w628.inc.get(iid), timers: w628.inc.get(iid).timers.set("resolution", { ...w628.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_624[0], "resolution", c.now)) ps_624[0].timers.get("resolution").fired else ps_624[0].timers.get("resolution").due) }) }) }
+      w630
+    } else w628
       w629
-    } else w627
-      w628
     } else w0
-    w624
+    w625
   }
 
   def e_linked_lost_access_1(w0: World, c: Ctx, iid: str): World = {
-    val w630 = if ((w0.inc.get(iid).linkedTo != "")) {
-      val ps_631 = byId(incs(w0), w0.inc.get(iid).linkedTo)
-      val w632 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
-      val w633 = { ...w632, inc: w632.inc.set(iid, { ...w632.inc.get(iid), linkedTo: "" }) }
-      val w634 = { ...w633, inc: w633.inc.set(iid, { ...w633.inc.get(iid), linkedAt: 0 }) }
-      val w635 = if (((ps_631.length() > 0) and ("workflow.journal.linked_lost_access" != ""))) w634 else w634
-      val w636 = if (("workflow.journal.linked_lost_access_primary" != "")) {
-      val w637 = ps_631.foldl([], (acc, x640) => acc.append(x640.id)).foldl(w635, (wf638, pId639) => wf638)
+    val w631 = if ((w0.inc.get(iid).linkedTo != "")) {
+      val ps_632 = byId(incs(w0), w0.inc.get(iid).linkedTo)
+      val w633 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
+      val w634 = { ...w633, inc: w633.inc.set(iid, { ...w633.inc.get(iid), linkedTo: "" }) }
+      val w635 = { ...w634, inc: w634.inc.set(iid, { ...w634.inc.get(iid), linkedAt: 0 }) }
+      val w636 = if (((ps_632.length() > 0) and ("workflow.journal.linked_lost_access" != ""))) w635 else w635
+      val w637 = if (("workflow.journal.linked_lost_access_primary" != "")) {
+      val w638 = ps_632.foldl([], (acc, x641) => acc.append(x641.id)).foldl(w636, (wf639, pId640) => wf639)
+      w638
+    } else w636
       w637
-    } else w635
-      w636
     } else {
-      val w641 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
-      val w642 = { ...w641, inc: w641.inc.set(iid, { ...w641.inc.get(iid), linkedAt: 0 }) }
-      w642
+      val w642 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
+      val w643 = { ...w642, inc: w642.inc.set(iid, { ...w642.inc.get(iid), linkedAt: 0 }) }
+      w643
     }
-    w630
+    w631
   }
 
   def e_linked_lost_access_2(w0: World, c: Ctx, iid: str): World = {
-    val w643 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w644 = if (timerDef("reaction").startsOnce) {
-      val w645 = ec_resumeTimer(w0, c, iid, "reaction")
-      w645
+    val w644 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w645 = if (timerDef("reaction").startsOnce) {
+      val w646 = ec_resumeTimer(w0, c, iid, "reaction")
+      w646
     } else {
-      val sec_646 = timerSec(w0.inc.get(iid), "reaction", "")
-      val w647 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_646 < 0)) 0 else (c.now + (sec_646 * 1000))) }) }) }
-      val w648 = { ...w647, inc: w647.inc.set(iid, { ...w647.inc.get(iid), timers: w647.inc.get(iid).timers.set("reaction", { ...w647.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
-      w648
+      val sec_647 = timerSec(w0.inc.get(iid), "reaction", "")
+      val w648 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_647 < 0)) 0 else (c.now + (sec_647 * 1000))) }) }) }
+      val w649 = { ...w648, inc: w648.inc.set(iid, { ...w648.inc.get(iid), timers: w648.inc.get(iid).timers.set("reaction", { ...w648.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      w649
     }
-      w644
+      w645
     }
-    w643
+    w644
   }
 
   def e_linked_lost_access_3(w0: World, c: Ctx, iid: str): World = {
@@ -2556,9 +2557,9 @@ module im {
   }
 
   def e_linked_lost_access_4(w0: World, c: Ctx, iid: str): World = {
-    val whom_649 = settings.alerts.target
-    val w650 = if (((whom_649 != "") and (whom_649 != c.actor))) w0 else w0
-    w650
+    val whom_650 = settings.alerts.target
+    val w651 = if (((whom_650 != "") and (whom_650 != c.actor))) w0 else w0
+    w651
   }
 
   def apply_linked_lost_access(c: Ctx, iid: str, w0: World): World = {
@@ -2720,9 +2721,9 @@ module im {
   val reached_linked_lost_access = lastAction.name == "linked_lost_access"
 
   def scenarioEditOk(c: Ctx, iid: str): bool = all {
-    ["in_progress"].foldl(false, (acc, y651) => acc or y651 == world.inc.get(iid).state),
+    ["in_progress"].foldl(false, (acc, y652) => acc or y652 == world.inc.get(iid).state),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_652) => acc or ((s_652.id == agentState(c.me)) and s_652.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_653) => acc or ((s_653.id == agentState(c.me)) and s_653.readOnly))),
   }
 
   /* ===== Мир модели ===== */
@@ -3151,10 +3152,9 @@ module im {
     else if (s == "pending_acceptance")
       (OPERATORS.contains(x.owner) and x.assignmentGroup == NOBODY) or (x.owner == NOBODY and x.assignmentGroup == GROUP)
     else if (s == "in_progress" or s == "on_hold") OPERATORS.contains(x.owner) and x.assignmentGroup == NOBODY
-    // Закрытый вместе с основным (close_linked) — без владельца, закрывший — закрывший основной
+    // Закрытый — у того, кто закрыл; закрытый вместе с основным (close_linked) — у закрывшего основной (BUG-89)
     else if (s == "closed")
-      OPERATORS.contains(x.closedBy) and x.assignmentGroup == NOBODY
-      and (x.owner == x.closedBy or (x.owner == NOBODY and x.linkedTo != NOBODY))
+      OPERATORS.contains(x.closedBy) and x.assignmentGroup == NOBODY and x.owner == x.closedBy
     else s == ""
   })
 

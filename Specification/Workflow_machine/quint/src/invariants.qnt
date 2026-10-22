@@ -19,10 +19,9 @@
     else if (s == "pending_acceptance")
       (OPERATORS.contains(x.owner) and x.assignmentGroup == NOBODY) or (x.owner == NOBODY and x.assignmentGroup == GROUP)
     else if (s == "in_progress" or s == "on_hold") OPERATORS.contains(x.owner) and x.assignmentGroup == NOBODY
-    // Закрытый вместе с основным (close_linked) — без владельца, закрывший — закрывший основной
+    // Закрытый — у того, кто закрыл; закрытый вместе с основным (close_linked) — у закрывшего основной (BUG-89)
     else if (s == "closed")
-      OPERATORS.contains(x.closedBy) and x.assignmentGroup == NOBODY
-      and (x.owner == x.closedBy or (x.owner == NOBODY and x.linkedTo != NOBODY))
+      OPERATORS.contains(x.closedBy) and x.assignmentGroup == NOBODY and x.owner == x.closedBy
     else s == ""
   })
 
