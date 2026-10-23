@@ -61,8 +61,7 @@
   }
 
   // Инварианты модели по ответам API — то, что должно быть верно после любого шага
-  // escalationEnabled — как в машине прогона: без эскалации реакция после нарушения тоже стоит (RULE-40)
-  function invariants(list, session, maxActive, escalationEnabled = W.escalation.enabled) {
+  function invariants(list, session, maxActive) {
     const bad = [];
     const say = (inc, msg) => bad.push(`${inc.guid} (${inc.state}): ${msg}`);
     list.forEach((inc) => {
@@ -78,9 +77,10 @@
       if (inc.state === "closed" && (!inc.owner || inc.owner.kind !== "operator" || inc.assignmentGroup)) say(inc, "у закрытого нет владельца-человека");
       const t = inc.timer;
       if (inc.state === "new" || inc.state === "pending_acceptance") {
-        // Реакция не идёт только на потолке эскалации или без эскалации: нарушение записано (§9, RULE-40)
-        const ceiling = (!escalationEnabled || inc.escalationLevel >= W.escalation.maxLevel) && inc.breaches.some((b) => b.kind === "reaction");
-        if ((!t || t.id !== "reaction" || !t.running) && !ceiling) say(inc, `ждёт реакции, а таймер ${JSON.stringify(t && [t.id, t.running])}`);
+        // Реакция стоит только после нарушения реакции: без эскалации, на потолке уровней или когда принять
+        // некому — потолок раньше последнего уровня (§9, RULE-40, RULE-93, RULE-100, PROC-47)
+        const stopped = inc.breaches.some((b) => b.kind === "reaction");
+        if ((!t || t.id !== "reaction" || !t.running) && !stopped) say(inc, `ждёт реакции, а таймер ${JSON.stringify(t && [t.id, t.running])} и нарушения реакции нет`);
       }
       if (inc.state === "in_progress" && (!t || t.id !== "resolution" || !t.running)) say(inc, "в работе — норматив закрытия должен идти");
       if (inc.state === "on_hold" && (!t || t.id !== "resolution" || t.running)) say(inc, "отложен — норматив закрытия должен стоять");
@@ -332,7 +332,7 @@
         if (actions.length) await act(step, inc, pick(r, actions), surface);
       }
       const [list, session] = await Promise.all([env.all(), env.session()]);
-      const bad = invariants(list, session, W.limits.maxActive, false).concat(await linkedInvariants(env, list));
+      const bad = invariants(list, session, W.limits.maxActive).concat(await linkedInvariants(env, list));
       if (bad.length) fail(step, bad.slice(0, 3).join("; "));
     }
     // Прогон не пустой: объединения были, и хоть раз привязанный — свой в работе, с идущим нормативом

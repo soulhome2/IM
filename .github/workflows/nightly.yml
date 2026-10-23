@@ -1,0 +1,32 @@
+# Ночной широкий прогон случайных проверок (PROC-47): 20 зёрен по 200 шагов вместо четырёх зёрен по 140 на
+# каждый push. Устаревший инвариант или редкое сочетание находится сам, а не на ревью. Зёрна меняются день ото
+# дня — каждую ночь проверяются новые истории; какие — печатается в журнале шага. Повторить локально:
+# tests/api.html?seeds=<зёрна>&steps=200
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  random-wide:
+    name: Случайные прогоны — 20 зёрен по 200 шагов
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Тесты API с широкими случайными прогонами
+        run: |
+          SEEDS=$(python3 -c "import datetime; d = datetime.date.today().toordinal() % 50; print(','.join(str(d * 20 + i) for i in range(1, 21)))")
+          echo "Зёрна: $SEEDS"
+          google-chrome --headless=new --disable-gpu --no-sandbox --no-first-run \
+            --virtual-time-budget=4800000 \
+            --dump-dom "file://$PWD/tests/api.html?seeds=$SEEDS&steps=200" > apitest.html
+          python3 - <<'EOF'
+          import html, re, sys
+          page = open("apitest.html", encoding="utf-8").read()
+          log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
+          print(html.unescape(log.group(1)) if log else "Отчёт тестов API не найден")
+          sys.exit(0 if 'data-apitest="pass"' in page else 1)
+          EOF
