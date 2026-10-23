@@ -322,6 +322,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # Уточнения норматива — только по признакам overridesBy (ARCH-11)
+    ("overrides-by-ignored", "workflow.js", "overrideAllowed(t, o) && overrideMatches(x, o)", "overrideMatches(x, o)", "api"),
     # Отсчёт — по времени сервера (BUG-103)
     ("ui-clock-ignores-server", "app.js", "const serverNow = () => Date.now() + skewMs;", "const serverNow = () => Date.now();", "ui"),
     # Одно слово — одно число: нижнее меню — как у «Очередь» (BUG-100)

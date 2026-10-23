@@ -2773,7 +2773,7 @@
                 "escalationLevel"
               ]
             },
-            "description": "§4, правило 2. По каким признакам уточняется норматив"
+            "description": "§4, правило 2. По каким признакам уточняется норматив: строка overrides с признаком не из этого списка не учитывается (ARCH-11)"
           },
           "overrides": {
             "type": "array",
@@ -2799,9 +2799,6 @@
                 }
               }
             }
-          },
-          "onExpire": {
-            "type": "string"
           },
           "meaning": {
             "type": "string",

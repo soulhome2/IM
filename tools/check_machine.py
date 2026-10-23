@@ -973,6 +973,55 @@ def itertools_pairs(items):
     return itertools.combinations(items, 2)
 
 
+def check_declared_fields(w, o, err):
+    """Поля машины, которые исполнитель не читает, сверяются с тем, что исполняется (ARCH-11): иначе разработчик
+    не отличит закон от пояснения.
+    - requiredOnTransition справочника — ровно те переходы, у формы которых обязательное поле из него;
+    - concurrency: у ручного перехода версия записи обязательна — If-Match в контракте, у автоматических её нет;
+      onTimerConflict — окно после дедлайна машины (invariants.manualWinsOverTimer);
+    - requiredStepSet перехода — то, что проверяют его условия: byCloseResult — closeResultAllowed, набор —
+      requiredStepsFilled с ним, none — ни того ни другого."""
+    forms = {f["id"]: f for f in w["forms"]}
+    trs = w["transitions"]
+    for cid, cat in w["reasonCatalogs"].items():
+        if cid.startswith("$"):
+            continue
+        need = sorted(
+            t["id"] for t in trs if t.get("form") and any(
+                fl.get("source") == f"reasonCatalog:{cid}" and fl.get("requiredExpr", "false") != "false" for fl in forms[t["form"]]["fields"]))
+        got = sorted(cat.get("requiredOnTransition", []))
+        if need != got:
+            err.append(f"справочник {cid}: requiredOnTransition {got}, а обязательное поле из него — в форме {need} (ARCH-11)")
+    path = o["paths"]["/operator/incidents/{incidentGuid}/transitions/{transitionId}"]["post"]
+    refs = [p.get("$ref", "").split("/")[-1] for p in path.get("parameters", [])]
+    if_match = "IfMatch" in refs and o["components"]["parameters"]["IfMatch"].get("required")
+    window = bool((w.get("invariants", {}).get("manualWinsOverTimer") or {}).get("graceSec") is not None)
+    # Ручные переходы со своими маршрутами — объединение (POST …/merge) и «Отсоединить» (DELETE …/linked/…): версию
+    # записи они пока не принимают (BUG-84), так и записано у них в concurrency
+    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or (t["trigger"] == "manual" and "linked" in t.get("from", []))}
+    for t in trs:
+        c = t.get("concurrency")
+        if c is None:
+            continue
+        manual = t["trigger"] == "manual"
+        if c.get("expectedVersion") != (manual and t["id"] not in own_route):
+            err.append(f"переход {t['id']}: concurrency.expectedVersion {c.get('expectedVersion')} — версия записи обязательна у ручного перехода через POST …/transitions, у автоматического её нет (ARCH-11)")
+        if manual and c.get("expectedVersion") and not if_match:
+            err.append(f"переход {t['id']}: версия записи обязательна, а в контракте у перехода нет обязательного If-Match (ARCH-11)")
+        if c.get("onTimerConflict") == "manual_wins" and not window:
+            err.append(f"переход {t['id']}: onTimerConflict manual_wins без invariants.manualWinsOverTimer (ARCH-11)")
+    for t in trs:
+        rs = t.get("requiredStepSet")
+        if rs is None:
+            continue
+        gs = t.get("guards", [])
+        by_result = any(g["fn"] == "closeResultAllowed" for g in gs)
+        sets = [(g.get("args") or [None])[0] for g in gs if g["fn"] == "requiredStepsFilled"]
+        ok = by_result and not sets if rs == "byCloseResult" else (not by_result and not sets) if rs == "none" else (sets == [rs] and not by_result)
+        if not ok:
+            err.append(f"переход {t['id']}: requiredStepSet «{rs}», а условия проверяют {'closeResultAllowed' if by_result else ''}{' '.join(sets) or ('' if by_result else 'ничего')} (ARCH-11)")
+
+
 def check_work_rights(w, err):
     """В «В работе» — только по праву взятия или принятия; у типового набора прав с ними — выход
     из карточки (§10.3, RULE-36, RULE-38)."""
@@ -1401,6 +1450,7 @@ def main():
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)
     check_work_rights(w, err)
+    check_declared_fields(w, o, err)
     if "--fsm" in sys.argv:
         show_overlaps(w)
         show_continuing(w)

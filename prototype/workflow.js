@@ -356,8 +356,7 @@ window.IM_WORKFLOW = {
           "priority": 25,
           "sec": 1800
         }
-      ],
-      "onExpire": "auto_escalate"
+      ]
     },
     {
       "id": "resolution",
@@ -390,8 +389,7 @@ window.IM_WORKFLOW = {
         "priority",
         "sourceGroup"
       ],
-      "overrides": [],
-      "onExpire": "resolution_overdue"
+      "overrides": []
     },
     {
       "id": "hold",
@@ -409,8 +407,7 @@ window.IM_WORKFLOW = {
         "linked"
       ],
       "pausable": false,
-      "secFrom": "reasonCatalogs.hold[].maxMinutes",
-      "onExpire": "hold_overdue"
+      "secFrom": "reasonCatalogs.hold[].maxMinutes"
     }
   ],
   "reasonCatalogs": {
@@ -567,7 +564,9 @@ window.IM_WORKFLOW = {
     "mass_fault": {
       "$comment": "§2.2. Причина массового сбоя — уточнение к результату «Массовый сбой».",
       "field": "close_cause",
-      "requiredOnTransition": [],
+      "requiredOnTransition": [
+        "close"
+      ],
       "items": [
         {
           "id": "power",
@@ -3959,6 +3958,7 @@ window.IM_WORKFLOW = {
         "labelKey": "string",
         "defaultSec": "int",
         "byPriority": "map<int, int>",
+        "overridesBy": "list<string>",
         "overrides": "list<Override>",
         "startsOnce": "bool",
         "pausable": "bool",
@@ -4365,13 +4365,22 @@ window.IM_WORKFLOW = {
         "returns": "bool",
         "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0])) && (size(o.escalationLevel) == 0 || o.escalationLevel[0] == x.escalationLevel)"
       },
+      "overrideAllowed": {
+        "params": {
+          "t": "TimerDef",
+          "o": "Override"
+        },
+        "returns": "bool",
+        "expr": "(size(o.eventType) == 0 || 'eventType' in t.overridesBy) && (size(o.priority) == 0 || 'priority' in t.overridesBy) && (size(o.sourceGroup) == 0 || 'sourceGroup' in t.overridesBy) && (size(o.escalationLevel) == 0 || 'escalationLevel' in t.overridesBy)",
+        "$comment": "§4, правило 2. Строка уточнения учитывается, только если все её признаки — из overridesBy таймера (ARCH-11)"
+      },
       "norm": {
         "params": {
           "x": "Incident",
           "t": "TimerDef"
         },
         "returns": "int",
-        "expr": "cel.bind(ms, t.overrides.filter(o, overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))",
+        "expr": "cel.bind(ms, t.overrides.filter(o, overrideAllowed(t, o) && overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))",
         "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"
       },
       "holdSec": {

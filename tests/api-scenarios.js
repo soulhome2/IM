@@ -1355,6 +1355,22 @@
   }
   const reactionSec = (card) => (Date.parse(card.timer.dueAt) - Date.parse(card.createdAt)) / 1000;
 
+  test("Уточнения норматива — только по признакам из overridesBy: строка по приоритету без «priority» в списке не действует (§4, правило 2; ARCH-11)", async () => {
+    const reaction = W.timers.find((t) => t.id === "reaction");
+    const row = reaction.overrides.find((o) => o.priority === TOP);
+    assert.ok(row && row.sec !== reaction.defaultSec, "в машине есть уточнение реакции по самому срочному приоритету");
+    const timers = (overridesBy) => W.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overridesBy }) : t));
+    for (const [by, sec] of [[reaction.overridesBy, row.sec], [reaction.overridesBy.filter((k) => k !== "priority"), reaction.defaultSec]]) {
+      const env = await makeEnv({ workflowPatch: { timers: timers(by) } });
+      const fire = await newFire(env);
+      const source = (await env.card(fire.guid)).source.guid;
+      const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: fire.site });
+      assert.status(created, 201, null, "появился инцидент");
+      const c = created.body;
+      assert.eq((Date.parse(c.timer.dueAt) - Date.parse(c.createdAt)) / 1000, sec, `overridesBy ${JSON.stringify(by)}: норматив реакции`);
+    }
+  });
+
   test("Приоритет от источника приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого или без числа — самый низкий (§2.5)", async () => {
     const env = await makeEnv();
     const lowest = LEVELS[LEVELS.length - 1];

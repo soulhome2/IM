@@ -162,8 +162,7 @@
         { "priority": 75, "sec": 420 },
         { "priority": 50, "sec": 900 },
         { "priority": 25, "sec": 1800 }
-      ],
-      "onExpire": "auto_escalate"
+      ]
     },
     {
       "id": "resolution",
@@ -179,8 +178,7 @@
       "defaultSec": 900,
       "byPriority": { "100": 600, "75": 900, "50": 1500, "25": 1800 },
       "overridesBy": ["eventType", "priority", "sourceGroup"],
-      "overrides": [],
-      "onExpire": "resolution_overdue"
+      "overrides": []
     },
     {
       "id": "hold",
@@ -190,8 +188,7 @@
       "startsOnEnter": ["on_hold"],
       "stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed", "linked"],
       "pausable": false,
-      "secFrom": "reasonCatalogs.hold[].maxMinutes",
-      "onExpire": "hold_overdue"
+      "secFrom": "reasonCatalogs.hold[].maxMinutes"
     }
   ],
 
@@ -233,7 +230,7 @@
     "mass_fault": {
       "$comment": "§2.2. Причина массового сбоя — уточнение к результату «Массовый сбой».",
       "field": "close_cause",
-      "requiredOnTransition": [],
+      "requiredOnTransition": ["close"],
       "items": [
         { "id": "power", "labelKey": "workflow.catalog.mass_fault.power", "setBy": "operator" },
         { "id": "link", "labelKey": "workflow.catalog.mass_fault.link", "setBy": "operator" },
@@ -1341,7 +1338,7 @@
       "ScopeRule": { "own": "ScopeOwn" },
       "ScopeOwn": { "anyOf": "list<ScopeCond>" },
       "ScopeCond": { "state": "string", "ownership": "string" },
-      "TimerDef": { "id": "string", "labelKey": "string", "defaultSec": "int", "byPriority": "map<int, int>", "overrides": "list<Override>", "startsOnce": "bool", "pausable": "bool", "secFrom": "string" },
+      "TimerDef": { "id": "string", "labelKey": "string", "defaultSec": "int", "byPriority": "map<int, int>", "overridesBy": "list<string>", "overrides": "list<Override>", "startsOnce": "bool", "pausable": "bool", "secFrom": "string" },
       "Override": { "eventType": "opt<string>", "priority": "opt<int>", "sourceGroup": "opt<string>", "escalationLevel": "opt<int>", "sec": "int" },
       "HoldReason": { "id": "string", "maxMinutes": "int", "setBy": "string" }
     },
@@ -1394,7 +1391,8 @@
       "timerDef": {"params": {"id": "string"}, "returns": "TimerDef", "expr": "timerDefs.filter(t, t.id == id)[0]"},
       "overrideKeys": {"params": {"o": "Override"}, "returns": "int", "expr": "size(o.eventType) + size(o.priority) + size(o.sourceGroup) + size(o.escalationLevel)", "$comment": "Сколько условий у строки overrides: чем больше, тем строка специфичнее"},
       "overrideMatches": {"params": {"x": "Incident", "o": "Override"}, "returns": "bool", "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0])) && (size(o.escalationLevel) == 0 || o.escalationLevel[0] == x.escalationLevel)"},
-      "norm": {"params": {"x": "Incident", "t": "TimerDef"}, "returns": "int", "expr": "cel.bind(ms, t.overrides.filter(o, overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))", "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"},
+      "overrideAllowed": {"params": {"t": "TimerDef", "o": "Override"}, "returns": "bool", "expr": "(size(o.eventType) == 0 || 'eventType' in t.overridesBy) && (size(o.priority) == 0 || 'priority' in t.overridesBy) && (size(o.sourceGroup) == 0 || 'sourceGroup' in t.overridesBy) && (size(o.escalationLevel) == 0 || 'escalationLevel' in t.overridesBy)", "$comment": "§4, правило 2. Строка уточнения учитывается, только если все её признаки — из overridesBy таймера (ARCH-11)"},
+      "norm": {"params": {"x": "Incident", "t": "TimerDef"}, "returns": "int", "expr": "cel.bind(ms, t.overrides.filter(o, overrideAllowed(t, o) && overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))", "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"},
       "holdSec": {"params": {"x": "Incident"}, "returns": "int", "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 ? rs[0].maxMinutes * 60 : -1)", "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет — -1, срок не ставится"},
       "levelNorm": {"params": {"x": "Incident"}, "returns": "int", "expr": "x.escalationLevel > 0 && size(escalation.levels) > 0 ? cel.bind(ls, escalation.levels.filter(l, l.level == x.escalationLevel), size(ls) > 0 ? ls[0].reactionSec : escalation.levels[size(escalation.levels) - 1].reactionSec) : norm(x, timerDef('reaction'))", "$comment": "§8.3. Норматив реакции уровня автоэскалации: уровня нет — последний; уровень 0 — обычный норматив (RULE-76)"},
       "timerSec": {"params": {"x": "Incident", "id": "string", "mode": "string"}, "returns": "int", "expr": "timerDef(id).secFrom != '' ? holdSec(x) : mode == 'byEscalationLevel' ? levelNorm(x) : norm(x, timerDef(id))", "$comment": "§4. Длительность таймера, с: из справочника (secFrom), по уровню эскалации или по нормативам"},
