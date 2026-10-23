@@ -452,11 +452,37 @@
           return `шаг ${n}`;
         }
         await answerCurrentStep();
-        expect($("stepNext") && !$("stepNext").disabled, "кнопка «Далее» недоступна");
+        expect($("stepNext") && !off($("stepNext")), "кнопка «Далее» недоступна");
         await click($("stepNext"));
       }
       throw new Error("в сценарии не нашлось шага с вариантами");
     }, "Взять новое событие");
+
+    await step("«Назад» и «Далее» недоступны — с причиной по нажатию, как остальные кнопки (BUG-91)", async () => {
+      // Новый инцидент на просмотре: первый шаг, дальше шагов нет — обе кнопки недоступны
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector('[data-do="claim"]') && button(r, "view"));
+      expect(row, "нет нового инцидента, который можно посмотреть");
+      await click(button(row, "view"));
+      expect(mode() === "work", "карточка на просмотр не открылась");
+      const lastToast = () => ($("toasts").lastElementChild || {}).textContent || "";
+      try {
+        for (const [id, why] of [
+          ["stepBack", "Это первый шаг"],
+          ["stepNext", "Дальше шагов пока нет: сценарий ещё не пройден"],
+        ]) {
+          const b = $(id);
+          expect(b && off(b) && !b.disabled, `«${b && b.textContent.trim()}» — не aria-disabled или disabled`);
+          expect(b.title === why, `причина «${b.textContent.trim()}»: «${b.title}»`);
+          await click(b);
+          expect(lastToast() === why, `по нажатию «${b.textContent.trim()}» — «${lastToast()}»`);
+        }
+      } finally {
+        await click($("backToQueue"));
+      }
+      return "первый шаг; дальше шагов нет";
+    });
 
     await step("Невыданный ответ на пройденном шаге не остаётся после ухода с шага: в поле — записанный (BUG-70)", async () => {
       await openOwn(closedId);
@@ -505,18 +531,18 @@
       for (let i = 0; i < 10; i++) {
         await answerCurrentStep();
         const next = $("stepNext");
-        expect(next && !next.disabled, "сценарий не проходится до конца");
+        expect(next && !off(next), "сценарий не проходится до конца");
         await click(next);
         await wait(200);
         if (!finish()) continue;
         expect($("modalDialog").hidden, "после последнего шага открылась форма");
         expect(root().querySelector(".summary-crumb.current"), "«Итог» в ленте шагов не текущий");
-        expect($("stepNext").disabled, "на «Итоге» «Далее» доступна");
+        expect(off($("stepNext")), "на «Итоге» «Далее» доступна");
         expect(!finish().disabled, "«Завершить инцидент» недоступна");
         await click($("stepBack"));
         const [, at, of] = $("statusSteps").textContent.match(/Шаг (\d+) из (\d+)/) || [];
         expect(at && at === of && !finish(), `«Назад» с «Итога» — не на последний шаг: «${$("statusSteps").textContent}»`);
-        expect(!$("stepNext").disabled, "на последнем шаге пройденного сценария «Далее» к «Итогу» недоступна");
+        expect(!off($("stepNext")), "на последнем шаге пройденного сценария «Далее» к «Итогу» недоступна");
         await click($("stepNext"));
         expect(finish(), "«Далее» с последнего шага не вернула на «Итог»");
         const note = root().querySelector("[data-summary-comment]");
@@ -615,7 +641,7 @@
           });
           if (st.type === "Message") continue;
           const next = $("stepNext");
-          expect(next && !next.disabled, `шаг «${st.id}»: «Далее» недоступна`);
+          expect(next && !off(next), `шаг «${st.id}»: «Далее» недоступна`);
           await click(next);
         }
         const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
@@ -688,11 +714,11 @@
         expect(st.id === "kind", `ожидался шаг «Тип сработки», а текущий — «${st.id}»`);
         await showStep(st);
         const box = (list) => root().querySelector(`[data-list="kind"][data-list-id="${list}"]`);
-        expect($("stepNext").disabled, "«Далее» доступна без отметок в обязательных списках");
+        expect(off($("stepNext")), "«Далее» доступна без отметок в обязательных списках");
         await click(box("kind"));
-        expect($("stepNext").disabled, "«Далее» доступна, хотя список «Этаж» пуст");
+        expect(off($("stepNext")), "«Далее» доступна, хотя список «Этаж» пуст");
         await click(box("floor"));
-        expect(!$("stepNext").disabled, "«Далее» недоступна, хотя отмечено в обоих списках");
+        expect(!off($("stepNext")), "«Далее» недоступна, хотя отмечено в обоих списках");
         await click($("stepNext"));
         await showStep(photo);
         // Файл читается асинхронно: вложение готово, когда карточка перерисовала поле (новый элемент) и показывает «Фото: 1»
@@ -755,7 +781,7 @@
         await click(claim);
         expect(mode() === "work", "карточка не открылась");
         expect(root().querySelector("[data-confirm].on"), "«Подтверждаю» не отмечено по умолчанию");
-        expect($("stepNext") && !$("stepNext").disabled, "«Далее» недоступна при значении по умолчанию");
+        expect($("stepNext") && !off($("stepNext")), "«Далее» недоступна при значении по умолчанию");
         await click($("stepNext"));
         await wait(200);
         const sc = (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).scenario;
@@ -805,7 +831,7 @@
             continue;
           }
           const next = $("stepNext");
-          expect(next && !next.disabled, `шаг «${st.id}»: «Далее» недоступна`);
+          expect(next && !off(next), `шаг «${st.id}»: «Далее» недоступна`);
           await click(next);
         }
         expect(pressed.join(", ") === "Сообщил охране, Доложил", `нажаты кнопки шагов: «${pressed.join(", ")}»`);
@@ -1233,7 +1259,7 @@
       await confirmDialog();
       // Карточка не закрывается, а становится просмотром (§9, §14.8): править отложенный нельзя
       expect(mode() === "work", "на перерыве карточка закрылась, а должна стать просмотром");
-      expect(!root().querySelector("#stepNext:not([disabled])"), "на перерыве сценарий можно править");
+      expect(!root().querySelector('#stepNext:not([aria-disabled="true"])'), "на перерыве сценарий можно править");
       await click($("backToQueue"));
       await setFilter("mine");
       const row = $("eventsList").querySelector(`[data-id="${freshId}"]`);
@@ -2188,7 +2214,7 @@
           const el = root().querySelector(sel);
           return el && el.getClientRects().length > 0 && getComputedStyle(el).visibility === "visible" ? el : null;
         };
-        expect(shown("#stepBack") && shown("#stepBack").disabled && shown("#stepNext") && shown("#stepNext").disabled, "на вкладке привязанных «Назад» / «Далее» не видны или доступны");
+        expect(shown("#stepBack") && off(shown("#stepBack")) && shown("#stepNext") && off(shown("#stepNext")), "на вкладке привязанных «Назад» / «Далее» не видны или доступны");
         expect(shown("#backToQueue") && !shown("#backToQueue").disabled, "на вкладке привязанных нет «К очереди»");
         // Узкая панель — как на телефоне 360 px (BUG-53): «Отсоединить» и «Отсоединить все» внутри панели, строки не шире её
         const lnk = root().querySelector(".lnk-panel");

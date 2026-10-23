@@ -321,7 +321,10 @@ MUTATIONS = [
     ("filter-options-not-viable", "server.js", "        base === pool ? opts : opts.filter(", "        true ? opts : opts.filter(", "api"),
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
-    ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${tab !== "scenario" || (i === 0 && !summary) ? "disabled" : ""}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : i === 0 && !summary ? "disabled" : ""}', "ui"),
+    ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # «Далее» и «Назад» недоступны — с причиной по нажатию (BUG-91)
+    ("ui-step-nav-silent", "app.js", 'if (explainIfOff(e.target.closest("#stepNext"))) return;', "", "ui"),
+    ("ui-step-nav-no-reason", "app.js", 'const offAttr = (on, why) => (on ? "" : `aria-disabled="true" title="${escapeHtml(why)}"`);', 'const offAttr = (on, why) => (on ? "" : "disabled");', "ui"),
     ("search-ignores-linked", "server.js", "if (!hit(e, needle) && !linkedHits(e, needle).length) return false;", "if (!hit(e, needle)) return false;", "api"),
     ("linked-focus-page-ignored", "server.js", "const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;", "const idx = -1;", "api"),
     ("ui-search-opens-scenario", "app.js", "workTab: foundLinked(ev.guid).length ? \"linked\" : \"scenario\"", "workTab: \"scenario\"", "ui"),

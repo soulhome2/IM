@@ -1025,6 +1025,26 @@
     if (editable && isCurrentStep(ev, i)) return step.type !== "Message" && (!stepRequired(step) || complete(step, valueOf(ev, step)));
     return i < path.length - 1 || (runDone(ev) && !atSummary(ev));
   }
+  // Почему «Далее» и «Назад» недоступны — словами, по нажатию, как у остальных кнопок (BUG-91)
+  function nextWhy(ev, i, editable, tab, summary) {
+    if (tab !== "scenario") return t("Шаги — на вкладке «Сценарий»");
+    if (summary) return t("«Итог» — последний пункт");
+    const step = stepOf(ev, pathOf(ev)[i]);
+    if (step && ((stepEditable(ev, i, editable) && changed(ev, step)) || (editable && isCurrentStep(ev, i)))) return t("Сначала ответьте на этот шаг");
+    return t("Дальше шагов пока нет: сценарий ещё не пройден");
+  }
+  const backWhy = (tab) => (tab !== "scenario" ? t("Шаги — на вкладке «Сценарий»") : t("Это первый шаг"));
+  // Недоступная кнопка — aria-disabled с причиной в title: нажатие её показывает (explainIfOff)
+  const offAttr = (on, why) => (on ? "" : `aria-disabled="true" title="${escapeHtml(why)}"`);
+  function setOff(btn, off, why) {
+    if (off) {
+      btn.setAttribute("aria-disabled", "true");
+      btn.title = why;
+    } else {
+      btn.removeAttribute("aria-disabled");
+      btn.removeAttribute("title");
+    }
+  }
 
   // Шаг «Итог» — после финального шага пройденного сценария: закрытие результатом «Обработан» кнопкой
   // «Завершить инцидент». Карточка встаёт на него, когда сценарий пройден, пока оператор не ушёл на шаги
@@ -2241,8 +2261,8 @@
                 : ""
             }
             <div class="scenario-actions-end">
-              <button type="button" class="btn outline" id="stepBack" ${tab !== "scenario" || (i === 0 && !summary) ? "disabled" : ""}>${te("Назад")}</button>
-              <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${canNext ? "" : "disabled"}>${te("Далее")}</button>
+              <button type="button" class="btn outline" id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}>${te("Назад")}</button>
+              <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${offAttr(canNext, nextWhy(ev, i, editable, tab, summary))}>${te("Далее")}</button>
             </div>
           </div>
           ${
@@ -3202,7 +3222,7 @@
       if (!el) return;
       setDraft(ev, el.dataset.ans, el.value);
       const next = $("stepNext");
-      if (next) next.disabled = !canGoNext(ev, cursorOf(ev), true);
+      if (next) setOff(next, !canGoNext(ev, cursorOf(ev), true), nextWhy(ev, cursorOf(ev), true, "scenario", false));
     });
     // Выбор, отметки, дата и файлы — в черновик; ответ уходит по «Далее»
     $("scenarioRoot").addEventListener("change", async (e) => {
@@ -3327,6 +3347,7 @@
         return;
       }
       if (e.target.closest("#stepBack")) {
+        if (explainIfOff(e.target.closest("#stepBack"))) return;
         // С «Итога» — на последний шаг сценария, курсор не двигается
         if (atSummary(ev)) {
           state.summaryOff.add(ev.guid);
@@ -3336,6 +3357,7 @@
         return;
       }
       if (e.target.closest("#stepNext")) {
+        if (explainIfOff(e.target.closest("#stepNext"))) return;
         goNextStep(ev);
         return;
       }
