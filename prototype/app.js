@@ -1930,9 +1930,15 @@
       ${renderTreeHtml(null, 0, trace)}
     `;
     const q = state.groupQuery.trim();
-    const visible = [...$("groupsList").querySelectorAll(".tree-node")].filter(
-      (n) => n.dataset.id !== "all" && !n.classList.contains("hidden")
-    );
+    // На экране — узел, который поиск не скрыл, а все его предки не скрыты и раскрыты: дети раскрытой группы
+    // класса hidden не получают, но без найденного предка их не видно (BUG-92)
+    const onScreen = (n) => {
+      for (let x = n; x; x = x.parentElement.closest(".tree-node")) {
+        if (x.classList.contains("hidden") || (x !== n && !x.classList.contains("open"))) return false;
+      }
+      return true;
+    };
+    const visible = [...$("groupsList").querySelectorAll(".tree-node")].filter((n) => n.dataset.id !== "all" && onScreen(n));
     $("groupsEmpty").hidden = !q || visible.length > 0;
     // Найденное и текущее из него: ▲ ▼ и Enter в поиске прыгают только по совпадениям (RULE-88)
     const hits = treeHits();

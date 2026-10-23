@@ -322,6 +322,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # Пустой поиск в дереве — по узлам на экране (BUG-92)
+    ("ui-tree-empty-by-class", "app.js", 'filter((n) => n.dataset.id !== "all" && onScreen(n));', 'filter((n) => n.dataset.id !== "all" && !n.classList.contains("hidden"));', "ui"),
     # «Далее» и «Назад» недоступны — с причиной по нажатию (BUG-91)
     ("ui-step-nav-silent", "app.js", 'if (explainIfOff(e.target.closest("#stepNext"))) return;', "", "ui"),
     ("ui-step-nav-no-reason", "app.js", 'const offAttr = (on, why) => (on ? "" : `aria-disabled="true" title="${escapeHtml(why)}"`);', 'const offAttr = (on, why) => (on ? "" : "disabled");', "ui"),

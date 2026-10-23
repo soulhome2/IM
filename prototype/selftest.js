@@ -2039,6 +2039,26 @@
       return `устройств в группе: ${node.devices.length}, со счётчиком: ${node.devices.filter((d) => d.counters.open > 0).map((d) => d.name).join(", ")}`;
     });
 
+    await step("Поиск в дереве без результатов — «Ничего не найдено», и когда группы раскрыты (BUG-92)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      // Раскрыть все группы: их дети класса hidden не получают — считать надо то, что на экране
+      if ($("groupsCollapseAll").textContent.includes("unfold_more")) await click($("groupsCollapseAll"));
+      const search = $("groupSearch");
+      search.value = "щщщщ";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await wait();
+      try {
+        const shown = [...$("groupsList").querySelectorAll(".tree-node")].filter((n) => n.dataset.id !== "all" && n.getClientRects().length > 0);
+        expect(!shown.length, `на экране узлов: ${shown.length}`);
+        expect(!$("groupsEmpty").hidden, "«Ничего не найдено» не показано");
+      } finally {
+        search.value = "";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        await wait();
+      }
+      return $("groupsEmpty").textContent.trim() || "показано";
+    });
+
     await step("Поиск в дереве: совпадение выделено, «Найдено: N»; ▲ ▼ и Enter — по найденным по кругу; ↓ из поиска — в дерево, ↑ ↓ — по узлам, Home и End — первый и последний, Enter — выбрать, Esc — очистить, выбранное остаётся видным; найденную группу → раскрывает целиком (§13, RULE-88, BUG-63, BUG-67)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const key = async (el, k) => {
