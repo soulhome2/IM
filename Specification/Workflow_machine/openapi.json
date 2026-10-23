@@ -493,7 +493,7 @@
         ],
         "operationId": "updatePreferences",
         "summary": "Персональные настройки рабочего места",
-        "description": "§5: прав не требует — данные инцидента не меняются. Сюда входят раскладка и размеры панелей, тема, язык и меню вспомогательных ссылок (Vision §1.4).",
+        "description": "§5: прав не требует — данные инцидента не меняются. Сюда входят раскладка и размеры панелей, тема и язык (Vision §1.4). Меню вспомогательных ссылок оператор не настраивает — это справочник (§7, `GET /operator/reference/help-links`).",
         "requestBody": {
           "required": true,
           "content": {
@@ -3693,33 +3693,6 @@
             "type": "object",
             "description": "Состав, расположение и размеры панелей: группы, события, обработка, карта, видеомонитор.",
             "additionalProperties": true
-          },
-          "helpLinks": {
-            "type": "array",
-            "description": "Меню вспомогательных ссылок: регламент, телефоны ответственных, схема эвакуации, контакты экстренных служб.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "url": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "link",
-                    "document",
-                    "contacts",
-                    "map"
-                  ]
-                }
-              }
-            }
           }
         }
       },
