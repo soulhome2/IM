@@ -322,6 +322,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # Одно слово — одно число: нижнее меню — как у «Очередь» (BUG-100)
+    ("ui-nav-count-all-open", "app.js", '$("navQueueCount").textContent = String(store.page.total || 0);', '$("navQueueCount").textContent = String(store.counters.open || 0);', "ui"),
     # Пустой поиск в дереве — по узлам на экране (BUG-92)
     ("ui-tree-empty-by-class", "app.js", 'filter((n) => n.dataset.id !== "all" && onScreen(n));', 'filter((n) => n.dataset.id !== "all" && !n.classList.contains("hidden"));', "ui"),
     # «Далее» и «Назад» недоступны — с причиной по нажатию (BUG-91)
@@ -408,7 +410,7 @@ MUTATIONS = [
     ("merge-limit-unchecked", "server.js", "if (tooLarge(list)) return problem(", "if (false) return problem(", "api"),
     ("selection-merge-limit-ignored", "server.js", "else if (tooLarge(list)) reason", "else if (false) reason", "api"),
     ("selection-truncated-on-null", "server.js", "const max = W.limits.maxBulk;\n      let list = [];", "const max = W.limits.maxBulk ?? 0;\n      let list = [];", "api"),
-    ("ui-status-always-of-n", "app.js", 'LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t(', "t(", "ui"),
+    ("ui-status-always-of-n", "app.js", 'LIMITS.maxActive == null ? t("Открытых: {n} · у меня: {a}, отложено: {h}", queueVars) : t(', "t(", "ui"),
     ("ui-null-key-ignored", "app.js", 'if (v == null) return nullKey ? te(nullKey) : "—";', 'if (v == null) return "—";', "ui"),
     # Плашка сценария в очереди — название, не счёт шагов (§14.5)
     ("ui-scenario-chip-count", "app.js", '<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>', '<span class="event-prog">${prog.filled}/${prog.total}</span>', "ui"),

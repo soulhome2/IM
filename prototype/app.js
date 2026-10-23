@@ -2692,8 +2692,9 @@
     const usage = store.session ? store.session.usage : { activeCount: 0, onHoldCount: 0 };
     // Лимит «в работе» снят — без «из N» (§10.2, RULE-69)
     const queueVars = { n: store.counters.open || 0, a: usage.activeCount, max: LIMITS.maxActive, h: usage.onHoldCount };
+    // Открытые — все, а не по фильтру над очередью: словом «открытых», чтобы не путать с числом у «Очередь» (BUG-100)
     $("statusQueue").textContent =
-      LIMITS.maxActive == null ? t("В очереди: {n} · у меня: {a}, отложено: {h}", queueVars) : t("В очереди: {n} · у меня: {a} из {max}, отложено: {h}", queueVars);
+      LIMITS.maxActive == null ? t("Открытых: {n} · у меня: {a}, отложено: {h}", queueVars) : t("Открытых: {n} · у меня: {a} из {max}, отложено: {h}", queueVars);
     if (!ev) {
       $("statusIncident").textContent = t("Очередь ожидает выбора инцидента");
       $("statusSteps").textContent = "";
@@ -2770,7 +2771,8 @@
       else b.removeAttribute("aria-current");
       if (b.dataset.view === "card") b.disabled = state.mode !== "work";
     });
-    $("navQueueCount").textContent = String(store.counters.open || 0);
+    // То же число, что у «Очередь» в шапке: по фильтру над очередью (BUG-100)
+    $("navQueueCount").textContent = String(store.page.total || 0);
     syncToggle(
       $("toggleMedia"),
       state.mediaOn,

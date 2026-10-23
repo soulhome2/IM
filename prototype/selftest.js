@@ -1947,6 +1947,21 @@
       return `плашек: ${seen.length}, например «${seen[0][0]}»; без названия — «Без названия»`;
     });
 
+    await step("Одно слово — одно число: у «Очередь» и в нижнем меню — по фильтру, в строке состояния — «Открытых» (BUG-100)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("mine");
+      try {
+        const head = $("eventsCount").textContent;
+        const nav = $("navQueueCount").textContent;
+        const status = $("statusQueue").textContent;
+        expect(head === nav, `у «Очередь» ${head}, в нижнем меню ${nav}`);
+        expect(/^Открытых: \d+/.test(status) && !/В очереди/.test(status), `строка состояния: «${status}»`);
+        return `«Мои»: ${head}; ${status}`;
+      } finally {
+        await setFilter("open");
+      }
+    });
+
     await step("Лимиты без ограничения: строка состояния без «из N», в настройках — «без ограничения», выборка не обрезается (§10.2, §11, RULE-69)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
