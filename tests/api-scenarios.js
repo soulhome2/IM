@@ -504,6 +504,39 @@
     assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "после входа — снова можно");
   });
 
+  test("«Карточка только для просмотра» — только тому, у кого она открыта, и не за своё действие (§9, контракт, BUG-105)", async () => {
+    const evicted = (got) => got.filter((m) => m.type === "incident.card_evicted");
+    // Свой перерыв: инциденты в работе отложены, одна карточка открыта — увёл сам, события нет
+    const env = await makeEnv();
+    const taken = (await env.all("open")).filter((e) => e.state === "new").slice(0, 2);
+    for (const e of taken) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    await env.heartbeat(taken[0].guid);
+    let got = [];
+    let stop = env.api.subscribe((m) => got.push(m));
+    const res = await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id });
+    assert.status(res, 200, null, "перерыв");
+    assert.ok(taken.every((e) => res.body.affectedIncidents.some((i) => i.guid === e.guid)), "оба отложены системой");
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.eq(evicted(got).length, 0, "свой перерыв — событий нет");
+
+    // Автоэскалация адресованного мне INC-1843: карточка не открыта — события нет; открыта — одно, о нём
+    for (const open of [false, true]) {
+      const env2 = await makeEnv();
+      const guid = await env2.guidOf("INC-1843");
+      const card = await env2.card(guid);
+      await env2.heartbeat(open ? guid : null);
+      got = [];
+      stop = env2.api.subscribe((m) => got.push(m));
+      const fired = await env2.advance(Math.ceil((Date.parse(card.timer.dueAt) - env2.now) / 1000) + GRACE + 1);
+      await new Promise((r) => setTimeout(r, 300));
+      stop();
+      assert.ok(fired.some((f) => f.incidentGuid === guid && f.transitionId === "auto_escalate"), `${open ? "открыта" : "не открыта"}: автоэскалация сработала`);
+      const about = evicted(got).map((m) => [m.incidentGuid, m.payload.transitionId]);
+      assert.eq(about, open ? [[guid, "auto_escalate"]] : [], open ? "открыта — одно событие о ней" : "не открыта — событий нет");
+    }
+  });
+
   test("Передача адресату, который уже вышел, — сразу его дежурной группе (§8.1, RULE-47)", async () => {
     const env = await makeEnv();
     const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");

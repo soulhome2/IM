@@ -319,11 +319,22 @@
       },
       // Нарушение основного записано тому, кто был в группе (recordBreach, §11.4, BUG-73) — ему новая версия
       onBreachShared: (ev) => touch([ev]),
-      // Карточку увели (§9): в событии — кто выполнил переход и какой, по нему клиент называет причину (BUG-86)
+      // Карточку увели (§9): в событии — кто выполнил переход и какой, по нему клиент называет причину (BUG-86).
+      // Только если она открыта у оператора стенда и увёл не он сам своим перерывом или выходом (контракт, BUG-105)
       onEvict: (ev, who, transitionId, by) => {
-        if (who === ME) emit("incident.card_evicted", ev, by || null, { transitionId });
+        if (who === ME && !ownAgentStateChange && session.openIncidentGuid === ev.id) emit("incident.card_evicted", ev, by || null, { transitionId });
       },
     };
+    // Перерыв или выход оператора стенда: переходы, которые он вызвал сам, увели карточку им же (BUG-105)
+    let ownAgentStateChange = false;
+    function runSchedulerForOwnChange() {
+      ownAgentStateChange = true;
+      try {
+        return runScheduler();
+      } finally {
+        ownAgentStateChange = false;
+      }
+    }
     // Молчание оператора стенда (§12.3) — с последнего признака активности (heartbeat)
     let lastHeartbeat = null;
     const makeEngine = () =>
@@ -1322,7 +1333,7 @@
             session.agentState = "not_ready";
             session.reasonId = body.reasonId || session.reasonId || null;
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
-            const fired = runScheduler();
+            const fired = runSchedulerForOwnChange();
             emit("session.agent_state_changed", null, ME, { agentState: "not_ready" });
             return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => find(f.id)).filter(Boolean).map((ev) => summary(ev, "queue")) } };
           }
@@ -1331,7 +1342,7 @@
             // и не принятые — дежурной группе или в очередь (§8.1, §12.1); их выполняет машина
             session.agentState = "offline";
             session.reasonId = null;
-            const fired = runScheduler();
+            const fired = runSchedulerForOwnChange();
             emit("session.agent_state_changed", null, ME, { agentState: "offline" });
             return { status: 200, body: { session: sessionView(), affectedIncidents: fired.map((f) => find(f.id)).filter(Boolean).map((ev) => summary(ev, "queue")) } };
           }

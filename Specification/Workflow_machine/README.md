@@ -366,7 +366,7 @@ POST /operator/incidents/{g}/transitions/transfer  If-Match: "14"  formValues: {
    → состояние pending_acceptance, адресат — человек или дежурная группа (§8.1)
    → transferCount +1, уровень эскалации не меняется, resolution на паузе
    → reaction: из new и pending_acceptance продолжается, из in_progress и on_hold — заново по нормативу текущего уровня (RULE-76)
-   → прежнему владельцу в поток приходит incident.card_evicted
+   → прежнему владельцу, если карточка открыта у него, в поток приходит incident.card_evicted
 ```
 
 **Автоэскалация** — клиент ничего не вызывает:

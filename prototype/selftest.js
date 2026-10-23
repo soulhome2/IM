@@ -1842,9 +1842,11 @@
         const number = await claimFromQueue(() => true);
         expect(mode() === "work", "карточка взятого инцидента не открылась");
         const what = window.IM_STRINGS.ru[window.IM_WORKFLOW.transitions.find((x) => x.id === "resolution_escalate").labelKey];
+        // Карточка открыта — сервер знает это из признака активности (BUG-105)
+        const open = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.number === number).guid;
         // Часы шагами короче порога «нет связи», перед каждым — признак активности
         for (let i = 0; i < 12 && !toast; i++) {
-          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: open });
           await stand.raw("POST", "/test/clock", { advanceSec: 240 });
           await wait(150);
           toast = toastWith(new RegExp(`${number}: карточка только для просмотра — ${what}`));
@@ -1855,6 +1857,29 @@
         await wait(300);
       }
       return toast.textContent;
+    });
+
+    await step("Свой выход с инцидентами в работе и открытой карточкой — ни одного «карточка только для просмотра» (BUG-105)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Два инцидента в работе: лимит активных самопроверки (1) снят
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(300);
+      try {
+        await claimFromQueue(() => true);
+        await claimFromQueue(() => true);
+        expect(mode() === "work", "карточка взятого инцидента не открылась");
+        const before = new Set($("toasts").children);
+        await click($("signOutBtn"));
+        await confirmDialog();
+        await wait(300);
+        expect(!$("signedOutBanner").hidden, "выход не выполнился");
+        const extra = [...$("toasts").children].find((x) => !before.has(x) && /карточка только для просмотра/.test(x.textContent));
+        expect(!extra, `после своего выхода: «${extra && extra.textContent}»`);
+      } finally {
+        if (!$("signedOutBanner").hidden) await click($("signInBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
     });
 
     await step("На перерыве пояснение карточки адресованного мне не зовёт «примите» — только просмотр (cardNotes, BUG-97)", async () => {

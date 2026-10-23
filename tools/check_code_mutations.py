@@ -150,7 +150,10 @@ MUTATIONS = [
     ("event-type-guid-is-id", "server.js", "!String(q.eventTypeGuid).split(\",\").includes(e.typeGuid)", "!String(q.eventTypeGuid).split(\",\").includes(e.typeId)", "api"),
     ("setting-is-ignored", "workflow.js", "\"expr\": \"settingKey == value\"", "\"expr\": \"true\"", "api"),
     ("owner-group-ignored", "workflow.js", "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"", "\"expr\": \"true\"", "api"),
-    ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
+    ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runSchedulerForOwnChange();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
+    # Карточку увели (BUG-105): событие — только при открытой карточке и не за свой перерыв или выход
+    ("evict-any-card", "server.js", "&& session.openIncidentGuid === ev.id) emit(", ") emit(", "api"),
+    ("evict-own-change", "server.js", "if (who === ME && !ownAgentStateChange && ", "if (who === ME && ", "api"),
     ("visibility-ignored", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => filters.set(e, engine.queueFilters(e)).get(e).length);", "api"),
     ("lists-show-linked", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e));", "api"),
     # Объединение (§11): основной, срок, закрытие привязанных; вкладка — фильтр; панель выборки
@@ -450,7 +453,7 @@ MUTATIONS = [
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
     ("settle-after-request-off", "server.js", "if (acting && res.status < 300 && runScheduler().length && res.again)", "if (false && res.again)", "api"),
     # Карточку увели — уведомление с причиной (BUG-86)
-    ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine) {', "} else if (false) {", "ui"),
+    ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
 
