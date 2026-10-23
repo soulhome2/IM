@@ -1256,6 +1256,8 @@
       const q = { filter: body.filter, search: body.search, sourceGroupGuid: body.sourceGroupGuid, eventTypeGuid: body.eventTypeGuid, deviceTypeId: body.deviceTypeId };
       const max = W.limits.maxBulk;
       let list = [];
+      // explicit — с отмеченными (minItems: 1 по контракту, BUG-98)
+      if (body.mode === "explicit" && !(body.incidentGuids || []).length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_empty"]);
       if (body.mode === "explicit") {
         list = (body.incidentGuids || []).map(find).filter(Boolean);
       } else if (body.mode === "all_in_filter") {
@@ -1264,7 +1266,8 @@
       // null — без ограничения (§11, RULE-69)
       const truncated = body.mode !== "explicit" && max != null && list.length > max;
       if (truncated) list = list.slice(0, max);
-      return { incidentGuids: list.map((e) => e.id), truncated, actions: selectionActions(list) };
+      // Ничего не подошло — и действий нет (BUG-98)
+      return { status: 200, body: { incidentGuids: list.map((e) => e.id), truncated, actions: list.length ? selectionActions(list) : [] } };
     }
 
     const ROUTES = [
@@ -1328,7 +1331,7 @@
       ],
       ["GET", "/operator/incidents", (p, q) => ({ status: 200, body: page(q) })],
       ["GET", "/operator/incidents/counters", () => ({ status: 200, body: counters() })],
-      ["POST", "/operator/incidents/selection", (p, q, body) => ({ status: 200, body: selection(body || {}) })],
+      ["POST", "/operator/incidents/selection", (p, q, body) => selection(body || {})],
       [
         "POST",
         "/operator/incidents/transitions/{transitionId}/bulk",

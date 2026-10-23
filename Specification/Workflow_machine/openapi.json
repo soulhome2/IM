@@ -727,6 +727,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -4544,7 +4547,8 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Для `explicit`."
+            "description": "Для `explicit` — обязательно, хотя бы один (BUG-98).",
+            "minItems": 1
           },
           "candidateTransitionIds": {
             "type": "array",
@@ -4565,6 +4569,18 @@
             "type": "string",
             "description": "Тип устройства-источника — те же фильтры, что у очереди"
           }
+        },
+        "if": {
+          "properties": {
+            "mode": {
+              "const": "explicit"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "incidentGuids"
+          ]
         }
       },
       "SelectionResult": {
@@ -4583,7 +4599,7 @@
           },
           "actions": {
             "type": "array",
-            "description": "§11. Пересечение действий по всей выборке: доступно только то, что доступно каждому.",
+            "description": "§11. Пересечение действий по всей выборке: доступно только то, что доступно каждому. Выборка пуста (ничего не подошло) — пустой список.",
             "items": {
               "$ref": "#/components/schemas/AvailableAction"
             }

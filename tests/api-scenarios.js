@@ -1785,6 +1785,18 @@
     assert.ok(two.actions.find((a) => a.id === "close").enabled, "«Закрыть» доступна обоим");
   });
 
+  test("Пустая выборка: explicit без отмеченных — 422; пустой результат — 200 без действий; сервер не падает (§11, BUG-98)", async () => {
+    const env = await makeEnv();
+    for (const body of [{ mode: "explicit", incidentGuids: [] }, { mode: "explicit" }]) {
+      const res = await env.call("POST", "/operator/incidents/selection", body);
+      assert.status(res, 422, "BULK_SELECTION_INVALID", `explicit: ${JSON.stringify(body.incidentGuids)}`);
+    }
+    // Ничего не подходит: «Все в фильтре» с поиском, который ничего не находит
+    const none = await env.call("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open", search: "щщщщ" });
+    assert.status(none, 200, null, "пустой результат");
+    assert.eq([none.body.incidentGuids, none.body.actions], [[], []], "пусто — и действий нет");
+  });
+
   test("«Взять в работу» на панели выборки — только если относится к кому-то из отмеченных; свои отложенные — бледная с причиной словами кнопки (§11.1, RULE-78, BUG-90)", async () => {
     const env = await makeEnv();
     const merge = async (guids) => (await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: guids })).actions.find((a) => a.id === "merge");
