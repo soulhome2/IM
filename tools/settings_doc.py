@@ -78,7 +78,8 @@ def element(x, sec):
     if "level" in x:
         return f"уровень {x['level']}: `{x.get('targetKind')}:{x.get('target')}`, реакция {duration(x.get('reactionSec'))}"
     head = x.get("label") or RU.get(x.get("labelKey"), x.get("labelKey")) or x.get("id") or ""
-    extra = [value(v, k, sec) for k, v in x.items() if k.endswith(("Sec", "Minutes")) and v is not None]
+    # Срок null у элемента справочника — без срока (у причины «Нет связи», RULE-116)
+    extra = [value(v, k, sec) if v is not None else "без срока" for k, v in x.items() if k.endswith(("Sec", "Minutes"))]
     if "sec" in x:
         cond = ", ".join(f"{word(k)} = {word(str(v))}" for k, v in x.items() if k != "sec")
         return f"{cond}: {duration(x['sec'])}"

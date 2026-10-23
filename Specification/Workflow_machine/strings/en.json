@@ -344,7 +344,7 @@
   "workflow.settings.session.breakReasons.what": "What the operator chooses when going on a break",
   "workflow.settings.tab.escalation": "Auto-escalation and alerts",
   "workflow.settings.escalation.enabled": "Auto-escalation",
-  "workflow.settings.escalation.enabled.what": "Whether an incident not picked up in time is passed up the levels; off — only a breach and an alert. Escalation on the resolution norm is set by «Overdue resolution», this setting does not turn it off",
+  "workflow.settings.escalation.enabled.what": "Whether an incident not picked up in time is passed up the levels; off — only a breach and an alert. It does not turn off escalation on the resolution norm — that has its own setting",
   "workflow.settings.escalation.levels": "Levels",
   "workflow.settings.escalation.levels.what": "Addressee of each level — a user or a duty group — and its reaction deadline",
   "workflow.settings.escalation.maxLevel": "Ceiling",

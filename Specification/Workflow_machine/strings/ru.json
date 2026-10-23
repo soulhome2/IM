@@ -344,7 +344,7 @@
   "workflow.settings.session.breakReasons.what": "Из чего выбирает оператор, уходя на перерыв",
   "workflow.settings.tab.escalation": "Автоэскалация и алерты",
   "workflow.settings.escalation.enabled": "Автоэскалация",
-  "workflow.settings.escalation.enabled.what": "Передавать ли не взятый вовремя инцидент по уровням; выключена — только нарушение и алерт. Эскалацию по нормативу закрытия задаёт «Просрочка закрытия», эта настройка её не выключает",
+  "workflow.settings.escalation.enabled.what": "Передавать ли не взятый вовремя инцидент по уровням; выключена — только нарушение и алерт. Эскалацию по нормативу закрытия она не выключает — у неё своя настройка",
   "workflow.settings.escalation.levels": "Уровни",
   "workflow.settings.escalation.levels.what": "Адресат каждого уровня — пользователь или дежурная группа — и его норматив реакции",
   "workflow.settings.escalation.maxLevel": "Потолок",

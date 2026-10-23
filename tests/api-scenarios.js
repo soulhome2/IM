@@ -1173,6 +1173,20 @@
     assert.eq([c.state, c.owner], ["new", null], "снова новый, ничей");
   });
 
+  test("У «Нет связи» срока удержания нет: порог возврата хоть час — нарушения удержания за обрыв связи нет (§4, правило 7; §12.3, RULE-116)", async () => {
+    const env = await makeEnv({ workflowPatch: { session: Object.assign({}, W.session, { idleReleaseSec: 3600 }) } });
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const fired = [];
+    for (let left = 3600; left > 0; left -= 600) {
+      fired.push(...(await env.call("POST", "/test/clock", { advanceSec: Math.min(600, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
+      const c = await env.card(inc.guid);
+      if (c.state === "on_hold") assert.eq([c.holdReasonId, c.holdTimer], ["no_link", null], "отложен «нет связи» — без срока удержания");
+    }
+    assert.ok(fired.includes("system_hold_idle") && fired.includes("system_release_idle") && !fired.includes("hold_overdue"), `переходы: ${fired.join(", ")}`);
+    assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 0, "нарушения удержания нет");
+  });
+
   test("Действие — признак активности (§12.3, BUG-76): молчал дольше idleHoldSec и взял инцидент — он в работе, не отложен", async () => {
     // Эскалация выключена: за время молчания инцидент остаётся новым
     const env = await makeEnv({ workflowPatch: { escalation: { enabled: false } } });

@@ -7,6 +7,7 @@ window.IM_DICT_UI = {
     "Объединено с этим инцидентом: {n}": "Merged into this incident: {n}",
     "Отсоединить все": "Detach all",
     "Действие недоступно": "Action unavailable",
+    "без срока": "no deadline",
     "Нет связи с сервером": "No connection to the server",
     "Отсоединено: {n} — теперь «{state}»": "Detached: {n} — now «{state}»",
     "Одинаковый сценарий": "Same scenario",

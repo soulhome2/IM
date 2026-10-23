@@ -4022,7 +4022,8 @@
           if (typeof x !== "object") return fmtSetting(x, key, sec);
           if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.target)))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
-          const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "";
+          // Срок null — без срока (причина «Нет связи», RULE-116)
+          const limit = x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "maxMinutes" in x ? ` (${te("без срока")})` : "";
           return escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id)) + limit;
         })
         .join("<br>");

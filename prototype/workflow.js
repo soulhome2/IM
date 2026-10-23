@@ -443,8 +443,9 @@ window.IM_WORKFLOW = {
         {
           "id": "no_link",
           "labelKey": "workflow.catalog.hold.no_link",
-          "maxMinutes": 20,
-          "setBy": "system"
+          "maxMinutes": null,
+          "setBy": "system",
+          "$comment": "§4, правило 7; §12.3 (RULE-116). Без срока: удержание по потере связи закрывает порог возврата в очередь session.idleReleaseSec — нарушение за обрыв связи не нужно"
         }
       ]
     },
@@ -3971,7 +3972,7 @@ window.IM_WORKFLOW = {
       },
       "HoldReason": {
         "id": "string",
-        "maxMinutes": "int",
+        "maxMinutes": "opt<int>",
         "setBy": "string"
       }
     },
@@ -4432,8 +4433,8 @@ window.IM_WORKFLOW = {
           "x": "Incident"
         },
         "returns": "int",
-        "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 ? rs[0].maxMinutes * 60 : -1)",
-        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет — -1, срок не ставится"
+        "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 && size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)",
+        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет или у неё нет срока (maxMinutes: null, RULE-116) — -1, срок не ставится"
       },
       "levelNorm": {
         "params": {
