@@ -393,6 +393,29 @@ function transitions() {
     ok.push(t.id);
     apply.push(t.id);
   }
+  // Значения полей-списков формы — по правилам формы машины, как проверяет сервер (ARCH-09): поле видно
+  // (visibleExpr), значение — из источника и проходит optionExpr и enabledExpr; пустое не проверяется
+  const sourceQ = (source, v) => {
+    if (source === "transferTargets") return `TARGETS.contains(${v})`;
+    const cat = W.reasonCatalogs[String(source).replace("reasonCatalog:", "")];
+    if (!cat) fail(`источник поля ${source}: нет справочника`);
+    return `Set(${cat.items.map((x) => JSON.stringify(x.id)).join(", ")}).contains(${v})`;
+  };
+  const formOk = [];
+  for (const t of W.transitions) {
+    const f = t.form && W.forms.find((x) => x.id === t.form);
+    const fields = f ? f.fields.filter((x) => x.source) : [];
+    if (!fields.length) continue;
+    const parts = fields.map((x) => {
+      const v = `c.form.${x.name}`;
+      const scope = Object.assign(TOP("world", "iid"), { option: { t: "string", q: v } });
+      const conds = [x.visibleExpr != null ? expr(x.visibleExpr, scope) : null, sourceQ(x.source, v), x.optionExpr != null ? expr(x.optionExpr, scope) : null, x.enabledExpr != null ? expr(x.enabledExpr, scope) : null];
+      return `${v} == "" or all {\n      ${conds.filter(Boolean).join(",\n      ")},\n    }`;
+    });
+    emit(`  def form_${t.id}(c: Ctx, iid: str): bool = all {\n    ${parts.join(",\n    ")},\n  }`);
+    formOk.push(t.id);
+  }
+  emit(`  def formOk(tid: str, c: Ctx, iid: str): bool =\n    ${formOk.map((id) => `if (tid == ${JSON.stringify(id)}) form_${id}(c, iid)`).join("\n    else ")}\n    else true`);
   // Таблицы для ядра: условия и эффекты по имени перехода, вид, таймер, нарушение в окне после дедлайна
   emit(`  def trOk(tid: str, c: Ctx, iid: str): bool =\n    ${ok.map((id) => `if (tid == ${JSON.stringify(id)}) ok_${id}(c, iid)`).join("\n    else ")}\n    else false`);
   emit(`  def trApply(tid: str, c: Ctx, iid: str, w: World): World =\n    ${apply.map((id) => `if (tid == ${JSON.stringify(id)}) apply_${id}(c, iid, w)`).join("\n    else ")}\n    else w`);

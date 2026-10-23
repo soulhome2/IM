@@ -115,7 +115,8 @@ function replay(states, name) {
       },
       actorName: (id) => id || "",
       log: (ev, whoId, k, v, at) => ev.log.push({ at, whoId, k, v }),
-      transferTargets: () => [],
+      // Кандидаты в адресаты — все операторы и группа, как TARGETS модели: сервер проверяет значение поля (ARCH-09)
+      transferTargets: () => OPS.concat(GROUP).map((id) => ({ id, label: id })),
       defaultTransferTarget: () => null,
       onEvict: () => {},
       onBreachShared: () => {},

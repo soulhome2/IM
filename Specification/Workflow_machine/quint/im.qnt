@@ -2573,6 +2573,39 @@ module im {
     w5
   }
 
+  def form_hold(c: Ctx, iid: str): bool = all {
+    c.form.reasonId == "" or all {
+      Set("third_party", "patrol", "no_data", "break", "no_link").contains(c.form.reasonId),
+      settings.holdReasons.foldl(false, (acc, r_652) => acc or ((r_652.id == c.form.reasonId) and (r_652.setBy != "system"))),
+    },
+  }
+
+  def form_transfer(c: Ctx, iid: str): bool = all {
+    c.form.targetId == "" or all {
+      TARGETS.contains(c.form.targetId),
+      ((not(isSelf(c.me, c.form.targetId)) and (c.form.targetId != addressee(world.inc.get(iid)))) and canAccept(c.form.targetId, world.inc.get(iid), "")),
+      incs(world).foldl(true, (acc, e_653) => acc and (((e_653.linkedTo != world.inc.get(iid).id) or isDone(e_653)) or hasAccess(c.form.targetId, e_653))),
+    },
+  }
+
+  def form_close(c: Ctx, iid: str): bool = all {
+    c.form.resultId == "" or all {
+      Set("processed", "false_alarm", "duplicate", "drill", "impossible", "mass").contains(c.form.resultId),
+      closeOptions(c.me, world.inc.get(iid), c.surface).foldl(false, (acc, i_654) => acc or (i_654.id == c.form.resultId)),
+      settings.closeResults.foldl(false, (acc, i_655) => acc or ((i_655.id == c.form.resultId) and stepsOk(i_655, world.inc.get(iid)))),
+    },
+    c.form.causeId == "" or all {
+      (c.form.resultId == "mass"),
+      Set("power", "link", "mass_fault", "known").contains(c.form.causeId),
+    },
+  }
+
+  def formOk(tid: str, c: Ctx, iid: str): bool =
+    if (tid == "hold") form_hold(c, iid)
+    else if (tid == "transfer") form_transfer(c, iid)
+    else if (tid == "close") form_close(c, iid)
+    else true
+
   def trOk(tid: str, c: Ctx, iid: str): bool =
     if (tid == "create") ok_create(c, iid)
     else if (tid == "claim") ok_claim(c, iid)
@@ -2721,9 +2754,9 @@ module im {
   val reached_linked_lost_access = lastAction.name == "linked_lost_access"
 
   def scenarioEditOk(c: Ctx, iid: str): bool = all {
-    ["in_progress"].foldl(false, (acc, y652) => acc or y652 == world.inc.get(iid).state),
+    ["in_progress"].foldl(false, (acc, y656) => acc or y656 == world.inc.get(iid).state),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_653) => acc or ((s_653.id == agentState(c.me)) and s_653.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_657) => acc or ((s_657.id == agentState(c.me)) and s_657.readOnly))),
   }
 
   /* ===== Мир модели ===== */
@@ -2901,6 +2934,8 @@ module im {
       t.surfaces.contains(surface),
       sees(a, i),
       trOk(tid, c, i),
+      // Значения полей-списков — по правилам формы машины, как проверяет сервер (ARCH-09)
+      formOk(tid, c, i),
       commit({ ...act0("manual", tid, a, i), form: form, surface: surface }, windowEnd(canceled, i, before, trApply(tid, c, i, windowStart(canceled, i, world)))),
     }
   }
@@ -3020,6 +3055,16 @@ module im {
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
 
+  // Запрос оператора, который ничего не изменил, — отказанный переход, подсчёт выборки: тоже признак активности.
+  // Любой запрос, кроме чтения (§12.3, BUG-76 а), RULE-112); нужна связь
+  action request(a: str): bool = all {
+    link.get(a),
+    lastBeat' = lastBeat.set(a, clock),
+    world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link, changedAt' = changedAt,
+    lastAction' = act0("env", "request", a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
+  }
+
   // Сменились роли (§5): доступ к объекту инцидента, право «Принимать»
   action roles(a: str, name: str, c: Config): bool = all {
     cfg' = c,
@@ -3122,6 +3167,7 @@ module im {
       },
       loseLink(a),
       restoreLink(a),
+      request(a),
       toggleAccess(a, i),
       toggleAccept(a),
       {

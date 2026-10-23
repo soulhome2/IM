@@ -106,6 +106,8 @@
       t.surfaces.contains(surface),
       sees(a, i),
       trOk(tid, c, i),
+      // Значения полей-списков — по правилам формы машины, как проверяет сервер (ARCH-09)
+      formOk(tid, c, i),
       commit({ ...act0("manual", tid, a, i), form: form, surface: surface }, windowEnd(canceled, i, before, trApply(tid, c, i, windowStart(canceled, i, world)))),
     }
   }
@@ -225,6 +227,16 @@
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
 
+  // Запрос оператора, который ничего не изменил, — отказанный переход, подсчёт выборки: тоже признак активности.
+  // Любой запрос, кроме чтения (§12.3, BUG-76 а), RULE-112); нужна связь
+  action request(a: str): bool = all {
+    link.get(a),
+    lastBeat' = lastBeat.set(a, clock),
+    world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link, changedAt' = changedAt,
+    lastAction' = act0("env", "request", a, NOBODY),
+    autoRun' = INCIDENTS.mapBy(j => 0),
+  }
+
   // Сменились роли (§5): доступ к объекту инцидента, право «Принимать»
   action roles(a: str, name: str, c: Config): bool = all {
     cfg' = c,
@@ -327,6 +339,7 @@
       },
       loseLink(a),
       restoreLink(a),
+      request(a),
       toggleAccess(a, i),
       toggleAccept(a),
       {
