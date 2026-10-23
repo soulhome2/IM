@@ -20,7 +20,8 @@ const opt = (name, dflt) => (process.argv.find((a) => a.startsWith(`--${name}=`)
 const TRACES = Number(opt("traces", 300));
 const STEPS = Number(opt("steps", 40));
 const OPS = ["a", "b"];
-const GROUP = "g";
+// Дежурные группы модели — g и h, в том же порядке (PROC-50)
+const GROUPS = ["g", "h"];
 const IDS = ["i1", "i2", "i3"];
 
 /* ===== Истории модели ===== */
@@ -95,10 +96,10 @@ function replay(states, name) {
       scenarioKey: (ev) => ev.scenarioGuid,
       can: (key) => facts.cfg.perms[me].includes(key),
       permsOf: (who) => (facts.cfg.perms[who] || []).slice(),
-      isGroup: (id) => id === GROUP,
+      isGroup: (id) => GROUPS.includes(id),
       isOperator: (id) => OPS.includes(id),
-      membersOf: (grp) => (grp === GROUP ? OPS.filter((m) => facts.cfg.members[GROUP].includes(m)) : []),
-      dutyGroups: () => [GROUP],
+      membersOf: (grp) => (GROUPS.includes(grp) ? OPS.filter((m) => facts.cfg.members[grp].includes(m)) : []),
+      dutyGroups: () => GROUPS,
       inGroup: () => false,
       agentState: () => facts.agents[me],
       agentStateOf: (who) => facts.agents[who] || "offline",
@@ -115,8 +116,8 @@ function replay(states, name) {
       },
       actorName: (id) => id || "",
       log: (ev, whoId, k, v, at) => ev.log.push({ at, whoId, k, v }),
-      // Кандидаты в адресаты — все операторы и группа, как TARGETS модели: сервер проверяет значение поля (ARCH-09)
-      transferTargets: () => OPS.concat(GROUP).map((id) => ({ id, label: id })),
+      // Кандидаты в адресаты — все операторы и группы, как TARGETS модели: сервер проверяет значение поля (ARCH-09)
+      transferTargets: () => OPS.concat(GROUPS).map((id) => ({ id, label: id })),
       defaultTransferTarget: () => null,
       onEvict: () => {},
       onBreachShared: () => {},

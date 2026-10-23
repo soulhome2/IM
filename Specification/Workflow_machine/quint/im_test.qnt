@@ -6,12 +6,12 @@
 module im_test {
   import im.* from "./im"
 
-  // Оба оператора со всеми правами и доступом ко всему; в дежурной группе — b.
+  // Оба оператора со всеми правами и доступом ко всему; в дежурной группе g — b, группа h пустая.
   // Эскалация: уровень 1 — b, уровень 2 — группа; алерты — группе; лимитов нет
   pure val BASE: Config = {
     perms: Map("a" -> USED_PERMISSIONS, "b" -> USED_PERMISSIONS),
     access: Map("a" -> INCIDENTS, "b" -> INCIDENTS),
-    members: Map(GROUP -> Set("b")),
+    members: Map(GROUP -> Set("b"), GROUP2 -> Set()),
   }
   pure val LEVELS = MACHINE_SETTINGS.escalation.levels
   pure val BASE_SETTINGS: Settings = { ...MACHINE_SETTINGS,
@@ -102,7 +102,7 @@ module im_test {
 
   // В группе уровня 2 — и a: иначе принять в ней мог бы только b, у кого инцидент уже есть (RULE-93)
   run escalationToCeilingTest =
-    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) }, BASE_SETTINGS)
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b"), GROUP2 -> Set()) }, BASE_SETTINGS)
       .then(newFire("i1"))
       .then(expire("i1", "reaction"))
       .expect(urgent)
@@ -123,7 +123,7 @@ module im_test {
 
   // RULE-93: уровень, адресат которого уже держит инцидент, пропускается
   run escalationSkipsCurrentAddresseeTest =
-    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) }, BASE_SETTINGS)
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b"), GROUP2 -> Set()) }, BASE_SETTINGS)
       .then(newFire("i1"))
       .then(actF("a", "transfer", "i1", target("b")))
       .then(expire("i1", "reaction"))
@@ -151,9 +151,24 @@ module im_test {
       .expect(lastAction.name == "auto_escalate" and x1.owner == "" and x1.assignmentGroup == GROUP and x1.escalationLevel == 2)
       .expect(inv)
 
+  // RULE-100, ветка дежурной группы (PROC-50): адресат уровня 1 вышел, но в его группе g есть кому принять, —
+  // уровень не пропускается: эскалация отдаёт ему, и инцидент сразу уходит группе g, а не группе уровня 2 (h)
+  run escalationSignedOutToOwnGroupTest =
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b"), GROUP2 -> Set("b")) },
+      { ...BASE_SETTINGS, escalation: { ...BASE_SETTINGS.escalation,
+        levels: [{ ...LEVELS[0], targetKind: "user", target: "a" }, { ...LEVELS[1], targetKind: "group", target: GROUP2 }] } })
+      .then(signOut("a"))
+      .then(newFire("i1"))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "auto_escalate" and x1.owner == "a" and x1.escalationLevel == 1)
+      .then(fire("i1"))
+      .expect(lastAction.name == "addressee_signed_out_to_group" and x1.owner == "" and x1.assignmentGroup == GROUP and x1.escalationLevel == 1)
+      .expect(inv)
+
   // RULE-93 по нормативу закрытия: уровень 1 — сам владелец, пропущен
   run resolutionEscalateSkipsOwnerTest =
-    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b")) },
+    initWith({ ...BASE, members: Map(GROUP -> Set("a", "b"), GROUP2 -> Set()) },
       withLevel1({ ...BASE_SETTINGS, escalation: { ...BASE_SETTINGS.escalation, onResolutionOverdue: "escalate" } }, "a"))
       .then(newFire("i1"))
       .then(act("a", "claim", "i1"))

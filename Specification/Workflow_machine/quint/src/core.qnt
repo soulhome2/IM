@@ -272,6 +272,7 @@
     nondet perms = OPERATORS.setOfMaps(USED_PERMISSIONS.powerset()).oneOf()
     nondet access = OPERATORS.setOfMaps(INCIDENTS.powerset()).oneOf()
     nondet grp = OPERATORS.powerset().oneOf()
+    nondet grp2 = OPERATORS.powerset().oneOf()
     // Настройки, от которых зависят ветки автоматических переходов, — из машины (BRANCH_SETTINGS, PROC-43)
     nondet branch = BRANCH_SETTINGS.oneOf()
     nondet maxActive = Set(0, 1).oneOf()
@@ -280,12 +281,12 @@
     nondet starts = OPERATORS.setOfMaps(AGENT_STARTS).oneOf()
     val levels = MACHINE_SETTINGS.escalation.levels
     all {
-      cfg' = { perms: perms, access: access, members: Map(GROUP -> grp) },
+      cfg' = { perms: perms, access: access, members: Map(GROUP -> grp, GROUP2 -> grp2) },
       // Настройки — значения машины; перебираются ветки автоматики (withBranches) и лимиты, люди — люди модели:
-      // уровень 1 — человек, уровень 2 — дежурная группа, алерты — группе
+      // уровень 1 — человек, уровень 2 — дежурная группа h, алерты — группе g
       settings' = withBranches({ ...MACHINE_SETTINGS,
         escalation: { ...MACHINE_SETTINGS.escalation,
-          levels: [{ ...levels[0], targetKind: "user", target: level1 }, { ...levels[1], targetKind: "group", target: GROUP }] },
+          levels: [{ ...levels[0], targetKind: "user", target: level1 }, { ...levels[1], targetKind: "group", target: GROUP2 }] },
         alerts: { ...MACHINE_SETTINGS.alerts, targetKind: "group", target: GROUP },
         limits: { ...MACHINE_SETTINGS.limits, maxActive: maxActive, maxOnHold: maxOnHold },
       }, branch),

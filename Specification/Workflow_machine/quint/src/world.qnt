@@ -8,8 +8,12 @@
   pure val INCIDENTS: Set[str] = Set("i1", "i2", "i3")
   pure val OPERATOR_LIST: List[str] = ["a", "b"]
   pure val OPERATORS: Set[str] = Set("a", "b")
+  // Две дежурные группы: уровень 2 эскалации — не та группа, куда уходит вышедший адресат уровня 1, — так
+  // ветка «вышел — его группе» отличима от «пропустить уровень» (RULE-100, PROC-50). Порядок — как у машины
   pure val GROUP = "g"
-  pure val GROUPS: Set[str] = Set(GROUP)
+  pure val GROUP2 = "h"
+  pure val GROUP_LIST: List[str] = [GROUP, GROUP2]
+  pure val GROUPS: Set[str] = Set(GROUP, GROUP2)
   pure val TARGETS: Set[str] = OPERATORS.union(GROUPS)
   // Сценарий без графа (§14.5): два сценария, у каждого два шага; пройден — отвечены оба (набор closing)
   pure val SCENARIOS: Set[str] = Set("fire", "water")
@@ -47,9 +51,9 @@
   def isOperator(id: str): bool = OPERATORS.contains(id)
   def isGroup(id: str): bool = GROUPS.contains(id)
   def members(g: str): List[str] = if (isGroup(g)) OPERATOR_LIST.select(m => cfg.members.get(g).contains(m)) else []
-  def dutyGroups: List[str] = [GROUP]
-  // Кому вообще можно передавать: люди и дежурная группа (§8.1, BUG-85)
-  def transferTargets: List[str] = OPERATOR_LIST.concat([GROUP])
+  def dutyGroups: List[str] = GROUP_LIST
+  // Кому вообще можно передавать: люди и дежурные группы (§8.1, BUG-85)
+  def transferTargets: List[str] = OPERATOR_LIST.concat(GROUP_LIST)
   // Групп устройств в модели нет: строк overrides по sourceGroup в машине тоже нет
   def inSourceGroup(x: Incident, g: str): bool = false
   def agentState(who: str): str = if (OPERATORS.contains(who)) agents.get(who) else "offline"
