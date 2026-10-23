@@ -286,6 +286,8 @@ module im_test {
       .then(newFire("i2"))
       .then(newFire("i3"))
       .then(merge("a", "i1", Set("i2")))
+      // Основного выбирает сервер (RULE-101): свой в работе i1 отложен — основным станет новый i3
+      .then(actF("a", "hold", "i1", reason("patrol")))
       .then(merge("a", "i3", Set("i1")))
       .expect(x1.linkedTo == "i3" and x2.linkedTo == "i3" and x2.leftGroup.primaryId == "i1")
       .expect(inv)

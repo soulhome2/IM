@@ -199,7 +199,7 @@
     assert.status(await env.act(v1.guid, "claim", {}, "queue"), 200, null, "взять v1");
     await answerOk(env, v1.guid, "visual", ["confirmed"]);
     const before = values(await scenarioOf(env, v2.guid));
-    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [v1.guid, v2.guid], primaryGuid: v1.guid });
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [v1.guid, v2.guid] });
     const primary = await scenarioOf(env, res.incident.guid);
     assert.eq(primary.scenarioVersion, 1, "основной — на своей версии");
     assert.eq(values(primary), { visual: ["confirmed"], verdict: "dispatch", kind: { kind: ["smoke"] } }, "перенесены классификация и тип; эвакуации в версии 1 нет");
@@ -223,7 +223,7 @@
     await env.act(a.guid, "release", { comment: "тест" });
     const before = values(await scenarioOf(env, a.guid));
     await env.act(b.guid, "claim", {}, "queue");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: b.guid });
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid] });
     assert.status(await env.act(b.guid, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть основной");
     const linked = await env.card(a.guid);
     assert.eq([linked.state, values(linked.scenario), linked.readOnly], ["closed", before, true], "привязанный закрыт, прохождение то же, на просмотр");

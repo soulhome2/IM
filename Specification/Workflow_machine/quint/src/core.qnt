@@ -140,11 +140,16 @@
       commit({ ...act0(kind, MERGE, a, p), others: list }, w5),
     }
   }
-  action merge(a: str, p: str, others: Set[str]): bool = mergeAs("merge", a, p, others)
-  // Основного не назвали — сервер выбирает по mergePrimary машины (§11, ARCH-08 в1)
+  // Основного выбирает сервер по mergePrimary машины (§11, ARCH-08 в1); назвать его клиент не может (RULE-101)
   action mergeAuto(a: str, sel: Set[str]): bool = {
     val ps = mergePrimary(IDS.select(j => sel.contains(j)).foldl([], (acc, j) => acc.append(incOf(j))), a)
     all { ps.length() == 1, mergeAs("merge_auto", a, ps[0].id, sel.exclude(Set(ps[0].id))) }
+  }
+  // Для сценариев: объединение, в котором сервер выбирает основным именно p
+  action merge(a: str, p: str, others: Set[str]): bool = {
+    val sel = others.union(Set(p))
+    val ps = mergePrimary(IDS.select(j => sel.contains(j)).foldl([], (acc, j) => acc.append(incOf(j))), a)
+    all { ps.length() == 1, ps[0].id == p, mergeAs("merge_auto", a, p, others.exclude(Set(p))) }
   }
 
   /* ===== Автоматические переходы: планировщик ===== */
@@ -322,11 +327,6 @@
         val form = { ...NO_FORM, targetId: target, reasonId: reason, resultId: result,
           causeId: if (CAUSE_FOR.keys().contains(result)) CAUSE_FOR.get(result) else "", comment: "c" }
         manual(a, tid, i, form, surface)
-      },
-      {
-        nondet p = INCIDENTS.oneOf()
-        nondet others = INCIDENTS.powerset().oneOf()
-        merge(a, p, others)
       },
       {
         nondet sel = INCIDENTS.powerset().oneOf()

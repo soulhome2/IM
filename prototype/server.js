@@ -1166,7 +1166,8 @@
     // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null. Выборка — по возрастанию
     // номера, а не в порядке отметки: у совсем равных основной — меньший номер, как в модели Quint
     const pickPrimary = (list) => engine.mergePrimary([...list].sort(byNumber));
-    function mergeIncidents(guids, primaryGuid, expected) {
+    // Основной — всегда по §11.3 (mergePrimary машины): выбрать его клиент не может (RULE-101)
+    function mergeIncidents(guids, expected) {
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
       // Объединение — всё или ничего: хоть один изменился после отметки — не выполняется (BUG-84)
@@ -1178,7 +1179,7 @@
       // Одно — просто «Взять»; от двух — не меньше bulk.minItems перехода объединения машины
       const min = (W.transitions.find((t) => t.bulk && t.bulk.mode === "merge") || { bulk: {} }).bulk.minItems;
       if (list.length > 1 && list.length < min) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: min }]);
-      const primary = primaryGuid ? list.find((e) => e.id === primaryGuid) : pickPrimary(list);
+      const primary = pickPrimary(list);
       if (!primary) return problem(422, "BULK_SELECTION_INVALID", ["workflow.guard.merge_primary"]);
       const others = list.filter((e) => e !== primary);
       const r = engine.merge(primary, others);
@@ -1423,7 +1424,7 @@
           return Object.assign(reply(), { again: reply });
         },
       ],
-      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.primaryGuid, body && body.expectedVersions)],
+      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.expectedVersions)],
       [
         "DELETE",
         "/operator/incidents/{incidentGuid}/linked/{linkedGuid}",

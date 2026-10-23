@@ -1622,7 +1622,8 @@
   test("Окно после дедлайна: «Взять в работу одним» в окне — нарушение не теряется ни у привязанного, ни у основного (BUG-62)", async () => {
     assert.ok(GRACE > 0, "окно задано в машине");
     const noEscalation = { workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { enabled: false }) }) };
-    const merge = (env, primary, other) => env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, other], primaryGuid: primary });
+    // Основного выбирает сервер (mergePrimary, RULE-101): свой в работе, иначе самый срочный новый
+    const merge = (env, primary, other) => env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, other] });
     const overriddenAt = (card, kind, due) => {
       assert.eq(card.breaches.map((b) => [b.kind, Date.parse(b.at)]), [[kind, due]], `${card.number}: нарушение ${kind} на момент дедлайна`);
       assert.ok(card.journal.some((j) => j.templateKey === "workflow.journal.timer_overridden"), `${card.number}: отмена — в журнале`);
@@ -1634,6 +1635,8 @@
         .filter((e) => e.state === "new" && e.eventType.id === "fire")
         .sort((x, y) => Date.parse(x.timer.dueAt) - Date.parse(y.timer.dueAt));
       const due = Date.parse(late.timer.dueAt);
+      // Основной — другой: он свой в работе, и сервер выберет его
+      if (!asPrimary) assert.status(await env.act(other.guid, "claim", {}, "queue"), 200, null, "взять будущий основной");
       await env.advance(Math.round((due - env.now) / 1000) + 1);
       const res = asPrimary ? await merge(env, late.guid, other.guid) : await merge(env, other.guid, late.guid);
       assert.status(res, 200, null, asPrimary ? "объединить, основной — с истёкшей реакцией" : "объединить, привязанный — с истёкшей реакцией");
@@ -1681,7 +1684,7 @@
     assert.ok(fired.some((f) => f.incidentGuid === late.guid && f.transitionId === "reaction_overdue"), "по окончании окна таймер сработал");
     assert.eq((await env.card(late.guid)).breaches.map((b) => [b.kind, Date.parse(b.at)]), [["reaction", due]], "нарушение реакции записано на момент дедлайна");
     // Основной новый: объединение и «Взять» основного — одна транзакция; «Взять» падает — привязанного нет
-    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, other.guid], primaryGuid: primary.guid });
+    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, other.guid] });
     assert.ok(res.status >= 400, `объединение со сбоем «Взять» — ошибка, а не ${res.status}`);
     assert.eq([(await env.card(other.guid)).state, (await env.card(primary.guid)).state], ["new", "new"], "оба — новые, как были");
     const linked = await env.ok("GET", `/operator/incidents/${enc(primary.guid)}/linked?pageSize=10`);
@@ -1947,7 +1950,9 @@
     const env = await makeEnv({ fixturePatch: { people } });
     const [mall, office, third] = await Promise.all(["INC-1847", "INC-1838", "INC-1828"].map((n) => env.guidOf(n)));
     assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [] }), 422, "BULK_SELECTION_INVALID", "ничего не отмечено");
-    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office, third], primaryGuid: mall }), 200, null, "взять как одно с основным в ТЦ");
+    // Основной — в ТЦ: свой в работе, его и выберет сервер (mergePrimary, RULE-101)
+    assert.status(await env.act(mall, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office, third] }), 200, null, "взять как одно с основным в ТЦ");
     const detached = await env.call("DELETE", `/operator/incidents/${enc(mall)}/linked/${enc(third)}`);
     assert.status(detached, 200, null, "отсоединить");
     const back = await env.card(third);
@@ -2011,9 +2016,9 @@
     const env = await makeEnv();
     const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     assert.ok(d, "в демо-данных четыре новых пожара");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: a.guid });
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [c.guid, d.guid], primaryGuid: c.guid });
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, c.guid], primaryGuid: a.guid });
+    await (await mergeInto(env, a.guid, [b.guid])).body;
+    await (await mergeInto(env, c.guid, [d.guid])).body;
+    await (await mergeInto(env, a.guid, [c.guid])).body;
     const cards = await Promise.all([b, c, d].map((e) => env.card(e.guid)));
     assert.ok(cards.every((x) => x.state === "linked" && x.linkedTo === a.guid), "B, C и D привязаны к A напрямую");
     // В списках — инциденты хоть одного фильтра очереди машины: и при фильтре, и без него
@@ -2031,10 +2036,10 @@
     const [e, f] = [0, 1].map((k) => Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000098${k}0`, number: `INC-98${k}0` }));
     const env2 = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat([e, f]) } });
     const lead = (await env2.all("open")).find((x) => x.number === "INC-1838");
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [e.guid, f.guid], primaryGuid: e.guid });
+    await (await mergeInto(env2, e.guid, [f.guid])).body;
     assert.status(await env2.act(e.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть E");
     assert.status(await env2.act(e.guid, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть E");
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [lead.guid, e.guid], primaryGuid: lead.guid });
+    await (await mergeInto(env2, lead.guid, [e.guid])).body;
     const closed = await env2.card(f.guid);
     assert.eq([closed.state, closed.linkedTo], ["closed", e.guid], "закрытый F остался при E как история");
   });
@@ -2047,6 +2052,21 @@
     return { urgent, fresh, calm };
   };
   const resolutionBreaches = (card) => card.breaches.filter((b) => b.kind === "resolution");
+  // «Взять в работу» одним с этим основным. Основного выбирает сервер (mergePrimary, RULE-101): свой в работе — самый
+  // срочный, при равенстве — появившийся раньше; иначе самый срочный новый. Свой в работе, который обогнал бы нужного,
+  // откладывается в тот же миг: остаток его срока тот же, и отложенный присоединяется так же
+  async function mergeInto(env, primary, others) {
+    const p = await env.card(primary);
+    const mineInWork = (c) => c.state === "in_progress" && c.ownership === "owner";
+    for (const g of others) {
+      const c = await env.card(g);
+      const ahead = !mineInWork(p) || c.priority > p.priority || (c.priority === p.priority && Date.parse(c.occurredAt) < Date.parse(p.occurredAt));
+      if (mineInWork(c) && ahead) assert.status(await env.act(g, "hold", { reasonId: "third_party", comment: "в группу" }), 200, null, `отложить ${c.number}`);
+    }
+    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary].concat(others) });
+    if (res.status === 200) assert.eq(res.body.incident.guid, primary, "основной — тот, кого ждёт тест");
+    return res;
+  }
 
   test("Срок группы — самый ранний из объединённых; у привязанных своего нет; истёк — нарушение у основного и у каждого привязанного, на владельца основного (§11.4, RULE-97)", async () => {
     const env = await makeEnv();
@@ -2055,7 +2075,7 @@
     await env.advance(30);
     const early = (await env.card(urgent.guid)).timer.dueAt;
     assert.ok(Date.parse(early) < Date.parse((await env.card(calm.guid)).timer.dueAt), "у срочного срок раньше");
-    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid, fresh.guid], primaryGuid: calm.guid });
+    const res = await (await mergeInto(env, calm.guid, [urgent.guid, fresh.guid])).body;
     assert.eq(res.incident.timer.dueAt, early, "срок основного — самый ранний из объединённых");
     // Срок стал раньше — запись в журнал основного, одна, по тому, чей срок стал сроком группы (RULE-98)
     const tightened = (await env.card(calm.guid)).journal.filter((j) => j.templateKey === "workflow.journal.group_deadline");
@@ -2081,7 +2101,7 @@
     const env2 = await makeEnv();
     for (const e of [urgent, calm]) await env2.act(e.guid, "claim", {}, "queue");
     const own = (await env2.card(urgent.guid)).timer.dueAt;
-    const res2 = await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    const res2 = await (await mergeInto(env2, urgent.guid, [calm.guid])).body;
     assert.eq(res2.incident.timer.dueAt, own, "привязанный с более поздним сроком срок основного не меняет");
     assert.ok(!(await env2.card(urgent.guid)).journal.some((j) => j.templateKey === "workflow.journal.group_deadline"), "срок не стал раньше — записи о сроке группы нет");
     // Два присоединённых сжимают срок по очереди — запись одна, по тому, чей срок стал сроком группы (RULE-98)
@@ -2089,7 +2109,7 @@
     await env5.act(urgent.guid, "claim", {}, "queue");
     await env5.advance(30);
     for (const e of [fresh, calm]) await env5.act(e.guid, "claim", {}, "queue");
-    await env5.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, fresh.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env5, calm.guid, [fresh.guid, urgent.guid])).body;
     const twice = (await env5.card(calm.guid)).journal.filter((j) => j.templateKey === "workflow.journal.group_deadline");
     assert.eq(twice.map((j) => j.vars.number), [urgent.number], "одна запись о сроке группы — по самому раннему");
     // Основной новый — берётся тем же действием, срок тоже самый ранний
@@ -2097,12 +2117,12 @@
     await env4.act(urgent.guid, "claim", {}, "queue");
     await env4.advance(30);
     const urgentDue = (await env4.card(urgent.guid)).timer.dueAt;
-    const res4 = await env4.ok("POST", "/operator/incidents/merge", { incidentGuids: [fresh.guid, urgent.guid], primaryGuid: fresh.guid });
+    const res4 = await (await mergeInto(env4, fresh.guid, [urgent.guid])).body;
     assert.eq([res4.incident.state, res4.incident.timer.dueAt], ["in_progress", urgentDue], "новый основной взят, срок — самый ранний");
     // Закрыли основной раньше срока — нарушений нет
     const env3 = await makeEnv();
     for (const e of [urgent, calm]) await env3.act(e.guid, "claim", {}, "queue");
-    await env3.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env3, calm.guid, [urgent.guid])).body;
     assert.status(await env3.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     await env3.advance(900);
     const closed = await env3.card(urgent.guid);
@@ -2114,7 +2134,7 @@
       const env = await makeEnv();
       const { urgent, calm } = await fireTrio(env);
       for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
-      await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+      await (await mergeInto(env, calm.guid, [urgent.guid])).body;
       const due = (await env.card(calm.guid)).timer.dueAt;
       const form = away === "release" ? { comment: "не моё" } : { targetId: "petrova", comment: "тест" };
       assert.status(await env.act(calm.guid, away, form, "card"), 200, null, `основной: ${away}`);
@@ -2125,7 +2145,7 @@
     const env = await makeEnv();
     const { urgent, calm } = await fireTrio(env);
     for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    await (await mergeInto(env, urgent.guid, [calm.guid])).body;
     await env.advance(60);
     const groupDue = (await env.card(urgent.guid)).timer.dueAt;
     assert.status(await env.call("DELETE", `/operator/incidents/${enc(urgent.guid)}/linked/${enc(calm.guid)}`), 200, null, "отсоединить");
@@ -2140,13 +2160,13 @@
     await env.advance(Math.ceil((Date.parse((await env.card(urgent.guid)).timer.dueAt) - env.now) / 1000) + 5);
     assert.eq(resolutionBreaches(await env.card(urgent.guid)).length, 1, "у срочного свой срок нарушен");
     const own = (await env.card(calm.guid)).timer.dueAt;
-    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    const res = await (await mergeInto(env, calm.guid, [urgent.guid])).body;
     assert.eq(res.incident.timer.dueAt, own, "просроченный срок группы не сжимает");
     assert.eq(resolutionBreaches(await env.card(urgent.guid)).length, 1, "второго нарушения за свой срок нет");
     // Срок группы истёк, привязанный отсоединили и взяли: отработанный срок не даёт второго нарушения (RULE-50)
     const env3 = await makeEnv();
     for (const e of [urgent, calm]) await env3.act(e.guid, "claim", {}, "queue");
-    await env3.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, calm.guid], primaryGuid: urgent.guid });
+    await (await mergeInto(env3, urgent.guid, [calm.guid])).body;
     await env3.advance(Math.ceil((Date.parse((await env3.card(urgent.guid)).timer.dueAt) - env3.now) / 1000) + 5);
     assert.eq(resolutionBreaches(await env3.card(calm.guid)).length, 1, "нарушение срока группы у привязанного");
     assert.status(await env3.call("DELETE", `/operator/incidents/${enc(urgent.guid)}/linked/${enc(calm.guid)}`), 200, null, "отсоединить");
@@ -2156,7 +2176,7 @@
     // Окно после дедлайна: закрытие основного выигрывает у таймера, нарушение — на момент срока, и привязанным
     const env2 = await makeEnv();
     for (const e of [urgent, calm]) await env2.act(e.guid, "claim", {}, "queue");
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env2, calm.guid, [urgent.guid])).body;
     const due = (await env2.card(calm.guid)).timer.dueAt;
     await env2.advance(Math.ceil((Date.parse(due) - env2.now) / 1000) + 1);
     const closing = await env2.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
@@ -2173,7 +2193,7 @@
     const env = await makeEnv();
     const { urgent, calm } = await fireTrio(env);
     for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env, calm.guid, [urgent.guid])).body;
     const due = (await env.card(calm.guid)).timer.dueAt;
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
     assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(urgent.guid)}`), 200, null, "отсоединить в окне");
@@ -2192,10 +2212,10 @@
     const rain = (await env2.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority < urgent.priority && e.guid !== calm.guid);
     assert.ok(rain, "есть пожар с нормативом длиннее срочного");
     for (const e of [urgent, calm, rain]) await env2.act(e.guid, "claim", {}, "queue");
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env2, calm.guid, [urgent.guid])).body;
     const due2 = (await env2.card(calm.guid)).timer.dueAt;
     await env2.advance(Math.ceil((Date.parse(due2) - env2.now) / 1000) + 1);
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, rain.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env2, calm.guid, [rain.guid])).body;
     await env2.advance(GRACE + 2);
     assert.eq(resolutionBreaches(await env2.card(urgent.guid)).length, 1, "прежнему привязанному — нарушение группы");
     assert.eq(resolutionBreaches(await env2.card(rain.guid)).length, 0, "присоединённому после срока — нет");
@@ -2206,7 +2226,7 @@
     const env = await makeEnv();
     const { urgent, calm } = await fireTrio(env);
     for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env, calm.guid, [urgent.guid])).body;
     const due = (await env.card(calm.guid)).timer.dueAt;
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
     assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(urgent.guid)}`), 200, null, "отсоединить в окне");
@@ -2221,10 +2241,10 @@
     const { urgent, fresh, calm } = await fireTrio(env);
     for (const e of [urgent, fresh, calm]) await env.act(e.guid, "claim", {}, "queue");
     // Группа «срочный + привязанный»; её срок проходит, в окне срочный присоединяют к спокойному
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [urgent.guid, fresh.guid], primaryGuid: urgent.guid });
+    await (await mergeInto(env, urgent.guid, [fresh.guid])).body;
     const due = (await env.card(urgent.guid)).timer.dueAt;
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [calm.guid, urgent.guid], primaryGuid: calm.guid });
+    await (await mergeInto(env, calm.guid, [urgent.guid])).body;
     await env.advance(GRACE + 2);
     const moved = await env.card(fresh.guid);
     assert.eq(moved.linkedTo, calm.guid, "привязанный перешёл к новому основному");
@@ -2238,7 +2258,7 @@
     const env = await makeEnv();
     const [a, b, c] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     for (const e of [a, b]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: a.guid });
+    await (await mergeInto(env, a.guid, [b.guid])).body;
     assert.status(await env.act(a.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
     assert.eq((await env.card(b.guid)).linkedTo, a.guid, "закрытый вместе с основным — при нём как история");
     assert.status(await env.act(b.guid, "reopen", { comment: "тест" }, "queue"), 200, null, "переоткрыть привязанный");
@@ -2252,7 +2272,7 @@
     // Основной переоткрыли и объединили с другим — переоткрытый не трогается
     assert.status(await env.act(a.guid, "reopen", { comment: "тест" }, "queue"), 200, null, "переоткрыть основной");
     assert.status(await env.act(c.guid, "claim", {}, "queue"), 200, null, "взять третий");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [c.guid, a.guid], primaryGuid: c.guid });
+    await (await mergeInto(env, c.guid, [a.guid])).body;
     const after = await env.card(b.guid);
     assert.eq([after.state, after.linkedTo], ["in_progress", null], "переоткрытый остался сам по себе");
     // Обычное переоткрытие — без записей о связи
@@ -2272,7 +2292,7 @@
     const office = fires.find((e) => e.site !== "Торговый центр");
     assert.ok(mall && office, "пожары в ТЦ и вне его");
     assert.status(await env.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [mall.guid, office.guid], primaryGuid: mall.guid });
+    await (await mergeInto(env, mall.guid, [office.guid])).body;
     const due = (await env.card(mall.guid)).timer.dueAt;
     // Вручную Кузнецову (только ТЦ) нельзя: нет доступа к привязанному
     const manual = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
@@ -2292,7 +2312,7 @@
     // Смена ролей: у владельца основного больше нет доступа к объекту привязанного
     const env2 = await makeEnv();
     assert.status(await env2.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
-    await env2.ok("POST", "/operator/incidents/merge", { incidentGuids: [mall.guid, office.guid], primaryGuid: mall.guid });
+    await (await mergeInto(env2, mall.guid, [office.guid])).body;
     const roles = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] });
     assert.ok(!roles.body.fired.some((f) => f.transitionId === "linked_lost_access"), "доступ остался — привязанный на месте");
     const res = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
@@ -2312,7 +2332,7 @@
     assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять B");
     await answer(b.guid, "visual", ["confirmed"], "B: подтверждение");
     await answer(b.guid, "verdict", "false_alarm", "B: классификация");
-    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: b.guid });
+    const res = await (await mergeInto(env, b.guid, [a.guid])).body;
     const primary = await env.card(res.incident.guid);
     const state = primary.scenario.result.state;
     assert.eq([state.verdict.value, state.kind.value], ["false_alarm", { kind: ["smoke"] }], "тип сработки из A перенесён, своя классификация B осталась");
@@ -2350,7 +2370,7 @@
       Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
     );
     const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)), primaryGuid: base.guid });
+    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
     const last = extra[extra.length - 1];
     const res = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(last.number)}`);
     assert.eq(res.items.map((e) => e.guid), [base.guid], "найден основной, привязанного строкой нет");
@@ -2370,7 +2390,7 @@
       Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
     );
     const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
-    const many = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)), primaryGuid: base.guid });
+    const many = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
     const entry = (c) => c.journal.filter((e) => /merged_in/.test(e.templateKey)).pop();
     const big = entry(await env.card(many.incident.guid));
     assert.eq([big.templateKey, big.vars.ids.split(", ").length, big.vars.more], ["workflow.journal.merged_in_more", 5, 1], "пять номеров и ещё один");
@@ -2570,7 +2590,7 @@
     };
     await same("до объединения");
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
-    await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid], primaryGuid: a.guid });
+    await (await mergeInto(env, a.guid, [b.guid])).body;
     assert.eq((await env.card(b.guid)).state, "linked", "второй привязан");
     await same("после объединения");
   });

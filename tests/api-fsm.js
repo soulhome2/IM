@@ -130,7 +130,9 @@
     async function run(stepSec, windowSec) {
       const env = await standWith({ workflow: withEscalation({ levels: levelsTo(["user:kuznetsov"]) }), fixture: Object.assign({}, window.IM_FIXTURE, { people }) });
       const [mall, office] = await Promise.all(["INC-1847", "INC-1838"].map((n) => env.guidOf(n)));
-      assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office], primaryGuid: mall }), 200, null, "взять одним");
+      // Основной — в ТЦ: свой в работе, его и выберет сервер (mergePrimary, RULE-101)
+      assert.status(await env.act(mall, "claim", {}, "queue"), 200, null, "взять INC-1847");
+      assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office] }), 200, null, "взять одним");
       assert.status(await env.act(mall, "release", { comment: "тест" }), 200, null, "основной — в очередь");
       const start = env.now;
       const fired = [];
@@ -215,15 +217,18 @@
     assert.status(await env.act(linked.guid, "claim", {}, "queue"), 200, null, "взять будущий привязанный");
     const primary = (await env.all("open")).find((e) => e.state === "new" && e.eventType.id === "fire");
     assert.status(await env.act(primary.guid, "claim", {}, "queue"), 200, null, "взять основной");
-    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, linked.guid], primaryGuid: primary.guid }), 200, null, "взять в работу одним");
-    return { linked: linked.guid, primary: primary.guid };
+    // Основного выбирает сервер (mergePrimary, RULE-101): какой из двух — тот и основной
+    const merged = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary.guid, linked.guid] });
+    assert.status(merged, 200, null, "взять в работу одним");
+    const p = merged.body.incident.guid;
+    return { linked: p === primary.guid ? linked.guid : primary.guid, primary: p };
   };
   const REENTRY_LINKED = {
     merge: {
       name: "истёк срок группы → «Отсоединить» → снова «Взять в работу» одним",
       async run(env, { linked, primary }) {
         assert.status(await env.call("DELETE", `/operator/incidents/${enc(primary)}/linked/${enc(linked)}`), 200, null, "отсоединить");
-        assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, linked], primaryGuid: primary }), 200, null, "снова одним");
+        assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [primary, linked] }), 200, null, "снова одним");
       },
     },
   };
