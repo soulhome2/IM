@@ -22,6 +22,7 @@ const MUTATIONS = [
   ["level-signed-out", "эскалация отдаёт вышедшему, у кого в группе никого (RULE-100)", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))"],
   ["level-no-duty-group", "эскалация пропускает вышедшего, хотя в его дежурной группе есть кому принять (RULE-100, PROC-50)", "(signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))", "signedIn(who)"],
   ["level-group-owner", "эскалация считает в группе и владельца (RULE-93)", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')"],
+  ["breach-at-now", "нарушение датируется моментом записи, а не дедлайном (§10.1, правило 5; PROC-51)", "'at': deadline, 'owner': addressee(before)", "'at': now, 'owner': addressee(before)"],
   ["breach-no-owner", "нарушение записывается ни на кого", "'owner': addressee(before)", "'owner': ''"],
   ["group-breach-not-shared", "нарушение основного привязанным не записывается (RULE-97)", "groupMembersAt(incident, deadline)", "[]"],
   ["window-left-not-in-group", "отсоединённый в окне после срока группы — не в группе (BUG-73)", " || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)", ""],

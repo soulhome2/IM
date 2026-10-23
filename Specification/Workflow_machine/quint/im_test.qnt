@@ -532,8 +532,20 @@ module im_test {
       .expect(not(urgent))
       .then(act("a", "claim", "i1"))
       .expect(x1.state == "in_progress" and x1.owner == "a" and breachesOf(x1, "reaction") == 1)
+      // Нарушение — на момент дедлайна, а не взятия в окне (§10.1, правило 5; PROC-51): инцидент появился в START
+      .expect(x1.breaches.select(b => b.kind == "reaction")[0].at == START + 1000 * timerSec(x1, "reaction", ""))
       .then(jump(clock + GRACE_MS))
       .expect(not(urgent))
+      .expect(inv)
+
+  // Переход по таймеру после окна датирует нарушение тоже дедлайном, а не моментом срабатывания (PROC-51)
+  run timerBreachAtDeadlineTest =
+    initWith(BASE, NO_ESCALATION)
+      .then(newFire("i1"))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "reaction_overdue" and breachesOf(x1, "reaction") == 1)
+      .expect(x1.breaches[0].at == START + 1000 * timerSec(x1, "reaction", "") and clock > x1.breaches[0].at)
       .expect(inv)
 
   // «Взять в работу одним» в окне: основного берут — его нарушение тоже не теряется (BUG-62)
