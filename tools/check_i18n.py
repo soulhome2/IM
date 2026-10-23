@@ -7,7 +7,8 @@
 весь текст элемента или значение атрибута. Подстрока другой строки или комментарий не считаются (PROC-32).
 Непереведённые строки ловит самопроверка прототипа.
 Ещё: после подстановки имени ({ownerName}, {targetName}…) нет точки — имя и так кончается на «М.», вышло
-бы «Петрова М..» (BUG-96); проверяются каталоги строк машины и словари прототипа.
+бы «Петрова М..» (BUG-96); проверяются каталоги строк машины и словари прототипа. И: русская строка в t("…") и
+te("…") в коде app.js есть в словарях — иначе на другом языке она останется русской (BUG-101).
 С --fix удаляет лишние ключи из словарей.
 Код выхода 1, если нашлись лишние ключи или ключи, которые есть только в одном языке.
 """
@@ -23,6 +24,17 @@ ENTRY = r'^    "((?:[^"\\]|\\.)*)":\s*(?:\n\s*)?"(?:[^"\\]|\\.)*",\n'
 CATALOGS = os.path.join(ROOT, "Specification", "Workflow_machine", "strings")
 # Подстановка имени, а за ней точка: «{ownerName}.»
 NAME_DOT = re.compile(r"\{\w*Name\}\.")
+
+
+# Строка интерфейса в коде: t("…") или te("…")
+UI_CALL = re.compile(r'\bte?\(\s*"((?:[^"\\]|\\.)*)"')
+
+
+def untranslated(dict_keys):
+    """Русские строки t("…") и te("…") в app.js, которых нет в словарях (BUG-101)."""
+    with open(os.path.join(PROTO, "app.js"), encoding="utf-8") as f:
+        lits = UI_CALL.findall(f.read())
+    return sorted({s for s in lits if re.search("[А-Яа-яЁё]", s) and s not in dict_keys})
 
 
 def name_dots():
@@ -63,6 +75,7 @@ def main():
         with open(os.path.join(PROTO, name), encoding="utf-8") as f:
             sources.append(f.read())
     problems = 0
+    dict_keys = set()
     for name in DICTS:
         path = os.path.join(PROTO, name)
         with open(path, encoding="utf-8") as f:
@@ -70,6 +83,7 @@ def main():
         # Языки словаря — все разделы; каждый сверяется с английским
         langs = re.findall(r"^  ([a-z]{2}): \{$", text, re.M)
         sets = {lang: set(keys_of(text, lang)) for lang in langs}
+        dict_keys |= set().union(*sets.values())
         for lang in langs:
             for key in sorted(sets["en"] ^ sets[lang]):
                 print(f"{name}: «{key}» есть только в {'en' if key in sets['en'] else lang}")
@@ -84,6 +98,9 @@ def main():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             print(f"{name}: удалено {len(unused)}")
+    for s in untranslated(dict_keys):
+        print(f"app.js: «{s}» нет в словарях — останется русской")
+        problems += 1
     for line in name_dots():
         print(line)
         problems += 1
