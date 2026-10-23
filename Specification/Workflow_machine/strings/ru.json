@@ -365,7 +365,7 @@
   "workflow.settings.limits.maxOnHold": "Отложенных",
   "workflow.settings.limits.maxOnHold.what": "Сколько оператор может отложить вручную. Можно «без ограничения»: ручное «Отложить» доступно всегда",
   "workflow.settings.limits.maxBulk": "В выборке",
-  "workflow.settings.limits.maxBulk.what": "Сколько инцидентов можно отметить для группового действия. Можно «без ограничения»: одно массовое действие уходит сразу на все отмеченные",
+  "workflow.settings.limits.maxBulk.what": "Сколько инцидентов можно отметить для группового действия — не меньше 2. Можно «без ограничения»: одно массовое действие уходит сразу на все отмеченные",
   "workflow.settings.unlimited": "без ограничения",
   "workflow.settings.tab.session": "Связь с оператором",
   "workflow.settings.session.heartbeatSec": "Признак активности",

@@ -1124,6 +1124,12 @@ def check_limits(w, err):
         v = w["limits"][k]
         if not (v is None or (isinstance(v, int) and not isinstance(v, bool) and v >= 1)):
             err.append(f"лимиты: limits.{k} = {v!r} — нужно целое от 1 или null, «без ограничения» (RULE-69)")
+    # Лимит выборки — не меньше наибольшего minItems массовых действий: иначе групповая обработка выключена целиком,
+    # а панель показывает действия доступными (RULE-117)
+    least = max([(t.get("bulk") or {}).get("minItems", 1) for t in w["transitions"] if (t.get("bulk") or {}).get("allowed")] or [1])
+    mb = w["limits"].get("maxBulk")
+    if isinstance(mb, int) and not isinstance(mb, bool) and mb < least:
+        err.append(f"лимиты: limits.maxBulk = {mb} — меньше {least}, наибольшего bulk.minItems: групповая обработка выключена целиком (RULE-117)")
     items = {i["path"]: i for t in w["adminSettings"]["tabs"] for i in t.get("items", [])}
     for k in LIMITS:
         item = items.get(f"limits.{k}")
