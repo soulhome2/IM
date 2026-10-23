@@ -169,9 +169,8 @@ MUTATIONS = [
     ("level-group-owner-counted", "workflow.js", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')", "api"),
     ("group-accept-except-ignored", "workflow.js", "m != except && signedIn(m) && canAcceptPerson(m, x)", "signedIn(m) && canAcceptPerson(m, x)", "api"),
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
-    ("tick-effects-at-now", "engine.js", "          at = runAt;\n          let facts = null;", "          at = null;\n          let facts = null;", "api"),
+    ("tick-effects-at-now", "engine.js", "        at = runAt;\n        let facts = null;", "        at = null;\n        let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
-    ("tick-without-after", "engine.js", "const moment = momentOf(ev, tr, last);", "const moment = momentOf(ev, tr, null);", "api"),
     ("alert-toast-silent", "app.js", 'toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));', "", "ui"),
     ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
     ("admin-values-raw", "app.js", "    if (values && typeof v === \"string\" && values[v]) return te(values[v]);\n", "", "ui"),
@@ -209,7 +208,7 @@ MUTATIONS = [
     ("grace-ignored", "engine.js", "(agentOnly || c.moment + GRACE_MS > ctx.now())", "agentOnly", "api"),
     # Системный переход в окне после дедлайна (RULE-67): переход по таймеру — первым
     # При прыжке часов переход по таймеру — не позже готового системного (BUG-38)
-    ("timer-after-system-in-jump", "engine.js", "Math.max(next.moment + GRACE_MS, last || 0), sysAt)", "Math.max(next.moment + GRACE_MS, last || 0), ctx.now())", "api"),
+    ("timer-after-system-in-jump", "engine.js", "Math.max(next.moment + GRACE_MS, s.last.get(ev.id) || 0), sysAt)", "Math.max(next.moment + GRACE_MS, s.last.get(ev.id) || 0), ctx.now())", "api"),
     ("system-waits-for-grace", "engine.js", 'c.tr.trigger === "timer" && !system && (agentOnly', 'c.tr.trigger === "timer" && (agentOnly', "api"),
     ("override-ignored", "engine.js", "      const canceled = windowBefore(ev, id);", "      const canceled = null;", "api"),
     # Объединение проверяет окно так же, как одиночный переход (BUG-62)
@@ -322,6 +321,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # Догон в общем порядке по времени (ARCH-13)
+    ("tick-per-incident-since-now", "engine.js", "s.since.has(key) ? s.since.get(key) : s.lastRun != null ? s.lastRun : ctx.now()", "ctx.now()", "api"),
     # Уточнения норматива — только по признакам overridesBy (ARCH-11)
     ("overrides-by-ignored", "workflow.js", "overrideAllowed(t, o) && overrideMatches(x, o)", "overrideMatches(x, o)", "api"),
     # Отсчёт — по времени сервера (BUG-103)

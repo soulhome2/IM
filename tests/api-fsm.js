@@ -121,6 +121,38 @@
     });
   });
 
+  // Догон после простоя — в общем порядке по времени, а не по инцидентам по очереди (ARCH-13): переход одного
+  // инцидента (основной эскалирован адресату без доступа к привязанному) открывает переход другого
+  // (привязанный отсоединяется) — в тот же момент, что и при проверке каждую секунду
+  test("im-fsm: прыжок часов и шаги — один итог и для связанных инцидентов: основной эскалирован, привязанный без доступа отсоединяется (§14.3, ARCH-13)", async () => {
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
+    async function run(stepSec, windowSec) {
+      const env = await standWith({ workflow: withEscalation({ levels: levelsTo(["user:kuznetsov"]) }), fixture: Object.assign({}, window.IM_FIXTURE, { people }) });
+      const [mall, office] = await Promise.all(["INC-1847", "INC-1838"].map((n) => env.guidOf(n)));
+      assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mall, office], primaryGuid: mall }), 200, null, "взять одним");
+      assert.status(await env.act(mall, "release", { comment: "тест" }), 200, null, "основной — в очередь");
+      const start = env.now;
+      const fired = [];
+      for (let left = windowSec; left > 0; left -= stepSec) {
+        const res = await env.call("POST", "/test/clock", { advanceSec: Math.min(stepSec, left) });
+        fired.push(...res.body.fired.filter((f) => f.incidentGuid === mall || f.incidentGuid === office).map((f) => `${f.incidentGuid === mall ? "основной" : "привязанный"}:${f.transitionId}`));
+      }
+      const sec = (iso) => (iso ? (Date.parse(iso) - start) / 1000 : null);
+      const state = async (g) => {
+        const c = await env.card(g);
+        return [c.state, c.owner && c.owner.id, c.escalationLevel, c.linkedTo, c.breaches.map((b) => `${b.kind}@${sec(b.at)}`), c.journal.map((j) => `${j.templateKey}@${sec(j.at)}`)];
+      };
+      return { fired, mall: await state(mall), office: await state(office) };
+    }
+    const steps = await run(1, 600);
+    const jump = await run(600, 600);
+    assert.ok(steps.fired.includes("привязанный:linked_lost_access"), `шагами привязанный отсоединился: ${steps.fired.join(", ")}`);
+    assert.eq(jump.fired, steps.fired, "прыжок часов — те же переходы в том же порядке");
+    assert.eq(jump.mall, steps.mall, "основной — тот же итог");
+    assert.eq(jump.office, steps.office, "привязанный — тот же итог");
+  });
+
   /* ===== Повторный вход: истёкший норматив закрытия не срабатывает снова (RULE-50) ===== */
 
   // Каждый вход в «В работе», кроме переоткрытия: оно запускает норматив заново (§4, правило 6)

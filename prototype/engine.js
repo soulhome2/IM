@@ -460,7 +460,10 @@
     // after — момент перехода, выполненного перед этим над тем же инцидентом (RULE-48): то, что он
     // сделал возможным, наступает не раньше него; переход без таймера — сразу после него.
     // Момент перехода по таймеру — дедлайн; окно после него (RULE-63) ждёт только действия человека
-    function momentOf(ev, tr, after) {
+    // since — с какого момента системный переход без таймера возможен: был готов до догона — сейчас; стал
+    // готов после перехода в этом такте — в момент того перехода (ARCH-13). Так и переход, который стал возможен
+    // после другого перехода того же инцидента, наступает не раньше него (RULE-48)
+    function momentOf(ev, tr, since) {
       let moment = null;
       for (const g of tr.guards || []) {
         if (g.fn === "timerExpired") {
@@ -474,62 +477,83 @@
           moment = Math.max(moment || 0, ctx.now() - ctx.idleSec() * 1000 + setting(g.args[0]) * 1000, ev.changedAt || 0);
         }
       }
-      if (moment == null) return after != null ? after : ctx.now();
-      return after != null ? Math.max(moment, after) : moment;
+      return moment == null ? since : moment;
     }
+    // Что выполнил бы планировщик у инцидента следующим: переход и момент; null — ничего
+    function nextOf(ev, s, agentOnly) {
+      const ready = [];
+      W.transitions.forEach((tr) => {
+        if (tr.trigger !== "timer" && tr.trigger !== "system") return;
+        if (agentOnly && tr.trigger === "system" && tr.scope !== "incidents_owned_by_agent") return;
+        if (!tr.from.includes(ev.state)) return;
+        if (tr.scope === "incidents_owned_by_agent" && ev.owner !== ME) return;
+        const key = `${ev.id}|${tr.id}`;
+        const moment = momentOf(ev, tr, s.since.has(key) ? s.since.get(key) : s.lastRun != null ? s.lastRun : ctx.now());
+        if (moment == null || moment > ctx.now() || s.done.has(`${key}@${moment}`)) return;
+        at = moment;
+        const fail = firstFail(ev, tr.guards);
+        at = null;
+        if (fail) s.since.delete(key);
+        else {
+          if (!s.since.has(key)) s.since.set(key, moment);
+          ready.push({ tr, moment });
+        }
+      });
+      // Переход по таймеру ждёт окна после дедлайна (RULE-63), но только действия человека: готов
+      // системный — переход по таймеру первым, как без окна, и нарушение не теряется (RULE-67).
+      // Без системного проверка оператора (agentOnly) общих таймеров не запускает
+      const system = ready.some((c) => c.tr.trigger === "system");
+      let next = null;
+      ready.forEach((c) => {
+        if (c.tr.trigger === "timer" && !system && (agentOnly || c.moment + GRACE_MS > ctx.now())) return;
+        if (!next || c.moment < next.moment) next = c;
+      });
+      if (!next) return null;
+      // Выполняется по таймеру — после окна, но не позже готового системного: тогда и при прыжке
+      // часов оба — в момент системного, как при шагах (BUG-38). Не раньше перехода, выполненного в
+      // такте до него: его сделанное этот переход уже видит (ARCH-13). Раньше бывает, только если условие
+      // перехода по таймеру зависит от другого инцидента — таких в машине нет, это защита
+      const sysAt = Math.min(ctx.now(), ...ready.filter((c) => c.tr.trigger === "system").map((c) => c.moment));
+      const runAt = next.tr.trigger === "timer" ? Math.min(Math.max(next.moment + GRACE_MS, s.last.get(ev.id) || 0), sysAt) : next.moment;
+      return { ev, tr: next.tr, moment: next.moment, runAt: Math.max(runAt, s.lastRun || 0) };
+    }
+    // Такт планировщика — догон в общем порядке по времени (§14.3, ARCH-13): из готовых у всех инцидентов
+    // первым — переход с самым ранним моментом, при равенстве — инцидент раньше по списку; после каждого —
+    // выбор заново. Так переход одного инцидента, который открыл переход другого, наступает раньше, и после
+    // простоя исход тот же, что при проверке каждую секунду
     function tick(opts) {
       const changed = [];
       const agentOnly = Boolean(opts && opts.agentOnly);
-      ctx.events().forEach((ev) => {
-        // Один и тот же переход в один и тот же момент — не больше раза за такт: ошибка в условии
-        // не зациклит планировщик
-        const done = new Set();
-        let last = null;
-        for (let step = 0; step < 50 && !isDone(ev); step++) {
-          const ready = [];
-          W.transitions.forEach((tr) => {
-            if (tr.trigger !== "timer" && tr.trigger !== "system") return;
-            if (agentOnly && tr.trigger === "system" && tr.scope !== "incidents_owned_by_agent") return;
-            if (!tr.from.includes(ev.state)) return;
-            if (tr.scope === "incidents_owned_by_agent" && ev.owner !== ME) return;
-            const moment = momentOf(ev, tr, last);
-            if (moment == null || moment > ctx.now() || done.has(`${tr.id}@${moment}`)) return;
-            at = moment;
-            const fail = firstFail(ev, tr.guards);
-            at = null;
-            if (!fail) ready.push({ tr, moment });
-          });
-          // Переход по таймеру ждёт окна после дедлайна (RULE-63), но только действия человека: готов
-          // системный — переход по таймеру первым, как без окна, и нарушение не теряется (RULE-67).
-          // Без системного проверка оператора (agentOnly) общих таймеров не запускает
-          const system = ready.some((c) => c.tr.trigger === "system");
-          let next = null;
-          ready.forEach((c) => {
-            if (c.tr.trigger === "timer" && !system && (agentOnly || c.moment + GRACE_MS > ctx.now())) return;
-            if (!next || c.moment < next.moment) next = c;
-          });
-          if (!next) return;
-          done.add(`${next.tr.id}@${next.moment}`);
-          // Выполняется по таймеру — после окна, но не позже готового системного: тогда и при прыжке
-          // часов оба — в момент системного, как при шагах (BUG-38)
-          const sysAt = Math.min(ctx.now(), ...ready.filter((c) => c.tr.trigger === "system").map((c) => c.moment));
-          const runAt = next.tr.trigger === "timer" ? Math.min(Math.max(next.moment + GRACE_MS, last || 0), sysAt) : next.moment;
-          at = runAt;
-          let facts = null;
-          try {
-            const timerGuard = (next.tr.guards || []).find((g) => g.fn === "timerExpired");
-            const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
-            if (timerGuard) markFired(ev, timerGuard.args[0]);
-            const applied = applyEffects(next.tr, ev, {}, next.tr.actor || "dispatcher", { deadline });
-            if (!applied.ok) return;
-            facts = applied.facts[0];
-          } finally {
-            at = null;
-          }
-          last = runAt;
-          changed.push({ id: ev.id, transition: next.tr.id, facts });
+      // Один и тот же переход инцидента в один и тот же момент — не больше раза за такт, у инцидента — не больше
+      // 50 переходов: ошибка в условии не зациклит планировщик
+      const s = { done: new Set(), last: new Map(), count: new Map(), since: new Map(), lastRun: null };
+      for (;;) {
+        let best = null;
+        ctx.events().forEach((ev) => {
+          if (isDone(ev) || (s.count.get(ev.id) || 0) >= 50) return;
+          const c = nextOf(ev, s, agentOnly);
+          if (c && (!best || c.runAt < best.runAt)) best = c;
+        });
+        if (!best) break;
+        const { ev, tr, runAt } = best;
+        s.done.add(`${ev.id}|${tr.id}@${best.moment}`);
+        s.count.set(ev.id, (s.count.get(ev.id) || 0) + 1);
+        at = runAt;
+        let facts = null;
+        try {
+          const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
+          const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
+          if (timerGuard) markFired(ev, timerGuard.args[0]);
+          const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher", { deadline });
+          if (applied.ok) facts = applied.facts[0];
+        } finally {
+          at = null;
         }
-      });
+        if (!facts) continue;
+        s.last.set(ev.id, runAt);
+        s.lastRun = runAt;
+        changed.push({ id: ev.id, transition: tr.id, facts });
+      }
       return changed;
     }
 
