@@ -1977,6 +1977,72 @@
       return text;
     });
 
+    await step("Выборка после изменения: отметил заново — действие проходит; после отказа «уже изменён» — повтор проходит (BUG-106)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const card = (g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`);
+      const tick = async (ids) => {
+        for (const g of ids) await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        await wait(200);
+        expect(ids.every((g) => $("eventsList").querySelector(`[data-check="${g}"]`).checked), "отмечены не оба");
+      };
+      // Автоэскалация: инциденты меняются (новая версия)
+      const escalate = async () => {
+        for (let i = 0; i < 4; i++) {
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+          await stand.raw("POST", "/test/clock", { advanceSec: 240 });
+        }
+        await wait(300);
+      };
+      const transfer = async () => {
+        const before = new Set($("toasts").children);
+        await click($("selBar").querySelector('[data-sel-do="transfer"]'));
+        expect(!$("modalDialog").hidden, "форма передачи выборки не открылась");
+        await click($("dialogFields").querySelector('[data-target-input="targetId"]'));
+        const pick = $("dialogFields").querySelector("[data-target-pick]");
+        expect(pick, "в форме нет адресатов");
+        await click(pick);
+        await confirmDialog("тест");
+        await wait(200);
+        return [...$("toasts").children].filter((x) => !before.has(x)).map((x) => x.textContent).join(" | ");
+      };
+      const out = [];
+      try {
+        for (const part of ["отметил заново", "повтор после отказа"]) {
+          await standReset({ fixture: "demo" });
+          await wait(300);
+          if (mode() === "work") await click($("backToQueue"));
+          await setFilter("open");
+          const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]') && r.querySelector("[data-check]")).slice(0, 2);
+          expect(rows.length === 2, "нет двух новых для выборки");
+          const ids = rows.map((r) => r.dataset.id);
+          await tick(ids);
+          if (part === "отметил заново") {
+            // Другой список и обратно — отметки сняты; инциденты изменились; отмечены снова
+            await setFilter("all");
+            await setFilter("open");
+            expect(ids.every((g) => !$("eventsList").querySelector(`[data-check="${g}"]`).checked), "смена фильтра не сняла отметки");
+            await escalate();
+            await tick(ids);
+          } else {
+            await escalate();
+            const first = await transfer();
+            expect(/уже изменён/.test(first), `первое нажатие: «${first}»`);
+          }
+          const before = await Promise.all(ids.map(card));
+          const text = await transfer();
+          const after = await Promise.all(ids.map(card));
+          expect(!/уже изменён/.test(text), `${part}: «${text}»`);
+          expect(after.every((c, i) => c.transferCount === before[i].transferCount + 1), `${part}: переданы не оба — ${text}`);
+          out.push(`${part}: ${text}`);
+        }
+      } finally {
+        if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return out.join("; ");
+    });
+
     await step("«Передать», когда передать некому, — бледная, по нажатию причина (BUG-85)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Всем коллегам — «Оператор ТЦ», в группах никого: у инцидента вне ТЦ принять некому

@@ -1298,6 +1298,17 @@
   }
   // Версии отмеченных на момент отметки — серверу в expectedVersions: изменённое после отметки он не тронет (§14.1, BUG-84)
   const checkedVersions = new Map();
+  // Снять выборку — вместе с версиями: отмеченный снова получит версию на момент новой отметки (BUG-106)
+  function dropSelection() {
+    state.checked.clear();
+    store.selection = null;
+    checkedVersions.clear();
+  }
+  // Новая выборка вместо прежней — тоже новая отметка: версии заново (BUG-106)
+  function selectOnly(guids) {
+    state.checked = new Set(guids);
+    checkedVersions.clear();
+  }
   const expectedVersions = (guids) => Object.fromEntries(guids.filter((g) => checkedVersions.has(g)).map((g) => [g, checkedVersions.get(g)]));
   // Ключ повтора — новый на каждое действие: повтор того же запроса сервер не выполнит дважды (BUG-84)
   const newKey = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -1349,10 +1360,12 @@
     }
     if (!res.succeeded.length) {
       toast(res.failed.length ? failureText(res.failed) : t("Действие недоступно"));
+      // Причину оператор увидел: у изменённых после отметки версия — нынешняя, повтор — его решение (BUG-106)
+      res.failed.filter((f) => f.problem.code === "VERSION_CONFLICT").forEach((f) => checkedVersions.delete(f.incidentGuid));
+      await updateSelection();
       return false;
     }
-    state.checked.clear();
-    store.selection = null;
+    dropSelection();
     const done = res.succeeded.map((e) => ({ id: e.guid }));
     const copy = bulkCopy(id, done);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
@@ -1412,7 +1425,7 @@
     }
     state.selectedId = ev.guid;
     if (TOASTS[id]) toast(TOASTS[id](res.incident));
-    if (state.checked.has(ev.guid)) state.checked.clear();
+    if (state.checked.has(ev.guid)) dropSelection();
     store.selection = null;
     navigate(res.navigate);
     await reload();
@@ -3108,10 +3121,7 @@
   function requery(keepSelection) {
     state.page = 1;
     state.focus = true;
-    if (!keepSelection) {
-      state.checked.clear();
-      store.selection = null;
-    }
+    if (!keepSelection) dropSelection();
     return reload();
   }
 
@@ -3708,7 +3718,7 @@
       toast(t("Нет инцидентов для выборки"));
       return;
     }
-    state.checked = new Set(res.incidentGuids);
+    selectOnly(res.incidentGuids);
     state.selectedId = res.incidentGuids[0];
     toast(message(res));
     await updateSelection();
@@ -3724,8 +3734,7 @@
   }
 
   function clearSelection() {
-    state.checked.clear();
-    store.selection = null;
+    dropSelection();
     renderEvents();
   }
 
@@ -3840,14 +3849,18 @@
       res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked], expectedVersions: expectedVersions([...state.checked]), idempotencyKey: newKey() });
     } catch (err) {
       toast(problemText(err));
+      // Изменились после отметки: причину оператор увидел, повтор — по нынешним версиям (BUG-106)
+      if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
+        checkedVersions.clear();
+        await updateSelection();
+      }
       return;
     }
     toast(n > 1 ? t("Взято в работу как одно: {id} и ещё {n}", { id: res.incident.number, n: n - 1 }) : t("Взято в работу: {id}", { id: res.incident.number }));
     // Куда дальше — из машины (ui.navigate объединения): карточка основного на его текущем шаге сценария
     const merge = WORKFLOW.transitions.find((x) => (x.bulk || {}).mode === "merge");
     state.selectedId = res.incident.guid;
-    state.checked.clear();
-    store.selection = null;
+    dropSelection();
     state.jump = true;
     navigate(merge.ui.navigate);
     await reload();
@@ -4002,7 +4015,7 @@
     $("eventSearch").value = "";
     renderTypeLists();
     renderGroups();
-    state.checked = new Set(filt.view.incidentGuids);
+    selectOnly(filt.view.incidentGuids);
     await updateSelection();
     toast(t("Выделено: {n}", { n: state.checked.size }));
     await reload();

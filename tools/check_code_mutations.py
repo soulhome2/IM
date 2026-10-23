@@ -426,7 +426,7 @@ MUTATIONS = [
     ("ui-sort-ignores-permission", "app.js", "select.hidden = !s.operatorMayChange;", "select.hidden = false;", "ui"),
     ("ui-sort-not-saved", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "", "ui"),
     ("ui-sort-no-requery", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });\n      requery(true);', 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "ui"),
-    ("ui-selection-survives-context", "app.js", "    if (!keepSelection) {\n      state.checked.clear();", "    if (false) {\n      state.checked.clear();", "ui"),
+    ("ui-selection-survives-context", "app.js", "    if (!keepSelection) dropSelection();", "    if (false) dropSelection();", "ui"),
     ("ui-filter-select-keeps-view", "app.js", "    Object.assign(state, { groupId: filt.node ? filt.node.guid : \"all\", deviceTypes: [], eventTypes: [], search: \"\", page: 1 });\n", "", "ui"),
     ("ui-schema-not-reloaded", "app.js", 'if (msg.type === "workflow.schema_published") {', "if (false) {", "ui"),
     ("schema-published-silent", "server.js", 'if (W !== before) emit("workflow.schema_published"', 'if (false) emit("workflow.schema_published"', "api"),
@@ -453,6 +453,9 @@ MUTATIONS = [
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
     ("settle-after-request-off", "server.js", "if (acting && res.status < 300 && runScheduler().length && res.again)", "if (false && res.again)", "api"),
     # Карточку увели — уведомление с причиной (BUG-86)
+    # Выборка (BUG-106): снятые отметки забывают версии; после отказа «уже изменён» повтор — по нынешней версии
+    ("ui-versions-kept-on-drop", "app.js", "    checkedVersions.clear();\n  }\n  // Новая выборка", "  }\n  // Новая выборка", "ui"),
+    ("ui-conflict-no-refresh", "app.js", '.forEach((f) => checkedVersions.delete(f.incidentGuid));', ".forEach(() => {});", "ui"),
     ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
