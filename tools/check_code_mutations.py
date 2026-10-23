@@ -100,7 +100,7 @@ MUTATIONS = [
     ("branch-answers-kept", "scenario.js", "dropped.forEach((id) => delete r.state[id]);", "", "api"),
     ("closing-without-finish", "scenario.js", 'setId === "closing" && Boolean(result.completedAt)', 'setId === "closing"', "api"),
     ("progress-from-start", "scenario.js", "const rest = remaining(script, result.currentStepId);", "const rest = remaining(script, script.initialStepId);", "api"),
-    ("share-no-settle", "scenario.js", "while (!r.completedAt && moved.includes(r.currentStepId)", "while (false && moved.includes(r.currentStepId)", "api"),
+    ("share-off", "scenario.js", "while (!r.completedAt && r.currentStepId && !settled.includes(r.currentStepId)) {", "while (false) {", "api"),
     ("required-skip-allowed", "scenario.js", 'if (o.skip && !canSkip(step)) return { ok: false, error: "required" };\n', "", "api"),
     ("macro-ignores-run-macro", "server.js", '      if (!actorEngine.availability("run_macro", ev).ok) return;\n', "", "api"),
     ("new-incident-oldest-version", "server.js", ".sort((a, b) => b.version - a.version)[0]", ".sort((a, b) => a.version - b.version)[0]", "api"),

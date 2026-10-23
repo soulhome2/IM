@@ -369,7 +369,7 @@
     consistent(script, result, "перенос");
   });
 
-  test("Перенос: заполненное в основном не перезаписывается; пропущенные, чужой тип и недопустимый вариант — не переносятся", () => {
+  test("Перенос: заполненное в основном не перезаписывается; пропущенные, чужой тип и недопустимый вариант — не переносятся; только по пути основного (BUG-87)", () => {
     const v1 = ex("01-perimeter-alarm.json");
     let linked = answerOk(v1, S.start(v1), "verify_event", "animal").result;
     linked = answerOk(v1, linked, "operator_note", "Лиса у забора").result;
@@ -377,7 +377,8 @@
     v2.scenario.version = 2;
     stepOf(v2, "verify_event").view.options = stepOf(v2, "verify_event").view.options.filter((o) => o.id !== "animal");
     const a = S.share(v1, linked, v2, S.start(v2), { at: at() });
-    assert.eq(a.moved, ["operator_note"], "варианта animal в версии основного нет");
+    // Варианта animal в версии основного нет: текущий шаг без ответа — перенос стоит, заметка впереди не переносится
+    assert.eq(a.moved, [], "варианта animal в версии основного нет — дальше по пути не переносится");
     assert.eq(a.result.currentStepId, "verify_event", "текущий шаг основного без ответа — прохождение стоит");
 
     const v3 = ex("01-perimeter-alarm.json");

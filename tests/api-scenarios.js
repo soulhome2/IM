@@ -2322,6 +2322,27 @@
     assert.eq((await env.card(a.guid)).scenario.result.state.verdict.value, "dispatch", "у привязанного ответы остались как история");
   });
 
+  test("Ответы привязанного переносятся только в шаги пути основного: шаг впереди разрыва не заполняется, «N из M» честное (§14.5, BUG-87)", async () => {
+    const env = await makeEnv();
+    // Пожар v1 (visual → verdict → kind → note) пройден до конца и отложен
+    const old = await env.guidOf("INC-1834");
+    assert.status(await env.act(old, "resume"), 200, null, "возобновить INC-1834");
+    const done = await env.passScenario(old);
+    assert.ok(done.result.completedAt && done.result.state.note, "INC-1834 пройден до конца, с заметкой");
+    assert.status(await env.act(old, "hold", { reasonId: "third_party", comment: "тест" }), 200, null, "отложить");
+    // Новый пожар — последняя версия сценария, v2: после kind — evacuation, потом note
+    const source = (await env.card(old)).source.guid;
+    const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: "Торговый центр" });
+    assert.status(created, 201, null, "новый пожар");
+    assert.ok(created.body.scenario.script.steps.some((s) => s.id === "evacuation"), "у нового — сценарий с шагом evacuation");
+    const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [created.body.guid, old] });
+    const sc = (await env.card(res.incident.guid)).scenario;
+    const answered = Object.keys(sc.result.state);
+    assert.ok(answered.every((id) => sc.path.includes(id)), `ответы только на пути: ${answered} при пути ${sc.path}`);
+    assert.eq([sc.result.currentStepId, answered.includes("note")], ["evacuation", false], "перенос дошёл до evacuation, заметка не перенесена впереди разрыва");
+    assert.ok(sc.progress.filled <= sc.path.length && !sc.requiredStepsFilled.closing, `«${sc.progress.filled} из ${sc.progress.total}», сценарий не пройден`);
+  });
+
   test("Поиск находит привязанный инцидент — строкой основного с «найдено в привязанных»; страница найденного среди привязанных (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");

@@ -322,22 +322,22 @@
     const at = (opts && opts.at) || new Date().toISOString();
     const r = clone(toResult);
     const moved = [];
-    Object.keys(fromResult.state).forEach((id) => {
+    // Только в шаги пути основного, по мере продвижения (BUG-87): текущий шаг получает ответ привязанного, путь идёт
+    // дальше по нему; у следующего ответа нет — перенос кончается. Шаг вне пути или впереди разрыва не заполняется:
+    // иначе «N из M» и набор шагов для закрытия расходились бы с тем, что пройдено
+    const settled = [];
+    while (!r.completedAt && r.currentStepId && !settled.includes(r.currentStepId)) {
+      const id = r.currentStepId;
       const entry = fromResult.state[id];
       const src = stepOf(fromScript, id);
-      const dst = stepOf(toScript, id);
-      if (!entry || entry.skipped || r.state[id] || !src || !dst || src.type !== dst.type) return;
+      const step = stepOf(toScript, id);
+      if (!entry || entry.skipped || r.state[id] || !src || !step || src.type !== step.type) break;
       const attachments = (fromResult.attachments || []).filter((a) => a.stepId === id);
-      if (checkValue(dst, entry.value, attachments)) return;
+      if (checkValue(step, entry.value, attachments)) break;
       r.state[id] = clone(entry);
       if (attachments.length) r.attachments = (r.attachments || []).concat(clone(attachments));
       moved.push(id);
-    });
-    const settled = [];
-    while (!r.completedAt && moved.includes(r.currentStepId) && !settled.includes(r.currentStepId)) {
-      const step = stepOf(toScript, r.currentStepId);
-      const entry = r.state[step.id];
-      settled.push(step.id);
+      settled.push(id);
       r.history.push({ ts: at, stepId: step.id, action: "answer", value: entry.value, by: entry.by == null ? null : entry.by });
       const res = follow(toScript, step, entry.value, at, false);
       r.history.push(...res.events);
