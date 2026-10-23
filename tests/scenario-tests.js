@@ -305,6 +305,8 @@
     const obj = ex("04-suspicious-object.json");
     const o = answerOk(obj, S.start(obj), "object_visible", "yes").result;
     assert.eq(answerOk(obj, o, "risk_factors", ["wires_visible"]).effects.map((e) => e.name), ["MACRO_AREA_LOCKDOWN"]);
+    // Ни одно правило не сработало — путь по default: «Признаков риска нет» делает его достижимым
+    assert.eq(answerOk(obj, o, "risk_factors", ["none_found"]).result.currentStepId, "low_risk_action");
   });
 
   test("Финальный шаг: переходы и макросы на нём не читаются; флаги report и multitasking не исполняются", () => {

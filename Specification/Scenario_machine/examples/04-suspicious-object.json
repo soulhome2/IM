@@ -73,7 +73,7 @@
       "view": {
         "label": "Какие признаки риска присутствуют? (отметьте все применимые)",
         "minSelected": 1,
-        "maxSelected": 7,
+        "maxSelected": 8,
         "options": [
           {
             "id": "crowded_area",
@@ -108,6 +108,11 @@
           {
             "id": "long_unattended",
             "label": "Объект без присмотра > 15 минут",
+            "default": false
+          },
+          {
+            "id": "none_found",
+            "label": "Признаков риска нет",
             "default": false
           }
         ]
