@@ -77,6 +77,8 @@
       isGroup: (id) => isGroup(id),
       members: (g) => (ctx.membersOf ? ctx.membersOf(g) : []),
       dutyGroups: () => (ctx.dutyGroups ? ctx.dutyGroups() : []),
+      // Кому вообще можно передавать — люди и дежурные группы сервера (§8.1, BUG-85)
+      transferTargets: () => (ctx.transferTargets ? ctx.transferTargets().map((o) => o.id) : []),
       inSourceGroup: (x, g) => ctx.inGroup(cel.source(x), g),
       agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
       idleSec: (who) => (who === ME && ctx.idleSec ? Math.floor(ctx.idleSec() - (ctx.now() - now()) / 1000) : 0),

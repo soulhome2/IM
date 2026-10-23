@@ -738,6 +738,23 @@
     assert.eq([c.owner && c.owner.id, c.escalationLevel], [second, 2], "первый уровень пропущен — сразу второй");
   });
 
+  test("«Передать», когда передать некому — недоступна с причиной, в очереди и в карточке (§8.1, BUG-85)", async () => {
+    // Всем коллегам — «Оператор ТЦ»: у инцидента вне ТЦ принять некому, кроме меня
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.filter((o) => o.id !== ME).forEach((o) => (o.roles = ["Оператор ТЦ"]));
+    people.dutyGroups.forEach((g) => (g.members = (g.members || []).filter((m) => m === ME)));
+    const env = await makeEnv({ fixturePatch: { people } });
+    const office = await env.guidOf("INC-1838");
+    const targets = await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(office)}`);
+    assert.eq(targets.filter((t) => !t.disabled).map((t) => t.id), [], "адресатов нет");
+    for (const surface of ["queue", "card"]) {
+      const a = actionOf({ actions: await env.ok("GET", `/operator/incidents/${enc(office)}/actions?surface=${surface}`) }, "transfer");
+      assert.eq([a && a.enabled, a && a.reasonKey], [false, "workflow.guard.no_transfer_target"], `${surface}: «Передать» недоступна, причина — некому`);
+    }
+    const res = await env.act(office, "transfer", { targetId: "sidorov", comment: "тест" }, "queue");
+    assert.status(res, 403, "TARGET_CANNOT_ACCEPT", "передача отклонена");
+  });
+
   test("Связи камер (§19.1, RULE-49, RULE-70): название, устройства и камеры по порядку, как в наборе; без права incident:schema:admin — 403", async () => {
     const env = await makeEnv();
     const links = await env.ok("GET", "/operator/admin/camera-links");

@@ -48,6 +48,8 @@
   def isGroup(id: str): bool = GROUPS.contains(id)
   def members(g: str): List[str] = if (isGroup(g)) OPERATOR_LIST.select(m => cfg.members.get(g).contains(m)) else []
   def dutyGroups: List[str] = [GROUP]
+  // Кому вообще можно передавать: люди и дежурная группа (§8.1, BUG-85)
+  def transferTargets: List[str] = OPERATOR_LIST.concat([GROUP])
   // Групп устройств в модели нет: строк overrides по sourceGroup в машине тоже нет
   def inSourceGroup(x: Incident, g: str): bool = false
   def agentState(who: str): str = if (OPERATORS.contains(who)) agents.get(who) else "offline"

@@ -97,6 +97,7 @@
   "workflow.journal.group_deadline": "Срок закрытия — по {number}: раньше своего",
   "workflow.journal.merged_in": "Присоединены инциденты: {ids}",
   "workflow.journal.merged_in_more": "Присоединены инциденты: {ids} и ещё {more}",
+  "workflow.guard.no_transfer_target": "Передать некому: ни у кого нет права «Принимать» и доступа к объекту",
   "workflow.guard.merge_primary": "Чтобы «Взять в работу», среди отмеченных нужен новый инцидент или ваш в работе — к нему присоединятся остальные",
   "workflow.guard.primary_not_editable": "Отсоединять может тот, кто ведёт основной инцидент",
   "workflow.guard.primary_open": "Основной инцидент ещё открыт",

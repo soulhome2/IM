@@ -1398,6 +1398,9 @@ window.IM_WORKFLOW = {
           "fn": "agentReady"
         },
         {
+          "fn": "hasTransferTarget"
+        },
+        {
           "fn": "targetIsNotSelf"
         },
         {
@@ -3581,6 +3584,9 @@ window.IM_WORKFLOW = {
     "workflow.guard.merge_primary": {
       "vars": []
     },
+    "workflow.guard.no_transfer_target": {
+      "vars": []
+    },
     "workflow.guard.merge_scenario": {
       "vars": []
     },
@@ -4054,6 +4060,11 @@ window.IM_WORKFLOW = {
         },
         "returns": "string",
         "$comment": "§8.2. Кому оператор передавал в последний раз — запоминает сервер; не передавал — ''"
+      },
+      "transferTargets": {
+        "params": {},
+        "returns": "list<string>",
+        "$comment": "§8.1. Кому вообще можно передавать: люди и дежурные группы. Кто из них может принять этот инцидент — определения машины (canAccept, hasAccess)"
       },
       "$commentIncidents": "ARCH-12. Множество инцидентов выражения читают только через факты ниже: сервер исполняет их запросами (по индексам), а не загрузкой всех инцидентов. Смысл каждого — выражение ref над incidents (все инциденты сервера, в эффекте — с изменениями этой транзакции): так считает прототип и модель Quint, запрос бэкенда обязан давать то же",
       "incidentById": {
@@ -4947,6 +4958,19 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§11. Основной инцидент привязанного закрыт"
+      },
+      {
+        "fn": "hasTransferTarget",
+        "errorCode": "TARGET_CANNOT_ACCEPT",
+        "args": [],
+        "argTypes": {},
+        "expr": "transferTargets().exists(t, !isSelf(me, t) && t != addressee(incident) && canAccept(t, incident, '') && linkedOf(incident.id).all(e, isDone(e) || hasAccess(t, e)))",
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.no_transfer_target"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§8.1 (BUG-85). Есть хоть один адресат — тот, кого форма «Передать» предложит доступным (optionExpr и enabledExpr поля targetId): иначе кнопка активна, а список пуст"
       },
       {
         "fn": "targetHasAccessToLinked",

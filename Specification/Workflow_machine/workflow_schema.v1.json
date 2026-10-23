@@ -569,6 +569,7 @@
           }
         },
         { "fn": "agentReady" },
+        { "fn": "hasTransferTarget" },
         { "fn": "targetIsNotSelf" },
         { "fn": "targetHasAccess" },
         { "fn": "targetHasAccessToLinked" },
@@ -1249,6 +1250,7 @@
     "workflow.guard.no_permission": { "vars": ["p"] },
     "workflow.guard.not_owner": { "vars": [] },
     "workflow.guard.merge_primary": { "vars": [] },
+    "workflow.guard.no_transfer_target": { "vars": [] },
     "workflow.guard.merge_scenario": { "vars": [] },
     "workflow.guard.primary_not_editable": { "vars": [] },
     "workflow.guard.primary_open": { "vars": [] },
@@ -1354,6 +1356,7 @@
       "idleSec": { "params": { "who": "string" }, "returns": "int", "$comment": "Сколько секунд сессия оператора не присылает признак активности (§12.3)" },
       "stepsFilled": { "params": { "x": "Incident", "setId": "string" }, "returns": "bool", "$comment": "Набор шагов сценария выполнен — отвечает машина сценариев (§14.5)" },
       "lastTransferTarget": { "params": { "who": "string" }, "returns": "string", "$comment": "§8.2. Кому оператор передавал в последний раз — запоминает сервер; не передавал — ''" },
+      "transferTargets": { "params": {}, "returns": "list<string>", "$comment": "§8.1. Кому вообще можно передавать: люди и дежурные группы. Кто из них может принять этот инцидент — определения машины (canAccept, hasAccess)" },
       "$commentIncidents": "ARCH-12. Множество инцидентов выражения читают только через факты ниже: сервер исполняет их запросами (по индексам), а не загрузкой всех инцидентов. Смысл каждого — выражение ref над incidents (все инциденты сервера, в эффекте — с изменениями этой транзакции): так считает прототип и модель Quint, запрос бэкенда обязан давать то же",
       "incidentById": { "params": { "id": "string" }, "returns": "list<Incident>", "ref": "byId(incidents, id)", "$comment": "Инцидент по id — списком из одного или пустым" },
       "linkedOf": { "params": { "id": "string" }, "returns": "list<Incident>", "ref": "incidents.filter(e, e.linkedTo == id)", "$comment": "§11. Привязанные к основному id — и открытые, и закрытые вместе с ним" },
@@ -1442,6 +1445,7 @@
       { "fn": "sameScenarioAsPrimary", "args": [], "argTypes": {}, "expr": "cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)", "onFail": "disable", "failKeys": ["workflow.guard.merge_scenario"], "extendsBaseRegistry": true, "$comment": "§11. Сценарий тот же, что у основного (form.primaryId): как одно берутся только события одного сценария" },
       { "fn": "primaryEditable", "args": [], "argTypes": {}, "expr": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && (ownership(me, ps[0]) == 'owner' || unowned(ps[0])))", "onFail": "disable", "failKeys": ["workflow.guard.primary_not_editable"], "extendsBaseRegistry": true, "$comment": "§11.4. Отсоединять может тот, кто ведёт основной — он мой (§2.4), в работе или отложен, — или любой, пока основной новый. У основного «Ожидает принятия» — только после «Принять», одинаково для человека и группы (RULE-78)" },
       { "fn": "primaryClosed", "args": [], "argTypes": {}, "expr": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && isDone(ps[0]))", "onFail": "hide", "failKeys": ["workflow.guard.primary_open"], "extendsBaseRegistry": true, "$comment": "§11. Основной инцидент привязанного закрыт" },
+      { "fn": "hasTransferTarget", "errorCode": "TARGET_CANNOT_ACCEPT", "args": [], "argTypes": {}, "expr": "transferTargets().exists(t, !isSelf(me, t) && t != addressee(incident) && canAccept(t, incident, '') && linkedOf(incident.id).all(e, isDone(e) || hasAccess(t, e)))", "onFail": "disable", "failKeys": ["workflow.guard.no_transfer_target"], "extendsBaseRegistry": true, "$comment": "§8.1 (BUG-85). Есть хоть один адресат — тот, кого форма «Передать» предложит доступным (optionExpr и enabledExpr поля targetId): иначе кнопка активна, а список пуст" },
       { "fn": "targetHasAccessToLinked", "errorCode": "TARGET_NO_ACCESS", "args": [], "argTypes": {}, "expr": "form.targetId == '' || linkedOf(incident.id).all(e, isDone(e) || hasAccess(form.targetId, e))", "onFail": "disable", "failKeys": ["workflow.guard.target_no_access_linked"], "extendsBaseRegistry": true, "$comment": "§11, §5. У адресата передачи (form.targetId) есть доступ к объектам всех привязанных инцидентов; до заполнения формы условие выполнено" },
       { "fn": "primaryAddresseeHasAccess", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "cel.bind(ps, incidentById(incident.linkedTo), cel.bind(who, size(ps) > 0 && !isDone(ps[0]) ? addressee(ps[0]) : '', who != '' && hasAccess(who, incident) == expected))", "failKey": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && !isDone(ps[0]) && addressee(ps[0]) != '' ? 'workflow.guard.primary_addressee_access' : 'workflow.guard.no_addressee')", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.primary_addressee_access"], "extendsBaseRegistry": true, "$comment": "§11.4, §5 (RULE-71). Есть ли у адресата основного доступ к объекту привязанного; группе хватает одного участника. Основной закрыт или без владельца и адресата — условие не выполнено при любом ожидании" }
     ],

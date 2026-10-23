@@ -1942,6 +1942,34 @@
       return text;
     });
 
+    await step("«Передать», когда передать некому, — бледная, по нажатию причина (BUG-85)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Всем коллегам — «Оператор ТЦ», в группах никого: у инцидента вне ТЦ принять некому
+      const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+      people.operators.filter((o) => o.id !== window.IM_FIXTURE.operator).forEach((o) => (o.roles = ["Оператор ТЦ"]));
+      people.dutyGroups.forEach((g) => (g.members = (g.members || []).filter((m) => m === window.IM_FIXTURE.operator)));
+      await standReset({ fixture: "demo", fixturePatch: { people } });
+      await wait(300);
+      let why = "";
+      try {
+        if (mode() === "work") await click($("backToQueue"));
+        await setFilter("open");
+        const guid = (window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1838") || {}).guid;
+        const b = $("eventsList").querySelector(`[data-do="transfer"][data-ev="${guid}"]`);
+        expect(b, "у INC-1838 нет кнопки «Передать»");
+        expect(off(b) && !b.disabled, "«Передать» не бледная или не в фокусе");
+        why = b.title;
+        expect(/Передать некому/.test(why), `причина: «${why}»`);
+        await click(b);
+        expect($("modalDialog").hidden, "форма с пустым списком открылась");
+        expect((($("toasts").lastElementChild || {}).textContent || "") === why, "по нажатию — не причина");
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return why;
+    });
+
     await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");

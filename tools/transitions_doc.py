@@ -130,6 +130,7 @@ class Doc:
             "primaryEditable": lambda: "основной новый или мой",
             "primaryClosed": lambda: "основной закрыт",
             "targetHasAccessToLinked": lambda: "у адресата есть доступ к объектам всех привязанных инцидентов",
+            "hasTransferTarget": lambda: "есть кому передать: хоть один адресат может принять и имеет доступ к объектам",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для условия {fn}: добавьте её в tools/transitions_doc.py")
