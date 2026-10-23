@@ -113,7 +113,6 @@ window.IM_DICT_UI = {
     "Время до нарушения норматива закрытия": "Time left before the resolution target is breached",
     "Время до нарушения норматива реакции": "Time left before the reaction target is breached",
     "Все инциденты": "All incidents",
-    "Вы на перерыве — изменения по сценарию недоступны.": "You are on a break — scenario edits are unavailable.",
     "Выбрано {n} из {max}": "{n} of {max} selected",
     "Выбрано инцидентов: {n}": "Selected incidents: {n}",
     "Выбрать все": "Select all",

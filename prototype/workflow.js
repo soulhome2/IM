@@ -162,7 +162,7 @@ window.IM_WORKFLOW = {
     "lateSec": 120
   },
   "cardNotes": {
-    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный",
+    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный. Перерыв и выход — раньше правил, которые зовут действовать: на перерыве и после выхода доступен только просмотр (§10.1, BUG-97)",
     "rules": [
       {
         "expr": "isDone(incident) && closedFinished(incident) && 'reopen' in actions",
@@ -187,6 +187,16 @@ window.IM_WORKFLOW = {
       {
         "expr": "incident.state == 'linked'",
         "textKey": "workflow.card.note.linked",
+        "style": ""
+      },
+      {
+        "expr": "agentState(me) == 'not_ready'",
+        "textKey": "workflow.card.note.break",
+        "style": ""
+      },
+      {
+        "expr": "agentState(me) == 'offline'",
+        "textKey": "workflow.card.note.signed_out",
         "style": ""
       },
       {
@@ -237,11 +247,6 @@ window.IM_WORKFLOW = {
       {
         "expr": "incident.state == 'on_hold'",
         "textKey": "workflow.card.note.hold",
-        "style": ""
-      },
-      {
-        "expr": "agentState(me) == 'not_ready'",
-        "textKey": "workflow.card.note.break",
         "style": ""
       }
     ]

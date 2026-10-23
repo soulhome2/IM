@@ -1841,6 +1841,32 @@
       return toast.textContent;
     });
 
+    await step("На перерыве пояснение карточки адресованного мне не зовёт «примите» — только просмотр (cardNotes, BUG-97)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Свежий набор: INC-1843 ждёт моего принятия
+      await standReset({ fixture: "demo" });
+      await wait(300);
+      if (mode() === "work") await click($("backToQueue"));
+      await click($("breakBtn"));
+      await confirmDialog();
+      let note = "";
+      try {
+        await setFilter("inbox");
+        const row = [...$("eventsList").querySelectorAll(".event")].find((r) => button(r, "view") || button(r, "open_card"));
+        expect(row, "на перерыве в «Мне на принятие» нечего открыть");
+        await click(button(row, "view") || button(row, "open_card"));
+        expect(mode() === "work", "карточка не открылась");
+        note = (root().querySelector(".work-note") || {}).textContent || "";
+        expect(!/Примите/.test(note), `пояснение зовёт действовать: «${note}»`);
+        expect(/перерыв/i.test(note), `пояснение не про перерыв: «${note}»`);
+      } finally {
+        if (mode() === "work") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return note;
+    });
+
     await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");

@@ -105,13 +105,15 @@
   },
 
   "cardNotes": {
-    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный",
+    "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. style — вид плашки: ok, inbox или обычный. Перерыв и выход — раньше правил, которые зовут действовать: на перерыве и после выхода доступен только просмотр (§10.1, BUG-97)",
     "rules": [
       { "expr": "isDone(incident) && closedFinished(incident) && 'reopen' in actions", "textKey": "workflow.card.note.closed_reopen", "style": "ok" },
       { "expr": "isDone(incident) && closedFinished(incident)", "textKey": "workflow.card.note.closed_view", "style": "ok" },
       { "expr": "isDone(incident) && 'reopen' in actions", "textKey": "workflow.card.note.closed_why_reopen", "style": "ok" },
       { "expr": "isDone(incident)", "textKey": "workflow.card.note.closed_why_view", "style": "ok" },
       { "expr": "incident.state == 'linked'", "textKey": "workflow.card.note.linked", "style": "" },
+      { "expr": "agentState(me) == 'not_ready'", "textKey": "workflow.card.note.break", "style": "" },
+      { "expr": "agentState(me) == 'offline'", "textKey": "workflow.card.note.signed_out", "style": "" },
       { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && escalatedTo(incident)", "textKey": "workflow.card.note.inbox_escalated", "style": "inbox" },
       { "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'", "textKey": "workflow.card.note.inbox", "style": "inbox" },
       { "expr": "incident.state == 'new'", "textKey": "workflow.card.note.new", "style": "" },
@@ -121,8 +123,7 @@
       { "expr": "ownership(me, incident) == 'other' && 'takeover' in actions", "textKey": "workflow.card.note.foreign_takeover", "style": "" },
       { "expr": "ownership(me, incident) == 'other' && 'transfer' in actions", "textKey": "workflow.card.note.foreign_transfer", "style": "" },
       { "expr": "ownership(me, incident) == 'other'", "textKey": "workflow.card.note.foreign_view", "style": "" },
-      { "expr": "incident.state == 'on_hold'", "textKey": "workflow.card.note.hold", "style": "" },
-      { "expr": "agentState(me) == 'not_ready'", "textKey": "workflow.card.note.break", "style": "" }
+      { "expr": "incident.state == 'on_hold'", "textKey": "workflow.card.note.hold", "style": "" }
     ]
   },
 
