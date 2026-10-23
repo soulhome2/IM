@@ -362,7 +362,8 @@ MUTATIONS = [
     ("linked-focus-page-ignored", "server.js", "const idx = q.focusGuid ? all.findIndex((e) => e.id === q.focusGuid) : -1;", "const idx = -1;", "api"),
     ("ui-search-opens-scenario", "app.js", "workTab: foundLinked(ev.guid).length ? \"linked\" : \"scenario\"", "workTab: \"scenario\"", "ui"),
     ("ui-search-found-page-ignored", "app.js", "    if (page && page.focusPage && page.focusPage !== state.linkedPage) {", "    if (false) {", "ui"),
-    ("copy-answers-overwrites", "scenario.js", "if (!entry || entry.skipped || r.state[id] || !src", "if (!entry || entry.skipped || !src", "api"),
+    # Текущий шаг основного отвечен только в сценарии с петлёй — такого в эталонном наборе нет, ловит тест исполнителя
+    ("copy-answers-overwrites", "scenario.js", "if (!entry || entry.skipped || r.state[id] || !src", "if (!entry || entry.skipped || !src", "scenario"),
     ("copy-answers-no-log", "engine.js", "            if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());\n", "", "api"),
     ("relink-closed-too", "workflow.js", "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"", "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"", "api"),
     ("relink-no-log", "workflow.js", "\"incident\": \"c\",\n                      \"key\": \"logKey\"", "\"incident\": \"c\",\n                      \"key\": \"''\"", "api"),

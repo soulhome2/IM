@@ -390,6 +390,15 @@
     const own = answerOk(v1, S.start(v1), "verify_event", "weather").result;
     const b = S.share(v1, linked, v1, own, { at: at() });
     assert.eq(b.result.state.verify_event.value, "weather", "заполненное в основном не перезаписано");
+
+    // Петля: после заметки — снова оценка. Текущий шаг основного уже отвечен на прошлом круге — его ответ остаётся
+    const loop = ex("01-perimeter-alarm.json");
+    stepOf(loop, "operator_note").transitions.default.goto = "verify_event";
+    let lap = answerOk(loop, S.start(loop), "verify_event", "weather").result;
+    lap = answerOk(loop, lap, "operator_note", "Ветер качает ветки").result;
+    assert.eq(lap.currentStepId, "verify_event", "основной снова на оценке, ответ прошлого круга при ней");
+    const c = S.share(loop, linked, loop, lap, { at: at() });
+    assert.eq([c.moved, c.result.state.verify_event.value], [[], "weather"], "ответ прошлого круга не перезаписан");
   });
 
   test("Перенос из завершённого прохождения завершает прохождение основного: набор closing выполнен", () => {

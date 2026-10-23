@@ -2345,20 +2345,28 @@
 
   test("Окно после срока группы: основной со своими привязанными присоединили в окне после его срока — его привязанные получают его нарушение (BUG-73, PROC-37)", async () => {
     const env = await makeEnv();
-    const { urgent, fresh, calm } = await fireTrio(env);
-    for (const e of [urgent, fresh, calm]) await env.act(e.guid, "claim", {}, "queue");
-    // Группа «срочный + привязанный»; её срок проходит, в окне срочный присоединяют к спокойному
-    await (await mergeInto(env, urgent.guid, [fresh.guid])).body;
-    const due = (await env.card(urgent.guid)).timer.dueAt;
+    // Три пожара одной срочности. Новым основным сервер выбирает появившегося раньше (mergePrimary, RULE-101) — сам,
+    // без «Отложить» в окне: иначе нарушение записало бы «Отложить» до перепривязки, и left_group не проверялся бы
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    const top = Math.max(...fires.map((e) => e.priority));
+    const [next, first, fresh] = fires.filter((e) => e.priority === top).sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+    assert.ok(fresh, "есть три пожара одной срочности");
+    for (const e of [first, fresh]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    // Группа «прежний основной + привязанный»; новый основной взят позже — его срок позже
+    await (await mergeInto(env, first.guid, [fresh.guid])).body;
+    const due = (await env.card(first.guid)).timer.dueAt;
+    await env.advance(30);
+    assert.status(await env.act(next.guid, "claim", {}, "queue"), 200, null, `взять ${next.number}`);
+    // Срок группы проходит, в окне прежнего основного присоединяют к новому
     await env.advance(Math.ceil((Date.parse(due) - env.now) / 1000) + 1);
-    await (await mergeInto(env, calm.guid, [urgent.guid])).body;
+    await (await mergeInto(env, next.guid, [first.guid])).body;
     await env.advance(GRACE + 2);
     const moved = await env.card(fresh.guid);
-    assert.eq(moved.linkedTo, calm.guid, "привязанный перешёл к новому основному");
+    assert.eq(moved.linkedTo, next.guid, "привязанный перешёл к новому основному");
     const b = resolutionBreaches(moved);
     assert.eq([b.length, b[0] && b[0].at], [1, due], "нарушение прежнего основного — и его привязанному, на момент срока");
-    assert.ok(moved.journal.some((j) => j.templateKey === "workflow.journal.group_breach" && j.vars.primaryNumber === urgent.number), "запись «Нарушен срок группы …» прежнего основного");
-    assert.eq(resolutionBreaches(await env.card(calm.guid)).length, 0, "у нового основного нарушения нет: его срок позже");
+    assert.ok(moved.journal.some((j) => j.templateKey === "workflow.journal.group_breach" && j.vars.primaryNumber === first.number), "запись «Нарушен срок группы …» прежнего основного");
+    assert.eq(resolutionBreaches(await env.card(next.guid)).length, 0, "у нового основного нарушения нет: его срок позже");
   });
 
   test("Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42)", async () => {

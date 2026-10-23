@@ -65,6 +65,12 @@
   async function confirm(text) {
     const c = field("comment");
     if (text && c) c.value = text;
+    // Причина удержания пуста, пока оператор не выберет (RULE-110): проба выбирает первую
+    const reason = field("reasonId");
+    if (reason && !reason.value) {
+      const first = [...reason.options].find((o) => o.value && !o.disabled);
+      if (first) reason.value = first.value;
+    }
     await click($("dialogConfirm"));
   }
 

@@ -72,6 +72,9 @@ def transfer_to_self(w):
     form = next(f for f in w["forms"] if f["id"] == "transfer")
     target = next(f for f in form["fields"] if f["name"] == "targetId")
     target["optionExpr"] = target["optionExpr"].replace("!isSelf(me, option) && ", "")
+    # «Не себе» у адресатов формы — в определении offersTransferTo (RULE-107)
+    offers = w["cel"]["definitions"]["offersTransferTo"]
+    offers["expr"] = offers["expr"].replace("!isSelf(who, t) && ", "")
     transition(w, "transfer")["guards"] = [g for g in transition(w, "transfer")["guards"] if g["fn"] != "targetIsNotSelf"]
 
 
