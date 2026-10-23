@@ -440,7 +440,8 @@ window.IM_WORKFLOW = {
           "id": "break",
           "labelKey": "workflow.catalog.hold.break",
           "maxMinutes": 30,
-          "setBy": "system"
+          "setBy": "system",
+          "$comment": "§12.2 (RULE-106). Срок перерыва: истёк — инцидент в очередь (break_hold_release), нарушения удержания нет"
         },
         {
           "id": "no_link",
@@ -2383,6 +2384,14 @@ window.IM_WORKFLOW = {
           "args": [
             "hold"
           ]
+        },
+        {
+          "fn": "holdReasonNotIn",
+          "args": [
+            [
+              "break"
+            ]
+          ]
         }
       ],
       "effects": [
@@ -2407,6 +2416,84 @@ window.IM_WORKFLOW = {
           "args": [
             "alerts.target",
             true
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
+      "id": "break_hold_release",
+      "$comment": "§4, правило 7; §12.2 (RULE-106). Срок перерыва истёк, а оператор не вернулся: отложенный «Перерыв оператора» уходит в очередь, как при долгом молчании, а не записывается нарушение удержания — перерыв по правилам, а инцидент не должен висеть у человека на обеде. Срок — maxMinutes причины break",
+      "labelKey": "workflow.transition.break_hold_release",
+      "from": [
+        "on_hold"
+      ],
+      "to": "new",
+      "trigger": "timer",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "timerExpired",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "fn": "holdReasonIn",
+          "args": [
+            [
+              "break"
+            ]
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearHoldReason"
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.break_hold_release"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "evictOpenCard",
+          "args": [
+            "previousOwner"
           ]
         }
       ],
@@ -4862,6 +4949,22 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§8.3. Есть ли следующий уровень эскалации не выше потолка, адресат которого может принять — право incident:accept и доступ к объекту, у группы — хотя бы один такой участник (§8.1, §8.3): true — есть, false — нет: инцидент никому не передаётся, записывается нарушение и уходит алерт ответственному (escalation_ceiling, resolution_ceiling). Остальные уровни пропускаются, как и уровень, на котором принять может только тот, у кого инцидент уже есть: адресат уровня — текущий адресат инцидента или группа, где принять может только владелец инцидента (RULE-93, «Исключение владельца» §8.1). Найденный уровень — значения escalation.level.target и escalation.level.number в эффектах."
+      },
+      {
+        "fn": "holdReasonNotIn",
+        "args": [
+          "reasonIds"
+        ],
+        "argTypes": {
+          "reasonIds": "list<string>"
+        },
+        "expr": "!(incident.holdReasonId in reasonIds)",
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.other_hold_reason"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§4, правило 7 (RULE-106). Причина удержания не из списка: нарушение удержания — не за перерыв, перерыв по истечении срока уходит в очередь"
       },
       {
         "fn": "holdReasonIn",

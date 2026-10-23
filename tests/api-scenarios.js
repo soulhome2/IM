@@ -1258,6 +1258,21 @@
     assert.status(await env.act(inc.guid, "resume", {}, "queue"), 200, null, "возобновить после возврата");
   });
 
+  test("Перерыв дольше срока: отложенный «Перерыв оператора» — в очередь, нарушения удержания нет (§12.2, RULE-106)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
+    const held = await env.card(inc.guid);
+    assert.eq([held.state, held.holdReasonId], ["on_hold", "break"], "отложен — перерыв");
+    // Оператор на месте (признак активности идёт), но с перерыва не вернулся дольше срока
+    const fired = (await env.advance(Math.ceil((Date.parse(held.holdTimer.dueAt) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    assert.eq(fired, ["break_hold_release"], "по сроку перерыва — в очередь, а не нарушение");
+    const c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner, c.holdReasonId, c.breaches.filter((b) => b.kind === "hold").length], ["new", null, null, 0], "новый, ничей, без нарушения удержания");
+    assert.ok(c.timer && c.timer.id === "reaction", "реакция — заново");
+  });
+
   test("Лимит отложенных — только для ручного «Отложить»: перерыв откладывает и сверх лимита (§10.2)", async () => {
     const env = await makeEnv();
     const max = W.limits.maxOnHold;

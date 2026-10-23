@@ -121,6 +121,7 @@ class Doc:
             "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")
             + f" эскалации не выше потолка ({self.setting('escalation.maxLevel')}), адресат которого может принять — право `incident:accept` и доступ к объекту — и не вышел из МИ (вышедшему — если в его дежурной группе кто-то не вышел и может принять); остальные уровни пропускаются",
             "holdReasonIn": lambda: "причина удержания — " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
+            "holdReasonNotIn": lambda: "причина удержания — не " + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0]),
             "stateIs": lambda: f"состояние {self.st(a[0])}",
             "settingEnabled": lambda: f"включена настройка {self.setting(a[0])}",
             "settingIs": lambda: f"настройка `{a[0]}` = {json.dumps(a[1], ensure_ascii=False)} (сейчас {json.dumps(self.lookup(a[0]), ensure_ascii=False)})",

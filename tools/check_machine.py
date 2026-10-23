@@ -832,6 +832,7 @@ def guard_terms(g):
         "addresseeHasAccess": lambda: ("у адресата есть доступ", a[0]),
         "addresseeCanAccept": lambda: ("адресат может принять", a[0]),
         "holdReasonIn": lambda: ("причина удержания в " + ",".join(a[0]), True),
+        "holdReasonNotIn": lambda: ("причина удержания в " + ",".join(a[0]), False),
         "primaryClosed": lambda: ("основной закрыт", True),
         "primaryAddresseeHasAccess": lambda: ("у адресата основного есть доступ", a[0]),
     }.get(fn, lambda: None)()
