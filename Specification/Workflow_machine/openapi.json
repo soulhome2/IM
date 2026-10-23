@@ -2769,8 +2769,7 @@
               "enum": [
                 "eventType",
                 "priority",
-                "sourceGroup",
-                "escalationLevel"
+                "sourceGroup"
               ]
             },
             "description": "§4, правило 2. По каким признакам уточняется норматив: строка overrides с признаком не из этого списка не учитывается (ARCH-11)"

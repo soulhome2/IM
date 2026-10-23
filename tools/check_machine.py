@@ -983,6 +983,14 @@ def check_declared_fields(w, o, err):
       requiredStepsFilled с ним, none — ни того ни другого."""
     forms = {f["id"]: f for f in w["forms"]}
     trs = w["transitions"]
+    # Строка уточнения норматива — только признаки из overridesBy таймера и sec: признак, которого исполнитель не
+    # знает, он отбросил бы молча, и строка действовала бы на всех (ARCH-11, RULE-114)
+    for t in w["timers"]:
+        allowed = set(t.get("overridesBy", [])) | {"sec"}
+        for i, row in enumerate(t.get("overrides", [])):
+            extra = sorted(k for k in row if not k.startswith("$") and k not in allowed)
+            if extra:
+                err.append(f"таймер {t['id']}, overrides[{i}]: признаки {extra} не из overridesBy (ARCH-11, RULE-114)")
     for cid, cat in w["reasonCatalogs"].items():
         if cid.startswith("$"):
             continue
