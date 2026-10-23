@@ -261,8 +261,11 @@ class Doc:
         for item in w["reasonCatalogs"]["close_result"]["items"]:
             if item.get("permission") == key:
                 uses.append(f"`close` с результатом «{lab(item)}»")
-        if key in (w.get("grouping") or {}).get("permissions", []):
-            uses.append("групповая обработка «Обработать как одно» (`grouping`)")
+        # «Взять в работу» на выборке: новый основной берётся переходом grouping.takeWith — с его правами (DOC-57)
+        take = (w.get("grouping") or {}).get("takeWith")
+        merge = next((t for t in w["transitions"] if t["id"] == "merge"), None)
+        if take and merge and any(checks(t.get("guards")) for t in w["transitions"] if t["id"] == take):
+            uses.append(f"`merge` {lab(merge)} на выборке, если основной новый — переходом `{take}` (`grouping.takeWith`)")
         for s in w["session"]["states"]:
             if s.get("permission") == key:
                 uses.append(f"состояние оператора «{lab(s)}» (`session`)")
