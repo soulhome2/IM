@@ -647,6 +647,47 @@ def check_fixture_media(err):
             err.append(f"эталон: {inc['number']} — media «{media}», а плана нет")
 
 
+def check_fixture_places(err):
+    """Место инцидента и план устройства сходятся с деревом групп устройств (DATA-12): у плана есть
+    площадка; план «Площадка · часть» — только для устройств, у которых эта часть (этаж, корпус) на
+    пути группы; место инцидента, которое начинается с названия группы площадки, — это группа на пути
+    источника. Иначе фильтр по группе и план показывают оператору разное."""
+    with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    paths, names = {}, {}
+
+    def walk(groups, path):
+        for g in groups:
+            here = path + [g["name"]]
+            names.setdefault(here[0], set()).add(g["name"])
+            for d in g.get("devices", []):
+                paths.setdefault(d, []).append(here)
+            walk(g.get("groups", []), here)
+
+    walk(fx["sourceGroups"], [])
+    plans = {p["id"]: p for p in fx["plans"]}
+    for p in fx["plans"]:
+        if not p.get("site"):
+            err.append(f"эталон: у плана «{p['name']}» нет площадки (DATA-12)")
+    for d in fx["devices"]:
+        plan = plans.get((d.get("position") or {}).get("plan"))
+        if not plan or not plan.get("site"):
+            continue
+        part = plan["name"].split(" · ", 1)[1] if " · " in plan["name"] else None
+        mine = [x for x in paths.get(d["id"], []) if x[0] == plan["site"]]
+        if not mine or (part and not any(part in x for x in mine)):
+            where = "; ".join(" / ".join(x) for x in paths.get(d["id"], [])) or "ни в одной группе"
+            err.append(f"эталон: устройство «{d['name']}» — на плане «{plan['name']}», а в группах: {where} (DATA-12)")
+    for inc in fx["incidents"]:
+        head = inc["location"].split(",")[0].strip()
+        if head not in names.get(inc["site"], set()):
+            continue
+        src = paths.get(inc["devices"][0], [])
+        if not any(head in x for x in src if x[0] == inc["site"]):
+            where = "; ".join(" / ".join(x) for x in src) or "ни в одной группе"
+            err.append(f"эталон: {inc['number']} — место «{inc['location']}», а источник в группах: {where} — фильтр по «{head}» его не покажет (DATA-12)")
+
+
 def check_doc_numbers(w, o, err):
     """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
     ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
@@ -1477,6 +1518,7 @@ def main():
     check_fixture_journal(w, err)
     check_fixture_history(w, err)
     check_fixture_media(err)
+    check_fixture_places(err)
     check_graph(w, err)
     check_session_machine(w, err)
     check_state_owners(w, err)

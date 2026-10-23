@@ -479,9 +479,9 @@
         <g fill="var(--map-label)" font-size="9" font-family="Inter, sans-serif">
           <text x="42" y="46">Лаборатория 1</text>
           <text x="220" y="46">Лаборатория 2 · серверная</text>
-          <text x="42" y="162">Коридор корпуса</text>
-          <text x="42" y="212">Офис 1</text>
-          <text x="220" y="212">Офис 2</text>
+          <text x="42" y="162">Коридор корпуса А</text>
+          <text x="42" y="212">Склад реактивов</text>
+          <text x="220" y="212">Комната персонала</text>
         </g>
       `,
     },
@@ -508,6 +508,74 @@
           <text x="42" y="192">Парковка персонала</text>
           <text x="30" y="116">Въезд</text>
           <text x="330" y="116">Территория</text>
+        </g>
+      `,
+    },
+    mall2: {
+      svg: `
+        <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
+        <rect x="32" y="32" width="158" height="106" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="32" y="152" width="120" height="76" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <rect x="210" y="32" width="158" height="106" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="172" y="152" width="196" height="76" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <g stroke="var(--stroke-2)" stroke-width="6" stroke-linecap="round" opacity=".55">
+          <line x1="96" y1="138" x2="126" y2="138"/><line x1="270" y1="138" x2="300" y2="138"/><line x1="152" y1="190" x2="172" y2="190"/>
+        </g>
+        <g fill="var(--map-label)" font-size="9" font-family="Inter, sans-serif">
+          <text x="42" y="48">Ресторан · зал</text>
+          <text x="42" y="170">Кухня ресторана</text>
+          <text x="220" y="48">Кинотеатр · кинозал №3</text>
+          <text x="182" y="170">Фойе и бар</text>
+        </g>
+      `,
+    },
+    office2: {
+      svg: `
+        <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
+        <rect x="32" y="32" width="200" height="196" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="248" y="32" width="120" height="120" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="248" y="166" width="120" height="62" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <g stroke="var(--stroke-2)" stroke-width="6" stroke-linecap="round" opacity=".55">
+          <line x1="232" y1="80" x2="248" y2="80"/><line x1="232" y1="196" x2="248" y2="196"/>
+        </g>
+        <g fill="var(--map-label)" font-size="9" font-family="Inter, sans-serif">
+          <text x="42" y="48">Отдел разработки · опенспейс</text>
+          <text x="258" y="48">Отдел маркетинга</text>
+          <text x="258" y="182">Переговорная «Невада»</text>
+        </g>
+      `,
+    },
+    warehouse2: {
+      svg: `
+        <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
+        <rect x="32" y="32" width="200" height="196" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="248" y="32" width="120" height="110" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <rect x="248" y="156" width="120" height="72" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <g stroke="var(--stroke-2)" stroke-width="6" stroke-linecap="round" opacity=".55">
+          <line x1="232" y1="70" x2="248" y2="70"/><line x1="232" y1="192" x2="248" y2="192"/>
+        </g>
+        <g fill="var(--map-label)" font-size="9" font-family="Inter, sans-serif">
+          <text x="42" y="48">Склад №3 · стеллажи</text>
+          <text x="258" y="48">Холодильная камера</text>
+          <text x="258" y="172">Пост погрузчика</text>
+        </g>
+      `,
+    },
+    lab2: {
+      svg: `
+        <rect x="16" y="16" width="368" height="228" rx="6" fill="var(--map-floor)" stroke="var(--stroke-2)" stroke-width="2"/>
+        <rect x="32" y="32" width="336" height="70" fill="var(--map-room)" stroke="var(--stroke-2)"/>
+        <rect x="32" y="116" width="336" height="36" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <rect x="32" y="166" width="158" height="62" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <rect x="210" y="166" width="158" height="62" fill="var(--map-room-2)" stroke="var(--stroke-2)"/>
+        <g stroke="var(--stroke-2)" stroke-width="6" stroke-linecap="round" opacity=".55">
+          <line x1="96" y1="102" x2="130" y2="102"/><line x1="96" y1="152" x2="130" y2="152"/><line x1="274" y1="152" x2="308" y2="152"/>
+        </g>
+        <g fill="var(--map-label)" font-size="9" font-family="Inter, sans-serif">
+          <text x="42" y="48">Офис 1</text>
+          <text x="42" y="132">Коридор корпуса Б</text>
+          <text x="42" y="182">Офис 2 · переговорная «Юпитер»</text>
+          <text x="220" y="182">Офис 2 · кухня</text>
         </g>
       `,
     },
