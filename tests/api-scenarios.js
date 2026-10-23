@@ -54,6 +54,23 @@
     assert.eq((await env.session()).usage.blockingIncidentGuid, inc.guid, "какой взят — его закрыть или отложить, чтобы взять следующий");
   });
 
+  test("Подсказка лимита активных — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна (§10.2, BUG-104)", async () => {
+    // Лимит отложенных — на один больше, чем у меня в наборе: одно «Отложить» ещё можно
+    const held = (await (await makeEnv()).session()).usage.onHoldCount;
+    const env = await makeEnv({ workflowPatch: { limits: { maxActive: 1, maxOnHold: held + 1 } } });
+    const fresh = (await env.all("open")).filter((e) => e.state === "new").map((e) => e.guid);
+    const why = async (guid) => actionOf(await env.card(guid), "claim").reason;
+    assert.status(await env.act(fresh[0], "claim", {}, "queue"), 200, null, "взять первый");
+    assert.ok(/отложите/.test(await why(fresh[3])), `отложить можно — подсказка с «отложите»: ${await why(fresh[3])}`);
+    // Отложенных — до лимита: отложить взятый нельзя — подсказка без «отложите»
+    assert.status(await env.act(fresh[0], "hold", { reasonId: "third_party", comment: "тест" }), 200, null, "отложить первый");
+    assert.status(await env.act(fresh[2], "claim", {}, "queue"), 200, null, "взять второй");
+    const actions = (await env.card(fresh[2])).actions;
+    assert.eq(actionOf({ actions }, "hold").enabled, false, "«Отложить» у взятого недоступна — лимит отложенных");
+    const text = await why(fresh[3]);
+    assert.ok(!/отложите/.test(text) && /верните в очередь/.test(text), `подсказка: ${text}`);
+  });
+
   test("Лимит активных 1: второе «Взять» недоступно и отклоняется сервером", async () => {
     const env = await makeEnv({ workflowPatch: { limits: { maxActive: 1 } } });
     const list = await env.all("open");

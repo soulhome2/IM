@@ -3665,6 +3665,12 @@ window.IM_WORKFLOW = {
         "id"
       ]
     },
+    "workflow.guard.active_limit_no_hold": {
+      "vars": [
+        "n",
+        "id"
+      ]
+    },
     "workflow.guard.hold_limit": {
       "vars": [
         "n"
@@ -4659,11 +4665,13 @@ window.IM_WORKFLOW = {
           "n": "limits.maxActive",
           "id": "mineIn(incidents, me, 'in_progress', incident.id)[0].number"
         },
+        "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', '')) < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'",
         "onFail": "disable",
         "failKeys": [
-          "workflow.guard.active_limit"
+          "workflow.guard.active_limit",
+          "workflow.guard.active_limit_no_hold"
         ],
-        "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца."
+        "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца. Подсказка — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна, есть право и лимит отложенных не исчерпан (BUG-104)."
       },
       {
         "fn": "withinHoldLimit",
