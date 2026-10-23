@@ -2410,6 +2410,37 @@
     assert.eq(allIn.truncated, (await capped.all("open")).length > 10, "признак усечения");
   });
 
+  test("Повтор массового действия с тем же ключом — прежний ответ, второй раз не применяется (idempotencyKey, BUG-84)", async () => {
+    const env = await makeEnv();
+    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    assert.eq(two.length, 2, "два новых в офисе");
+    const body = { incidentGuids: two, formValues: { targetId: "sidorov", comment: "тест" }, idempotencyKey: "bug-84-once" };
+    const first = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", body);
+    assert.eq([first.status, first.body.succeeded.length], [200, 2], "первый раз — оба переданы");
+    const again = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", body);
+    assert.eq(again.body, first.body, "повтор — тот же ответ");
+    for (const g of two) {
+      const c = await env.card(g);
+      assert.eq([c.transferCount, c.journal.filter((j) => j.templateKey === "workflow.journal.transfer").length], [1, 1], "одна передача и одна запись");
+    }
+  });
+
+  test("Устаревшая выборка не уводит то, что изменилось после отметки: массовое действие — в failed с VERSION_CONFLICT, объединение — 412 (expectedVersions, BUG-84)", async () => {
+    const env = await makeEnv();
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [await env.guidOf("INC-1838"), await env.guidOf("INC-1851")] });
+    assert.eq(Object.keys(sel.versions).sort(), sel.incidentGuids.slice().sort(), "у выборки — версии отмеченных");
+    // После отметки инциденты ушли по автоэскалации к Петровой
+    const reaction = W.timers.find((t) => t.id === "reaction");
+    await env.advance(Math.max(...reaction.overrides.map((o) => o.sec), reaction.defaultSec) + GRACE + 1);
+    const moved = await Promise.all(sel.incidentGuids.map((g) => env.card(g)));
+    assert.ok(moved.every((c) => c.version !== sel.versions[c.guid]), "после отметки инциденты изменились");
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: sel.incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, expectedVersions: sel.versions });
+    assert.eq([bulk.status, bulk.body.succeeded.length, bulk.body.failed.map((f) => f.problem.code)], [200, 0, ["VERSION_CONFLICT", "VERSION_CONFLICT"]], "массовая передача — ни один не уведён");
+    for (const c of moved) assert.eq((await env.card(c.guid)).owner, c.owner, `${c.number}: у прежнего адресата`);
+    const merge = await env.call("POST", "/operator/incidents/merge", { incidentGuids: sel.incidentGuids, expectedVersions: sel.versions });
+    assert.status(merge, 412, "VERSION_CONFLICT", "объединение по устаревшей выборке");
+  });
+
   test("Массовое действие: передача выборки — каждому, кому доступно; результат по каждому", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new").slice(0, 3);

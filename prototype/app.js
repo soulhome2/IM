@@ -1221,10 +1221,19 @@
   async function updateSelection() {
     if (!state.checked.size) {
       store.selection = null;
+      checkedVersions.clear();
       return;
     }
     store.selection = await api.post("/operator/incidents/selection", { mode: "explicit", incidentGuids: [...state.checked] });
+    // Версия — на момент отметки: у отмеченного раньше не обновляется (BUG-84)
+    [...checkedVersions.keys()].forEach((g) => state.checked.has(g) || checkedVersions.delete(g));
+    Object.entries(store.selection.versions || {}).forEach(([g, v]) => checkedVersions.has(g) || checkedVersions.set(g, v));
   }
+  // Версии отмеченных на момент отметки — серверу в expectedVersions: изменённое после отметки он не тронет (§14.1, BUG-84)
+  const checkedVersions = new Map();
+  const expectedVersions = (guids) => Object.fromEntries(guids.filter((g) => checkedVersions.has(g)).map((g) => [g, checkedVersions.get(g)]));
+  // Ключ повтора — новый на каждое действие: повтор того же запроса сервер не выполнит дважды (BUG-84)
+  const newKey = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
 
   // Тексты действия на выборке: заголовок, пояснение и кнопка — ключами формы машины (bulkTitleKey, bulkNoteKey,
@@ -1266,7 +1275,7 @@
   async function runBulk(id, guids, form, surface) {
     let res;
     try {
-      res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface });
+      res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface, expectedVersions: expectedVersions(guids), idempotencyKey: newKey() });
     } catch (err) {
       toast(problemText(err));
       return false;
@@ -1328,7 +1337,7 @@
     if (!ev) return false;
     let res;
     try {
-      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface }, ifMatch(ev));
+      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface, idempotencyKey: newKey() }, ifMatch(ev));
     } catch (err) {
       toast(problemText(err));
       await reload();
@@ -3768,7 +3777,7 @@
     const n = state.checked.size;
     let res;
     try {
-      res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked] });
+      res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked], expectedVersions: expectedVersions([...state.checked]), idempotencyKey: newKey() });
     } catch (err) {
       toast(problemText(err));
       return;

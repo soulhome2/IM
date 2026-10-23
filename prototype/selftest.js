@@ -1899,6 +1899,49 @@
       return `в строке ${shown} с, у сервера ${left} с`;
     });
 
+    await step("Устаревшая выборка: отмеченные ушли по эскалации — массовая передача их не уводит и называет причину (expectedVersions, BUG-84)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      await standReset({ fixture: "demo" });
+      await wait(300);
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      let text = "";
+      try {
+        const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]') && r.querySelector("[data-check]")).slice(0, 2);
+        expect(rows.length === 2, "нет двух новых для выборки");
+        const ids = rows.map((r) => r.dataset.id);
+        // Строки после сброса стенда перерисовываются: отмечать — по свежей строке
+        for (const g of ids) await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        await wait(200);
+        expect(ids.every((g) => $("eventsList").querySelector(`[data-check="${g}"]`).checked), "отмечены не оба");
+        // После отметки — автоэскалация: инциденты изменились
+        for (let i = 0; i < 4; i++) {
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+          await stand.raw("POST", "/test/clock", { advanceSec: 240 });
+        }
+        await wait(300);
+        const before = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
+        await click($("selBar").querySelector('[data-sel-do="transfer"]'));
+        expect(!$("modalDialog").hidden, "форма передачи выборки не открылась");
+        await click($("dialogFields").querySelector('[data-target-input="targetId"]'));
+        const pick = $("dialogFields").querySelector("[data-target-pick]");
+        expect(pick, "в форме нет адресатов");
+        await click(pick);
+        await confirmDialog("тест");
+        await wait(200);
+        text = ($("toasts").lastElementChild || {}).textContent || "";
+        const after0 = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
+        expect(/уже изменён/.test(text), `уведомление: «${text}»; до: ${before.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}; после: ${after0.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}`);
+        const after = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
+        expect(after.every((c, i) => JSON.stringify(c.owner) === JSON.stringify(before[i].owner) && c.transferCount === before[i].transferCount), "изменённые после отметки переданы");
+      } finally {
+        if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return text;
+    });
+
     await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");

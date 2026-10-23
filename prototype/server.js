@@ -792,6 +792,7 @@
         body: {
           count: matched.length,
           incidentGuids: (max == null ? matched : matched.slice(0, max)).map((e) => e.id),
+          versions: versionsOf(max == null ? matched : matched.slice(0, max)),
           truncated: max != null && matched.length > max,
           scenarioGuid,
           excluded,
@@ -1106,6 +1107,8 @@
       return ev && canSee(ev) ? ev : null;
     };
     const touch = (list) => list.forEach((e) => (e.version += 1));
+    // Версии отобранных — их клиент пришлёт в expectedVersions (BUG-84)
+    const versionsOf = (list) => Object.fromEntries(list.map((e) => [e.id, String(e.version)]));
 
     // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
     // Запрос, меняющий инцидент, несёт её в If-Match: нет заголовка — 428, версия старая — 412
@@ -1155,12 +1158,20 @@
       return { status: 200, body: view(), view };
     }
 
+    // Отмеченный изменился после отметки (expectedVersions, §14.1, BUG-84): версия строки очереди не та, что прислал
+    // клиент. Нет guid в словаре — не сверяется
+    const changedSince = (ev, expected) => Boolean(expected) && expected[ev.id] != null && String(expected[ev.id]) !== String(ev.version);
+    const conflict = (ev, extra) => problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], extra);
+
     // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null. Выборка — по возрастанию
     // номера, а не в порядке отметки: у совсем равных основной — меньший номер, как в модели Quint
     const pickPrimary = (list) => engine.mergePrimary([...list].sort(byNumber));
-    function mergeIncidents(guids, primaryGuid) {
+    function mergeIncidents(guids, primaryGuid, expected) {
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+      // Объединение — всё или ничего: хоть один изменился после отметки — не выполняется (BUG-84)
+      const stale = list.find((e) => changedSince(e, expected));
+      if (stale) return conflict(stale, { current: card(stale) });
       if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.merge.too_few"]);
       // Лимит выборки — как у массовых действий (§11, BUG-83); null — без ограничения
       if (tooLarge(list)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
@@ -1283,7 +1294,7 @@
       const truncated = body.mode !== "explicit" && max != null && list.length > max;
       if (truncated) list = list.slice(0, max);
       // Ничего не подошло — и действий нет (BUG-98)
-      return { status: 200, body: { incidentGuids: list.map((e) => e.id), truncated, actions: list.length ? selectionActions(list) : [] } };
+      return { status: 200, body: { incidentGuids: list.map((e) => e.id), versions: versionsOf(list), truncated, actions: list.length ? selectionActions(list) : [] } };
     }
 
     const ROUTES = [
@@ -1367,6 +1378,8 @@
           let navigate = null;
           const done = [];
           list.forEach((ev) => {
+            // Изменился после отметки — не трогается: устаревшая выборка не перебивает сделанное после неё (BUG-84)
+            if (changedSince(ev, body.expectedVersions)) return failed.push({ incidentGuid: ev.id, problem: conflict(ev).body });
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
             if (r.status === 200) {
               done.push(ev);
@@ -1410,7 +1423,7 @@
           return Object.assign(reply(), { again: reply });
         },
       ],
-      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.primaryGuid)],
+      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.primaryGuid, body && body.expectedVersions)],
       [
         "DELETE",
         "/operator/incidents/{incidentGuid}/linked/{linkedGuid}",
@@ -1749,6 +1762,11 @@
       recorded.push({ method, template, status, body: JSON.parse(JSON.stringify(body)), kind: kind || "http", headers: lowerKeys(headers) });
     }
 
+    // Ключ повтора (idempotencyKey, BUG-84): ответ на запрос с ключом помнится 10 минут, повтор получает его же
+    // и ничего не выполняет снова — двойное нажатие и ретрай сети не применяют действие дважды
+    const IDEMPOTENCY_MS = 10 * 60 * 1000;
+    const answered = new Map();
+
     function handle(method, url, body, headers) {
       const [path, query = ""] = String(url).split("?");
       const q = {};
@@ -1762,6 +1780,13 @@
       const params = {};
       route.names.forEach((name, i) => (params[name] = decodeURIComponent(m[i + 1])));
       const acting = method !== "GET" && path.startsWith("/operator/");
+      const idem = acting && body && body.idempotencyKey ? `${method} ${path} ${body.idempotencyKey}` : null;
+      answered.forEach((a, k) => now() - a.at >= IDEMPOTENCY_MS && answered.delete(k));
+      if (idem && answered.has(idem)) {
+        const { res } = answered.get(idem);
+        record(method, route.template, res.status, res.body, "http", res.headers);
+        return JSON.parse(JSON.stringify(res));
+      }
       // Перед запросом оператора — всё, что уже наступило по времени (§14.3, ARCH-10): иначе действие между
       // тактами планировщика стёрло бы нарушение (BUG-82). Окно после дедлайна по-прежнему ждёт человека
       if (acting) runScheduler();
@@ -1772,7 +1797,9 @@
       // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10)
       if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
       record(method, route.template, res.status, res.body, "http", res.headers);
-      return { status: res.status, body: res.body, headers: res.headers };
+      const out = { status: res.status, body: res.body, headers: res.headers };
+      if (idem) answered.set(idem, { at: now(), res: JSON.parse(JSON.stringify(out)) });
+      return out;
     }
 
     /* ===== Планировщик и эмуляция коллег ===== */
