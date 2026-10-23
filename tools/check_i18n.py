@@ -6,6 +6,8 @@
 состояний (prototype/workflow.js) — всё содержимое литерала в кавычках "…", '…' или `…`; в разметке —
 весь текст элемента или значение атрибута. Подстрока другой строки или комментарий не считаются (PROC-32).
 Непереведённые строки ловит самопроверка прототипа.
+Ещё: после подстановки имени ({ownerName}, {targetName}…) нет точки — имя и так кончается на «М.», вышло
+бы «Петрова М..» (BUG-96); проверяются каталоги строк машины и словари прототипа.
 С --fix удаляет лишние ключи из словарей.
 Код выхода 1, если нашлись лишние ключи или ключи, которые есть только в одном языке.
 """
@@ -18,6 +20,21 @@ PROTO = os.path.join(ROOT, "prototype")
 DICTS = ["i18n-ui.js", "i18n-data.js", "i18n-html.js"]
 SOURCES = ["app.js", "engine.js", "server.js", "fixture.js", "colleagues.js", "api.js", "workflow.js", "strings.js", "index.html", "selftest.js"]
 ENTRY = r'^    "((?:[^"\\]|\\.)*)":\s*(?:\n\s*)?"(?:[^"\\]|\\.)*",\n'
+CATALOGS = os.path.join(ROOT, "Specification", "Workflow_machine", "strings")
+# Подстановка имени, а за ней точка: «{ownerName}.»
+NAME_DOT = re.compile(r"\{\w*Name\}\.")
+
+
+def name_dots():
+    """Строки, где после подстановки имени стоит точка (BUG-96)."""
+    found = []
+    paths = [os.path.join(CATALOGS, n) for n in sorted(os.listdir(CATALOGS)) if n.endswith(".json")] + [os.path.join(PROTO, n) for n in DICTS]
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            for i, line in enumerate(f, 1):
+                if NAME_DOT.search(line):
+                    found.append(f"{os.path.relpath(path, ROOT)}:{i}: точка после имени — «{line.strip()[:80]}»")
+    return found
 
 
 def section(text, lang):
@@ -67,6 +84,9 @@ def main():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             print(f"{name}: удалено {len(unused)}")
+    for line in name_dots():
+        print(line)
+        problems += 1
     print(f"Проблем в словарях: {problems}")
     return 1 if problems else 0
 
