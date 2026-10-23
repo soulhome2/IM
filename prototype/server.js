@@ -1051,12 +1051,27 @@
     function emitAccessLost(ev) {
       send({ type: "incident.access_lost", at: iso(now()), incidentGuid: ev.id, actor: null, incident: null, payload: { number: ev.number } });
     }
+    // История потока — последние события: по Last-Event-ID сервер досылает пропущенное; такого id уже нет —
+    // первым сообщением stream.reset, клиент перечитывает всё (контракт, BUG-102)
+    const STREAM_DEPTH = 500;
+    const history = [];
     function send(body) {
       const message = Object.assign({ id: String(++seq) }, body);
       record("GET", "/operator/stream", 200, message, "stream");
+      history.push(message);
+      if (history.length > STREAM_DEPTH) history.shift();
       listeners.forEach((fn) => setTimeout(() => fn(JSON.parse(JSON.stringify(message))), 0));
     }
-    function subscribe(fn) {
+    function subscribe(fn, lastEventId) {
+      if (lastEventId != null && lastEventId !== "") {
+        const i = history.findIndex((m) => m.id === String(lastEventId));
+        const missed =
+          i >= 0
+            ? history.slice(i + 1)
+            : [{ id: String(seq), type: "stream.reset", at: iso(now()), incidentGuid: null, actor: null, incident: null, payload: {} }];
+        if (i < 0) record("GET", "/operator/stream", 200, missed[0], "stream");
+        missed.forEach((m) => setTimeout(() => fn(JSON.parse(JSON.stringify(m))), 0));
+      }
       listeners.add(fn);
       return () => listeners.delete(fn);
     }

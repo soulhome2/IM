@@ -4118,6 +4118,8 @@
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     if (mine && msg.type !== "incident.card_evicted") return;
+    // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
+    if (msg.type === "stream.reset") return reload();
     // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)
     if (msg.type === "reference.priorities_changed") {
       return loadPriorities().then(() => reload());
@@ -4205,7 +4207,7 @@
     applyTheme(savedTheme);
     await reload();
     applyLang(savedLang);
-    api.subscribe(onServerEvent);
+    api.subscribe(onServerEvent, () => reload());
     renderHelpLinks();
   }
 

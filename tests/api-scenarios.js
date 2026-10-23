@@ -2917,4 +2917,41 @@
     got.forEach(({ m, meta }) => assert.eq(meta && meta.lastEventId, m.id, `id: сообщения ${m.type}`));
     assert.eq(new Set(got.map(({ m }) => m.id)).size, got.length, "id сообщений не повторяются");
   });
+
+  test("Поток событий: обрыв и переподключение по Last-Event-ID — пропущенное досылается; такого id нет — первым stream.reset (BUG-102)", async () => {
+    if (!IMTest.baseUrl) return "только по сети — петля или бэкенд: встроенный поток не рвётся";
+    // Подключиться к потоку (с Last-Event-ID или без), выполнить действие и прочитать n сообщений; потом — обрыв
+    async function read(lastId, n, action) {
+      const stop = new AbortController();
+      const res = await fetch(`${IMTest.baseUrl}/operator/stream`, { headers: lastId ? { "Last-Event-ID": lastId } : {}, credentials: "include", signal: stop.signal });
+      const reader = res.body.getReader();
+      const text = new TextDecoder();
+      const got = [];
+      let buf = "";
+      if (action) await action();
+      const deadline = Date.now() + 5000;
+      while (got.length < n && Date.now() < deadline) {
+        const r = await Promise.race([reader.read(), new Promise((ok) => setTimeout(() => ok({ late: true }), deadline - Date.now()))]);
+        if (r.late || r.done) break;
+        buf += text.decode(r.value, { stream: true });
+        for (let i; (i = buf.indexOf("\n\n")) >= 0; buf = buf.slice(i + 2)) {
+          const data = buf.slice(0, i).split("\n").find((l) => l.startsWith("data: "));
+          if (data) got.push(JSON.parse(data.slice(6)));
+        }
+      }
+      stop.abort();
+      return got;
+    }
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const [claimed] = await read(null, 1, async () => assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять"));
+    assert.ok(claimed && claimed.payload.transitionId === "claim", `в потоке — «Взять»: ${JSON.stringify(claimed && claimed.type)}`);
+    // Поток оборван — тем временем «Отложить»; переподключение с id последнего полученного досылает его
+    assert.status(await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "тест" }), 200, null, "отложить без потока");
+    const [missed] = await read(claimed.id, 1);
+    assert.eq([missed && missed.type, missed && missed.payload.transitionId], ["incident.transitioned", "hold"], "дослано пропущенное «Отложить»");
+    // Такого id в истории нет — история потеряна: первым stream.reset
+    const [reset] = await read("0", 1);
+    assert.eq(reset && reset.type, "stream.reset", "id нет в истории — stream.reset");
+  });
 })();

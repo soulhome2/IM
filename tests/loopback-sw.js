@@ -46,7 +46,8 @@ async function answer(request, path) {
       start(controller) {
         const encoder = new TextEncoder();
         controller.enqueue(encoder.encode(": loopback\n\n"));
-        stop = server.subscribe((m) => controller.enqueue(encoder.encode(`id: ${m.id}\ndata: ${JSON.stringify(m)}\n\n`)));
+        // Переподключение: браузер шлёт Last-Event-ID — сервер досылает пропущенное или stream.reset (BUG-102)
+        stop = server.subscribe((m) => controller.enqueue(encoder.encode(`id: ${m.id}\ndata: ${JSON.stringify(m)}\n\n`)), request.headers.get("Last-Event-ID"));
       },
       cancel() {
         if (stop) stop();

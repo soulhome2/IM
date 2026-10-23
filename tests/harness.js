@@ -332,5 +332,7 @@
     finish(lines, summary, failed);
   }
 
-  window.IMTest = { test, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase) };
+  // Адрес сервера по сети (петля или бэкенд); встроенный — null: тесты протокола потока идут только по сети
+  const baseUrl = apiBase === "loopback" ? new URL("loopback-api", location.href).href : apiBase || null;
+  window.IMTest = { test, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase), baseUrl };
 })();
