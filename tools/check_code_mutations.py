@@ -522,8 +522,9 @@ def check(site, profile, mutation, full, killers):
     finally:
         with open(path, "w", encoding="utf-8") as f:
             f.write(code)
+    # Тесты не запустились — порча ничего не показала: это ошибка прогона, а не пойманная порча (PROC-54)
     if not ran:
-        return f"KILLED {name} [{kind}] — тесты не запустились (ошибка JS)", False, None
+        return f"ERROR {name} [{kind}] — тесты не запустились: прогон недействителен", True, None
     if passed:
         return f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}", True, None
     return f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}", False, killer
@@ -541,15 +542,18 @@ def main():
     found = {}
     work = tempfile.mkdtemp(prefix="im-code-mut-")
     tasks = queue.Queue()
-    # Контроль: без порчи тесты проходят — полный прогон; при делении на части — в первой. Первым в очереди,
+    # Контроль: без порчи тесты проходят и запускаются — в каждом прогоне и каждой части, для тех наборов тестов,
+    # которые нужны её порчам; иначе сломанный Chrome выдал бы все порчи за пойманные (PROC-54). Первым в очереди,
     # самый долгий (самопроверка) — раньше всех: идёт вместе с мутациями, а не после них
-    if not wanted and shard == 1:
-        for kind in ("ui", "api", "scenario"):
+    for kind in ("ui", "api", "scenario"):
+        if any(m[4] == kind for m in todo):
             tasks.put(("BASE", kind))
     for m in todo:
         tasks.put(m)
     lock = threading.Lock()
     survived = []
+    # Прогон недействителен: контроль без порчи не прошёл или тесты не запустились
+    failed = []
 
     def worker(n):
         # Своя копия прототипа и тестов: портится и восстанавливается по одному файлу
@@ -563,17 +567,18 @@ def main():
             except queue.Empty:
                 return
             if m[0] == "BASE":
-                passed, fails, _, _ = run_tests(site, m[1], profile)
+                passed, fails, ran, _ = run_tests(site, m[1], profile)
                 if not passed:
                     with lock:
-                        survived.append(f"BASE {m[1]}")
-                        print(f"BASE [{m[1]}] — без порчи тесты не проходят: {fails[:2]}", flush=True)
+                        failed.append(f"BASE {m[1]}")
+                        why = fails[:2] if ran else "тесты не запустились"
+                        print(f"BASE [{m[1]}] — без порчи тесты не проходят: {why}", flush=True)
                 continue
             line, bad, killer = check(site, profile, m, full, killers)
             with lock:
                 print(line, flush=True)
                 if bad:
-                    survived.append(m[0])
+                    (survived if line.startswith(("SURVIVED", "STALE")) else failed).append(m[0])
                 if killer:
                     found[m[0]] = killer
 
@@ -594,7 +599,9 @@ def main():
             f.write("\n")
     part = f" (часть {shard} из {shards}: {len(todo)} мутаций)" if shards > 1 else ""
     print(f"Выживших мутаций кода: {len(survived)}{part}")
-    return 1 if survived else 0
+    if failed:
+        print(f"Прогон недействителен — контроль без порчи не прошёл или тесты не запустились: {len(failed)}")
+    return 1 if survived or failed else 0
 
 
 if __name__ == "__main__":
