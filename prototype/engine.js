@@ -35,7 +35,8 @@
 
     // Где у инцидента прототипа лежат дедлайн и остаток таймера (deadlineField машины)
     const FIELDS = {
-      reaction: { due: "reactionDueAt" },
+      // Остаток реакции при остановке — с него «Вернуть в очередь» её продолжает (RULE-104)
+      reaction: { due: "reactionDueAt", left: "reactionLeftMs" },
       resolution: { due: "resolutionDueAt", left: "resolutionLeftMs" },
       hold: { due: "holdDueAt", since: "holdSince" },
     };

@@ -321,6 +321,9 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # «Взял — вернул» эскалацию не откладывает (RULE-104)
+    ("release-restarts-reaction", "workflow.js", '"reaction",\n            "continue"', '"reaction"', "api"),
+    ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
     # «Переоткрыть» снимает закрытие целиком (RULE-103)
     ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
     # «Передать», когда передать некому (BUG-85)

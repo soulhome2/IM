@@ -195,6 +195,28 @@
     assert.ok(left <= full - 119000, `норматив закрытия продолжен: осталось ${left} из ${full}`);
   });
 
+  test("«Взял — вернул» эскалацию не откладывает: реакция после «Вернуть в очередь» — с остатка на момент взятия, время в работе не в счёт (§8.3, RULE-104)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const leftOf = (card) => Date.parse(card.timer.dueAt) - env.now;
+    // Взял за 30 с до срока, работал 100 с, вернул — осталось те же 30 с
+    await env.advance(Math.round((Date.parse(inc.timer.dueAt) - env.now) / 1000) - 30);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    await env.advance(100);
+    let back = await env.act(inc.guid, "release", { comment: "не моё" });
+    assert.status(back, 200, null, "вернуть");
+    assert.eq([back.body.incident.timer.id, leftOf(back.body.incident)], ["reaction", 30000], "реакция — с остатка 30 с");
+    // Ещё круг: 10 с в очереди, взял, вернул — осталось 20 с, остаток не растёт
+    await env.advance(10);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять снова");
+    await env.advance(50);
+    back = await env.act(inc.guid, "release", { comment: "не моё" });
+    assert.eq(leftOf(back.body.incident), 20000, "реакция — с остатка 20 с");
+    // Остаток истёк — автоэскалация, как без «взял — вернул»
+    const fired = await env.advance(20 + GRACE + 1);
+    assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "auto_escalate"), `автоэскалация: ${JSON.stringify(fired)}`);
+  });
+
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */
 
   test("Передачи не расходуют цепочку автоэскалации и не продлевают реакцию: две передачи нового — не принят, уходит на уровень 1 (§8.3, RULE-76)", async () => {

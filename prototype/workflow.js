@@ -332,6 +332,8 @@ window.IM_WORKFLOW = {
         "linked"
       ],
       "pausable": false,
+      "keepsLeft": true,
+      "$commentKeepsLeft": "RULE-104. При взятии в работу остаток реакции запоминается; «Вернуть в очередь» продолжает реакцию с него (startTimer continue): цикл «взял — вернул» эскалацию не откладывает",
       "defaultSec": 300,
       "overridesBy": [
         "eventType",
@@ -1323,7 +1325,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "startTimer",
           "args": [
-            "reaction"
+            "reaction",
+            "continue"
           ]
         },
         {
@@ -3990,6 +3993,7 @@ window.IM_WORKFLOW = {
         "byPriority": "map<int, int>",
         "overridesBy": "list<string>",
         "overrides": "list<Override>",
+        "keepsLeft": "bool",
         "startsOnce": "bool",
         "pausable": "bool",
         "secFrom": "string"
@@ -5123,23 +5127,50 @@ window.IM_WORKFLOW = {
                 ],
                 "else": [
                   {
-                    "let": "sec",
-                    "value": "timerSec(incident, timerId, mode)"
-                  },
-                  {
-                    "set": "incident.timers[timerId].due",
-                    "value": "sec < 0 ? 0 : now + sec * 1000"
-                  },
-                  {
-                    "set": "incident.timers[timerId].since",
-                    "value": "now"
+                    "if": "mode == 'continue' && incident.timers[timerId].paused",
+                    "then": [
+                      {
+                        "set": "incident.timers[timerId].due",
+                        "value": "now + incident.timers[timerId].left"
+                      },
+                      {
+                        "set": "incident.timers[timerId].paused",
+                        "value": "false"
+                      },
+                      {
+                        "set": "incident.timers[timerId].left",
+                        "value": "0"
+                      }
+                    ],
+                    "else": [
+                      {
+                        "let": "sec",
+                        "value": "timerSec(incident, timerId, mode == 'continue' ? '' : mode)"
+                      },
+                      {
+                        "set": "incident.timers[timerId].due",
+                        "value": "sec < 0 ? 0 : now + sec * 1000"
+                      },
+                      {
+                        "set": "incident.timers[timerId].since",
+                        "value": "now"
+                      },
+                      {
+                        "set": "incident.timers[timerId].paused",
+                        "value": "false"
+                      },
+                      {
+                        "set": "incident.timers[timerId].left",
+                        "value": "0"
+                      }
+                    ]
                   }
                 ]
               }
             ]
           }
         ],
-        "$comment": "§14.8. Запускает таймер с полного норматива (mode: '' — норматив, byEscalationLevel — норматив уровня эскалации). ifStopped = true — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)."
+        "$comment": "§14.8. Запускает таймер с полного норматива (mode: '' — норматив, byEscalationLevel — норматив уровня эскалации; continue — с остатка, запомненного при остановке, а остатка нет — с полного норматива: «Вернуть в очередь» продолжает реакцию, RULE-104). ifStopped = true — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)."
       },
       {
         "fn": "stopTimer",
@@ -5163,6 +5194,18 @@ window.IM_WORKFLOW = {
             ],
             "else": [
               {
+                "let": "keep",
+                "value": "timerDef(timerId).keepsLeft && incident.timers[timerId].due != 0 && incident.timers[timerId].fired != incident.timers[timerId].due && incident.timers[timerId].due > now"
+              },
+              {
+                "set": "incident.timers[timerId].left",
+                "value": "keep ? incident.timers[timerId].due - now : 0"
+              },
+              {
+                "set": "incident.timers[timerId].paused",
+                "value": "keep"
+              },
+              {
                 "set": "incident.timers[timerId].due",
                 "value": "0"
               },
@@ -5172,7 +5215,8 @@ window.IM_WORKFLOW = {
               }
             ]
           }
-        ]
+        ],
+        "$comment": "§14.8. Останавливает таймер; у таймера с keepsLeft остаток до ещё не наступившего срока запоминается (paused, left) — с него startTimer(continue) продолжает реакцию после «Вернуть в очередь», время в работе не считается, а остаток не растёт (RULE-104)"
       },
       {
         "fn": "pauseTimer",
