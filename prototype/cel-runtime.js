@@ -63,8 +63,16 @@
     const celType = (t) => t.replace(/opt<([^<>]+)>/g, "list<$1>");
     Object.entries(types).forEach(([n, fields]) => root.registerType(n, { ctor: classes[n], fields: Object.fromEntries(own(fields).map(([f, t]) => [f, celType(t)])) }));
     let world = null;
+    // Факты мира со смыслом ref (ARCH-12): множество инцидентов — выражением над incidents. Его считает сам
+    // исполнитель выражений над списком этого вычисления (в эффекте — с изменениями транзакции); бэкенд — запросом
+    let incidentsNow = null;
+    const worldRefs = {};
     own(spec.world).forEach(([name, f]) => {
       root.registerFunction(`${name}(${own(f.params).map(([, t]) => t).join(", ")}): ${f.returns}`, (...a) => {
+        if (f.ref != null) {
+          if (!worldRefs[name] || !incidentsNow) throw new Error(`cel: world.${name} — нет выражения или списка инцидентов`);
+          return worldRefs[name](Object.assign({}, lists, { incidents: incidentsNow() }, Object.fromEntries(own(f.params).map(([p], i) => [p, a[i]]))));
+        }
         if (!world || !world[name]) throw new Error(`cel: world.${name} is not given`);
         return value(f.returns, world[name](...a));
       });
@@ -136,6 +144,9 @@
     own(spec.definitions).forEach(([name, d]) => {
       defs[name] = compile(`cel.definitions.${name}`, Object.fromEntries(own(d.params)), d.expr, d.returns);
     });
+    own(spec.world).forEach(([name, f]) => {
+      if (f.ref != null) worldRefs[name] = compile(`cel.world.${name}.ref`, Object.assign({ incidents: "list<Incident>" }, Object.fromEntries(own(f.params))), f.ref, f.returns);
+    });
 
     // Условия реестра с expr. Аргумент типа setting — путь к настройке: в выражение приходит её значение;
     // usage — поля самого условия в переходе (scopeRule у hasScopedPermission). failVars — подстановки
@@ -177,6 +188,7 @@
       };
       let list = null;
       Object.defineProperty(ctx, "incidents", { enumerable: true, get: () => list || (list = Array.from(scope.incidents(), (x) => x)) });
+      incidentsNow = () => ctx.incidents;
       return ctx;
     }
     function contextOf(c, args, scope, use) {
@@ -413,6 +425,7 @@
       };
       let list = null;
       Object.defineProperty(ctx, "incidents", { enumerable: true, get: () => list || (list = Array.from(store.incidents(), (x) => x)) });
+      incidentsNow = () => ctx.incidents;
       const t = prog.e.argTypes || {};
       prog.vals.forEach(([n, v]) => {
         ctx[n] = t[n] === "setting" ? dyn(byPath(W, v)) : exprOf(t[n]) ? prog.exprs[n](ctx) : value(t[n] || "dyn", v);
@@ -438,8 +451,15 @@
       call: (name, args, w) => {
         const d = (spec.definitions || {})[name];
         if (!d || !defs[name]) throw new Error(`cel: no definition ${name}`);
+        // Вызов из исполнителя бывает и посреди эффекта (подстановки журнала): факты мира и список инцидентов
+        // эффекта после вызова — прежние
+        const was = [world, incidentsNow];
         world = w;
-        return defs[name](Object.assign({}, lists, Object.fromEntries(own(d.params).map(([p], i) => [p, args[i]]))));
+        try {
+          return defs[name](Object.assign({}, lists, Object.fromEntries(own(d.params).map(([p], i) => [p, args[i]]))));
+        } finally {
+          [world, incidentsNow] = was;
+        }
       },
       effect,
       // Правила интерфейса: есть ли правило, его значение, какие поля формы оно читает

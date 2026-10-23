@@ -157,6 +157,11 @@ function q(n, scope, want) {
       if (fn === "size") return `${q(args[0], scope)}.length()`;
       // Без аргументов — значение мира модели
       if (!args.length) return fn;
+      // Факт мира со смыслом ref (ARCH-12) — определение над списком инцидентов этого вычисления
+      if (WORLD[fn] && WORLD[fn].ref != null) {
+        if (!scope.incidents) fail(`${fn}(): факт над инцидентами — только в условиях, эффектах и правилах, не в определениях`);
+        return `${fn}(${[scope.incidents.q, ...args.map((a) => q(a, scope))].join(", ")})`;
+      }
       return `${fn}(${args.map((a) => q(a, scope)).join(", ")})`;
     }
     case "rcall": {
@@ -196,6 +201,12 @@ function definitions() {
     const scope = Object.fromEntries(own(d.params).map(([p, t]) => [p, { t, q: p }]));
     if (d.$comment) emit(`  // ${d.$comment}`);
     emit(`  def ${name}(${own(d.params).map(([p, t]) => `${p}: ${qt(t)}`).join(", ")}): ${qt(d.returns)} =\n    ${expr(d.expr, scope)}`);
+  }
+  // Факты мира над множеством инцидентов (ARCH-12): смысл — выражение ref над списком инцидентов
+  for (const [name, f] of Object.entries(WORLD).filter(([, f]) => f.ref != null)) {
+    const scope = Object.assign({ incidents: { t: "list<Incident>", q: "incidents" } }, Object.fromEntries(own(f.params).map(([p, t]) => [p, { t, q: p }])));
+    if (f.$comment) emit(`  // ${f.$comment}`);
+    emit(`  def ${name}(${["incidents: List[Incident]", ...own(f.params).map(([p, t]) => `${p}: ${qt(t)}`)].join(", ")}): ${qt(f.returns)} =\n    ${expr(f.ref, scope)}`);
   }
 }
 

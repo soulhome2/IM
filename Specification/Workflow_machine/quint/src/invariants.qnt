@@ -72,11 +72,11 @@
   })
 
   // 8. Лимиты (§10.2): maxOnHold ограничивает только ручное «Отложить» — системные удержания откладывают и сверх
-  def countMine(a: str, s: str): int = INCIDENTS.filter(j => incOf(j).state == s and incOf(j).owner == a).size()
+  def countOwned(a: str, s: str): int = INCIDENTS.filter(j => incOf(j).state == s and incOf(j).owner == a).size()
   def countManualHeld(a: str): int =
     INCIDENTS.filter(j => incOf(j).state == "on_hold" and incOf(j).owner == a and HOLD_REASONS_BY_OPERATOR.contains(incOf(j).holdReasonId)).size()
   val limitsRespected = OPERATORS.forall(a => all {
-    settings.limits.maxActive == 0 or countMine(a, "in_progress") <= settings.limits.maxActive,
+    settings.limits.maxActive == 0 or countOwned(a, "in_progress") <= settings.limits.maxActive,
     settings.limits.maxOnHold == 0 or countManualHeld(a) <= settings.limits.maxOnHold,
   })
 

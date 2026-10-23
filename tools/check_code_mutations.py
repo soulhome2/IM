@@ -51,8 +51,8 @@ KILLERS = os.path.join(ROOT, "tools", "mutations", "api-killers.json")
 
 # (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
-    ("active-limit", "workflow.js", "size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive\"", "size(mineIn(incidents, me, 'in_progress', incident.id)) <= limits.maxActive\"", "api"),
-    ("hold-limit", "workflow.js", "size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold", "size(mineIn(incidents, me, 'on_hold', incident.id)) <= limits.maxOnHold", "api"),
+    ("active-limit", "workflow.js", "countMine(me, 'in_progress', incident.id) < limits.maxActive\"", "countMine(me, 'in_progress', incident.id) <= limits.maxActive\"", "api"),
+    ("hold-limit", "workflow.js", "countMine(me, 'on_hold', incident.id) < limits.maxOnHold", "countMine(me, 'on_hold', incident.id) <= limits.maxOnHold", "api"),
     ("self-without-groups", "workflow.js", "id != '' && (id == who || (isGroup(id) && who in members(id)))", "id != '' && id == who", "api"),
     ("addressee-owner-only", "workflow.js", "x.owner != '' ? x.owner : x.assignmentGroup", "x.owner", "api"),
     ("pause-loses-remaining", "workflow.js", "\"value\": \"incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0\"", "\"value\": \"0\"", "api"),
@@ -79,7 +79,7 @@ MUTATIONS = [
     ("scope-always-own", "workflow.js", "\"expr\": \"can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)\"", "\"expr\": \"can(me, ownKey)\"", "api"),
     ("break-ignored", "workflow.js", "\"expr\": \"!session.states.exists(s, s.id == agentState(me) && s.readOnly)\"", "\"expr\": \"true\"", "api"),
     # «Занят» — производное: по выражению машины, смены — от хранимого (RULE-99)
-    ("busy-never", "workflow.js", "\"expr\": \"size(mineIn(incidents, me, 'in_progress', '')) > 0\"", "\"expr\": \"false\"", "api"),
+    ("busy-never", "workflow.js", "\"expr\": \"countMine(me, 'in_progress', '') > 0\"", "\"expr\": \"false\"", "api"),
     ("agent-move-from-shown", "server.js", "const from = session.agentState;", "const from = sessionView().agentState;", "api"),
     # Автоэскалация — только тому, кто может принять сейчас: вышедшему — если в его группе кто-то на месте (RULE-100)
     ("escalate-to-signed-out", "workflow.js", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))", "api"),
@@ -339,7 +339,7 @@ MUTATIONS = [
     ("ui-search-found-page-ignored", "app.js", "    if (page && page.focusPage && page.focusPage !== state.linkedPage) {", "    if (false) {", "ui"),
     ("copy-answers-overwrites", "scenario.js", "if (!entry || entry.skipped || r.state[id] || !src", "if (!entry || entry.skipped || !src", "api"),
     ("copy-answers-no-log", "engine.js", "            if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());\n", "", "api"),
-    ("relink-closed-too", "workflow.js", "\"in\": \"incidents.filter(e, e.linkedTo == incident.id && !isDone(e))\"", "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"", "api"),
+    ("relink-closed-too", "workflow.js", "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"", "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"", "api"),
     ("relink-no-log", "workflow.js", "\"incident\": \"c\",\n                      \"key\": \"logKey\"", "\"incident\": \"c\",\n                      \"key\": \"''\"", "api"),
     ("transfer-restarts-reaction", "workflow.js", "ifStopped && incident.timers[timerId].due != 0", "false", "api"),
     ("level0-last-norm", "workflow.js", "x.escalationLevel > 0 && size(escalation.levels) > 0 ?", "size(escalation.levels) > 0 ?", "api"),
@@ -352,7 +352,7 @@ MUTATIONS = [
     ("detach-spent-lost", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"false\"", "api"),
     ("detach-window-not-spent", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"spent(ps[0], timerId, now)\"", "api"),
     ("action-not-activity", "server.js", "      if (acting) lastHeartbeat = now();\n", "", "api"),
-    ("breach-not-shared", "workflow.js", "\"in\": \"incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))\"", "\"in\": \"[]\"", "api"),
+    ("breach-not-shared", "workflow.js", "\"in\": \"groupMembersAt(incident, deadline)\"", "\"in\": \"[]\"", "api"),
     ("window-breach-not-shared", "engine.js", "canceled.tr.effects.filter((x) => x.fn === \"recordBreach\")", "[]", "api"),
     # Нарушение группы — тем, кто был в группе в момент срока (BUG-73)
     ("share-ignores-join-time", "workflow.js", "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at)", "(e.linkedTo == p.id && !isDone(e))", "api"),
@@ -408,7 +408,7 @@ MUTATIONS = [
     ("top-priority-fixed", "server.js", "const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);", "const topPriority = () => 100;", "api"),
     ("ui-priorities-not-reloaded", "app.js", 'if (msg.type === "reference.priorities_changed") {', "if (false) {", "ui"),
     # Лимиты без ограничения (§10.2, §11, RULE-69) и проверка лимита выборки на сервере (BUG-40)
-    ("active-limit-null-blocks", "workflow.js", "\"expr\": \"limits.maxActive == 0 || size(", "\"expr\": \"size(", "api"),
+    ("active-limit-null-blocks", "workflow.js", "\"expr\": \"limits.maxActive == 0 || countMine(", "\"expr\": \"countMine(", "api"),
     ("bulk-limit-unchecked", "server.js", "if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(", "if (false) return problem(", "api"),
     # Лимит выборки и у «Взять в работу» на выборке (BUG-83)
     ("merge-limit-unchecked", "server.js", "if (tooLarge(list)) return problem(", "if (false) return problem(", "api"),

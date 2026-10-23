@@ -636,7 +636,7 @@ window.IM_WORKFLOW = {
           "placeholderKey": "workflow.form.transfer.field.targetId.placeholder",
           "source": "transferTargets",
           "optionExpr": "!isSelf(me, option) && option != addressee(incident) && canAccept(option, incident, '')",
-          "enabledExpr": "incidents.all(e, e.linkedTo != incident.id || isDone(e) || hasAccess(option, e))",
+          "enabledExpr": "linkedOf(incident.id).all(e, isDone(e) || hasAccess(option, e))",
           "disabledKey": "workflow.guard.target_no_access_linked",
           "defaultExpr": "lastTransferTarget(me)",
           "$comment": "§8.1. Адресаты — без себя и своих групп, без текущего адресата, только кто может принять (canAccept — с правом «Принимать» и доступом к объекту); без доступа к объектам привязанных — в списке, но недоступен с причиной, как условие targetHasAccessToLinked (§11, BUG-88); по умолчанию — последний адресат оператора"
@@ -3395,7 +3395,7 @@ window.IM_WORKFLOW = {
         "labelKey": "workflow.session.state.busy",
         "derived": {
           "of": "ready",
-          "expr": "size(mineIn(incidents, me, 'in_progress', '')) > 0"
+          "expr": "countMine(me, 'in_progress', '') > 0"
         }
       },
       {
@@ -4055,6 +4055,52 @@ window.IM_WORKFLOW = {
         },
         "returns": "string",
         "$comment": "§8.2. Кому оператор передавал в последний раз — запоминает сервер; не передавал — ''"
+      },
+      "$commentIncidents": "ARCH-12. Множество инцидентов выражения читают только через факты ниже: сервер исполняет их запросами (по индексам), а не загрузкой всех инцидентов. Смысл каждого — выражение ref над incidents (все инциденты сервера, в эффекте — с изменениями этой транзакции): так считает прототип и модель Quint, запрос бэкенда обязан давать то же",
+      "incidentById": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "list<Incident>",
+        "ref": "byId(incidents, id)",
+        "$comment": "Инцидент по id — списком из одного или пустым"
+      },
+      "linkedOf": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "list<Incident>",
+        "ref": "incidents.filter(e, e.linkedTo == id)",
+        "$comment": "§11. Привязанные к основному id — и открытые, и закрытые вместе с ним"
+      },
+      "countMine": {
+        "params": {
+          "who": "string",
+          "state": "string",
+          "except": "string"
+        },
+        "returns": "int",
+        "ref": "size(mineIn(incidents, who, state, except))",
+        "$comment": "§10.2. Сколько инцидентов человека в состоянии, кроме одного — для лимитов"
+      },
+      "mineOf": {
+        "params": {
+          "who": "string",
+          "state": "string",
+          "except": "string"
+        },
+        "returns": "list<Incident>",
+        "ref": "mineIn(incidents, who, state, except)",
+        "$comment": "§10.2. Те же инциденты списком — для подсказки, кто держит лимит"
+      },
+      "groupMembersAt": {
+        "params": {
+          "p": "Incident",
+          "at": "int"
+        },
+        "returns": "list<Incident>",
+        "ref": "incidents.filter(e, e.id != p.id && inGroupAt(e, p, at))",
+        "$comment": "§11.4. Кто был в группе основного p в момент at (inGroupAt)"
       }
     },
     "settings": {
@@ -4669,12 +4715,12 @@ window.IM_WORKFLOW = {
         "errorCode": "LIMIT_EXCEEDED",
         "args": [],
         "argTypes": {},
-        "expr": "limits.maxActive == 0 || size(mineIn(incidents, me, 'in_progress', incident.id)) < limits.maxActive",
+        "expr": "limits.maxActive == 0 || countMine(me, 'in_progress', incident.id) < limits.maxActive",
         "failVars": {
           "n": "limits.maxActive",
-          "id": "mineIn(incidents, me, 'in_progress', incident.id)[0].number"
+          "id": "mineOf(me, 'in_progress', incident.id)[0].number"
         },
-        "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', '')) < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'",
+        "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || countMine(me, 'on_hold', '') < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.active_limit",
@@ -4687,7 +4733,7 @@ window.IM_WORKFLOW = {
         "errorCode": "LIMIT_EXCEEDED",
         "args": [],
         "argTypes": {},
-        "expr": "limits.maxOnHold == 0 || size(mineIn(incidents, me, 'on_hold', incident.id)) < limits.maxOnHold",
+        "expr": "limits.maxOnHold == 0 || countMine(me, 'on_hold', incident.id) < limits.maxOnHold",
         "failVars": {
           "n": "limits.maxOnHold"
         },
@@ -4859,7 +4905,7 @@ window.IM_WORKFLOW = {
         "fn": "mergePrimaryValid",
         "args": [],
         "argTypes": {},
-        "expr": "cel.bind(ps, byId(incidents, form.primaryId), size(ps) > 0 && ps[0].id != incident.id && ps[0].linkedTo == '' && (ps[0].state == 'new' || (ps[0].state == 'in_progress' && ps[0].owner == me)))",
+        "expr": "cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].id != incident.id && ps[0].linkedTo == '' && (ps[0].state == 'new' || (ps[0].state == 'in_progress' && ps[0].owner == me)))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.merge_primary"
@@ -4871,7 +4917,7 @@ window.IM_WORKFLOW = {
         "fn": "sameScenarioAsPrimary",
         "args": [],
         "argTypes": {},
-        "expr": "cel.bind(ps, byId(incidents, form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)",
+        "expr": "cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.merge_scenario"
@@ -4883,7 +4929,7 @@ window.IM_WORKFLOW = {
         "fn": "primaryEditable",
         "args": [],
         "argTypes": {},
-        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && (ownership(me, ps[0]) == 'owner' || unowned(ps[0])))",
+        "expr": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && (ownership(me, ps[0]) == 'owner' || unowned(ps[0])))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.primary_not_editable"
@@ -4895,7 +4941,7 @@ window.IM_WORKFLOW = {
         "fn": "primaryClosed",
         "args": [],
         "argTypes": {},
-        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && isDone(ps[0]))",
+        "expr": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && isDone(ps[0]))",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.primary_open"
@@ -4908,7 +4954,7 @@ window.IM_WORKFLOW = {
         "errorCode": "TARGET_NO_ACCESS",
         "args": [],
         "argTypes": {},
-        "expr": "form.targetId == '' || incidents.all(e, e.linkedTo != incident.id || isDone(e) || hasAccess(form.targetId, e))",
+        "expr": "form.targetId == '' || linkedOf(incident.id).all(e, isDone(e) || hasAccess(form.targetId, e))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.target_no_access_linked"
@@ -4924,8 +4970,8 @@ window.IM_WORKFLOW = {
         "argTypes": {
           "expected": "bool"
         },
-        "expr": "cel.bind(ps, byId(incidents, incident.linkedTo), cel.bind(who, size(ps) > 0 && !isDone(ps[0]) ? addressee(ps[0]) : '', who != '' && hasAccess(who, incident) == expected))",
-        "failKey": "cel.bind(ps, byId(incidents, incident.linkedTo), size(ps) > 0 && !isDone(ps[0]) && addressee(ps[0]) != '' ? 'workflow.guard.primary_addressee_access' : 'workflow.guard.no_addressee')",
+        "expr": "cel.bind(ps, incidentById(incident.linkedTo), cel.bind(who, size(ps) > 0 && !isDone(ps[0]) ? addressee(ps[0]) : '', who != '' && hasAccess(who, incident) == expected))",
+        "failKey": "cel.bind(ps, incidentById(incident.linkedTo), size(ps) > 0 && !isDone(ps[0]) && addressee(ps[0]) != '' ? 'workflow.guard.primary_addressee_access' : 'workflow.guard.no_addressee')",
         "onFail": "hide",
         "failKeys": [
           "workflow.guard.no_addressee",
@@ -5179,7 +5225,7 @@ window.IM_WORKFLOW = {
           },
           {
             "forEach": "e",
-            "in": "incidents.filter(e, e.id != incident.id && inGroupAt(e, incident, deadline))",
+            "in": "groupMembersAt(incident, deadline)",
             "do": [
               {
                 "append": "e.breaches",
@@ -5406,7 +5452,7 @@ window.IM_WORKFLOW = {
             "then": [
               {
                 "let": "ps",
-                "value": "byId(incidents, incident.linkedTo)"
+                "value": "incidentById(incident.linkedTo)"
               },
               {
                 "set": "incident.leftGroup",
@@ -5502,14 +5548,14 @@ window.IM_WORKFLOW = {
         "do": [
           {
             "let": "ps",
-            "value": "byId(incidents, form.primaryId)"
+            "value": "incidentById(form.primaryId)"
           },
           {
             "if": "size(ps) > 0",
             "then": [
               {
                 "forEach": "c",
-                "in": "incidents.filter(e, e.linkedTo == incident.id && !isDone(e))",
+                "in": "linkedOf(incident.id).filter(e, !isDone(e))",
                 "do": [
                   {
                     "set": "c.leftGroup",
@@ -5547,7 +5593,7 @@ window.IM_WORKFLOW = {
         "do": [
           {
             "let": "ps",
-            "value": "byId(incidents, incident.linkedTo)"
+            "value": "incidentById(incident.linkedTo)"
           },
           {
             "if": "size(ps) > 0",
@@ -5592,7 +5638,7 @@ window.IM_WORKFLOW = {
         "do": [
           {
             "let": "ps",
-            "value": "byId(incidents, form.primaryId)"
+            "value": "incidentById(form.primaryId)"
           },
           {
             "if": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
@@ -5666,7 +5712,7 @@ window.IM_WORKFLOW = {
         "do": [
           {
             "let": "ps",
-            "value": "byId(incidents, incident.linkedTo)"
+            "value": "incidentById(incident.linkedTo)"
           },
           {
             "if": "size(ps) > 0 && leftOf(ps[0], timerId, now) >= 0",

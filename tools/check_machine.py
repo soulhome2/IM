@@ -1022,6 +1022,22 @@ def check_declared_fields(w, o, err):
             err.append(f"переход {t['id']}: requiredStepSet «{rs}», а условия проверяют {'closeResultAllowed' if by_result else ''}{' '.join(sets) or ('' if by_result else 'ничего')} (ARCH-11)")
 
 
+def check_incidents_via_facts(w, err):
+    """Множество инцидентов выражения читают только через факты мира со смыслом ref (ARCH-12): incidents — только
+    в ref, иначе бэкенд загружал бы все инциденты в каждое вычисление."""
+    def walk(o, path):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if not k.startswith("$") and not (k == "ref" and path[:2] == ["cel", "world"]):
+                    walk(v, path + [k])
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                walk(v, path + [str(i)])
+        elif isinstance(o, str) and re.search(r"\bincidents\b(?!_)", o) and path[-1] not in ("scope",):
+            err.append(f"{'.'.join(path)}: выражение читает incidents — только через факты мира (ARCH-12)")
+    walk(w, [])
+
+
 def check_work_rights(w, err):
     """В «В работе» — только по праву взятия или принятия; у типового набора прав с ними — выход
     из карточки (§10.3, RULE-36, RULE-38)."""
@@ -1451,6 +1467,7 @@ def main():
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)
     check_work_rights(w, err)
     check_declared_fields(w, o, err)
+    check_incidents_via_facts(w, err)
     if "--fsm" in sys.argv:
         show_overlaps(w)
         show_continuing(w)
