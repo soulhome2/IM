@@ -301,7 +301,7 @@
     return p[p.length - 1];
   }
 
-  // «N из M»: N — отвеченные шаги пути, M — N плюс кратчайший остаток до конца; step — номер курсора в пути (решение в6)
+  // «N из M»: N — пройденные шаги пути, вместе с пропущенными, M — N плюс кратчайший остаток до конца; step — номер курсора в пути (решение в6)
   function progress(script, result) {
     const p = path(script, result);
     const filled = p.filter((id) => result.state[id]).length;
