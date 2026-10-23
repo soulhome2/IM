@@ -10,7 +10,8 @@ Chrome без окна по протоколу DevTools — тот же, что 
   («Отложен · »);
 - контраст текста не ниже 4,5:1, крупного — 3:1 (WCAG), включая кнопки; недоступные не считаются;
 - ширина: страница не шире экрана, кнопки и поля не за краем экрана и не за краем своей панели;
-- тексты: нет ключей каталога workflow.… вместо текста, нет подсказок с клавишами — их нет (§13).
+- тексты: нет ключей каталога workflow.… вместо текста, нет подсказок с клавишами — их нет (§13);
+- цвета числами в styles.css — столько, сколько называет README прототипа (DOC-63).
 
 Логику проверяют самопроверка и тесты API; эта проверка — о том, как это выглядит и можно ли
 до этого дотянуться. --shots папка — сохранить снимки экранов, чтобы посмотреть их глазами
@@ -34,6 +35,7 @@ import shots as S
 
 DESKTOP = S.DESKTOP
 PHONE = (360, 800)
+ROOT = Path(__file__).resolve().parent.parent
 CLAIM = ["#eventsList button[data-do=claim]"]
 
 # Экран: имя и подготовка — щелчки и фильтры, как в tools/shots.py; уведомления убираются: они
@@ -189,6 +191,28 @@ def digits(s):
     return re.sub(r"\d+", "#", s)
 
 
+# Цвета числами (DOC-63): README прототипа называет, сколько hex всего и сколько цветов числами вне блоков
+# темы (:root и [data-theme]) — сверяем с styles.css, чтобы перечень не устаревал
+def colors_vs_readme():
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "prototype/styles.css").read_text(encoding="utf-8"), flags=re.S)
+    total = len(re.findall(r"#[0-9a-fA-F]{3,8}\b", css))
+    hexes = rgbas = 0
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if re.fullmatch(r'(:root,\s*)?\[data-theme="(light|dark)"\]|:root', " ".join(sel.split())):
+            continue
+        hexes += len(re.findall(r"#[0-9a-fA-F]{3,8}\b", body))
+        rgbas += len(re.findall(r"rgba?\(", body))
+    readme = (ROOT / "prototype/README.md").read_text(encoding="utf-8")
+    m = re.search(r"Hex всего (\d+), цветов числами вне блока темы — (\d+) \((\d+) hex и (\d+) rgba\)", readme)
+    if not m:
+        return ["README прототипа: нет строки «Hex всего N, цветов числами вне блока темы — N (N hex и N rgba)»"]
+    want = tuple(int(x) for x in m.groups())
+    have = (total, hexes + rgbas, hexes, rgbas)
+    if want != have:
+        return [f"README прототипа: цвета числами — {want[0]} hex, вне темы {want[1]} ({want[2]} hex и {want[3]} rgba), а в styles.css {have[0]}, {have[1]} ({have[2]} и {have[3]})"]
+    return []
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--chrome", default=shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser"))
@@ -250,7 +274,7 @@ def main():
         if not known_hits[item] and not args.only:
             failed += 1
             print(f"FAIL  {item} ({what}) больше не воспроизводится — уберите его из KNOWN в tools/check_ui.py")
-    for line in broken:
+    for line in broken + colors_vs_readme():
         failed += 1
         print(f"FAIL  {line}")
     print(f"Проблем на экране: {failed}")
