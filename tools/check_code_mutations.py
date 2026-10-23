@@ -150,12 +150,15 @@ MUTATIONS = [
     ("event-type-guid-is-id", "server.js", "!String(q.eventTypeGuid).split(\",\").includes(e.typeGuid)", "!String(q.eventTypeGuid).split(\",\").includes(e.typeId)", "api"),
     ("setting-is-ignored", "workflow.js", "\"expr\": \"settingKey == value\"", "\"expr\": \"true\"", "api"),
     ("owner-group-ignored", "workflow.js", "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"", "\"expr\": \"true\"", "api"),
-    ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runSchedulerForOwnChange();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
+    ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
+    # Срок «Нет связи» — из порогов молчания (RULE-118, RULE-129)
+    ("no-link-deadline-off", "workflow.js", "x.holdReasonId == 'no_link' ? session.idleReleaseSec - session.idleHoldSec : ", "", "api"),
     # Простой сервиса на стенде (RULE-119): при старте молчание оператора считается заново (RULE-113)
     ("service-restart-ignored", "server.js", "if (body.serviceRestart === true) lastHeartbeat = now();", "", "api"),
-    # Карточку увели (BUG-105): событие — только при открытой карточке и не за свой перерыв или выход
+    # Карточку увели (BUG-105, BUG-117): событие — только при открытой карточке; свой перерыв и выход её не уводят — в машине
     ("evict-any-card", "server.js", "&& session.openIncidentGuid === ev.id) emit(", ") emit(", "api"),
-    ("evict-own-change", "server.js", "if (who === ME && !ownAgentStateChange && ", "if (who === ME && ", "api"),
+    ("signout-evicts-own-card", "workflow.js", '"workflow.journal.owner_signed_out"\n          ]\n        }', '"workflow.journal.owner_signed_out"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "evictOpenCard",\n          "args": [\n            "previousOwner"\n          ]\n        }', "api"),
+    ("break-evicts-own-card", "workflow.js", '"workflow.journal.system_hold_break"\n          ]\n        }', '"workflow.journal.system_hold_break"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "evictOpenCard",\n          "args": [\n            "owner"\n          ]\n        }', "api"),
     ("visibility-ignored", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => filters.set(e, engine.queueFilters(e)).get(e).length);", "api"),
     ("lists-show-linked", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e));", "api"),
     # Объединение (§11): основной, срок, закрытие привязанных; вкладка — фильтр; панель выборки

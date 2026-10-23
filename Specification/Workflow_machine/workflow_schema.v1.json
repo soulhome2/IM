@@ -203,7 +203,7 @@
         { "id": "patrol", "labelKey": "workflow.catalog.hold.patrol", "maxMinutes": 45, "setBy": "operator" },
         { "id": "no_data", "labelKey": "workflow.catalog.hold.no_data", "maxMinutes": 60, "setBy": "operator" },
         { "id": "break", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 30, "setBy": "system", "$comment": "§12.2 (RULE-106). Срок перерыва: истёк — инцидент в очередь (break_hold_release), нарушения удержания нет" },
-        { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": 15, "setBy": "system", "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118). Срок — порог возврата в очередь минус порог удержания (session.idleReleaseSec − idleHoldSec): оператор молчит дальше — в очередь по молчанию (system_release_idle), связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет" }
+        { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": null, "setBy": "system", "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118, RULE-129). Срок не в справочнике, а из порогов молчания: порог возврата в очередь минус порог удержания (holdSec) — оператор молчит дальше, в очередь по молчанию (system_release_idle) в тот же момент; связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет" }
       ]
     },
     "close_result": {
@@ -875,6 +875,7 @@
     },
     {
       "id": "system_hold_break",
+      "$comment": "§12.2. Карточку уводит сам оператор своим перерывом: evictOpenCard нет — уведомления «только для просмотра» нет (BUG-105, BUG-117)",
       "labelKey": "workflow.transition.system_hold_break",
       "from": ["in_progress"],
       "to": "on_hold",
@@ -886,8 +887,7 @@
         { "kind": "transactional", "fn": "setHoldReason", "args": ["'break'"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["hold"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_hold_break"] },
-        { "kind": "transactional", "fn": "evictOpenCard", "args": ["owner"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.system_hold_break"] }
       ],
       "ui": { "surface": [] }
     },
@@ -993,6 +993,7 @@
     },
     {
       "id": "owner_signed_out",
+      "$comment": "§12.1. Карточку уводит сам оператор своим выходом: evictOpenCard нет — уведомления «только для просмотра» нет (BUG-105, BUG-117)",
       "labelKey": "workflow.transition.owner_signed_out",
       "$comment": "§12.1 (RULE-37). Оператор вышел из МИ — его инциденты в работе и отложенные, с любой причиной, сразу возвращаются в общую очередь, как по «Вернуть в очередь»: ждать срабатывания потери связи (§12.3) незачем, он ушёл сам. Уровень эскалации не меняется, прогресс сценария сохраняется.",
       "from": ["in_progress", "on_hold"],
@@ -1009,8 +1010,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "continue"] },
-        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.owner_signed_out"] },
-        { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] }
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.owner_signed_out"] }
       ],
       "ui": { "surface": [] }
     },
@@ -1451,7 +1451,7 @@
       "overrideMatches": {"params": {"x": "Incident", "o": "Override"}, "returns": "bool", "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0]))"},
       "overrideAllowed": {"params": {"t": "TimerDef", "o": "Override"}, "returns": "bool", "expr": "(size(o.eventType) == 0 || 'eventType' in t.overridesBy) && (size(o.priority) == 0 || 'priority' in t.overridesBy) && (size(o.sourceGroup) == 0 || 'sourceGroup' in t.overridesBy)", "$comment": "§4, правило 2. Строка уточнения учитывается, только если все её признаки — из overridesBy таймера (ARCH-11)"},
       "norm": {"params": {"x": "Incident", "t": "TimerDef"}, "returns": "int", "expr": "cel.bind(ms, t.overrides.filter(o, overrideAllowed(t, o) && overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))", "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"},
-      "holdSec": {"params": {"x": "Incident"}, "returns": "int", "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 && size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)", "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет или у неё нет срока (maxMinutes: null, RULE-116) — -1, срок не ставится"},
+      "holdSec": {"params": {"x": "Incident"}, "returns": "int", "expr": "x.holdReasonId == 'no_link' ? session.idleReleaseSec - session.idleHoldSec : cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 && size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)", "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); у «Нет связи» — порог возврата в очередь минус порог удержания, чтобы срок причины и возврат по молчанию совпадали при любых порогах (RULE-118, RULE-129); причины нет или у неё нет срока (maxMinutes: null) — -1, срок не ставится"},
       "levelNorm": {"params": {"x": "Incident"}, "returns": "int", "expr": "x.escalationLevel > 0 && size(escalation.levels) > 0 ? cel.bind(ls, escalation.levels.filter(l, l.level == x.escalationLevel), size(ls) > 0 ? ls[0].reactionSec : escalation.levels[size(escalation.levels) - 1].reactionSec) : norm(x, timerDef('reaction'))", "$comment": "§8.3. Норматив реакции уровня автоэскалации: уровня нет — последний; уровень 0 — обычный норматив (RULE-76)"},
       "timerSec": {"params": {"x": "Incident", "id": "string", "mode": "string"}, "returns": "int", "expr": "timerDef(id).secFrom != '' ? holdSec(x) : mode == 'byEscalationLevel' ? levelNorm(x) : norm(x, timerDef(id))", "$comment": "§4. Длительность таймера, с: из справочника (secFrom), по уровню эскалации или по нормативам"},
       "leftOf": {"params": {"x": "Incident", "id": "string", "now": "int"}, "returns": "int", "expr": "cel.bind(t, x.timers[id], t.due != 0 ? (t.due - now > 0 ? t.due - now : 0) : (t.paused ? t.left : -1))", "$comment": "Остаток таймера, мс: идёт — до дедлайна, на паузе — остаток, не запускался — -1"},

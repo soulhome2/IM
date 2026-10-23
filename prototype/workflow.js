@@ -446,9 +446,9 @@ window.IM_WORKFLOW = {
         {
           "id": "no_link",
           "labelKey": "workflow.catalog.hold.no_link",
-          "maxMinutes": 15,
+          "maxMinutes": null,
           "setBy": "system",
-          "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118). Срок — порог возврата в очередь минус порог удержания (session.idleReleaseSec − idleHoldSec): оператор молчит дальше — в очередь по молчанию (system_release_idle), связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет"
+          "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118, RULE-129). Срок не в справочнике, а из порогов молчания: порог возврата в очередь минус порог удержания (holdSec) — оператор молчит дальше, в очередь по молчанию (system_release_idle) в тот же момент; связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет"
         }
       ]
     },
@@ -2517,6 +2517,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "system_hold_break",
+      "$comment": "§12.2. Карточку уводит сам оператор своим перерывом: evictOpenCard нет — уведомления «только для просмотра» нет (BUG-105, BUG-117)",
       "labelKey": "workflow.transition.system_hold_break",
       "from": [
         "in_progress"
@@ -2560,13 +2561,6 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "workflow.journal.system_hold_break"
-          ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "evictOpenCard",
-          "args": [
-            "owner"
           ]
         }
       ],
@@ -2894,8 +2888,8 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "owner_signed_out",
-      "labelKey": "workflow.transition.owner_signed_out",
       "$comment": "§12.1 (RULE-37). Оператор вышел из МИ — его инциденты в работе и отложенные, с любой причиной, сразу возвращаются в общую очередь, как по «Вернуть в очередь»: ждать срабатывания потери связи (§12.3) незачем, он ушёл сам. Уровень эскалации не меняется, прогресс сценария сохраняется.",
+      "labelKey": "workflow.transition.owner_signed_out",
       "from": [
         "in_progress",
         "on_hold"
@@ -2951,13 +2945,6 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "workflow.journal.owner_signed_out"
-          ]
-        },
-        {
-          "kind": "transactional",
-          "fn": "evictOpenCard",
-          "args": [
-            "previousOwner"
           ]
         }
       ],
@@ -4663,8 +4650,8 @@ window.IM_WORKFLOW = {
           "x": "Incident"
         },
         "returns": "int",
-        "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 && size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)",
-        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); причины нет или у неё нет срока (maxMinutes: null, RULE-116) — -1, срок не ставится"
+        "expr": "x.holdReasonId == 'no_link' ? session.idleReleaseSec - session.idleHoldSec : cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) > 0 && size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)",
+        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold); у «Нет связи» — порог возврата в очередь минус порог удержания, чтобы срок причины и возврат по молчанию совпадали при любых порогах (RULE-118, RULE-129); причины нет или у неё нет срока (maxMinutes: null) — -1, срок не ставится"
       },
       "levelNorm": {
         "params": {

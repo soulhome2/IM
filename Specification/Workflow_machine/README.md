@@ -375,7 +375,7 @@ POST /operator/incidents/{g}/transitions/transfer  If-Match: "14"  formValues: {
 
 ```
 поток: incident.transitioned { incident, payload: { transitionId: "auto_escalate", trigger: "timer" } }  → обновить строку очереди
-поток: incident.card_evicted  → если карточка открыта, перевести в просмотр; увёл не я — уведомление с подписью перехода
+поток: incident.card_evicted  → приходит, только если карточка открыта: перевести в просмотр; увёл не я — уведомление с подписью перехода, если о переходе уже не сказало observerNotice (BUG-105)
 ```
 
 **Потеря доступа** — изменились роли или группы доступа (§5):

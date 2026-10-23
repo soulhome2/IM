@@ -588,6 +588,18 @@
     stop();
     assert.eq(evicted(got).length, 0, "свой перерыв — событий нет");
 
+    // Свой выход: инциденты в работе ушли в очередь, одна карточка открыта — увёл сам, события нет (BUG-117)
+    const out = await makeEnv();
+    const mine = (await out.all("open")).filter((e) => e.state === "new").slice(0, 2);
+    for (const e of mine) assert.status(await out.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
+    await out.heartbeat(mine[0].guid);
+    got = [];
+    stop = out.api.subscribe((m) => got.push(m));
+    assert.status(await out.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    assert.eq(evicted(got).length, 0, "свой выход — событий нет");
+
     // Автоэскалация адресованного мне INC-1843: карточка не открыта — события нет; открыта — одно, о нём
     for (const open of [false, true]) {
       const env2 = await makeEnv();
@@ -1383,16 +1395,21 @@
     assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], "снова новый, ничей, без причины удержания");
   });
 
-  test("У «Нет связи» нарушения удержания нет: порог возврата хоть час — инцидент уходит в очередь по сроку причины или по молчанию (§4, правило 7; §12.3, RULE-116, RULE-118)", async () => {
-    const env = await makeEnv({ workflowPatch: { session: Object.assign({}, W.session, { idleReleaseSec: 3600 }) } });
-    const inc = await newFire(env);
-    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
-    const fired = [];
-    for (let left = 3600; left > 0; left -= 600) {
-      fired.push(...(await env.call("POST", "/test/clock", { advanceSec: Math.min(600, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
+  test("У «Нет связи» нарушения удержания нет, срок — из порогов молчания: оператор молчит — в очередь ровно по порогу возврата при любых порогах (§4, правило 7; §12.3, RULE-116, RULE-118, RULE-129)", async () => {
+    for (const [holdSec, releaseSec] of [[300, 3600], [900, 1200]]) {
+      const env = await makeEnv({ workflowPatch: { session: Object.assign({}, W.session, { idleHoldSec: holdSec, idleReleaseSec: releaseSec }) } });
+      const inc = await newFire(env);
+      assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+      const at = {};
+      for (let sec = 60; sec <= releaseSec + 60; sec += 60) {
+        const fired = (await env.call("POST", "/test/clock", { advanceSec: 60 })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+        fired.forEach((t) => (at[t] = at[t] || sec));
+      }
+      const why = `пороги ${holdSec}/${releaseSec}: ${JSON.stringify(at)}`;
+      assert.eq([at.system_hold_idle, at.system_release_idle], [holdSec, releaseSec], `отложен по порогу удержания, в очередь — по порогу возврата; ${why}`);
+      assert.ok(!at.no_link_hold_release && !at.hold_overdue, `ни срока причины раньше порога, ни нарушения; ${why}`);
+      assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 0, "нарушения удержания нет");
     }
-    assert.ok(fired.includes("system_hold_idle") && fired.some((t) => ["system_release_idle", "no_link_hold_release"].includes(t)) && !fired.includes("hold_overdue"), `переходы: ${fired.join(", ")}`);
-    assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 0, "нарушения удержания нет");
   });
 
   test("«Нет связи»: связь вернулась раньше порога возврата, инцидент не возобновлён — по сроку причины в очередь, без нарушения (§4, правило 7; §12.3, RULE-118)", async () => {
