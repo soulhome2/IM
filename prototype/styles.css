@@ -1094,6 +1094,8 @@ select.search-input { padding-right: 36px; }
   color: var(--muted);
 }
 .badge.mine { color: var(--badge-mine); background: var(--duty-bg); }
+/* На выделенной строке фон бейджа почти как у строки (светлая тема) — рамка держит форму плашки (BUG-93) */
+.event.selected .badge.mine { box-shadow: inset 0 0 0 1px var(--duty-border); }
 .badge.foreign { color: var(--badge-foreign); background: var(--badge-foreign-border); }
 .badge.escalated { color: var(--crit-text); background: var(--danger-bg); }
 .badge.new { color: var(--badge-new); background: var(--break-bg); }
