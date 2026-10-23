@@ -987,11 +987,14 @@
       return text;
     }, "Взять, вернуться к очереди, продолжить");
 
-    await step("Отложить", async () => {
+    await step("Отложить: причина пуста, пока оператор не выберет сам", async () => {
       await openOwn(workId);
       const b = button(root(), "hold");
       expect(b, "в карточке нет кнопки «Отложить»");
       await click(b);
+      // От причины зависит срок удержания — за оператора её не выбирают (RULE-110)
+      expect(field("reasonId").value === "", `причина выбрана за оператора: «${field("reasonId").value}»`);
+      await setField("reasonId", "third_party");
       await confirmDialog();
       expect(mode() === "queue", "после «Отложить» карточка не закрылась");
       await setFilter("mine");
@@ -1005,7 +1008,7 @@
       expect(b, `у ${workId} нет кнопки «Возобновить»`);
       await click(b);
       expect(mode() === "work", "карточка не открылась");
-    }, "Отложить");
+    }, "Отложить: причина пуста, пока оператор не выберет сам");
 
     await step("Передать: поле с поиском по подстроке; «На месте», потом «Нет на месте» с причиной; себя и своей группы нет", async () => {
       await openOwn(workId);
@@ -1281,6 +1284,8 @@
       await click(b);
       expect(field("resultId").value === "mass", "в форме не выбран массовый сбой");
       expect(field("causeId") && !field("causeId").closest("[data-field-box]").hidden, "нет причины сбоя");
+      expect(field("causeId").value === "", `причина сбоя выбрана за оператора: «${field("causeId").value}»`);
+      await setField("causeId", "power");
       await confirmDialog(NOTE);
       await setFilter("done");
       const row = await rowOnPages(freshId);
@@ -1331,6 +1336,11 @@
       expect(b, "у новых событий нет кнопки «Закрыть»");
       const id = b.dataset.ev;
       await click(b);
+      // Причину сбоя за оператора не выбирают (RULE-110)
+      if (field("resultId").value === "mass") {
+        expect(field("causeId").value === "", `причина сбоя выбрана за оператора: «${field("causeId").value}»`);
+        await setField("causeId", "power");
+      }
       await confirmDialog(NOTE);
       await setFilter("open");
       expect(!$("eventsList").querySelector(`[data-id="${id}"]`), `${id} остался среди открытых`);
@@ -2496,6 +2506,7 @@
         expect(b && !off(b), "в панели выборки нет «Отложить»");
         await click(b);
         await wait();
+        await setField("reasonId", "third_party");
         await confirmDialog(NOTE);
         await wait();
         const now = (await stand.raw("GET", path)).body;

@@ -674,7 +674,9 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.hold.field.reasonId",
           "requiredExpr": "true",
           "source": "reasonCatalog:hold",
-          "optionExpr": "holdReasons.exists(r, r.id == option && r.setBy != 'system')"
+          "optionExpr": "holdReasons.exists(r, r.id == option && r.setBy != 'system')",
+          "placeholderKey": "workflow.form.hold.field.reasonId.placeholder",
+          "$comment": "RULE-110: от причины зависит срок удержания — пусто, пока оператор не выберет сам, как у результата закрытия (§2.2)"
         },
         {
           "name": "comment",
@@ -767,7 +769,9 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.close.field.causeId",
           "requiredExpr": "true",
           "source": "reasonCatalog:mass_fault",
-          "visibleExpr": "form.resultId == 'mass'"
+          "visibleExpr": "form.resultId == 'mass'",
+          "placeholderKey": "workflow.form.close.field.causeId.placeholder",
+          "$comment": "RULE-110: причина сбоя уходит в отчёт — пусто, пока оператор не выберет сам"
         },
         {
           "name": "comment",

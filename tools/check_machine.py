@@ -1031,6 +1031,15 @@ def check_declared_fields(w, o, err):
             err.append(f"переход {t['id']}: requiredStepSet «{rs}», а условия проверяют {'closeResultAllowed' if by_result else ''}{' '.join(sets) or ('' if by_result else 'ничего')} (ARCH-11)")
 
 
+def check_select_placeholders(w, err):
+    """Список в форме перехода — с заглушкой (placeholderKey): без неё интерфейс подставляет первый вариант, и
+    случайное подтверждение запишет причину или результат, которых оператор не выбирал (§2.2, RULE-23, RULE-110)."""
+    for f in w["forms"]:
+        for fld in f.get("fields", []):
+            if fld.get("kind") == "select" and not fld.get("placeholderKey"):
+                err.append(f"форма {f['id']}: у списка {fld['name']} нет заглушки placeholderKey — интерфейс выберет первый вариант за оператора (RULE-110)")
+
+
 def check_incidents_via_facts(w, err):
     """Множество инцидентов выражения читают только через факты мира со смыслом ref (ARCH-12): incidents — только
     в ref, иначе бэкенд загружал бы все инциденты в каждое вычисление."""
@@ -1483,6 +1492,7 @@ def main():
     check_work_rights(w, err)
     check_declared_fields(w, o, err)
     check_incidents_via_facts(w, err)
+    check_select_placeholders(w, err)
     if "--fsm" in sys.argv:
         show_overlaps(w)
         show_continuing(w)
