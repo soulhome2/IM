@@ -446,9 +446,9 @@ window.IM_WORKFLOW = {
         {
           "id": "no_link",
           "labelKey": "workflow.catalog.hold.no_link",
-          "maxMinutes": null,
+          "maxMinutes": 15,
           "setBy": "system",
-          "$comment": "§4, правило 7; §12.3 (RULE-116). Без срока: удержание по потере связи закрывает порог возврата в очередь session.idleReleaseSec — нарушение за обрыв связи не нужно"
+          "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118). Срок — порог возврата в очередь минус порог удержания (session.idleReleaseSec − idleHoldSec): оператор молчит дальше — в очередь по молчанию (system_release_idle), связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет"
         }
       ]
     },
@@ -1736,7 +1736,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "stopTimer",
           "args": [
-            "reaction"
+            "reaction",
+            true
           ]
         },
         {
@@ -1896,6 +1897,14 @@ window.IM_WORKFLOW = {
           "args": [
             "resolution",
             "limits.reopenResolutionSec"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "reaction",
+            true
           ]
         },
         {
@@ -2393,7 +2402,8 @@ window.IM_WORKFLOW = {
           "fn": "holdReasonNotIn",
           "args": [
             [
-              "break"
+              "break",
+              "no_link"
             ]
           ]
         }
@@ -2701,6 +2711,84 @@ window.IM_WORKFLOW = {
       }
     },
     {
+      "id": "no_link_hold_release",
+      "$comment": "§4, правило 7; §12.3 (RULE-118). Связь вернулась раньше порога возврата, а отложенный «Нет связи» не возобновлён: по сроку причины — в очередь без нарушения, как перерыв дольше срока (RULE-106). Иначе он лежал бы у оператора без срока. Стоит после system_release_idle: оператор молчит дальше — в один момент срабатывает возврат по молчанию",
+      "labelKey": "workflow.transition.no_link_hold_release",
+      "from": [
+        "on_hold"
+      ],
+      "to": "new",
+      "trigger": "timer",
+      "actor": "system",
+      "guards": [
+        {
+          "fn": "timerExpired",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "fn": "holdReasonIn",
+          "args": [
+            [
+              "no_link"
+            ]
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setOwner",
+          "args": [
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "clearHoldReason"
+        },
+        {
+          "kind": "transactional",
+          "fn": "stopTimer",
+          "args": [
+            "hold"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "pauseTimer",
+          "args": [
+            "resolution"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "startTimer",
+          "args": [
+            "reaction"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendLog",
+          "args": [
+            "workflow.journal.no_link_hold_release"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "evictOpenCard",
+          "args": [
+            "previousOwner"
+          ]
+        }
+      ],
+      "ui": {
+        "surface": []
+      }
+    },
+    {
       "id": "addressee_signed_out_to_group",
       "labelKey": "workflow.transition.addressee_signed_out_to_group",
       "$comment": "§8.1 (RULE-28, RULE-37). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот выходит из МИ. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
@@ -2854,7 +2942,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "startTimer",
           "args": [
-            "reaction"
+            "reaction",
+            "continue"
           ]
         },
         {
@@ -3210,7 +3299,8 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "startTimer",
           "args": [
-            "reaction"
+            "reaction",
+            "continue"
           ]
         },
         {
@@ -5293,10 +5383,15 @@ window.IM_WORKFLOW = {
         "fn": "stopTimer",
         "kind": "transactional",
         "args": [
-          "timerId"
+          "timerId",
+          "forget"
         ],
         "argTypes": {
-          "timerId": "string"
+          "timerId": "string",
+          "forget": "bool"
+        },
+        "defaults": {
+          "forget": false
         },
         "do": [
           {
@@ -5311,29 +5406,58 @@ window.IM_WORKFLOW = {
             ],
             "else": [
               {
-                "let": "keep",
-                "value": "timerDef(timerId).keepsLeft && incident.timers[timerId].due != 0 && incident.timers[timerId].fired != incident.timers[timerId].due && incident.timers[timerId].due > now"
-              },
-              {
-                "set": "incident.timers[timerId].left",
-                "value": "keep ? incident.timers[timerId].due - now : 0"
-              },
-              {
-                "set": "incident.timers[timerId].paused",
-                "value": "keep"
-              },
-              {
-                "set": "incident.timers[timerId].due",
-                "value": "0"
-              },
-              {
-                "set": "incident.timers[timerId].since",
-                "value": "0"
+                "if": "forget",
+                "then": [
+                  {
+                    "set": "incident.timers[timerId].left",
+                    "value": "0"
+                  },
+                  {
+                    "set": "incident.timers[timerId].paused",
+                    "value": "false"
+                  },
+                  {
+                    "set": "incident.timers[timerId].due",
+                    "value": "0"
+                  },
+                  {
+                    "set": "incident.timers[timerId].since",
+                    "value": "0"
+                  }
+                ],
+                "else": [
+                  {
+                    "if": "incident.timers[timerId].due == 0",
+                    "then": [],
+                    "else": [
+                      {
+                        "let": "keep",
+                        "value": "timerDef(timerId).keepsLeft && incident.timers[timerId].due != 0 && incident.timers[timerId].fired != incident.timers[timerId].due && incident.timers[timerId].due > now"
+                      },
+                      {
+                        "set": "incident.timers[timerId].left",
+                        "value": "keep ? incident.timers[timerId].due - now : 0"
+                      },
+                      {
+                        "set": "incident.timers[timerId].paused",
+                        "value": "keep"
+                      },
+                      {
+                        "set": "incident.timers[timerId].due",
+                        "value": "0"
+                      },
+                      {
+                        "set": "incident.timers[timerId].since",
+                        "value": "0"
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           }
         ],
-        "$comment": "§14.8. Останавливает таймер; у таймера с keepsLeft остаток до ещё не наступившего срока запоминается (paused, left) — с него startTimer(continue) продолжает реакцию после «Вернуть в очередь», время в работе не считается, а остаток не растёт (RULE-104)"
+        "$comment": "§14.8. Останавливает таймер; у таймера с keepsLeft остаток до ещё не наступившего срока запоминается (paused, left) — с него startTimer(continue) продолжает реакцию после «Вернуть в очередь», выхода и «Отсоединить», время в работе не считается, а остаток не растёт (RULE-104, RULE-121, RULE-128). Таймер уже стоит — остаток не трогается: «Перехватить» его не стирает (RULE-120). forget = true — остаток забывается: «Закрыть» и «Переоткрыть» (RULE-120)"
       },
       {
         "fn": "pauseTimer",

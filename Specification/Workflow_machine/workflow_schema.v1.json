@@ -203,7 +203,7 @@
         { "id": "patrol", "labelKey": "workflow.catalog.hold.patrol", "maxMinutes": 45, "setBy": "operator" },
         { "id": "no_data", "labelKey": "workflow.catalog.hold.no_data", "maxMinutes": 60, "setBy": "operator" },
         { "id": "break", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 30, "setBy": "system", "$comment": "§12.2 (RULE-106). Срок перерыва: истёк — инцидент в очередь (break_hold_release), нарушения удержания нет" },
-        { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": null, "setBy": "system", "$comment": "§4, правило 7; §12.3 (RULE-116). Без срока: удержание по потере связи закрывает порог возврата в очередь session.idleReleaseSec — нарушение за обрыв связи не нужно" }
+        { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": 15, "setBy": "system", "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118). Срок — порог возврата в очередь минус порог удержания (session.idleReleaseSec − idleHoldSec): оператор молчит дальше — в очередь по молчанию (system_release_idle), связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет" }
       ]
     },
     "close_result": {
@@ -658,7 +658,7 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "form.causeId"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["result", "form.comment"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
-        { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "stopTimer", "args": ["reaction", true] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.close"] },
@@ -701,6 +701,7 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "0"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedBy", "''"] },
         { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
+        { "kind": "transactional", "fn": "stopTimer", "args": ["reaction", true] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] }
       ],
       "bulk": { "allowed": false },
@@ -844,7 +845,7 @@
       "to": null,
       "trigger": "timer",
       "actor": "dispatcher",
-      "guards": [{ "fn": "timerExpired", "args": ["hold"] }, { "fn": "holdReasonNotIn", "args": [["break"]] }],
+      "guards": [{ "fn": "timerExpired", "args": ["hold"] }, { "fn": "holdReasonNotIn", "args": [["break", "no_link"]] }],
       "effects": [
         { "kind": "transactional", "fn": "recordBreach", "args": ["hold", "workflow.journal.group_breach"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.hold_overdue"] },
@@ -931,6 +932,26 @@
       "ui": { "surface": [] }
     },
     {
+      "id": "no_link_hold_release",
+      "$comment": "§4, правило 7; §12.3 (RULE-118). Связь вернулась раньше порога возврата, а отложенный «Нет связи» не возобновлён: по сроку причины — в очередь без нарушения, как перерыв дольше срока (RULE-106). Иначе он лежал бы у оператора без срока. Стоит после system_release_idle: оператор молчит дальше — в один момент срабатывает возврат по молчанию",
+      "labelKey": "workflow.transition.no_link_hold_release",
+      "from": ["on_hold"],
+      "to": "new",
+      "trigger": "timer",
+      "actor": "system",
+      "guards": [{ "fn": "timerExpired", "args": ["hold"] }, { "fn": "holdReasonIn", "args": [["no_link"]] }],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": ["''"] },
+        { "kind": "transactional", "fn": "clearHoldReason" },
+        { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
+        { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.no_link_hold_release"] },
+        { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
       "id": "addressee_signed_out_to_group",
       "labelKey": "workflow.transition.addressee_signed_out_to_group",
       "$comment": "§8.1 (RULE-28, RULE-37). Адресованный лично и не принятый инцидент уходит дежурной группе адресата, когда тот выходит из МИ. Норматив реакции продолжается: уход адресата не даёт лишнего времени. Уровень эскалации не меняется.",
@@ -987,7 +1008,7 @@
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
-        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "continue"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.owner_signed_out"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] }
       ],
@@ -1092,7 +1113,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.detach"] },
         { "kind": "transactional", "fn": "copyPrimaryDeadline", "args": ["resolution"] },
         { "kind": "transactional", "fn": "clearLink" },
-        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction", "continue"] },
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": false },
@@ -1484,7 +1505,7 @@
       { "fn": "setHoldReason", "kind": "transactional", "args": ["reason"], "argTypes": {"reason": "expr<string>"}, "do": [{"set": "incident.holdReasonId", "value": "reason"}] },
       { "fn": "clearHoldReason", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"set": "incident.holdReasonId", "value": "''"}] },
       { "fn": "startTimer", "kind": "transactional", "args": ["timerId", "mode", "ifStopped"], "argTypes": {"timerId": "string", "mode": "string", "ifStopped": "bool"}, "defaults": {"mode": "", "ifStopped": false}, "do": [{"if": "ifStopped && incident.timers[timerId].due != 0", "then": [], "else": [{"if": "timerDef(timerId).startsOnce", "then": [{"call": "resumeTimer", "args": {"timerId": "timerId"}}], "else": [{"if": "mode == 'continue' && incident.timers[timerId].paused", "then": [{"set": "incident.timers[timerId].due", "value": "now + incident.timers[timerId].left"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].left", "value": "0"}], "else": [{"let": "sec", "value": "timerSec(incident, timerId, mode == 'continue' ? '' : mode)"}, {"set": "incident.timers[timerId].due", "value": "sec < 0 ? 0 : now + sec * 1000"}, {"set": "incident.timers[timerId].since", "value": "now"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].left", "value": "0"}]}]}]}], "$comment": "§14.8. Запускает таймер с полного норматива (mode: '' — норматив, byEscalationLevel — норматив уровня эскалации; continue — с остатка, запомненного при остановке, а остатка нет — с полного норматива: «Вернуть в очередь» продолжает реакцию, RULE-104). ifStopped = true — только если таймер не идёт: идущий продолжается (RULE-76, «Передать» — реакция из «Новое» и «Ожидает принятия» не начинается заново)." },
-      { "fn": "stopTimer", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"if": "timerDef(timerId).startsOnce", "then": [{"call": "pauseTimer", "args": {"timerId": "timerId"}}], "else": [{"let": "keep", "value": "timerDef(timerId).keepsLeft && incident.timers[timerId].due != 0 && incident.timers[timerId].fired != incident.timers[timerId].due && incident.timers[timerId].due > now"}, {"set": "incident.timers[timerId].left", "value": "keep ? incident.timers[timerId].due - now : 0"}, {"set": "incident.timers[timerId].paused", "value": "keep"}, {"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}]}], "$comment": "§14.8. Останавливает таймер; у таймера с keepsLeft остаток до ещё не наступившего срока запоминается (paused, left) — с него startTimer(continue) продолжает реакцию после «Вернуть в очередь», время в работе не считается, а остаток не растёт (RULE-104)" },
+      { "fn": "stopTimer", "kind": "transactional", "args": ["timerId", "forget"], "argTypes": {"timerId": "string", "forget": "bool"}, "defaults": {"forget": false}, "do": [{"if": "timerDef(timerId).startsOnce", "then": [{"call": "pauseTimer", "args": {"timerId": "timerId"}}], "else": [{"if": "forget", "then": [{"set": "incident.timers[timerId].left", "value": "0"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}], "else": [{"if": "incident.timers[timerId].due == 0", "then": [], "else": [{"let": "keep", "value": "timerDef(timerId).keepsLeft && incident.timers[timerId].due != 0 && incident.timers[timerId].fired != incident.timers[timerId].due && incident.timers[timerId].due > now"}, {"set": "incident.timers[timerId].left", "value": "keep ? incident.timers[timerId].due - now : 0"}, {"set": "incident.timers[timerId].paused", "value": "keep"}, {"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}]}]}]}], "$comment": "§14.8. Останавливает таймер; у таймера с keepsLeft остаток до ещё не наступившего срока запоминается (paused, left) — с него startTimer(continue) продолжает реакцию после «Вернуть в очередь», выхода и «Отсоединить», время в работе не считается, а остаток не растёт (RULE-104, RULE-121, RULE-128). Таймер уже стоит — остаток не трогается: «Перехватить» его не стирает (RULE-120). forget = true — остаток забывается: «Закрыть» и «Переоткрыть» (RULE-120)" },
       { "fn": "pauseTimer", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"if": "!timerDef(timerId).pausable", "then": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].since", "value": "0"}], "else": [{"if": "incident.timers[timerId].due != 0", "then": [{"set": "incident.timers[timerId].left", "value": "incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0"}, {"set": "incident.timers[timerId].paused", "value": "true"}, {"set": "incident.timers[timerId].due", "value": "0"}]}]}] },
       { "fn": "restartTimer", "kind": "transactional", "args": ["timerId", "sec"], "argTypes": {"timerId": "string", "sec": "expr<int>"}, "do": [{"set": "incident.timers[timerId].due", "value": "now + (sec > 0 ? sec : norm(incident, timerDef(timerId))) * 1000"}, {"set": "incident.timers[timerId].paused", "value": "false"}, {"set": "incident.timers[timerId].left", "value": "0"}], "extendsBaseRegistry": true, "$comment": "§4, правило 6 (RULE-11). Запускает таймер заново, без остатка. Второй аргумент — длительность, с, выражением (limits.reopenResolutionSec); 0 — обычный норматив по §4. Переоткрытие запускает так норматив закрытия." },
       { "fn": "recordBreach", "kind": "transactional", "args": ["kind", "groupLogKey"], "argTypes": {"kind": "string", "groupLogKey": "string"}, "do": [{"let": "breach", "value": "{'kind': kind, 'at': deadline, 'owner': addressee(before)}"}, {"append": "incident.breaches", "value": "breach"}, {"set": "incident.slaBreached", "value": "true"}, {"forEach": "e", "in": "groupMembersAt(incident, deadline)", "do": [{"append": "e.breaches", "value": "breach"}, {"set": "e.slaBreached", "value": "true"}, {"world": "log", "args": {"incident": "e", "key": "groupLogKey", "actor": "'dispatcher'", "vars": "{'primaryNumber': incident.number, 'timer': [timerDef(kind).labelKey]}"}}, {"world": "touch", "args": {"incident": "e"}}]}], "extendsBaseRegistry": true, "$comment": "§2.2 (RULE-12). Дописывает в breaches запись: вид нарушения (reaction / resolution / hold), когда, чей — владелец в этот момент. У основного — и каждому, кто был привязан к нему в момент нарушения, та же запись: у группы один срок (§11.4). Отсоединённому после срока, пока нарушение не записано (окно manualWinsOverTimer), — тоже, присоединённому после срока — нет. Второй аргумент — запись в журнал каждого, кому нарушение записано так ({primaryNumber}, {timer}) (RULE-98). sla_breached — есть хоть одна запись. Записи не стираются, в том числе при переоткрытии." },

@@ -151,6 +151,8 @@ MUTATIONS = [
     ("setting-is-ignored", "workflow.js", "\"expr\": \"settingKey == value\"", "\"expr\": \"true\"", "api"),
     ("owner-group-ignored", "workflow.js", "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"", "\"expr\": \"true\"", "api"),
     ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runSchedulerForOwnChange();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
+    # Простой сервиса на стенде (RULE-119): при старте молчание оператора считается заново (RULE-113)
+    ("service-restart-ignored", "server.js", "if (body.serviceRestart === true) lastHeartbeat = now();", "", "api"),
     # Карточку увели (BUG-105): событие — только при открытой карточке и не за свой перерыв или выход
     ("evict-any-card", "server.js", "&& session.openIncidentGuid === ev.id) emit(", ") emit(", "api"),
     ("evict-own-change", "server.js", "if (who === ME && !ownAgentStateChange && ", "if (who === ME && ", "api"),
@@ -327,7 +329,7 @@ MUTATIONS = [
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
     # «Взял — вернул» эскалацию не откладывает (RULE-104)
-    ("release-restarts-reaction", "workflow.js", '"reaction",\n            "continue"', '"reaction"', "api"),
+    ("release-restarts-reaction", "workflow.js", '"hold"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"hold"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
     ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
     # «Переоткрыть» снимает закрытие целиком (RULE-103)
     ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
@@ -335,7 +337,10 @@ MUTATIONS = [
     ("test-file-load-error", "../tests/api-junction.js", "/* Тесты API стыка машины инцидента", "}\n/* Тесты API стыка машины инцидента", "api"),
     # Системные ветки (PROC-49): молчание возвращает в очередь и отложенное перерывом; адресат вышел без дежурной
     # группы — реакция продолжается с того же срока
-    ("idle-release-skips-break", "workflow.js", '[\n              "break",\n              "no_link"\n            ]', '[\n              "no_link"\n            ]', "api"),
+    # Остаток реакции (RULE-120, RULE-121, RULE-128): выход и «Отсоединить» — с остатка, «Закрыть» забывает
+    ("signout-restarts-reaction", "workflow.js", '"resolution"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"resolution"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
+    ("detach-restarts-reaction", "workflow.js", '"fn": "clearLink"\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"fn": "clearLink"\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
+    ("idle-release-skips-break", "workflow.js", '"fn": "holdReasonIn",\n          "args": [\n            [\n              "break",\n              "no_link"\n            ]', '"fn": "holdReasonIn",\n          "args": [\n            [\n              "no_link"\n            ]', "api"),
     ("signed-out-queue-restarts-reaction", "workflow.js", '"fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', '"fn": "startTimer",\n          "args": [\n            "reaction"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', "api"),
     # «Переоткрыть» — норматив закрытия заново: полный или из настройки, причина сбоя снимается (PROC-48)
     ("reopen-resolution-continues", "workflow.js", '"fn": "restartTimer",\n          "args": [\n            "resolution",\n            "limits.reopenResolutionSec"\n          ]', '"fn": "startTimer",\n          "args": [\n            "resolution"\n          ]', "api"),

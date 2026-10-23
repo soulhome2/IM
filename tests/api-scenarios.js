@@ -217,6 +217,53 @@
     assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "auto_escalate"), `автоэскалация: ${JSON.stringify(fired)}`);
   });
 
+  test("Выход из МИ — как «Вернуть в очередь»: реакция с остатка на момент взятия, «взял — вышел — вошёл» эскалацию не откладывает (§6.2, RULE-121)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const leftOf = (card) => Date.parse(card.timer.dueAt) - env.now;
+    await env.advance(Math.round((Date.parse(inc.timer.dueAt) - env.now) / 1000) - 20);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять за 20 с до срока");
+    await env.advance(5);
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "offline" }), 200, null, "выйти");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "войти");
+    const c = await env.card(inc.guid);
+    assert.eq([c.state, c.timer && c.timer.id, leftOf(c)], ["new", "reaction", 20000], "реакция — с остатка 20 с, а не заново");
+  });
+
+  test("«Взять в работу» на выборке и «Отсоединить» эскалацию не откладывают: реакция отсоединённого — с остатка на момент объединения (§11.4, RULE-128)", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.ok(fires.length >= 2, "два новых пожара");
+    const [mine, other] = fires;
+    assert.status(await env.act(mine.guid, "claim", {}, "queue"), 200, null, "свой в работе");
+    const before = await env.card(other.guid);
+    const leftOf = (card) => Date.parse(card.timer.dueAt) - env.now;
+    await env.advance(Math.round(leftOf(before) / 1000) - 10);
+    const merged = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mine.guid, other.guid] });
+    assert.status(merged, 200, null, "взять в работу как одно за 10 с до срока второго");
+    assert.eq(merged.body.incident.guid, mine.guid, "основной — свой в работе");
+    await env.advance(30);
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(mine.guid)}/linked/${enc(other.guid)}`), 200, null, "отсоединить");
+    const c = await env.card(other.guid);
+    assert.eq([c.state, c.timer && c.timer.id, leftOf(c)], ["new", "reaction", 10000], "реакция — с остатка 10 с, а не заново");
+  });
+
+  test("«Закрыть» и «Переоткрыть» забывают остаток реакции: после переоткрытия «Вернуть в очередь» — полный норматив (§4, RULE-120)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const leftOf = (card) => Date.parse(card.timer.dueAt) - env.now;
+    const norm = W.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === TOP).sec * 1000;
+    await env.advance(Math.round(leftOf(inc) / 1000) - 20);
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    assert.status(await env.act(inc.guid, "close", { resultId: "mass", causeId: cause, comment: "свет" }, "queue"), 200, null, "закрыть массовым сбоем за 20 с до срока");
+    await env.advance(60);
+    assert.status(await env.act(inc.guid, "reopen", { comment: "вернули" }), 200, null, "переоткрыть");
+    await env.advance(30);
+    const back = await env.act(inc.guid, "release", { comment: "не моё" });
+    assert.status(back, 200, null, "вернуть в очередь");
+    assert.eq([back.body.incident.timer.id, leftOf(back.body.incident)], ["reaction", norm], "реакция — полный норматив, а не остаток на момент закрытия");
+  });
+
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */
 
   test("Передачи не расходуют цепочку автоэскалации и не продлевают реакцию: две передачи нового — не принят, уходит на уровень 1 (§8.3, RULE-76)", async () => {
@@ -502,6 +549,27 @@
     assert.ok((await env.card(taken.guid)).guid === taken.guid, "просмотр доступен");
     assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "войти");
     assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "после входа — снова можно");
+  });
+
+  test("Простой сервиса — не молчание оператора: после старта инцидент не отложен «нет связи», норматив закрытия срабатывает (§14.3, RULE-113, RULE-119)", async () => {
+    const about = (fired, guid) => fired.filter((f) => f.incidentGuid === guid).map((f) => f.transitionId);
+    for (const down of [false, true]) {
+      const env = await makeEnv();
+      const inc = (await env.all("open")).find((e) => e.state === "new");
+      assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+      await env.heartbeat(null);
+      // Два часа: сервис работал, а оператор молчал — или лежал сам сервис
+      const res = await env.call("POST", "/test/clock", { advanceSec: 7200, serviceRestart: down });
+      assert.status(res, 200, null, "часы");
+      const fired = about(res.body.fired, inc.guid);
+      if (down) {
+        assert.ok(!fired.includes("system_hold_idle"), `простой: не отложен «нет связи» — ${fired}`);
+        assert.ok(fired.some((t) => t.startsWith("resolution_")), `простой: норматив закрытия сработал — ${fired}`);
+      } else {
+        assert.ok(fired.includes("system_hold_idle"), `молчание: отложен «нет связи» — ${fired}`);
+        assert.ok(!fired.some((t) => t.startsWith("resolution_")), `молчание: норматив закрытия на паузе — ${fired}`);
+      }
+    }
   });
 
   test("«Карточка только для просмотра» — только тому, у кого она открыта, и не за своё действие (§9, контракт, BUG-105)", async () => {
@@ -1315,18 +1383,36 @@
     assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], "снова новый, ничей, без причины удержания");
   });
 
-  test("У «Нет связи» срока удержания нет: порог возврата хоть час — нарушения удержания за обрыв связи нет (§4, правило 7; §12.3, RULE-116)", async () => {
+  test("У «Нет связи» нарушения удержания нет: порог возврата хоть час — инцидент уходит в очередь по сроку причины или по молчанию (§4, правило 7; §12.3, RULE-116, RULE-118)", async () => {
     const env = await makeEnv({ workflowPatch: { session: Object.assign({}, W.session, { idleReleaseSec: 3600 }) } });
     const inc = await newFire(env);
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
     const fired = [];
     for (let left = 3600; left > 0; left -= 600) {
       fired.push(...(await env.call("POST", "/test/clock", { advanceSec: Math.min(600, left) })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId));
-      const c = await env.card(inc.guid);
-      if (c.state === "on_hold") assert.eq([c.holdReasonId, c.holdTimer], ["no_link", null], "отложен «нет связи» — без срока удержания");
     }
-    assert.ok(fired.includes("system_hold_idle") && fired.includes("system_release_idle") && !fired.includes("hold_overdue"), `переходы: ${fired.join(", ")}`);
+    assert.ok(fired.includes("system_hold_idle") && fired.some((t) => ["system_release_idle", "no_link_hold_release"].includes(t)) && !fired.includes("hold_overdue"), `переходы: ${fired.join(", ")}`);
     assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 0, "нарушения удержания нет");
+  });
+
+  test("«Нет связи»: связь вернулась раньше порога возврата, инцидент не возобновлён — по сроку причины в очередь, без нарушения (§4, правило 7; §12.3, RULE-118)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    // Молчание дольше порога удержания: отложен «нет связи»
+    const silent = (await env.call("POST", "/test/clock", { advanceSec: W.session.idleHoldSec + 60 })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    assert.eq(silent, ["system_hold_idle"], "отложен по молчанию");
+    const held = await env.card(inc.guid);
+    assert.eq([held.state, held.holdReasonId], ["on_hold", "no_link"], "отложен «нет связи»");
+    assert.ok(held.holdTimer && held.holdTimer.dueAt, "срок удержания идёт");
+    // Связь вернулась: признак активности идёт, инцидент оператор не трогает
+    const fired = (await env.advance(Math.ceil((Date.parse(held.holdTimer.dueAt) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    // Дальше реакция идёт заново: у пожара короткий норматив, автоэскалация может успеть
+    assert.eq(fired[0], "no_link_hold_release", `по сроку причины — в очередь: ${fired}`);
+    assert.ok(!fired.includes("hold_overdue"), `нарушения удержания нет: ${fired}`);
+    const c = await env.card(inc.guid);
+    assert.eq([c.holdReasonId, c.breaches.filter((b) => b.kind === "hold").length], [null, 0], "причина снята, нарушения удержания нет");
+    assert.ok(c.journal.some((j) => /потере связи дольше срока/.test(jt(j))), "запись в журнале");
   });
 
   test("Действие — признак активности (§12.3, BUG-76): молчал дольше idleHoldSec и взял инцидент — он в работе, не отложен", async () => {

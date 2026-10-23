@@ -860,6 +860,16 @@ def check_timer_declarations(w, err):
 # именам: смысл условия — его expr в машине (ARCH-07), и «ровно один переход по истёкшему таймеру» на настоящих
 # выражениях проверяет модель Quint — timerTransitionsExclusive и dueDeadlineHandled на всех сочетаниях
 # настроек BRANCH_SETTINGS (PROC-43)
+HOLD_REASON = "причина удержания"
+
+
+def holds(want, value):
+    """Значение переменной подходит условию: «входит / не входит в список» — для причины удержания, иначе равенство."""
+    if isinstance(want, tuple) and want[:1] in (("in",), ("not in",)):
+        return (value in want[1]) == (want[0] == "in")
+    return want == value
+
+
 def guard_terms(g):
     fn, a = g["fn"], g.get("args", [])
     return {
@@ -872,8 +882,9 @@ def guard_terms(g):
         "ownerHasDutyGroup": lambda: ("у владельца есть дежурная группа", a[0]),
         "addresseeHasAccess": lambda: ("у адресата есть доступ", a[0]),
         "addresseeCanAccept": lambda: ("адресат может принять", a[0]),
-        "holdReasonIn": lambda: ("причина удержания в " + ",".join(a[0]), True),
-        "holdReasonNotIn": lambda: ("причина удержания в " + ",".join(a[0]), False),
+        # Причина удержания — одна переменная: условие — входит ли она в список (RULE-118)
+        "holdReasonIn": lambda: (HOLD_REASON, ("in", tuple(a[0]))),
+        "holdReasonNotIn": lambda: (HOLD_REASON, ("not in", tuple(a[0]))),
         "primaryClosed": lambda: ("основной закрыт", True),
         "primaryAddresseeHasAccess": lambda: ("у адресата основного есть доступ", a[0]),
     }.get(fn, lambda: None)()
@@ -904,7 +915,13 @@ def compatible(a, b):
     Доступа нет — значит и принять нельзя; доступ адресата основного — только у открытого основного."""
     va, vb = dict(a), dict(b)
     for k in set(va) & set(vb):
-        if k != "timer" and va[k] != vb[k]:
+        if k == HOLD_REASON:
+            # Есть причина, подходящая обоим: «не в списке» и «не в списке» — всегда, справочник шире
+            ins = [set(v[1]) for v in (va[k], vb[k]) if v[0] == "in"]
+            outs = set().union(*[set(v[1]) for v in (va[k], vb[k]) if v[0] == "not in"])
+            if ins and not (set.intersection(*ins) - outs):
+                return False
+        elif k != "timer" and va[k] != vb[k]:
             return False
     merged = {**va, **vb}
     if merged.get("у адресата есть доступ") is False and merged.get("адресат может принять") is True:
@@ -946,10 +963,11 @@ def check_settings_matrix(w, o, err, show=False):
                     if k != "timer":
                         values.setdefault(k, []).append(v)
             names = sorted(values)
-            domains = [setting_domain(k, values[k], o) if "." in k else [True, False] for k in names]
+            reasons = [r["id"] for r in w["reasonCatalogs"]["hold"]["items"]]
+            domains = [reasons if k == HOLD_REASON else setting_domain(k, values[k], o) if "." in k else [True, False] for k in names]
             for combo in itertools.product(*domains):
                 env = dict(zip(names, combo))
-                fired = [t["id"] for t in group if all(k == "timer" or env.get(k) == v for k, v in terms[t["id"]])]
+                fired = [t["id"] for t in group if all(k == "timer" or holds(v, env.get(k)) for k, v in terms[t["id"]])]
                 rows.append((state, timer, env, fired))
                 if len(fired) != 1:
                     err.append(f"перебор настроек: {state}, истёк {timer}, {env} — срабатывает {fired or 'ничего'}, нужен ровно один (im-fsm)")

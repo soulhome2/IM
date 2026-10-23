@@ -41,13 +41,20 @@
       not(runs(r) and r.fired == r.due),
       if (s == "new" or s == "pending_acceptance") not(runs(h)) and not(runs(z)) and (runs(r) or hasBreach(x, "reaction"))
       else if (s == "in_progress") runs(z) and not(runs(r)) and not(runs(h))
-      // Срок удержания идёт, только если он у причины есть: у «нет связи» его нет (RULE-116)
+      // Срок удержания идёт, только если он у причины есть (holdSec ≥ 0)
       else if (s == "on_hold") (runs(h) iff holdSec(x) >= 0) and not(runs(z)) and z.paused and not(runs(r))
       else if (s == "closed") not(runs(r)) and not(runs(z)) and not(runs(h))
       // Свой норматив закрытия привязанного на паузе: у группы один срок — срок основного (RULE-97)
       else if (s == "linked") not(runs(r)) and not(runs(h)) and not(runs(z))
       else true,
     }
+  })
+
+  // 3б. Удержание не бесконечно (§4, правило 7; RULE-118): у отложенного идёт срок удержания или уже записано
+  //     нарушение удержания — иначе отложенный лежал бы без срока, пока его не тронет человек
+  val holdBounded = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    x.state == "on_hold" implies (runs(x.timers.get("hold")) or hasBreach(x, "hold"))
   })
 
   // 3а. Наступивший дедлайн норматива закрытия не уходит на паузу необработанным: на паузе с остатком 0 —
@@ -222,6 +229,7 @@
     ownerByState,
     holdReasonIffOnHold,
     timersByState,
+    holdBounded,
     dueNotPausedUnprocessed,
     levelBounded,
     closeResultIffClosed,

@@ -1750,6 +1750,8 @@
             if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.clock_backwards"]);
             if (clock.frozenAt != null) clock.frozenAt += sec * 1000;
             else clock.offset += sec * 1000;
+            // serviceRestart — сервис лежал всё время сдвига: при старте молчание считается заново (§14.3, RULE-113, RULE-119)
+            if (body.serviceRestart === true) lastHeartbeat = now();
             // runScheduler: false — такт планировщика ещё не наступил: что сделает запрос оператора (§14.3, BUG-82)
             const fired = body.runScheduler === false ? [] : runScheduler();
             return { status: 200, body: { now: iso(now()), fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
