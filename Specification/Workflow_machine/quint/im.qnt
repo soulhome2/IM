@@ -131,6 +131,11 @@ module im {
   def unowned(x: Incident): bool =
     ((x.owner == "") and (x.assignmentGroup == ""))
 
+  // §8.1, §10.1 (RULE-107). Кому форма «Передать» предлагает инцидент: не себе и не своей группе, не текущему адресату, тому, кто может принять, и не вышедшему, чья дежурная группа — своя: передача ему сразу ушла бы этой группе, то есть вернулась бы себе — как запрет «на себя» у автоэскалации (RULE-93)
+
+  def offersTransferTo(who: str, t: str, x: Incident): bool =
+    (((not(isSelf(who, t)) and (t != addressee(x))) and canAccept(t, x, "")) and not(((isOperator(t) and (agentState(t) == "offline")) and isSelf(who, dutyGroupOf(t)))))
+
   // §10.1. «Я» как адресат: сам оператор и дежурные группы, в которые он входит
 
   def isSelf(who: str, id: str): bool =
@@ -885,7 +890,7 @@ module im {
     Set("new", "pending_acceptance", "in_progress", "on_hold").contains(world.inc.get(iid).state),
     can(c.me, (if (scopeOwn(c.me, world.inc.get(iid), { own: { anyOf: [{ state: "new", ownership: "" }, { state: "", ownership: "owner" }, { state: "", ownership: "target" }] } })) "incident:transfer:own" else "incident:transfer:any")),
     not(settings.session.states.foldl(false, (acc, s_202) => acc or ((s_202.id == agentState(c.me)) and s_202.readOnly))),
-    transferTargets.foldl(false, (acc, t_203) => acc or (((not(isSelf(c.me, t_203)) and (t_203 != addressee(world.inc.get(iid)))) and canAccept(t_203, world.inc.get(iid), "")) and linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_204) => acc and (isDone(e_204) or hasAccess(t_203, e_204))))),
+    transferTargets.foldl(false, (acc, t_203) => acc or (offersTransferTo(c.me, t_203, world.inc.get(iid)) and linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_204) => acc and (isDone(e_204) or hasAccess(t_203, e_204))))),
     not(isSelf(c.me, c.form.targetId)),
     ((c.form.targetId == "") or hasAccess(c.form.targetId, world.inc.get(iid))),
     ((c.form.targetId == "") or linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_205) => acc and (isDone(e_205) or hasAccess(c.form.targetId, e_205)))),
@@ -2924,7 +2929,7 @@ module im {
   def form_transfer(c: Ctx, iid: str): bool = all {
     c.form.targetId == "" or all {
       TARGETS.contains(c.form.targetId),
-      ((not(isSelf(c.me, c.form.targetId)) and (c.form.targetId != addressee(world.inc.get(iid)))) and canAccept(c.form.targetId, world.inc.get(iid), "")),
+      offersTransferTo(c.me, c.form.targetId, world.inc.get(iid)),
       linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_824) => acc and (isDone(e_824) or hasAccess(c.form.targetId, e_824))),
     },
   }

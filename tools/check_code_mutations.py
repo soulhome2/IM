@@ -65,8 +65,10 @@ MUTATIONS = [
     ("form-list-hidden-accepted", "engine.js", "          rule.visible &&\n", "", "api"),
     ("form-comment-required-ignored", "workflow.js", "\"requiredExpr\": \"closeResults.exists(i, i.id == form.resultId && i.commentRequired)\"", "\"requiredExpr\": \"false\"", "api"),
     ("form-cause-always-visible", "workflow.js", "\"visibleExpr\": \"form.resultId == 'mass'\"", "\"visibleExpr\": \"true\"", "api"),
-    ("form-transfer-offers-no-access", "workflow.js", " && canAccept(option, incident, '')\"", "\"", "api"),
-    ("form-transfer-offers-owner", "workflow.js", " && option != addressee(incident)", "", "api"),
+    ("form-transfer-offers-no-access", "workflow.js", " && canAccept(t, x, '') && !(isOperator(t)", " && !(isOperator(t)", "api"),
+    ("form-transfer-offers-owner", "workflow.js", " && t != addressee(x)", "", "api"),
+    # Вышедшему из своей дежурной группы — не предлагать (RULE-107)
+    ("form-transfer-offers-own-group-away", "workflow.js", " && !(isOperator(t) && agentState(t) == 'offline' && isSelf(who, dutyGroupOf(t)))", "", "api"),
     ("form-hold-offers-system", "workflow.js", "r.setBy != 'system'", "true", "api"),
     ("form-close-no-default", "workflow.js", "\"defaultExpr\": \"stepsFilled(incident, 'closing') ? 'processed' : ''\"", "\"defaultExpr\": \"''\"", "api"),
     ("form-close-steps-ignored", "workflow.js", "\"enabledExpr\": \"closeResults.exists(i, i.id == option && stepsOk(i, incident))\"", "\"enabledExpr\": \"true\"", "api"),

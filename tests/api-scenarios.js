@@ -526,6 +526,21 @@
     assert.ok(c.journal.some((j) => /Адресат вышел, не приняв/.test(jt(j))), "запись в журнале");
   });
 
+  test("Вышедшему коллеге из своей дежурной группы передать нельзя: передача вернулась бы себе (§10.1, RULE-107)", async () => {
+    // Петрова — в «Старших операторах», как и я, и вышла из МИ
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "petrova").agentState = "offline";
+    const env = await makeEnv({ fixturePatch: { people } });
+    const inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire");
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const options = actionOf(await env.card(inc.guid), "transfer").fieldOptions.targetId.options.map((o) => o.id);
+    assert.ok(!options.includes("petrova"), `Петровой нет среди адресатов: ${options}`);
+    assert.ok(options.includes("kuznetsov") || options.includes("sidorov"), "другие адресаты есть");
+    const res = await env.act(inc.guid, "transfer", { targetId: "petrova", comment: "тест" });
+    assert.status(res, 422, "FORM_FIELD_INVALID", "передача вышедшей Петровой");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "инцидент у меня");
+  });
+
   test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
     // Свой набор данных: оператор стенда не состоит ни в одной группе
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));

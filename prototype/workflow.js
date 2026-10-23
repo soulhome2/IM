@@ -638,7 +638,7 @@ window.IM_WORKFLOW = {
           "requiredExpr": "true",
           "placeholderKey": "workflow.form.transfer.field.targetId.placeholder",
           "source": "transferTargets",
-          "optionExpr": "!isSelf(me, option) && option != addressee(incident) && canAccept(option, incident, '')",
+          "optionExpr": "offersTransferTo(me, option, incident)",
           "enabledExpr": "linkedOf(incident.id).all(e, isDone(e) || hasAccess(option, e))",
           "disabledKey": "workflow.guard.target_no_access_linked",
           "defaultExpr": "lastTransferTarget(me)",
@@ -4263,6 +4263,16 @@ window.IM_WORKFLOW = {
         "returns": "bool",
         "expr": "x.owner == '' && x.assignmentGroup == ''"
       },
+      "offersTransferTo": {
+        "params": {
+          "who": "string",
+          "t": "string",
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "!isSelf(who, t) && t != addressee(x) && canAccept(t, x, '') && !(isOperator(t) && agentState(t) == 'offline' && isSelf(who, dutyGroupOf(t)))",
+        "$comment": "§8.1, §10.1 (RULE-107). Кому форма «Передать» предлагает инцидент: не себе и не своей группе, не текущему адресату, тому, кто может принять, и не вышедшему, чья дежурная группа — своя: передача ему сразу ушла бы этой группе, то есть вернулась бы себе — как запрет «на себя» у автоэскалации (RULE-93)"
+      },
       "isSelf": {
         "params": {
           "who": "string",
@@ -5095,7 +5105,7 @@ window.IM_WORKFLOW = {
         "errorCode": "TARGET_CANNOT_ACCEPT",
         "args": [],
         "argTypes": {},
-        "expr": "transferTargets().exists(t, !isSelf(me, t) && t != addressee(incident) && canAccept(t, incident, '') && linkedOf(incident.id).all(e, isDone(e) || hasAccess(t, e)))",
+        "expr": "transferTargets().exists(t, offersTransferTo(me, t, incident) && linkedOf(incident.id).all(e, isDone(e) || hasAccess(t, e)))",
         "onFail": "disable",
         "failKeys": [
           "workflow.guard.no_transfer_target"
