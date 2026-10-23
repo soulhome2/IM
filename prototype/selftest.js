@@ -1632,7 +1632,7 @@
       }
     });
 
-    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 120 px, типы — под «Фильтры» с числом выбранных (BUG-50); Esc закрывает панель групп (RULE-91); названия в дереве различимы (BUG-65)", async () => {
+    await step("На телефоне 360 пикселей страница не шире экрана; шапка очереди и фильтры — не выше 160 px, поиск — отдельной строкой (BUG-94), типы — под «Фильтры» с числом выбранных (BUG-50); Esc закрывает панель групп (RULE-91); названия в дереве различимы (BUG-65)", async () => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-9999px;top:0;width:360px;height:740px;border:0";
       const report = new Promise((resolve) => {
@@ -1651,7 +1651,8 @@
       frame.remove();
       expect(r, "узкая страница не ответила");
       expect(r.scroll <= r.width, `ширина ${r.scroll} при экране ${r.width}: ${r.wide.join(", ")}`);
-      expect(r.filters <= 120, `шапка очереди и фильтры — ${r.filters} px, на список мало места`);
+      // Поиск — отдельной строкой не уже 160 px (BUG-94, решение 2026-10-23): порог шапки — 160 px вместо 120
+      expect(r.filters <= 160, `шапка очереди и фильтры — ${r.filters} px, на список мало места`);
       expect(r.more.typesHidden, "типы видны без «Фильтры»");
       expect(r.more.typesShown, "«Фильтры» не открыли типы");
       expect(r.more.counted, "на «Фильтры» нет числа выбранных типов");

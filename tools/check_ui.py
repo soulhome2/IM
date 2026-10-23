@@ -163,6 +163,12 @@ CHECK = r"""(() => {
     }
   });
 
+  // Поле поиска не уже 160 px: на телефоне поиск очереди сжимался до «Пс» (BUG-94)
+  all.filter((el) => el.matches('input[type=search]')).forEach((el) => {
+    const w = el.getBoundingClientRect().width;
+    if (w < 160) add('ширина', el, 'поле поиска ' + Math.round(w) + ' px, нужно не уже 160');
+  });
+
   // Тексты: ключи каталога и подсказки с клавишами
   const KEY = /\bworkflow\.[a-z_]+\./;
   const HOTKEY = /\((?:[←→↑↓]|Esc|Enter|Tab|Ctrl|Alt|Shift|F\d+)[^)]*\)|\b(?:Ctrl|Alt|Shift)\s*\+/;

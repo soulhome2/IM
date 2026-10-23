@@ -2127,8 +2127,11 @@ select.search-input { padding-right: 36px; }
 
   /* Шапка очереди — одной строкой; поиск, состояние и «Фильтры» — второй. Типы и порядок —
      под «Фильтры»: на список остаётся место (BUG-50) */
-  .events-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .events-toolbar select { min-width: 0; max-width: 132px; }
+  /* Фильтр и «Фильтры» — первой строкой, поиск — отдельной под ними: в одну строку с ними на 360 px полю
+     оставалось 70–90 px (BUG-94) */
+  .events-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .events-toolbar select { min-width: 0; }
+  .events-toolbar .search-wrapper { grid-column: 1 / -1; grid-row: 2; }
   .events-more { display: inline-flex; }
   .events-types { grid-row: auto; }
   .events-toolbar .events-sort { grid-column: 1 / -1; max-width: none; }
