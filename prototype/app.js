@@ -642,9 +642,18 @@
     return p.messageKey ? say(p.messageKey, p.messageVars) : t(p.message || "");
   };
 
+  // Поправка «время сервера − время пульта» (BUG-103): отсчёты и часы — по времени сервера, иначе часы пульта,
+  // спешащие на минуты, показали бы «просрочено» раньше срока. Обновляется при каждом ответе с serverTime
+  let skewMs = 0;
+  const serverNow = () => Date.now() + skewMs;
+  function noteServerTime(list) {
+    const timer = (list || []).map((e) => e && (e.timer || e.holdTimer)).find((x) => x && x.serverTime);
+    if (timer) skewMs = Date.parse(timer.serverTime) - Date.now();
+  }
+
   function nowStamp() {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
-    return new Date().toLocaleTimeString(locale, { hour12: false });
+    return new Date(serverNow()).toLocaleTimeString(locale, { hour12: false });
   }
   const fmtTime = (iso) => {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
@@ -820,6 +829,7 @@
         state.page = page.focusPage;
         page = await api.get("/operator/incidents", queueQuery());
       }
+      noteServerTime(page.items);
       Object.assign(store, { session, page, counters, tree });
       state.page = page.page;
       if (!state.openGroups.size && !state.treeSeen) {
@@ -853,6 +863,7 @@
   async function loadCard() {
     const id = state.selectedId;
     store.card = id ? await api.get(incPath(id)).catch(() => null) : null;
+    noteServerTime([store.card]);
     if (store.card) focusCameras(store.card);
     await loadLinked();
     heartbeat();
@@ -1157,7 +1168,7 @@
 
   function timerView(timer) {
     if (!timer) return null;
-    const leftMs = timer.running && timer.dueAt ? Date.parse(timer.dueAt) - Date.now() : timer.remainingMs;
+    const leftMs = timer.running && timer.dueAt ? Date.parse(timer.dueAt) - serverNow() : timer.remainingMs;
     return { kind: timer.id, label: timer.label, leftMs, running: timer.running, due: timer.running ? Date.parse(timer.dueAt) : null };
   }
 
@@ -4103,7 +4114,7 @@
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
     document.querySelectorAll("[data-due]").forEach((el) => {
-      const left = Number(el.dataset.due) - Date.now();
+      const left = Number(el.dataset.due) - serverNow();
       el.querySelector(".sla-t").textContent = fmtSla(left);
       el.classList.toggle("late", left < lateMs());
     });

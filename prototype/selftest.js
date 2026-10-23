@@ -1171,6 +1171,12 @@
     });
 
     await step("Вернуть в очередь", async () => {
+      // Норматив закрытия шёл, пока инцидент был в работе: часы стенда стоят — сдвинуть на 5 с. Отсчёт — по
+      // времени сервера (BUG-103), часы пульта на него не влияют
+      if (window.IM_SELFTEST_API) {
+        await window.IM_SELFTEST_API.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await window.IM_SELFTEST_API.raw("POST", "/test/clock", { advanceSec: 5 });
+      }
       await openOwn(acceptedId);
       const b = button(root(), "release");
       expect(b, "в карточке нет кнопки «Вернуть в очередь»");
@@ -1865,6 +1871,32 @@
         await wait(300);
       }
       return note;
+    });
+
+    await step("Отсчёт — по времени сервера, а не пульта: часы стенда ушли вперёд — в строке остаток, как у сервера (BUG-103)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      // Часы стенда — на 40 с вперёд от пульта: без поправки отсчёт был бы на 40 с больше
+      await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+      await stand.raw("POST", "/test/clock", { advanceSec: 40 });
+      await wait(300);
+      await setFilter("open");
+      const sec = (s) => s.split(":").reduce((m, x) => m * 60 + Number(x), 0);
+      const row = [...$("eventsList").querySelectorAll(".event")].find((r) => {
+        const t = r.querySelector("[data-due] .sla-t");
+        return t && sec(t.textContent) > 10;
+      });
+      expect(row, "нет строки с идущим отсчётом");
+      const el = row.querySelector("[data-due]");
+      const shown = sec(el.querySelector(".sla-t").textContent);
+      // Таймер сервера — тот, чей срок у отсчёта: в строке их может быть два (закрытие и удержание)
+      const inc = await stand.get(`/operator/incidents/${encodeURIComponent(row.dataset.id)}`);
+      const server = [inc.timer, inc.holdTimer].find((x) => x && Date.parse(x.dueAt) === Number(el.dataset.due));
+      expect(server, "у сервера нет таймера с таким сроком");
+      const left = Math.floor(server.remainingMs / 1000);
+      expect(Math.abs(shown - left) <= 3, `в строке ${shown} с, у сервера ${left} с`);
+      return `в строке ${shown} с, у сервера ${left} с`;
     });
 
     await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
