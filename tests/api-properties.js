@@ -359,4 +359,7 @@
     for (const inc of FX.incidents) bad.push(...(await scenarioOf(env, inc.guid)));
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });
+
+  // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
+  IMTest.loaded("api-properties.js");
 })();

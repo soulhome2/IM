@@ -228,4 +228,7 @@
     const linked = await env.card(a.guid);
     assert.eq([linked.state, values(linked.scenario), linked.readOnly], ["closed", before, true], "привязанный закрыт, прохождение то же, на просмотр");
   });
+
+  // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
+  IMTest.loaded("api-junction.js");
 })();

@@ -3197,4 +3197,7 @@
     const [reset] = await read("0", 1);
     assert.eq(reset && reset.type, "stream.reset", "id нет в истории — stream.reset");
   });
+
+  // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
+  IMTest.loaded("api-scenarios.js");
 })();

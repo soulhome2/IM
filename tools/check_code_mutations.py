@@ -328,6 +328,8 @@ MUTATIONS = [
     ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
     # «Переоткрыть» снимает закрытие целиком (RULE-103)
     ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
+    # Файл тестов с ошибкой в первой строке не загрузился — прогон красный, а не без его тестов (PROC-53)
+    ("test-file-load-error", "../tests/api-junction.js", "/* Тесты API стыка машины инцидента", "}\n/* Тесты API стыка машины инцидента", "api"),
     # Системные ветки (PROC-49): молчание возвращает в очередь и отложенное перерывом; адресат вышел без дежурной
     # группы — реакция продолжается с того же срока
     ("idle-release-skips-break", "workflow.js", '[\n              "break",\n              "no_link"\n            ]', '[\n              "no_link"\n            ]', "api"),

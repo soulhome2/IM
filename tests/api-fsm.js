@@ -430,4 +430,7 @@
       .map((t) => t.id)))].sort();
     assert.eq(Object.keys(CONTINUING).sort(), continuing, "ручные переходы, после которых таймер продолжается, — в наборе CONTINUING");
   });
+
+  // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
+  IMTest.loaded("api-fsm.js");
 })();

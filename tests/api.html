@@ -4,6 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Тесты API МИ</title>
+    <script>
+      // Ошибки загрузки скриптов страницы — провал прогона, а не молча пропавшие тесты (PROC-53): синтаксис и
+      // исключения при выполнении файла, и файл, который не загрузился (событие ресурса ловится на погружении)
+      window.IM_LOAD_ERRORS = [];
+      window.addEventListener(
+        "error",
+        (e) => {
+          const src = e.target && e.target.src;
+          window.IM_LOAD_ERRORS.push(src ? `${src.split("/").pop()} не загрузился` : `${(e.filename || "").split("/").pop()}:${e.lineno} ${e.message}`);
+        },
+        true
+      );
+    </script>
     <style>
       body { margin: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
       pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }

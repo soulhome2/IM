@@ -283,6 +283,14 @@
     // быстрее: чтобы поймать порчу, хватает одного упавшего теста, PROC-17); ?first=<имя теста> — он первым,
     // потом остальные по порядку (мутации кода: первым — тест, поймавший порчу в прошлый раз). Тесты
     // независимы — каждый со сброса стенда, поэтому порядок на итог не влияет
+    // Файлы тестов загрузились целиком: каждый в конце объявляет себя (loaded), список — теги <script> страницы;
+    // упавший при загрузке файл не объявится, и его тесты не пропадут молча (PROC-53)
+    const files = [...document.scripts].map((x) => (x.getAttribute("src") || "").split("/").pop()).filter((n) => /^api-.+\.js$/.test(n));
+    const broken = files.filter((n) => !declared.has(n)).map((n) => `${n} не загрузился целиком`).concat(window.IM_LOAD_ERRORS || []);
+    if (broken.length) {
+      failed += 1;
+      lines.push(`FAIL  Файлы тестов загрузились — ${broken.join("; ")}`);
+    } else lines.push(`PASS  Файлы тестов загрузились — ${files.length}`);
     const params = new URLSearchParams(location.search);
     const only = params.get("only");
     const failfast = params.has("failfast");
@@ -327,12 +335,15 @@
       lines.push(`FAIL  Каждая операция контракта покрыта тестами — без тестов: ${uncovered.join(", ")}`);
     } else lines.push(`PASS  Каждая операция контракта покрыта тестами — ${ops.length - ops.filter((op) => NOT_COVERED.test(op)).length} операций`);
     lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы и правка справочника приоритетов вне прототипа`);
-    const total = tests.length + 2;
+    const total = tests.length + 3;
     const summary = failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`;
     finish(lines, summary, failed);
   }
 
   // Адрес сервера по сети (петля или бэкенд); встроенный — null: тесты протокола потока идут только по сети
   const baseUrl = apiBase === "loopback" ? new URL("loopback-api", location.href).href : apiBase || null;
-  window.IMTest = { test, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase), baseUrl };
+  const declared = new Set();
+  const loaded = (name) => declared.add(name);
+
+  window.IMTest = { test, loaded, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase), baseUrl };
 })();
