@@ -29,6 +29,7 @@ const MUTATIONS = [
   ["active-limit", "лимит активных пропускает лишний", "countMine(me, 'in_progress', incident.id) < limits.maxActive\"", "countMine(me, 'in_progress', incident.id) <= limits.maxActive\""],
   ["relink-off", "привязанные объединяемого новому основному не переходят", "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"", "\"in\": \"[]\""],
   ["scenario-ignored", "объединяются инциденты разных сценариев", "\"expr\": \"cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)\"", "\"expr\": \"true\""],
+  ["reopen-keeps-closed-at", "«Переоткрыть» оставляет время закрытия (RULE-103)", "{ \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"closedAt\", \"0\"] },", ""],
   ["processed-without-steps", "«Обработан» без пройденного сценария", "\"expr\": \"i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)\"", "\"expr\": \"true\""],
   ["lost-access-ignored", "потеря доступа адресата не замечается (RULE-71)", "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"", "\"expr\": \"addressee(incident) != '' && true == expected\""],
   ["pause-not-paused", "«на паузе» не отмечается — остаток теряется", `{"set": "${T}.paused", "value": "true"}, {"set": "${T}.due", "value": "0"}`, `{"set": "${T}.paused", "value": "false"}, {"set": "${T}.due", "value": "0"}`],

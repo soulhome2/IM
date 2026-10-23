@@ -321,6 +321,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
+    # «Переоткрыть» снимает закрытие целиком (RULE-103)
+    ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
     # «Передать», когда передать некому (BUG-85)
     ("transfer-nobody-allowed", "workflow.js", "\"expr\": \"transferTargets().exists(", "\"expr\": \"true || transferTargets().exists(", "api"),
     # Ключ повтора и версии отмеченных (BUG-84)

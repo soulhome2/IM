@@ -999,6 +999,9 @@
     assert.eq(c.state, "in_progress", "состояние");
     assert.eq(c.owner.id, ME, "владелец");
     assert.eq(c.closeResultId, null, "результат очищен");
+    // Закрытие снято целиком — время и комментарий тоже; прошлое закрытие — в журнале (RULE-103)
+    assert.eq([c.closedAt, c.result], [null, null], "время и комментарий закрытия сняты");
+    assert.ok(c.journal.some((j) => j.templateKey === "workflow.journal.reopen"), "переоткрытие — в журнале");
     assert.eq(c.slaBreached, done.slaBreached, "отметка нарушения не сбрасывается");
     const other = (await env.all("done"))[0];
     await env.advance(W.limits.reopenWindowMin * 60 + 60);

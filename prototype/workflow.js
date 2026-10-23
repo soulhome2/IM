@@ -1860,6 +1860,30 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "result",
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closedAt",
+            "0"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closedBy",
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
           "fn": "restartTimer",
           "args": [
             "resolution",

@@ -72,6 +72,8 @@
       if ((inc.state === "in_progress" || inc.state === "on_hold") && (!inc.owner || inc.assignmentGroup)) say(inc, "в работе — без владельца-человека или с группой");
       if ((inc.state === "on_hold") !== Boolean(inc.holdReasonId)) say(inc, "причина удержания не совпадает с состоянием");
       if ((inc.state === "closed") !== Boolean(inc.closeResultId)) say(inc, "результат закрытия не совпадает с состоянием");
+      // Время закрытия — только у закрытого: «Переоткрыть» снимает закрытие целиком (RULE-103)
+      if ((inc.state === "closed") !== Boolean(inc.closedAt)) say(inc, "время закрытия не совпадает с состоянием");
       // Владелец закрытого — тот, кто закрыл, и закрытого вместе с основным тоже (§2.1, BUG-89)
       if (inc.state === "closed" && (!inc.owner || inc.owner.kind !== "operator" || inc.assignmentGroup)) say(inc, "у закрытого нет владельца-человека");
       const t = inc.timer;

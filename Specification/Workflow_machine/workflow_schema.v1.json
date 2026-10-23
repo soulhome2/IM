@@ -693,6 +693,9 @@
         { "kind": "transactional", "fn": "clearLink", "args": ["workflow.journal.reopen_unlinked", "workflow.journal.linked_reopened"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeResultId", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["result", "''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "0"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closedBy", "''"] },
         { "kind": "transactional", "fn": "restartTimer", "args": ["resolution", "limits.reopenResolutionSec"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] }
       ],

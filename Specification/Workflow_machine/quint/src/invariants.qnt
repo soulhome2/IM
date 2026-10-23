@@ -61,7 +61,12 @@
   val levelBounded = INCIDENTS.forall(i => incOf(i).escalationLevel >= 0 and incOf(i).escalationLevel <= settings.escalation.maxLevel)
 
   // 5. Результат закрытия задан ⇔ «Закрыто» (§2.2)
-  val closeResultIffClosed = INCIDENTS.forall(i => (incOf(i).closeResultId != NOBODY) iff (incOf(i).state == "closed"))
+  //    Закрытие снимается «Переоткрыть» целиком: время, закрывший и комментарий — только у закрытого (RULE-103)
+  val closeResultIffClosed = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    val closed = x.state == "closed"
+    all { (x.closeResultId != NOBODY) iff closed, (x.closedAt != 0) iff closed, (x.closedBy != NOBODY) iff closed, closed or x.result == "" }
+  })
 
   // 6. По инциденту готово не больше одного перехода по таймеру (§14.3)
   val timerTransitionsExclusive = INCIDENTS.forall(i => ofTrigger("timer").select(t => autoReady(t, i)).length() <= 1)
