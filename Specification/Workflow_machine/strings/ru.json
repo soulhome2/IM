@@ -168,6 +168,7 @@
   "workflow.error.test.no_fixture": "Нет эталонного набора {name}",
   "workflow.error.test.no_operator": "Нет оператора {id}",
   "workflow.error.test.clock_backwards": "Время назад не идёт",
+  "workflow.error.test.clock_seconds": "Сдвиг часов — целое число секунд",
   "workflow.category.pending": "Ожидают",
   "workflow.category.active": "В работе",
   "workflow.category.done": "Завершены",

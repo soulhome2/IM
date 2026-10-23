@@ -168,6 +168,7 @@
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
   "workflow.error.test.clock_backwards": "Time does not go backwards",
+  "workflow.error.test.clock_seconds": "The clock shift is a whole number of seconds",
   "workflow.category.pending": "Waiting",
   "workflow.category.active": "In progress",
   "workflow.category.done": "Finished",

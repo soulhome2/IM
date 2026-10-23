@@ -1701,7 +1701,9 @@
           "POST",
           "/test/clock",
           (p, q, body) => {
-            const sec = Number(body.advanceSec) || 0;
+            // advanceSec — целое, не меньше 0, обязательно (контракт, BUG-99)
+            const sec = body.advanceSec;
+            if (!Number.isInteger(sec)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.clock_seconds"]);
             if (sec < 0) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.clock_backwards"]);
             if (clock.frozenAt != null) clock.frozenAt += sec * 1000;
             else clock.offset += sec * 1000;

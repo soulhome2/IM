@@ -3797,6 +3797,9 @@ window.IM_WORKFLOW = {
     "workflow.error.test.clock_backwards": {
       "vars": []
     },
+    "workflow.error.test.clock_seconds": {
+      "vars": []
+    },
     "workflow.error.test.bad_incident": {
       "vars": []
     },

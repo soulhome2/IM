@@ -1309,6 +1309,7 @@
     "workflow.error.test.no_fixture": { "vars": ["name"] },
     "workflow.error.test.no_operator": { "vars": ["id"] },
     "workflow.error.test.clock_backwards": { "vars": [] },
+    "workflow.error.test.clock_seconds": { "vars": [] },
     "workflow.error.test.bad_incident": { "vars": [] },
     "workflow.journal.timer_overridden": { "vars": ["timer", "transition"] },
     "workflow.label.unassigned": { "vars": [] },

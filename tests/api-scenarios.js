@@ -1785,6 +1785,17 @@
     assert.ok(two.actions.find((a) => a.id === "close").enabled, "«Закрыть» доступна обоим");
   });
 
+  test("Стенд: /test/clock по контракту — без advanceSec, дробное, не число или отрицательное — 422, часы не двигаются (BUG-99)", async () => {
+    const env = await makeEnv();
+    for (const body of [{}, { advanceSec: 0.5 }, { advanceSec: "abc" }, { advanceSec: -1 }]) {
+      const res = await env.call("POST", "/test/clock", body);
+      assert.status(res, 422, "FORM_FIELD_REQUIRED", `advanceSec: ${JSON.stringify(body.advanceSec)}`);
+    }
+    const ok = await env.call("POST", "/test/clock", { advanceSec: 0 });
+    assert.status(ok, 200, null, "advanceSec: 0");
+    assert.eq(Date.parse(ok.body.now), env.now, "часы не сдвинулись");
+  });
+
   test("Пустая выборка: explicit без отмеченных — 422; пустой результат — 200 без действий; сервер не падает (§11, BUG-98)", async () => {
     const env = await makeEnv();
     for (const body of [{ mode: "explicit", incidentGuids: [] }, { mode: "explicit" }]) {
