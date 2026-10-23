@@ -1046,6 +1046,31 @@
     assert.status(await env.act(other.guid, "reopen", { comment: "x" }), 403, "REOPEN_WINDOW_EXPIRED", "после срока переоткрытия");
   });
 
+  test("Переоткрыть после нарушения закрытия и «Массового сбоя»: нарушения те же, причина сбоя снята, норматив закрытия — полный или из настройки (§6.1, RULE-103, PROC-48)", async () => {
+    const full = W.timers.find((x) => x.id === "resolution").byPriority[TOP];
+    // Второй стенд — с нормативом после переоткрытия из настройки (limits.reopenResolutionSec)
+    for (const reopenSec of [null, 240]) {
+      const env = await makeEnv(reopenSec ? { workflowPatch: { limits: { reopenResolutionSec: reopenSec } } } : undefined);
+      const inc = await newFire(env);
+      assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+      await env.advance(full + GRACE + 1);
+      const before = await env.card(inc.guid);
+      assert.ok(before.breaches.some((b) => b.kind === "resolution"), "нарушение закрытия записано");
+      const closed = await env.act(inc.guid, "close", { resultId: "mass", causeId: "power", comment: "сбой питания" });
+      assert.status(closed, 200, null, "закрыть «Массовым сбоем»");
+      assert.eq(closed.body.incident.closeCauseId, "power", "причина сбоя записана");
+      const res = await env.act(inc.guid, "reopen", { comment: "вернулись" });
+      assert.status(res, 200, null, "переоткрыть");
+      const c = res.body.incident;
+      assert.eq(c.breaches, before.breaches, "нарушения те же — переоткрытием просрочку не спрятать");
+      assert.eq(c.slaBreached, true, "отметка нарушения осталась");
+      assert.eq(c.closeCauseId, null, "причина сбоя снята вместе с закрытием (RULE-103)");
+      assert.eq([c.timer && c.timer.id, c.timer && c.timer.running], ["resolution", true], "идёт норматив закрытия");
+      const want = (reopenSec || full) * 1000;
+      assert.near(Date.parse(c.timer.dueAt) - env.now, want, 1000, reopenSec ? "срок — из reopenResolutionSec" : "срок — полный норматив, а не остаток");
+    }
+  });
+
   /* ===== Автоэскалация и нормативы (§4, §9) ===== */
 
   test("Автоэскалация по уровням и потолок: адресаты уровней, затем нарушение реакции без новой передачи", async () => {

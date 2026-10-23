@@ -149,6 +149,7 @@
     const env = await makeEnv(maxActive === W.limits.maxActive ? undefined : { workflowPatch: { limits: { maxActive } } });
     const history = [];
     const versions = new Map();
+    const breachCount = new Map();
     const journals = new Map();
     const roles = new Map(FX.people.operators.map((o) => [o.id, o.roles.slice()]));
     let checked = 0;
@@ -237,6 +238,9 @@
         const v = Number(inc.version);
         if (v < (versions.get(inc.guid) || 0)) bad.push(`${inc.guid}: версия уменьшилась`);
         versions.set(inc.guid, v);
+        // Нарушения не стираются ничем — ни закрытием, ни переоткрытием: просрочку не спрятать (§4, PROC-48)
+        if (inc.breaches.length < (breachCount.get(inc.guid) || 0)) bad.push(`${inc.guid}: нарушений стало меньше — ${inc.breaches.length} после ${breachCount.get(inc.guid)}`);
+        breachCount.set(inc.guid, inc.breaches.length);
       });
       if (step % 20 === 0) {
         const counters = await env.ok("GET", "/operator/incidents/counters");

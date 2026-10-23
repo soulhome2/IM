@@ -328,6 +328,10 @@ MUTATIONS = [
     ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
     # «Переоткрыть» снимает закрытие целиком (RULE-103)
     ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
+    # «Переоткрыть» — норматив закрытия заново: полный или из настройки, причина сбоя снимается (PROC-48)
+    ("reopen-resolution-continues", "workflow.js", '"fn": "restartTimer",\n          "args": [\n            "resolution",\n            "limits.reopenResolutionSec"\n          ]', '"fn": "startTimer",\n          "args": [\n            "resolution"\n          ]', "api"),
+    ("reopen-setting-ignored", "workflow.js", '"resolution",\n            "limits.reopenResolutionSec"', '"resolution",\n            "0"', "api"),
+    ("reopen-keeps-cause", "workflow.js", '"closeCauseId",\n            "\'\'"', '"closeCauseId",\n            "closeCauseId"', "api"),
     # «Передать», когда передать некому (BUG-85)
     ("transfer-nobody-allowed", "workflow.js", "\"expr\": \"transferTargets().exists(", "\"expr\": \"true || transferTargets().exists(", "api"),
     # Ключ повтора и версии отмеченных (BUG-84)
