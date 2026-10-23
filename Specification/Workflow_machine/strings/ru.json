@@ -238,7 +238,7 @@
   "workflow.form.reject.field.comment.placeholder": "Почему не принимаете",
   "workflow.form.close.title": "Закрытие без обработки",
   "workflow.form.close.confirm": "Закрыть без обработки",
-  "workflow.form.close.note.1": "Сценарий заполнен: {filledSteps} из {totalSteps}. Результат уйдёт в AxxonData.",
+  "workflow.form.close.note.1": "Сценарий заполнен: {filledSteps} из {totalSteps}.",
   "workflow.form.close.field.resultId": "Результат",
   "workflow.form.close.field.resultId.placeholder": "Выберите результат",
   "workflow.form.close.field.causeId": "Причина сбоя",

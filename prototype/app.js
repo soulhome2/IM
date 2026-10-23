@@ -744,7 +744,6 @@
     select.title = t("Язык интерфейса");
     applyStatic();
     applyTheme(state.themeMode);
-    renderAutoLevels();
     renderTypeFilters();
     renderAll();
     // Окно «Выделить по фильтру» — тоже на новом языке, даже закрытое
@@ -1577,9 +1576,9 @@
     // Пояснение в карточке — точнее, чем у машины: останется ли сценарий незавершённым
     if (unprocessed) {
       const prog = stepProgress(ev);
-      if (surface === "card" && runDone(ev)) note = t("Сценарий пройден, но инцидент закроется выбранным результатом, а не «Обработан». Результат уйдёт в AxxonData.");
+      if (surface === "card" && runDone(ev)) note = t("Сценарий пройден, но инцидент закроется выбранным результатом, а не «Обработан».");
       else if (surface === "card" && prog.total)
-        note = t("Сценарий заполнен: {filled} из {total} — останется незавершённым. Результат уйдёт в AxxonData.", { filled: prog.filled, total: prog.total });
+        note = t("Сценарий заполнен: {filled} из {total} — останется незавершённым.", { filled: prog.filled, total: prog.total });
     }
     state.selectedId = ev.guid;
     showForm({ id, eventId: ev.guid, ev, surface }, Object.assign({}, def, { fields, note }));
@@ -1630,13 +1629,6 @@
     }
     if (tr.form) return openDialog(id, ev, surface);
     return runTransition(id, ev, {}, surface);
-  }
-
-  // Кому уходит автоэскалация — для сведения, в меню оператора (§9)
-  function renderAutoLevels() {
-    $("autoLevels").textContent = WORKFLOW.escalation.levels
-      .map((l) => t("ур. {lvl} — {who}", { lvl: l.level, who: actorName(l.target) }))
-      .join(", ");
   }
 
   function escapeHtml(value) {
@@ -2342,7 +2334,7 @@
     const d = state.drafts.get(draftKey(ev, SUMMARY));
     return `${head}
       <p class="step-ask">${te("Сценарий пройден до конца. Инцидент закроется с результатом «Обработан».")}</p>
-      <p class="step-q">${te("Результат уйдёт в AxxonData. Если нужен другой результат — «Закрыть без обработки».")}</p>
+      <p class="step-q">${te("Если нужен другой результат — «Закрыть без обработки».")}</p>
       <textarea class="summary-comment" rows="3" data-summary-comment placeholder="${te("Итог обработки для отчёта — необязательно")}" ${
         ok ? "" : "disabled"
       }>${escapeHtml(d ? d.value : "")}</textarea>
@@ -4148,7 +4140,6 @@
     // Опубликована новая схема: подписи, кнопки, фильтры и порядок очереди — по ней (§14.6)
     if (msg.type === "workflow.schema_published") {
       return loadWorkflow().then(() => {
-        renderAutoLevels();
         renderTypeFilters();
             reload();
       });
