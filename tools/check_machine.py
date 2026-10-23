@@ -127,9 +127,13 @@ def check_workflow(w, err):
         if item.get("causeCatalog") and item["causeCatalog"] not in catalogs:
             err.append(f"результат {rid}: нет справочника {item['causeCatalog']}")
 
-    for x in w["validation"]["claimWithoutExitPermission"]["requiresAnyOf"]:
+    exit_rule = w["validation"]["claimWithoutExitPermission"]
+    for x in exit_rule["requiresAnyOf"] + exit_rule.get("appliesTo", []) + exit_rule.get("disables", []):
         if x not in perms:
             err.append(f"проверка §10.3: нет права {x}")
+    # Без выхода из карточки не действует ни одно право входа в работу — и взять, и принять (RULE-102)
+    for x in sorted(set(exit_rule.get("appliesTo", [])) - set(exit_rule.get("disables", []))):
+        err.append(f"проверка §10.3: без выхода из карточки право {x} должно гаснуть (disables)")
     for s in w["validation"].get("typicalPermissionSets", {}).get("items", []):
         for x in s["permissions"]:
             if x not in perms:
@@ -972,7 +976,7 @@ def itertools_pairs(items):
 def check_work_rights(w, err):
     """В «В работе» — только по праву взятия или принятия; у типового набора прав с ними — выход
     из карточки (§10.3, RULE-36, RULE-38)."""
-    enter = {"incident:claim", "incident:accept"}
+    enter = set(w["validation"]["claimWithoutExitPermission"]["appliesTo"])
     for t in w["transitions"]:
         if t["trigger"] == "manual" and t.get("to") == "in_progress":
             rights = {g["args"][0] for g in t["guards"] if g["fn"] == "hasPermission"}
