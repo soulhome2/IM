@@ -541,16 +541,22 @@
     assert.eq((await env.card(inc.guid)).state, "in_progress", "инцидент у меня");
   });
 
-  test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь (§8.1)", async () => {
+  test("Выход из МИ без дежурной группы: адресованный лично возвращается в общую очередь, реакция продолжается с того же срока (§8.1, §6.2, PROC-49)", async () => {
     // Свой набор данных: оператор стенда не состоит ни в одной группе
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
     const api = (await standWith({ fixture })).api;
     const guid = fixture.incidents.find((i) => i.number === "INC-1843").guid;
+    const before = await api.get(`/operator/incidents/${enc(guid)}`);
+    assert.eq([before.state, before.timer && before.timer.id], ["pending_acceptance", "reaction"], "ждёт моего принятия, идёт реакция");
+    // Минута реакции прошла: перезапуск дал бы другой срок, чем продолжение
+    await api.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+    assert.status(await api.raw("POST", "/test/clock", { advanceSec: 60 }), 200, null, "минута прошла");
     const res = await api.raw("PUT", "/operator/session/agent-state", { agentState: "offline" });
     assert.status(res, 200, null, "выйти");
     const card = await api.get(`/operator/incidents/${enc(guid)}`);
     assert.eq([card.state, card.owner, card.assignmentGroup], ["new", null, null], "в общей очереди, ничей");
+    assert.eq([card.timer && card.timer.id, card.timer && card.timer.dueAt], ["reaction", before.timer.dueAt], "реакция продолжается с того же срока, а не заново");
     assert.ok(card.journal.some((j) => /Адресат вышел/.test(jt(j))), "запись в журнале");
   });
 
@@ -1253,6 +1259,27 @@
     assert.eq(await silent(W.session.idleReleaseSec - W.session.idleHoldSec), ["system_release_idle"], "после idleReleaseSec — возврат в очередь");
     c = await env.card(inc.guid);
     assert.eq([c.state, c.owner], ["new", null], "снова новый, ничей");
+  });
+
+  test("Перерыв и молчание (§12.3, PROC-49): отложенный перерывом возвращается в очередь через idleReleaseSec молчания, раньше срока перерыва", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id }), 200, null, "на перерыв");
+    let c = await env.card(inc.guid);
+    assert.eq([c.state, c.holdReasonId], ["on_hold", "break"], "отложен с причиной «Перерыв оператора»");
+    // Вкладку закрыли: часы идут без heartbeat. Порог молчания короче срока перерыва — срабатывает он
+    const breakSec = W.reasonCatalogs.hold.items.find((r) => r.id === "break").maxMinutes * 60;
+    assert.ok(W.session.idleReleaseSec < breakSec, "порог молчания короче срока перерыва");
+    const silent = async (sec) => {
+      const res = await env.call("POST", "/test/clock", { advanceSec: sec });
+      assert.status(res, 200, null, "сдвиг часов");
+      return res.body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    };
+    assert.eq(await silent(W.session.idleReleaseSec - 10), [], "до idleReleaseSec ничего не происходит");
+    assert.eq(await silent(20), ["system_release_idle"], "после idleReleaseSec — возврат в очередь");
+    c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], "снова новый, ничей, без причины удержания");
   });
 
   test("У «Нет связи» срока удержания нет: порог возврата хоть час — нарушения удержания за обрыв связи нет (§4, правило 7; §12.3, RULE-116)", async () => {

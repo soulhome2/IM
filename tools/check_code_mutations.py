@@ -328,6 +328,10 @@ MUTATIONS = [
     ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
     # «Переоткрыть» снимает закрытие целиком (RULE-103)
     ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
+    # Системные ветки (PROC-49): молчание возвращает в очередь и отложенное перерывом; адресат вышел без дежурной
+    # группы — реакция продолжается с того же срока
+    ("idle-release-skips-break", "workflow.js", '[\n              "break",\n              "no_link"\n            ]', '[\n              "no_link"\n            ]', "api"),
+    ("signed-out-queue-restarts-reaction", "workflow.js", '"fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', '"fn": "startTimer",\n          "args": [\n            "reaction"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', "api"),
     # «Переоткрыть» — норматив закрытия заново: полный или из настройки, причина сбоя снимается (PROC-48)
     ("reopen-resolution-continues", "workflow.js", '"fn": "restartTimer",\n          "args": [\n            "resolution",\n            "limits.reopenResolutionSec"\n          ]', '"fn": "startTimer",\n          "args": [\n            "resolution"\n          ]', "api"),
     ("reopen-setting-ignored", "workflow.js", '"resolution",\n            "limits.reopenResolutionSec"', '"resolution",\n            "0"', "api"),
