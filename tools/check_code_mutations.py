@@ -152,7 +152,8 @@ MUTATIONS = [
     ("owner-group-ignored", "workflow.js", "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"", "\"expr\": \"true\"", "api"),
     ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
     # Срок «Нет связи» — из порогов молчания (RULE-118, RULE-129)
-    ("no-link-deadline-off", "workflow.js", "x.holdReasonId == 'no_link' ? session.idleReleaseSec - session.idleHoldSec : ", "", "api"),
+    ("no-link-deadline-off", "workflow.js", "rs[0].deadlineFromIdle ? (", "false ? (", "api"),
+    ("no-link-deadline-release-only", "workflow.js", "session.idleReleaseSec - session.idleHoldSec", "session.idleReleaseSec", "api"),
     # Простой сервиса на стенде (RULE-119): при старте молчание оператора считается заново (RULE-113)
     ("service-restart-ignored", "server.js", "if (body.serviceRestart === true) lastHeartbeat = now();", "", "api"),
     # Карточку увели (BUG-105, BUG-117): событие — только при открытой карточке; свой перерыв и выход её не уводят — в машине

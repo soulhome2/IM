@@ -1464,6 +1464,9 @@
       const key = window.IM_WORKFLOW.adminSettings.tabs.find((x) => x.id === "escalation").items.find((i) => i.path === "escalation.onResolutionOverdue").values[window.IM_WORKFLOW.escalation.onResolutionOverdue];
       const expected = window.IM_STRINGS.ru[key];
       expect(overdue && overdue.cells[1].textContent.trim() === expected, `«Просрочка закрытия»: «${overdue && overdue.cells[1].textContent.trim()}» вместо «${expected}»`);
+      // Срок «Нет связи» — из порогов молчания, а не «без срока» (deadlineFromIdle, BUG-119)
+      await click($("adminTabs").querySelector('[data-admin-tab="reasons"]'));
+      expect(/Нет связи с оператором \(порог «в очередь» минус «отложить»\)/.test($("adminTable").textContent), "срок «Нет связи» на экране — не из порогов молчания");
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
       expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
       // Связи камер многие-ко-многим (§19.1, RULE-70): название, устройства, камеры — как в наборе

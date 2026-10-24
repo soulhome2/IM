@@ -1396,17 +1396,18 @@
   });
 
   test("У «Нет связи» нарушения удержания нет, срок — из порогов молчания: оператор молчит — в очередь ровно по порогу возврата при любых порогах (§4, правило 7; §12.3, RULE-116, RULE-118, RULE-129)", async () => {
-    for (const [holdSec, releaseSec] of [[300, 3600], [900, 1200]]) {
+    // Порог удержания не меньше порога возврата — срок 0, в очередь сразу по молчанию, без срока причины (RULE-132)
+    for (const [holdSec, releaseSec] of [[300, 3600], [900, 1200], [1200, 300]]) {
       const env = await makeEnv({ workflowPatch: { session: Object.assign({}, W.session, { idleHoldSec: holdSec, idleReleaseSec: releaseSec }) } });
       const inc = await newFire(env);
       assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
       const at = {};
-      for (let sec = 60; sec <= releaseSec + 60; sec += 60) {
+      for (let sec = 60; sec <= Math.max(holdSec, releaseSec) + 60; sec += 60) {
         const fired = (await env.call("POST", "/test/clock", { advanceSec: 60 })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
         fired.forEach((t) => (at[t] = at[t] || sec));
       }
       const why = `пороги ${holdSec}/${releaseSec}: ${JSON.stringify(at)}`;
-      assert.eq([at.system_hold_idle, at.system_release_idle], [holdSec, releaseSec], `отложен по порогу удержания, в очередь — по порогу возврата; ${why}`);
+      assert.eq([at.system_hold_idle, at.system_release_idle], [holdSec, Math.max(holdSec, releaseSec)], `отложен по порогу удержания, в очередь — по порогу возврата; ${why}`);
       assert.ok(!at.no_link_hold_release && !at.hold_overdue, `ни срока причины раньше порога, ни нарушения; ${why}`);
       assert.eq((await env.card(inc.guid)).breaches.filter((b) => b.kind === "hold").length, 0, "нарушения удержания нет");
     }
@@ -1416,12 +1417,15 @@
     const env = await makeEnv();
     const inc = await newFire(env);
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const claimedAt = env.now;
     // Молчание дольше порога удержания: отложен «нет связи»
     const silent = (await env.call("POST", "/test/clock", { advanceSec: W.session.idleHoldSec + 60 })).body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
     assert.eq(silent, ["system_hold_idle"], "отложен по молчанию");
     const held = await env.card(inc.guid);
     assert.eq([held.state, held.holdReasonId], ["on_hold", "no_link"], "отложен «нет связи»");
     assert.ok(held.holdTimer && held.holdTimer.dueAt, "срок удержания идёт");
+    // Срок — порог возврата минус порог удержания от момента откладывания: ровно порог возврата от взятия (RULE-129)
+    assert.eq(Date.parse(held.holdTimer.dueAt) - claimedAt, W.session.idleReleaseSec * 1000, "срок «нет связи» — порог возврата минус порог удержания");
     // Связь вернулась: признак активности идёт, инцидент оператор не трогает
     const fired = (await env.advance(Math.ceil((Date.parse(held.holdTimer.dueAt) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
     // Дальше реакция идёт заново: у пожара короткий норматив, автоэскалация может успеть

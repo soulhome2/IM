@@ -35,7 +35,7 @@ const MUTATIONS = [
   ["processed-without-steps", "«Обработан» без пройденного сценария", "\"expr\": \"i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)\"", "\"expr\": \"true\""],
   ["lost-access-ignored", "потеря доступа адресата не замечается (RULE-71)", "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"", "\"expr\": \"addressee(incident) != '' && true == expected\""],
   ["pause-not-paused", "«на паузе» не отмечается — остаток теряется", `{"set": "${T}.paused", "value": "true"}, {"set": "${T}.due", "value": "0"}`, `{"set": "${T}.paused", "value": "false"}, {"set": "${T}.due", "value": "0"}`],
-  ["no-link-no-deadline", "у «Нет связи» снова нет срока: связь вернулась — отложенный лежит бесконечно (RULE-118, RULE-129)", "x.holdReasonId == 'no_link' ? session.idleReleaseSec - session.idleHoldSec : ", ""],
+  ["no-link-no-deadline", "у «Нет связи» снова нет срока: связь вернулась — отложенный лежит бесконечно (RULE-118, RULE-129)", "rs[0].deadlineFromIdle ? (", "false ? ("],
   ["hold-idle-threshold", "«нет связи» у «В работе» — по порогу возврата в очередь, а не удержания (П2)", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleHoldSec\"] }", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleReleaseSec\"] }"],
   ["core-timer-late", "ядро: часы не останавливаются в конце окна — переход по таймеру опаздывает (П1)", ".union(ds.map(d => d + GRACE_MS))", "", "core.qnt"],
   ["core-window-no-breach", "ядро: ручное действие в окне отменяет переход по таймеру без нарушения (RULE-63, BUG-62)", "windowBreach(t.id, { ...ctx(DISPATCHER, DISPATCHER, NO_FORM, \"\"), deadline: before.timers.get(t.timer).due, before: before }, i, w)", "w", "core.qnt"],

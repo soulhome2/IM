@@ -8,6 +8,7 @@ window.IM_DICT_UI = {
     "Отсоединить все": "Detach all",
     "Действие недоступно": "Action unavailable",
     "без срока": "no deadline",
+    "порог «в очередь» минус «отложить»": "“to the queue” threshold minus “put on hold”",
     "Нет связи с сервером": "No connection to the server",
     "Отсоединено: {n} — теперь «{state}»": "Detached: {n} — now «{state}»",
     "Одинаковый сценарий": "Same scenario",

@@ -24,9 +24,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, "Specification", "Workflow_machine")
 
 
+def no_duplicate_keys(pairs):
+    """Повтор ключа в объекте JSON — ошибка чтения: из двух значений тихо осталось бы последнее, а строгий
+    разборщик бэкенда такой файл не примет (BUG-120)."""
+    keys = [k for k, _ in pairs]
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        raise json.JSONDecodeError(f"ключ повторяется в объекте: {', '.join(dup)}", "", 0)
+    return dict(pairs)
+
+
 def load(name):
     with open(os.path.join(DIR, name), encoding="utf-8") as f:
-        return json.load(f)
+        return json.load(f, object_pairs_hook=no_duplicate_keys)
 
 
 def duplicates(items):
@@ -110,6 +120,12 @@ def check_workflow(w, err):
             src = field.get("source", "")
             if src.startswith("reasonCatalog:") and src.split(":", 1)[1] not in catalogs:
                 err.append(f"форма {f['id']}: нет справочника {src}")
+
+    # Срок из порогов молчания (deadlineFromIdle) — вместо срока справочника: оба сразу — значение справочника
+    # молча не учитывалось бы (BUG-119)
+    for item in w["reasonCatalogs"].get("hold", {}).get("items", []):
+        if item.get("deadlineFromIdle") and item.get("maxMinutes") is not None:
+            err.append(f"причина удержания {item['id']}: срок из порогов молчания (deadlineFromIdle) — maxMinutes должен быть null")
 
     # Результат «Итога» (finish) — один и только с обязательными шагами: им закрывают пройденный сценарий (ARCH-08 в7)
     finishing = [i for i in w["reasonCatalogs"].get("close_result", {}).get("items", []) if i.get("finish")]
