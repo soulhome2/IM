@@ -91,10 +91,11 @@ def fast_reaction(w, sec=3):
 
 
 def escalate_to_my_group(w):
+    """Норматив уровня 2 длинный: иначе «Принять» пробы совпадает с потолком эскалации — тот меняет
+    версию инцидента, и принятие изредка получает 412 (сбой CI 2026-10-24)."""
     fast_reaction(w)
-    for lvl in w["escalation"]["levels"]:
-        lvl["reactionSec"] = 2
-    w["escalation"]["levels"][1].update(targetKind="group", target="grp-leads")
+    w["escalation"]["levels"][0]["reactionSec"] = 2
+    w["escalation"]["levels"][1].update(targetKind="group", target="grp-leads", reactionSec=60)
 
 
 def close_without_placeholder(w):
