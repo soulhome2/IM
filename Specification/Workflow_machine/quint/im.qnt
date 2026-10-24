@@ -3829,24 +3829,32 @@ module im {
     nondet perms = OPERATORS.setOfMaps(TYPICAL_PERMISSION_SETS).oneOf()
     initFrom(perms, OPERATORS.mapBy(a => INCIDENTS), OPERATORS)
   }
+  // Уровень эскалации с адресатом t: вид — по адресату (человек или дежурная группа)
+  pure def levelTo(l: Level, n: int, t: str): Level = { ...l, level: n, targetKind: if (GROUPS.contains(t)) "group" else "user", target: t }
   action initFrom(perms: str -> Set[str], access: str -> Set[str], grp: Set[str]): bool = {
     nondet grp2 = OPERATORS.powerset().oneOf()
     // Настройки, от которых зависят ветки автоматических переходов, — из машины (BRANCH_SETTINGS, PROC-43)
     nondet branch = BRANCH_SETTINGS.oneOf()
     nondet maxActive = Set(0, 1).oneOf()
     nondet maxOnHold = Set(0, 1).oneOf()
-    nondet level1 = OPERATORS.oneOf()
+    // Состав уровней эскалации и потолок (§8.3, PROC-74): два или три уровня, адресат каждого — любой человек или
+    // дежурная группа модели, потолок — от 1 до числа уровней; третий уровень — с нормативом второго
+    nondet t1 = TARGETS.oneOf()
+    nondet t2 = TARGETS.oneOf()
+    nondet t3 = TARGETS.oneOf()
+    nondet three = Set(false, true).oneOf()
     nondet starts = OPERATORS.setOfMaps(AGENT_STARTS).oneOf()
     val levels = MACHINE_SETTINGS.escalation.levels
+    val chosen = [levelTo(levels[0], 1, t1), levelTo(levels[1], 2, t2)].concat(if (three) [levelTo(levels[1], 3, t3)] else [])
+    nondet maxLevel = 1.to(chosen.length()).oneOf()
     val c = { perms: perms, access: access, members: Map(GROUP -> grp, GROUP2 -> grp2) }
     val w = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) }
     all {
       cfg' = c,
-      // Настройки — значения машины; перебираются ветки автоматики (withBranches) и лимиты, люди — люди модели:
-      // уровень 1 — человек, уровень 2 — дежурная группа h, алерты — группе g
+      // Настройки — значения машины; перебираются ветки автоматики (withBranches), лимиты и состав уровней
+      // эскалации, люди — люди модели; алерты — группе g
       settings' = withBranches({ ...MACHINE_SETTINGS,
-        escalation: { ...MACHINE_SETTINGS.escalation,
-          levels: [{ ...levels[0], targetKind: "user", target: level1 }, { ...levels[1], targetKind: "group", target: GROUP2 }] },
+        escalation: { ...MACHINE_SETTINGS.escalation, levels: chosen, maxLevel: maxLevel },
         alerts: { ...MACHINE_SETTINGS.alerts, targetKind: "group", target: GROUP },
         limits: { ...MACHINE_SETTINGS.limits, maxActive: maxActive, maxOnHold: maxOnHold },
       }, branch),

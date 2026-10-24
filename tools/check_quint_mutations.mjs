@@ -54,6 +54,8 @@ const MUTATIONS = [
   ["mass-foreign-on-hold", "«Массовый сбой» из чужого «Отложен» (§2.2, §6.1)", "\"ownerOnlyInStates\": [\"in_progress\", \"on_hold\"],", "\"ownerOnlyInStates\": [\"in_progress\"],"],
   ["break-skipped-by-escalation", "эскалация пропускает адресата на перерыве — он инцидент получает (§8.3, §12.1)", "\"expr\": \"agentState(who) != 'offline'\", \"$comment\": \"§12.1. Человек вошёл", "\"expr\": \"agentState(who) == 'ready'\", \"$comment\": \"§12.1. Человек вошёл"],
   ["reopen-no-window", "«Переоткрыть» после срока переоткрытия (§6.1, §10.1, BUG-31)", "\"expr\": \"now - incident.closedAt <= limits.reopenWindowMin * 60000\"", "\"expr\": \"true\""],
+  // Потолок эскалации (PROC-74, А1-03): видна только при maxLevel меньше числа уровней — состав уровней перебирает init
+  ["level-ceiling-ignored", "автоэскалация не смотрит на потолок maxLevel (§8.3)", "l.level > x.escalationLevel && l.level <= escalation.maxLevel && ", "l.level > x.escalationLevel && "],
 ];
 
 const args = process.argv.slice(2);

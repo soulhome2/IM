@@ -77,14 +77,16 @@ function permsActing(ps) {
   return ps.filter((p) => !(off && EXIT.disables.includes(p)));
 }
 
-// Машина с настройками истории: переключатели, лимиты, люди модели в уровнях эскалации и алертах
+// Машина с настройками истории: переключатели, лимиты, уровни эскалации и потолок, люди модели в алертах
 const machines = new Map();
 function machineFor(s) {
-  const key = JSON.stringify([s.escalation.enabled, s.escalation.onResolutionOverdue, s.escalation.levels.map((l) => l.target), s.limits.maxActive, s.limits.maxOnHold]);
+  const key = JSON.stringify([s.escalation.enabled, s.escalation.onResolutionOverdue, s.escalation.levels, s.escalation.maxLevel, s.limits.maxActive, s.limits.maxOnHold]);
   if (!machines.has(key)) {
     const w = JSON.parse(JSON.stringify(MACHINE));
     Object.assign(w.escalation, { enabled: s.escalation.enabled, onResolutionOverdue: s.escalation.onResolutionOverdue });
-    w.escalation.levels = w.escalation.levels.map((l, i) => Object.assign({}, l, { targetKind: s.escalation.levels[i].targetKind, target: s.escalation.levels[i].target }));
+    // Состав уровней и потолок — из истории: модель их перебирает (PROC-74)
+    w.escalation.levels = s.escalation.levels.map((l) => ({ level: l.level, targetKind: l.targetKind, target: l.target, reactionSec: l.reactionSec }));
+    w.escalation.maxLevel = s.escalation.maxLevel;
     Object.assign(w.alerts, { targetKind: s.alerts.targetKind, target: s.alerts.target });
     w.limits.maxActive = s.limits.maxActive || null;
     w.limits.maxOnHold = s.limits.maxOnHold || null;
