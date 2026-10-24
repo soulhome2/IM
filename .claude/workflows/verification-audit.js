@@ -3,7 +3,7 @@ export const meta = {
   description: 'Консилиум: хватает ли Quint и проверок для логики двух машин состояний — 5 аналитиков, 3 аудитора, итог',
   whenToUse: 'Аудит проверки логики машины инцидента и машины сценариев. Промпты — prompts/verification-pipeline-audit.md. args: {date: "ГГГГ-ММ-ДД"}',
   phases: [
-    { title: 'Аналитики', detail: 'А1–А5 независимо, каждый пишет a<N>.md' },
+    { title: 'Аналитики', detail: 'А1–А5 независимо, не больше трёх сразу, каждый пишет a<N>.md' },
     { title: 'Аудит', detail: 'три аудитора, утверждения поделены по вопросам' },
     { title: 'Консилиум', detail: 'итог из подтверждённого и таблица решений' },
   ],
@@ -59,13 +59,20 @@ const CONSILIUM = {
 const own = path => `Запиши ответ целиком в ${path} (каталог создай, если его нет). ` +
   'Больше ничего в репозитории не меняй и не коммить. Раздел «Как запускать» в файле промптов — для человека, пропусти его.'
 
+// Не больше трёх аналитиков сразу: пятеро вместе со своими quint и Chrome переполнили
+// память (14 ГБ), 2026-10-24 упал VS Code.
+const BATCH = 3
+
 phase('Аналитики')
-const analysts = (await parallel(ANALYSTS.map(a => () => agent(
-  `Ты — аналитик ${a.role}. Открой ${PROMPTS}: твои инструкции — блоки «Общая часть — всем агентам» ` +
-  `и «Аналитик», твоя роль — ${a.role}. Работай независимо: файлы других аналитиков в ${dir} не читай. ` +
-  own(`${dir}/${a.file}`),
-  { label: a.role, phase: 'Аналитики', schema: WRITTEN },
-)))).filter(Boolean)
+const analysts = []
+for (let i = 0; i < ANALYSTS.length; i += BATCH) {
+  analysts.push(...(await parallel(ANALYSTS.slice(i, i + BATCH).map(a => () => agent(
+    `Ты — аналитик ${a.role}. Открой ${PROMPTS}: твои инструкции — блоки «Общая часть — всем агентам» ` +
+    `и «Аналитик», твоя роль — ${a.role}. Работай независимо: файлы других аналитиков в ${dir} не читай. ` +
+    own(`${dir}/${a.file}`),
+    { label: a.role, phase: 'Аналитики', schema: WRITTEN },
+  )))).filter(Boolean))
+}
 
 if (analysts.length < ANALYSTS.length) {
   log(`Ответили ${analysts.length} из ${ANALYSTS.length} аналитиков — аудит идёт по тем, что есть`)
