@@ -2064,9 +2064,17 @@
         expect(off(b) && !b.disabled, "«Передать» не бледная или не в фокусе");
         why = b.title;
         expect(/Передать некому/.test(why), `причина: «${why}»`);
+        // Падает в CI изредка: что было на экране и не перерисовали ли кнопку до нажатия — в сообщении
+        const before = $("toasts").lastElementChild;
+        const attached = b.isConnected;
         await click(b);
         expect($("modalDialog").hidden, "форма с пустым списком открылась");
-        expect((($("toasts").lastElementChild || {}).textContent || "") === why, "по нажатию — не причина");
+        const last = $("toasts").lastElementChild;
+        const shown = [...$("toasts").children].map((x) => `«${x.textContent}»`).join(", ") || "нет";
+        expect(
+          ((last || {}).textContent || "") === why,
+          `по нажатию — не причина; кнопка на странице: ${attached ? "да" : "нет"}, новое уведомление: ${last && last !== before ? "да" : "нет"}, уведомления: ${shown}`
+        );
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);

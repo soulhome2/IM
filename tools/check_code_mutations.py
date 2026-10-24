@@ -470,23 +470,27 @@ MUTATIONS = [
 ]
 
 
-def chrome(url, profile, budget):
-    out = subprocess.run(
-        [
-            "google-chrome",
-            "--headless=new",
-            "--disable-gpu",
-            "--no-sandbox",
-            "--no-first-run",
-            f"--user-data-dir={profile}",
-            f"--virtual-time-budget={budget}",
-            "--dump-dom",
-            url,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=240,
-    )
+def chrome(url, profile, budget, limit):
+    # Не уложился в limit секунд — страницы нет: «тесты не запустились», а не упавший поток и потерянный итог
+    try:
+        out = subprocess.run(
+            [
+                "google-chrome",
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--no-first-run",
+                f"--user-data-dir={profile}",
+                f"--virtual-time-budget={budget}",
+                "--dump-dom",
+                url,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=limit,
+        )
+    except subprocess.TimeoutExpired:
+        return ""
     return out.stdout
 
 
@@ -494,20 +498,22 @@ def run_tests(site, kind, profile, failfast=False, first=None):
     """(прошли ли, строки FAIL, запустились ли, имя первого упавшего теста API или None)"""
     shutil.rmtree(profile, ignore_errors=True)
     first_failed = None
+    # Полный набор (контроль без порчи, --full) API идёт ~2 мин на свободной машине, в CI — дольше
+    limit = 240 if failfast else 600
     if kind == "api":
         query = "&".join((["failfast"] if failfast else []) + ([f"first={quote(first)}"] if first else []))
-        page = chrome(f"file://{site}/tests/api.html" + (f"?{query}" if query else ""), profile, 120000)
+        page = chrome(f"file://{site}/tests/api.html" + (f"?{query}" if query else ""), profile, 120000, limit)
         passed = 'data-apitest="pass"' in page
         log = re.search(r'<pre id="apitest-log">(.*?)</pre>', page, re.S)
         m = re.search(r'data-apitest-first-failed="([^"]*)"', page)
         first_failed = html.unescape(m.group(1)) if m and m.group(1) else None
     elif kind == "scenario":
-        page = chrome(f"file://{site}/tests/scenario.html", profile, 60000)
+        page = chrome(f"file://{site}/tests/scenario.html", profile, 60000, limit)
         passed = 'data-scenariotest="pass"' in page
         log = re.search(r'<pre id="scenariotest-log">(.*?)</pre>', page, re.S)
     else:
         # Бюджет — как у самопроверки в CI, с запасом втрое (PROC-31)
-        page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 180000)
+        page = chrome(f"file://{site}/prototype/index.html?selftest" + ("&failfast" if failfast else ""), profile, 180000, limit)
         passed = 'data-selftest="pass"' in page
         log = re.search(r'<pre id="selftest-log"[^>]*>(.*?)</pre>', page, re.S)
     fails = [line for line in (log.group(1).splitlines() if log else []) if line.startswith("FAIL")]
