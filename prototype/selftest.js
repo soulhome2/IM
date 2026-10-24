@@ -2064,16 +2064,17 @@
         expect(off(b) && !b.disabled, "«Передать» не бледная или не в фокусе");
         why = b.title;
         expect(/Передать некому/.test(why), `причина: «${why}»`);
-        // Падает в CI изредка: что было на экране и не перерисовали ли кнопку до нажатия — в сообщении
-        const before = $("toasts").lastElementChild;
+        // Причина — среди уведомлений после нажатия, не обязательно последней: такт стенда раз в секунду может
+        // следом вернуть в очередь чужие инциденты без доступа, и их алерты придут позже причины
+        const before = new Set($("toasts").children);
         const attached = b.isConnected;
         await click(b);
         expect($("modalDialog").hidden, "форма с пустым списком открылась");
-        const last = $("toasts").lastElementChild;
+        const added = [...$("toasts").children].filter((x) => !before.has(x));
         const shown = [...$("toasts").children].map((x) => `«${x.textContent}»`).join(", ") || "нет";
         expect(
-          ((last || {}).textContent || "") === why,
-          `по нажатию — не причина; кнопка на странице: ${attached ? "да" : "нет"}, новое уведомление: ${last && last !== before ? "да" : "нет"}, уведомления: ${shown}`
+          added.some((x) => x.textContent === why),
+          `по нажатию — не причина; кнопка на странице: ${attached ? "да" : "нет"}, новых уведомлений: ${added.length}, уведомления: ${shown}`
         );
       } finally {
         await standReset({ fixture: "demo" });
