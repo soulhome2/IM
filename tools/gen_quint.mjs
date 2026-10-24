@@ -521,6 +521,16 @@ function header() {
   branchSettings(byPath);
   emit(`  pure val HOLD_REASONS_BY_OPERATOR: Set[str] = Set(${W.reasonCatalogs.hold.items.filter((i) => i.setBy !== "system").map((i) => JSON.stringify(i.id)).join(", ")})`);
   emit(`  pure val CLOSE_RESULT_IDS: Set[str] = Set(${W.reasonCatalogs.close_result.items.map((i) => JSON.stringify(i.id)).join(", ")})`);
+  // Профиль «смена» (PROC-72): права — типовые наборы валидатора (§14.7); закрытие с результатом, которому нужен
+  // пройденный сценарий, — переходы, у которых набор шагов задаёт результат, и такие результаты
+  const typical = W.validation.typicalPermissionSets.items;
+  if (!typical.length) fail("validation.typicalPermissionSets: нет наборов — профилю «смена» нечего взять");
+  emit(`  pure val TYPICAL_PERMISSION_SETS: Set[Set[str]] = Set(${typical.map((s) => `Set(${s.permissions.map((p) => JSON.stringify(p)).join(", ")})`).join(", ")})`);
+  const stepResults = W.reasonCatalogs.close_result.items.filter((i) => i.requiredStepSet && i.requiredStepSet !== "none");
+  const byResult = W.transitions.filter((t) => t.trigger === "manual" && ((t.ui || {}).surface || []).length && t.requiredStepSet === "byCloseResult");
+  if (!stepResults.length || !byResult.length) fail("нет закрытия с результатом, которому нужен пройденный сценарий: профилю «смена» нечего выбирать");
+  emit(`  pure val STEP_RESULT_IDS: Set[str] = Set(${stepResults.map((i) => JSON.stringify(i.id)).join(", ")})`);
+  emit(`  pure val STEP_RESULT_CLOSE_IDS: Set[str] = Set(${byResult.map((t) => JSON.stringify(t.id)).join(", ")})`);
   // Права, которые спрашивают условия машины и справочник результатов закрытия, — их перебирает модель
   const perms = new Set(["agent:set_not_ready"]);
   const walk = (o) => {

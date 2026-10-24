@@ -108,6 +108,12 @@ module im {
 
   pure val CLOSE_RESULT_IDS: Set[str] = Set("processed", "false_alarm", "duplicate", "drill", "impossible", "mass")
 
+  pure val TYPICAL_PERMISSION_SETS: Set[Set[str]] = Set(Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:bulk", "incident:run_action", "agent:set_not_ready"), Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "agent:set_not_ready"))
+
+  pure val STEP_RESULT_IDS: Set[str] = Set("processed")
+
+  pure val STEP_RESULT_CLOSE_IDS: Set[str] = Set("close")
+
   pure val USED_PERMISSIONS: Set[str] = Set("agent:set_not_ready", "incident:accept", "incident:bulk", "incident:claim", "incident:close", "incident:close:unprocessed", "incident:hold", "incident:reassign", "incident:release", "incident:reopen", "incident:run_action", "incident:transfer:any", "incident:transfer:own")
 
   pure val TIMER_IDS: Set[str] = Set("reaction", "resolution", "hold")
@@ -3786,12 +3792,24 @@ module im {
     commit(act0("env", "answer", a, i), { ...world, answers: world.answers.set(i, world.answers.get(i).union(Set(st))) }),
   }
 
-  /* ===== Начало и шаг ===== */
+  /* ===== Начало и шаг =====
+     Два профиля (PROC-72). Широкий — init и step: права, доступ и группы любые, роли меняются на ходу.
+     «Смена» — initWork: типовые наборы прав валидатора, доступ ко всем инцидентам, в группе g оба; шаг
+     stepWork — без смены ролей и пустых запросов, ответ на шаг сценария и закрытие с результатом, которому нужен
+     пройденный сценарий, выпадают чаще. Редкие переходы и посылки инвариантов набирают историй в «смене»,
+     переходы по доступу и праву «Принимать» — в широком (tools/check_quint_coverage.mjs) */
 
   action init = {
     nondet perms = OPERATORS.setOfMaps(USED_PERMISSIONS.powerset()).oneOf()
     nondet access = OPERATORS.setOfMaps(INCIDENTS.powerset()).oneOf()
     nondet grp = OPERATORS.powerset().oneOf()
+    initFrom(perms, access, grp)
+  }
+  action initWork = {
+    nondet perms = OPERATORS.setOfMaps(TYPICAL_PERMISSION_SETS).oneOf()
+    initFrom(perms, OPERATORS.mapBy(a => INCIDENTS), OPERATORS)
+  }
+  action initFrom(perms: str -> Set[str], access: str -> Set[str], grp: Set[str]): bool = {
     nondet grp2 = OPERATORS.powerset().oneOf()
     // Настройки, от которых зависят ветки автоматических переходов, — из машины (BRANCH_SETTINGS, PROC-43)
     nondet branch = BRANCH_SETTINGS.oneOf()
@@ -3823,51 +3841,74 @@ module im {
   }
 
   pure val MANUAL_IDS: Set[str] = ofTrigger("manual").foldl(Set(), (s, t) => if (t.bulkOnly) s else s.union(Set(t.id)))
-  action step = {
-    val pending = INCIDENTS.filter(i => nextAuto(i).length() > 0)
-    if (pending.size() > 0) {
-      nondet j = pending.oneOf()
-      fire(j)
-    } else stepFree
+  def pendingAuto: Set[str] = INCIDENTS.filter(i => nextAuto(i).length() > 0)
+  action step = if (pendingAuto.size() > 0) fireAny else stepFree
+  action stepWork = if (pendingAuto.size() > 0) fireAny else stepFreeWork
+  action fireAny = {
+    nondet j = pendingAuto.oneOf()
+    fire(j)
   }
   action stepFree = {
     nondet i = INCIDENTS.oneOf()
     nondet a = OPERATORS.oneOf()
     any {
-      {
-        nondet sc = SCENARIOS.oneOf()
-        nondet prio = PRIORITIES.oneOf()
-        create(i, sc, prio)
-      },
-      {
-        nondet tid = MANUAL_IDS.oneOf()
-        nondet target = TARGETS.oneOf()
-        nondet reason = HOLD_REASONS_BY_OPERATOR.oneOf()
-        nondet result = CLOSE_RESULT_IDS.oneOf()
-        nondet surface = tr(tid).surfaces.oneOf()
-        val form = { ...NO_FORM, targetId: target, reasonId: reason, resultId: result,
-          causeId: if (CAUSE_FOR.keys().contains(result)) CAUSE_FOR.get(result) else "", comment: "c" }
-        manual(a, tid, i, form, surface)
-      },
-      {
-        nondet sel = INCIDENTS.powerset().oneOf()
-        mergeAuto(a, sel)
-      },
+      createAny(i),
+      manualAny(a, i, MANUAL_IDS, CLOSE_RESULT_IDS),
+      mergeAny(a),
       time,
-      {
-        nondet m = AGENT_MOVES.oneOf()
-        agentMove(a, m.id)
-      },
+      agentMoveAny(a),
       loseLink(a),
       restoreLink(a),
       request(a),
       toggleAccess(a, i),
       toggleAccept(a),
-      {
-        nondet st = STEPS.oneOf()
-        answer(a, i, st)
-      },
+      answerAny(a, i),
     }
+  }
+  action stepFreeWork = {
+    nondet i = INCIDENTS.oneOf()
+    nondet a = OPERATORS.oneOf()
+    any {
+      createAny(i),
+      manualAny(a, i, MANUAL_IDS, CLOSE_RESULT_IDS),
+      mergeAny(a),
+      time,
+      agentMoveAny(a),
+      loseLink(a),
+      restoreLink(a),
+      // Ответ — двумя ветками, закрытие по пройденному сценарию — своей: иначе путь «ответы → закрыть» почти
+      // не выпадает (замер PROC-72: 0 историй из 3000, с этими ветками — 27)
+      answerAny(a, i),
+      answerAny(a, i),
+      manualAny(a, i, STEP_RESULT_CLOSE_IDS, STEP_RESULT_IDS),
+    }
+  }
+  action createAny(i: str): bool = {
+    nondet sc = SCENARIOS.oneOf()
+    nondet prio = PRIORITIES.oneOf()
+    create(i, sc, prio)
+  }
+  action manualAny(a: str, i: str, tids: Set[str], results: Set[str]): bool = {
+    nondet tid = tids.oneOf()
+    nondet target = TARGETS.oneOf()
+    nondet reason = HOLD_REASONS_BY_OPERATOR.oneOf()
+    nondet result = results.oneOf()
+    nondet surface = tr(tid).surfaces.oneOf()
+    val form = { ...NO_FORM, targetId: target, reasonId: reason, resultId: result,
+      causeId: if (CAUSE_FOR.keys().contains(result)) CAUSE_FOR.get(result) else "", comment: "c" }
+    manual(a, tid, i, form, surface)
+  }
+  action mergeAny(a: str): bool = {
+    nondet sel = INCIDENTS.powerset().oneOf()
+    mergeAuto(a, sel)
+  }
+  action agentMoveAny(a: str): bool = {
+    nondet m = AGENT_MOVES.oneOf()
+    agentMove(a, m.id)
+  }
+  action answerAny(a: str, i: str): bool = {
+    nondet st = STEPS.oneOf()
+    answer(a, i, st)
   }
 
   /* ===== Инварианты =====
@@ -4126,4 +4167,15 @@ module im {
     silentOwnerHandled,
     autoBounded,
   }
+
+  /* ===== Свидетели посылок (PROC-72) =====
+     Посылка инварианта выполнилась — иначе он в прогоне ничего не проверяет. Вместе с reached_<переход> их
+     считает tools/check_quint_coverage.mjs: каждый — не меньше чем в 20 историях */
+
+  // processedOnlyFinished: закрыт своим «Закрыть» с результатом «Обработан»
+  val premise_processedClosed = INCIDENTS.exists(i => incOf(i).state == "closed" and incOf(i).closeResultId == "processed" and incOf(i).linkedTo == NOBODY)
+  // holdBounded, вторая ветка: отложенный с записанным нарушением удержания
+  val premise_holdBreach = INCIDENTS.exists(i => incOf(i).state == "on_hold" and hasBreach(incOf(i), "hold"))
+  // Два привязанных к одному основному (linkedShape, linkedSharesBreaches, linkedSameScenario)
+  val premise_twoLinked = INCIDENTS.exists(p => INCIDENTS.filter(i => incOf(i).linkedTo == p).size() >= 2)
 }

@@ -4,6 +4,7 @@
 // (quint run --out-itf), скрипт повторяет каждый шаг на исполнителе — те же настройки, права, доступ, состояние
 // операторов, часы и действия — и в спокойные моменты (у модели нет готовых автоматических переходов)
 // сравнивает все инциденты и ответы сценария. Факты мира — из истории модели, без сервера и эталонного набора.
+// Истории — по профилям порога покрытия (tools/quint_profiles.mjs, PROC-72), числом пропорционально их историям.
 // Запуск из корня репозитория: node tools/check_quint_replay.mjs [--traces=N] [--steps=M] [--seed=0x…]
 // [--dir=папка с готовыми *.itf.json]. Нужен quint в PATH (если нет --dir).
 import fs from "node:fs";
@@ -12,6 +13,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { PROFILES } from "./quint_profiles.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const Q = path.join(ROOT, "Specification/Workflow_machine/quint");
@@ -31,16 +33,20 @@ if (!dir) {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "quint-replay-"));
   // Пачками по 200: quint держит выгружаемые истории в памяти. Зерно пачки — заданное плюс её номер
   const seed = opt("seed", "");
-  for (let b = 0, left = TRACES; left > 0; b++, left -= 200) {
-    const n = Math.min(200, left);
-    const r = spawnSync(
-      "quint",
-      ["run", "im.qnt", "--invariant", "inv", `--max-samples=${n}`, `--max-steps=${STEPS}`, `--out-itf=${dir}/b${b}t{seq}.itf.json`, `--n-traces=${n}`, ...(seed ? [`--seed=${"0x" + (BigInt(seed) + BigInt(b)).toString(16)}`] : [])],
-      { cwd: Q, encoding: "utf8", maxBuffer: 1 << 28 }
-    );
-    if (r.status !== 0 && !/\[ok\]/.test(r.stdout)) {
-      console.log(r.stdout.split("\n").slice(-5).join("\n"), r.stderr);
-      process.exit(1);
+  const total = PROFILES.reduce((s, p) => s + p.samples, 0);
+  let b = 0;
+  for (const p of PROFILES) {
+    for (let left = Math.round((TRACES * p.samples) / total); left > 0; b++, left -= 200) {
+      const n = Math.min(200, left);
+      const r = spawnSync(
+        "quint",
+        ["run", "im.qnt", "--invariant", "inv", `--max-samples=${n}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, `--out-itf=${dir}/b${b}t{seq}.itf.json`, `--n-traces=${n}`, ...(seed ? [`--seed=${"0x" + (BigInt(seed) + BigInt(b)).toString(16)}`] : [])],
+        { cwd: Q, encoding: "utf8", maxBuffer: 1 << 28 }
+      );
+      if (r.status !== 0 && !/\[ok\]/.test(r.stdout)) {
+        console.log(r.stdout.split("\n").slice(-5).join("\n"), r.stderr);
+        process.exit(1);
+      }
     }
   }
 }

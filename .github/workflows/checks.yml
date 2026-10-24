@@ -140,9 +140,9 @@ jobs:
         run: |
           quint typecheck im.qnt
           quint test im_test.qnt
-      - name: Инварианты — 10 000 случайных историй по 40 шагов
-        working-directory: Specification/Workflow_machine/quint
-        run: quint run im.qnt --invariant inv --max-samples=10000 --max-steps=40
+      # Профили историй — tools/quint_profiles.mjs; каждый переход и посылка инварианта — не меньше чем в 20 историях
+      - name: Инварианты — 14 000 случайных историй по 40 шагов в трёх профилях, порог покрытия (PROC-72)
+        run: node tools/check_quint_coverage.mjs
       - name: Ядро исполнителя прототипа и модели — одни и те же истории (ARCH-07.9)
         run: node tools/check_quint_replay.mjs --traces=400
 

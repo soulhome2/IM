@@ -254,3 +254,14 @@
     silentOwnerHandled,
     autoBounded,
   }
+
+  /* ===== Свидетели посылок (PROC-72) =====
+     Посылка инварианта выполнилась — иначе он в прогоне ничего не проверяет. Вместе с reached_<переход> их
+     считает tools/check_quint_coverage.mjs: каждый — не меньше чем в 20 историях */
+
+  // processedOnlyFinished: закрыт своим «Закрыть» с результатом «Обработан»
+  val premise_processedClosed = INCIDENTS.exists(i => incOf(i).state == "closed" and incOf(i).closeResultId == "processed" and incOf(i).linkedTo == NOBODY)
+  // holdBounded, вторая ветка: отложенный с записанным нарушением удержания
+  val premise_holdBreach = INCIDENTS.exists(i => incOf(i).state == "on_hold" and hasBreach(incOf(i), "hold"))
+  // Два привязанных к одному основному (linkedShape, linkedSharesBreaches, linkedSameScenario)
+  val premise_twoLinked = INCIDENTS.exists(p => INCIDENTS.filter(i => incOf(i).linkedTo == p).size() >= 2)
