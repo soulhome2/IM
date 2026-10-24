@@ -49,4 +49,4 @@ Production-кода нет. Обзор и порядок чтения — [READM
 
 `/im-review [роль]` — ревью; `/im-fsm` — формальная проверка машин; `/im-fix <пункт>` — выполнить пункт плана.
 
-Сценарии из нескольких агентов — `.claude/workflows/`, промпты к ним — `prompts/`. `verification-audit` — консилиум «хватает ли проверок логики машин» (`prompts/verification-pipeline-audit.md`), запуск — только по просьбе, с датой: `args = {date: "ГГГГ-ММ-ДД"}`.
+Сценарии из нескольких агентов — `.claude/workflows/`, промпты к ним — `prompts/`. `verification-audit` — консилиум «хватает ли проверок логики машин» (`prompts/verification-pipeline-audit.md`), запуск — только по просьбе, с датой: `args = {date: "ГГГГ-ММ-ДД"}`; дата не названа — сегодняшняя.
