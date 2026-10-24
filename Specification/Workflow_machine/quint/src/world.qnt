@@ -43,10 +43,21 @@
   var lastAction: Action
   // Сколько автоматических переходов у инцидента подряд — без действий людей и окружения, только со временем (П3, PROC-45)
   var autoRun: str -> int
+  // Состояние до последнего шага — для свойств права на действие и двух соседних состояний (PROC-73). Пишет каждое
+  // действие: prev' = snapshot; после init — само начальное состояние
+  type Before = { world: World, cfg: Config, agents: str -> str, lastBeat: str -> int, link: str -> bool, clock: int }
+  var prev: Before
+  def snapshot: Before = { world: world, cfg: cfg, agents: agents, lastBeat: lastBeat, link: link, clock: clock }
 
   /* ===== Факты мира (cel.world машины) ===== */
 
-  def can(who: str, perm: str): bool = OPERATORS.contains(who) and cfg.perms.get(who).contains(perm)
+  // Право действует, если набор прав проходит §10.3: с «Взять» или «Принять» нужен хотя бы один выход из карточки,
+  // иначе эти права не действуют (EXIT_RULE из машины, PROC-73). Проверка при входе — в модели действует всегда
+  pure def permsAct(ps: Set[str], perm: str): bool = all {
+    ps.contains(perm),
+    not(EXIT_RULE.disables.contains(perm) and EXIT_RULE.appliesTo.exists(p => ps.contains(p)) and not(EXIT_RULE.requiresAnyOf.exists(p => ps.contains(p)))),
+  }
+  def can(who: str, perm: str): bool = OPERATORS.contains(who) and permsAct(cfg.perms.get(who), perm)
   def access(who: str, x: Incident): bool = OPERATORS.contains(who) and cfg.access.get(who).contains(x.id)
   def isOperator(id: str): bool = OPERATORS.contains(id)
   def isGroup(id: str): bool = GROUPS.contains(id)

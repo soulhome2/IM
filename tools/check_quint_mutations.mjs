@@ -46,6 +46,14 @@ const MUTATIONS = [
   // историй). Порядок проверяет мутация кода tick-array-order и тесты API «прыжок часов»
   ["core-merge-primary-no-window", "ядро: у основного, которого берут при объединении, окно не учитывается (BUG-62)", "val pc = if (taking) canceledBy(TAKE_WITH, p) else []", "val pc = if (false) canceledBy(TAKE_WITH, p) else []", "core.qnt"],
   ["resume-refires", "отработанный норматив при возврате в работу — новый срок (RULE-50)", `${T}.fired != 0 ? ${T}.fired : now + left`, "false ? 0 : now + left"],
+  // Выжившие порчи консилиума verification-audit 2026-10-24 (PROC-73): правила права на действие и двух соседних состояний
+  ["hold-no-owner", "«Отложить» чужой инцидент — без условия «я владелец» (§6.1, К1)", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n        { \"fn\": \"isOwner\" },\n", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n"],
+  ["transfer-restarts-reaction", "передача из «Новое» и «Ожидает принятия» запускает реакцию заново — передачами её не продлить (§4, §6.1, RULE-83)", "\"args\": [\"reaction\", \"byEscalationLevel\", true] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }", "\"args\": [\"reaction\", \"byEscalationLevel\"] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }"],
+  ["claim-on-break", "«Взять» на перерыве и после выхода (§10.1, правило 2)", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"agentReady\" },\n        { \"fn\": \"withinActiveLimit\" }", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"withinActiveLimit\" }"],
+  ["close-on-break", "«Закрыть» на перерыве и после выхода (§10.1, правило 2)", "{ \"fn\": \"agentReady\" },\n        { \"fn\": \"closeResultAllowed\" }", "{ \"fn\": \"closeResultAllowed\" }"],
+  ["mass-foreign-on-hold", "«Массовый сбой» из чужого «Отложен» (§2.2, §6.1)", "\"ownerOnlyInStates\": [\"in_progress\", \"on_hold\"],", "\"ownerOnlyInStates\": [\"in_progress\"],"],
+  ["break-skipped-by-escalation", "эскалация пропускает адресата на перерыве — он инцидент получает (§8.3, §12.1)", "\"expr\": \"agentState(who) != 'offline'\", \"$comment\": \"§12.1. Человек вошёл", "\"expr\": \"agentState(who) == 'ready'\", \"$comment\": \"§12.1. Человек вошёл"],
+  ["reopen-no-window", "«Переоткрыть» после срока переоткрытия (§6.1, §10.1, BUG-31)", "\"expr\": \"now - incident.closedAt <= limits.reopenWindowMin * 60000\"", "\"expr\": \"true\""],
 ];
 
 const args = process.argv.slice(2);

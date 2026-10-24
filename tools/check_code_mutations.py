@@ -55,6 +55,12 @@ MUTATIONS = [
     ("hold-limit", "workflow.js", "countMine(me, 'on_hold', incident.id) < limits.maxOnHold", "countMine(me, 'on_hold', incident.id) <= limits.maxOnHold", "api"),
     ("self-without-groups", "workflow.js", "id != '' && (id == who || (isGroup(id) && who in members(id)))", "id != '' && id == who", "api"),
     ("addressee-owner-only", "workflow.js", "x.owner != '' ? x.owner : x.assignmentGroup", "x.owner", "api"),
+    # Правила права на действие из консилиума verification-audit 2026-10-24 (PROC-73, К1, В5): модель Quint их ловит,
+    # тесты API — должны тоже
+    ("hold-no-owner", "workflow.js", "            \"incident:hold\"\n          ]\n        },\n        {\n          \"fn\": \"isOwner\"\n        },\n", "            \"incident:hold\"\n          ]\n        },\n", "api"),
+    ("close-on-break", "workflow.js", "        {\n          \"fn\": \"agentReady\"\n        },\n        {\n          \"fn\": \"closeResultAllowed\"\n        }", "        {\n          \"fn\": \"closeResultAllowed\"\n        }", "api"),
+    ("mass-foreign-on-hold", "workflow.js", "\"ownerOnlyInStates\": [\n            \"in_progress\",\n            \"on_hold\"\n          ],", "\"ownerOnlyInStates\": [\n            \"in_progress\"\n          ],", "api"),
+    ("break-skipped-by-escalation", "workflow.js", "agentState(who) != 'offline'", "agentState(who) == 'ready'", "api"),
     ("pause-loses-remaining", "workflow.js", "\"value\": \"incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0\"", "\"value\": \"0\"", "api"),
     ("resume-restarts", "workflow.js", "\"value\": \"incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000\"", "\"value\": \"timerSec(incident, timerId, '') * 1000\"", "api"),
     ("deadline-fires-repeatedly", "workflow.js", "t.due != 0 && t.due <= now && t.fired != t.due", "t.due != 0 && t.due <= now", "api"),

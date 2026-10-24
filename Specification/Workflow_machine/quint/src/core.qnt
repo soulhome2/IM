@@ -76,6 +76,7 @@
     lastBeat' = if (OPERATORS.contains(a.actor) and (a.kind == "manual" or a.kind == "merge" or a.kind == "merge_auto" or a.name == "answer")) lastBeat.set(a.actor, clock) else lastBeat,
     cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link,
     lastAction' = a,
+    prev' = snapshot,
     // Автоматический переход — ещё один подряд; любое другое действие счёт сбрасывает (П3)
     autoRun' = if (a.kind == "auto") autoRun.set(a.incident, autoRun.get(a.incident) + 1) else INCIDENTS.mapBy(j => 0),
   }
@@ -188,6 +189,7 @@
       lastBeat' = OPERATORS.mapBy(o => if (link.get(o) and agents.get(o) != "offline") nextAt else lastBeat.get(o)),
       clock' = nextAt,
       lastAction' = act0("time", "time", NOBODY, NOBODY),
+      prev' = snapshot,
       autoRun' = autoRun,
     }
   }
@@ -197,6 +199,7 @@
     lastBeat' = if (beat) lastBeat.set(a, clock) else lastBeat,
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", name, a, NOBODY),
+    prev' = snapshot,
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
   // Смена состояния оператора — переход session.transitions машины (AGENT_MOVES, ARCH-08 в4): откуда, куда, право
@@ -221,6 +224,7 @@
     link' = link.set(a, false),
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, lastBeat' = lastBeat, changedAt' = changedAt,
     lastAction' = act0("env", "lose_link", a, NOBODY),
+    prev' = snapshot,
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
   action restoreLink(a: str): bool = all {
@@ -229,6 +233,7 @@
     lastBeat' = lastBeat.set(a, clock),
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, changedAt' = changedAt,
     lastAction' = act0("env", "restore_link", a, NOBODY),
+    prev' = snapshot,
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
 
@@ -239,6 +244,7 @@
     lastBeat' = lastBeat.set(a, clock),
     world' = world, cfg' = cfg, settings' = settings, clock' = clock, agents' = agents, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", "request", a, NOBODY),
+    prev' = snapshot,
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
 
@@ -247,6 +253,7 @@
     cfg' = c,
     world' = world, settings' = settings, clock' = clock, agents' = agents, lastBeat' = lastBeat, link' = link, changedAt' = changedAt,
     lastAction' = act0("env", name, a, NOBODY),
+    prev' = snapshot,
     autoRun' = INCIDENTS.mapBy(j => 0),
   }
   action toggleAccess(a: str, i: str): bool = {
@@ -292,8 +299,10 @@
     nondet level1 = OPERATORS.oneOf()
     nondet starts = OPERATORS.setOfMaps(AGENT_STARTS).oneOf()
     val levels = MACHINE_SETTINGS.escalation.levels
+    val c = { perms: perms, access: access, members: Map(GROUP -> grp, GROUP2 -> grp2) }
+    val w = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) }
     all {
-      cfg' = { perms: perms, access: access, members: Map(GROUP -> grp, GROUP2 -> grp2) },
+      cfg' = c,
       // Настройки — значения машины; перебираются ветки автоматики (withBranches) и лимиты, люди — люди модели:
       // уровень 1 — человек, уровень 2 — дежурная группа h, алерты — группе g
       settings' = withBranches({ ...MACHINE_SETTINGS,
@@ -302,7 +311,7 @@
         alerts: { ...MACHINE_SETTINGS.alerts, targetKind: "group", target: GROUP },
         limits: { ...MACHINE_SETTINGS.limits, maxActive: maxActive, maxOnHold: maxOnHold },
       }, branch),
-      world' = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) },
+      world' = w,
       clock' = START,
       // Оператор — ещё не вошёл (начальное машины) или уже вошёл (RULE-99)
       agents' = starts,
@@ -311,6 +320,7 @@
       changedAt' = INCIDENTS.mapBy(i => 0),
       lastAction' = act0("init", "init", NOBODY, NOBODY),
       autoRun' = INCIDENTS.mapBy(i => 0),
+      prev' = { world: w, cfg: c, agents: starts, lastBeat: OPERATORS.mapBy(a => START), link: OPERATORS.mapBy(a => true), clock: START },
     }
   }
 

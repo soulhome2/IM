@@ -791,6 +791,31 @@
     assert.status(await env.act(foreign.guid, "close", { resultId: "mass", causeId: cause, comment: "x" }, "queue"), 403, null, "сервер отказывает");
   });
 
+  test("Чужой в работе не отложить: «Отложить» — только владельцу (§6.1; PROC-73, К1)", async () => {
+    const env = await makeEnv();
+    const foreign = await env.find((e) => e.state === "in_progress" && e.ownership === "other");
+    const hold = actionOf(foreign, "hold");
+    assert.ok(!hold || !hold.enabled, "«Отложить» у чужого недоступно");
+    const reason = W.reasonCatalogs.hold.items.find((r) => r.setBy !== "system").id;
+    assert.status(await env.act(foreign.guid, "hold", { reasonId: reason, comment: "x" }, "card"), 403, null, "сервер отказывает");
+    const c = await env.card(foreign.guid);
+    assert.eq([c.state, c.owner && c.owner.id], ["in_progress", foreign.owner && foreign.owner.id], "чужой в работе у прежнего владельца");
+  });
+
+  test("Чужой отложенный «Массовым сбоем» не закрыть, свой — можно (ownerOnlyInStates, §2.2, §6.1; PROC-73)", async () => {
+    const env = await makeEnv();
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    const foreign = await env.find((e) => e.state === "on_hold" && e.ownership === "other");
+    const close = actionOf(foreign, "close");
+    assert.ok(!close || !close.enabled, "«Закрыть» у чужого отложенного недоступно");
+    assert.status(await env.act(foreign.guid, "close", { resultId: "mass", causeId: cause, comment: "x" }, "queue"), 403, null, "сервер отказывает");
+    assert.eq((await env.card(foreign.guid)).state, "on_hold", "чужой остался отложенным");
+    const own = await env.find((e) => e.state === "on_hold" && e.ownership === "owner");
+    const res = await env.act(own.guid, "close", { resultId: "mass", causeId: cause, comment: "x" }, "queue");
+    assert.status(res, 200, null, "свой отложенный — можно");
+    assert.eq(res.body.incident.closeResultId, "mass", "закрыт «Массовым сбоем»");
+  });
+
   test("«Ложная тревога» требует комментарий; комментарий сохраняется как result", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
@@ -1213,6 +1238,19 @@
     assert.ok(c.journal.some((j) => /Автоэскалация/.test(jt(j))), "автоэскалация в журнале");
   });
 
+  test("Автоэскалация на перерыв не смотрит: адресат уровня на перерыве инцидент получает, уровень не пропускается (§8.3, §12.1; PROC-73)", async () => {
+    // Орлова в наборе на перерыве и ни в одной дежурной группе: уровень держится только тем, что перерыв — не выход
+    // (без группы ветка «в его группе есть кому принять», RULE-100, ничего не решает)
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to("user:orlova")) : l));
+    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { levels }) } });
+    assert.eq(window.IM_FIXTURE.people.operators.find((o) => o.id === "orlova").agentState, "not_ready", "Орлова на перерыве");
+    const inc = await newFire(env);
+    const reactionSec = W.timers.find((x) => x.id === "reaction").overrides.find((o) => o.priority === TOP).sec;
+    await env.advance(reactionSec + GRACE + 1);
+    const c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", "orlova", 1], "адресату уровня 1 на перерыве, уровень 1");
+  });
+
   test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и алерт", async () => {
     // Своя копия машины с другой настройкой — так правило проверяется из машины, а не из кода
     async function overdue(patch) {
@@ -1463,6 +1501,18 @@
     assert.ok(!actionOf(other, "claim").enabled, "«Взять» на перерыве недоступно");
     await env.ok("PUT", "/operator/session/agent-state", { agentState: "ready" });
     assert.status(await env.act(inc.guid, "resume", {}, "queue"), 200, null, "возобновить после возврата");
+  });
+
+  test("На перерыве не закрыть ничего, даже «Массовым сбоем» из очереди (§10.1, правило 2; PROC-73)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "lunch" });
+    const close = actionOf(await env.card(inc.guid), "close");
+    assert.ok(!close || !close.enabled, "«Закрыть» на перерыве недоступно");
+    const res = await env.act(inc.guid, "close", { resultId: "mass", causeId: cause, comment: "x" }, "queue");
+    assert.ok(res.status >= 400, `сервер отказывает: ${res.status}`);
+    assert.eq((await env.card(inc.guid)).state, "new", "инцидент не закрыт");
   });
 
   test("Перерыв дольше срока: отложенный «Перерыв оператора» — в очередь, нарушения удержания нет (§12.2, RULE-106)", async () => {

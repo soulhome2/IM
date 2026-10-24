@@ -8,8 +8,9 @@
   def isDueT(t: Timer): bool = t.due != 0 and t.due <= clock and t.fired != t.due
   pure def hasBreach(x: Incident, kind: str): bool = x.breaches.select(b => b.kind == kind).length() > 0
   def primaryOf(x: Incident): Incident = if (INCIDENTS.contains(x.linkedTo)) incOf(x.linkedTo) else NO_INCIDENT
-  // Сейчас выполнится автоматический переход этого инцидента — системный или по таймеру
-  def autoPending(i: str): bool = AUTO.foldl(false, (acc, t) => acc or autoReady(t, i))
+  // Сейчас выполнится один из названных автоматических переходов этого инцидента — тот, что исправляет состояние
+  // (PROC-73): не любой готовый, иначе случайно готовый таймер прикрыл бы запрещённое состояние
+  def fixReady(i: str, names: Set[str]): bool = AUTO.foldl(false, (acc, t) => acc or (names.contains(t.id) and autoReady(t, i)))
 
   // 1. Владелец по состоянию (§2.1)
   val ownerByState = INCIDENTS.forall(i => {
@@ -100,7 +101,7 @@
   val pendingAddresseeCanAccept = INCIDENTS.forall(i => {
     val x = incOf(i)
     val who = if (x.owner != NOBODY) x.owner else x.assignmentGroup
-    x.state == "pending_acceptance" implies (mayAccept(who, x) or autoPending(i))
+    x.state == "pending_acceptance" implies (mayAccept(who, x) or fixReady(i, Set("addressee_cannot_accept", "addressee_lost_access")))
   })
 
   // 10. Эскалация не адресует инцидент тому, у кого он уже есть: тому же человеку, той же группе или группе,
@@ -140,7 +141,7 @@
       x.closeResultId == NOBODY,
       INCIDENTS.contains(x.linkedTo),
       x.linkedTo != i,
-      OPEN.contains(p.state) or (p.state == "closed" and autoPending(i)),
+      OPEN.contains(p.state) or (p.state == "closed" and fixReady(i, Set("close_linked"))),
     }
   })
 
@@ -167,8 +168,8 @@
     val who = if (x.owner != NOBODY) x.owner else x.assignmentGroup
     val pwho = if (p.owner != NOBODY) p.owner else p.assignmentGroup
     all {
-      Set("pending_acceptance", "in_progress", "on_hold").contains(x.state) implies (reach(who, x) or autoPending(i)),
-      (x.state == "linked" and p.state != "closed" and pwho != NOBODY) implies (reach(pwho, x) or autoPending(i) or autoPending(x.linkedTo)),
+      Set("pending_acceptance", "in_progress", "on_hold").contains(x.state) implies (reach(who, x) or fixReady(i, Set("addressee_lost_access"))),
+      (x.state == "linked" and p.state != "closed" and pwho != NOBODY) implies (reach(pwho, x) or fixReady(i, Set("linked_lost_access")) or fixReady(x.linkedTo, Set("addressee_lost_access"))),
     }
   })
 
@@ -194,8 +195,9 @@
   val agentStateRespected = INCIDENTS.forall(i => {
     val x = incOf(i)
     all {
-      (Set("pending_acceptance", "in_progress", "on_hold").contains(x.state) and agentState(x.owner) == "offline" and OPERATORS.contains(x.owner)) implies autoPending(i),
-      (x.state == "in_progress" and agentState(x.owner) == "not_ready") implies autoPending(i),
+      (Set("pending_acceptance", "in_progress", "on_hold").contains(x.state) and agentState(x.owner) == "offline" and OPERATORS.contains(x.owner))
+        implies fixReady(i, Set("owner_signed_out", "addressee_signed_out_to_group", "addressee_signed_out_to_queue")),
+      (x.state == "in_progress" and agentState(x.owner) == "not_ready") implies fixReady(i, Set("system_hold_break")),
     }
   })
 
@@ -213,8 +215,8 @@
     val x = incOf(i)
     val idle = if (OPERATORS.contains(x.owner) and agentState(x.owner) != "offline") idleSec(x.owner) else 0
     all {
-      (x.state == "in_progress" and idle >= settings.session.idleHoldSec) implies autoPending(i),
-      (x.state == "on_hold" and x.holdReasonId != NOBODY and not(HOLD_REASONS_BY_OPERATOR.contains(x.holdReasonId)) and idle >= settings.session.idleReleaseSec) implies autoPending(i),
+      (x.state == "in_progress" and idle >= settings.session.idleHoldSec) implies fixReady(i, Set("system_hold_idle")),
+      (x.state == "on_hold" and x.holdReasonId != NOBODY and not(HOLD_REASONS_BY_OPERATOR.contains(x.holdReasonId)) and idle >= settings.session.idleReleaseSec) implies fixReady(i, Set("system_release_idle")),
     }
   })
 
@@ -224,6 +226,135 @@
   //     → escalation_ceiling; при пределе 3 модель находит нарушение — у предела есть запас, но не лишний (PROC-45)
   pure val AUTO_BOUND = 10
   val autoBounded = INCIDENTS.forall(i => autoRun.get(i) <= AUTO_BOUND)
+
+  // 20. Право на действие (§6.1, §2.2, §10.1, правило 2; PROC-73): ручной переход и объединение сделал тот, у
+  //     кого до шага (prev) были право и условие, — оператор на месте, видел инцидент, а дальше по переходу
+  def hadPerm(a: str, p: str): bool = prev.cfg.perms.get(a).contains(p)
+  def hadAccess(a: str, i: str): bool = prev.cfg.access.get(a).contains(i)
+  // Адресат — я или дежурная группа, где я состою (§8.1)
+  def wasAddressee(a: str, x: Incident): bool =
+    x.owner == a or (GROUPS.contains(x.assignmentGroup) and prev.cfg.members.get(x.assignmentGroup).contains(a))
+  def rightFor(a: str, tid: str, x0: Incident, x: Incident): bool =
+    if (tid == "claim") x0.state == "new" and hadPerm(a, "incident:claim")
+    else if (tid == "accept") x0.state == "pending_acceptance" and wasAddressee(a, x0) and hadPerm(a, "incident:accept")
+    else if (tid == "reject") x0.state == "pending_acceptance" and wasAddressee(a, x0) and hadPerm(a, "incident:release")
+    else if (tid == "hold") x0.state == "in_progress" and x0.owner == a and hadPerm(a, "incident:hold")
+    else if (tid == "resume") x0.state == "on_hold" and x0.owner == a and hadPerm(a, "incident:claim")
+    else if (tid == "release") Set("in_progress", "on_hold").contains(x0.state) and x0.owner == a and hadPerm(a, "incident:release")
+    else if (tid == "transfer") hadPerm(a, "incident:transfer:own") or hadPerm(a, "incident:transfer:any")
+    else if (tid == "takeover") not(wasAddressee(a, x0)) and hadPerm(a, "incident:reassign") and hadPerm(a, "incident:claim")
+    // Закрыть (§2.2): «Массовый сбой» — своим правом и ещё из «Новое» и «Ожидает принятия», остальные — из «В
+    // работе»; в работе и отложенный — только свой
+    else if (tid == "close") all {
+      if (x.closeResultId == "mass") hadPerm(a, "incident:close:unprocessed") else hadPerm(a, "incident:close") and x0.state == "in_progress",
+      Set("in_progress", "on_hold").contains(x0.state) implies x0.owner == a,
+    }
+    else if (tid == "reopen") all {
+      x0.state == "closed",
+      prev.clock - x0.closedAt <= settings.limits.reopenWindowMin * 60000,
+      hadPerm(a, "incident:reopen"),
+      hadPerm(a, "incident:claim"),
+    }
+    // Отсоединить: я веду основной, или основной новый (§11.3)
+    else if (tid == "detach") {
+      val p0 = prev.world.inc.get(x0.linkedTo)
+      x0.state == "linked" and (p0.state == "new" or p0.owner == a)
+    }
+    else true
+  // 21. Свойства двух соседних состояний (PROC-73): инцидент сейчас и до шага (prev)
+  def before(i: str): Incident = prev.world.inc.get(i)
+
+  //     а) Передачей и отклонением реакцию не продлить (§6.1, RULE-82, RULE-83): после «Передать» из «Новое» и
+  //        «Ожидает принятия», «Отклонить» и ухода вышедшего адресата срок реакции прежний, если она шла.
+  //        Остановленную потолком или нарушением «Передать» запускает заново, «Отклонить» — нет (RULE-84)
+  val reactionNotExtended = {
+    val la = lastAction
+    val r0 = before(la.incident).timers.get("reaction")
+    val r = incOf(la.incident).timers.get("reaction")
+    val keeps = (la.name == "transfer" and Set("new", "pending_acceptance").contains(before(la.incident).state))
+      or Set("reject", "addressee_signed_out_to_group", "addressee_signed_out_to_queue").contains(la.name)
+    INCIDENTS.contains(la.incident) implies all {
+      (keeps and runs(r0)) implies r.due == r0.due,
+      (la.name == "reject" and not(runs(r0))) implies not(runs(r)),
+    }
+  }
+
+  //     б) Уровень эскалации меняет только эскалация этого инцидента, и только вверх (§8.3)
+  val levelOnlyByEscalation = INCIDENTS.forall(i => {
+    val l0 = before(i).escalationLevel
+    val l = incOf(i).escalationLevel
+    l != l0 implies all {
+      lastAction.incident == i,
+      Set("auto_escalate", "resolution_escalate").contains(lastAction.name),
+      l > l0,
+    }
+  })
+
+  //     в) Нарушения не стираются (§6.1, «Переоткрыть»; §10.1): записанные остаются в том же порядке, новые — в конец
+  val breachesKept = INCIDENTS.forall(i => {
+    val b0 = before(i).breaches
+    val b = incOf(i).breaches
+    if (b.length() >= b0.length()) b.slice(0, b0.length()) == b0 else false
+  })
+
+  //     г) Остаток норматива закрытия сохраняется (§4): «Отложить» запоминает, сколько осталось, «Возобновить»
+  //        продолжает с того же остатка. Отработанный норматив (RULE-50) — другой случай, его здесь нет
+  val resolutionLeftKept = {
+    val la = lastAction
+    val z0 = before(la.incident).timers.get("resolution")
+    val z = incOf(la.incident).timers.get("resolution")
+    INCIDENTS.contains(la.incident) implies all {
+      (la.name == "hold" and runs(z0)) implies (z.paused and z.left == (if (z0.due > clock) z0.due - clock else 0)),
+      (la.name == "resume" and z0.paused and z0.left > 0) implies z.due == clock + z0.left,
+    }
+  }
+
+  //     д) Действие не создаёт состояния, которое система тут же исправляет (Р5 б): после ручного перехода и
+  //        объединения у этого инцидента не готов ни один исправляющий системный переход
+  pure val FIXERS: Set[str] = Set("addressee_cannot_accept", "addressee_lost_access", "close_linked", "linked_lost_access",
+    "owner_signed_out", "addressee_signed_out_to_group", "addressee_signed_out_to_queue", "system_hold_break",
+    "system_hold_idle", "system_release_idle")
+  //        Исключения — по правилам: «Передать» вышедшему можно, инцидент сразу уходит его группе или в очередь
+  //        (§8.1, «Адресат вышел»; RULE-47)
+  pure def fixExpected(tid: str): Set[str] =
+    if (tid == "transfer") Set("addressee_signed_out_to_group", "addressee_signed_out_to_queue") else Set()
+  val noFixAfterAction =
+    Set("manual", "merge", "merge_auto").contains(lastAction.kind)
+      implies not(fixReady(lastAction.incident, FIXERS.exclude(fixExpected(lastAction.name))))
+
+  // 22. Выход есть (§10.3; PROC-73): у «В работе», чей владелец на месте, видит инцидент и имеет право хотя бы на
+  //     один выход, доступен хотя бы один выход из карточки — «Отложить», «Вернуть в очередь» или «Закрыть»
+  pure def exitForm(reason: str, result: str): Form = { ...NO_FORM, reasonId: reason, resultId: result,
+    causeId: if (CAUSE_FOR.keys().contains(result)) CAUSE_FOR.get(result) else "", comment: "c" }
+  def exitOk(a: str, tid: str, i: str, f: Form): bool =
+    tr(tid).surfaces.exists(s => trOk(tid, ctx(a, a, f, s), i) and formOk(tid, ctx(a, a, f, s), i))
+  val exitExists = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    val a = x.owner
+    // Оговорка до решения RULE-136: из выходов у владельца только «Отложить», а лимит отложенных задан, — его может
+    // закрыть лимит (§10.2), и выхода нет; правила это пока допускают
+    val holdOnlyUnderLimit = EXIT_RULE.requiresAnyOf.filter(p => can(a, p)) == Set("incident:hold") and settings.limits.maxOnHold > 0
+    (x.state == "in_progress" and OPERATORS.contains(a) and agentState(a) == "ready" and sees(a, i)
+      and EXIT_RULE.requiresAnyOf.exists(p => can(a, p)) and not(holdOnlyUnderLimit)) implies or {
+      HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "hold", i, exitForm(r, ""))),
+      HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "release", i, exitForm(r, ""))),
+      CLOSE_RESULT_IDS.exists(r => exitOk(a, "close", i, exitForm("", r))),
+    }
+  })
+
+  val actionRights = {
+    val la = lastAction
+    val a = la.actor
+    val x0 = prev.world.inc.get(la.incident)
+    // Объединение (§11.3): право на выборку, каждый — ничей или мой, у каждого доступ
+    val mergeOk = hadPerm(a, "incident:bulk") and la.others.foldl(true, (ok, o) => ok and hadAccess(a, o) and
+      Set(NOBODY, a).contains(prev.world.inc.get(o).owner)) and Set(NOBODY, a).contains(x0.owner)
+    Set("manual", "merge", "merge_auto").contains(la.kind) implies all {
+      prev.agents.get(a) == "ready",
+      hadAccess(a, la.incident),
+      if (la.kind == "manual") rightFor(a, la.name, x0, incOf(la.incident)) else mergeOk,
+    }
+  }
 
   val inv = all {
     ownerByState,
@@ -253,6 +384,13 @@
     deadlineFiredInWindow,
     silentOwnerHandled,
     autoBounded,
+    actionRights,
+    reactionNotExtended,
+    levelOnlyByEscalation,
+    breachesKept,
+    resolutionLeftKept,
+    noFixAfterAction,
+    exitExists,
   }
 
   /* ===== Свидетели посылок (PROC-72) =====

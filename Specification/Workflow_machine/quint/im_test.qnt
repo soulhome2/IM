@@ -23,17 +23,21 @@ module im_test {
   pure def withLevel1(s: Settings, who: str): Settings =
     { ...s, escalation: { ...s.escalation, levels: [{ ...s.escalation.levels[0], target: who }, s.escalation.levels[1]] } }
 
-  action initWith(c: Config, s: Settings): bool = all {
-    cfg' = c,
-    settings' = s,
-    world' = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) },
-    clock' = START,
-    agents' = OPERATORS.mapBy(a => "ready"),
-    lastBeat' = OPERATORS.mapBy(a => START),
-    link' = OPERATORS.mapBy(a => true),
-    changedAt' = INCIDENTS.mapBy(i => 0),
-    lastAction' = act0("init", "init", NOBODY, NOBODY),
-    autoRun' = INCIDENTS.mapBy(i => 0),
+  action initWith(c: Config, s: Settings): bool = {
+    val w = { inc: INCIDENTS.mapBy(i => NO_INCIDENT), answers: INCIDENTS.mapBy(i => Set()) }
+    all {
+      cfg' = c,
+      settings' = s,
+      world' = w,
+      clock' = START,
+      agents' = OPERATORS.mapBy(a => "ready"),
+      lastBeat' = OPERATORS.mapBy(a => START),
+      link' = OPERATORS.mapBy(a => true),
+      changedAt' = INCIDENTS.mapBy(i => 0),
+      lastAction' = act0("init", "init", NOBODY, NOBODY),
+      autoRun' = INCIDENTS.mapBy(i => 0),
+      prev' = { world: w, cfg: c, agents: OPERATORS.mapBy(a => "ready"), lastBeat: OPERATORS.mapBy(a => START), link: OPERATORS.mapBy(a => true), clock: START },
+    }
   }
   action start = initWith(BASE, BASE_SETTINGS)
 
@@ -54,6 +58,7 @@ module im_test {
     world' = world, cfg' = cfg, settings' = settings, agents' = agents, link' = link, changedAt' = changedAt,
     lastAction' = act0("time", "jump", NOBODY, NOBODY),
     autoRun' = autoRun,
+    prev' = snapshot,
   }
   def due(i: str, k: str): int = incOf(i).timers.get(k).due
   action expire(i: str, k: str): bool = jump(due(i, k) + GRACE_MS)
@@ -166,6 +171,17 @@ module im_test {
       .expect(lastAction.name == "addressee_signed_out_to_group" and x1.owner == "" and x1.assignmentGroup == GROUP and x1.escalationLevel == 1)
       .expect(inv)
 
+  // §8.3, §12.1: автоэскалация на перерыв не смотрит — адресат уровня на перерыве инцидент получает, уровень не
+  // пропускается (PROC-73: порча break-skipped-by-escalation в случайных историях не встречалась)
+  run escalationToAddresseeOnBreakTest =
+    initWith(BASE, withLevel1(BASE_SETTINGS, "a"))
+      .then(goOnBreak("a"))
+      .then(newFire("i1"))
+      .then(expire("i1", "reaction"))
+      .then(fire("i1"))
+      .expect(lastAction.name == "auto_escalate" and x1.state == "pending_acceptance" and x1.owner == "a" and x1.escalationLevel == 1)
+      .expect(inv)
+
   // RULE-93 по нормативу закрытия: уровень 1 — сам владелец, пропущен
   run resolutionEscalateSkipsOwnerTest =
     initWith({ ...BASE, members: Map(GROUP -> Set("a", "b"), GROUP2 -> Set()) },
@@ -232,6 +248,16 @@ module im_test {
       .then(actF("a", "hold", "i1", reason("patrol")))
       .then(act("a", "claim", "i2"))
       .expect(not(okF("a", "hold", "i2", reason("patrol"))))
+      .expect(inv)
+
+  // §2.2, §6.1: «Массовый сбой» из «Отложен» — только свой; чужой отложенный так не закрыть (PROC-73: порча
+  // mass-foreign-on-hold в случайных историях встречается не каждый прогон)
+  run massForeignOnHoldTest =
+    start
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .then(actF("a", "hold", "i1", reason("patrol")))
+      .expect(not(okF("b", "close", "i1", result("mass"))) and okF("a", "close", "i1", result("mass")))
       .expect(inv)
 
   // Видимость (§5): без доступа к объекту — ничего
