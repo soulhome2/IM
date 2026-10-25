@@ -41,16 +41,16 @@ description: "Выполнить пункт плана исправлений In
 
 Проверки — по таблице «Что поменял → что проверить» в `CLAUDE.md`. Дополнительно:
 
-- **Правка в `prototype/*.js` или в машине** (из машины собирается `workflow.js`) — порчи кода не устарели: место порчи должно встречаться в файле ровно один раз.
+- **Правка в `prototype/*.js` или в машине** — порчи не устарели: место порчи должно встречаться ровно один раз — в файле прототипа, а у порч машины (общий список `tools/mutations/machine.json`) — в самой машине.
 
   ```bash
   python3 -c "
   import sys; sys.path.insert(0, 'tools'); import check_code_mutations as m
-  bad = [n for n, f, old, *_ in m.MUTATIONS if open('prototype/' + f, encoding='utf-8').read().count(old) != 1]
+  bad = m.stale()
   print(len(m.MUTATIONS), 'порч, устаревших:', len(bad), bad)"
   ```
 
-  Устаревшую — поправить строку поиска в `tools/check_code_mutations.py` в той же правке. Затем — только порчи изменённых файлов: `python3 tools/check_code_mutations.py <имя> …`. Полный прогон — предложить, запускать по просьбе.
+  Устаревшую — поправить строку поиска в той же правке: порчу кода — в `tools/check_code_mutations.py`, порчу машины — в `tools/mutations/machine.json` (по ней же судит и модель Quint). Затем — только порчи изменённых файлов: `python3 tools/check_code_mutations.py <имя> …`. Полный прогон — предложить, запускать по просьбе.
 - **Правка правила в машине** — затронутые мутации машины: `python3 tools/check_mutations.py <имя> …`. Статус BAD — правило продублировано в коде прототипа.
 - Проверку, которую не прогнал, назвать с причиной.
 

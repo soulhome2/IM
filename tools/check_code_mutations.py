@@ -4,7 +4,9 @@
 В копии репозитория по одному портится место в коде (engine.js, server.js, scenario.js, app.js) —
 так, как мог бы ошибиться разработчик: строгое сравнение вместо нестрогого, забытая
 проверка, таймер без остатка. Смысл условий и эффектов — выражения машины (CEL.md, ARCH-07): их порча —
-в собранной машине prototype/workflow.js, так, как мог бы ошибиться тот, кто правит машину. Затем запускаются тесты API (tests/api.html), а для
+в собранной машине prototype/workflow.js, так, как мог бы ошибиться тот, кто правит машину; список этих порч — общий с
+моделью Quint, tools/mutations/machine.json (PROC-75): портится исходная машина, workflow.js собирается из неё
+(tools/machine_mutations.py). Затем запускаются тесты API (tests/api.html), а для
 интерфейса — самопроверка прототипа, для исполнителя сценариев — его тесты (tests/scenario.html).
 Каждая порча должна уронить тесты (KILLED).
 Если тесты прошли (SURVIVED) — в них дыра: такую ошибку никто бы не заметил.
@@ -43,6 +45,7 @@ import threading
 from urllib.parse import quote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import machine_mutations  # noqa: E402
 import parallel  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,51 +54,14 @@ KILLERS = os.path.join(ROOT, "tools", "mutations", "api-killers.json")
 
 # (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
-    ("active-limit", "workflow.js", "countMine(me, 'in_progress', incident.id) < limits.maxActive\"", "countMine(me, 'in_progress', incident.id) <= limits.maxActive\"", "api"),
-    ("hold-limit", "workflow.js", "countMine(me, 'on_hold', incident.id) < limits.maxOnHold", "countMine(me, 'on_hold', incident.id) <= limits.maxOnHold", "api"),
-    ("self-without-groups", "workflow.js", "id != '' && (id == who || (isGroup(id) && who in members(id)))", "id != '' && id == who", "api"),
-    ("addressee-owner-only", "workflow.js", "x.owner != '' ? x.owner : x.assignmentGroup", "x.owner", "api"),
-    # Правила права на действие из консилиума verification-audit 2026-10-24 (PROC-73, К1, В5): модель Quint их ловит,
-    # тесты API — должны тоже
-    ("hold-no-owner", "workflow.js", "            \"incident:hold\"\n          ]\n        },\n        {\n          \"fn\": \"isOwner\"\n        },\n", "            \"incident:hold\"\n          ]\n        },\n", "api"),
-    ("close-on-break", "workflow.js", "        {\n          \"fn\": \"agentReady\"\n        },\n        {\n          \"fn\": \"closeResultAllowed\"\n        }", "        {\n          \"fn\": \"closeResultAllowed\"\n        }", "api"),
-    ("mass-foreign-on-hold", "workflow.js", "\"ownerOnlyInStates\": [\n            \"in_progress\",\n            \"on_hold\"\n          ],", "\"ownerOnlyInStates\": [\n            \"in_progress\"\n          ],", "api"),
-    ("break-skipped-by-escalation", "workflow.js", "agentState(who) != 'offline'", "agentState(who) == 'ready'", "api"),
-    ("pause-loses-remaining", "workflow.js", "\"value\": \"incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0\"", "\"value\": \"0\"", "api"),
-    ("resume-restarts", "workflow.js", "\"value\": \"incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000\"", "\"value\": \"timerSec(incident, timerId, '') * 1000\"", "api"),
-    ("deadline-fires-repeatedly", "workflow.js", "t.due != 0 && t.due <= now && t.fired != t.due", "t.due != 0 && t.due <= now", "api"),
-    ("if-person-any", "workflow.js", "id != '' && !isGroup(id) ? id : ''", "id", "api"),
     ("form-not-validated", "engine.js", "if (rule.required && empty) {", "if (false) {", "api"),
     # Значение поля-списка — по правилам формы машины (ARCH-09)
     ("form-list-value-unchecked", "engine.js", "if (!offered) return {", "if (false) return {", "api"),
     ("form-list-hidden-accepted", "engine.js", "          rule.visible &&\n", "", "api"),
-    ("form-comment-required-ignored", "workflow.js", "\"requiredExpr\": \"closeResults.exists(i, i.id == form.resultId && i.commentRequired)\"", "\"requiredExpr\": \"false\"", "api"),
-    ("form-cause-always-visible", "workflow.js", "\"visibleExpr\": \"form.resultId == 'mass'\"", "\"visibleExpr\": \"true\"", "api"),
-    ("form-transfer-offers-no-access", "workflow.js", " && canAccept(t, x, '') && !(isOperator(t)", " && !(isOperator(t)", "api"),
-    ("form-transfer-offers-owner", "workflow.js", " && t != addressee(x)", "", "api"),
-    # Вышедшему из своей дежурной группы — не предлагать (RULE-107)
-    ("form-transfer-offers-own-group-away", "workflow.js", " && !(isOperator(t) && agentState(t) == 'offline' && isSelf(who, dutyGroupOf(t)))", "", "api"),
-    ("form-hold-offers-system", "workflow.js", "r.setBy != 'system'", "true", "api"),
-    ("form-close-no-default", "workflow.js", "\"defaultExpr\": \"stepsFilled(incident, 'closing') ? 'processed' : ''\"", "\"defaultExpr\": \"''\"", "api"),
-    ("form-close-steps-ignored", "workflow.js", "\"enabledExpr\": \"closeResults.exists(i, i.id == option && stepsOk(i, incident))\"", "\"enabledExpr\": \"true\"", "api"),
-    ("form-note-ignores-ownership", "workflow.js", "\"expr\": \"ownership(me, incident) == 'other'\",\n          \"textKey\": \"workflow.form.transfer.note.1\"", "\"expr\": \"false\",\n          \"textKey\": \"workflow.form.transfer.note.1\"", "api"),
-    ("close-result-any-owner", "workflow.js", " && !(x.state in i.ownerOnlyInStates && x.owner != who)", "", "api"),
-    ("close-result-any-surface", "workflow.js", "(surface == '' || size(i.surfaces) == 0 || surface in i.surfaces)", "true", "api"),
-    ("reopen-window-ignored", "workflow.js", "\"expr\": \"now - incident.closedAt <= limits.reopenWindowMin * 60000\"", "\"expr\": \"true\"", "api"),
-    ("breach-no-flag", "workflow.js", "\"set\": \"incident.slaBreached\",\n            \"value\": \"true\"", "\"set\": \"incident.slaBreached\",\n            \"value\": \"incident.slaBreached\"", "api"),
-    ("pending-target-as-owner", "workflow.js", "x.state == 'pending_acceptance' && isTarget(who, x) ? 'target' : ", "", "api"),
-    ("scope-always-own", "workflow.js", "\"expr\": \"can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)\"", "\"expr\": \"can(me, ownKey)\"", "api"),
-    ("break-ignored", "workflow.js", "\"expr\": \"!session.states.exists(s, s.id == agentState(me) && s.readOnly)\"", "\"expr\": \"true\"", "api"),
     # «Занят» — производное: по выражению машины, смены — от хранимого (RULE-99)
-    ("busy-never", "workflow.js", "\"expr\": \"countMine(me, 'in_progress', '') > 0\"", "\"expr\": \"false\"", "api"),
     ("agent-move-from-shown", "server.js", "const from = session.agentState;", "const from = sessionView().agentState;", "api"),
     # Автоэскалация — только тому, кто может принять сейчас: вышедшему — если в его группе кто-то на месте (RULE-100)
-    ("escalate-to-signed-out", "workflow.js", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))", "api"),
-    ("signed-out-group-ignored", "workflow.js", "canAcceptPerson(who, x) && (signedIn(who) || cel.bind(", "canAcceptPerson(who, x) && (signedIn(who) && cel.bind(", "api"),
     ("scenario-always-editable", "engine.js", "const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);", "const canEditScenario = (ev) => Boolean(ev);", "api"),
-    ("filter-ignores-ownership", "workflow.js", "\"incident.state in ['in_progress', 'on_hold'] && ownership(me, incident) == 'owner'\"", "\"incident.state in ['in_progress', 'on_hold']\"", "api"),
-    ("badge-ignores-addressee", "workflow.js", "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && isGroup(addressee(incident))\"", "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'\"", "api"),
-    ("count-not-incremented", "workflow.js", "\"value\": \"incident.${field} + 1\"", "\"value\": \"incident.${field}\"", "api"),
     ("version-conflict-ignored", "server.js", "if (body && body.expectedState && body.expectedState !== ev.state) {", "if (false) {", "api"),
     ("version-not-bumped", "server.js", "const touch = (list) => list.forEach((e) => (e.version += 1));", "const touch = () => {};", "api"),
     ("device-type-filter-ignored", "server.js", "if (q.deviceTypeId && q.deviceTypeId !== \"all\") {", "if (false) {", "api"),
@@ -143,7 +109,6 @@ MUTATIONS = [
     ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev) } }", "{ status: 200, body: card(ev) }", "api"),
     ("targets-include-self", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = field ? field.options : targets();", "api"),
     ("targets-ignore-form", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = targets().filter((o) => !engine.isSelf(o.id));", "api"),
-    ("limit-code-generic", "workflow.js", "\"fn\": \"withinActiveLimit\",\n        \"errorCode\": \"LIMIT_EXCEEDED\",", "\"fn\": \"withinActiveLimit\",\n        \"errorCode\": \"GUARD_FAILED\",", "api"),
     ("hold-timer-hidden", "server.js", "holdTimer: holdTimerState(ev),", "holdTimer: null,", "api"),
     ("colleague-acts-as-operator", "server.js", "          Object.assign({}, engineCtx, {\n            me: id,", "          Object.assign({}, engineCtx, {\n            me: ME,", "api"),
     ("operator-never-idle", "server.js", "{ me: ME, idleSec: () => (lastHeartbeat == null ? 0 : (now() - lastHeartbeat) / 1000) }", "{ me: ME, idleSec: () => 0 }", "api"),
@@ -154,18 +119,11 @@ MUTATIONS = [
     ("ui-map-ignores-markers", "app.js", "const markers = ordered.map((m) => deviceMarker(m, { source: m.deviceGuid === source, active: m.deviceGuid === state.activeCam })).join(\"\");", "const markers = \"\";", "ui"),
     ("number-is-guid", "server.js", "        number: ev.number,", "        number: ev.id,", "api"),
     ("event-type-guid-is-id", "server.js", "!String(q.eventTypeGuid).split(\",\").includes(e.typeGuid)", "!String(q.eventTypeGuid).split(\",\").includes(e.typeId)", "api"),
-    ("setting-is-ignored", "workflow.js", "\"expr\": \"settingKey == value\"", "\"expr\": \"true\"", "api"),
-    ("owner-group-ignored", "workflow.js", "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"", "\"expr\": \"true\"", "api"),
     ("offline-without-scheduler", "server.js", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = runScheduler();", "            session.agentState = \"offline\";\n            session.reasonId = null;\n            const fired = [];", "api"),
-    # Срок «Нет связи» — из порогов молчания (RULE-118, RULE-129)
-    ("no-link-deadline-off", "workflow.js", "rs[0].deadlineFromIdle ? (", "false ? (", "api"),
-    ("no-link-deadline-release-only", "workflow.js", "session.idleReleaseSec - session.idleHoldSec", "session.idleReleaseSec", "api"),
     # Простой сервиса на стенде (RULE-119): при старте молчание оператора считается заново (RULE-113)
     ("service-restart-ignored", "server.js", "if (body.serviceRestart === true) lastHeartbeat = now();", "", "api"),
     # Карточку увели (BUG-105, BUG-117): событие — только при открытой карточке; свой перерыв и выход её не уводят — в машине
     ("evict-any-card", "server.js", "&& session.openIncidentGuid === ev.id) emit(", ") emit(", "api"),
-    ("signout-evicts-own-card", "workflow.js", '"workflow.journal.owner_signed_out"\n          ]\n        }', '"workflow.journal.owner_signed_out"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "evictOpenCard",\n          "args": [\n            "previousOwner"\n          ]\n        }', "api"),
-    ("break-evicts-own-card", "workflow.js", '"workflow.journal.system_hold_break"\n          ]\n        }', '"workflow.journal.system_hold_break"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "evictOpenCard",\n          "args": [\n            "owner"\n          ]\n        }', "api"),
     ("visibility-ignored", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => filters.set(e, engine.queueFilters(e)).get(e).length);", "api"),
     ("lists-show-linked", "server.js", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e).length);", "let list = events.filter((e) => canSee(e) && filters.set(e, engine.queueFilters(e)).get(e));", "api"),
     # Объединение (§11): основной, срок, закрытие привязанных; вкладка — фильтр; панель выборки
@@ -178,13 +136,7 @@ MUTATIONS = [
     ("stream-leaks-hidden", "server.js", "      if (ev && !canSee(ev)) return;\n", "", "api"),
     ("tree-ignores-access", "server.js", ".filter((c) => c.isDevice && myDevices.has(c.id))", ".filter((c) => c.isDevice)", "api"),
     ("counters-ignore-access", "server.js", "const list = visible({});", "const list = events;", "api"),
-    ("target-access-ignored", "workflow.js", "\"expr\": \"form.targetId == '' || hasAccess(form.targetId, incident)\"", "\"expr\": \"true\"", "api"),
-    ("group-access-all-members", "workflow.js", "members(who).exists(m, access(m, x))", "members(who).all(m, access(m, x))", "api"),
-    ("level-cannot-accept-ignored", "workflow.js", "l.target != addressee(x) && canAcceptNow(l.target, x, x.owner)", "l.target != addressee(x)", "api"),
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
-    ("level-current-addressee-ignored", "workflow.js", "l.target != addressee(x) && canAcceptNow(", "canAcceptNow(", "api"),
-    ("level-group-owner-counted", "workflow.js", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')", "api"),
-    ("group-accept-except-ignored", "workflow.js", "m != except && signedIn(m) && canAcceptPerson(m, x)", "signedIn(m) && canAcceptPerson(m, x)", "api"),
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "        at = runAt;\n        let facts = null;", "        at = null;\n        let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
@@ -204,11 +156,7 @@ MUTATIONS = [
     ("camera-links-ignore-source", "server.js", "CAMERA_LINKS.filter((l) => l.devices.includes(source))", "CAMERA_LINKS.filter((l) => l.devices.length)", "api"),
     ("camera-links-created-empty", "server.js", "cameras: camerasOf(devices[0]),", "cameras: [],", "api"),
     ("ui-camera-links-no-name", "app.js", "<tr><td>${asData(l.name)}</td><td>${names(l.devices)}</td>", "<tr><td>—</td><td>${names(l.devices)}</td>", "ui"),
-    ("expired-resolution-refires", "workflow.js", "\"value\": \"left == 0 && incident.timers[timerId].fired != 0 ? incident.timers[timerId].fired : now + left\"", "\"value\": \"now + left\"", "api"),
-    ("cannot-accept-ignored", "workflow.js", "\"expr\": \"addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected\"", "\"expr\": \"false\"", "api"),
-    ("lost-access-ignored", "workflow.js", "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"", "\"expr\": \"false\"", "api"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
-    ("duty-group-last", "workflow.js", "size(gs) > 0 ? gs[0] : ''", "size(gs) > 0 ? gs[size(gs) - 1] : ''", "api"),
     ("group-shift-ignored", "server.js", "(op.group ? membersOf(op).some((m) => present({ id: m })) :", "(op.group ? true :", "api"),
     ("agent-state-ignored", "server.js", ": engine.onDuty(op.id));", ": true);", "api"),
     ("ui-bulk-failures-hidden", "app.js", "toast(res.failed.length ? `${okText} ", "toast(false ? `${okText} ", "ui"),
@@ -270,12 +218,9 @@ MUTATIONS = [
     ("next-not-to-summary", "app.js", "    return i < path.length - 1 || (runDone(ev) && !atSummary(ev));\n  }", "    return i < path.length - 1;\n  }", "ui"),
     ("next-on-linked-tab", "app.js", 'const canNext = tab === "scenario" && !summary && canGoNext(ev, i, editable);', "const canNext = !summary && canGoNext(ev, i, editable);", "ui"),
     ("back-after-next", "styles.css", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n  flex-direction: row-reverse;\n", "ui"),
-    ("sort-newest-as-oldest", "workflow.js", "\"-incident.priority\",\n        \"-incident.occurredAt\"", "\"-incident.priority\",\n        \"incident.occurredAt\"", "api"),
-    ("sort-reaction-ignores-running", "workflow.js", "\"timerRuns(incident, 'reaction') ? 0 : 1\"", "\"0\"", "api"),
     ("sort-ignores-keys", "server.js", "for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];", "", "api"),
     ("agent-move-any", "server.js", "if (!move || !target) return problem(409,", "if (!target) return problem(409,", "api"),
     ("agent-reason-optional", "server.js", "if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId))", "if (false)", "api"),
-    ("agent-break-from-offline", "workflow.js", "\"noteKey\": \"workflow.session.transition.break.note\",\n        \"from\": [\n          \"ready\"\n        ]", "\"noteKey\": \"workflow.session.transition.break.note\",\n        \"from\": [\n          \"ready\",\n          \"offline\"\n        ]", "api"),
     ("run-all-skips-check", "engine.js", "        if (!a.ok) return { ok: false, why: a.why, guard: a.guard, notFrom: a.notFrom, ev };", "", "api"),
     ("card-note-ignores-actions", "server.js", "base.actions.filter((a) => a.enabled).map((a) => a.id)", "base.actions.map((a) => a.id)", "api"),
     ("card-note-not-sent", "server.js", "        note: noteView(ev, base.actions.filter((a) => a.enabled).map((a) => a.id)),\n", "", "api"),
@@ -287,11 +232,6 @@ MUTATIONS = [
     ("ui-bulk-done-generic", "app.js", "const done = tr && tr.ui && tr.ui.bulkDoneKey;", "const done = null;", "ui"),
     ("ui-session-note-lost", "app.js", "return m && m.noteKey ? t(m.noteKey, vars || {}) : \"\";", "return \"\";", "ui"),
     ("ui-detached-state-lost", "app.js", "return tr && STATES[tr.to] ? lbl(STATES[tr.to]) : \"\";", "return \"\";", "ui"),
-    ("notify-self", "workflow.js", "\"if\": \"whom != '' && whom != actor\"", "\"if\": \"whom != ''\"", "api"),
-    ("recipients-ignore-duty", "workflow.js", ".filter(m, onDuty(m) && access(m, x))", ".filter(m, access(m, x))", "api"),
-    ("recipients-ignore-access", "workflow.js", ".filter(m, onDuty(m) && access(m, x))", ".filter(m, onDuty(m))", "api"),
-    ("alert-no-recipient-silent", "workflow.js", "\"emptyLog\": \"alert ? alerts.noRecipientLog : ''\"", "\"emptyLog\": \"''\"", "api"),
-    ("alert-by-recipient", "workflow.js", "\"alert\": \"alert\",", "\"alert\": \"whom == alerts.target\",", "api"),
     ("alert-not-delivered", "server.js", 'if (alert && recipients.includes(ME)) emit("incident.alert"', 'if (false) emit("incident.alert"', "api"),
     ("tree-counts-linked", "server.js", 'const isOpen = (e) => engine.inQueueFilter(e, "open");', "const isOpen = (e) => !isDone(e);", "api"),
     ("selection-single-stub", "app.js", "(state.checked.size === 1 ? await api.get(`/operator/incidents/${enc(first)}`) : { guid: first })", "{ guid: first }", "ui"),
@@ -305,8 +245,6 @@ MUTATIONS = [
     ("journal-not-paged", "server.js", "body: { items: all.slice((n - 1) * size, n * size), total: all.length } }", "body: { items: all, total: all.length } }", "api"),
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),
-    ("target-can-accept-ignored", "workflow.js", "\"expr\": \"form.targetId == '' || canAccept(form.targetId, incident, '')\"", "\"expr\": \"true\"", "api"),
-    ("accept-right-ignored", "workflow.js", "can(m, 'incident:accept') && access(m, x)", "access(m, x)", "api"),
     ("stream-id-repeats", "server.js", "const message = Object.assign({ id: String(++seq) }, body);", "const message = Object.assign({ id: String(seq) }, body);", "api"),
     ("ui-field-rules-ignore-choice", "app.js", "return r.dependsOn ? r.byValue[values[r.dependsOn] || \"\"] || r.byValue[\"\"] : r;", "return r;", "ui"),
     ("ui-esc-keeps-modal", "app.js", "if (e.key !== \"Escape\") return;", "return;", "ui"),
@@ -338,26 +276,8 @@ MUTATIONS = [
     ("ui-work-tab-ignored", "app.js", "        state.workTab = tabBtn.dataset.workTab;\n", "", "ui"),
     ("ui-work-tabs-hidden", "app.js", "    if (!ev.linkedCount) return \"\";\n    const b = (id, label) =>", "    return \"\";\n    const b = (id, label) =>", "ui"),
     ("ui-actions-jump-on-tab", "app.js", 'id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}', 'id="stepBack" ${tab !== "scenario" ? "hidden" : offAttr(!(i === 0 && !summary), backWhy(tab))}', "ui"),
-    # «Взял — вернул» эскалацию не откладывает (RULE-104)
-    ("release-restarts-reaction", "workflow.js", '"hold"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"hold"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
-    ("stop-forgets-left", "workflow.js", '"value": "keep ? incident.timers[timerId].due - now : 0"', '"value": "0"', "api"),
-    # «Переоткрыть» снимает закрытие целиком (RULE-103)
-    ("reopen-keeps-closed-at", "workflow.js", '"closedAt",\n            "0"', '"closedAt",\n            "closedAt"', "api"),
     # Файл тестов с ошибкой в первой строке не загрузился — прогон красный, а не без его тестов (PROC-53)
     ("test-file-load-error", "../tests/api-junction.js", "/* Тесты API стыка машины инцидента", "}\n/* Тесты API стыка машины инцидента", "api"),
-    # Системные ветки (PROC-49): молчание возвращает в очередь и отложенное перерывом; адресат вышел без дежурной
-    # группы — реакция продолжается с того же срока
-    # Остаток реакции (RULE-120, RULE-121, RULE-128): выход и «Отсоединить» — с остатка, «Закрыть» забывает
-    ("signout-restarts-reaction", "workflow.js", '"resolution"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"resolution"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
-    ("detach-restarts-reaction", "workflow.js", '"fn": "clearLink"\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction",\n            "continue"', '"fn": "clearLink"\n        },\n        {\n          "kind": "transactional",\n          "fn": "startTimer",\n          "args": [\n            "reaction"', "api"),
-    ("idle-release-skips-break", "workflow.js", '"fn": "holdReasonIn",\n          "args": [\n            [\n              "break",\n              "no_link"\n            ]', '"fn": "holdReasonIn",\n          "args": [\n            [\n              "no_link"\n            ]', "api"),
-    ("signed-out-queue-restarts-reaction", "workflow.js", '"fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', '"fn": "startTimer",\n          "args": [\n            "reaction"\n          ]\n        },\n        {\n          "kind": "transactional",\n          "fn": "appendLog",\n          "args": [\n            "workflow.journal.addressee_signed_out_to_queue"\n          ]', "api"),
-    # «Переоткрыть» — норматив закрытия заново: полный или из настройки, причина сбоя снимается (PROC-48)
-    ("reopen-resolution-continues", "workflow.js", '"fn": "restartTimer",\n          "args": [\n            "resolution",\n            "limits.reopenResolutionSec"\n          ]', '"fn": "startTimer",\n          "args": [\n            "resolution"\n          ]', "api"),
-    ("reopen-setting-ignored", "workflow.js", '"resolution",\n            "limits.reopenResolutionSec"', '"resolution",\n            "0"', "api"),
-    ("reopen-keeps-cause", "workflow.js", '"closeCauseId",\n            "\'\'"', '"closeCauseId",\n            "closeCauseId"', "api"),
-    # «Передать», когда передать некому (BUG-85)
-    ("transfer-nobody-allowed", "workflow.js", "\"expr\": \"transferTargets().exists(", "\"expr\": \"true || transferTargets().exists(", "api"),
     # Ключ повтора и версии отмеченных (BUG-84)
     ("idempotency-off", "server.js", "if (idem && answered.has(idem)) {", "if (false) {", "api"),
     ("bulk-versions-unchecked", "server.js", "if (changedSince(ev, body.expectedVersions)) return failed.push(", "if (false) return failed.push(", "api"),
@@ -365,8 +285,6 @@ MUTATIONS = [
     ("ui-bulk-no-versions", "app.js", "surface, expectedVersions: expectedVersions(guids), idempotencyKey", "surface, idempotencyKey", "ui"),
     # Догон в общем порядке по времени (ARCH-13)
     ("tick-per-incident-since-now", "engine.js", "s.since.has(key) ? s.since.get(key) : s.lastRun != null ? s.lastRun : ctx.now()", "ctx.now()", "api"),
-    # Уточнения норматива — только по признакам overridesBy (ARCH-11)
-    ("overrides-by-ignored", "workflow.js", "overrideAllowed(t, o) && overrideMatches(x, o)", "overrideMatches(x, o)", "api"),
     # Отсчёт — по времени сервера (BUG-103)
     ("ui-clock-ignores-server", "app.js", "const serverNow = () => Date.now() + skewMs;", "const serverNow = () => Date.now();", "ui"),
     # Одно слово — одно число: нижнее меню — как у «Очередь» (BUG-100)
@@ -383,32 +301,10 @@ MUTATIONS = [
     # Текущий шаг основного отвечен только в сценарии с петлёй — такого в эталонном наборе нет, ловит тест исполнителя
     ("copy-answers-overwrites", "scenario.js", "if (!entry || entry.skipped || r.state[id] || !src", "if (!entry || entry.skipped || !src", "scenario"),
     ("copy-answers-no-log", "engine.js", "            if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());\n", "", "api"),
-    ("relink-closed-too", "workflow.js", "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"", "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"", "api"),
-    ("relink-no-log", "workflow.js", "\"incident\": \"c\",\n                      \"key\": \"logKey\"", "\"incident\": \"c\",\n                      \"key\": \"''\"", "api"),
-    ("transfer-restarts-reaction", "workflow.js", "ifStopped && incident.timers[timerId].due != 0", "false", "api"),
-    ("level0-last-norm", "workflow.js", "x.escalationLevel > 0 && size(escalation.levels) > 0 ?", "size(escalation.levels) > 0 ?", "api"),
-    ("detach-before-accept", "workflow.js", "(ownership(me, ps[0]) == 'owner' || unowned(ps[0]))", "(ps[0].owner == me || unowned(ps[0]))", "api"),
     # Срок группы — самый ранний; нарушения основного — и привязанным (RULE-97)
-    ("tighten-ignored", "workflow.js", "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)", "false", "api"),
-    ("tighten-spent-counted", "workflow.js", " && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)", " && !spent(ps[0], timerId, now)", "api"),
-    ("tighten-new-primary-skipped", "workflow.js", "\"set\": \"p.timers[timerId].left\",\n                            \"value\": \"left\"", "\"set\": \"p.timers[timerId].left\",\n                            \"value\": \"t.left\"", "api"),
-    ("detach-keeps-own-deadline", "workflow.js", "\"value\": \"leftOf(ps[0], timerId, now)\"", "\"value\": \"incident.timers[timerId].left\"", "api"),
-    ("detach-spent-lost", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"false\"", "api"),
-    ("detach-window-not-spent", "workflow.js", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"spent(ps[0], timerId, now)\"", "api"),
     ("action-not-activity", "server.js", "      if (acting) lastHeartbeat = now();\n", "", "api"),
-    ("breach-not-shared", "workflow.js", "\"in\": \"groupMembersAt(incident, deadline)\"", "\"in\": \"[]\"", "api"),
     ("window-breach-not-shared", "engine.js", "canceled.tr.effects.filter((x) => x.fn === \"recordBreach\")", "[]", "api"),
-    # Нарушение группы — тем, кто был в группе в момент срока (BUG-73)
-    ("share-ignores-join-time", "workflow.js", "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at)", "(e.linkedTo == p.id && !isDone(e))", "api"),
-    ("share-skips-left", "workflow.js", " || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)", "", "api"),
-    ("link-time-not-set", "workflow.js", "\"set\": \"incident.linkedAt\",\n            \"value\": \"now\"", "\"set\": \"incident.linkedAt\",\n            \"value\": \"0\"", "api"),
-    ("left-group-not-recorded", "workflow.js", "\"value\": \"{'primaryId': incident.linkedTo, 'linkedAt': incident.linkedAt, 'at': now}\"", "\"value\": \"incident.leftGroup\"", "api"),
-    ("relink-forgets-group", "workflow.js", "\"value\": \"{'primaryId': c.linkedTo, 'linkedAt': c.linkedAt, 'at': now}\"", "\"value\": \"c.leftGroup\"", "api"),
     # Журнал срока группы (RULE-98)
-    ("group-breach-no-log", "workflow.js", "\"key\": \"groupLogKey\"", "\"key\": \"''\"", "api"),
-    ("deadline-no-log", "workflow.js", "\"key\": \"logKey\",\n                          \"vars\": \"{'number': incident.number}\",\n                          \"once\"", "\"key\": \"''\",\n                          \"vars\": \"{'number': incident.number}\",\n                          \"once\"", "api"),
-    ("deadline-log-always", "workflow.js", "\"if\": \"left < was\"", "\"if\": \"true\"", "api"),
-    ("deadline-log-twice", "workflow.js", "\"once\": \"true\"", "\"once\": \"false\"", "api"),
     ("linked-timer-shown", "server.js", "      if (isDone(ev) || ev.state === \"linked\") return null;", "      if (isDone(ev)) return null;", "api"),
     ("linked-version-not-bumped", "server.js", "      onBreachShared: (ev) => touch([ev]),", "      onBreachShared: () => {},", "api"),
     ("ui-select-by-filter-menu-dead", "app.js", "      openFilter(state.groupId || \"all\");\n", "", "ui"),
@@ -425,8 +321,6 @@ MUTATIONS = [
     ("ui-target-sections-swapped", "app.js", 'section("На месте", all.filter((o) => o.available !== false), `${field.name}-here`) +\n      section("Нет на месте", all.filter((o) => o.available === false), `${field.name}-away`)', 'section("Нет на месте", all.filter((o) => o.available === false), `${field.name}-away`) +\n      section("На месте", all.filter((o) => o.available !== false), `${field.name}-here`)', "ui"),
     ("ui-target-prefix-search", "app.js", "const targetHit = (o, q) => comboHit(`${t(o.label)} ${t(o.role || \"\")}`, q);", "const targetHit = (o, q) => !q || t(o.label).toLowerCase().startsWith(q.toLowerCase());", "ui"),
     ("ui-target-esc-closes-form", "app.js", "    if (e.key === \"Escape\" && state.dialog.combo.open) {\n      e.stopPropagation();", "    if (e.key === \"Escape\" && state.dialog.combo.open) {", "ui"),
-    ("reopen-unlink-no-log", "workflow.js", "\"key\": \"primaryLogKey\"", "\"key\": \"''\"", "api"),
-    ("linked-access-ignored", "workflow.js", "who != '' && hasAccess(who, incident) == expected", "who != '' && true == expected", "api"),
     ("absence-no-reason", "server.js", 'render("workflow.label.absent.break", { reason: reason ? [reason.labelKey] : "" })', 'render("workflow.label.absent.break", { reason: "" })', "api"),
     ("last-transfer-target-forgotten", "server.js", "      if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];\n", "", "api"),
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),
@@ -452,7 +346,6 @@ MUTATIONS = [
     ("top-priority-fixed", "server.js", "const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);", "const topPriority = () => 100;", "api"),
     ("ui-priorities-not-reloaded", "app.js", 'if (msg.type === "reference.priorities_changed") {', "if (false) {", "ui"),
     # Лимиты без ограничения (§10.2, §11, RULE-69) и проверка лимита выборки на сервере (BUG-40)
-    ("active-limit-null-blocks", "workflow.js", "\"expr\": \"limits.maxActive == 0 || countMine(", "\"expr\": \"countMine(", "api"),
     ("bulk-limit-unchecked", "server.js", "if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(", "if (false) return problem(", "api"),
     # Лимит выборки и у «Взять в работу» на выборке (BUG-83)
     ("merge-limit-unchecked", "server.js", "if (tooLarge(list)) return problem(", "if (false) return problem(", "api"),
@@ -474,6 +367,28 @@ MUTATIONS = [
     ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
+# Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
+# из испорченной; судят тесты API
+MUTATIONS += [(m["name"], "workflow.js", m["find"], m["replace"], "api") for m in machine_mutations.load()]
+
+
+def place(mutation, code):
+    """(сколько мест порчи, код с порчей — если место одно). Порча машины — в машине, workflow.js — из неё."""
+    _, file, old, new, _ = mutation
+    if file == "workflow.js":
+        return machine_mutations.workflow_js(old, new)
+    n = code.count(old)
+    return n, (code.replace(old, new) if n == 1 else None)
+
+
+def stale():
+    """Порчи, место которых в коде не найдено или не одно, — устарели (скилл im-fix)."""
+    out = []
+    for m in MUTATIONS:
+        with open(os.path.join(ROOT, "prototype", m[1]), encoding="utf-8") as f:
+            if place(m, f.read())[0] != 1:
+                out.append(m[0])
+    return out
 
 
 def chrome(url, profile, budget, limit):
@@ -532,10 +447,11 @@ def check(site, profile, mutation, full, killers):
     path = os.path.join(site, "prototype", file)
     with open(path, encoding="utf-8") as f:
         code = f.read()
-    if code.count(old) != 1:
+    found, mutated = place(mutation, code)
+    if found != 1:
         return f"STALE {name}: в {file} не найдено место порчи — обновите мутацию", True, None
     with open(path, "w", encoding="utf-8") as f:
-        f.write(code.replace(old, new))
+        f.write(mutated)
     try:
         # До первого падения: не упало ничего — значит, пройден весь набор. Первым — поймавший в прошлый раз
         hint = None if full else killers.get(name)
@@ -602,6 +518,9 @@ def main():
                     (survived if line.startswith(("SURVIVED", "STALE")) else failed).append(m[0])
                 if killer:
                     found[m[0]] = killer
+                # Выжившая — пустая подсказка: таблица порч машины видит «не поймана» (tools/mutation_table.py)
+                elif line.startswith("SURVIVED"):
+                    found[m[0]] = None
 
     try:
         threads = [threading.Thread(target=worker, args=(n,)) for n in range(min(jobs, tasks.qsize()) or 1)]

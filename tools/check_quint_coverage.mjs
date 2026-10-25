@@ -27,13 +27,16 @@ PROFILES.forEach((p, k) => {
   const t0 = Date.now();
   const r = spawnSync(
     "quint",
-    ["run", "im.qnt", "--invariant", "inv", `--max-samples=${p.samples}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, "--witnesses", ...WITNESSES],
+    // --verbosity=1: без примера истории — длинный вывод в трубу quint обрывал раньше строки итога (PROC-75)
+    ["run", "im.qnt", "--invariant", "inv", `--max-samples=${p.samples}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, "--witnesses", ...WITNESSES, "--verbosity=1"],
     { cwd: Q, encoding: "utf8", maxBuffer: 1 << 28 }
   );
   const ok = (r.stdout.match(/^\[ok\].*$/m) || [])[0];
   if (r.status !== 0 || !ok) {
     console.log(`Профиль «${p.name}» (--init=${p.init} --step=${p.step}): нарушение или ошибка quint`);
     console.log(r.stdout, r.stderr);
+    const seed = (r.stdout.match(/--seed=(0x[0-9a-f]+)/) || [])[1];
+    if (seed) console.log(`История целиком: cd Specification/Workflow_machine/quint && quint run im.qnt --invariant inv --max-samples=${p.samples} --max-steps=${STEPS} --init=${p.init} --step=${p.step} --seed=${seed}`);
     failed = true;
     return;
   }

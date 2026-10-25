@@ -1,0 +1,724 @@
+[
+ {
+  "name": "level-current-addressee",
+  "what": "эскалация не пропускает уровень текущего адресата (RULE-93)",
+  "find": "l.target != addressee(x) && canAcceptNow(",
+  "replace": "canAcceptNow("
+ },
+ {
+  "name": "level-signed-out",
+  "what": "эскалация отдаёт вышедшему, у кого в группе никого (RULE-100)",
+  "find": "&& canAcceptNow(l.target, x, x.owner))",
+  "replace": "&& canAccept(l.target, x, x.owner))"
+ },
+ {
+  "name": "level-no-duty-group",
+  "what": "эскалация пропускает вышедшего, хотя в его дежурной группе есть кому принять (RULE-100, PROC-50)",
+  "find": "(signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))",
+  "replace": "signedIn(who)"
+ },
+ {
+  "name": "level-group-owner",
+  "what": "эскалация считает в группе и владельца (RULE-93)",
+  "find": "canAcceptNow(l.target, x, x.owner)",
+  "replace": "canAcceptNow(l.target, x, '')"
+ },
+ {
+  "name": "breach-at-now",
+  "what": "нарушение датируется моментом записи, а не дедлайном (§10.1, правило 5; PROC-51)",
+  "find": "'at': deadline, 'owner': addressee(before)",
+  "replace": "'at': now, 'owner': addressee(before)"
+ },
+ {
+  "name": "breach-no-owner",
+  "what": "нарушение записывается ни на кого",
+  "find": "'owner': addressee(before)",
+  "replace": "'owner': ''"
+ },
+ {
+  "name": "group-breach-not-shared",
+  "what": "нарушение основного привязанным не записывается (RULE-97)",
+  "find": "groupMembersAt(incident, deadline)",
+  "replace": "[]"
+ },
+ {
+  "name": "window-left-not-in-group",
+  "what": "отсоединённый в окне после срока группы — не в группе (BUG-73)",
+  "find": " || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)",
+  "replace": ""
+ },
+ {
+  "name": "detach-window-not-spent",
+  "what": "отсоединённый после наступившего срока группы — с неотработанным остатком 0 (BUG-75)",
+  "find": "\"if\": \"leftOf(ps[0], timerId, now) == 0\"",
+  "replace": "\"if\": \"spent(ps[0], timerId, now)\""
+ },
+ {
+  "name": "detach-at-deadline-out",
+  "what": "отсоединённый в миг срока группы — не в группе (BUG-75)",
+  "find": "e.leftGroup.at >= at",
+  "replace": "e.leftGroup.at > at"
+ },
+ {
+  "name": "active-limit",
+  "what": "лимит активных пропускает лишний",
+  "find": "countMine(me, 'in_progress', incident.id) < limits.maxActive\"",
+  "replace": "countMine(me, 'in_progress', incident.id) <= limits.maxActive\""
+ },
+ {
+  "name": "relink-off",
+  "what": "привязанные объединяемого новому основному не переходят",
+  "find": "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"",
+  "replace": "\"in\": \"[]\""
+ },
+ {
+  "name": "scenario-ignored",
+  "what": "объединяются инциденты разных сценариев",
+  "find": "\"expr\": \"cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "reopen-closed-at-not-cleared",
+  "what": "«Переоткрыть» оставляет время закрытия (RULE-103)",
+  "find": "{ \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"closedAt\", \"0\"] },",
+  "replace": ""
+ },
+ {
+  "name": "processed-without-steps",
+  "what": "«Обработан» без пройденного сценария",
+  "find": "\"expr\": \"i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "lost-access-always-ok",
+  "what": "потеря доступа адресата не замечается (RULE-71)",
+  "find": "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"",
+  "replace": "\"expr\": \"addressee(incident) != '' && true == expected\""
+ },
+ {
+  "name": "pause-not-paused",
+  "what": "«на паузе» не отмечается — остаток теряется",
+  "find": "{\"set\": \"incident.timers[timerId].paused\", \"value\": \"true\"}, {\"set\": \"incident.timers[timerId].due\", \"value\": \"0\"}",
+  "replace": "{\"set\": \"incident.timers[timerId].paused\", \"value\": \"false\"}, {\"set\": \"incident.timers[timerId].due\", \"value\": \"0\"}"
+ },
+ {
+  "name": "no-link-no-deadline",
+  "what": "у «Нет связи» снова нет срока: связь вернулась — отложенный лежит бесконечно (RULE-118, RULE-129)",
+  "find": "rs[0].deadlineFromIdle ? (",
+  "replace": "false ? ("
+ },
+ {
+  "name": "hold-idle-threshold",
+  "what": "«нет связи» у «В работе» — по порогу возврата в очередь, а не удержания (П2)",
+  "find": "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleHoldSec\"] }",
+  "replace": "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleReleaseSec\"] }"
+ },
+ {
+  "name": "resume-refires",
+  "what": "отработанный норматив при возврате в работу — новый срок (RULE-50)",
+  "find": "incident.timers[timerId].fired != 0 ? incident.timers[timerId].fired : now + left",
+  "replace": "false ? 0 : now + left"
+ },
+ {
+  "name": "hold-no-owner",
+  "what": "«Отложить» чужой инцидент — без условия «я владелец» (§6.1, К1)",
+  "find": "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n        { \"fn\": \"isOwner\" },\n",
+  "replace": "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n"
+ },
+ {
+  "name": "transfer-no-if-stopped",
+  "what": "передача из «Новое» и «Ожидает принятия» запускает реакцию заново — передачами её не продлить (§4, §6.1, RULE-83)",
+  "find": "\"args\": [\"reaction\", \"byEscalationLevel\", true] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }",
+  "replace": "\"args\": [\"reaction\", \"byEscalationLevel\"] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }"
+ },
+ {
+  "name": "claim-on-break",
+  "what": "«Взять» на перерыве и после выхода (§10.1, правило 2)",
+  "find": "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"agentReady\" },\n        { \"fn\": \"withinActiveLimit\" }",
+  "replace": "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"withinActiveLimit\" }"
+ },
+ {
+  "name": "close-on-break",
+  "what": "«Закрыть» на перерыве и после выхода (§10.1, правило 2)",
+  "find": "{ \"fn\": \"agentReady\" },\n        { \"fn\": \"closeResultAllowed\" }",
+  "replace": "{ \"fn\": \"closeResultAllowed\" }"
+ },
+ {
+  "name": "mass-foreign-on-hold",
+  "what": "«Массовый сбой» из чужого «Отложен» (§2.2, §6.1)",
+  "find": "\"ownerOnlyInStates\": [\"in_progress\", \"on_hold\"],",
+  "replace": "\"ownerOnlyInStates\": [\"in_progress\"],"
+ },
+ {
+  "name": "break-skipped-by-escalation",
+  "what": "эскалация пропускает адресата на перерыве — он инцидент получает (§8.3, §12.1)",
+  "find": "\"expr\": \"agentState(who) != 'offline'\", \"$comment\": \"§12.1. Человек вошёл",
+  "replace": "\"expr\": \"agentState(who) == 'ready'\", \"$comment\": \"§12.1. Человек вошёл"
+ },
+ {
+  "name": "reopen-no-window",
+  "what": "«Переоткрыть» после срока переоткрытия (§6.1, §10.1, BUG-31)",
+  "find": "\"expr\": \"now - incident.closedAt <= limits.reopenWindowMin * 60000\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "level-ceiling-ignored",
+  "what": "автоэскалация не смотрит на потолок maxLevel (§8.3)",
+  "find": "l.level > x.escalationLevel && l.level <= escalation.maxLevel && ",
+  "replace": "l.level > x.escalationLevel && "
+ },
+ {
+  "name": "hold-limit",
+  "what": "лимит отложенных пропускает лишний (§10.2)",
+  "find": "countMine(me, 'on_hold', incident.id) < limits.maxOnHold",
+  "replace": "countMine(me, 'on_hold', incident.id) <= limits.maxOnHold"
+ },
+ {
+  "name": "self-without-groups",
+  "what": "«я или моя группа» без групп: адресованное моей группе — не моё (§8.1)",
+  "find": "id != '' && (id == who || (isGroup(id) && who in members(id)))",
+  "replace": "id != '' && id == who"
+ },
+ {
+  "name": "addressee-owner-only",
+  "what": "адресат — только владелец, адресация группе не в счёт (§8.1)",
+  "find": "x.owner != '' ? x.owner : x.assignmentGroup",
+  "replace": "x.owner"
+ },
+ {
+  "name": "pause-loses-remaining",
+  "what": "пауза не запоминает остаток срока (§4)",
+  "find": "\"value\": \"incident.timers[timerId].due - now > 0 ? incident.timers[timerId].due - now : 0\"",
+  "replace": "\"value\": \"0\""
+ },
+ {
+  "name": "resume-restarts",
+  "what": "возобновление — с полного норматива, а не с остатка (§4)",
+  "find": "\"value\": \"incident.timers[timerId].paused ? incident.timers[timerId].left : timerSec(incident, timerId, '') * 1000\"",
+  "replace": "\"value\": \"timerSec(incident, timerId, '') * 1000\""
+ },
+ {
+  "name": "deadline-fires-repeatedly",
+  "what": "наступивший срок срабатывает снова и снова (§10.1)",
+  "find": "t.due != 0 && t.due <= now && t.fired != t.due",
+  "replace": "t.due != 0 && t.due <= now"
+ },
+ {
+  "name": "if-person-any",
+  "what": "«человек из адресата» пропускает и группу",
+  "find": "id != '' && !isGroup(id) ? id : ''",
+  "replace": "id"
+ },
+ {
+  "name": "form-comment-required-ignored",
+  "what": "форма «Закрыть»: комментарий не обязателен ни при каком результате (§2.2)",
+  "find": "\"requiredExpr\": \"closeResults.exists(i, i.id == form.resultId && i.commentRequired)\"",
+  "replace": "\"requiredExpr\": \"false\"",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-cause-always-visible",
+  "what": "форма «Закрыть»: причина сбоя видна при любом результате (§7)",
+  "find": "\"visibleExpr\": \"form.resultId == 'mass'\"",
+  "replace": "\"visibleExpr\": \"true\"",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-transfer-offers-no-access",
+  "what": "форма «Передать» предлагает того, кто не может принять (§8.1)",
+  "find": " && canAccept(t, x, '') && !(isOperator(t)",
+  "replace": " && !(isOperator(t)",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-transfer-offers-owner",
+  "what": "форма «Передать» предлагает того, у кого инцидент уже есть (§8.1)",
+  "find": " && t != addressee(x)",
+  "replace": "",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-transfer-offers-own-group-away",
+  "what": "форма «Передать» предлагает вышедшего из моей группы (RULE-107)",
+  "find": " && !(isOperator(t) && agentState(t) == 'offline' && isSelf(who, dutyGroupOf(t)))",
+  "replace": "",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-hold-offers-system",
+  "what": "форма «Отложить» предлагает системные причины (§4, setBy)",
+  "find": "r.setBy != 'system'",
+  "replace": "true",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-close-no-default",
+  "what": "форма «Закрыть»: «Обработан» не выбран по умолчанию у пройденного сценария (§7)",
+  "find": "\"defaultExpr\": \"stepsFilled(incident, 'closing') ? 'processed' : ''\"",
+  "replace": "\"defaultExpr\": \"''\"",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-close-steps-ignored",
+  "what": "форма «Закрыть»: результат доступен без пройденного сценария (§2.2)",
+  "find": "\"enabledExpr\": \"closeResults.exists(i, i.id == option && stepsOk(i, incident))\"",
+  "replace": "\"enabledExpr\": \"true\"",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "form-note-ignores-ownership",
+  "what": "форма «Передать»: пояснение про чужой инцидент не показывается (§8.1)",
+  "find": "\"expr\": \"ownership(me, incident) == 'other'\", \"textKey\": \"workflow.form.transfer.note.1\"",
+  "replace": "\"expr\": \"false\",\n          \"textKey\": \"workflow.form.transfer.note.1\"",
+  "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
+ },
+ {
+  "name": "close-result-any-owner",
+  "what": "результат «из чужого» — без проверки владельца (ownerOnlyInStates, §2.2)",
+  "find": " && !(x.state in i.ownerOnlyInStates && x.owner != who)",
+  "replace": ""
+ },
+ {
+  "name": "close-result-any-surface",
+  "what": "результат закрытия доступен на любой поверхности — очереди или карточке (§2.2, §7)",
+  "find": "(surface == '' || size(i.surfaces) == 0 || surface in i.surfaces)",
+  "replace": "true",
+  "model": "не проверяет: поверхность (очередь или карточка) — правило интерфейса"
+ },
+ {
+  "name": "breach-no-flag",
+  "what": "нарушение не ставит признак «срок нарушен» (§10.1)",
+  "find": "\"set\": \"incident.slaBreached\", \"value\": \"true\"",
+  "replace": "\"set\": \"incident.slaBreached\",\n            \"value\": \"incident.slaBreached\"",
+  "model": "не проверяет: признак slaBreached для интерфейса — инварианты смотрят на сами нарушения"
+ },
+ {
+  "name": "pending-target-as-owner",
+  "what": "адресат ожидающего принятия считается не адресатом (ownership, §2.4)",
+  "find": "x.state == 'pending_acceptance' && isTarget(who, x) ? 'target' : ",
+  "replace": "",
+  "model": "кандидат в инвариант (PROC-84): адресат ожидающего принятия — «адресат», а не «чужой»: права own/any (§5)"
+ },
+ {
+  "name": "scope-always-own",
+  "what": "право own/any: всегда спрашивается own (§5)",
+  "find": "\"expr\": \"can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)\"",
+  "replace": "\"expr\": \"can(me, ownKey)\"",
+  "model": "кандидат в инвариант (PROC-84): право own/any по владению (§5): «Передать» чужого — только с incident:transfer:any"
+ },
+ {
+  "name": "break-ignored",
+  "what": "на перерыве и после выхода — не только просмотр (agentReady, §10.1)",
+  "find": "\"expr\": \"!session.states.exists(s, s.id == agentState(me) && s.readOnly)\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "busy-never",
+  "what": "«Занят» не наступает никогда (§12.1, RULE-99)",
+  "find": "\"expr\": \"countMine(me, 'in_progress', '') > 0\"",
+  "replace": "\"expr\": \"false\"",
+  "model": "не проверяет: «Занят» — производного состояния в модели нет"
+ },
+ {
+  "name": "signed-out-group-ignored",
+  "what": "вышедший адресат принимает, только если и в его группе кто-то на месте (RULE-100)",
+  "find": "canAcceptPerson(who, x) && (signedIn(who) || cel.bind(",
+  "replace": "canAcceptPerson(who, x) && (signedIn(who) && cel.bind("
+ },
+ {
+  "name": "filter-ignores-ownership",
+  "what": "фильтр «Мои» показывает чужие в работе (§2.4)",
+  "find": "\"incident.state in ['in_progress', 'on_hold'] && ownership(me, incident) == 'owner'\"",
+  "replace": "\"incident.state in ['in_progress', 'on_hold']\"",
+  "model": "не проверяет: фильтры очереди"
+ },
+ {
+  "name": "badge-ignores-addressee",
+  "what": "бейдж адресованного группе — без проверки, что адресат — я (§2.4)",
+  "find": "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target' && isGroup(addressee(incident))\"",
+  "replace": "\"incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'\"",
+  "model": "не проверяет: бейджи"
+ },
+ {
+  "name": "count-not-incremented",
+  "what": "счётчик передач не растёт (§8.3)",
+  "find": "\"value\": \"incident.${field} + 1\"",
+  "replace": "\"value\": \"incident.${field}\""
+ },
+ {
+  "name": "limit-code-generic",
+  "what": "отказ по лимиту активных — общий код ошибки вместо LIMIT_EXCEEDED (§10.2)",
+  "find": "\"fn\": \"withinActiveLimit\", \"errorCode\": \"LIMIT_EXCEEDED\", ",
+  "replace": "\"fn\": \"withinActiveLimit\",\n        \"errorCode\": \"GUARD_FAILED\",",
+  "model": "не проверяет: коды ошибок"
+ },
+ {
+  "name": "setting-is-ignored",
+  "what": "условие по настройке всегда истинно (settingIs)",
+  "find": "\"expr\": \"settingKey == value\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "owner-group-ignored",
+  "what": "условие «у владельца есть дежурная группа» всегда истинно (§6.2)",
+  "find": "\"expr\": \"(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected\"",
+  "replace": "\"expr\": \"true\""
+ },
+ {
+  "name": "no-link-deadline-release-only",
+  "what": "срок «Нет связи» — весь порог возврата, а не его остаток после удержания (RULE-118, RULE-129)",
+  "find": "session.idleReleaseSec - session.idleHoldSec",
+  "replace": "session.idleReleaseSec",
+  "model": "кандидат в инвариант (PROC-84): срок «Нет связи» = порог возврата − порог удержания (RULE-129)"
+ },
+ {
+  "name": "signout-evicts-own-card",
+  "what": "выход уводит открытую карточку у самого вышедшего (BUG-117)",
+  "find": "\"workflow.journal.owner_signed_out\"] }\n      ",
+  "replace": "\"workflow.journal.owner_signed_out\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"evictOpenCard\",\n          \"args\": [\n            \"previousOwner\"\n          ]\n        }",
+  "model": "не проверяет: увод открытой карточки — внешний эффект"
+ },
+ {
+  "name": "break-evicts-own-card",
+  "what": "свой перерыв уводит открытую карточку (BUG-117)",
+  "find": "\"workflow.journal.system_hold_break\"] }\n      ",
+  "replace": "\"workflow.journal.system_hold_break\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"evictOpenCard\",\n          \"args\": [\n            \"owner\"\n          ]\n        }",
+  "model": "не проверяет: увод открытой карточки — внешний эффект"
+ },
+ {
+  "name": "target-access-ignored",
+  "what": "«Передать» тому, у кого нет доступа к объекту (§5, §8.1)",
+  "find": "\"expr\": \"form.targetId == '' || hasAccess(form.targetId, incident)\"",
+  "replace": "\"expr\": \"true\"",
+  "model": "эквивалентна в модели: форма «Передать» отвергает адресата без доступа (canAccept в offersTransferTo); тесты API ловят по коду отказа"
+ },
+ {
+  "name": "group-access-all-members",
+  "what": "доступ группы — только если доступ есть у всех участников, а не у кого-то (§5)",
+  "find": "members(who).exists(m, access(m, x))",
+  "replace": "members(who).all(m, access(m, x))",
+  "model": "кандидат в инвариант (PROC-84): доступ группы — у кого-то из участников (§5)"
+ },
+ {
+  "name": "level-cannot-accept-ignored",
+  "what": "эскалация отдаёт уровню, который не может принять (§8.3)",
+  "find": "l.target != addressee(x) && canAcceptNow(l.target, x, x.owner)",
+  "replace": "l.target != addressee(x)"
+ },
+ {
+  "name": "group-accept-except-ignored",
+  "what": "группа «может принять» за счёт того, у кого инцидент уже есть (RULE-93)",
+  "find": "m != except && signedIn(m) && canAcceptPerson(m, x)",
+  "replace": "signedIn(m) && canAcceptPerson(m, x)"
+ },
+ {
+  "name": "expired-resolution-refires",
+  "what": "отработанный норматив закрытия при возобновлении — новый срок (RULE-50)",
+  "find": "\"value\": \"left == 0 && incident.timers[timerId].fired != 0 ? incident.timers[timerId].fired : now + left\"",
+  "replace": "\"value\": \"now + left\""
+ },
+ {
+  "name": "cannot-accept-ignored",
+  "what": "адресат, который не может принять, не замечается (addresseeCanAccept, §8.1)",
+  "find": "\"expr\": \"addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected\"",
+  "replace": "\"expr\": \"false\""
+ },
+ {
+  "name": "lost-access-ignored",
+  "what": "потеря доступа адресата не замечается никогда (RULE-71)",
+  "find": "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"",
+  "replace": "\"expr\": \"false\""
+ },
+ {
+  "name": "duty-group-last",
+  "what": "дежурная группа вышедшего — последняя, а не первая по порядку (§8.1)",
+  "find": "size(gs) > 0 ? gs[0] : ''",
+  "replace": "size(gs) > 0 ? gs[size(gs) - 1] : ''",
+  "model": "мир модели: порядок дежурных групп у оператора не перебирается (PROC-76)"
+ },
+ {
+  "name": "sort-newest-as-oldest",
+  "what": "очередь: при равном приоритете новые выше старых (§2.4)",
+  "find": "\"-incident.priority\", \"-incident.occurredAt\"",
+  "replace": "\"-incident.priority\",\n        \"incident.occurredAt\"",
+  "model": "не проверяет: сортировку очереди"
+ },
+ {
+  "name": "sort-reaction-ignores-running",
+  "what": "очередь: идущая реакция не поднимает инцидент (§2.4)",
+  "find": "\"timerRuns(incident, 'reaction') ? 0 : 1\"",
+  "replace": "\"0\"",
+  "model": "не проверяет: сортировку очереди"
+ },
+ {
+  "name": "agent-break-from-offline",
+  "what": "перерыв — и из «Вышел», не только из «Готов» (§12.2)",
+  "find": "\"noteKey\": \"workflow.session.transition.break.note\", \"from\": [\"ready\"]",
+  "replace": "\"noteKey\": \"workflow.session.transition.break.note\",\n        \"from\": [\n          \"ready\",\n          \"offline\"\n        ]",
+  "model": "кандидат в инвариант (PROC-84): перерыв — только из «Готов» (§12.2): свойство смен состояния оператора"
+ },
+ {
+  "name": "notify-self",
+  "what": "уведомление получает и сам действующий",
+  "find": "\"if\": \"whom != '' && whom != actor\"",
+  "replace": "\"if\": \"whom != ''\"",
+  "model": "не проверяет: уведомления"
+ },
+ {
+  "name": "recipients-ignore-duty",
+  "what": "уведомления — и тем, кто не на месте (§8.1)",
+  "find": ".filter(m, onDuty(m) && access(m, x))",
+  "replace": ".filter(m, access(m, x))",
+  "model": "не проверяет: получателей уведомлений"
+ },
+ {
+  "name": "recipients-ignore-access",
+  "what": "уведомления — и тем, у кого нет доступа к объекту (§5)",
+  "find": ".filter(m, onDuty(m) && access(m, x))",
+  "replace": ".filter(m, onDuty(m))",
+  "model": "не проверяет: получателей уведомлений"
+ },
+ {
+  "name": "alert-no-recipient-silent",
+  "what": "алерт без получателя не пишет записи в журнал (§9)",
+  "find": "\"emptyLog\": \"alert ? alerts.noRecipientLog : ''\"",
+  "replace": "\"emptyLog\": \"''\"",
+  "model": "не проверяет: уведомления и журнал"
+ },
+ {
+  "name": "alert-by-recipient",
+  "what": "признак алерта — по получателю, а не по виду уведомления (§9)",
+  "find": "\"alert\": \"alert\",",
+  "replace": "\"alert\": \"whom == alerts.target\",",
+  "model": "не проверяет: уведомления"
+ },
+ {
+  "name": "target-can-accept-ignored",
+  "what": "«Передать» тому, кто не может принять (§8.1)",
+  "find": "\"expr\": \"form.targetId == '' || canAccept(form.targetId, incident, '')\"",
+  "replace": "\"expr\": \"true\"",
+  "model": "эквивалентна в модели: форма «Передать» (offersTransferTo) отвергает того, кто не может принять, — переход и так недоступен; тесты API ловят по коду отказа"
+ },
+ {
+  "name": "accept-right-ignored",
+  "what": "«может принять» без права incident:accept (§8.1)",
+  "find": "can(m, 'incident:accept') && access(m, x)",
+  "replace": "access(m, x)"
+ },
+ {
+  "name": "release-restarts-reaction",
+  "what": "«Вернуть в очередь» — реакция заново, а не с остатка (RULE-104)",
+  "find": "\"hold\"] },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
+  "replace": "\"hold\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
+  "model": "кандидат в инвариант (PROC-84): «Вернуть в очередь» — реакция с остатка на момент взятия (RULE-104), расширить reactionNotExtended"
+ },
+ {
+  "name": "stop-forgets-left",
+  "what": "остановка таймера не запоминает остаток (§4)",
+  "find": "\"value\": \"keep ? incident.timers[timerId].due - now : 0\"",
+  "replace": "\"value\": \"0\""
+ },
+ {
+  "name": "reopen-keeps-closed-at",
+  "what": "«Переоткрыть» оставляет время закрытия — пишет в него голое имя closedAt (RULE-103)",
+  "find": "\"closedAt\", \"0\"",
+  "replace": "\"closedAt\",\n            \"closedAt\""
+ },
+ {
+  "name": "signout-restarts-reaction",
+  "what": "выход — реакция заново, а не с остатка (RULE-121)",
+  "find": "\"resolution\"] },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
+  "replace": "\"resolution\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
+  "model": "кандидат в инвариант (PROC-84): выход — реакция с остатка (RULE-121), расширить reactionNotExtended"
+ },
+ {
+  "name": "detach-restarts-reaction",
+  "what": "«Отсоединить» — реакция заново, а не с остатка (RULE-128)",
+  "find": "\"fn\": \"clearLink\" },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
+  "replace": "\"fn\": \"clearLink\"\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
+  "model": "кандидат в инвариант (PROC-84): «Отсоединить» — реакция с остатка на момент объединения (RULE-128), расширить reactionNotExtended"
+ },
+ {
+  "name": "idle-release-skips-break",
+  "what": "молчание не возвращает в очередь отложенный перерывом (PROC-49)",
+  "find": "\"fn\": \"holdReasonIn\", \"args\": [[\"break\", \"no_link\"]",
+  "replace": "\"fn\": \"holdReasonIn\",\n          \"args\": [\n            [\n              \"no_link\"\n            ]"
+ },
+ {
+  "name": "signed-out-queue-restarts-reaction",
+  "what": "вышедший адресат без группы — реакция заново (§6.2)",
+  "find": "\"fn\": \"appendLog\", \"args\": [\"workflow.journal.addressee_signed_out_to_queue\"] ",
+  "replace": "\"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"appendLog\",\n          \"args\": [\n            \"workflow.journal.addressee_signed_out_to_queue\"\n          ]"
+ },
+ {
+  "name": "reopen-resolution-continues",
+  "what": "«Переоткрыть» — норматив закрытия с остатка, а не заново (§4, правило 6)",
+  "find": "\"fn\": \"restartTimer\", \"args\": [\"resolution\", \"limits.reopenResolutionSec\"] ",
+  "replace": "\"fn\": \"startTimer\",\n          \"args\": [\n            \"resolution\"\n          ]"
+ },
+ {
+  "name": "reopen-setting-ignored",
+  "what": "«Переоткрыть» не смотрит на норматив переоткрытия (PROC-48)",
+  "find": "\"resolution\", \"limits.reopenResolutionSec\"",
+  "replace": "\"resolution\",\n            \"0\"",
+  "model": "мир модели: норматив переоткрытия всегда 0, ветка не исполняется (PROC-76)"
+ },
+ {
+  "name": "reopen-keeps-cause",
+  "what": "«Переоткрыть» не снимает причину сбоя (RULE-103)",
+  "find": "\"closeCauseId\", \"''\"",
+  "replace": "\"closeCauseId\",\n            \"closeCauseId\""
+ },
+ {
+  "name": "transfer-nobody-allowed",
+  "what": "«Передать» доступна, когда передать некому (BUG-85)",
+  "find": "\"expr\": \"transferTargets().exists(",
+  "replace": "\"expr\": \"true || transferTargets().exists(",
+  "model": "эквивалентна в модели: адресат формы всё равно из предложенных — передать некому, значит, и нельзя; тесты API ловят по доступности кнопки"
+ },
+ {
+  "name": "overrides-by-ignored",
+  "what": "уточнения норматива — без проверки признаков overridesBy (ARCH-11)",
+  "find": "overrideAllowed(t, o) && overrideMatches(x, o)",
+  "replace": "overrideMatches(x, o)",
+  "model": "мир модели: групп устройств и уточнений норматива нет (PROC-76)"
+ },
+ {
+  "name": "relink-closed-too",
+  "what": "при объединении к новому основному переходят и закрытые привязанные (§11.3)",
+  "find": "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"",
+  "replace": "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"",
+  "model": "кандидат в инвариант (PROC-84): при объединении к новому основному переходят только открытые привязанные (§11.3)"
+ },
+ {
+  "name": "relink-no-log",
+  "what": "переход привязанных к новому основному не пишется в журнал (§11.3)",
+  "find": "\"incident\": \"c\", \"key\": \"logKey\"",
+  "replace": "\"incident\": \"c\",\n                      \"key\": \"''\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "transfer-restarts-reaction",
+  "what": "startTimer не смотрит на ifStopped: передача и другие переходы запускают идущую реакцию заново (RULE-76, RULE-83)",
+  "find": "ifStopped && incident.timers[timerId].due != 0",
+  "replace": "false"
+ },
+ {
+  "name": "level0-last-norm",
+  "what": "норматив уровня 0 — норматив последнего уровня эскалации (§4)",
+  "find": "x.escalationLevel > 0 && size(escalation.levels) > 0 ?",
+  "replace": "size(escalation.levels) > 0 ?",
+  "model": "мир модели: нормативы уровней не перебираются (PROC-76)"
+ },
+ {
+  "name": "detach-before-accept",
+  "what": "«Отсоединить» — у адресата основного, не принявшего его (§11.3)",
+  "find": "(ownership(me, ps[0]) == 'owner' || unowned(ps[0]))",
+  "replace": "(ps[0].owner == me || unowned(ps[0]))",
+  "model": "кандидат в инвариант (PROC-84): «Отсоединить» — только тому, кто ведёт основной, или у нового основного (§11.3)"
+ },
+ {
+  "name": "tighten-ignored",
+  "what": "срок основного не становится самым ранним из сроков объединённых (§11.4, RULE-97)",
+  "find": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
+  "replace": "false",
+  "model": "кандидат в инвариант (PROC-84): срок основного после объединения — самый ранний из сроков объединённых (RULE-97)"
+ },
+ {
+  "name": "tighten-spent-counted",
+  "what": "отработанный срок привязанного тоже сокращает срок основного (RULE-97)",
+  "find": " && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
+  "replace": " && !spent(ps[0], timerId, now)",
+  "model": "кандидат в инвариант (PROC-84): отработанный срок привязанного срок основного не сокращает (RULE-97)"
+ },
+ {
+  "name": "tighten-new-primary-skipped",
+  "what": "у нового основного срок группы не ставится (RULE-97)",
+  "find": "\"set\": \"p.timers[timerId].left\", \"value\": \"left\"",
+  "replace": "\"set\": \"p.timers[timerId].left\",\n                            \"value\": \"t.left\"",
+  "model": "кандидат в инвариант (PROC-84): у нового основного — срок группы (RULE-97)"
+ },
+ {
+  "name": "detach-keeps-own-deadline",
+  "what": "отсоединённый — со своим сроком, а не с остатком срока группы (§11.4)",
+  "find": "\"value\": \"leftOf(ps[0], timerId, now)\"",
+  "replace": "\"value\": \"incident.timers[timerId].left\""
+ },
+ {
+  "name": "detach-spent-lost",
+  "what": "отсоединённый после наступившего срока группы — без отметки «отработан» (BUG-75)",
+  "find": "\"if\": \"leftOf(ps[0], timerId, now) == 0\"",
+  "replace": "\"if\": \"false\""
+ },
+ {
+  "name": "share-ignores-join-time",
+  "what": "нарушение группы — и тем, кто вошёл в группу после срока (BUG-73)",
+  "find": "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at)",
+  "replace": "(e.linkedTo == p.id && !isDone(e))"
+ },
+ {
+  "name": "link-time-not-set",
+  "what": "момент привязки не записывается (BUG-73)",
+  "find": "\"set\": \"incident.linkedAt\", \"value\": \"now\"",
+  "replace": "\"set\": \"incident.linkedAt\",\n            \"value\": \"0\""
+ },
+ {
+  "name": "left-group-not-recorded",
+  "what": "выход из группы не записывается (BUG-73)",
+  "find": "\"value\": \"{'primaryId': incident.linkedTo, 'linkedAt': incident.linkedAt, 'at': now}\"",
+  "replace": "\"value\": \"incident.leftGroup\""
+ },
+ {
+  "name": "relink-forgets-group",
+  "what": "перепривязанный не помнит прежнюю группу (BUG-73)",
+  "find": "\"value\": \"{'primaryId': c.linkedTo, 'linkedAt': c.linkedAt, 'at': now}\"",
+  "replace": "\"value\": \"c.leftGroup\""
+ },
+ {
+  "name": "group-breach-no-log",
+  "what": "нарушение группы не пишется в журнал привязанных (RULE-98)",
+  "find": "\"key\": \"groupLogKey\"",
+  "replace": "\"key\": \"''\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "deadline-no-log",
+  "what": "сокращение срока группы не пишется в журнал (RULE-98)",
+  "find": "\"key\": \"logKey\", \"vars\": \"{'number': incident.number}\", \"once\"",
+  "replace": "\"key\": \"''\",\n                          \"vars\": \"{'number': incident.number}\",\n                          \"once\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "deadline-log-always",
+  "what": "запись о сроке группы — и когда срок не сократился (RULE-98)",
+  "find": "\"if\": \"left < was\"",
+  "replace": "\"if\": \"true\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "deadline-log-twice",
+  "what": "запись о сроке группы — повторно (RULE-98)",
+  "find": "\"once\": \"true\"",
+  "replace": "\"once\": \"false\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "reopen-unlink-no-log",
+  "what": "снятие связи при переоткрытии не пишется в журнал основного (§11.4)",
+  "find": "\"key\": \"primaryLogKey\"",
+  "replace": "\"key\": \"''\"",
+  "model": "не проверяет: журнал"
+ },
+ {
+  "name": "linked-access-ignored",
+  "what": "нет доступа к привязанному у адресата основного — не замечается (RULE-71)",
+  "find": "who != '' && hasAccess(who, incident) == expected",
+  "replace": "who != '' && true == expected"
+ },
+ {
+  "name": "active-limit-null-blocks",
+  "what": "лимит активных «без ограничения» (0) запрещает брать (§10.2, RULE-69)",
+  "find": "\"expr\": \"limits.maxActive == 0 || countMine(",
+  "replace": "\"expr\": \"countMine("
+ }
+]

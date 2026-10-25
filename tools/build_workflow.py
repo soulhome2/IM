@@ -42,6 +42,11 @@ def build(source, var, indent):
     else:
         with open(os.path.join(MACHINE, source), encoding="utf-8") as f:
             data = json.load(f)
+    return render(data, source, var, indent)
+
+
+def render(data, source, var, indent):
+    """Текст собранного файла — и для порч машины (tools/machine_mutations.py): workflow.js из испорченной машины."""
     header = (
         f"// Собрано из Specification/Workflow_machine/{source} скриптом tools/build_workflow.py.\n"
         "// Руками не править: правится исходник, затем сборка.\n"

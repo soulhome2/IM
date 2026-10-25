@@ -2518,6 +2518,20 @@
     assert.eq(resolutionBreaches(await env2.card(rain.guid)).length, 0, "присоединённому после срока — нет");
   });
 
+  test("Отсоединённый ровно в миг срока группы — ещё в группе: нарушение группы записано ему (§11.4, BUG-75; PROC-75)", async () => {
+    const env = await makeEnv();
+    const { urgent, calm } = await fireTrio(env);
+    for (const e of [urgent, calm]) await env.act(e.guid, "claim", {}, "queue");
+    await (await mergeInto(env, calm.guid, [urgent.guid])).body;
+    const due = (await env.card(calm.guid)).timer.dueAt;
+    await env.advance((Date.parse(due) - env.now) / 1000);
+    assert.eq(env.now, Date.parse(due), "часы — ровно на сроке группы");
+    assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(urgent.guid)}`), 200, null, "отсоединить в миг срока");
+    await env.advance(GRACE + 2);
+    const b = resolutionBreaches(await env.card(urgent.guid));
+    assert.eq([b.length, b[0] && b[0].at], [1, due], "отсоединённому в миг срока — нарушение группы на момент срока");
+  });
+
   test("Окно после срока группы: отсоединённый в окне и взятый в нём же — одно нарушение, группы; своего нет (§11.4, BUG-75)", async () => {
     assert.ok(GRACE > 1, "окно после дедлайна больше секунды");
     const env = await makeEnv();

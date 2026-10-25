@@ -20,28 +20,9 @@ const MACHINE = path.join(ROOT, "Specification/Workflow_machine/workflow_schema.
 const Q = path.join(ROOT, "Specification/Workflow_machine/quint");
 const T = "incident.timers[timerId]";
 
-// имя, что портится, найти, заменить — текст машины (выражения CEL в JSON); пятое поле — ручная часть модели
-// (quint/src/…): порча ядра или мира, машина не меняется (PROC-45)
+// Порчи ручных частей модели (quint/src/…, пятое поле): ядро или мир, машина не меняется (PROC-45). Порчи машины —
+// в общем списке tools/mutations/machine.json, ниже (ALL)
 const MUTATIONS = [
-  ["level-current-addressee", "эскалация не пропускает уровень текущего адресата (RULE-93)", "l.target != addressee(x) && canAcceptNow(", "canAcceptNow("],
-  ["level-signed-out", "эскалация отдаёт вышедшему, у кого в группе никого (RULE-100)", "&& canAcceptNow(l.target, x, x.owner))", "&& canAccept(l.target, x, x.owner))"],
-  ["level-no-duty-group", "эскалация пропускает вышедшего, хотя в его дежурной группе есть кому принять (RULE-100, PROC-50)", "(signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))", "signedIn(who)"],
-  ["level-group-owner", "эскалация считает в группе и владельца (RULE-93)", "canAcceptNow(l.target, x, x.owner)", "canAcceptNow(l.target, x, '')"],
-  ["breach-at-now", "нарушение датируется моментом записи, а не дедлайном (§10.1, правило 5; PROC-51)", "'at': deadline, 'owner': addressee(before)", "'at': now, 'owner': addressee(before)"],
-  ["breach-no-owner", "нарушение записывается ни на кого", "'owner': addressee(before)", "'owner': ''"],
-  ["group-breach-not-shared", "нарушение основного привязанным не записывается (RULE-97)", "groupMembersAt(incident, deadline)", "[]"],
-  ["window-left-not-in-group", "отсоединённый в окне после срока группы — не в группе (BUG-73)", " || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)", ""],
-  ["detach-window-not-spent", "отсоединённый после наступившего срока группы — с неотработанным остатком 0 (BUG-75)", "\"if\": \"leftOf(ps[0], timerId, now) == 0\"", "\"if\": \"spent(ps[0], timerId, now)\""],
-  ["detach-at-deadline-out", "отсоединённый в миг срока группы — не в группе (BUG-75)", "e.leftGroup.at >= at", "e.leftGroup.at > at"],
-  ["active-limit", "лимит активных пропускает лишний", "countMine(me, 'in_progress', incident.id) < limits.maxActive\"", "countMine(me, 'in_progress', incident.id) <= limits.maxActive\""],
-  ["relink-off", "привязанные объединяемого новому основному не переходят", "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"", "\"in\": \"[]\""],
-  ["scenario-ignored", "объединяются инциденты разных сценариев", "\"expr\": \"cel.bind(ps, incidentById(form.primaryId), size(ps) > 0 && ps[0].scenario == incident.scenario)\"", "\"expr\": \"true\""],
-  ["reopen-keeps-closed-at", "«Переоткрыть» оставляет время закрытия (RULE-103)", "{ \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"closedAt\", \"0\"] },", ""],
-  ["processed-without-steps", "«Обработан» без пройденного сценария", "\"expr\": \"i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)\"", "\"expr\": \"true\""],
-  ["lost-access-ignored", "потеря доступа адресата не замечается (RULE-71)", "\"expr\": \"addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected\"", "\"expr\": \"addressee(incident) != '' && true == expected\""],
-  ["pause-not-paused", "«на паузе» не отмечается — остаток теряется", `{"set": "${T}.paused", "value": "true"}, {"set": "${T}.due", "value": "0"}`, `{"set": "${T}.paused", "value": "false"}, {"set": "${T}.due", "value": "0"}`],
-  ["no-link-no-deadline", "у «Нет связи» снова нет срока: связь вернулась — отложенный лежит бесконечно (RULE-118, RULE-129)", "rs[0].deadlineFromIdle ? (", "false ? ("],
-  ["hold-idle-threshold", "«нет связи» у «В работе» — по порогу возврата в очередь, а не удержания (П2)", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleHoldSec\"] }", "{ \"fn\": \"agentIdleFor\", \"args\": [\"session.idleReleaseSec\"] }"],
   ["core-timer-late", "ядро: часы не останавливаются в конце окна — переход по таймеру опаздывает (П1)", ".union(ds.map(d => d + GRACE_MS))", "", "core.qnt"],
   ["core-window-no-breach", "ядро: ручное действие в окне отменяет переход по таймеру без нарушения (RULE-63, BUG-62)", "windowBreach(t.id, { ...ctx(DISPATCHER, DISPATCHER, NO_FORM, \"\"), deadline: before.timers.get(t.timer).due, before: before }, i, w)", "w", "core.qnt"],
   ["core-system-waits-window", "ядро: системный переход ждёт конца окна, переход по таймеру не идёт первым (RULE-67)", "t.trigger == \"system\" or sys or moment(t, i) + GRACE_MS <= clock", "t.trigger == \"system\" or moment(t, i) + GRACE_MS <= clock", "core.qnt"],
@@ -50,18 +31,10 @@ const MUTATIONS = [
   // после простоя сервиса, а модель шагает от события к событию — в её шагах порча ничего не меняет (20 000
   // историй). Порядок проверяет мутация кода tick-array-order и тесты API «прыжок часов»
   ["core-merge-primary-no-window", "ядро: у основного, которого берут при объединении, окно не учитывается (BUG-62)", "val pc = if (taking) canceledBy(TAKE_WITH, p) else []", "val pc = if (false) canceledBy(TAKE_WITH, p) else []", "core.qnt"],
-  ["resume-refires", "отработанный норматив при возврате в работу — новый срок (RULE-50)", `${T}.fired != 0 ? ${T}.fired : now + left`, "false ? 0 : now + left"],
-  // Выжившие порчи консилиума verification-audit 2026-10-24 (PROC-73): правила права на действие и двух соседних состояний
-  ["hold-no-owner", "«Отложить» чужой инцидент — без условия «я владелец» (§6.1, К1)", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n        { \"fn\": \"isOwner\" },\n", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:hold\"] },\n"],
-  ["transfer-restarts-reaction", "передача из «Новое» и «Ожидает принятия» запускает реакцию заново — передачами её не продлить (§4, §6.1, RULE-83)", "\"args\": [\"reaction\", \"byEscalationLevel\", true] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }", "\"args\": [\"reaction\", \"byEscalationLevel\"] },\n        { \"kind\": \"transactional\", \"fn\": \"appendLog\", \"args\": [\"workflow.journal.transfer\"] }"],
-  ["claim-on-break", "«Взять» на перерыве и после выхода (§10.1, правило 2)", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"agentReady\" },\n        { \"fn\": \"withinActiveLimit\" }", "{ \"fn\": \"hasPermission\", \"args\": [\"incident:claim\"] },\n        { \"fn\": \"withinActiveLimit\" }"],
-  ["close-on-break", "«Закрыть» на перерыве и после выхода (§10.1, правило 2)", "{ \"fn\": \"agentReady\" },\n        { \"fn\": \"closeResultAllowed\" }", "{ \"fn\": \"closeResultAllowed\" }"],
-  ["mass-foreign-on-hold", "«Массовый сбой» из чужого «Отложен» (§2.2, §6.1)", "\"ownerOnlyInStates\": [\"in_progress\", \"on_hold\"],", "\"ownerOnlyInStates\": [\"in_progress\"],"],
-  ["break-skipped-by-escalation", "эскалация пропускает адресата на перерыве — он инцидент получает (§8.3, §12.1)", "\"expr\": \"agentState(who) != 'offline'\", \"$comment\": \"§12.1. Человек вошёл", "\"expr\": \"agentState(who) == 'ready'\", \"$comment\": \"§12.1. Человек вошёл"],
-  ["reopen-no-window", "«Переоткрыть» после срока переоткрытия (§6.1, §10.1, BUG-31)", "\"expr\": \"now - incident.closedAt <= limits.reopenWindowMin * 60000\"", "\"expr\": \"true\""],
-  // Потолок эскалации (PROC-74, А1-03): видна только при maxLevel меньше числа уровней — состав уровней перебирает init
-  ["level-ceiling-ignored", "автоэскалация не смотрит на потолок maxLevel (§8.3)", "l.level > x.escalationLevel && l.level <= escalation.maxLevel && ", "l.level > x.escalationLevel && "],
 ];
+// Порчи выражений машины — общий список с тестами API (tools/mutations/machine.json, PROC-75), затем порчи ручных частей
+// Порча с пометкой model — модель её не проверяет (вне модели, мир модели, эквивалентна, кандидат в инвариант): пропускается
+const ALL = [...JSON.parse(fs.readFileSync(path.join(ROOT, "tools/mutations/machine.json"), "utf8")).map((m) => [m.name, m.what, m.find, m.replace, null, m.model]), ...MUTATIONS];
 
 const args = process.argv.slice(2);
 const total = PROFILES.reduce((s, p) => s + p.samples, 0);
@@ -92,7 +65,9 @@ function run(cmd, argv, cwd) {
 // Модель в каталоге: истории по профилям до первого нарушения, затем сценарии. Итог — что поймало, или ошибка quint
 async function judge(dir) {
   for (const p of profiles) {
-    const r = await run("quint", ["run", "im.qnt", "--invariants", ...INVARIANTS, `--max-samples=${p.samples}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`], dir);
+    // --verbosity=1: без примера истории — итог, нарушенные инварианты и зерно; длинный вывод в трубу quint обрывал
+    // раньше строки итога (ERROR relink-forgets-group, PROC-75)
+    const r = await run("quint", ["run", "im.qnt", "--invariants", ...INVARIANTS, `--max-samples=${p.samples}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, "--verbosity=1"], dir);
     if (/\[violation\]/.test(r.out)) return { by: "inv", names: [...r.out.matchAll(/^\s*❌ (\w+)/gm)].map((m) => m[1]), profile: p.name };
     if (!/\[ok\]/.test(r.out)) return { error: `quint run, профиль «${p.name}», ${r.signal ? `сигнал ${r.signal}` : `код ${r.status}`}: ${r.out.trim().split("\n").slice(-3).join(" ").slice(-300)}` };
   }
@@ -110,13 +85,20 @@ function prepare(machineText, part, partText) {
   fs.cpSync(path.join(Q, "src"), path.join(dir, "src"), { recursive: true });
   if (part) fs.writeFileSync(path.join(dir, "src", part), partText);
   fs.copyFileSync(path.join(Q, "im_test.qnt"), path.join(dir, "im_test.qnt"));
-  execFileSync("node", [path.join(ROOT, "tools/gen_quint.mjs"), `--machine=${path.join(dir, "machine.json")}`, `--src=${path.join(dir, "src")}`, `--out=${path.join(dir, "im.qnt")}`], { stdio: "ignore" });
+  try {
+    execFileSync("node", [path.join(ROOT, "tools/gen_quint.mjs"), `--machine=${path.join(dir, "machine.json")}`, `--src=${path.join(dir, "src")}`, `--out=${path.join(dir, "im.qnt")}`], { stdio: "pipe" });
+  } catch (e) {
+    // Сборка модели отказала (например, неизвестное имя в выражении): порчу поймал генератор, как поймал бы check_cel.mjs
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { refused: (String(e.stderr).match(/^Error: (.*)$/m) || [, String(e.stderr).trim().split("\n").pop()])[1] };
+  }
   return dir;
 }
 
 // Контроль: без порчи — ни нарушений, ни упавших сценариев
 async function control() {
   const dir = prepare(src);
+  if (dir.refused) return { line: `ERROR контроль без порчи — сборка модели отказала: ${dir.refused}`, bad: true };
   try {
     const r = await judge(dir);
     if (r.error) return { line: `ERROR контроль без порчи — ${r.error}`, bad: true };
@@ -128,22 +110,24 @@ async function control() {
 }
 
 // Одна порча: строка итога, поймана ли и чем
-async function check([name, what, find, replace, part]) {
+async function check([name, what, find, replace, part, skip]) {
+  if (skip) return { line: `SKIP ${name}: ${skip}`, bad: false, skip: true };
   const text = part ? fs.readFileSync(path.join(Q, "src", part), "utf8") : src;
   if (text.split(find).length !== 2) return { line: `STALE ${name}: в ${part ? `src/${part}` : "машине"} не найдено место порчи (или оно не одно)`, bad: true };
   const dir = prepare(part ? src : src.replace(find, replace), part, part ? text.replace(find, replace) : null);
+  if (dir.refused) return { line: `OK  ${name}${what ? ` — ${what}` : ""}: сборка модели отказала — ${dir.refused}`, bad: false, inv: [] };
   try {
     const r = await judge(dir);
     if (r.error) return { line: `ERROR ${name} — ${r.error}`, bad: true };
-    if (r.by === "inv") return { line: `OK  ${name} — ${what}: инвариант ${r.names.join(", ")} (профиль «${r.profile}»)`, bad: false, inv: r.names };
-    if (r.by === "test") return { line: `OK  ${name} — ${what}: сценарии ${r.names.join(", ")}`, bad: false, inv: [] };
-    return { line: `BAD ${name} — ${what}: ни инвариант, ни сценарий не поймали`, bad: true };
+    if (r.by === "inv") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: инвариант ${r.names.join(", ")} (профиль «${r.profile}»)`, bad: false, inv: r.names };
+    if (r.by === "test") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: сценарии ${r.names.join(", ")}`, bad: false, inv: [] };
+    return { line: `BAD ${name}${what ? ` — ${what}` : ""}: ни инвариант, ни сценарий не поймали`, bad: true };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-const todo = MUTATIONS.filter(([name]) => !only.length || only.includes(name)).filter((m, i) => i % shardM === shardK - 1);
+const todo = ALL.filter(([name]) => !only.length || only.includes(name)).filter((m, i) => i % shardM === shardK - 1);
 // Сначала — один короткий прогон: при первом запуске quint скачивает вычислитель (~/.quint/rust-evaluator-…) без
 // блокировки, и одновременные первые прогоны на чистом раннере падают на недокачанном архиве — в CI так выглядели
 // «пойманными сценариями» 21 порча из 33, хотя quint просто не запустился
@@ -178,7 +162,22 @@ if (!only.length && shardM === 1) {
   const none = Object.keys(caught).filter((n) => !caught[n].length);
   if (none.length) console.log(`Инварианты без пойманных порч (своей порчи нет или её ловит другой первым): ${none.join(", ")}`);
 }
+// Кто поймал — для таблицы «порча → модель / тесты API» (tools/mutation_table.py): только из действительного прогона;
+// части (--shard) и выборки дописывают свои порчи к прежним
+if (!ctl.bad && !results.some((r) => r.line.startsWith("ERROR"))) {
+  const file = path.join(ROOT, "tools/mutations/quint-catchers.json");
+  const known = new Set(ALL.map(([name]) => name));
+  const prev = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  const next = Object.fromEntries(Object.entries(prev).filter(([n]) => known.has(n)));
+  todo.forEach(([name], i) => {
+    const r = results[i];
+    if (r.skip) return;
+    next[name] = r.line.startsWith("OK") ? r.line.slice(r.line.lastIndexOf(": ") + 2) : null;
+  });
+  const sorted = Object.fromEntries(Object.keys(next).sort().map((n) => [n, next[n]]));
+  fs.writeFileSync(file, JSON.stringify(sorted, null, 1) + "\n");
+}
 const failed = results.filter((r) => r.bad).length;
-console.log(`Порч машины, которых модель не поймала: ${results.filter((r) => r.line.startsWith("BAD") || r.line.startsWith("STALE")).length}`);
+console.log(`Порч машины, которых модель не поймала: ${results.filter((r) => r.line.startsWith("BAD") || r.line.startsWith("STALE")).length}; пропущено по пометке model: ${results.filter((r) => r.skip).length}`);
 if (ctl.bad || results.some((r) => r.line.startsWith("ERROR"))) console.log("Прогон недействителен — контроль без порчи не прошёл или quint не разобрал модель");
 process.exit(failed || ctl.bad ? 1 : 0);
