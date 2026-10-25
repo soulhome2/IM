@@ -2,12 +2,25 @@
 # каждый push. Устаревший инвариант или редкое сочетание находится сам, а не на ревью. Зёрна меняются день ото
 # дня — каждую ночь проверяются новые истории; какие — печатается в журнале шага. Повторить локально:
 # tests/api.html?seeds=<зёрна>&steps=200
+#
+# Модель Quint на больших историях (PROC-76): то же, что задача «Модель Quint» в checks.yml, но историй больше и
+# они длиннее — до редких путей (эскалация через все уровни, переоткрытие объединённых), до которых 40 шагов не
+# доходят. Без --seed: с зерном quint считает в один поток, в 10 раз медленнее; зерно нарушения quint печатает сам.
+# Пока — только ручной запуск (Actions → nightly → Run workflow): замер времени на раннере GitHub; по расписанию и
+# частями — после замера.
 name: nightly
 
 on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
+    inputs:
+      samples:
+        description: Модель Quint — всего историй, по профилям пропорционально
+        default: "100000"
+      steps:
+        description: Модель Quint — шагов в истории
+        default: "80"
 
 jobs:
   random-wide:
@@ -30,3 +43,22 @@ jobs:
           print(html.unescape(log.group(1)) if log else "Отчёт тестов API не найден")
           sys.exit(0 if 'data-apitest="pass"' in page else 1)
           EOF
+
+  quint-wide:
+    name: Модель Quint — ${{ inputs.samples }} историй по ${{ inputs.steps }} шагов
+    # По расписанию входов нет — только ручной запуск (замер, PROC-76)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    # GitHub обрывает задачу через 6 ч; чуть раньше — чтобы журнал с временем профилей успел сохраниться
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+      - name: Quint 0.33.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/quint" --no-audit --no-fund @informalsystems/quint@0.33.0
+          echo "$RUNNER_TEMP/quint/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Модель собрана из этой машины
+        run: node tools/gen_quint.mjs --check
+      # Время каждого профиля — в журнале шага
+      - name: Инварианты и порог покрытия на больших историях
+        run: node tools/check_quint_coverage.mjs --samples=${{ inputs.samples }} --steps=${{ inputs.steps }}
