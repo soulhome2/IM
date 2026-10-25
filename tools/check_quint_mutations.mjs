@@ -36,6 +36,9 @@ const MUTATIONS = [
 // Порча с пометкой model — модель её не проверяет (вне модели, мир модели, эквивалентна, кандидат в инвариант): пропускается
 const ALL = [...JSON.parse(fs.readFileSync(path.join(ROOT, "tools/mutations/machine.json"), "utf8")).map((m) => [m.name, m.what, m.find, m.replace, null, m.model]), ...MUTATIONS];
 
+// Кто поймал порчу в прошлый раз (пишется в конце прогона): пойманным сценариями — сценарии первыми (PROC-85)
+const CATCHERS = path.join(ROOT, "tools/mutations/quint-catchers.json");
+const before = fs.existsSync(CATCHERS) ? JSON.parse(fs.readFileSync(CATCHERS, "utf8")) : {};
 const args = process.argv.slice(2);
 const total = PROFILES.reduce((s, p) => s + p.samples, 0);
 const want = Number((args.find((a) => a.startsWith("--samples=")) || `--samples=${total}`).split("=")[1]);
@@ -43,7 +46,7 @@ const profiles = PROFILES.map((p) => ({ ...p, samples: Math.max(1, Math.round((p
 // Одновременно — четверть ядер: quint без зерна сам считает во все ядра, больше порч разом — только теснота и память
 // (23 мин и обрыв quint при трёх четвертях ядер, PROC-75)
 const jobs = Math.max(1, Number((args.find((a) => a.startsWith("--jobs=")) || "").split("=")[1]) || Math.floor(os.cpus().length / 4));
-// K-я из M частей, как у мутаций кода (tools/parallel.py): номера k-1, k-1+m, … — для матрицы CI
+// K-я из M частей — для матрицы CI. Части — поровну по ожидаемому времени (shardOf), а не по номеру порчи (PROC-85)
 const [shardK, shardM] = ((args.find((a) => a.startsWith("--shard=")) || "--shard=1/1").split("=")[1]).split("/").map(Number);
 const only = args.filter((a) => !a.startsWith("--"));
 const src = fs.readFileSync(MACHINE, "utf8");
@@ -62,8 +65,23 @@ function run(cmd, argv, cwd) {
   });
 }
 
-// Модель в каталоге: истории по профилям до первого нарушения, затем сценарии. Итог — что поймало, или ошибка quint
-async function judge(dir) {
+// Сценарии модели: упавшие по имени, или ошибка quint
+async function scenarios(dir) {
+  const test = await run("quint", ["test", "im_test.qnt"], dir);
+  const failed = [...test.out.matchAll(/^\s+\d+\) (\w+) failed/gm)].map((m) => m[1]);
+  if (failed.length) return { by: "test", names: failed };
+  if (test.status !== 0) return { error: `quint test, ${test.signal ? `сигнал ${test.signal}` : `код ${test.status}`}: ${test.out.trim().split("\n").slice(-3).join(" ").slice(-300)}` };
+  return null;
+}
+
+// Модель в каталоге: истории по профилям до первого нарушения, затем сценарии. Итог — что поймало, или ошибка quint.
+// testFirst — сценарии первыми: порчу, которую ловят только сценарии, иначе ловят после всех историй, а это полный
+// прогон модели (12–15 мин на раннере GitHub, PROC-85). Прошли сценарии — истории те же, проверка не слабее
+async function judge(dir, testFirst) {
+  if (testFirst) {
+    const t = await scenarios(dir);
+    if (t) return t;
+  }
   for (const p of profiles) {
     // --verbosity=1: без примера истории — итог, нарушенные инварианты и зерно; длинный вывод в трубу quint обрывал
     // раньше строки итога (ERROR relink-forgets-group, PROC-75)
@@ -71,11 +89,7 @@ async function judge(dir) {
     if (/\[violation\]/.test(r.out)) return { by: "inv", names: [...r.out.matchAll(/^\s*❌ (\w+)/gm)].map((m) => m[1]), profile: p.name };
     if (!/\[ok\]/.test(r.out)) return { error: `quint run, профиль «${p.name}», ${r.signal ? `сигнал ${r.signal}` : `код ${r.status}`}: ${r.out.trim().split("\n").slice(-3).join(" ").slice(-300)}` };
   }
-  const test = await run("quint", ["test", "im_test.qnt"], dir);
-  const failed = [...test.out.matchAll(/^\s+\d+\) (\w+) failed/gm)].map((m) => m[1]);
-  if (failed.length) return { by: "test", names: failed };
-  if (test.status !== 0) return { error: `quint test, ${test.signal ? `сигнал ${test.signal}` : `код ${test.status}`}: ${test.out.trim().split("\n").slice(-3).join(" ").slice(-300)}` };
-  return { by: null };
+  return (!testFirst && (await scenarios(dir))) || { by: null };
 }
 
 // Каталог с моделью из машины и ручных частей (испорченных или нет)
@@ -117,7 +131,7 @@ async function check([name, what, find, replace, part, skip]) {
   const dir = prepare(part ? src : src.replace(find, replace), part, part ? text.replace(find, replace) : null);
   if (dir.refused) return { line: `OK  ${name}${what ? ` — ${what}` : ""}: сборка модели отказала — ${dir.refused}`, bad: false, inv: [] };
   try {
-    const r = await judge(dir);
+    const r = await judge(dir, (before[name] || "").startsWith("сценарии"));
     if (r.error) return { line: `ERROR ${name} — ${r.error}`, bad: true };
     if (r.by === "inv") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: инвариант ${r.names.join(", ")} (профиль «${r.profile}»)`, bad: false, inv: r.names };
     if (r.by === "test") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: сценарии ${r.names.join(", ")}`, bad: false, inv: [] };
@@ -127,7 +141,33 @@ async function check([name, what, find, replace, part, skip]) {
   }
 }
 
-const todo = ALL.filter(([name]) => !only.length || only.includes(name)).filter((m, i) => i % shardM === shardK - 1);
+// Ожидаемое время порчи — в историях, по прошлому прогону: пойманная инвариантом — истории профилей до поймавшего и
+// половина его; сценариями — сценарии (около 4000 историй по времени); сборкой и пропущенная — ничего; новая и
+// непойманная — всё
+function cost([name, , , , , skip]) {
+  const v = before[name];
+  if (skip || (v && v.startsWith("сборка"))) return 0;
+  if (v && v.startsWith("сценарии")) return 4000;
+  const k = v ? profiles.findIndex((p) => v.endsWith(`(профиль «${p.name}»)`)) : -1;
+  if (k < 0) return profiles.reduce((s, p) => s + p.samples, 0) + 4000;
+  return profiles.slice(0, k).reduce((s, p) => s + p.samples, 0) + profiles[k].samples / 2;
+}
+// Часть каждой порчи: дорогие первыми — в самую лёгкую часть; бесплатные — по очереди, иначе все в одну. Во всех
+// частях одинаково: те же список и прошлый прогон
+function shardOf(list) {
+  const load = new Array(shardM).fill(0);
+  const part = new Array(list.length);
+  let free = 0;
+  list.map((m, i) => [cost(m), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([c, i]) => {
+    const k = c ? load.indexOf(Math.min(...load)) : free++ % shardM;
+    part[i] = k;
+    load[k] += c;
+  });
+  return part;
+}
+const chosen = ALL.filter(([name]) => !only.length || only.includes(name));
+const parts = shardOf(chosen);
+const todo = chosen.filter((m, i) => parts[i] === shardK - 1);
 // Сначала — один короткий прогон: при первом запуске quint скачивает вычислитель (~/.quint/rust-evaluator-…) без
 // блокировки, и одновременные первые прогоны на чистом раннере падают на недокачанном архиве — в CI так выглядели
 // «пойманными сценариями» 21 порча из 33, хотя quint просто не запустился
@@ -165,17 +205,15 @@ if (!only.length && shardM === 1) {
 // Кто поймал — для таблицы «порча → модель / тесты API» (tools/mutation_table.py): только из действительного прогона;
 // части (--shard) и выборки дописывают свои порчи к прежним
 if (!ctl.bad && !results.some((r) => r.line.startsWith("ERROR"))) {
-  const file = path.join(ROOT, "tools/mutations/quint-catchers.json");
   const known = new Set(ALL.map(([name]) => name));
-  const prev = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-  const next = Object.fromEntries(Object.entries(prev).filter(([n]) => known.has(n)));
+  const next = Object.fromEntries(Object.entries(before).filter(([n]) => known.has(n)));
   todo.forEach(([name], i) => {
     const r = results[i];
     if (r.skip) return;
     next[name] = r.line.startsWith("OK") ? r.line.slice(r.line.lastIndexOf(": ") + 2) : null;
   });
   const sorted = Object.fromEntries(Object.keys(next).sort().map((n) => [n, next[n]]));
-  fs.writeFileSync(file, JSON.stringify(sorted, null, 1) + "\n");
+  fs.writeFileSync(CATCHERS, JSON.stringify(sorted, null, 1) + "\n");
 }
 const failed = results.filter((r) => r.bad).length;
 console.log(`Порч машины, которых модель не поймала: ${results.filter((r) => r.line.startsWith("BAD") || r.line.startsWith("STALE")).length}; пропущено по пометке model: ${results.filter((r) => r.skip).length}`);
