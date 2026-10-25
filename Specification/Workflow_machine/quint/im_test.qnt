@@ -377,6 +377,24 @@ module im_test {
       .expect(lastAction.name == "close_linked" and x2.state == "closed" and x2.closeResultId == "false_alarm" and x2.closedBy == "a")
       .expect(inv)
 
+  // Закрытый не меняется (§11.3; PROC-84): основной с привязанным закрыли, переоткрыли и объединили с третьим — к новому
+  // основному переходят только открытые привязанные; закрытый вместе с ним остаётся, как был (порча relink-closed-too
+  // в случайных историях не встречается)
+  // (основной второго объединения — срочный i3, взятый в работу: mergePrimary)
+  run relinkKeepsClosedTest =
+    start
+      .then(create("i1", "fire", 50))
+      .then(create("i2", "fire", 50))
+      .then(create("i3", "fire", 100))
+      .then(merge("a", "i1", Set("i2")))
+      .then(actF("a", "close", "i1", result("false_alarm")))
+      .then(fire("i2"))
+      .then(act("a", "reopen", "i1"))
+      .then(act("a", "claim", "i3"))
+      .then(merge("a", "i3", Set("i1")))
+      .expect(x2.state == "closed" and x2.linkedTo == "i1" and x1.state == "linked" and x1.linkedTo == "i3")
+      .expect(inv)
+
   // У группы один срок: нарушение основного — и привязанному, на владельца основного (RULE-97)
   run groupBreachSharedTest =
     start

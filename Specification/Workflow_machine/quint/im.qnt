@@ -4185,7 +4185,10 @@ module im {
     else if (tid == "hold") x0.state == "in_progress" and x0.owner == a and hadPerm(a, "incident:hold")
     else if (tid == "resume") x0.state == "on_hold" and x0.owner == a and hadPerm(a, "incident:claim")
     else if (tid == "release") Set("in_progress", "on_hold").contains(x0.state) and x0.owner == a and hadPerm(a, "incident:release")
-    else if (tid == "transfer") hadPerm(a, "incident:transfer:own") or hadPerm(a, "incident:transfer:any")
+    // Передать (§5): своё — новый, мой или адресованный мне или моей группе — правом own, остальное — правом any
+    else if (tid == "transfer")
+      if (x0.state == "new" or x0.owner == a or (x0.state == "pending_acceptance" and wasAddressee(a, x0))) hadPerm(a, "incident:transfer:own")
+      else hadPerm(a, "incident:transfer:any")
     else if (tid == "takeover") not(wasAddressee(a, x0)) and hadPerm(a, "incident:reassign") and hadPerm(a, "incident:claim")
     // Закрыть (§2.2): «Массовый сбой» — своим правом и ещё из «Новое» и «Ожидает принятия», остальные — из «В
     // работе»; в работе и отложенный — только свой
@@ -4199,10 +4202,12 @@ module im {
       hadPerm(a, "incident:reopen"),
       hadPerm(a, "incident:claim"),
     }
-    // Отсоединить: я веду основной, или основной новый (§11.3)
+    // Отсоединить (§11.4, RULE-78): я веду основной — он мой, в работе или отложен, — или основной новый и ничей;
+    // у основного «Ожидает принятия» — только после «Принять»
     else if (tid == "detach") {
       val p0 = prev.world.inc.get(x0.linkedTo)
-      x0.state == "linked" and (p0.state == "new" or p0.owner == a)
+      x0.state == "linked" and ((p0.state == "new" and p0.owner == NOBODY and p0.assignmentGroup == NOBODY)
+        or (Set("in_progress", "on_hold").contains(p0.state) and p0.owner == a))
     }
     else true
   // 21. Свойства двух соседних состояний (PROC-73): инцидент сейчас и до шага (prev)
@@ -4210,7 +4215,9 @@ module im {
 
   //     а) Передачей и отклонением реакцию не продлить (§6.1, RULE-82, RULE-83): после «Передать» из «Новое» и
   //        «Ожидает принятия», «Отклонить» и ухода вышедшего адресата срок реакции прежний, если она шла.
-  //        Остановленную потолком или нарушением «Передать» запускает заново, «Отклонить» — нет (RULE-84)
+  //        Остановленную потолком или нарушением «Передать» запускает заново, «Отклонить» — нет (RULE-84).
+  //        «Вернуть в очередь», выход владельца и «Отсоединить» продолжают реакцию с остатка, запомненного при взятии
+  //        или объединении: цикл «взял — вернул» эскалацию не откладывает (RULE-104, RULE-121, RULE-128; PROC-84)
   val reactionNotExtended = {
     val la = lastAction
     val r0 = before(la.incident).timers.get("reaction")
@@ -4220,8 +4227,55 @@ module im {
     INCIDENTS.contains(la.incident) implies all {
       (keeps and runs(r0)) implies r.due == r0.due,
       (la.name == "reject" and not(runs(r0))) implies not(runs(r)),
+      (Set("release", "owner_signed_out", "detach").contains(la.name) and r0.paused and r0.left > 0) implies r.due == clock + r0.left,
     }
   }
+
+  //     а2) Срок группы — самый ранний (§11.4, RULE-97; PROC-84): после объединения остаток норматива закрытия основного —
+  //        наименьший из своего и неотработанных остатков объединённых; новый основной берётся с полного норматива, но
+  //        не позже их. Наступивший срок основного (окно, нарушение) — по правилам окна, здесь не проверяется
+  pure def remOf(z: Timer, now: int): int = if (z.due != 0) (if (z.due > now) z.due - now else 0) else if (z.paused) z.left else -1
+  val groupDeadlineEarliest = {
+    val la = lastAction
+    val p0 = remOf(before(la.incident).timers.get("resolution"), clock)
+    val p = remOf(incOf(la.incident).timers.get("resolution"), clock)
+    val others = la.others.foldl([], (acc, o) => {
+      val r = remOf(before(o).timers.get("resolution"), clock)
+      if (r > 0) acc.append(r) else acc
+    })
+    val least = others.foldl(-1, (m, r) => if (m < 0 or r < m) r else m)
+    Set("merge", "merge_auto").contains(la.kind) implies {
+      if (p0 > 0) p == (if (least > 0 and least < p0) least else p0)
+      else if (p0 < 0) p > 0 and (least > 0 implies p <= least)
+      else true
+    }
+  }
+
+  //     а3) Закрытый не меняется, пока его самого не переоткрыли (§2.1, §6.1; PROC-84): ни связь, ни сроки, ни владелец.
+  //        Нарушение дописаться может: отсоединённый в окне после срока группы и закрытый в нём — был в группе в момент
+  //        срока и получает её нарушение (BUG-73); что нарушения только дописываются — breachesKept
+  val closedKept = INCIDENTS.forall(i =>
+    (before(i).state == "closed" and not(lastAction.name == "reopen" and lastAction.incident == i))
+      implies { ...incOf(i), breaches: before(i).breaches, slaBreached: before(i).slaBreached } == before(i))
+
+  //     а4) Срок удержания — по причине (§4, правило 7; RULE-129, RULE-132; PROC-84): при входе в «Отложен» срок — сейчас
+  //        плюс срок причины; у «Нет связи» (deadlineFromIdle) — порог возврата в очередь минус порог удержания, не
+  //        меньше 0: срок причины и возврат по молчанию совпадают; причина без срока — срок не идёт
+  val holdDeadlineByReason = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    val h = x.timers.get("hold")
+    val rs = settings.holdReasons.select(r => r.id == x.holdReasonId)
+    val s = settings.session
+    val sec = if (rs.length() == 0) -1
+      else if (rs[0].deadlineFromIdle) (if (s.idleReleaseSec > s.idleHoldSec) s.idleReleaseSec - s.idleHoldSec else 0)
+      else if (rs[0].maxMinutes.length() > 0) rs[0].maxMinutes[0] * 60
+      else -1
+    (before(i).state != "on_hold" and x.state == "on_hold") implies (if (sec >= 0) h.due == clock + sec * 1000 else not(runs(h)))
+  })
+
+  //     а5) Перерыв — только из «Готов» (§12.2; PROC-84): «Занят» в модели — тот же «Готов»; из «Вышел» — сначала вход
+  val breakFromReady = (lastAction.kind == "env" and lastAction.name == "break")
+    implies (prev.agents.get(lastAction.actor) == "ready" and agents.get(lastAction.actor) == "not_ready")
 
   //     б) Уровень эскалации меняет только эскалация этого инцидента, и только вверх (§8.3)
   val levelOnlyByEscalation = INCIDENTS.forall(i => {
@@ -4286,6 +4340,29 @@ module im {
     }
   })
 
+  // 23. Системный переход — только по делу (PROC-84): исправляющий переход сделан, только если до шага (prev) было что
+  //     исправлять — адресат без доступа, не может принять, вышел; владелец вышел или на перерыве. Доступ и право
+  //     принять у дежурной группы — у кого-то из участников (§5, §8.1)
+  def hadPermOf(m: str, p: str): bool = permsAct(prev.cfg.perms.get(m), p)
+  def reachedBefore(who: str, i: str): bool =
+    if (GROUPS.contains(who)) prev.cfg.members.get(who).exists(m => hadAccess(m, i)) else OPERATORS.contains(who) and hadAccess(who, i)
+  def couldAcceptBefore(who: str, i: str): bool =
+    if (GROUPS.contains(who)) prev.cfg.members.get(who).exists(m => hadPermOf(m, "incident:accept") and hadAccess(m, i))
+    else OPERATORS.contains(who) and hadPermOf(who, "incident:accept") and hadAccess(who, i)
+  val systemOnlyWhenDue = {
+    val la = lastAction
+    val x0 = before(la.incident)
+    val who = if (x0.owner != NOBODY) x0.owner else x0.assignmentGroup
+    la.kind == "auto" implies (
+      if (la.name == "addressee_lost_access") not(reachedBefore(who, la.incident))
+      else if (la.name == "addressee_cannot_accept") not(couldAcceptBefore(who, la.incident))
+      else if (la.name == "owner_signed_out") prev.agents.get(x0.owner) == "offline"
+      else if (Set("addressee_signed_out_to_group", "addressee_signed_out_to_queue").contains(la.name)) OPERATORS.contains(x0.owner) and prev.agents.get(x0.owner) == "offline"
+      else if (la.name == "system_hold_break") prev.agents.get(x0.owner) == "not_ready"
+      else true
+    )
+  }
+
   val actionRights = {
     val la = lastAction
     val a = la.actor
@@ -4330,6 +4407,11 @@ module im {
     autoBounded,
     actionRights,
     reactionNotExtended,
+    groupDeadlineEarliest,
+    systemOnlyWhenDue,
+    closedKept,
+    holdDeadlineByReason,
+    breakFromReady,
     levelOnlyByEscalation,
     breachesKept,
     resolutionLeftKept,

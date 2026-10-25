@@ -296,15 +296,13 @@
   "name": "pending-target-as-owner",
   "what": "адресат ожидающего принятия считается не адресатом (ownership, §2.4)",
   "find": "x.state == 'pending_acceptance' && isTarget(who, x) ? 'target' : ",
-  "replace": "",
-  "model": "кандидат в инвариант (PROC-84): адресат ожидающего принятия — «адресат», а не «чужой»: права own/any (§5)"
+  "replace": ""
  },
  {
   "name": "scope-always-own",
   "what": "право own/any: всегда спрашивается own (§5)",
   "find": "\"expr\": \"can(me, scopeOwn(me, incident, scopeRule) ? ownKey : anyKey)\"",
-  "replace": "\"expr\": \"can(me, ownKey)\"",
-  "model": "кандидат в инвариант (PROC-84): право own/any по владению (§5): «Передать» чужого — только с incident:transfer:any"
+  "replace": "\"expr\": \"can(me, ownKey)\""
  },
  {
   "name": "break-ignored",
@@ -368,8 +366,7 @@
   "name": "no-link-deadline-release-only",
   "what": "срок «Нет связи» — весь порог возврата, а не его остаток после удержания (RULE-118, RULE-129)",
   "find": "session.idleReleaseSec - session.idleHoldSec",
-  "replace": "session.idleReleaseSec",
-  "model": "кандидат в инвариант (PROC-84): срок «Нет связи» = порог возврата − порог удержания (RULE-129)"
+  "replace": "session.idleReleaseSec"
  },
  {
   "name": "signout-evicts-own-card",
@@ -396,8 +393,7 @@
   "name": "group-access-all-members",
   "what": "доступ группы — только если доступ есть у всех участников, а не у кого-то (§5)",
   "find": "members(who).exists(m, access(m, x))",
-  "replace": "members(who).all(m, access(m, x))",
-  "model": "кандидат в инвариант (PROC-84): доступ группы — у кого-то из участников (§5)"
+  "replace": "members(who).all(m, access(m, x))"
  },
  {
   "name": "level-cannot-accept-ignored",
@@ -454,8 +450,7 @@
   "name": "agent-break-from-offline",
   "what": "перерыв — и из «Вышел», не только из «Готов» (§12.2)",
   "find": "\"noteKey\": \"workflow.session.transition.break.note\", \"from\": [\"ready\"]",
-  "replace": "\"noteKey\": \"workflow.session.transition.break.note\",\n        \"from\": [\n          \"ready\",\n          \"offline\"\n        ]",
-  "model": "кандидат в инвариант (PROC-84): перерыв — только из «Готов» (§12.2): свойство смен состояния оператора"
+  "replace": "\"noteKey\": \"workflow.session.transition.break.note\",\n        \"from\": [\n          \"ready\",\n          \"offline\"\n        ]"
  },
  {
   "name": "notify-self",
@@ -509,8 +504,7 @@
   "name": "release-restarts-reaction",
   "what": "«Вернуть в очередь» — реакция заново, а не с остатка (RULE-104)",
   "find": "\"hold\"] },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
-  "replace": "\"hold\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
-  "model": "кандидат в инвариант (PROC-84): «Вернуть в очередь» — реакция с остатка на момент взятия (RULE-104), расширить reactionNotExtended"
+  "replace": "\"hold\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\""
  },
  {
   "name": "stop-forgets-left",
@@ -528,15 +522,13 @@
   "name": "signout-restarts-reaction",
   "what": "выход — реакция заново, а не с остатка (RULE-121)",
   "find": "\"resolution\"] },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
-  "replace": "\"resolution\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
-  "model": "кандидат в инвариант (PROC-84): выход — реакция с остатка (RULE-121), расширить reactionNotExtended"
+  "replace": "\"resolution\"\n          ]\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\""
  },
  {
   "name": "detach-restarts-reaction",
   "what": "«Отсоединить» — реакция заново, а не с остатка (RULE-128)",
   "find": "\"fn\": \"clearLink\" },\n        { \"kind\": \"transactional\", \"fn\": \"startTimer\", \"args\": [\"reaction\", \"continue\"",
-  "replace": "\"fn\": \"clearLink\"\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\"",
-  "model": "кандидат в инвариант (PROC-84): «Отсоединить» — реакция с остатка на момент объединения (RULE-128), расширить reactionNotExtended"
+  "replace": "\"fn\": \"clearLink\"\n        },\n        {\n          \"kind\": \"transactional\",\n          \"fn\": \"startTimer\",\n          \"args\": [\n            \"reaction\""
  },
  {
   "name": "idle-release-skips-break",
@@ -587,8 +579,7 @@
   "name": "relink-closed-too",
   "what": "при объединении к новому основному переходят и закрытые привязанные (§11.3)",
   "find": "\"in\": \"linkedOf(incident.id).filter(e, !isDone(e))\"",
-  "replace": "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\"",
-  "model": "кандидат в инвариант (PROC-84): при объединении к новому основному переходят только открытые привязанные (§11.3)"
+  "replace": "\"in\": \"incidents.filter(e, e.linkedTo == incident.id)\""
  },
  {
   "name": "relink-no-log",
@@ -614,29 +605,25 @@
   "name": "detach-before-accept",
   "what": "«Отсоединить» — у адресата основного, не принявшего его (§11.3)",
   "find": "(ownership(me, ps[0]) == 'owner' || unowned(ps[0]))",
-  "replace": "(ps[0].owner == me || unowned(ps[0]))",
-  "model": "кандидат в инвариант (PROC-84): «Отсоединить» — только тому, кто ведёт основной, или у нового основного (§11.3)"
+  "replace": "(ps[0].owner == me || unowned(ps[0]))"
  },
  {
   "name": "tighten-ignored",
   "what": "срок основного не становится самым ранним из сроков объединённых (§11.4, RULE-97)",
   "find": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
-  "replace": "false",
-  "model": "кандидат в инвариант (PROC-84): срок основного после объединения — самый ранний из сроков объединённых (RULE-97)"
+  "replace": "false"
  },
  {
   "name": "tighten-spent-counted",
   "what": "отработанный срок привязанного тоже сокращает срок основного (RULE-97)",
   "find": " && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)",
-  "replace": " && !spent(ps[0], timerId, now)",
-  "model": "кандидат в инвариант (PROC-84): отработанный срок привязанного срок основного не сокращает (RULE-97)"
+  "replace": " && !spent(ps[0], timerId, now)"
  },
  {
   "name": "tighten-new-primary-skipped",
   "what": "у нового основного срок группы не ставится (RULE-97)",
   "find": "\"set\": \"p.timers[timerId].left\", \"value\": \"left\"",
-  "replace": "\"set\": \"p.timers[timerId].left\",\n                            \"value\": \"t.left\"",
-  "model": "кандидат в инвариант (PROC-84): у нового основного — срок группы (RULE-97)"
+  "replace": "\"set\": \"p.timers[timerId].left\",\n                            \"value\": \"t.left\""
  },
  {
   "name": "detach-keeps-own-deadline",
