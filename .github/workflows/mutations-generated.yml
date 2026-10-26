@@ -3,21 +3,28 @@
 # и против тестов API. Разовый прогон, только вручную (Actions → mutations-generated → Run workflow): машина меняется
 # редко, а прогон долгий — пойманная порча стоит около 2 мин, выжившая — полный прогон модели, 12–15 мин.
 # Выжившие — красные задачи, так и задумано. Кто поймал какую порчу — в артефактах прогона (Summary → Artifacts):
-# quint-K — tools/mutations/quint-catchers-generated.json части K, api-K — tools/mutations/api-killers-generated.json.
+# quint-K — tools/mutations/quint-catchers-generated.json части K (и quint-errors-generated.json — на каких порчах упал
+# quint), api-K — tools/mutations/api-killers-generated.json. Итоги прошлых прогонов — в этих файлах в репозитории;
+# «только недостающие» (--rest) гоняет порчи без итога в них.
 name: mutations-generated
 
 on:
   workflow_dispatch:
+    inputs:
+      rest:
+        description: Только порчи без итога в tools/mutations/*-generated.json
+        type: boolean
+        default: true
 
 jobs:
   quint:
-    name: Порчи генератора для модели Quint — часть ${{ matrix.shard }} из 16
+    name: Порчи генератора для модели Quint — часть ${{ matrix.shard }} из 20
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v5
       - name: Quint 0.33.0
@@ -27,12 +34,14 @@ jobs:
       - name: Список порч — из этой машины
         run: python3 tools/gen_mutations.py
       - name: Каждую порчу ловит инвариант или сценарий
-        run: node tools/check_quint_mutations.mjs --generated --shard=${{ matrix.shard }}/16
+        run: node tools/check_quint_mutations.mjs --generated ${{ inputs.rest && '--rest' || '' }} --shard=${{ matrix.shard }}/20
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: quint-${{ matrix.shard }}
-          path: tools/mutations/quint-catchers-generated.json
+          path: |
+            tools/mutations/quint-catchers-generated.json
+            tools/mutations/quint-errors-generated.json
           if-no-files-found: warn
 
   api:
@@ -48,7 +57,7 @@ jobs:
       - name: Список порч — из этой машины
         run: python3 tools/gen_mutations.py
       - name: Тесты API ловят порчу
-        run: python3 tools/check_code_mutations.py --generated --shard=${{ matrix.shard }}/4
+        run: python3 tools/check_code_mutations.py --generated ${{ inputs.rest && '--rest' || '' }} --shard=${{ matrix.shard }}/4
       - uses: actions/upload-artifact@v4
         if: always()
         with:

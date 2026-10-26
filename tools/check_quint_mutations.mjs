@@ -8,7 +8,8 @@
 // четверти ядер, как у мутаций кода (tools/parallel.py); итог печатается в порядке списка.
 // Запуск из корня репозитория: node tools/check_quint_mutations.mjs [имя …] [--samples=N] [--jobs=N] [--shard=K/M] [--generated]
 // --generated — порчи генератора tools/mutations/generated.json вместо общего списка и ручных частей (PROC-76), кто поймал —
-// quint-catchers-generated.json
+// quint-catchers-generated.json, почему quint упал — quint-errors-generated.json; --rest — только порчи без итога в файле
+// «кто поймал» (догнать прерванный прогон)
 // --samples=N — всего историй на порчу, по профилям пропорционально (по умолчанию — как у порога покрытия)
 import fs from "node:fs";
 import os from "node:os";
@@ -169,7 +170,7 @@ function shardOf(list) {
   });
   return part;
 }
-const chosen = ALL.filter(([name]) => !only.length || only.includes(name));
+const chosen = ALL.filter(([name]) => (!only.length || only.includes(name)) && !(args.includes("--rest") && name in before));
 const parts = shardOf(chosen);
 const todo = chosen.filter((m, i) => parts[i] === shardK - 1);
 // Сначала — один короткий прогон: при первом запуске quint скачивает вычислитель (~/.quint/rust-evaluator-…) без
@@ -206,20 +207,24 @@ if (!only.length && shardM === 1) {
   const none = Object.keys(caught).filter((n) => !caught[n].length);
   if (none.length) console.log(`Инварианты без пойманных порч (своей порчи нет или её ловит другой первым): ${none.join(", ")}`);
 }
-// Кто поймал — для таблицы «порча → модель / тесты API» (tools/mutation_table.py): только из действительного прогона;
-// части (--shard) и выборки дописывают свои порчи к прежним
-if (!ctl.bad && !results.some((r) => r.line.startsWith("ERROR"))) {
+// Кто поймал — для таблицы «порча → модель / тесты API» (tools/mutation_table.py): только если контроль прошёл;
+// части (--shard) и выборки дописывают свои порчи к прежним. Порча, на которой упал quint, итога не получает — её
+// прогонят снова (--rest), а причина — в файле ошибок: в CI одна такая порча стоила итога всей части (PROC-76)
+if (!ctl.bad) {
   const known = new Set(ALL.map(([name]) => name));
   const next = Object.fromEntries(Object.entries(before).filter(([n]) => known.has(n)));
   todo.forEach(([name], i) => {
     const r = results[i];
-    if (r.skip) return;
+    if (r.skip || r.line.startsWith("ERROR")) return;
     next[name] = r.line.startsWith("OK") ? r.line.slice(r.line.lastIndexOf(": ") + 2) : null;
   });
   const sorted = Object.fromEntries(Object.keys(next).sort().map((n) => [n, next[n]]));
   fs.writeFileSync(CATCHERS, JSON.stringify(sorted, null, 1) + "\n");
 }
+const errors = Object.fromEntries(todo.map(([name], i) => [name, results[i].line]).filter(([, l]) => l.startsWith("ERROR")));
+if (GENERATED && Object.keys(errors).length) fs.writeFileSync(path.join(ROOT, "tools/mutations/quint-errors-generated.json"), JSON.stringify(errors, null, 1) + "\n");
 const failed = results.filter((r) => r.bad).length;
 console.log(`Порч машины, которых модель не поймала: ${results.filter((r) => r.line.startsWith("BAD") || r.line.startsWith("STALE")).length}; пропущено по пометке model: ${results.filter((r) => r.skip).length}`);
-if (ctl.bad || results.some((r) => r.line.startsWith("ERROR"))) console.log("Прогон недействителен — контроль без порчи не прошёл или quint не разобрал модель");
+if (ctl.bad) console.log("Прогон недействителен — контроль без порчи не прошёл или quint не разобрал модель");
+else if (Object.keys(errors).length) console.log(`quint упал на порчах: ${Object.keys(errors).length} — итога у них нет; прогнать снова — --rest`);
 process.exit(failed || ctl.bad ? 1 : 0);

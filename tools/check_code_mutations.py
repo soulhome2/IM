@@ -30,7 +30,8 @@
   python3 tools/check_code_mutations.py hold-limit — только названные
   python3 tools/check_code_mutations.py --full     — без failfast: полные прогоны
   --jobs=N — потоков (по умолчанию три четверти ядер), --shard=K/M — K-я из M частей (так делит CI)
-  --generated — порчи генератора tools/mutations/generated.json вместо всех (PROC-76), подсказки — api-killers-generated.json
+  --generated — порчи генератора tools/mutations/generated.json вместо всех (PROC-76), подсказки — api-killers-generated.json;
+  --rest — только порчи без итога в файле подсказок (догнать прерванный прогон)
 Код выхода 1, если хоть одна мутация выжила.
 """
 import html
@@ -424,8 +425,9 @@ def run_tests(site, kind, profile, failfast=False, first=None):
     """(прошли ли, строки FAIL, запустились ли, имя первого упавшего теста API или None)"""
     shutil.rmtree(profile, ignore_errors=True)
     first_failed = None
-    # Полный набор (контроль без порчи, --full) API идёт ~2 мин на свободной машине, в CI — дольше
-    limit = 240 if failfast else 600
+    # Полный набор API идёт ~2 мин на свободной машине, в CI — дольше; полный набор идёт и при failfast, если порча
+    # выжила: 240 с в CI не хватало — выжившие порчи генератора выходили «тесты не запустились» (PROC-76)
+    limit = 600
     if kind == "api":
         query = "&".join((["failfast"] if failfast else []) + ([f"first={quote(first)}"] if first else []))
         page = chrome(f"file://{site}/tests/api.html" + (f"?{query}" if query else ""), profile, 120000, limit)
@@ -476,12 +478,13 @@ def main():
     wanted, jobs, shard, shards = parallel.options()
     full = "--full" in sys.argv
     pool = [(m["name"], "workflow.js", m["find"], m["replace"], "api") for m in machine_mutations.load(machine_mutations.GENERATED)] if GENERATED else MUTATIONS
-    todo = parallel.part([m for m in pool if not wanted or m[0] in wanted], shard, shards)
     try:
         with open(KILLERS, encoding="utf-8") as f:
             killers = json.load(f)
     except FileNotFoundError:
         killers = {}
+    rest = "--rest" in sys.argv
+    todo = parallel.part([m for m in pool if (not wanted or m[0] in wanted) and not (rest and m[0] in killers)], shard, shards)
     found = {}
     work = tempfile.mkdtemp(prefix="im-code-mut-")
     tasks = queue.Queue()
