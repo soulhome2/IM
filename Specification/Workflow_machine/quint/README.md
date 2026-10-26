@@ -168,7 +168,7 @@ quint run im.qnt --invariant inv --max-samples=10000 --witnesses reached_resolut
 
 Без `--seed`: с зерном quint считает в один поток, примерно в 10 раз медленнее.
 
-То же — в CI на каждый push: задачи «Модель Quint» (Quint 0.33.0: `gen_quint.mjs --check`, `quint typecheck`, `quint test`, `check_quint_coverage.mjs`, сверка ядра на 400 историях) и «Порчи машины для модели Quint» (шесть частей, `--shard`, поровну по ожидаемому времени). Нарушение — история и зерно в журнале задачи: повторить локально — `quint run … --seed=<зерно>`. Большие истории — задача `quint-wide` в `.github/workflows/nightly.yml` (PROC-76): `check_quint_coverage.mjs --samples=100000 --steps=80`, пока запуск вручную.
+То же — в CI на каждый push: задачи «Модель Quint» (Quint 0.33.0: `gen_quint.mjs --check`, `quint typecheck`, `quint test`, `check_quint_coverage.mjs`, сверка ядра на 400 историях) и «Порчи машины для модели Quint» (шесть частей, `--shard`, поровну по ожидаемому времени). Нарушение — история и зерно в журнале задачи: повторить локально — `quint run … --seed=<зерно>`. Большие истории — задача `quint-wide` в `.github/workflows/nightly.yml` (PROC-76): `check_quint_coverage.mjs --samples=100000 --steps=80`, каждую ночь, около 2,5 ч.
 
 `quint run` — случайная выборка историй, а не полный перебор.
 
