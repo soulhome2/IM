@@ -1,0 +1,57 @@
+# Порчи генератора (PROC-76): tools/gen_mutations.py портит каждое место машины однотипно — убрано условие или
+# эффект перехода, переход в другое состояние, заменён оператор в выражении CEL (около 700 порч). Против модели Quint
+# и против тестов API. Разовый прогон, только вручную (Actions → mutations-generated → Run workflow): машина меняется
+# редко, а прогон долгий — пойманная порча стоит около 2 мин, выжившая — полный прогон модели, 12–15 мин.
+# Выжившие — красные задачи, так и задумано. Кто поймал какую порчу — в артефактах прогона (Summary → Artifacts):
+# quint-K — tools/mutations/quint-catchers-generated.json части K, api-K — tools/mutations/api-killers-generated.json.
+name: mutations-generated
+
+on:
+  workflow_dispatch:
+
+jobs:
+  quint:
+    name: Порчи генератора для модели Quint — часть ${{ matrix.shard }} из 16
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Quint 0.33.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/quint" --no-audit --no-fund @informalsystems/quint@0.33.0
+          echo "$RUNNER_TEMP/quint/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Список порч — из этой машины
+        run: python3 tools/gen_mutations.py
+      - name: Каждую порчу ловит инвариант или сценарий
+        run: node tools/check_quint_mutations.mjs --generated --shard=${{ matrix.shard }}/16
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quint-${{ matrix.shard }}
+          path: tools/mutations/quint-catchers-generated.json
+          if-no-files-found: warn
+
+  api:
+    name: Порчи генератора для тестов API — часть ${{ matrix.shard }} из 4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Список порч — из этой машины
+        run: python3 tools/gen_mutations.py
+      - name: Тесты API ловят порчу
+        run: python3 tools/check_code_mutations.py --generated --shard=${{ matrix.shard }}/4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-${{ matrix.shard }}
+          path: tools/mutations/api-killers-generated.json
+          if-no-files-found: warn

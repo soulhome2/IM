@@ -12,13 +12,15 @@ import build_workflow
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILE = os.path.join(ROOT, "tools", "mutations", "machine.json")
+# Порчи генератора (tools/gen_mutations.py, PROC-76) — тот же формат, гоняются разово: флаг --generated у обоих скриптов
+GENERATED = os.path.join(ROOT, "tools", "mutations", "generated.json")
 MACHINE = os.path.join(ROOT, "Specification", "Workflow_machine", "workflow_schema.v1.json")
 
 
-def load():
+def load(path=FILE):
     """Записи списка: name, what (что ломает), find, replace; model — почему модель порчу не проверяет
     (вне модели, мир модели, эквивалентна, кандидат в инвариант): скрипт модели такую пропускает."""
-    with open(FILE, encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 

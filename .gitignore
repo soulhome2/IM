@@ -1,2 +1,4 @@
 __pycache__/
 .claude/settings.local.json
+# Порчи генератора — собираются перед прогоном: python3 tools/gen_mutations.py (PROC-76)
+tools/mutations/generated.json

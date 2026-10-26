@@ -6,7 +6,9 @@
 // не прошёл или quint не разобрал модель — прогон недействителен, а не «поймано» (ERROR).
 // Порчи независимы — каждая в своём каталоге — и идут одновременно (PROC-41): --jobs=N, по умолчанию три
 // четверти ядер, как у мутаций кода (tools/parallel.py); итог печатается в порядке списка.
-// Запуск из корня репозитория: node tools/check_quint_mutations.mjs [имя …] [--samples=N] [--jobs=N] [--shard=K/M]
+// Запуск из корня репозитория: node tools/check_quint_mutations.mjs [имя …] [--samples=N] [--jobs=N] [--shard=K/M] [--generated]
+// --generated — порчи генератора tools/mutations/generated.json вместо общего списка и ручных частей (PROC-76), кто поймал —
+// quint-catchers-generated.json
 // --samples=N — всего историй на порчу, по профилям пропорционально (по умолчанию — как у порога покрытия)
 import fs from "node:fs";
 import os from "node:os";
@@ -34,12 +36,14 @@ const MUTATIONS = [
 ];
 // Порчи выражений машины — общий список с тестами API (tools/mutations/machine.json, PROC-75), затем порчи ручных частей
 // Порча с пометкой model — модель её не проверяет (вне модели, мир модели, эквивалентна, кандидат в инвариант): пропускается
-const ALL = [...JSON.parse(fs.readFileSync(path.join(ROOT, "tools/mutations/machine.json"), "utf8")).map((m) => [m.name, m.what, m.find, m.replace, null, m.model]), ...MUTATIONS];
+const args = process.argv.slice(2);
+const GENERATED = args.includes("--generated");
+const list = (file) => JSON.parse(fs.readFileSync(path.join(ROOT, "tools/mutations", file), "utf8")).map((m) => [m.name, m.what, m.find, m.replace, null, m.model]);
+const ALL = GENERATED ? list("generated.json") : [...list("machine.json"), ...MUTATIONS];
 
 // Кто поймал порчу в прошлый раз (пишется в конце прогона): пойманным сценариями — сценарии первыми (PROC-85)
-const CATCHERS = path.join(ROOT, "tools/mutations/quint-catchers.json");
+const CATCHERS = path.join(ROOT, "tools/mutations", GENERATED ? "quint-catchers-generated.json" : "quint-catchers.json");
 const before = fs.existsSync(CATCHERS) ? JSON.parse(fs.readFileSync(CATCHERS, "utf8")) : {};
-const args = process.argv.slice(2);
 const total = PROFILES.reduce((s, p) => s + p.samples, 0);
 const want = Number((args.find((a) => a.startsWith("--samples=")) || `--samples=${total}`).split("=")[1]);
 const profiles = PROFILES.map((p) => ({ ...p, samples: Math.max(1, Math.round((p.samples * want) / total)) }));

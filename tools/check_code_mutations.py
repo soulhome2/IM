@@ -30,6 +30,7 @@
   python3 tools/check_code_mutations.py hold-limit — только названные
   python3 tools/check_code_mutations.py --full     — без failfast: полные прогоны
   --jobs=N — потоков (по умолчанию три четверти ядер), --shard=K/M — K-я из M частей (так делит CI)
+  --generated — порчи генератора tools/mutations/generated.json вместо всех (PROC-76), подсказки — api-killers-generated.json
 Код выхода 1, если хоть одна мутация выжила.
 """
 import html
@@ -51,6 +52,10 @@ import parallel  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Мутация тестами API → тест, который поймал её в прошлый раз (PROC-41)
 KILLERS = os.path.join(ROOT, "tools", "mutations", "api-killers.json")
+# --generated: вместо всех порч — порчи генератора (tools/gen_mutations.py, PROC-76), подсказки — в своём файле
+GENERATED = "--generated" in sys.argv
+if GENERATED:
+    KILLERS = os.path.join(ROOT, "tools", "mutations", "api-killers-generated.json")
 
 # (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
@@ -470,7 +475,8 @@ def check(site, profile, mutation, full, killers):
 def main():
     wanted, jobs, shard, shards = parallel.options()
     full = "--full" in sys.argv
-    todo = parallel.part([m for m in MUTATIONS if not wanted or m[0] in wanted], shard, shards)
+    pool = [(m["name"], "workflow.js", m["find"], m["replace"], "api") for m in machine_mutations.load(machine_mutations.GENERATED)] if GENERATED else MUTATIONS
+    todo = parallel.part([m for m in pool if not wanted or m[0] in wanted], shard, shards)
     try:
         with open(KILLERS, encoding="utf-8") as f:
             killers = json.load(f)
@@ -531,7 +537,7 @@ def main():
     finally:
         shutil.rmtree(work, ignore_errors=True)
     # Подсказки — на следующий прогон: поймавшие сейчас; полный список — без мутаций, которых больше нет
-    known = {m[0] for m in MUTATIONS if m[4] == "api"}
+    known = {m[0] for m in pool if m[4] == "api"}
     updated = {k: v for k, v in dict(killers, **found).items() if k in known}
     if updated != killers:
         with open(KILLERS, "w", encoding="utf-8") as f:
