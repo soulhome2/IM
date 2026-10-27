@@ -65,6 +65,7 @@ KNOWN = {
     "gen-create-no-effect-setOwner": _NEW,
     "gen-create-no-effect-setAssignmentGroup": _NEW,
     "gen-create-no-effect-setFlag-escalationLevel": _NEW,
+    "gen-merge-no-effect-setAssignmentGroup": _SAME + "к объединению группа уже пуста: она бывает только у ожидающего принятия, а выход из него её очищает (ownerByState; PROC-88)",
     "gen-hold-no-guard-agentReady": _SAME + "у оператора не в «Готов» инцидентов «В работе» нет: перерыв их откладывает, выход — возвращает",
     "gen-addressee_signed_out_to_queue-no-guard-ownerHasDutyGroup": _FIRST,
     "gen-addressee_cannot_accept-no-guard-addresseeHasAccess": _FIRST,
