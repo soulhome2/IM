@@ -13,8 +13,9 @@
 Пометка model (скрипт модели такую пропускает, тесты API — нет) — по машине, а не по списку имён:
   - эффект, который в модели ничего не меняет: только действия мира (журнал, уведомления, карточка на экране) —
     tools/gen_quint.mjs их пропускает;
-  - выражение интерфейса: бейджи, пояснения на карточке, подсказки форм, фильтры и группы очереди;
-  - эквивалентная — EQUIVALENT ниже, после разбора выживших.
+  - выражение интерфейса: бейджи, пояснения на карточке, подсказки форм, фильтры и группы очереди — и определение
+    cel.definitions, которое зовут только они или никто (обход вызовов от выражений вне интерфейса);
+  - разобранная выжившая — KNOWN ниже: эквивалентная (поведение не меняется) или видна только при других настройках.
 
 Запуск из корня репозитория: python3 tools/gen_mutations.py
 Прогон: node tools/check_quint_mutations.mjs --generated, python3 tools/check_code_mutations.py --generated;
@@ -32,10 +33,48 @@ ROOT = machine_mutations.ROOT
 OUT = os.path.join(ROOT, "tools", "mutations", "generated.json")
 
 # Разделы машины, которые модель не читает: выражения в них — интерфейс
-UI_SECTIONS = {"badges", "cardNotes", "queueFilters", "queueGrouping", "display", "navActions"}
+UI_SECTIONS = {"badges", "cardNotes", "queueFilters", "queueGrouping", "queueSort", "display", "navActions"}
 UI_PATHS = [re.compile(r"^forms\.[^.]+\.notes\.")]
-# Эквивалентные порчи: имя → почему поведение не меняется. Пополняется по разбору выживших
-EQUIVALENT = {}
+# Разобранные выжившие (прогоны 2026-10-26, PROC-76): имя → пометка model. Порча-дыра сюда не попадает — она в плане
+_SAME = "эквивалентна: "
+_PAUSED = _SAME + "в «Отложен» и у привязанного норматив решения уже на паузе"
+_NEW = _SAME + "у нового инцидента это и так начальное значение"
+_FIRST = _SAME + "у того же события раньше по порядку срабатывает соседний переход с тем же итогом (§14.3)"
+_PRIMARY = _SAME + "у привязанного основной есть всегда, а форма объединения требует существующего основного"
+_SETTINGS = "мир модели: видна при других настройках — переопределения норматива по типу события и группе источника, причина удержания без срока (Р19 б, RULE-135)"
+KNOWN = {
+    "gen-cel-cel.definitions.matchesOwnership-eq3": _SAME + "правило области у «Передать» знает только владельца и адресата, ветка не выполняется",
+    "gen-cel-cel.definitions.matchesOwnership-eq4": _SAME + "правило области у «Передать» знает только владельца и адресата, ветка не выполняется",
+    "gen-cel-cel.definitions.levelUpNumber-gt1": _SAME + "зовётся, только когда следующий уровень есть",
+    "gen-cel-cel.definitions.levelUpTarget-gt1": _SAME + "зовётся, только когда следующий уровень есть",
+    "gen-cel-cel.definitions.levelNorm-gt2": _SAME + "уровень выше нуля — только при заданных уровнях",
+    "gen-cel-cel.definitions.levelNorm-gt3": _SAME + "уровень инцидента — всегда один из заданных",
+    "gen-cel-cel.definitions.holdSec-gt1": _SAME + "при равенстве порогов разность и так 0",
+    "gen-cel-cel.definitions.leftOf-gt1": _SAME + "при равенстве остаток и так 0",
+    "gen-cel-registries.guards.primaryClosed-gt1": _PRIMARY,
+    "gen-cel-registries.guards.primaryEditable-gt1": _PRIMARY,
+    "gen-cel-registries.guards.primaryAddresseeHasAccess-gt1": _PRIMARY,
+    "gen-cel-registries.guards.sameScenarioAsPrimary-gt1": _PRIMARY,
+    "gen-reopen-no-effect-stopTimer-reaction": _SAME + "закрытие уже остановило реакцию",
+    "gen-system_release_idle-no-effect-pauseTimer-resolution": _PAUSED,
+    "gen-no_link_hold_release-no-effect-pauseTimer-resolution": _PAUSED,
+    "gen-break_hold_release-no-effect-pauseTimer-resolution": _PAUSED,
+    "gen-close_linked-no-effect-pauseTimer-resolution": _PAUSED,
+    "gen-auto_escalate-no-effect-pauseTimer-resolution": _SAME + "у нового и ожидающего принятия норматив решения не идёт",
+    "gen-auto_escalate-no-effect-clearHoldReason": _SAME + "у нового и ожидающего принятия причины удержания нет",
+    "gen-create-no-effect-setOwner": _NEW,
+    "gen-create-no-effect-setAssignmentGroup": _NEW,
+    "gen-create-no-effect-setFlag-escalationLevel": _NEW,
+    "gen-hold-no-guard-agentReady": _SAME + "у оператора не в «Готов» инцидентов «В работе» нет: перерыв их откладывает, выход — возвращает",
+    "gen-addressee_signed_out_to_queue-no-guard-ownerHasDutyGroup": _FIRST,
+    "gen-addressee_cannot_accept-no-guard-addresseeHasAccess": _FIRST,
+    "gen-cel-cel.definitions.overrideAllowed-eq1": _SETTINGS,
+    "gen-cel-cel.definitions.overrideAllowed-eq3": _SETTINGS,
+    "gen-cel-cel.definitions.overrideAllowed-or1": _SETTINGS,
+    "gen-cel-cel.definitions.overrideAllowed-or3": _SETTINGS,
+    "gen-cel-cel.definitions.overrideMatches-eq2": _SETTINGS,
+    "gen-cel-cel.definitions.holdSec-gt2": _SETTINGS,
+}
 
 FLIPS = [
     ("le", r"<=", "<"),
@@ -157,6 +196,40 @@ def changes_model(fn, effects, seen=()):
     return ops(effects[fn].get("do"))
 
 
+def definitions_for_model(data):
+    """Определения cel.definitions, которые зовут выражения вне интерфейса (и функции мира cel.world, и ручные части
+    модели quint/src) — прямо или через другие определения"""
+    defs = data["cel"]["definitions"]
+    src = os.path.join(ROOT, "Specification", "Workflow_machine", "quint", "src")
+    quint = "".join(open(os.path.join(src, f), encoding="utf-8").read() for f in sorted(os.listdir(src)) if f.endswith(".qnt"))
+
+    def texts(o, skip):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if not k.startswith("$") and not (skip and k in skip):
+                    yield from texts(v, None)
+        elif isinstance(o, list):
+            for v in o:
+                yield from texts(v, None)
+        elif isinstance(o, str):
+            yield o
+
+    def calls(text):
+        return {n for n in defs if re.search(rf"\b{n}\(", text)}
+
+    seen = set()
+    roots = {k: v for k, v in data.items() if k not in UI_SECTIONS}
+    roots["cel"] = {k: v for k, v in data["cel"].items() if k != "definitions"}
+    todo = set().union(*(calls(x) for k, v in roots.items() for x in texts(v, {"notes"} if k == "forms" else None)))
+    todo |= {n for n in defs if re.search(rf"\b{n}\b", quint)}
+    while todo:
+        n = todo.pop()
+        if n not in seen:
+            seen.add(n)
+            todo |= set().union(*(calls(x) for x in texts(defs[n], None))) - seen
+    return seen
+
+
 def label(it):
     """Имя элемента условия или эффекта: функция и первый аргумент-строка"""
     a = (it.get("args") or [None])[0]
@@ -174,10 +247,8 @@ def generate(src):
         while any(m["name"] == n for m in out):
             n, k = f"{name}-{k}", k + 1
         m = {"name": n, "what": what, "find": fr[0], "replace": fr[1]}
-        if EQUIVALENT.get(n):
-            m["model"] = "эквивалентна: " + EQUIVALENT[n]
-        elif model:
-            m["model"] = model
+        if KNOWN.get(n) or model:
+            m["model"] = KNOWN.get(n) or model
         out.append(m)
 
     states = [s["id"] for s in data["states"]]
@@ -196,9 +267,11 @@ def generate(src):
                 if st != tr["to"]:
                     add(f"gen-{tid}-to-{st}", f"«{tid}» ведёт в {st}, а не в {tr['to']}", t.edit(f["to"], t.end(f["to"]), json.dumps(st)))
 
+    model_defs = definitions_for_model(data)
     for path, a, b in t.strings(0, [], "expr"):
         p = ".".join(path)
         ui = path[0] in UI_SECTIONS or any(r.match(p + ".") for r in UI_PATHS)
+        ui = ui or (path[:2] == ["cel", "definitions"] and path[2] not in model_defs)
         s = src[a:b]
         for op, pat, rep in FLIPS:
             for n, m in enumerate(re.finditer(pat, s)):

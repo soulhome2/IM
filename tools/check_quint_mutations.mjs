@@ -92,6 +92,9 @@ async function judge(dir, testFirst) {
     // раньше строки итога (ERROR relink-forgets-group, PROC-75)
     const r = await run("quint", ["run", "im.qnt", "--invariants", ...INVARIANTS, `--max-samples=${p.samples}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, "--verbosity=1"], dir);
     if (/\[violation\]/.test(r.out)) return { by: "inv", names: [...r.out.matchAll(/^\s*❌ (\w+)/gm)].map((m) => m[1]), profile: p.name };
+    // Ошибка исполнения (элемент пустого списка, нет ключа): модель на испорченной машине не досчитала — порча видна,
+    // как и в прототипе, где то же выражение падает (PROC-76; 16 порч генератора)
+    if (/error: Runtime error/.test(r.out)) return { by: "runtime", names: [], profile: p.name };
     if (!/\[ok\]/.test(r.out)) return { error: `quint run, профиль «${p.name}», ${r.signal ? `сигнал ${r.signal}` : `код ${r.status}`}: ${r.out.trim().split("\n").slice(-3).join(" ").slice(-300)}` };
   }
   return (!testFirst && (await scenarios(dir))) || { by: null };
@@ -121,7 +124,7 @@ async function control() {
   try {
     const r = await judge(dir);
     if (r.error) return { line: `ERROR контроль без порчи — ${r.error}`, bad: true };
-    if (r.by) return { line: `ERROR контроль без порчи — поймано то, чего нет: ${r.by === "inv" ? "инварианты" : "сценарии"} ${r.names.join(", ")}`, bad: true };
+    if (r.by) return { line: `ERROR контроль без порчи — поймано то, чего нет: ${{ inv: "инварианты", test: "сценарии", runtime: "исполнение модели упало" }[r.by]} ${r.names.join(", ")}`, bad: true };
     return { line: "OK  контроль без порчи — нарушений нет, сценарии проходят", bad: false };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -140,6 +143,7 @@ async function check([name, what, find, replace, part, skip]) {
     if (r.error) return { line: `ERROR ${name} — ${r.error}`, bad: true };
     if (r.by === "inv") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: инвариант ${r.names.join(", ")} (профиль «${r.profile}»)`, bad: false, inv: r.names };
     if (r.by === "test") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: сценарии ${r.names.join(", ")}`, bad: false, inv: [] };
+    if (r.by === "runtime") return { line: `OK  ${name}${what ? ` — ${what}` : ""}: исполнение модели упало (профиль «${r.profile}»)`, bad: false, inv: [] };
     return { line: `BAD ${name}${what ? ` — ${what}` : ""}: ни инвариант, ни сценарий не поймали`, bad: true };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
