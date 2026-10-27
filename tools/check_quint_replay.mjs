@@ -4,6 +4,9 @@
 // (quint run --out-itf), скрипт повторяет каждый шаг на исполнителе — те же настройки, права, доступ, состояние
 // операторов, часы и действия — и в спокойные моменты (у модели нет готовых автоматических переходов)
 // сравнивает все инциденты и ответы сценария. Факты мира — из истории модели, без сервера и эталонного набора.
+// И в обе стороны — что доступно (PROC-78): кто, какой ручной переход, с каким инцидентом, в очереди или карточке —
+// у модели (avail, часть quint/src/replay.qnt, приклеивается к im.qnt во временной копии) и у исполнителя
+// (actions — кнопки с пустой формой). Доступно у одного и не у другого — расхождение.
 // Истории — по профилям порога покрытия (tools/quint_profiles.mjs, PROC-72), числом пропорционально их историям.
 // Запуск из корня репозитория: node tools/check_quint_replay.mjs [--traces=N] [--steps=M] [--seed=0x…]
 // [--dir=папка с готовыми *.itf.json]. Нужен quint в PATH (если нет --dir).
@@ -31,6 +34,9 @@ const IDS = ["i1", "i2", "i3"];
 let dir = opt("dir", "");
 if (!dir) {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "quint-replay-"));
+  // Модель с доступностью: im.qnt и часть replay.qnt внутри того же модуля
+  const im = fs.readFileSync(path.join(Q, "im.qnt"), "utf8").trimEnd();
+  fs.writeFileSync(path.join(dir, "im_replay.qnt"), `${im.slice(0, -1)}\n${fs.readFileSync(path.join(Q, "src/replay.qnt"), "utf8")}}\n`);
   // Пачками по 200: quint держит выгружаемые истории в памяти. Зерно пачки — заданное плюс её номер
   const seed = opt("seed", "");
   const total = PROFILES.reduce((s, p) => s + p.samples, 0);
@@ -40,8 +46,8 @@ if (!dir) {
       const n = Math.min(200, left);
       const r = spawnSync(
         "quint",
-        ["run", "im.qnt", "--invariant", "inv", `--max-samples=${n}`, `--max-steps=${STEPS}`, `--init=${p.init}`, `--step=${p.step}`, `--out-itf=${dir}/b${b}t{seq}.itf.json`, `--n-traces=${n}`, ...(seed ? [`--seed=${"0x" + (BigInt(seed) + BigInt(b)).toString(16)}`] : [])],
-        { cwd: Q, encoding: "utf8", maxBuffer: 1 << 28 }
+        ["run", "im_replay.qnt", "--invariant", "inv", `--max-samples=${n}`, `--max-steps=${STEPS}`, `--init=${p.init}R`, `--step=${p.step}R`, `--out-itf=${dir}/b${b}t{seq}.itf.json`, `--n-traces=${n}`, ...(seed ? [`--seed=${"0x" + (BigInt(seed) + BigInt(b)).toString(16)}`] : [])],
+        { cwd: dir, encoding: "utf8", maxBuffer: 1 << 28 }
       );
       if (r.status !== 0 && !/\[ok\]/.test(r.stdout)) {
         console.log(r.stdout.split("\n").slice(-5).join("\n"), r.stderr);
@@ -171,6 +177,24 @@ function replay(states, name) {
       if (JSON.stringify(want) !== JSON.stringify(answers[id].slice().sort())) problems.push(`${name}, шаг ${k}: ответы ${id} — модель ${want}, исполнитель ${answers[id]}`);
     }
   };
+  // Доступное в состоянии k: у модели — avail следующего шага (он запоминает, что было доступно до него), у
+  // исполнителя — включённые кнопки переходов того, кто видит инцидент
+  const compareAvail = (k, st, next) => {
+    if (!next.avail) return;
+    const model = next.avail.map((x) => x.join(" ")).sort();
+    const got = [];
+    for (const me of OPS) {
+      for (const id of IDS) {
+        const ev = evOf(id);
+        if (!ev || !facts.cfg.access[me].includes(id)) continue;
+        for (const surface of ["queue", "card"]) engines[me].actions(ev, surface).filter((x) => x.kind === "transition" && x.enabled).forEach((x) => got.push(`${me} ${x.id} ${id} ${surface}`));
+      }
+    }
+    got.sort();
+    const onlyModel = model.filter((x) => !got.includes(x));
+    const onlyEngine = got.filter((x) => !model.includes(x));
+    if (onlyModel.length || onlyEngine.length) problems.push(`${name}, шаг ${k} (${describe(st.lastAction)}): доступно только у модели — ${onlyModel.join(", ") || "—"}; только у исполнителя — ${onlyEngine.join(", ") || "—"}`);
+  };
   for (let k = 1; k < states.length && !problems.length; k++) {
     const st = states[k];
     const a = st.lastAction;
@@ -203,6 +227,7 @@ function replay(states, name) {
     else if (next.lastAction.kind !== "auto") {
       settle();
       compare(k, st);
+      compareAvail(k, st, next);
     }
   }
   return problems;
@@ -221,8 +246,11 @@ const files = fs.readdirSync(dir).filter((f) => f.endsWith(".itf.json")).sort((x
 let checked = 0;
 let steps = 0;
 const all = [];
+// Какие переходы машины в историях выполнены — не встретившийся сверяется только доступностью (PROC-78)
+const done = new Set();
 for (const f of files) {
   const states = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")).states.map(decode);
+  states.forEach((st) => done.add(st.lastAction.name));
   const p = replay(states, f);
   checked++;
   steps += states.length - 1;
@@ -230,5 +258,7 @@ for (const f of files) {
   if (all.length >= 5) break;
 }
 all.slice(0, 5).forEach((x) => console.log(x));
+const unseen = MACHINE.transitions.map((t) => t.id).filter((id) => !done.has(id) && !(id === "merge" && (done.has("merge") || done.has("merge_auto"))));
 console.log(`Историй модели: ${checked}, шагов: ${steps}. Расхождений модели и исполнителя: ${all.length}`);
+if (unseen.length) console.log(`Переходы, ни разу не выполненные в историях (сверены только доступностью, если ручные): ${unseen.join(", ")}`);
 process.exit(all.length ? 1 : 0);
