@@ -15,7 +15,8 @@
     tools/gen_quint.mjs их пропускает;
   - выражение интерфейса: бейджи, пояснения на карточке, подсказки форм, фильтры и группы очереди — и определение
     cel.definitions, которое зовут только они или никто (обход вызовов от выражений вне интерфейса);
-  - разобранная выжившая — KNOWN ниже: эквивалентная (поведение не меняется) или видна только при других настройках.
+  - разобранная выжившая — KNOWN ниже: эквивалентная (поведение не меняется), видна только при других настройках
+    или её ловит статическая сверка tools/check_machine.py.
 
 Запуск из корня репозитория: python3 tools/gen_mutations.py
 Прогон: node tools/check_quint_mutations.mjs --generated, python3 tools/check_code_mutations.py --generated;
@@ -69,6 +70,9 @@ KNOWN = {
     "gen-merge-no-guard-mergePrimaryValid": _SAME + "основного выбирает сервер по mergePrimary — только свой «В работе» или новый, назвать его клиент не может (RULE-101; PROC-90)",
     "gen-cel-registries.guards.mergePrimaryValid-and4": _SAME + "основного выбирает сервер по mergePrimary — только свой «В работе» или новый, назвать его клиент не может (RULE-101; PROC-90)",
     "gen-merge-no-guard-agentReady": _SAME + "новый основной берётся «Взять» с проверкой «Готов», а своего «В работе» на перерыве нет — перерыв откладывает его в том же запросе (PROC-90)",
+    "gen-resume-no-guard-hasPermission-incident-claim": "ловит check_machine.py: переход в «В работе» без права взятия или принятия (§10.3); actionRights тоже ловит, но в случайных историях путь редок (PROC-92)",
+    "gen-addressee_cannot_accept-no-effect-startTimer-reaction": "ловит check_machine.py: реакция по описанию запускается при входе в «Новый» (RULE-51; PROC-92)",
+    "gen-cel-registries.guards.primaryAddresseeHasAccess-and1": _SAME + "условие только у linked_lost_access, а при закрытом основном раньше по порядку срабатывает close_linked (PROC-92)",
     "gen-hold-no-guard-agentReady": _SAME + "у оператора не в «Готов» инцидентов «В работе» нет: перерыв их откладывает, выход — возвращает",
     "gen-addressee_signed_out_to_queue-no-guard-ownerHasDutyGroup": _FIRST,
     "gen-addressee_cannot_accept-no-guard-addresseeHasAccess": _FIRST,
