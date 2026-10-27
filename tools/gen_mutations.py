@@ -42,7 +42,7 @@ _PAUSED = _SAME + "в «Отложен» и у привязанного норм
 _NEW = _SAME + "у нового инцидента это и так начальное значение"
 _FIRST = _SAME + "у того же события раньше по порядку срабатывает соседний переход с тем же итогом (§14.3)"
 _PRIMARY = _SAME + "у привязанного основной есть всегда, а форма объединения требует существующего основного"
-_SETTINGS = "мир модели: видна при других настройках — переопределения норматива по типу события и группе источника, причина удержания без срока (Р19 б, RULE-135)"
+_SETTINGS = "мир модели: видна при других настройках — переопределения норматива по типу события и группе источника (Р19 б)"
 KNOWN = {
     "gen-cel-cel.definitions.matchesOwnership-eq3": _SAME + "правило области у «Передать» знает только владельца и адресата, ветка не выполняется",
     "gen-cel-cel.definitions.matchesOwnership-eq4": _SAME + "правило области у «Передать» знает только владельца и адресата, ветка не выполняется",
@@ -81,7 +81,7 @@ KNOWN = {
     "gen-cel-cel.definitions.overrideAllowed-or1": _SETTINGS,
     "gen-cel-cel.definitions.overrideAllowed-or3": _SETTINGS,
     "gen-cel-cel.definitions.overrideMatches-eq2": _SETTINGS,
-    "gen-cel-cel.definitions.holdSec-gt2": _SETTINGS,
+    "gen-cel-cel.definitions.holdSec-gt2": _SAME + "причины удержания без срока нет: срок обязателен, кроме deadlineFromIdle (RULE-135, check_machine.py)",
 }
 
 FLIPS = [

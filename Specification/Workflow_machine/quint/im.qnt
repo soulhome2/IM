@@ -298,7 +298,7 @@ module im {
   def norm(x: Incident, t: TimerDef): int =
     { val ms_42 = t.overrides.select(o_43 => (overrideAllowed(t, o_43) and overrideMatches(x, o_43)))  (if ((ms_42.length() > 0)) ms_42.select(o_44 => ms_42.foldl(true, (acc, k_45) => acc and (overrideKeys(k_45) <= overrideKeys(o_44))))[0].sec else (if (t.byPriority.keys().contains(x.priority)) t.byPriority.get(x.priority) else t.defaultSec)) }
 
-  // §4. Срок удержания, с — по причине (secFrom таймера hold). У причины с deadlineFromIdle («Нет связи») — порог возврата в очередь минус порог удержания, не меньше 0: срок причины и возврат по молчанию совпадают при любых порогах (RULE-118, RULE-129, RULE-132). Причины нет или у неё нет срока (maxMinutes: null) — -1, срок не ставится
+  // §4. Срок удержания, с — по причине (secFrom таймера hold). У причины с deadlineFromIdle («Нет связи») — порог возврата в очередь минус порог удержания, не меньше 0: срок причины и возврат по молчанию совпадают при любых порогах (RULE-118, RULE-129, RULE-132). Причины нет — -1, срок не ставится. Срок у причины обязателен, кроме deadlineFromIdle (§4, правило 7; RULE-135, check_machine.py): ветка «maxMinutes пуст» — подстраховка
 
   def holdSec(x: Incident): int =
     { val rs_46 = settings.holdReasons.select(r_47 => (r_47.id == x.holdReasonId))  (if ((rs_46.length() == 0)) (0 - 1) else (if (rs_46[0].deadlineFromIdle) (if ((settings.session.idleReleaseSec > settings.session.idleHoldSec)) (settings.session.idleReleaseSec - settings.session.idleHoldSec) else 0) else (if ((rs_46[0].maxMinutes.length() > 0)) (rs_46[0].maxMinutes[0] * 60) else (0 - 1)))) }
@@ -3989,8 +3989,8 @@ module im {
       not(runs(r) and r.fired == r.due),
       if (s == "new" or s == "pending_acceptance") not(runs(h)) and not(runs(z)) and (runs(r) or hasBreach(x, "reaction"))
       else if (s == "in_progress") runs(z) and not(runs(r)) and not(runs(h))
-      // Срок удержания идёт, только если он у причины есть (holdSec ≥ 0)
-      else if (s == "on_hold") (runs(h) iff holdSec(x) >= 0) and not(runs(z)) and z.paused and not(runs(r))
+      // Срок удержания у причины есть всегда (§4, правило 7; RULE-135) — идёт он или уже нарушен, проверяет holdBounded
+      else if (s == "on_hold") not(runs(z)) and z.paused and not(runs(r))
       else if (s == "closed") not(runs(r)) and not(runs(z)) and not(runs(h))
       // Свой норматив закрытия привязанного на паузе: у группы один срок — срок основного (RULE-97)
       else if (s == "linked") not(runs(r)) and not(runs(h)) and not(runs(z))

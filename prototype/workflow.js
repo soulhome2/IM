@@ -4653,7 +4653,7 @@ window.IM_WORKFLOW = {
         },
         "returns": "int",
         "expr": "cel.bind(rs, holdReasons.filter(r, r.id == x.holdReasonId), size(rs) == 0 ? -1 : rs[0].deadlineFromIdle ? (session.idleReleaseSec > session.idleHoldSec ? session.idleReleaseSec - session.idleHoldSec : 0) : size(rs[0].maxMinutes) > 0 ? rs[0].maxMinutes[0] * 60 : -1)",
-        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold). У причины с deadlineFromIdle («Нет связи») — порог возврата в очередь минус порог удержания, не меньше 0: срок причины и возврат по молчанию совпадают при любых порогах (RULE-118, RULE-129, RULE-132). Причины нет или у неё нет срока (maxMinutes: null) — -1, срок не ставится"
+        "$comment": "§4. Срок удержания, с — по причине (secFrom таймера hold). У причины с deadlineFromIdle («Нет связи») — порог возврата в очередь минус порог удержания, не меньше 0: срок причины и возврат по молчанию совпадают при любых порогах (RULE-118, RULE-129, RULE-132). Причины нет — -1, срок не ставится. Срок у причины обязателен, кроме deadlineFromIdle (§4, правило 7; RULE-135, check_machine.py): ветка «maxMinutes пуст» — подстраховка"
       },
       "levelNorm": {
         "params": {

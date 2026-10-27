@@ -126,6 +126,11 @@ def check_workflow(w, err):
     for item in w["reasonCatalogs"].get("hold", {}).get("items", []):
         if item.get("deadlineFromIdle") and item.get("maxMinutes") is not None:
             err.append(f"причина удержания {item['id']}: срок из порогов молчания (deadlineFromIdle) — maxMinutes должен быть null")
+        # Срок у причины обязателен — и у причин оператора, и у системных: без него инцидент лежал бы отложенным
+        # бесконечно (§4, правило 7; RULE-135)
+        mm = item.get("maxMinutes")
+        if not item.get("deadlineFromIdle") and not (isinstance(mm, int) and not isinstance(mm, bool) and mm >= 1):
+            err.append(f"причина удержания {item['id']}: нет срока — maxMinutes целое от 1 (§4, правило 7; RULE-135)")
 
     # Результат «Итога» (finish) — один и только с обязательными шагами: им закрывают пройденный сценарий (ARCH-08 в7)
     finishing = [i for i in w["reasonCatalogs"].get("close_result", {}).get("items", []) if i.get("finish")]
