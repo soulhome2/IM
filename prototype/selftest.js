@@ -267,6 +267,14 @@
 
   async function setTheme(theme) {
     if (document.documentElement.dataset.theme !== theme) await click($("themeToggle"));
+    // Цвета темы меняются плавно (transition): замерять — после конца перехода. В обычном окне время идёт
+    // по-настоящему, и без ожидания контраст замерялся посреди перехода. Пауза — на остаток самого долгого перехода:
+    // ожидание finished в безоконном Chrome съедало по 6–10 с виртуального времени
+    const left = document.getAnimations().filter((a) => a instanceof CSSTransition).map((a) => {
+      const t = a.effect.getTiming();
+      return t.duration + t.delay - (a.currentTime || 0);
+    });
+    await wait(Math.max(0, ...left) + 20);
   }
 
   // Шаги сценария: подтвердить, выбрать первый вариант; ответ уходит по «Далее»
@@ -1065,6 +1073,8 @@
       await click(input());
       expect([...menu().querySelectorAll("[data-target-pick]")].every((o) => o.tabIndex === -1), "адресаты списка — в порядке Tab");
       field("comment").focus();
+      // Окно не активно (запустили и ушли на другую вкладку) — браузер переносит фокус без события ухода: оно — вручную
+      if (!document.hasFocus()) input().dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: field("comment") }));
       await wait();
       expect(!menu(), "фокус ушёл в «Причину», а список адресатов открыт");
       // Клавиши (PROC-21): ↓ открывает список и ведёт к адресатам, ↑ с первого — обратно в поле, Enter — первый подходящий
@@ -2823,7 +2833,33 @@
     close.textContent = "Скрыть";
     close.style.cssText = "float:right;margin-left:12px";
     close.addEventListener("click", () => box.remove());
-    box.append(close, title, log);
+    // Весь отчёт — в буфер обмена одной кнопкой: итог и строки, без выделения руками. Нет Clipboard API (страница
+    // не в безопасном контексте) — через скрытое поле и execCommand
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "btn ghost small";
+    copy.id = "selftest-copy";
+    copy.textContent = "Копировать";
+    copy.style.cssText = "float:right;margin-left:12px";
+    copy.addEventListener("click", async () => {
+      const text = `${summary}\n${lines.join("\n")}`;
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (e) {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.cssText = "position:fixed;opacity:0";
+        box.appendChild(area);
+        area.select();
+        ok = document.execCommand("copy");
+        area.remove();
+      }
+      copy.textContent = ok ? "Скопировано" : "Не скопировалось";
+      setTimeout(() => (copy.textContent = "Копировать"), 2000);
+    });
+    box.append(close, copy, title, log);
     document.body.appendChild(box);
   }
 
