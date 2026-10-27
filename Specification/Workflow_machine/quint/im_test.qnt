@@ -480,6 +480,50 @@ module im_test {
       .expect(not(urgent) and breachesOf(x2, "resolution") == 1 and x2.breaches[0].owner == "a")
       .expect(inv)
 
+  // PROC-89: отсоединённый до срока группы в группе в момент срока не был — нарушение группы только основному. Его
+  // берёт b через минуту: свой срок закрытия — позже окна основного, реакция стоит
+  run detachBeforeGroupDeadlineTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(merge("a", "i1", Set("i2")))
+      .then(act("a", "detach", "i2"))
+      .then(jump(clock + 60000))
+      .then(act("b", "claim", "i2"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(breachesOf(x1, "resolution") == 1 and breachesOf(x2, "resolution") == 0)
+      .expect(inv)
+
+  // PROC-89: привязанный ровно в миг срока группы — в группе («присоединённый не позже»): нарушение группы и ему
+  run mergeAtGroupDeadlineTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(jump(due("i1", "resolution")))
+      .then(merge("a", "i1", Set("i2")))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(breachesOf(x1, "resolution") == 1 and breachesOf(x2, "resolution") == 1 and x2.state == "linked")
+      .expect(inv)
+
+  // PROC-89: привязанный ровно в миг срока и отсоединённый в окне — тоже в группе: нарушение группы ему записано
+  run mergeAtGroupDeadlineDetachTest =
+    start
+      .then(newFire("i1"))
+      .then(newFire("i2"))
+      .then(act("a", "claim", "i1"))
+      .then(jump(due("i1", "resolution")))
+      .then(merge("a", "i1", Set("i2")))
+      .then(jump(clock + 1))
+      .then(act("a", "detach", "i2"))
+      .then(expire("i1", "resolution"))
+      .then(fire("i1"))
+      .expect(breachesOf(x1, "resolution") == 1 and breachesOf(x2, "resolution") == 1 and x2.state == "new")
+      .expect(inv)
+
   // Перехват основного тем, кто не видит привязанный: привязанный отсоединяется (§11.4, RULE-71)
   run takeoverLosesLinkedTest =
     initWith({ ...BASE, access: Map("a" -> INCIDENTS, "b" -> Set("i1")) }, BASE_SETTINGS)

@@ -2552,6 +2552,36 @@
     assert.eq([b.length, b[0] && b[0].at], [1, due], "отсоединённому в миг срока — нарушение группы на момент срока");
   });
 
+  // Присоединяется новый, только что появившийся: своего норматива закрытия у него ещё нет — срок группы от
+  // объединения не сдвигается, — и реакция не истекла — он ещё «Новый», его можно присоединить
+  test("Состав группы в момент срока: отсоединённому до срока нарушения группы нет; присоединённому ровно в миг срока — есть, и если отсоединили в окне (§11.4, PROC-89)", async () => {
+    const run = async (mergeAtDue, detachAfterSec) => {
+      const env = await makeEnv();
+      const { calm } = await fireTrio(env);
+      await env.act(calm.guid, "claim", {}, "queue");
+      const due = (await env.card(calm.guid)).timer.dueAt;
+      if (mergeAtDue) await env.advance((Date.parse(due) - env.now) / 1000);
+      const source = (await env.card(calm.guid)).source.guid;
+      const born = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], location: "тест", priority: calm.priority });
+      assert.status(born, 201, null, "появился новый");
+      const fresh = { guid: born.body.guid };
+      assert.status(await mergeInto(env, calm.guid, [fresh.guid]), 200, null, "присоединить новый");
+      if (detachAfterSec !== null) {
+        await env.advance(detachAfterSec);
+        assert.status(await env.call("DELETE", `/operator/incidents/${enc(calm.guid)}/linked/${enc(fresh.guid)}`), 200, null, "отсоединить");
+      }
+      await env.advance(Math.max(0, Math.ceil((Date.parse(due) - env.now) / 1000)) + GRACE + 2);
+      assert.eq(resolutionBreaches(await env.card(calm.guid)).length, 1, "основному — нарушение срока");
+      return { due, b: resolutionBreaches(await env.card(fresh.guid)) };
+    };
+    let r = await run(false, 0);
+    assert.eq(r.b.length, 0, "отсоединённому до срока — нарушения группы нет");
+    r = await run(true, null);
+    assert.eq([r.b.length, r.b[0] && r.b[0].at], [1, r.due], "присоединённому ровно в миг срока — нарушение группы на момент срока");
+    r = await run(true, 1);
+    assert.eq([r.b.length, r.b[0] && r.b[0].at], [1, r.due], "присоединённому в миг срока и отсоединённому в окне — тоже");
+  });
+
   test("Окно после срока группы: отсоединённый в окне и взятый в нём же — одно нарушение, группы; своего нет (§11.4, BUG-75)", async () => {
     assert.ok(GRACE > 1, "окно после дедлайна больше секунды");
     const env = await makeEnv();
