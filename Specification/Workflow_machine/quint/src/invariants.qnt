@@ -210,13 +210,15 @@
 
   // 13. П2. Молчащий владелец, который не вышел (§12.3): «В работе» при молчании от idleHoldSec — сейчас
   //     откладывается; отложенный системой (причины, которые оператор сам не выбирает) при молчании от
-  //     idleReleaseSec — сейчас уходит в очередь (PROC-45)
+  //     idleReleaseSec — сейчас уходит в очередь (PROC-45); отложенный оператором молчание в очередь не возвращает —
+  //     причина по справочнику, а не по условию перехода (PROC-87)
   val silentOwnerHandled = INCIDENTS.forall(i => {
     val x = incOf(i)
     val idle = if (OPERATORS.contains(x.owner) and agentState(x.owner) != "offline") idleSec(x.owner) else 0
     all {
       (x.state == "in_progress" and idle >= settings.session.idleHoldSec) implies fixReady(i, Set("system_hold_idle")),
       (x.state == "on_hold" and x.holdReasonId != NOBODY and not(HOLD_REASONS_BY_OPERATOR.contains(x.holdReasonId)) and idle >= settings.session.idleReleaseSec) implies fixReady(i, Set("system_release_idle")),
+      (lastAction.incident == i and lastAction.name == "system_release_idle") implies not(HOLD_REASONS_BY_OPERATOR.contains(before(i).holdReasonId)),
     }
   })
 

@@ -646,7 +646,7 @@
  "gen-system_release_idle-no-effect-startTimer-reaction": null,
  "gen-system_release_idle-no-effect-stopTimer-hold": null,
  "gen-system_release_idle-no-guard-agentIdleFor-session.idleReleaseSec": "Оператор замолчал (§12.3): через idleHoldSec — «Отложен, нет связи», через idleReleaseSec — снова в очереди, ничей",
- "gen-system_release_idle-no-guard-holdReasonIn": null,
+ "gen-system_release_idle-no-guard-holdReasonIn": "Отложенный оператором молчание в очередь не возвращает (§12.3, PROC-87): idleReleaseSec — только для системных причин",
  "gen-system_release_idle-to-closed": "Оператор замолчал (§12.3): через idleHoldSec — «Отложен, нет связи», через idleReleaseSec — снова в очереди, ничей",
  "gen-system_release_idle-to-in_progress": "Оператор замолчал (§12.3): через idleHoldSec — «Отложен, нет связи», через idleReleaseSec — снова в очереди, ничей",
  "gen-system_release_idle-to-linked": "Оператор замолчал (§12.3): через idleHoldSec — «Отложен, нет связи», через idleReleaseSec — снова в очереди, ничей",

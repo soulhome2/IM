@@ -1438,6 +1438,21 @@
     assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], "снова новый, ничей, без причины удержания");
   });
 
+  test("Отложенный оператором молчание в очередь не возвращает (§12.3, PROC-87): idleReleaseSec — только для системных причин", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    assert.status(await env.act(inc.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
+    // Срок причины длиннее порога молчания — до него инцидент держит только причина
+    const reasonSec = W.reasonCatalogs.hold.items.find((r) => r.id === "third_party").maxMinutes * 60;
+    assert.ok(W.session.idleReleaseSec + 20 < reasonSec, "порог молчания короче срока причины");
+    const res = await env.call("POST", "/test/clock", { advanceSec: W.session.idleReleaseSec + 20 });
+    assert.status(res, 200, null, "сдвиг часов без heartbeat");
+    assert.eq(res.body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId), [], "молчание ничего не делает");
+    const c = await env.card(inc.guid);
+    assert.eq([c.state, c.owner && c.owner.id, c.holdReasonId], ["on_hold", ME, "third_party"], "отложен у меня, причина та же");
+  });
+
   test("У «Нет связи» нарушения удержания нет, срок — из порогов молчания: оператор молчит — в очередь ровно по порогу возврата при любых порогах (§4, правило 7; §12.3, RULE-116, RULE-118, RULE-129)", async () => {
     // Порог удержания не меньше порога возврата — срок 0, в очередь сразу по молчанию, без срока причины (RULE-132)
     for (const [holdSec, releaseSec] of [[300, 3600], [900, 1200], [1200, 300]]) {

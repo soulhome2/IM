@@ -531,7 +531,7 @@
  "gen-system_release_idle-no-effect-startTimer-reaction": "инвариант timersByState (профиль «широкий»)",
  "gen-system_release_idle-no-effect-stopTimer-hold": "инвариант timersByState, dueDeadlineHandled (профиль «широкий»)",
  "gen-system_release_idle-no-guard-agentIdleFor-session.idleReleaseSec": null,
- "gen-system_release_idle-no-guard-holdReasonIn": null,
+ "gen-system_release_idle-no-guard-holdReasonIn": "инвариант silentOwnerHandled (профиль «широкий»)",
  "gen-system_release_idle-to-closed": "инвариант ownerByState, timersByState, closeResultIffClosed (профиль «широкий»)",
  "gen-system_release_idle-to-in_progress": "инвариант ownerByState, timersByState, noIncidentWithoutAccess (профиль «широкий»)",
  "gen-system_release_idle-to-linked": "инвариант timersByState, linkedShape, linkedSameScenario (профиль «широкий»)",
