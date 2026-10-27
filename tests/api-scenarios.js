@@ -2682,12 +2682,18 @@
     const env2 = await makeEnv();
     assert.status(await env2.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
     await (await mergeInto(env2, mall.guid, [office.guid])).body;
+    // Срок группы уже идёт: полный норматив отсоединённого был бы позже остатка группы
+    await env2.advance(60);
     const roles = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] });
     assert.ok(!roles.body.fired.some((f) => f.transitionId === "linked_lost_access"), "доступ остался — привязанный на месте");
     const res = await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
     assert.ok(res.body.fired.some((f) => f.incidentGuid === office.guid && f.transitionId === "linked_lost_access"), "без доступа к офису — отсоединён");
     const kept = await env2.card(mall.guid);
     assert.eq([kept.state, kept.owner && kept.owner.id, kept.linkedCount], ["in_progress", ME, 0], "основной у меня, привязанных нет");
+    // Отсоединённый уносит остаток срока группы (§6.2, PROC-91): доступ вернули, взятый — со сроком основного
+    assert.status(await env2.call("PUT", "/test/operators/me/roles", { roles: ["Оператор", "Оператор ТЦ"] }), 200, null, "доступ вернули");
+    assert.status(await env2.act(office.guid, "claim", {}, "queue"), 200, null, "взять отсоединённый");
+    assert.eq((await env2.card(office.guid)).timer.dueAt, kept.timer.dueAt, "у отсоединённого — остаток срока группы");
   });
 
   test("Ответы сценария привязанного — в незаполненные шаги основного; заполненное в основном не перезаписывается; запись в журнале (§11)", async () => {

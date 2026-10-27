@@ -4253,6 +4253,17 @@ module im {
     }
   }
 
+  //     а2б) Вышедший из группы уносит срок группы (§11.4, §6.2; PROC-91): после «Отсоединить» и потери доступа
+  //        (linked_lost_access) норматив закрытия на паузе с остатком основного на этот момент — не со своим прежним
+  //        и не с полным: иначе взятый позже получил бы срок длиннее группы
+  val leftGroupKeepsGroupDeadline = {
+    val la = lastAction
+    val z = incOf(la.incident).timers.get("resolution")
+    val r = remOf(before(before(la.incident).linkedTo).timers.get("resolution"), clock)
+    (INCIDENTS.contains(la.incident) and Set("detach", "linked_lost_access").contains(la.name) and r >= 0)
+      implies (z.paused and z.due == 0 and z.left == r)
+  }
+
   //     а3) Закрытый не меняется, пока его самого не переоткрыли (§2.1, §6.1; PROC-84): ни связь, ни сроки, ни владелец.
   //        Нарушение дописаться может: отсоединённый в окне после срока группы и закрытый в нём — был в группе в момент
   //        срока и получает её нарушение (BUG-73); что нарушения только дописываются — breachesKept
@@ -4420,6 +4431,7 @@ module im {
     actionRights,
     reactionNotExtended,
     groupDeadlineEarliest,
+    leftGroupKeepsGroupDeadline,
     systemOnlyWhenDue,
     closedKept,
     holdDeadlineByReason,

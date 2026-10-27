@@ -377,7 +377,7 @@
  "gen-hold_overdue-no-guard-holdReasonNotIn": "инвариант timerTransitionsExclusive (профиль «широкий»)",
  "gen-hold_overdue-no-guard-timerExpired-hold": "исполнение модели упало (профиль «широкий»)",
  "gen-linked_lost_access-no-effect-clearLink-workflow.journal.linked_lost_access": "инвариант openNotLinked (профиль «широкий»)",
- "gen-linked_lost_access-no-effect-copyPrimaryDeadline-resolution": null,
+ "gen-linked_lost_access-no-effect-copyPrimaryDeadline-resolution": "инвариант leftGroupKeepsGroupDeadline (профиль «широкий»)",
  "gen-linked_lost_access-no-effect-startTimer-reaction": "инвариант timersByState (профиль «широкий»)",
  "gen-linked_lost_access-no-guard-primaryAddresseeHasAccess": "сценарии detachInGroupWindowTest",
  "gen-linked_lost_access-to-closed": "инвариант ownerByState, timersByState, closeResultIffClosed (профиль «широкий»)",
