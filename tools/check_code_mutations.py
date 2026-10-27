@@ -471,6 +471,10 @@ def check(site, profile, mutation, full, killers):
         return f"ERROR {name} [{kind}] — тесты не запустились: прогон недействителен", True, None
     if passed:
         return f"SURVIVED {name} [{kind}] — тесты прошли с испорченным {file}", True, None
+    # Поймал не отдельный тест, а общая проверка набора (сверка ответов с openapi.json) — её имя: без него пойманная
+    # порча оставалась без итога (PROC-76)
+    if kind == "api" and not killer and fails:
+        killer = fails[0].removeprefix("FAIL  ").split(" — ")[0]
     return f"KILLED {name} [{kind}] — {fails[0][:110] if fails else 'тесты упали'}", False, killer
 
 
