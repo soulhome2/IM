@@ -265,11 +265,12 @@
     roles(a, "toggle_accept", { ...cfg, perms: cfg.perms.set(a, if (s.contains("incident:accept")) s.exclude(Set("incident:accept")) else s.union(Set("incident:accept"))) })
   }
 
-  // Ответ на шаг сценария (§10.4): кто может — scenarioEdit машины
+  // Ответ на шаг сценария (§10.4): кто может — scenarioEdit машины; шаг — следующий неотвеченный (линейный сценарий)
   action answer(a: str, i: str, st: str): bool = all {
     sees(a, i),
     scenarioEditOk(ctx(a, a, NO_FORM, "card"), i),
-    not(world.answers.get(i).contains(st)),
+    st != "",
+    st == nextStep(i),
     commit(act0("env", "answer", a, i), { ...world, answers: world.answers.set(i, world.answers.get(i).union(Set(st))) }),
   }
 
@@ -398,7 +399,4 @@
     nondet m = AGENT_MOVES.oneOf()
     agentMove(a, m.id)
   }
-  action answerAny(a: str, i: str): bool = {
-    nondet st = STEPS.oneOf()
-    answer(a, i, st)
-  }
+  action answerAny(a: str, i: str): bool = answer(a, i, nextStep(i))

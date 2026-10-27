@@ -72,7 +72,12 @@ function decode(v) {
 const g = { console, TextEncoder, TextDecoder };
 g.window = g;
 vm.createContext(g);
-for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js"]) vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), g, { filename: f });
+for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js", "prototype/vendor/json-logic-js/logic.js", "prototype/scenario.js"]) vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), g, { filename: f });
+// Сценарий модели на настоящем исполнителе сценариев (PROC-79, Р9 б): линейный, s1 → s2, s2 финальный. Ответы,
+// перенос при объединении, «пройден» и прогресс — функции prototype/scenario.js, а не заглушка
+const SC = g.IMScenario;
+const step = (id, finish) => ({ id, type: "RadioButton", title: id, description: "", revisitable: true, multitasking: false, report: false, finish, view: { label: id, required: true, options: [{ id: "ok", label: "ok", default: false }] }, transitions: { default: { goto: finish ? null : "s2", macro: null } } });
+const LINEAR = { scenario: { id: "model", name: "model", version: 1, initialStep: "s1" }, steps: [step("s1", false), step("s2", true)] };
 
 // Права, которые действуют (§10.3, validation.claimWithoutExitPermission): с «Взять» или «Принять» и без единого
 // выхода из карточки права из disables не действуют. Это проверка при входе — внешней системы, не сервера прототипа
@@ -109,7 +114,8 @@ function replay(states, name) {
   setFacts(states[0]);
   const W = machineFor(states[0].settings);
   const events = [];
-  const answers = Object.fromEntries(IDS.map((i) => [i, []]));
+  const results = Object.fromEntries(IDS.map((i) => [i, SC.start(LINEAR)]));
+  const iso = () => new Date(facts.clock).toISOString();
   const evOf = (id) => events.find((e) => e.id === id);
   const engines = {};
   for (const me of OPS) {
@@ -130,14 +136,14 @@ function replay(states, name) {
       agentStateOf: (who) => facts.agents[who] || "offline",
       idleSec: () => (facts.clock - facts.lastBeat[me]) / 1000,
       hasAccess: (who, ev) => OPS.includes(who) && facts.cfg.access[who].includes(ev.id),
-      stepsFilled: (ev, setId) => setId === "none" || (setId === "closing" && ["s1", "s2"].every((x) => answers[ev.id].includes(x))),
-      progress: (ev) => ({ filled: answers[ev.id].length, total: 2 }),
+      stepsFilled: (ev, setId) => SC.stepsFilled(LINEAR, results[ev.id], setId),
+      progress: (ev) => SC.progress(LINEAR, results[ev.id]),
       stepNumber: () => 1,
       setCursor: () => {},
       shareAnswers: (from, to) => {
-        const add = answers[from.id].filter((x) => !answers[to.id].includes(x));
-        answers[to.id] = answers[to.id].concat(add).sort();
-        return add.length;
+        const r = SC.share(LINEAR, results[from.id], LINEAR, results[to.id], { at: iso() });
+        results[to.id] = r.result;
+        return r.moved.length;
       },
       actorName: (id) => id || "",
       log: (ev, whoId, k, v, at) => ev.log.push({ at, whoId, k, v }),
@@ -174,7 +180,8 @@ function replay(states, name) {
     }
     for (const id of IDS) {
       const want = (st.world.answers[id] || []).slice().sort();
-      if (JSON.stringify(want) !== JSON.stringify(answers[id].slice().sort())) problems.push(`${name}, шаг ${k}: ответы ${id} — модель ${want}, исполнитель ${answers[id]}`);
+      const got = Object.keys(results[id].state).sort();
+      if (JSON.stringify(want) !== JSON.stringify(got)) problems.push(`${name}, шаг ${k}: ответы ${id} — модель ${want}, исполнитель ${got}`);
     }
   };
   // Доступное в состоянии k: у модели — avail следующего шага (он запоминает, что было доступно до него), у
@@ -216,7 +223,12 @@ function replay(states, name) {
       }
       const r = engines[a.actor].merge(evOf(a.incident), a.others.map(evOf));
       if (!r.ok) problems.push(`${name}, шаг ${k} (${describe(a)}): модель объединила, исполнитель отказал: ${JSON.stringify(r.why)}`);
-    } else if (a.name === "answer") answers[a.incident] = st.world.answers[a.incident].slice();
+    } else if (a.name === "answer") {
+      // Модель отвечает на следующий неотвеченный шаг — у исполнителя это текущий шаг прохождения
+      const r = SC.answer(LINEAR, results[a.incident], results[a.incident].currentStepId, "ok", { at: iso(), by: a.actor });
+      if (r.ok) results[a.incident] = r.result;
+      else problems.push(`${name}, шаг ${k} (${describe(a)}): модель ответила, исполнитель сценариев отказал: ${r.error}`);
+    }
     setFacts(st);
     // Спокойный момент: следующее действие модели — не автоматический переход. Последний шаг истории — без
     // планировщика: история могла оборваться посреди автоматических переходов; оборвалась на нём — не сравнивается

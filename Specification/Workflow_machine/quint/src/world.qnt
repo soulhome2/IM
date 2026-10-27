@@ -15,9 +15,13 @@
   pure val GROUP_LIST: List[str] = [GROUP, GROUP2]
   pure val GROUPS: Set[str] = Set(GROUP, GROUP2)
   pure val TARGETS: Set[str] = OPERATORS.union(GROUPS)
-  // Сценарий без графа (§14.5): два сценария, у каждого два шага; пройден — отвечены оба (набор closing)
+  // Сценарий без графа (§14.5): два сценария, у каждого два шага по порядку; пройден — отвечены оба (набор closing)
   pure val SCENARIOS: Set[str] = Set("fire", "water")
   pure val STEPS: Set[str] = Set("s1", "s2")
+  // Сценарий модели — линейный: s1, затем s2, он финальный. Ответ — только на следующий неотвеченный шаг, поэтому
+  // ответы — начало пути, и перенос объединением (shareAnswers) даёт то же, что настоящий перенос «по пути до
+  // разрыва» (scenario.js, share); сверка ядра повторяет ответы и переносы на настоящем исполнителе (Р9 б, PROC-79)
+  pure val STEP_ORDER: List[str] = ["s1", "s2"]
   pure val PRIORITIES: Set[int] = Set(100, 50)
   // Часы с секунды: 0 у дедлайна и момента в машине — «нет»
   pure val START = 1000
@@ -72,6 +76,7 @@
   def inSourceGroup(x: Incident, g: str): bool = false
   def agentState(who: str): str = if (OPERATORS.contains(who)) agents.get(who) else "offline"
   def idleSec(who: str): int = if (OPERATORS.contains(who)) (clock - lastBeat.get(who)) / 1000 else 0
+  def nextStep(i: str): str = STEP_ORDER.foldl("", (n, s) => if (n == "" and not(world.answers.get(i).contains(s))) s else n)
   def stepsFilled(x: Incident, setId: str): bool = setId == "none" or (setId == "closing" and world.answers.get(x.id) == STEPS)
 
   // Перенос ответов при объединении (действие мира shareAnswers): отвеченные шаги основного — с ответами привязанного
