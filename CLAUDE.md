@@ -26,7 +26,7 @@ Production-кода нет. Обзор и порядок чтения — [READM
 |---|---|
 | машину, контракт, эталонный набор | сборка (выше), самопроверка и тесты API; затронутые мутации машины — `python3 tools/check_mutations.py <имя> …` |
 | `strings/*.json`, переводы | `python3 tools/check_i18n.py`, `python3 tools/check_guide.py` |
-| сценарии, `Scenario_machine/` | `python3 tools/check_scenarios.py`, `tests/scenario.html` |
+| сценарии, `Scenario_machine/`, `prototype/scenario.js` | `python3 tools/check_scenarios.py`, `node tools/check_scenario_states.mjs` (и `--mutations`), `tests/scenario.html` |
 | `prototype/*.js` | самопроверка и тесты API; порчи кода не устарели (скилл im-fix) |
 | `app.js`, `styles.css`, `bridge.css`, `index.html` | плюс `python3 tools/check_ui.py` (~2 мин), `check_guide.py` |
 | `quint/src/` | `quint test im_test.qnt`, `quint run im.qnt --invariant inv` — [README модели](Specification/Workflow_machine/quint/README.md) |

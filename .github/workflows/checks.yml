@@ -72,6 +72,13 @@ jobs:
           python3 -m pip install --quiet --user --break-system-packages jsonschema==4.19.2
           python3 tools/check_scenarios.py
 
+      # Полный перебор состояний исполнителя сценариев и переносов ответов, с самопроверкой порчами (PROC-79)
+      - name: Машина сценариев — перебор исполнителя
+        if: always()
+        run: |
+          node tools/check_scenario_states.mjs
+          node tools/check_scenario_states.mjs --mutations
+
       - name: Машина сценариев — тесты исполнителя
         if: always()
         run: |
