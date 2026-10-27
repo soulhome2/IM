@@ -56,9 +56,11 @@ jobs:
       - name: Машина состояний
         if: always()
         # check_cel.mjs — выражения CEL машины (CEL.md, ARCH-07); gen_quint.mjs --check — модель Quint собрана
-        # из этой машины (сама модель — задачи quint-model и quint-mutations); Node на раннере уже есть
+        # из этой машины (сама модель — задачи quint-model и quint-mutations); Node на раннере уже есть.
+        # check_machine.py --mutations — самопроверка: каждую порчу машины или правил ловит своя сверка (PROC-77)
         run: |
           python3 tools/check_machine.py
+          python3 tools/check_machine.py --mutations
           python3 tools/build_workflow.py --check
           node tools/check_cel.mjs
           node tools/gen_quint.mjs --check

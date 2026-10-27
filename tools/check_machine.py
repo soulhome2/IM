@@ -10,7 +10,11 @@
 и не трогает исполнитель и демо-данные напрямую; что эталонный набор fixtures/demo.json ссылается
 на то, что есть, а время в нём — UTC и не позже снимка. Смысл правил не проверяет — только целостность.
 Код выхода 1, если есть ошибки.
+
+python3 tools/check_machine.py --mutations — самопроверка (PROC-77): каждая порча из MUTATIONS (машина или текст правил,
+что найти и на что заменить) должна дать новую ошибку. Файлы на диске не меняются — порча подменяет текст при чтении.
 """
+import io
 import json
 import os
 import re
@@ -1140,6 +1144,195 @@ def check_incidents_via_facts(w, err):
     walk(w, [])
 
 
+def check_rights_column(w, err):
+    """Колонка «Право» таблиц §6.1 и §6.3 — права в условиях машины (PROC-77): hasPermission, hasScopedPermission,
+    у закрытия — права результатов (closeResultAllowed). «`:any`» в правилах — продолжение предыдущего права."""
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    results = {i.get("permission") for i in w["reasonCatalogs"].get("close_result", {}).get("items", [])} - {None}
+    acts = {t["id"]: t["guards"] for t in w["transitions"]}
+    acts.update({n["id"]: n.get("guards", []) for n in w["navActions"]["items"]})
+
+    def machine(guards):
+        out = set()
+        for g in guards:
+            if g["fn"] == "hasPermission":
+                out.add(g["args"][0])
+            elif g["fn"] == "hasScopedPermission":
+                out |= set(g["args"])
+            elif g["fn"] == "closeResultAllowed":
+                out |= results
+        return out
+
+    def rules(text):
+        out, last = set(), ""
+        for x in re.findall(r"`((?:incident|agent)?:[a-z_:]+)`", text):
+            full = last.rsplit(":", 1)[0] + x if x.startswith(":") else x
+            out.add(full)
+            last = full
+        return out
+
+    for title in ("### 6.1. Ручные переходы", "### 6.3. Действия без смены состояния"):
+        table = []
+        for line in lines[lines.index(title) + 1 :]:
+            if line.startswith("#"):
+                break
+            if line.startswith("|"):
+                table.append([c.strip() for c in line.strip("|").split("|")])
+        for r in table[2:]:
+            row = dict(zip(table[0], r))
+            ids = [i for i in re.findall(r"`([^`]+)`", row.get("В машине", "")) if i in acts]
+            if len(ids) != 1 or "Право" not in row:
+                continue
+            got, want = rules(row["Право"]), machine(acts[ids[0]])
+            if got != want:
+                name = re.sub(r"\*", "", r[0])
+                err.append(f"правила, «{name}»: право {sorted(got) or '—'}, в машине `{ids[0]}` — {sorted(want) or '—'}")
+
+
+def check_states_timers_tables(w, err):
+    """Таблица состояний §2.1 — states машины: код, категория, владелец, терминальное; таблица таймеров §4 —
+    startsOnEnter, stopsOnEnter, pausedInStates (PROC-77). Ячейка таймера: «вход в `a`, `b`» — эти состояния,
+    «выход из `a`» — все, кроме них, без состояний («не останавливается», «—») — ни одного; смотрится первая часть
+    ячейки — до «;» или «(», дальше пояснения."""
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    states = {s["id"]: s for s in w["states"]}
+
+    def table(head):
+        i = next(k for k, line in enumerate(lines) if line.startswith(head))
+        out = []
+        for line in lines[i:]:
+            if not line.startswith("|"):
+                break
+            out.append([c.strip() for c in line.strip("|").split("|")])
+        return [dict(zip(out[0], r)) for r in out[2:]]
+
+    owners = {"нет": "none", "адресат передачи": "transfer_target", "оператор": "operator", "кто закрыл": "closed_by"}
+    seen = set()
+    for row in table("| Состояние | Код | Категория | Владелец | Терминальное |"):
+        sid = row["Код"].strip("`")
+        seen.add(sid)
+        s = states.get(sid)
+        if not s:
+            err.append(f"правила, §2.1: состояния `{sid}` в машине нет")
+            continue
+        got = (row["Категория"], owners.get(row["Владелец"], row["Владелец"]), row["Терминальное"] == "да")
+        want = (s["category"], s.get("owner"), bool(s.get("terminal")))
+        if got != want:
+            err.append(f"правила, §2.1, `{sid}`: категория, владелец, терминальное — {got}, в машине — {want}")
+    for sid in sorted(set(states) - seen):
+        err.append(f"правила, §2.1: нет состояния `{sid}` из машины")
+
+    def cell(text):
+        head = re.split(r"[;(]", text)[0]
+        named = set(re.findall(r"`(\w+)`", head)) & set(states)
+        return set(states) - named if "выход" in head else named if "вход" in head else set()
+
+    timers = {t["id"]: t for t in w["timers"]}
+    for row in table("| Таймер | Смысл | Запускается | Останавливается | Удержание |"):
+        t = timers.get(row["Таймер"].strip("`"))
+        if not t:
+            err.append(f"правила, §4: таймера {row['Таймер']} в машине нет")
+            continue
+        for col, key in (("Запускается", "startsOnEnter"), ("Останавливается", "stopsOnEnter"), ("Удержание", "pausedInStates")):
+            if cell(row[col]) != set(t.get(key) or []):
+                err.append(f"правила, §4, {row['Таймер']}, «{col}»: {sorted(cell(row[col]))}, в машине {key} — {sorted(t.get(key) or [])}")
+
+
+def check_rights_and_defaults(w, err):
+    """Список прав §5 — permissions машины; значения по умолчанию в таблицах §9, §10.2, §12.3 — настройки машины
+    (PROC-77). Строка ищется по образцу; не нашлась — тоже ошибка, иначе сверка молча перестала бы работать."""
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        text = f.read()
+    i = text.index("| Право | Что разрешает |")
+    rights = set(re.findall(r"^\| `([a-z_:]+)` \|", text[i : text.index("\n\n", i)], re.M))
+    machine = {p["key"] for p in w["permissions"]}
+    if rights != machine:
+        err.append(f"правила, §5: права {sorted(rights ^ machine)} — только в одном из двух: в правилах или в машине")
+    words = {"включена": True, "выключена": False, "алерт": "alert", "эскалация": "escalate", "без ограничения": None}
+    checks = [
+        (r"\| `enabled` \|[^\n]*\| (включена|выключена) \| `escalation\.enabled` \|", w["escalation"]["enabled"], "§9, enabled"),
+        (r"\| `max_level` \|[^|]*\| (\d+) \| `escalation\.maxLevel` \|", w["escalation"]["maxLevel"], "§9, max_level"),
+        (r"\| `on_resolution_overdue` \|[^\n]*\| (алерт|эскалация) \| `escalation\.onResolutionOverdue`", w["escalation"]["onResolutionOverdue"], "§9, on_resolution_overdue"),
+        (r"\| `max_active` \| (\d+|без ограничения) \|", w["limits"]["maxActive"], "§10.2, max_active"),
+        (r"\| `max_on_hold` \| (\d+|без ограничения) \|", w["limits"]["maxOnHold"], "§10.2, max_on_hold"),
+        (r"\| `idle_hold` \(по умолчанию (\d+) минут\) \|", w["session"]["idleHoldSec"] / 60, "§12.3, idle_hold"),
+        (r"\| `idle_release` \(по умолчанию (\d+) минут\) \|", w["session"]["idleReleaseSec"] / 60, "§12.3, idle_release"),
+    ]
+    for pattern, want, where in checks:
+        m = re.search(pattern, text)
+        if not m:
+            err.append(f"правила, {where}: строка со значением по умолчанию не найдена по образцу — сверка не работает")
+            continue
+        got = words[m.group(1)] if m.group(1) in words else int(m.group(1))
+        if got != want:
+            err.append(f"правила, {where}: по умолчанию {m.group(1)}, в машине — {want}")
+
+
+def check_catalog_tables(w, err):
+    """Таблицы §2.2 — справочники машины (PROC-77; А5-03). Строка — по подписи из каталога строк (strings/ru.json).
+    Причины удержания: «Кто ставит» — setBy. Результаты закрытия: «Право» — permission; «Сценарий»: «пройден до
+    конца» — набор closing, «не нужен» — none; «Откуда» — fromStates, а состояния после «свой» — ownerOnlyInStates."""
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    with open(os.path.join(DIR, "strings", "ru.json"), encoding="utf-8") as f:
+        ru = json.load(f)
+    ru = ru.get("ru", ru)
+    states = {s["id"] for s in w["states"]}
+
+    def table(head):
+        i = lines.index(head)
+        out = []
+        for line in lines[i:]:
+            if not line.startswith("|"):
+                break
+            out.append([c.strip() for c in line.strip("|").split("|")])
+        return {r[0]: dict(zip(out[0], r)) for r in out[2:]}
+
+    def compare(head, catalog, where, fields):
+        rows = table(head)
+        items = {ru.get(i["labelKey"], i["id"]): i for i in w["reasonCatalogs"][catalog]["items"]}
+        for name in sorted(set(rows) ^ set(items)):
+            err.append(f"правила, §2.2, {where}: «{name}» — только в {'правилах' if name in rows else 'машине'}")
+        for name in sorted(set(rows) & set(items)):
+            for col, got, want in fields(rows[name], items[name]):
+                if got != want:
+                    err.append(f"правила, §2.2, {where}, «{name}», «{col}»: {got}, в машине — {want}")
+
+    def hold(row, item):
+        yield "Кто ставит", {"оператор": "operator", "система": "system"}.get(row["Кто ставит"], row["Кто ставит"]), item.get("setBy")
+
+    def close(row, item):
+        where = row["Откуда"]
+        own = set(re.findall(r"`(\w+)`", where.split("свой", 1)[1])) & states if "свой" in where else set()
+        yield "Право", "".join(re.findall(r"`([a-z_:]+)`", row["Право"])), item.get("permission")
+        yield "Сценарий", "closing" if row["Сценарий"].startswith("пройден до конца") else "none" if row["Сценарий"] == "не нужен" else row["Сценарий"], item.get("requiredStepSet")
+        yield "Откуда", sorted(set(re.findall(r"`(\w+)`", where)) & states), sorted(item.get("fromStates") or [])
+        yield "Откуда, только свой", sorted(own), sorted(item.get("ownerOnlyInStates") or [])
+
+    compare("| Причина | Когда выбирают | Кто ставит |", "hold", "причины удержания", hold)
+    compare("| Результат | Когда выбирают | Сценарий | Право | Откуда |", "close_result", "результаты закрытия", close)
+
+
+def check_invariant_flags(w, err):
+    """Флаги invariants — обязательства сервера на каждом переходе (§10.1); их следствия в самой машине (PROC-77):
+    readOnlyByAgentState — у каждого ручного перехода agentReady; transferToSelfForbidden — у перехода с адресатом
+    в форме (targetId) targetIsNotSelf; terminalOnlyViaReopen — из терминального состояния только reopen."""
+    inv = w.get("invariants", {})
+    forms = {f["id"]: f for f in w["forms"]}
+    terminal = {s["id"] for s in w["states"] if s.get("terminal")}
+    for t in w["transitions"]:
+        guards = {g["fn"] for g in t["guards"]}
+        if inv.get("readOnlyByAgentState") and t["trigger"] == "manual" and "agentReady" not in guards:
+            err.append(f"переход {t['id']}: ручной без agentReady — на перерыве и после выхода только просмотр (readOnlyByAgentState, §10.1, правило 2)")
+        target = any(x.get("name") == "targetId" for x in forms.get(t.get("form") or "", {}).get("fields", []))
+        if inv.get("transferToSelfForbidden") and target and "targetIsNotSelf" not in guards:
+            err.append(f"переход {t['id']}: адресат в форме без targetIsNotSelf — себе не передают (transferToSelfForbidden, §10.1)")
+        if inv.get("terminalOnlyViaReopen") and set(t["from"]) & terminal and t["id"] != "reopen":
+            err.append(f"переход {t['id']}: из терминального {sorted(set(t['from']) & terminal)} — только reopen (terminalOnlyViaReopen, §10.1)")
+
+
 def check_work_rights(w, err):
     """В «В работе» — только по праву взятия или принятия; у типового набора прав с ними — выход
     из карточки (§10.3, RULE-36, RULE-38)."""
@@ -1543,14 +1736,14 @@ def check_admin_settings(w, o, err):
                 err.append(f"настройки: {key} — ни в перечне adminSettings, ни в notSettings")
 
 
-def main():
+def collect():
+    """Все ошибки машины, правил, контракта и прототипа — списком"""
     err = []
     try:
         w = load("workflow_schema.v1.json")
         o = load("openapi.json")
     except (OSError, json.JSONDecodeError) as e:
-        print(f"Не читается: {e}")
-        return 1
+        return [f"Не читается: {e}"]
     check_workflow(w, err)
     check_engine(w, err)
     check_layers(err)
@@ -1577,6 +1770,11 @@ def main():
     fsm_terms(w, err)
     check_settings_matrix(w, o, err, show="--fsm" in sys.argv)
     check_work_rights(w, err)
+    check_invariant_flags(w, err)
+    check_rights_column(w, err)
+    check_states_timers_tables(w, err)
+    check_rights_and_defaults(w, err)
+    check_catalog_tables(w, err)
     check_declared_fields(w, o, err)
     check_incidents_via_facts(w, err)
     check_select_placeholders(w, err)
@@ -1590,6 +1788,94 @@ def main():
     check_admin_settings(w, o, err)
     check_fixture(w, err)
     check_api(w, o, err)
+    return err
+
+
+# Порчи для самопроверки (PROC-77): имя, что ломает, файл от корня репозитория, что найти (ровно одно место), на что
+# заменить и, если надо, часть текста ожидаемой ошибки — чтобы поймала именно своя сверка, а не соседняя. Без неё —
+# любая новая ошибка
+MACHINE = "Specification/Workflow_machine/workflow_schema.v1.json"
+RULES = "Specification/State_rules/States rules IM.md"
+MUTATIONS = [
+    ("rules-from-wrong", "§6.1: у «Взять» в колонке «Откуда» — не то состояние", RULES,
+     "| **Взять** | `claim` | `new` | `in_progress` |", "| **Взять** | `claim` | `on_hold` | `in_progress` |"),
+    ("timer-not-started", "машина: «не может принять» не запускает реакцию при входе в «Новый» (RULE-51)", MACHINE,
+     '{ "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },\n        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }',
+     '{ "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }'),
+    ("hold-reason-no-deadline", "машина: у причины оператора нет срока (§4, правило 7; RULE-135)", MACHINE,
+     '"maxMinutes": 30, "setBy": "operator"', '"maxMinutes": null, "setBy": "operator"'),
+    ("exit-hold-limited", "машина: при лимите отложенных «Отложить» считается выходом (RULE-136)", MACHINE,
+     '"requiresAnyOfWithHoldLimit": ["incident:release", "incident:close"]', '"requiresAnyOfWithHoldLimit": ["incident:hold", "incident:close"]'),
+    ("flag-agent-ready", "машина: «Отложить» без agentReady (readOnlyByAgentState)", MACHINE,
+     '{ "fn": "isOwner" },\n        { "fn": "agentReady" },\n        { "fn": "withinHoldLimit" }', '{ "fn": "isOwner" },\n        { "fn": "withinHoldLimit" }',
+     "без agentReady"),
+    ("flag-not-self", "машина: «Передать» без targetIsNotSelf (transferToSelfForbidden)", MACHINE,
+     '{ "fn": "targetIsNotSelf" },\n', "", "без targetIsNotSelf"),
+    ("flag-terminal", "машина: «Вернуть в работу» и из «Закрыт» (terminalOnlyViaReopen)", MACHINE,
+     '"from": ["on_hold"],\n      "to": "in_progress",', '"from": ["on_hold", "closed"],\n      "to": "in_progress",', "только reopen"),
+    ("rights-rules", "§6.1: у «Отложить» в колонке «Право» — не то право", RULES,
+     "| **Отложить** | `hold` | `in_progress` | `on_hold` | `incident:hold` |", "| **Отложить** | `hold` | `in_progress` | `on_hold` | `incident:release` |", "право"),
+    ("rights-machine", "машина: «Переоткрыть» без права incident:reopen", MACHINE,
+     '{ "fn": "hasPermission", "args": ["incident:reopen"] }', '{ "fn": "hasPermission", "args": ["incident:claim"] }', "право"),
+    ("rights-nav", "§6.3: у «Запустить макрос» — не то право", RULES,
+     "| **Запустить макрос** | `run_macro` | я владелец, состояние `in_progress` | `incident:run_action` |",
+     "| **Запустить макрос** | `run_macro` | я владелец, состояние `in_progress` | `incident:bulk` |", "право"),
+    ("states-rules", "§2.1: у «Привязан» не та категория", RULES, "| Привязан | `linked` | linked | нет | нет |", "| Привязан | `linked` | pending | нет | нет |", "§2.1"),
+    ("states-machine", "машина: «Закрыто» не терминальное", MACHINE, '"terminal": true,', '"terminal": false,', "§2.1"),
+    ("timers-rules", "§4: реакция не останавливается при объединении", RULES, "| вход в `in_progress`, `closed`, `linked` |", "| вход в `in_progress`, `closed` |", "§4"),
+    ("timers-machine", "машина: срок удержания не останавливается при объединении", MACHINE,
+     '"stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed", "linked"],', '"stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed"],', "§4"),
+    ("rights-list-rules", "§5: в списке прав нет «Обработать несколько как один»", RULES,
+     "| `incident:bulk` | Обработать несколько инцидентов как один |\n", "", "§5"),
+    ("default-max-level", "машина: потолок эскалации 3, в правилах 2", MACHINE, '"maxLevel": 2', '"maxLevel": 3', "§9, max_level"),
+    ("default-overdue", "машина: по нормативу закрытия — эскалация, в правилах алерт", MACHINE,
+     '"onResolutionOverdue": "alert"', '"onResolutionOverdue": "escalate"', "§9, on_resolution_overdue"),
+    ("default-max-on-hold", "§10.2: лимит отложенных 3, в машине 5", RULES, "| `max_on_hold` | 5 |", "| `max_on_hold` | 3 |", "§10.2, max_on_hold"),
+    ("default-idle-hold", "§12.3: порог «нет связи» 7 минут, в машине 5", RULES, "`idle_hold` (по умолчанию 5 минут)", "`idle_hold` (по умолчанию 7 минут)", "§12.3, idle_hold"),
+    ("default-idle-release", "машина: порог возврата 25 минут, в правилах 20", MACHINE, '"idleReleaseSec": 1200', '"idleReleaseSec": 1500', "§12.3, idle_release"),
+    ("catalog-mass-own", "машина: «Массовый сбой» из чужого «Отложен» (А5-03)", MACHINE,
+     '"ownerOnlyInStates": ["in_progress", "on_hold"],', '"ownerOnlyInStates": ["in_progress"],', "§2.2"),
+    ("catalog-steps", "машина: «Ложной тревоге» нужен пройденный сценарий", MACHINE,
+     '"id": "false_alarm", "labelKey": "workflow.catalog.close_result.false_alarm", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none"',
+     '"id": "false_alarm", "labelKey": "workflow.catalog.close_result.false_alarm", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing"', "§2.2"),
+    ("catalog-right", "§2.2: «Дубликат» — по праву «Массового сбоя»", RULES,
+     "| Дубликат | То же событие уже разбирается в другом инциденте | не нужен | `incident:close` |",
+     "| Дубликат | То же событие уже разбирается в другом инциденте | не нужен | `incident:close:unprocessed` |", "§2.2"),
+    ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
+     "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
+]
+
+
+def self_test():
+    """Каждая порча даёт новую ошибку. Текст подменяется при чтении: open модуля смотрит сначала сюда"""
+    global open
+    real = open
+    base = set(collect())
+    bad = 0
+    for name, what, rel, find, replace, *expect in MUTATIONS:
+        path = os.path.join(ROOT, rel)
+        with real(path, encoding="utf-8") as f:
+            text = f.read()
+        if text.count(find) != 1:
+            print(f"STALE {name}: в {rel} место порчи не найдено или не одно")
+            bad += 1
+            continue
+        spoiled = text.replace(find, replace)
+        open = lambda p, *a, **k: io.StringIO(spoiled) if os.path.abspath(p) == path else real(p, *a, **k)  # noqa: E731
+        try:
+            new = [e for e in collect() if e not in base and (not expect or expect[0] in e)]
+        finally:
+            open = real
+        print(f"OK  {name} — {what}: {new[0]}" if new else f"BAD {name} — {what}: ни одна проверка не поймала")
+        bad += not new
+    print(f"Порч check_machine.py: {len(MUTATIONS)}, не пойманных: {bad}")
+    return 1 if bad else 0
+
+
+def main():
+    if "--mutations" in sys.argv:
+        return self_test()
+    err = collect()
     for e in err:
         print(e)
     print(f"Ошибок в машине состояний: {len(err)}")

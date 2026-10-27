@@ -20,7 +20,7 @@ Production-кода нет. Обзор и порядок чтения — [READM
 
 ## Что поменял → что проверить
 
-Быстрые (доли секунды) — после любой правки: `python3 tools/build_workflow.py --check`, `python3 tools/check_machine.py`, `node tools/check_cel.mjs`, `node tools/gen_quint.mjs --check`, `python3 tools/check_links.py`.
+Быстрые (доли секунды) — после любой правки: `python3 tools/build_workflow.py --check`, `python3 tools/check_machine.py` (и `--mutations`), `node tools/check_cel.mjs`, `node tools/gen_quint.mjs --check`, `python3 tools/check_links.py`.
 
 | Поменял | Дополнительно |
 |---|---|
