@@ -5,6 +5,7 @@
 от машины молча. По ней правила (§6) сверяются с машиной глазами: что задумали — в правилах,
 что сделано — здесь.
 """
+import hashlib
 import json
 import os
 
@@ -35,6 +36,52 @@ BULK = {
 }
 
 
+# Отпечатки выражений условий (PROC-83): условие → первые 8 знаков SHA-256 его expr в registries.guards, при
+# котором фразу в Doc.guard сверяли с выражением. Выражение сменилось — сборка падает: пересмотрите фразу и впишите новый
+# отпечаток (его печатает ошибка)
+REVIEWED = {
+    "addresseeCanAccept": "b2d632c7",
+    "addresseeHasAccess": "7b1e9f69",
+    "agentIdleFor": "c3b2c0de",
+    "agentReady": "9250fadd",
+    "agentStateIs": "242bada0",
+    "closeResultAllowed": "86e0c4f1",
+    "escalationTargetAvailable": "86b1f72c",
+    "hasPermission": "acc40cba",
+    "hasScopedPermission": "37f2c5ee",
+    "hasTransferTarget": "c4a40f6b",
+    "holdReasonIn": "b035edcf",
+    "holdReasonNotIn": "b3fd7191",
+    "isNotOwner": "b6c86c3a",
+    "isNotTarget": "3492cdaa",
+    "isOwner": "be89ae13",
+    "isOwnerOrUnowned": "84f16a52",
+    "isTarget": "71cd9932",
+    "mergePrimaryValid": "b4e339d8",
+    "ownerHasDutyGroup": "04004c43",
+    "primaryAddresseeHasAccess": "a22463d9",
+    "primaryClosed": "ca2d9ec1",
+    "primaryEditable": "b860780a",
+    "requiredStepsFilled": "a5262918",
+    "sameScenarioAsPrimary": "71d4ee41",
+    "settingEnabled": "32d4661f",
+    "settingIs": "dd447c1b",
+    "stateIs": "e3b76ef9",
+    "targetCanAccept": "5d23cbb9",
+    "targetHasAccess": "54830cd7",
+    "targetHasAccessToLinked": "3d51b722",
+    "targetIsNotSelf": "38041044",
+    "timerExpired": "a50f7ed6",
+    "withinActiveLimit": "699f9d8a",
+    "withinHoldLimit": "7947052b",
+    "withinReopenWindow": "2aaee97b",
+}
+
+
+def fingerprint(expr):
+    return hashlib.sha256(expr.encode("utf-8")).hexdigest()[:8]
+
+
 class Doc:
     def __init__(self, w):
         self.w = w
@@ -43,6 +90,7 @@ class Doc:
         self.forms = {f["id"]: lab(f, "title") for f in w["forms"]}
         self.reasons = {i["id"]: lab(i) for c in w["reasonCatalogs"].values() for i in c.get("items", [])}
         self.agent = {s["id"]: lab(s) for s in w["session"]["states"]}
+        self.exprs = {g["fn"]: g.get("expr", "") for g in w["registries"]["guards"]}
 
     def setting(self, path):
         """Путь к настройке машины → «`путь` = значение»."""
@@ -135,6 +183,10 @@ class Doc:
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для условия {fn}: добавьте её в tools/transitions_doc.py")
+        # Фраза — по выражению, при котором её сверяли (PROC-83): сменилось выражение — таблица отстала бы от машины молча
+        got = fingerprint(self.exprs.get(fn, ""))
+        if REVIEWED.get(fn) != got:
+            raise KeyError(f"Выражение условия {fn} изменилось (отпечаток {got}, сверяли при {REVIEWED.get(fn)}): пересмотрите фразу в tools/transitions_doc.py и впишите отпечаток в REVIEWED")
         return phrases[fn]()
 
     def effect(self, e):
@@ -197,7 +249,7 @@ class Doc:
             "# Переходы машины состояний",
             "",
             "Собрано из [`workflow_schema.v1.json`](workflow_schema.v1.json) скриптом `tools/build_workflow.py`. Руками не править: правится машина, затем сборка. "
-            "Это то, что машина делает на самом деле; что задумано — в правилах, §6. Строки правил ссылаются на переходы по идентификатору в первой колонке.",
+            "Это то, что машина делает на самом деле; что задумано — в правилах, §6. Строки правил ссылаются на переходы по идентификатору в первой колонке. Фраза условия привязана к его выражению CEL отпечатком: выражение в машине сменилось, а фразу не пересмотрели — сборка падает (PROC-83).",
             "",
             "## Переходы",
             "",

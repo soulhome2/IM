@@ -23,6 +23,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fixture  # noqa: E402
+import transitions_doc  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, "Specification", "Workflow_machine")
@@ -1315,6 +1316,15 @@ def check_catalog_tables(w, err):
     compare("| Результат | Когда выбирают | Сценарий | Право | Откуда |", "close_result", "результаты закрытия", close)
 
 
+def check_transitions_doc(w, err):
+    """TRANSITIONS.md собирается из этой машины: у каждого условия и эффекта есть фраза, а выражение условия — то,
+    при котором фразу сверяли (отпечаток в transitions_doc.REVIEWED, PROC-83)."""
+    try:
+        transitions_doc.render(w)
+    except KeyError as e:
+        err.append(f"TRANSITIONS.md: {e.args[0]}")
+
+
 def check_invariant_flags(w, err):
     """Флаги invariants — обязательства сервера на каждом переходе (§10.1); их следствия в самой машине (PROC-77):
     readOnlyByAgentState — у каждого ручного перехода agentReady; transferToSelfForbidden — у перехода с адресатом
@@ -1775,6 +1785,7 @@ def collect():
     check_states_timers_tables(w, err)
     check_rights_and_defaults(w, err)
     check_catalog_tables(w, err)
+    check_transitions_doc(w, err)
     check_declared_fields(w, o, err)
     check_incidents_via_facts(w, err)
     check_select_placeholders(w, err)
@@ -1841,6 +1852,8 @@ MUTATIONS = [
     ("catalog-right", "§2.2: «Дубликат» — по праву «Массового сбоя»", RULES,
      "| Дубликат | То же событие уже разбирается в другом инциденте | не нужен | `incident:close` |",
      "| Дубликат | То же событие уже разбирается в другом инциденте | не нужен | `incident:close:unprocessed` |", "§2.2"),
+    ("doc-expr-changed", "машина: выражение agentReady сменилось, а фраза в TRANSITIONS.md — та же (PROC-83)", MACHINE,
+     "!session.states.exists(s, s.id == agentState(me) && s.readOnly)", "!session.states.exists(s, s.id == agentState(me))", "TRANSITIONS.md"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]
