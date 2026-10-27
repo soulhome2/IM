@@ -144,9 +144,13 @@ def check_workflow(w, err):
             err.append(f"результат {rid}: нет справочника {item['causeCatalog']}")
 
     exit_rule = w["validation"]["claimWithoutExitPermission"]
-    for x in exit_rule["requiresAnyOf"] + exit_rule.get("appliesTo", []) + exit_rule.get("disables", []):
+    for x in exit_rule["requiresAnyOf"] + exit_rule.get("appliesTo", []) + exit_rule.get("disables", []) + exit_rule.get("requiresAnyOfWithHoldLimit", []):
         if x not in perms:
             err.append(f"проверка §10.3: нет права {x}")
+    # При лимите отложенных выходы — часть обычных, без «Отложить»: его закрывает лимит (RULE-136)
+    limited = set(exit_rule.get("requiresAnyOfWithHoldLimit", []))
+    if not limited or not limited < set(exit_rule["requiresAnyOf"]) or "incident:hold" in limited:
+        err.append("проверка §10.3: requiresAnyOfWithHoldLimit — непустая часть requiresAnyOf без incident:hold (RULE-136)")
     # Без выхода из карточки не действует ни одно право входа в работу — и взять, и принять (RULE-102)
     for x in sorted(set(exit_rule.get("appliesTo", [])) - set(exit_rule.get("disables", []))):
         err.append(f"проверка §10.3: без выхода из карточки право {x} должно гаснуть (disables)")
@@ -1140,7 +1144,9 @@ def check_work_rights(w, err):
             rights = {g["args"][0] for g in t["guards"] if g["fn"] == "hasPermission"}
             if not rights & enter:
                 err.append(f"переход {t['id']}: ведёт в «В работе» без права взятия или принятия (§10.3)")
-    exits = set(w["validation"]["claimWithoutExitPermission"]["requiresAnyOf"])
+    rule = w["validation"]["claimWithoutExitPermission"]
+    # При заданном лимите отложенных «Отложить» выходом не считается (RULE-136)
+    exits = set(rule["requiresAnyOfWithHoldLimit"] if w["limits"].get("maxOnHold") is not None else rule["requiresAnyOf"])
     for s in w["validation"].get("typicalPermissionSets", {}).get("items", []):
         if set(s["permissions"]) & enter and not set(s["permissions"]) & exits:
             err.append(f"типовой набор {s['id']}: может взять или принять, но выйти из карточки нечем (§10.3)")

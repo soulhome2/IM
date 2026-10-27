@@ -70,10 +70,12 @@ for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "
 
 // Права, которые действуют (§10.3, validation.claimWithoutExitPermission): с «Взять» или «Принять» и без единого
 // выхода из карточки права из disables не действуют. Это проверка при входе — внешней системы, не сервера прототипа
-// (§17), поэтому исполнитель получает права уже с ней, как факт мира; в модели — permsAct (PROC-73)
+// (§17), поэтому исполнитель получает права уже с ней, как факт мира; в модели — permsAct (PROC-73). При заданном
+// лимите отложенных «Отложить» выходом не считается (RULE-136)
 const EXIT = MACHINE.validation.claimWithoutExitPermission;
-function permsActing(ps) {
-  const off = ps.some((p) => EXIT.appliesTo.includes(p)) && !ps.some((p) => EXIT.requiresAnyOf.includes(p));
+function permsActing(ps, holdLimited) {
+  const exits = holdLimited ? EXIT.requiresAnyOfWithHoldLimit : EXIT.requiresAnyOf;
+  const off = ps.some((p) => EXIT.appliesTo.includes(p)) && !ps.some((p) => exits.includes(p));
   return ps.filter((p) => !(off && EXIT.disables.includes(p)));
 }
 
@@ -111,8 +113,8 @@ function replay(states, name) {
       now: () => facts.clock,
       events: () => events,
       scenarioKey: (ev) => ev.scenarioGuid,
-      can: (key) => permsActing(facts.cfg.perms[me]).includes(key),
-      permsOf: (who) => permsActing(facts.cfg.perms[who] || []),
+      can: (key) => permsActing(facts.cfg.perms[me], states[0].settings.limits.maxOnHold > 0).includes(key),
+      permsOf: (who) => permsActing(facts.cfg.perms[who] || [], states[0].settings.limits.maxOnHold > 0),
       isGroup: (id) => GROUPS.includes(id),
       isOperator: (id) => OPS.includes(id),
       membersOf: (grp) => (GROUPS.includes(grp) ? OPS.filter((m) => facts.cfg.members[grp].includes(m)) : []),

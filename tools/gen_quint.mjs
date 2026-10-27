@@ -532,10 +532,11 @@ function header() {
   emit(`  pure val STEP_RESULT_IDS: Set[str] = Set(${stepResults.map((i) => JSON.stringify(i.id)).join(", ")})`);
   emit(`  pure val STEP_RESULT_CLOSE_IDS: Set[str] = Set(${byResult.map((t) => JSON.stringify(t.id)).join(", ")})`);
   // Права без выхода из карточки (§10.3, validation.claimWithoutExitPermission): с правом из appliesTo и без
-  // единого из requiresAnyOf права из disables не действуют — факт мира can (PROC-73)
+  // единого из requiresAnyOf права из disables не действуют — факт мира can (PROC-73); при заданном лимите
+  // отложенных выходы — requiresAnyOfWithHoldLimit, без «Отложить» (RULE-136)
   const exit = W.validation.claimWithoutExitPermission;
   const qs = (xs) => `Set(${xs.map((x) => JSON.stringify(x)).join(", ")})`;
-  emit(`  pure val EXIT_RULE: { appliesTo: Set[str], requiresAnyOf: Set[str], disables: Set[str] } = { appliesTo: ${qs(exit.appliesTo)}, requiresAnyOf: ${qs(exit.requiresAnyOf)}, disables: ${qs(exit.disables)} }`);
+  emit(`  pure val EXIT_RULE: { appliesTo: Set[str], requiresAnyOf: Set[str], requiresAnyOfWithHoldLimit: Set[str], disables: Set[str] } = { appliesTo: ${qs(exit.appliesTo)}, requiresAnyOf: ${qs(exit.requiresAnyOf)}, requiresAnyOfWithHoldLimit: ${qs(exit.requiresAnyOfWithHoldLimit)}, disables: ${qs(exit.disables)} }`);
   // Права, которые спрашивают условия машины и справочник результатов закрытия, — их перебирает модель
   const perms = new Set(["agent:set_not_ready"]);
   const walk = (o) => {

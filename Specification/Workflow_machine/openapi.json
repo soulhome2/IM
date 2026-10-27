@@ -3648,7 +3648,7 @@
           },
           "permissionIssues": {
             "type": "array",
-            "description": "§10.3. Проблемы набора прав, найденные при входе. `claim_without_exit`: есть `incident:claim` или `incident:accept`, но нет ни одного выхода из карточки (`incident:hold`, `incident:release`, `incident:close`). Тогда не действуют ни `incident:claim`, ни `incident:accept` — взять или принять инцидент нельзя, передать такому пользователю тоже (§8.1); администратору уходит предупреждение. Требование — `validation.claimWithoutExitPermission` машины (RULE-102).",
+            "description": "§10.3. Проблемы набора прав, найденные при входе. `claim_without_exit`: есть `incident:claim` или `incident:accept`, но нет ни одного выхода из карточки (`incident:hold`, `incident:release`, `incident:close`; при заданном лимите отложенных `limits.maxOnHold` «Отложить» не в счёт — нужен `incident:release` или `incident:close`, RULE-136). Тогда не действуют ни `incident:claim`, ни `incident:accept` — взять или принять инцидент нельзя, передать такому пользователю тоже (§8.1); администратору уходит предупреждение. Требование — `validation.claimWithoutExitPermission` машины (RULE-102).",
             "items": {
               "type": "object",
               "properties": {

@@ -114,7 +114,7 @@ module im {
 
   pure val STEP_RESULT_CLOSE_IDS: Set[str] = Set("close")
 
-  pure val EXIT_RULE: { appliesTo: Set[str], requiresAnyOf: Set[str], disables: Set[str] } = { appliesTo: Set("incident:claim", "incident:accept"), requiresAnyOf: Set("incident:hold", "incident:release", "incident:close"), disables: Set("incident:claim", "incident:accept") }
+  pure val EXIT_RULE: { appliesTo: Set[str], requiresAnyOf: Set[str], requiresAnyOfWithHoldLimit: Set[str], disables: Set[str] } = { appliesTo: Set("incident:claim", "incident:accept"), requiresAnyOf: Set("incident:hold", "incident:release", "incident:close"), requiresAnyOfWithHoldLimit: Set("incident:release", "incident:close"), disables: Set("incident:claim", "incident:accept") }
 
   pure val USED_PERMISSIONS: Set[str] = Set("agent:set_not_ready", "incident:accept", "incident:bulk", "incident:claim", "incident:close", "incident:close:unprocessed", "incident:hold", "incident:reassign", "incident:release", "incident:reopen", "incident:run_action", "incident:transfer:any", "incident:transfer:own")
 
@@ -3507,12 +3507,15 @@ module im {
   /* ===== Факты мира (cel.world машины) ===== */
 
   // Право действует, если набор прав проходит §10.3: с «Взять» или «Принять» нужен хотя бы один выход из карточки,
-  // иначе эти права не действуют (EXIT_RULE из машины, PROC-73). Проверка при входе — в модели действует всегда
-  pure def permsAct(ps: Set[str], perm: str): bool = all {
+  // иначе эти права не действуют (EXIT_RULE из машины, PROC-73). Проверка при входе — в модели действует всегда.
+  // При заданном лимите отложенных «Отложить» выходом не считается: лимит может его закрыть (RULE-136)
+  pure def exitsFor(holdLimited: bool): Set[str] = if (holdLimited) EXIT_RULE.requiresAnyOfWithHoldLimit else EXIT_RULE.requiresAnyOf
+  pure def permsAct(ps: Set[str], perm: str, holdLimited: bool): bool = all {
     ps.contains(perm),
-    not(EXIT_RULE.disables.contains(perm) and EXIT_RULE.appliesTo.exists(p => ps.contains(p)) and not(EXIT_RULE.requiresAnyOf.exists(p => ps.contains(p)))),
+    not(EXIT_RULE.disables.contains(perm) and EXIT_RULE.appliesTo.exists(p => ps.contains(p)) and not(exitsFor(holdLimited).exists(p => ps.contains(p)))),
   }
-  def can(who: str, perm: str): bool = OPERATORS.contains(who) and permsAct(cfg.perms.get(who), perm)
+  def holdLimited: bool = settings.limits.maxOnHold > 0
+  def can(who: str, perm: str): bool = OPERATORS.contains(who) and permsAct(cfg.perms.get(who), perm, holdLimited)
   def access(who: str, x: Incident): bool = OPERATORS.contains(who) and cfg.access.get(who).contains(x.id)
   def isOperator(id: str): bool = OPERATORS.contains(id)
   def isGroup(id: str): bool = GROUPS.contains(id)
@@ -4352,11 +4355,9 @@ module im {
   val exitExists = INCIDENTS.forall(i => {
     val x = incOf(i)
     val a = x.owner
-    // Оговорка до решения RULE-136: из выходов у владельца только «Отложить», а лимит отложенных задан, — его может
-    // закрыть лимит (§10.2), и выхода нет; правила это пока допускают
-    val holdOnlyUnderLimit = EXIT_RULE.requiresAnyOf.filter(p => can(a, p)) == Set("incident:hold") and settings.limits.maxOnHold > 0
+    // Право на выход — по §10.3: при заданном лимите отложенных «Отложить» не в счёт (RULE-136)
     (x.state == "in_progress" and OPERATORS.contains(a) and agentState(a) == "ready" and sees(a, i)
-      and EXIT_RULE.requiresAnyOf.exists(p => can(a, p)) and not(holdOnlyUnderLimit)) implies or {
+      and exitsFor(holdLimited).exists(p => can(a, p))) implies or {
       HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "hold", i, exitForm(r, ""))),
       HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "release", i, exitForm(r, ""))),
       CLOSE_RESULT_IDS.exists(r => exitOk(a, "close", i, exitForm("", r))),
@@ -4366,7 +4367,7 @@ module im {
   // 23. Системный переход — только по делу (PROC-84): исправляющий переход сделан, только если до шага (prev) было что
   //     исправлять — адресат без доступа, не может принять, вышел; владелец вышел или на перерыве. Доступ и право
   //     принять у дежурной группы — у кого-то из участников (§5, §8.1)
-  def hadPermOf(m: str, p: str): bool = permsAct(prev.cfg.perms.get(m), p)
+  def hadPermOf(m: str, p: str): bool = permsAct(prev.cfg.perms.get(m), p, holdLimited)
   def reachedBefore(who: str, i: str): bool =
     if (GROUPS.contains(who)) prev.cfg.members.get(who).exists(m => hadAccess(m, i)) else OPERATORS.contains(who) and hadAccess(who, i)
   def couldAcceptBefore(who: str, i: str): bool =

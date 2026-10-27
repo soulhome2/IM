@@ -52,12 +52,15 @@
   /* ===== Факты мира (cel.world машины) ===== */
 
   // Право действует, если набор прав проходит §10.3: с «Взять» или «Принять» нужен хотя бы один выход из карточки,
-  // иначе эти права не действуют (EXIT_RULE из машины, PROC-73). Проверка при входе — в модели действует всегда
-  pure def permsAct(ps: Set[str], perm: str): bool = all {
+  // иначе эти права не действуют (EXIT_RULE из машины, PROC-73). Проверка при входе — в модели действует всегда.
+  // При заданном лимите отложенных «Отложить» выходом не считается: лимит может его закрыть (RULE-136)
+  pure def exitsFor(holdLimited: bool): Set[str] = if (holdLimited) EXIT_RULE.requiresAnyOfWithHoldLimit else EXIT_RULE.requiresAnyOf
+  pure def permsAct(ps: Set[str], perm: str, holdLimited: bool): bool = all {
     ps.contains(perm),
-    not(EXIT_RULE.disables.contains(perm) and EXIT_RULE.appliesTo.exists(p => ps.contains(p)) and not(EXIT_RULE.requiresAnyOf.exists(p => ps.contains(p)))),
+    not(EXIT_RULE.disables.contains(perm) and EXIT_RULE.appliesTo.exists(p => ps.contains(p)) and not(exitsFor(holdLimited).exists(p => ps.contains(p)))),
   }
-  def can(who: str, perm: str): bool = OPERATORS.contains(who) and permsAct(cfg.perms.get(who), perm)
+  def holdLimited: bool = settings.limits.maxOnHold > 0
+  def can(who: str, perm: str): bool = OPERATORS.contains(who) and permsAct(cfg.perms.get(who), perm, holdLimited)
   def access(who: str, x: Incident): bool = OPERATORS.contains(who) and cfg.access.get(who).contains(x.id)
   def isOperator(id: str): bool = OPERATORS.contains(id)
   def isGroup(id: str): bool = GROUPS.contains(id)

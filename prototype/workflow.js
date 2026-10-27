@@ -6181,6 +6181,11 @@ window.IM_WORKFLOW = {
         "incident:release",
         "incident:close"
       ],
+      "requiresAnyOfWithHoldLimit": [
+        "incident:release",
+        "incident:close"
+      ],
+      "$commentWithHoldLimit": "RULE-136. Задан limits.maxOnHold — «Отложить» выходом не считается: лимит может его закрыть (§10.2), например, занятый инцидентом, который система отложила сама («Нет связи»). Тогда выход — только из этого списка",
       "disables": [
         "incident:claim",
         "incident:accept"

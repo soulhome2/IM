@@ -408,11 +408,9 @@
   val exitExists = INCIDENTS.forall(i => {
     val x = incOf(i)
     val a = x.owner
-    // Оговорка до решения RULE-136: из выходов у владельца только «Отложить», а лимит отложенных задан, — его может
-    // закрыть лимит (§10.2), и выхода нет; правила это пока допускают
-    val holdOnlyUnderLimit = EXIT_RULE.requiresAnyOf.filter(p => can(a, p)) == Set("incident:hold") and settings.limits.maxOnHold > 0
+    // Право на выход — по §10.3: при заданном лимите отложенных «Отложить» не в счёт (RULE-136)
     (x.state == "in_progress" and OPERATORS.contains(a) and agentState(a) == "ready" and sees(a, i)
-      and EXIT_RULE.requiresAnyOf.exists(p => can(a, p)) and not(holdOnlyUnderLimit)) implies or {
+      and exitsFor(holdLimited).exists(p => can(a, p))) implies or {
       HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "hold", i, exitForm(r, ""))),
       HOLD_REASONS_BY_OPERATOR.exists(r => exitOk(a, "release", i, exitForm(r, ""))),
       CLOSE_RESULT_IDS.exists(r => exitOk(a, "close", i, exitForm("", r))),
@@ -422,7 +420,7 @@
   // 23. Системный переход — только по делу (PROC-84): исправляющий переход сделан, только если до шага (prev) было что
   //     исправлять — адресат без доступа, не может принять, вышел; владелец вышел или на перерыве. Доступ и право
   //     принять у дежурной группы — у кого-то из участников (§5, §8.1)
-  def hadPermOf(m: str, p: str): bool = permsAct(prev.cfg.perms.get(m), p)
+  def hadPermOf(m: str, p: str): bool = permsAct(prev.cfg.perms.get(m), p, holdLimited)
   def reachedBefore(who: str, i: str): bool =
     if (GROUPS.contains(who)) prev.cfg.members.get(who).exists(m => hadAccess(m, i)) else OPERATORS.contains(who) and hadAccess(who, i)
   def couldAcceptBefore(who: str, i: str): bool =

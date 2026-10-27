@@ -536,6 +536,22 @@ module im_test {
       .expect(lastAction.name == "linked_lost_access" and x2.state == "new" and x2.linkedTo == "")
       .expect(inv)
 
+  // RULE-136: при заданном лимите отложенных «Отложить» — не выход из карточки (§10.3): с правами «Брать» и
+  // «Отложить» взять нельзя; без лимита — можно
+  run claimNeedsExitUnderHoldLimitTest =
+    initWith({ ...BASE, perms: Map("a" -> Set("incident:claim", "incident:hold"), "b" -> USED_PERMISSIONS) },
+      { ...BASE_SETTINGS, limits: { ...BASE_SETTINGS.limits, maxOnHold: 1 } })
+      .then(newFire("i1"))
+      .expect(not(ok("a", "claim", "i1")) and ok("b", "claim", "i1"))
+      .expect(inv)
+
+  run claimHoldExitWithoutLimitTest =
+    initWith({ ...BASE, perms: Map("a" -> Set("incident:claim", "incident:hold"), "b" -> USED_PERMISSIONS) }, BASE_SETTINGS)
+      .then(newFire("i1"))
+      .then(act("a", "claim", "i1"))
+      .expect(x1.state == "in_progress" and x1.owner == "a")
+      .expect(inv)
+
   /* ===== 5. Состояние оператора (§12) и роли (§5) ===== */
 
   run breakHoldsWorkTest =
