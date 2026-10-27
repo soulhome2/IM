@@ -1227,10 +1227,15 @@
     assert.eq(c.state, "pending_acceptance", "после реакции");
     assert.eq(c.escalationLevel, 1, "уровень");
     assert.eq(c.owner && c.owner.id, levels[0].target, "адресат уровня 1");
+    // Реакция на уровне — с нормативом этого уровня, от момента эскалации: конец окна после срока прошлой реакции
+    // (§8.3, RULE-76; PROC-86)
+    assert.eq([c.timer.id, Date.parse(c.timer.dueAt) - Date.parse(inc.timer.dueAt)], ["reaction", (GRACE + levels[0].reactionSec) * 1000], "реакция уровня 1 — по его нормативу");
+    const due1 = c.timer.dueAt;
     await env.advance(levels[0].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, 2, "уровень 2");
     assert.eq(c.owner && c.owner.id, levels[1].target, "адресат уровня 2");
+    assert.eq([c.timer.id, Date.parse(c.timer.dueAt) - Date.parse(due1)], ["reaction", (GRACE + levels[1].reactionSec) * 1000], "реакция уровня 2 — по его нормативу");
     await env.advance(levels[1].reactionSec + GRACE + 1);
     c = await env.card(inc.guid);
     assert.eq(c.escalationLevel, W.escalation.maxLevel, "выше потолка не поднимается");

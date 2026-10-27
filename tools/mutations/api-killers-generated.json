@@ -212,7 +212,7 @@
  "gen-cel-cel.definitions.leftOf-gt1": null,
  "gen-cel-cel.definitions.leftOf-ne1": "Взять в работу как одно: лимит занят — ничего не меняется; к моему в работе — новые присоединяются, приоритет и срок основного — свои",
  "gen-cel-cel.definitions.levelNorm-and1": "Передать из «В работе»: реакция запускается по нормативу текущего уровня (RULE-76)",
- "gen-cel-cel.definitions.levelNorm-eq1": null,
+ "gen-cel-cel.definitions.levelNorm-eq1": "Автоэскалация по уровням и потолок: адресаты уровней, затем нарушение реакции без новой передачи",
  "gen-cel-cel.definitions.levelNorm-gt1": "Передать из «В работе»: реакция запускается по нормативу текущего уровня (RULE-76)",
  "gen-cel-cel.definitions.levelNorm-gt2": null,
  "gen-cel-cel.definitions.levelNorm-gt3": null,

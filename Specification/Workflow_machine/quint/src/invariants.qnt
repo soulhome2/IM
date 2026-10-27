@@ -333,6 +333,16 @@
   val breakFromReady = (lastAction.kind == "env" and lastAction.name == "break")
     implies (prev.agents.get(lastAction.actor) == "ready" and agents.get(lastAction.actor) == "not_ready")
 
+  //     а6) Норматив реакции уровня (§8.3, RULE-76; PROC-86): после автоэскалации реакция идёт с нормативом того
+  //        уровня, на который инцидент поднялся, — по списку уровней, а не через levelNorm машины
+  val escalationReactionNorm = {
+    val la = lastAction
+    val x = incOf(la.incident)
+    val ls = settings.escalation.levels.select(l => l.level == x.escalationLevel)
+    (INCIDENTS.contains(la.incident) and Set("auto_escalate", "resolution_escalate").contains(la.name))
+      implies (ls.length() > 0 and x.timers.get("reaction").due == clock + ls[0].reactionSec * 1000)
+  }
+
   //     б) Уровень эскалации меняет только эскалация этого инцидента, и только вверх (§8.3)
   val levelOnlyByEscalation = INCIDENTS.forall(i => {
     val l0 = before(i).escalationLevel
@@ -468,6 +478,7 @@
     closedKept,
     holdDeadlineByReason,
     breakFromReady,
+    escalationReactionNorm,
     levelOnlyByEscalation,
     breachesKept,
     resolutionLeftKept,
