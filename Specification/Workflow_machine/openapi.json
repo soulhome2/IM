@@ -2447,7 +2447,8 @@
             "items": {
               "type": "object",
               "required": [
-                "key"
+                "key",
+                "cloud"
               ],
               "properties": {
                 "key": {
@@ -2462,7 +2463,7 @@
                 },
                 "cloud": {
                   "type": "string",
-                  "description": "Имя права в каталоге прав облака (`incident_manager.<ресурс>.<глагол>[.own|.any]`); по нему облако выдаёт право роли."
+                  "description": "Имя права в каталоге прав облака; правило — `IsValidPermissionName` облака (пространство `incident_manager`, последний сегмент — глагол или область own/any после глагола); по нему облако выдаёт право роли."
                 }
               }
             }
