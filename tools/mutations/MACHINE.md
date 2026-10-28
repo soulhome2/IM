@@ -8,7 +8,7 @@
 списке — почему модель порчу не проверяет (вне модели, мир модели, эквивалентна, кандидат в инвариант); такие
 порчи скрипт модели пропускает.
 
-Итого: обе — 75, только модель — 0, только тесты API — 0, никто — 0, модель не проверяет (пометка) — 39, не прогонялась — 0.
+Итого: обе — 75, только модель — 0, только тесты API — 0, никто — 0, модель не проверяет (пометка) — 40, не прогонялась — 0.
 
 | Порча | Что ломает | Модель Quint | Тесты API |
 |---|---|---|---|
@@ -126,3 +126,4 @@
 | `active-limit-null-blocks` | лимит активных «без ограничения» (0) запрещает брать (§10.2, RULE-69) | сценарии mainCycleTest, reopenRestartsResolutionTest, resolutionEscalateSkipsOwnerTest, resolutionFiresOnceTest, targetCannotTakeoverTest, processedNeedsStepsTest, holdLimitTest, massForeignOnHoldTest, invisibleCannotActTest, answerRightsTest, mergeIntoMineTest, mergeTakesNewPrimaryTest, mergeAutoPicksUrgentTest, mergeAutoPicksEarlierTest, mergeAutoPicksMineTest, mergeRelinksTest, mergeAllOrNothingTest, mergeAnswersFinishTest, closeLinkedTest, relinkKeepsClosedTest, groupBreachSharedTest, releasedGroupStopsTest, detachAfterGroupBreachTest, detachInGroupWindowTest, detachClaimInGroupWindowTest, detachAtGroupDeadlineTest, takeoverLosesLinkedTest, breakHoldsWorkTest, silenceHoldThenReleaseTest, actingIsNotSilentTest, signOutReturnsWorkTest, lostAccessInWorkTest, windowClaimBreachTest, mergeWindowPrimaryBreachTest | Взять: в работе у меня, норматив реакции снят, норматив закрытия идёт, запись в журнале |
 | `intake-priority-first` | выбор правила по событию: приоритет сравнивается раньше точности условия (§14.5, ARCH-15) | _вне модели: выбор правила по событию_ | Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15) |
 | `override-scenario-ignored` | строка уточнения норматива со сценарием действует на инциденты любого сценария (§4, правило 2; ARCH-15) | _мир модели: нормативы по сценарию в модели не различаются_ | Норматив по сценарию: строка со scenario даёт свой срок; строка из двух ключей точнее строки по приоритету (§4, правило 2; ARCH-15) |
+| `override-scenario-tie-lost` | при равном числе условий строка со сценарием не точнее строки без него — побеждает первая по порядку (§4, правило 2; ARCH-15) | _мир модели: нормативы по сценарию в модели не различаются_ | не прогонялась |

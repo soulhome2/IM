@@ -900,14 +900,13 @@
       }
     });
 
-    await step("Норматив реакции по сценарию: у медпункта свой срок в заголовке карточки (§4, ARCH-15)", async () => {
+    await step("Норматив реакции по сценарию: у медпункта свой срок, строка со сценарием точнее строки по приоритету (§4, ARCH-15)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const keys = window.IM_FIXTURE.scenarios.keys;
-      const reaction = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction");
       const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "selftest" };
       const timers = window.IM_WORKFLOW.timers.map((t) =>
-        t.id === "reaction" ? Object.assign({}, t, { overrides: t.overrides.concat([{ scenario: keys.medical, priority: 100, sec: 90 }]) }) : t);
+        t.id === "reaction" ? Object.assign({}, t, { overrides: t.overrides.concat([{ scenario: keys.medical, sec: 90 }]) }) : t);
       try {
         await standReset({ fixture: "demo", workflowPatch: { timers } });
         const res = await stand.raw("POST", "/test/events", event);

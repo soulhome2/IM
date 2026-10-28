@@ -4690,6 +4690,14 @@ window.IM_WORKFLOW = {
         "expr": "size(o.eventType) + size(o.priority) + size(o.sourceGroup) + size(o.scenario)",
         "$comment": "Сколько условий у строки overrides: чем больше, тем строка специфичнее"
       },
+      "overrideRank": {
+        "params": {
+          "o": "Override"
+        },
+        "returns": "int",
+        "expr": "overrideKeys(o) * 2 + size(o.scenario)",
+        "$comment": "§4, правило 2. Старшинство строки уточнения: сначала число условий, при равном числе строка со сценарием старше (решение 2026-10-28)"
+      },
       "overrideMatches": {
         "params": {
           "x": "Incident",
@@ -4713,8 +4721,8 @@ window.IM_WORKFLOW = {
           "t": "TimerDef"
         },
         "returns": "int",
-        "expr": "cel.bind(ms, t.overrides.filter(o, overrideAllowed(t, o) && overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideKeys(k) <= overrideKeys(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))",
-        "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec"
+        "expr": "cel.bind(ms, t.overrides.filter(o, overrideAllowed(t, o) && overrideMatches(x, o)), size(ms) > 0 ? ms.filter(o, ms.all(k, overrideRank(k) <= overrideRank(o)))[0].sec : (x.priority in t.byPriority ? t.byPriority[x.priority] : t.defaultSec))",
+        "$comment": "§4, правило 2. Норматив, с: самая специфичная строка overrides (больше условий; при равном числе — со сценарием; при равных и этом — первая), иначе byPriority, иначе defaultSec"
       },
       "holdSec": {
         "params": {

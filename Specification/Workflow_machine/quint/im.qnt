@@ -291,6 +291,11 @@ module im {
   def overrideKeys(o: Override): int =
     (((o.eventType.length() + o.priority.length()) + o.sourceGroup.length()) + o.scenario.length())
 
+  // §4, правило 2. Старшинство строки уточнения: сначала число условий, при равном числе строка со сценарием старше (решение 2026-10-28)
+
+  def overrideRank(o: Override): int =
+    ((overrideKeys(o) * 2) + o.scenario.length())
+
   def overrideMatches(x: Incident, o: Override): bool =
     (((((o.eventType.length() == 0) or (o.eventType[0] == x.eventType)) and ((o.priority.length() == 0) or (o.priority[0] == x.priority))) and ((o.sourceGroup.length() == 0) or inSourceGroup(x, o.sourceGroup[0]))) and ((o.scenario.length() == 0) or (o.scenario[0] == x.scenario)))
 
@@ -299,10 +304,10 @@ module im {
   def overrideAllowed(t: TimerDef, o: Override): bool =
     (((((o.eventType.length() == 0) or t.overridesBy.foldl(false, (acc, y39) => acc or y39 == "eventType")) and ((o.priority.length() == 0) or t.overridesBy.foldl(false, (acc, y40) => acc or y40 == "priority"))) and ((o.sourceGroup.length() == 0) or t.overridesBy.foldl(false, (acc, y41) => acc or y41 == "sourceGroup"))) and ((o.scenario.length() == 0) or t.overridesBy.foldl(false, (acc, y42) => acc or y42 == "scenario")))
 
-  // §4, правило 2. Норматив, с: самая специфичная строка overrides (при равных — первая), иначе byPriority, иначе defaultSec
+  // §4, правило 2. Норматив, с: самая специфичная строка overrides (больше условий; при равном числе — со сценарием; при равных и этом — первая), иначе byPriority, иначе defaultSec
 
   def norm(x: Incident, t: TimerDef): int =
-    { val ms_43 = t.overrides.select(o_44 => (overrideAllowed(t, o_44) and overrideMatches(x, o_44)))  (if ((ms_43.length() > 0)) ms_43.select(o_45 => ms_43.foldl(true, (acc, k_46) => acc and (overrideKeys(k_46) <= overrideKeys(o_45))))[0].sec else (if (t.byPriority.keys().contains(x.priority)) t.byPriority.get(x.priority) else t.defaultSec)) }
+    { val ms_43 = t.overrides.select(o_44 => (overrideAllowed(t, o_44) and overrideMatches(x, o_44)))  (if ((ms_43.length() > 0)) ms_43.select(o_45 => ms_43.foldl(true, (acc, k_46) => acc and (overrideRank(k_46) <= overrideRank(o_45))))[0].sec else (if (t.byPriority.keys().contains(x.priority)) t.byPriority.get(x.priority) else t.defaultSec)) }
 
   // §4. Срок удержания, с — по причине (secFrom таймера hold). У причины с deadlineFromIdle («Нет связи») — порог возврата в очередь минус порог удержания, не меньше 0: срок причины и возврат по молчанию совпадают при любых порогах (RULE-118, RULE-129, RULE-132). Причины нет — -1, срок не ставится. Срок у причины обязателен, кроме deadlineFromIdle (§4, правило 7; RULE-135, check_machine.py): ветка «maxMinutes пуст» — подстраховка
 

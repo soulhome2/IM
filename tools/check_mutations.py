@@ -140,6 +140,13 @@ def override_scenario_ignored(w):
     d["expr"] = d["expr"].replace(find, "")
 
 
+def override_scenario_tie_lost(w):
+    """Порча override-scenario-tie-lost из tools/mutations/machine.json: при равном числе условий строка со сценарием не старше."""
+    d = w["cel"]["definitions"]["overrideRank"]
+    assert "overrideKeys(o) * 2 + size(o.scenario)" in d["expr"]
+    d["expr"] = "overrideKeys(o)"
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -209,6 +216,7 @@ MUTATIONS = [
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
     ("intake-priority-first", "выбор правила по событию: приоритет раньше точности условия (§14.5, ARCH-15)", intake_priority_first),
     ("override-scenario-ignored", "строка норматива со сценарием действует на любой сценарий (§4, правило 2; ARCH-15)", override_scenario_ignored),
+    ("override-scenario-tie-lost", "при равном числе условий строка со сценарием не точнее (§4, правило 2; ARCH-15)", override_scenario_tie_lost),
 ]
 
 

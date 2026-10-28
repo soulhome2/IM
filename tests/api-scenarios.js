@@ -1721,25 +1721,6 @@
     }
   });
 
-  test("Норматив по сценарию: строка со scenario даёт свой срок; строка из двух ключей точнее строки по приоритету (§4, правило 2; ARCH-15)", async () => {
-    const reaction = W.timers.find((t) => t.id === "reaction");
-    const rows = reaction.overrides.concat([{ scenario: KEYS.medical, sec: 120 }, { scenario: KEYS.medical, priority: TOP, sec: 90 }]);
-    const timers = (overridesBy, overrides) => W.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: overrides || rows, overridesBy }) : t));
-    const sec = async (by, overrides) => {
-      const env = await makeEnv({ workflowPatch: { timers: timers(by, overrides) } });
-      const res = await env.call("POST", "/test/events", fireAt(S5));
-      assert.status(res, 201, null, "событие с инцидентами");
-      const of = (key) => reactionSec(res.body.incidents.find((c) => scenarioOf(c) === key));
-      return { med: of(KEYS.medical), fire: of(KEYS.fire) };
-    };
-    // Медпункт (приоритет 100): две строки по сценарию и строка по приоритету — побеждает строка из двух ключей; пожар (75) своей строки по сценарию не имеет
-    assert.eq(await sec(reaction.overridesBy), { med: 90, fire: 420 }, "норматив реакции: медпункт — по строке из двух ключей, пожар — по приоритету");
-    // Без «scenario» в overridesBy строки по сценарию не действуют — остаётся строка по приоритету
-    assert.eq(await sec(reaction.overridesBy.filter((k) => k !== "scenario")), { med: 240, fire: 420 }, "без scenario в overridesBy — по приоритету");
-    // Одна строка по сценарию медпункта: другой сценарий (пожар) её не получает — у него срок по умолчанию
-    assert.eq(await sec(reaction.overridesBy, [{ scenario: KEYS.medical, sec: 120 }]), { med: 120, fire: reaction.defaultSec }, "строка по сценарию — только своему сценарию");
-  });
-
   test("Приоритет тестового инцидента приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого — самый низкий; без числа — приоритет правила (§2.5)", async () => {
     const env = await makeEnv();
     const lowest = LEVELS[LEVELS.length - 1];
@@ -1875,6 +1856,29 @@
     assert.eq(again.body.alarmNumber, first.body.alarmNumber, "номер тревоги — прежний");
     assert.eq(again.body.incidents.map((c) => c.guid), first.body.incidents.map((c) => c.guid), "те же инциденты, в том же порядке");
     assert.eq((await env.all("all")).length, before, "в очереди нового нет");
+  });
+
+  test("Норматив по сценарию: строка со scenario даёт свой срок; при равной точности строка со сценарием точнее, строка с большим числом условий — точнее всех (§4, правило 2; ARCH-15)", async () => {
+    const reaction = W.timers.find((t) => t.id === "reaction");
+    const rows = reaction.overrides.concat([{ scenario: KEYS.medical, sec: 120 }, { scenario: KEYS.medical, priority: TOP, sec: 90 }]);
+    const timers = (overridesBy, overrides) => W.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: overrides || rows, overridesBy }) : t));
+    const sec = async (by, overrides) => {
+      const env = await makeEnv({ workflowPatch: { timers: timers(by, overrides) } });
+      const res = await env.call("POST", "/test/events", fireAt(S5));
+      assert.status(res, 201, null, "событие с инцидентами");
+      const of = (key) => reactionSec(res.body.incidents.find((c) => scenarioOf(c) === key));
+      return { med: of(KEYS.medical), fire: of(KEYS.fire) };
+    };
+    // Медпункт (приоритет 100): две строки по сценарию и строка по приоритету — побеждает строка из двух ключей; пожар (75) своей строки по сценарию не имеет
+    assert.eq(await sec(reaction.overridesBy), { med: 90, fire: 420 }, "норматив реакции: медпункт — по строке из двух ключей, пожар — по приоритету");
+    // Решение 2026-10-28: прежние строки плюс только {сценарий, срок} — одно условие, как у строки по приоритету, но со сценарием она точнее
+    assert.eq(await sec(reaction.overridesBy, reaction.overrides.concat([{ scenario: KEYS.medical, sec: 90 }])), { med: 90, fire: 420 }, "при равном числе условий строка со сценарием точнее строки по приоритету; пожар — по приоритету");
+    // Строка из двух условий без сценария точнее строки по сценарию из одного
+    assert.eq(await sec(reaction.overridesBy, reaction.overrides.concat([{ scenario: KEYS.medical, sec: 90 }, { eventType: "fire", priority: TOP, sec: 200 }])), { med: 200, fire: 420 }, "два условия без сценария точнее одного со сценарием");
+    // Без «scenario» в overridesBy строки по сценарию не действуют — остаётся строка по приоритету
+    assert.eq(await sec(reaction.overridesBy.filter((k) => k !== "scenario")), { med: 240, fire: 420 }, "без scenario в overridesBy — по приоритету");
+    // Одна строка по сценарию медпункта: другой сценарий (пожар) её не получает — у него срок по умолчанию
+    assert.eq(await sec(reaction.overridesBy, [{ scenario: KEYS.medical, sec: 120 }]), { med: 120, fire: reaction.defaultSec }, "строка по сценарию — только своему сценарию");
   });
 
   test("Правило без сценария не участвует; не подошло ни одно — инцидентов и номера тревоги нет (§14.5, ARCH-15)", async () => {
