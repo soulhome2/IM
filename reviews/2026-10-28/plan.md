@@ -44,19 +44,19 @@
 **Interfaces:**
 - Produces: `openapi30.convert(spec: dict) -> dict` — новая копия, исходник не меняется; `openapi30.leftovers(spec: dict) -> list[str]` — пути конструкций, которых нет в 3.0.
 
-- [ ] **Step 1: Write the failing test** — `tools/test_openapi30.py`, `unittest`:
+- [x] **Step 1: Write the failing test** — `tools/test_openapi30.py`, `unittest`:
   - `test_type_array_to_nullable`: `{"type": ["string", "null"]}` → `{"type": "string", "nullable": True}`.
   - `test_anyof_null_ref`: `{"anyOf": [{"$ref": "#/x"}, {"type": "null"}]}` → `{"allOf": [{"$ref": "#/x"}], "nullable": True}`; с не-`$ref` вариантом — сам вариант плюс `"nullable": True`.
   - `test_examples_to_example`: у схемы `{"examples": [1, 2]}` → `{"example": 1}`.
   - `test_if_then_const_dropped`: `if`, `then`, `const` убраны, остальное у схемы на месте.
   - `test_ref_with_siblings`: `{"$ref": "#/x", "description": "d"}` → `{"allOf": [{"$ref": "#/x"}], "description": "d"}`.
   - `test_whole_contract`: для `openapi.json` — `convert(...)["openapi"] == "3.0.3"`, `leftovers(convert(...)) == []`, `leftovers(original)` не пуст, число путей в `paths` и схем в `components.schemas` не изменилось.
-- [ ] **Step 2: Run test to verify it fails** — `python3 -m unittest tools/test_openapi30.py -v`; ожидание: `ModuleNotFoundError: openapi30`.
-- [ ] **Step 3: Implement** `convert` и `leftovers` в `tools/openapi30.py` — рекурсивный обход копии; `leftovers` ищет `type`-массив, `anyOf`/`oneOf` с `{"type":"null"}`, `examples` у схем, `const`, `if`/`then`/`else`, `$ref` с соседями.
-- [ ] **Step 4: Wire into the build** — `build_workflow.outputs()` выдаёт `Specification/Workflow_machine/openapi.v30.json` (JSON, отступ 2, LF, шапка — поле `info.description` с пометкой «собрано из openapi.json, руками не править»); в `CLAUDE.md` — строка в таблице сгенерированных файлов.
-- [ ] **Step 5: Run tests to verify they pass** — `python3 -m unittest tools/test_openapi30.py -v` — OK; `python3 tools/build_workflow.py && python3 tools/build_workflow.py --check` — все «совпадает»; `python3 tools/check_links.py`.
-- [ ] **Step 6: Verify with the server generator** — генератор сервера МИ принимает копию: во временной папке (не в репозитории) `source ~/go/offline-env.sh && go install src.axxonsoft.dev/bitbucket/proj/oapi-codegen/cmd/oapi-codegen@v0.11.0`, затем `oapi-codegen -package operatorapi -generate types,custom-gin,custom-strict-server -o <tmp>/operator.gen.go Specification/Workflow_machine/openapi.v30.json` — код выхода 0; сгенерированный файл компилируется в модуле-времянке (`go mod init tmp`, зависимости — как у `~/Work/incident-manager-server/go.mod`). Исходник `openapi.json` тем же генератором — падает или теряет типы (фиксирует, зачем копия). Итог и версии — в сообщение коммита.
-- [ ] **Step 7: Commit** — `ARCH-14.1: копия контракта в OpenAPI 3.0 для генератора сервера`.
+- [x] **Step 2: Run test to verify it fails** — `python3 -m unittest tools/test_openapi30.py -v`; ожидание: `ModuleNotFoundError: openapi30`.
+- [x] **Step 3: Implement** `convert` и `leftovers` в `tools/openapi30.py` — рекурсивный обход копии; `leftovers` ищет `type`-массив, `anyOf`/`oneOf` с `{"type":"null"}`, `examples` у схем, `const`, `if`/`then`/`else`, `$ref` с соседями.
+- [x] **Step 4: Wire into the build** — `build_workflow.outputs()` выдаёт `Specification/Workflow_machine/openapi.v30.json` (JSON, отступ 2, LF, шапка — поле `info.description` с пометкой «собрано из openapi.json, руками не править»); в `CLAUDE.md` — строка в таблице сгенерированных файлов.
+- [x] **Step 5: Run tests to verify they pass** — `python3 -m unittest tools/test_openapi30.py -v` — OK; `python3 tools/build_workflow.py && python3 tools/build_workflow.py --check` — все «совпадает»; `python3 tools/check_links.py`.
+- [x] **Step 6: Verify with the server generator** — генератор сервера МИ принимает копию: во временной папке (не в репозитории) `source ~/go/offline-env.sh && go install src.axxonsoft.dev/bitbucket/proj/oapi-codegen/cmd/oapi-codegen@v0.11.0`, затем `oapi-codegen -package operatorapi -generate types,custom-gin,custom-strict-server -o <tmp>/operator.gen.go Specification/Workflow_machine/openapi.v30.json` — код выхода 0; сгенерированный файл компилируется в модуле-времянке (`go mod init tmp`, зависимости — как у `~/Work/incident-manager-server/go.mod`). Исходник `openapi.json` тем же генератором — падает или теряет типы (фиксирует, зачем копия). Итог и версии — в сообщение коммита.
+- [x] **Step 7: Commit** — `ARCH-14.1: копия контракта в OpenAPI 3.0 для генератора сервера`. Коммит: `e2cd1c9`
 
 ### Task 14.2: Имена прав облака в машине
 
@@ -85,11 +85,11 @@
 | `incident:schema:admin` | `incident_manager.manage` |
 | `agent:set_not_ready` | `incident_manager.agent.not_ready.use` |
 
-- [ ] **Step 1: Write the failing test** — в `check_machine.py` функция `check_cloud_permissions(w, err)`, вызов рядом с `check_rights_and_defaults`: у каждого права есть `cloud`; имя проходит правило облака (Global Constraints: пространство `incident_manager`, сегменты по образцу, последний сегмент — глагол или область, перед областью — глагол); имена уникальны. Сообщение: `машина, permissions: <key> — имя облака «<cloud>» не проходит правило облака` / `нет имени облака` / `имя облака повторяется`.
-- [ ] **Step 2: Run test to verify it fails** — `python3 tools/check_machine.py`; ожидание: 14 ошибок «нет имени облака», код 1.
-- [ ] **Step 3: Implement** — поле `cloud` у 14 прав по таблице выше; `python3 tools/build_workflow.py`; если `node tools/gen_quint.mjs --check` отстал — `node tools/gen_quint.mjs`.
-- [ ] **Step 4: Run tests to verify they pass** — `python3 tools/check_machine.py` и `--mutations`, `python3 tools/build_workflow.py --check`, `node tools/check_cel.mjs`, `node tools/gen_quint.mjs --check` — зелёные; проверка падает на порче: временно поставить `incident_manager.incidents.release` (без глагола) — ошибка; вернуть.
-- [ ] **Step 5: Commit** — `ARCH-14.2: имена прав облака в машине и их проверка`.
+- [x] **Step 1: Write the failing test** — в `check_machine.py` функция `check_cloud_permissions(w, err)`, вызов рядом с `check_rights_and_defaults`: у каждого права есть `cloud`; имя проходит правило облака (Global Constraints: пространство `incident_manager`, сегменты по образцу, последний сегмент — глагол или область, перед областью — глагол); имена уникальны. Сообщение: `машина, permissions: <key> — имя облака «<cloud>» не проходит правило облака` / `нет имени облака` / `имя облака повторяется`.
+- [x] **Step 2: Run test to verify it fails** — `python3 tools/check_machine.py`; ожидание: 14 ошибок «нет имени облака», код 1.
+- [x] **Step 3: Implement** — поле `cloud` у 14 прав по таблице выше; `python3 tools/build_workflow.py`; если `node tools/gen_quint.mjs --check` отстал — `node tools/gen_quint.mjs`.
+- [x] **Step 4: Run tests to verify they pass** — `python3 tools/check_machine.py` и `--mutations`, `python3 tools/build_workflow.py --check`, `node tools/check_cel.mjs`, `node tools/gen_quint.mjs --check` — зелёные; проверка падает на порче: временно поставить `incident_manager.incidents.release` (без глагола) — ошибка; вернуть.
+- [x] **Step 5: Commit** — `ARCH-14.2: имена прав облака в машине и их проверка`. Коммиты: `19aa5cc`, `f229d52` (исключение для имён облака только в `permissions`)
 
 ### Task 14.3: Правила и BACKEND.md по решениям
 
@@ -102,20 +102,20 @@
 **Interfaces:**
 - Consumes: поле `cloud` из 14.2.
 
-- [ ] **Step 1: Write the failing test** — в `check_rights_and_defaults`: у таблицы §5 `| Право | Что разрешает |` появляется колонка `Право в облаке`; для каждой строки имя в ней (в обратных кавычках) равно `cloud` права машины; иначе `правила, §5: <key> — в облаке «<в правилах>», в машине «<cloud>»`; нет колонки — ошибка «колонка не найдена — сверка не работает».
-- [ ] **Step 2: Run test to verify it fails** — `python3 tools/check_machine.py`: ошибка «колонка не найдена».
-- [ ] **Step 3: Implement the rules** —
+- [x] **Step 1: Write the failing test** — в `check_rights_and_defaults`: у таблицы §5 `| Право | Что разрешает |` появляется колонка `Право в облаке`; для каждой строки имя в ней (в обратных кавычках) равно `cloud` права машины; иначе `правила, §5: <key> — в облаке «<в правилах>», в машине «<cloud>»`; нет колонки — ошибка «колонка не найдена — сверка не работает».
+- [x] **Step 2: Run test to verify it fails** — `python3 tools/check_machine.py`: ошибка «колонка не найдена».
+- [x] **Step 3: Implement the rules** —
   - §5: колонка «Право в облаке»; абзац о ролях — «роль» = группа пользователей облака; права и группы вошедшего — из облака (проверка токена отдаёт `userGroupIds` и права); права настройки (`incident:schema:admin`, в облаке `incident_manager.manage`) операторских прав не дают; прав `filter.edit` и `track` у МИ нет.
   - §8.1: дежурная группа — группы пользователей облака и люди.
   - §14.5: как выбирается один сценарий — самое точное условие (устройство точнее типа устройства, тип — группы), при равенстве — выше приоритет правила, у правила — первый сценарий; второго инцидента на то же событие нет; правило без сценария инцидента не создаёт.
   - §15: вопрос о выборе сценария — решён (ссылка на §14.5); вопрос «как МИ получает права и группы остальных пользователей» — из облака служебными запросами с периодической сверкой, события об изменении прав у облака нет.
   - CHANGELOG: по строке на §5/§8.1/§15 и на §14.5, основание — «решения 2026-10-28, research/integration/40-plan.md», коммит — после коммита.
   - `BACKEND.md`: «Что ещё не решено» — вопрос выбора сценария закрыть правилом §14.5 и уникальностью по `event_guid` в одной транзакции с отметкой события; новые требования — арендатор = установка (`customer_guid` из настроек), `problem+json` только на `/operator/*`, `occurredAt` — время события от агента, каталог прав — по полю `cloud` машины (`filter.edit`, `track` убрать; `manage` операторских прав не даёт); копия контракта для генератора — `openapi.v30.json`, в ней нет условной проверки `SelectionRequest` (`if`/`then`) — сервер проверяет её сам; поток событий через шлюз облака — пустой комментарий не реже раза в 15 с, `Cache-Control: no-cache`, `X-Accel-Buffering: no` (шлюз буферизует и рвёт простой). Вход и токены не меняются (решение 2026-10-28, вне этапа).
-- [ ] **Step 4: Run tests to verify they pass** — `python3 tools/check_machine.py`, `python3 tools/check_guide.py`, `python3 tools/check_links.py` — зелёные.
-- [ ] **Step 5: Commit** — `ARCH-14.3: правила и BACKEND.md — роли, права облака, выбор сценария`; вторым коммитом — хэш в CHANGELOG.
+- [x] **Step 4: Run tests to verify they pass** — `python3 tools/check_machine.py`, `python3 tools/check_guide.py`, `python3 tools/check_links.py` — зелёные.
+- [x] **Step 5: Commit** — `ARCH-14.3: правила и BACKEND.md — роли, права облака, выбор сценария`; вторым коммитом — хэш в CHANGELOG. Коммиты: `dc1dbd3`, хэш — `01d63b0`; `f9225f5` (точность выбора правила, сверка ролей, вопросы облаку в §15), хэш — `10173f9`; `0399a38` (правила без сценария не участвуют в выборе; «Событие» в словаре), хэш — `ff6a2a8`
 
 ### После этапа
 
-- [ ] Итоговый просмотр всей ветки свежим агентом (superpowers:requesting-code-review).
-- [ ] Полные мутации кода (`check_code_mutations.py`) не нужны: `prototype/*.js` не менялись.
-- [ ] Строка в таблицу [reviews/README.md](../README.md): «2026-10-28 — этап 1 встраивания в облако (ARCH-14)».
+- [x] Итоговый просмотр всей ветки свежим агентом (superpowers:requesting-code-review). Исправления по нему: `eba53b3` (сборка копии 3.0 падает на остатках 3.1, тесты перевода в CI), `5944a3c` (в контракте имя права облака обязательно), `b9cead8` (проверка имён облака целиком, две новые порчи), `e69df50` (§15 — ранжирование условий и источник приоритета; UUID каталога прав в `BACKEND.md`), хэш в журнале правил — `0dc0757`. Отложено без исправления: мелочи перевода в 3.0, которых в контракте нет (их ловит остановка сборки), закрепление исключения `len(path)==3`, «облако» и «внешняя система» вперемешку, цепочки двоеточий в §5 и `BACKEND.md`, строка README §15 в журнале правил, «один» → «не больше одного» в словаре
+- [x] Полные мутации кода (`check_code_mutations.py`) не нужны: `prototype/*.js` не менялись (кроме собранного `openapi.js`).
+- [x] Строка в таблицу [reviews/README.md](../README.md): «2026-10-28 — этап 1 встраивания в облако (ARCH-14)». Сделано вместе с этой отметкой.
