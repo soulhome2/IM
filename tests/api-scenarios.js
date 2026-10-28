@@ -1587,11 +1587,19 @@
     assert.ok((await env.session()).usage.onHoldCount >= target, `отложено ${target} и больше`);
     const all = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
     assert.ok(all.incidentGuids.length > (W.limits.maxBulk || 10) && !all.truncated, `«Выбрать все» — все ${all.incidentGuids.length}, без обрезки`);
+    // «Закрыть без обработки» на выборке закрывает один сценарий — основного (§11.1, ARCH-15): больше десяти — пожаров,
+    // выборка по фильтру сценария; в наборе пожаров меньше — добавить тестовые
+    const FIRE = window.IM_FIXTURE.scenarios.keys.fire;
+    for (let i = 0; i < 8; i++) assert.status(await env.call("POST", "/test/incidents", fireAt(S5)), 201, null, `тестовый пожар ${i + 1}`);
+    const fires = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open", scenarioGuid: FIRE });
+    assert.ok(fires.incidentGuids.length > (W.limits.maxBulk || 10) && !fires.truncated, `«Выбрать все» пожаров — все ${fires.incidentGuids.length}, без обрезки`);
     const cause = W.reasonCatalogs.mass_fault.items[0].id;
-    const bulk = await env.call("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: all.incidentGuids, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
+    const bulk = await env.call("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: fires.incidentGuids, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
     assert.status(bulk, 200, null, "массовое действие на всю выборку");
-    // Инциденты не того сценария, что у основного, — в skipped (§11.1, ARCH-15)
-    assert.eq(bulk.body.succeeded.length + bulk.body.failed.length + bulk.body.skipped.length, all.incidentGuids.length, "каждый инцидент выборки — в итоге");
+    assert.eq(bulk.body.skipped, [], "один сценарий — пропущенных нет");
+    const handled = bulk.body.succeeded.length + bulk.body.failed.length;
+    assert.eq(handled, fires.incidentGuids.length, "каждый инцидент выборки — в итоге");
+    assert.ok(bulk.body.succeeded.length > 10, `закрыто больше 10: ${bulk.body.succeeded.length}`);
   });
 
   test("Сервер проверяет лимит выборки: в массовом действии больше maxBulk — 422 целиком (§11, BUG-40)", async () => {
@@ -2092,6 +2100,24 @@
     assert.eq((res.body.skipped || []).map((s) => [s.number, s.reasonKey]), [["INC-1847", "workflow.error.selection.other_scenario"]], "пожар пропущен");
     const fireAfter = await env.card(fire);
     assert.eq([fireAfter.state, fireAfter.version], [fireBefore.state, fireBefore.version], "INC-1847 не тронут");
+  });
+
+  test("Массовый сбой по устаревшей выборке: основной ушёл к коллеге после отметки — действие отклоняется целиком, другой сценарий не закрыт (§11.1, BUG-84, ARCH-15)", async () => {
+    const env = await makeEnv();
+    // Пожар INC-1851 (новый, появился раньше) — основной выборки, медпункт INC-1853 (новый) — другой сценарий
+    const fire = await env.guidOf("INC-1851");
+    const med = await env.guidOf("INC-1853");
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
+    const close = sel.actions.find((a) => a.id === "close");
+    assert.eq([close.enabled, close.formNote.vars.scenario, close.formNote.vars.n], [true, FIRE_TITLE, 1], "форма: закроется пожар");
+    // После отметки пожар ушёл к коллеге: новым он больше не основной — по нынешним отмеченным основным стал бы медпункт
+    assert.status(await env.act(fire, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "INC-1851 — Петровой");
+    const medBefore = await env.card(med);
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expectedVersions: sel.versions }));
+    assert.status(res, 412, "VERSION_CONFLICT", "выборка устарела — массовый сбой не выполняется");
+    const medAfter = await env.card(med);
+    assert.eq([medAfter.state, medAfter.version], ["new", medBefore.version], "INC-1853 — новый, версия прежняя");
+    assert.eq((await env.card(fire)).state, "pending_acceptance", "INC-1851 — у коллеги, не закрыт");
   });
 
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {

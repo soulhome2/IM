@@ -124,6 +124,9 @@ def check_workflow(w, err):
         # у объединения свой основной и своё условие одного сценария
         if "scope" in b and not (b["scope"] == "primaryScenario" and b.get("mode") == "each_allowed"):
             err.append(f"переход {t['id']}: bulk.scope — только primaryScenario и только при mode: each_allowed")
+        # Пояснение формы и уведомление о пропущенных написаны про «Закрыть без обработки» (§11.1, ARCH-15, В8)
+        if "scope" in b and t["id"] != "close":
+            err.append(f"переход {t['id']}: bulk.scope — только у close: пояснение формы и уведомление о пропущенных — про закрытие")
     for f in w["forms"]:
         for field in f["fields"]:
             src = field.get("source", "")
@@ -2062,6 +2065,9 @@ MUTATIONS = [
      '    "version": 4,\n', '    "version": 4,\n    "cloud": "incidents.size() > 0",\n', "читает incidents"),
     ("bulk-scope-unknown", "машина: у «Закрыть» на выборке неизвестная область bulk.scope (§11.1, ARCH-15)", MACHINE,
      '"scope": "primaryScenario"', '"scope": "allScenarios"', "bulk.scope"),
+    ("bulk-scope-not-close", "машина: bulk.scope у «Перехватить» (takeover), а не у «Закрыть» (§11.1, ARCH-15)", MACHINE,
+     '"bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },\n      "ui": {\n        "bulkDoneKey": "workflow.transition.takeover.bulk.done",',
+     '"bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "scope": "primaryScenario" },\n      "ui": {\n        "bulkDoneKey": "workflow.transition.takeover.bulk.done",', "только у close"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

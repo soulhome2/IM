@@ -1318,9 +1318,8 @@
 
 
   // Тексты действия на выборке: заголовок, пояснение и кнопка — ключами формы машины (bulkTitleKey, bulkNoteKey,
-  // bulkConfirmKey, ARCH-08 в9); итог — уведомлением интерфейса
-  function bulkCopy(id, list) {
-    const n = list.length;
+  // bulkConfirmKey, ARCH-08 в9); итог — уведомлением интерфейса. n — сколько инцидентов действие касается
+  function bulkCopy(id, n) {
     const tr = transitionDef(id);
     const form = tr && tr.form ? WORKFLOW.forms.find((f) => f.id === tr.form) : null;
     // Итог — ключом перехода машины (ui.bulkDoneKey): {n} — сколько, {who} — адресат из формы
@@ -1339,7 +1338,7 @@
     // сервера (сколько закроется, сколько останется открытыми), в заголовке и на кнопке — сколько закроется
     const a = actionOf(ev, id);
     const scoped = a && a.formNote && a.formNote.key === "workflow.form.close.bulk.note.scenario" ? a.formNote : null;
-    const copy = bulkCopy(id, scoped ? guids.slice(0, scoped.vars.n) : guids);
+    const copy = bulkCopy(id, scoped ? scoped.vars.n : guids.length);
     if (copy) {
       $("dialogTitle").textContent = copy.title;
       $("dialogNote").textContent = scoped ? say(scoped.key, scoped.vars) : copy.note;
@@ -1370,10 +1369,18 @@
       res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface, expectedVersions: expectedVersions(guids), idempotencyKey: newKey() });
     } catch (err) {
       toast(problemText(err));
+      // Выборка устарела, а действие с bulk.scope выполняется только по свежей (412, §11.1, BUG-84): причину оператор
+      // увидел, повтор — по нынешним версиям и с новым пояснением формы (BUG-106)
+      if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
+        checkedVersions.clear();
+        await updateSelection();
+      }
       return false;
     }
     if (!res.succeeded.length) {
-      toast(res.failed.length ? failureText(res.failed) : t("Действие недоступно"));
+      const why = res.failed.length ? failureText(res.failed) : t("Действие недоступно");
+      // Пропущенные другого сценария — названы и здесь: им ничего не сделано (§11.1, ARCH-15)
+      toast(skippedText(res.skipped) ? `${why} ${skippedText(res.skipped)}` : why);
       // Причину оператор увидел: у изменённых после отметки версия — нынешняя, повтор — его решение (BUG-106)
       res.failed.filter((f) => f.problem.code === "VERSION_CONFLICT").forEach((f) => checkedVersions.delete(f.incidentGuid));
       await updateSelection();
@@ -1381,7 +1388,7 @@
     }
     dropSelection();
     const done = res.succeeded.map((e) => ({ id: e.guid }));
-    const copy = bulkCopy(id, done);
+    const copy = bulkCopy(id, done.length);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
     // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
     const failedText = res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText;

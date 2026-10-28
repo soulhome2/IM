@@ -1486,6 +1486,11 @@
           if (bulkTr && guids.length > 1 && guids.length < bulkTr.bulk.minItems) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: bulkTr.bulk.minItems }]);
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
+          // У действия с bulk.scope основной выбирается заново, по нынешним отмеченным: изменился после отметки хоть один —
+          // основной мог смениться, и закрылся бы не тот сценарий, что назвала форма. Выборка устарела — не выполняется
+          // целиком, 412, как у объединения (BUG-84, §11.1, ARCH-15): оператор открывает форму заново
+          const outdated = bulkTr && bulkTr.bulk.scope ? list.find((e) => changedSince(e, body.expectedVersions)) : null;
+          if (outdated) return conflict(outdated, { current: card(outdated) });
           let navigate = null;
           const done = [];
           // Только те, кого действие касается (bulk.scope машины, §11.1, ARCH-15) — сервер проверяет сам, а не верит
