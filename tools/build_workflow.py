@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fixture  # noqa: E402
+import openapi30  # noqa: E402
 import settings_doc  # noqa: E402
 import transitions_doc  # noqa: E402
 
@@ -88,6 +89,15 @@ def build_scenario_examples():
     return f"{header}window.IM_SCENARIO_EXAMPLES = {json.dumps(dict(sorted(examples.items())), ensure_ascii=False)};\n"
 
 
+def build_openapi30():
+    """Копия контракта в OpenAPI 3.0 для генератора сервера (JSON, отступ 2, LF)."""
+    with open(os.path.join(MACHINE, "openapi.json"), encoding="utf-8", newline="") as f:
+        spec = openapi30.convert(json.load(f))
+    note = "Собрано из openapi.json скриптом tools/build_workflow.py (OpenAPI 3.0 для генератора сервера), руками не править."
+    spec["info"]["description"] = (spec["info"].get("description", "") + "\n\n" + note).strip()
+    return json.dumps(spec, ensure_ascii=False, indent=2) + "\n"
+
+
 def outputs():
     """(путь от корня, текст, из чего собран) — всё, что собирает этот скрипт."""
     for source, target, var, indent in TARGETS:
@@ -97,6 +107,7 @@ def outputs():
     with open(os.path.join(MACHINE, "workflow_schema.v1.json"), encoding="utf-8") as f:
         w = json.load(f)
     yield "Specification/Workflow_machine/TRANSITIONS.md", transitions_doc.render(w), "workflow_schema.v1.json"
+    yield "Specification/Workflow_machine/openapi.v30.json", build_openapi30(), "openapi.json"
     yield "Specification/Workflow_machine/SETTINGS.md", settings_doc.render(w), "workflow_schema.v1.json"
 
 

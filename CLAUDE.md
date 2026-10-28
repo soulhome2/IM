@@ -14,7 +14,7 @@ Production-кода нет. Обзор и порядок чтения — [READM
 
 | Файл | Исходник | Собрать |
 |---|---|---|
-| `prototype/workflow.js`, `openapi.js`, `fixture.js`, `strings.js`, `tests/scenario-examples.js`, `Specification/Workflow_machine/TRANSITIONS.md`, `SETTINGS.md` | машина, контракт, эталонный набор, строки, примеры сценариев | `python3 tools/build_workflow.py` |
+| `prototype/workflow.js`, `openapi.js`, `fixture.js`, `strings.js`, `tests/scenario-examples.js`, `Specification/Workflow_machine/TRANSITIONS.md`, `SETTINGS.md`, `openapi.v30.json` | машина, контракт, эталонный набор, строки, примеры сценариев | `python3 tools/build_workflow.py` |
 | `Specification/Workflow_machine/quint/im.qnt` | машина + `quint/src/*.qnt` | `node tools/gen_quint.mjs` |
 | `tools/mutations/MACHINE.md` | `tools/mutations/machine.json` + итоги прогонов порч | `python3 tools/mutation_table.py` |
 
