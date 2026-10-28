@@ -37,7 +37,8 @@
 | 3 | [Vision coverage.md](Specification/Vision%20coverage.md) | Что из видения покрыто правилами и прототипом, что отложено, а что делается вне этого репозитория |
 | 4 | [States rules IM.md](Specification/State_rules/States%20rules%20IM.md) | **Действующие правила** перехода состояний инцидента, сейчас версия 10: состояния, переходы, права, нормативы, автоэскалация, кнопки, групповая обработка. Один файл, правится на месте; журнал изменений — в §16 |
 | 5 | [Workflow_machine/](Specification/Workflow_machine/README.md) | Машина состояний: единая JSON-модель workflow (`workflow_schema.v1.json`) и контракт API операторской части (`openapi.json`). Предложение фронтенда по задаче CLOUD-23465. Приведена к правилам v10; прототип её исполняет |
-| 6 | [archive/](Specification/State_rules/archive/) | Прошлые версии правил v1–v4 и разбор v1. История решений: почему модель стала такой. Не правятся |
+| 6 | [Interface/](Specification/Interface/DESIGN_SYSTEM.md) | Интерфейс оператора для переноса в продукт: [дизайн-система](Specification/Interface/DESIGN_SYSTEM.md) — цвета, шрифты, компоненты, состояния, раскладка; [карта экранов и форм](Specification/Interface/SITEMAP.md) — области, режимы, окна и что открывает что |
+| 7 | [archive/](Specification/State_rules/archive/) | Прошлые версии правил v1–v4 и разбор v1. История решений: почему модель стала такой. Не правятся |
 
 ### Как связаны документы
 
