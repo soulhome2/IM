@@ -707,5 +707,12 @@
   "what": "лимит активных «без ограничения» (0) запрещает брать (§10.2, RULE-69)",
   "find": "\"expr\": \"limits.maxActive == 0 || countMine(",
   "replace": "\"expr\": \"countMine("
+ },
+ {
+  "name": "intake-priority-first",
+  "what": "выбор правила по событию: приоритет сравнивается раньше точности условия (§14.5, ARCH-15)",
+  "find": "ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))",
+  "replace": "a.priority > b.priority || (a.priority == b.priority && (ra > rb || (ra == rb && a.createdAt < b.createdAt)))",
+  "model": "вне модели: выбор правила по событию"
  }
 ]

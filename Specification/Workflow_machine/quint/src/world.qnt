@@ -74,6 +74,9 @@
   def transferTargets: List[str] = OPERATOR_LIST.concat(GROUP_LIST)
   // Групп устройств в модели нет: строк overrides по sourceGroup в машине тоже нет
   def inSourceGroup(x: Incident, g: str): bool = false
+  // Условия правил по группе (§14.5, ARCH-15): групп устройств в модели нет — устройство ни в одной, глубина 0
+  def deviceInGroup(d: str, g: str): bool = false
+  def groupDepth(g: str): int = 0
   def agentState(who: str): str = if (OPERATORS.contains(who)) agents.get(who) else "offline"
   def idleSec(who: str): int = if (OPERATORS.contains(who)) (clock - lastBeat.get(who)) / 1000 else 0
   def nextStep(i: str): str = STEP_ORDER.foldl("", (n, s) => if (n == "" and not(world.answers.get(i).contains(s))) s else n)

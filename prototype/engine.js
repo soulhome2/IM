@@ -67,6 +67,7 @@
           closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches,
           timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
+          eventGuid: ev.eventGuid,
         },
         ev
       );
@@ -81,6 +82,9 @@
       // Кому вообще можно передавать — люди и дежурные группы сервера (§8.1, BUG-85)
       transferTargets: () => (ctx.transferTargets ? ctx.transferTargets().map((o) => o.id) : []),
       inSourceGroup: (x, g) => ctx.inGroup(cel.source(x), g),
+      // Условия правил по группе (§14.5): устройство в группе или во вложенной, глубина группы в дереве
+      deviceInGroup: (d, g) => Boolean(ctx.deviceInGroup && ctx.deviceInGroup(d, g)),
+      groupDepth: (g) => (ctx.groupDepth ? ctx.groupDepth(g) : 0),
       agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
       idleSec: (who) => (who === ME && ctx.idleSec ? Math.floor(ctx.idleSec() - (ctx.now() - now()) / 1000) : 0),
       stepsFilled: (x, setId) => ctx.stepsFilled(cel.source(x), setId),
@@ -450,6 +454,36 @@
       return applied.ok ? Object.assign(applied, { facts: applied.facts[0] }) : applied;
     }
 
+    /* ===== Событие через правила (§14.5, раздел intake машины) ===== */
+
+    // Правило сервера → Rule машины: поля условия — по именам машины, необязательные — opt; createdAt — мс
+    const celRule = (r) =>
+      cel.value(
+        "Rule",
+        {
+          guid: r.guid, priority: r.priority, createdAt: r.createdAt, scenarios: r.scenarios || [],
+          conditions: (r.conditions || []).map((c) => ({ eventType: c.eventTypeId, device: c.deviceGuid, deviceType: c.deviceTypeId, group: c.sourceGroupGuid })),
+        },
+        r
+      );
+    // Какие инциденты даёт событие: по сценарию подошедших правил (intake.match) — правило-победитель (первое из
+    // intake.winner). Порядок создания — чей победитель старше (ruleBeats), сценарии одного правила — по его списку,
+    // полное равенство — порядок списка правил. Ответ — [{ scenario, rule }] с правилами сервера; пусто — инцидентов нет
+    function intake(rules, event) {
+      const I = W.intake;
+      const e = cel.value("Event", event);
+      const all = rules.map(celRule);
+      const scenarios = [...new Set(all.filter((r) => def(I.match, r, e)).flatMap((r) => Array.from(r.scenarios)))];
+      const picks = scenarios.map((s) => ({ scenario: s, rule: def(I.winner, all, e, s)[0] }));
+      const beats = (a, b) => def("ruleBeats", a, b, e);
+      picks.sort((x, y) =>
+        x.rule === y.rule
+          ? x.rule.scenarios.indexOf(x.scenario) - y.rule.scenarios.indexOf(y.scenario)
+          : beats(x.rule, y.rule) ? -1 : beats(y.rule, x.rule) ? 1 : all.indexOf(x.rule) - all.indexOf(y.rule)
+      );
+      return picks.map((p) => ({ scenario: p.scenario, rule: cel.source(p.rule) }));
+    }
+
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
 
     // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
@@ -762,6 +796,7 @@
       session: W.session,
       run,
       create,
+      intake,
       form,
       badge,
       cardNote,

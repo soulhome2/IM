@@ -1,0 +1,101 @@
+{
+  "scenario": {
+    "id": "60000000-0000-4000-8000-000000000009",
+    "name": "Медпомощь при пожаре",
+    "description": "",
+    "version": 1,
+    "createdAt": "2026-09-01T09:00:00Z",
+    "updatedAt": "2026-09-01T09:00:00Z",
+    "initialStep": "injured"
+  },
+  "steps": [
+    {
+      "id": "injured",
+      "type": "RadioButton",
+      "title": "Есть пострадавшие?",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Есть пострадавшие?",
+        "required": true,
+        "default": null,
+        "options": [
+          {
+            "id": "yes",
+            "label": "Да"
+          },
+          {
+            "id": "no",
+            "label": "Нет"
+          }
+        ]
+      },
+      "transitions": {
+        "default": {
+          "goto": "summary",
+          "macro": null
+        },
+        "rules": [
+          {
+            "condition": {
+              "==": [
+                {
+                  "var": "value"
+                },
+                "yes"
+              ]
+            },
+            "goto": "ambulance",
+            "macro": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "ambulance",
+      "type": "Message",
+      "title": "Вызвать скорую",
+      "description": "",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": false,
+      "view": {
+        "label": "Скорая вызвана"
+      },
+      "transitions": {
+        "default": {
+          "goto": "summary",
+          "macro": null
+        }
+      }
+    },
+    {
+      "id": "summary",
+      "type": "Comment",
+      "title": "Итог по пострадавшим",
+      "description": "Сколько пострадавших, кому переданы",
+      "revisitable": true,
+      "multitasking": false,
+      "report": false,
+      "finish": true,
+      "view": {
+        "label": "Итог по пострадавшим",
+        "default": "",
+        "required": false,
+        "readonly": false,
+        "minLength": 0,
+        "maxLength": 2000
+      },
+      "transitions": {
+        "default": {
+          "goto": null,
+          "macro": null
+        }
+      }
+    }
+  ]
+}

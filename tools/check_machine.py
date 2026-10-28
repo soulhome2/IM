@@ -445,6 +445,125 @@ def check_fixture(w, err):
                 err.append(f"эталон: у {who} {name} {n}, лимит — {limit} (§10.2)")
 
 
+def fixture_with_rows():
+    """Эталонный набор с строками сценариев, как tools/fixture.load(), но demo.json — открытием этого модуля: так порчи
+    MUTATIONS доходят и до него."""
+    with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
+        fx = json.load(f)
+    fx["scenarios"]["rows"] = [fixture.row(script) for _, script in fixture.scenario_files()]
+    return fx
+
+
+CONDITION_FIELDS = ("eventTypeId", "deviceGuid", "deviceTypeId", "sourceGroupGuid")
+
+
+def check_rules(fx, err):
+    """Правила-фильтры эталонного набора и события инцидентов (§14.5, ARCH-15). Правило — как incident_rules сервера
+    МИ: guid и createdAt уникальны, createdAt не позже снимка; приоритет — число справочника (§2.5); сценарии есть
+    в scenarios.rows; условие — хоть одно поле, поля ссылаются на то, что есть в наборе. У каждого типа события
+    инцидентов — ровно одно базовое правило (одно условие, в нём только тип). У инцидента — событие, номер тревоги
+    и правило; у инцидентов одного события — один номер тревоги, одно устройство-источник, один тип и разные
+    сценарии; номер тревоги — номер инцидента этого события, у которого номер тревоги свой; у разных событий —
+    разные номера; сценарий инцидента — в сценариях его правила."""
+    rules = fx.get("rules")
+    if not isinstance(rules, list):
+        err.append("эталон: нет раздела rules — правила-фильтры (§14.5, ARCH-15)")
+        return
+    captured = fx.get("capturedAt") or ""
+    scenarios = {r["guid"] for r in fx["scenarios"]["rows"]}
+    levels = {p.get("value") for p in fx.get("priorities") or []}
+    event_types = {i["eventType"]["id"] for i in fx["incidents"]}
+    devices = {d["id"] for d in fx["devices"]}
+    device_types = {t["id"] for t in fx["deviceTypes"]}
+
+    def node_ids(gs):
+        for g in gs:
+            yield g["id"]
+            yield from node_ids(g.get("groups", []))
+
+    groups = set(node_ids(fx["sourceGroups"]))
+    known = {"eventTypeId": event_types, "deviceGuid": devices, "deviceTypeId": device_types, "sourceGroupGuid": groups}
+    for key in ("guid", "createdAt"):
+        for d in duplicates([r.get(key) for r in rules]):
+            err.append(f"эталон: правила — {key} {d} повторяется (§14.5)")
+    by_guid = {r.get("guid"): r for r in rules}
+    for r in rules:
+        name = f"эталон: правило «{r.get('name') or r.get('guid')}»"
+        if not isinstance(r.get("createdAt"), str) or r["createdAt"] > captured:
+            err.append(f"{name} — createdAt позже снимка capturedAt или не задан")
+        if r.get("priority") not in levels:
+            err.append(f"{name} — приоритет «{r.get('priority')}», которого нет в справочнике (§2.5)")
+        for s in r.get("scenarios", []):
+            if s not in scenarios:
+                err.append(f"{name} — нет сценария {s} в scenarios.rows")
+        for c in r.get("conditions", []):
+            if not any(c.get(k) for k in CONDITION_FIELDS):
+                err.append(f"{name} — условие без единого поля (§14.5)")
+            for k, v in c.items():
+                if k not in known:
+                    err.append(f"{name} — у условия неизвестное поле {k}")
+                elif v not in known[k]:
+                    err.append(f"{name} — условие {k} «{v}»: такого в наборе нет")
+        if not r.get("conditions"):
+            err.append(f"{name} — без условий")
+    for t in sorted(event_types):
+        base = [r for r in rules if r.get("scenarios") and len(r.get("conditions", [])) == 1 and r["conditions"][0] == {"eventTypeId": t}]
+        if len(base) != 1:
+            err.append(f"эталон: у типа события {t} базовых правил {len(base)}, а нужно одно — одно условие, в нём только тип (§14.5)")
+    events = {}
+    for inc in fx["incidents"]:
+        where = f"эталон: {inc['number']}"
+        if not inc.get("eventGuid") or not inc.get("alarmNumber") or not inc.get("ruleGuid"):
+            err.append(f"{where} — нет eventGuid, alarmNumber или ruleGuid (§14.5)")
+            continue
+        events.setdefault(inc["eventGuid"], []).append(inc)
+        rule = by_guid.get(inc["ruleGuid"])
+        if rule is None:
+            err.append(f"{where} — нет правила {inc['ruleGuid']}")
+        elif inc.get("scenarioGuid") not in rule.get("scenarios", []):
+            err.append(f"{where} — сценарий не из сценариев его правила «{rule.get('name')}» (§14.5)")
+    alarms = {}
+    for guid, group in events.items():
+        where = f"эталон: событие {guid}"
+        numbers = sorted(i["number"] for i in group)
+        if len({i["alarmNumber"] for i in group}) != 1:
+            err.append(f"{where} — у инцидентов {', '.join(numbers)} разные номера тревоги (§14.5)")
+        if len({i["devices"][0] for i in group}) != 1 or len({i["eventType"]["id"] for i in group}) != 1:
+            err.append(f"{where} — у инцидентов {', '.join(numbers)} разные устройства-источники или типы")
+        scen = [i.get("scenarioGuid") for i in group]
+        if len(set(scen)) != len(scen):
+            err.append(f"{where} — два инцидента одного сценария: {', '.join(numbers)} (§14.5, ключ «событие + сценарий»)")
+        alarm = group[0]["alarmNumber"]
+        if not any(i["number"] == alarm and i["alarmNumber"] == i["number"] for i in group):
+            err.append(f"{where} — номер тревоги {alarm} — не номер инцидента этого события с собственным номером тревоги (§14.5)")
+        if alarm in alarms:
+            err.append(f"{where} — номер тревоги {alarm} уже у события {alarms[alarm]}")
+        alarms[alarm] = guid
+
+
+def check_intake(w, err):
+    """Раздел intake машины (§14.5, ARCH-15): как событие становится инцидентами — ключ уникальности из полей Incident,
+    определения выбора правила и переход появления с trigger: event."""
+    intake = w.get("intake")
+    if not isinstance(intake, dict):
+        err.append("машина: нет раздела intake — как событие становится инцидентами (§14.5, ARCH-15)")
+        return
+    defs = w.get("cel", {}).get("definitions", {})
+    fields = w.get("cel", {}).get("types", {}).get("Incident", {})
+    for key in ("match", "winner"):
+        if intake.get(key) not in defs:
+            err.append(f"машина: intake.{key} — нет определения {intake.get(key)} в cel.definitions")
+    if defs.get(intake.get("match"), {}).get("returns") != "bool":
+        err.append("машина: intake.match — определение должно давать bool")
+    if defs.get(intake.get("winner"), {}).get("returns") != "list<Rule>":
+        err.append("машина: intake.winner — определение должно давать list<Rule>")
+    if not any(t["id"] == intake.get("create") and t.get("trigger") == "event" for t in w["transitions"]):
+        err.append(f"машина: intake.create — нет перехода {intake.get('create')} с trigger: event")
+    key = intake.get("uniqueKey")
+    if not isinstance(key, list) or not key or any(k not in fields for k in key):
+        err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
+
+
 def check_layers(err):
     """Интерфейс прототипа говорит только с API: не трогает исполнитель, демо-данные и сервер
     напрямую. Единственное место, где он их называет, — создание встроенного сервера."""
@@ -751,11 +870,11 @@ def check_doc_numbers(w, o, err):
         ("README машины", r"\*\*OpenAPI 3\.1\*\* — (\d+) адрес\w*, (\d+) операц\w*, (\d+) схем", [("адресов", len(o["paths"])), ("операций", len(ops)), ("схем", len(o["components"]["schemas"]))]),
         ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w* \+ появление\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(automatic(w))), ("форм", len(w["forms"]))]),
         ("README машины", r"описывает (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
-        ("README машины", r"Нужны (\w+) операции выше", [("служебных операций", test_ops)]),
+        ("README машины", r"Нужны (\w+) операц\w* выше", [("служебных операций", test_ops)]),
         ("README машины", r"приведена к v(\d+)", [("версия правил", version)]),
         ("BACKEND.md", r"(\d+) операц\w*, плюс (\d+) служебн", [("операций", len(ops) - test_ops), ("служебных", test_ops)]),
         ("BACKEND.md", r"(\d+) состояни\w*, (\d+) переход\w*, (\d+) услови\w*, (\d+) эффект", [("состояний", len(w["states"])), ("переходов", len(w["transitions"])), ("условий", len(w["registries"]["guards"])), ("эффектов", len(w["registries"]["effects"]))]),
-        ("BACKEND.md", r"нужны (\w+) служебные операции", [("служебных операций", test_ops)]),
+        ("BACKEND.md", r"нужны (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
         ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\) и правку справочника приоритетов \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities)]),
         ("корневой README", r"сейчас версия (\d+)", [("версия правил", version)]),
         ("корневой README", r"Приведена к правилам v(\d+)", [("версия правил", version)]),
@@ -1852,6 +1971,8 @@ def collect():
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
     check_fixture(w, err)
+    check_rules(fixture_with_rows(), err)
+    check_intake(w, err)
     check_api(w, o, err)
     return err
 
@@ -1861,7 +1982,13 @@ def collect():
 # любая новая ошибка
 MACHINE = "Specification/Workflow_machine/workflow_schema.v1.json"
 RULES = "Specification/State_rules/States rules IM.md"
+FIXTURE = "Specification/Workflow_machine/fixtures/demo.json"
 MUTATIONS = [
+    ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
+     '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
+    ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,
+     '"number": "INC-1853",\n      "eventGuid": "70000000-0000-4000-8000-000000001847",\n      "alarmNumber": "INC-1847",',
+     '"number": "INC-1853",\n      "eventGuid": "70000000-0000-4000-8000-000000001847",\n      "alarmNumber": "INC-1853",', "номер"),
     ("rules-from-wrong", "§6.1: у «Взять» в колонке «Откуда» — не то состояние", RULES,
      "| **Взять** | `claim` | `new` | `in_progress` |", "| **Взять** | `claim` | `on_hold` | `in_progress` |"),
     ("timer-not-started", "машина: «не может принять» не запускает реакцию при входе в «Новый» (RULE-51)", MACHINE,

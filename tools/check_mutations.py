@@ -125,6 +125,13 @@ def without_manual_transitions(w):
     w["navActions"]["items"] = []
 
 
+def intake_priority_first(w):
+    """Порча intake-priority-first из tools/mutations/machine.json: в ruleBeats приоритет раньше точности (§14.5)."""
+    d = w["cel"]["definitions"]["ruleBeats"]
+    find = "ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))"
+    d["expr"] = d["expr"].replace(find, "a.priority > b.priority || (a.priority == b.priority && (ra > rb || (ra == rb && a.createdAt < b.createdAt)))")
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -192,6 +199,7 @@ MUTATIONS = [
         lambda w: (fast_reaction(w), [lvl.update(reactionSec=2) for lvl in w["escalation"]["levels"]]),
     ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
+    ("intake-priority-first", "выбор правила по событию: приоритет раньше точности условия (§14.5, ARCH-15)", intake_priority_first),
 ]
 
 

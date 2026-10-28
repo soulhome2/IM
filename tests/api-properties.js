@@ -101,6 +101,23 @@
       if (prog && prog.total != null && prog.filled > prog.total) say(inc, `прогресс сценария ${prog.filled} из ${prog.total}`);
     });
     if (maxActive != null && session.usage.activeCount > maxActive) bad.push(`активных у меня ${session.usage.activeCount} > ${maxActive}`);
+    // Событие и тревога (§14.5, ARCH-15): у каждого — событие и номер тревоги; на событие — один инцидент на сценарий;
+    // у инцидентов события один номер тревоги — номер того из них, у кого номер тревоги свой. Первый может быть
+    // не в списке (привязан, не виден) — тогда сверяется, что номер тревоги не принадлежит инциденту другого события
+    const byEvent = new Map();
+    list.forEach((inc) => {
+      if (!inc.eventGuid || !inc.alarmNumber) say(inc, "нет события или номера тревоги (§14.5)");
+      else byEvent.set(inc.eventGuid, (byEvent.get(inc.eventGuid) || []).concat(inc));
+    });
+    const byNumber = new Map(list.map((inc) => [inc.number, inc]));
+    byEvent.forEach((group, eventGuid) => {
+      const titles = group.map((inc) => inc.scenarioTitle);
+      if (new Set(titles).size !== titles.length) bad.push(`событие ${eventGuid}: два инцидента одного сценария (${titles.join(", ")}) (§14.5)`);
+      const alarms = new Set(group.map((inc) => inc.alarmNumber));
+      if (alarms.size !== 1) bad.push(`событие ${eventGuid}: разные номера тревоги ${[...alarms].join(", ")} (§14.5)`);
+      const first = byNumber.get(group[0].alarmNumber);
+      if (first && (first.eventGuid !== eventGuid || first.alarmNumber !== first.number)) bad.push(`событие ${eventGuid}: номер тревоги ${group[0].alarmNumber} — не первого инцидента этого события (§14.5)`);
+    });
     return bad;
   }
 

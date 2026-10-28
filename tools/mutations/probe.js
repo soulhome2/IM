@@ -548,6 +548,19 @@
       const held = chip && chip.classList.contains("held");
       return [!held, "норматив закрытия на паузе в «Отложен»: " + held];
     },
+    // Выбор правила по событию (§14.5, ARCH-15): пожар на датчике дыма 2, у его правила приоритет 25. По машине побеждает
+    // точное правило датчика (25), если приоритет сравнивается раньше точности — базовое правило пожара (75). Событий от
+    // источника в прототипе нет: своя копия встроенного сервера со служебными операциями стенда, с той же машиной
+    async "intake-priority-first"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      const smoke2 = "80000000-0000-4000-8000-00000000000a";
+      const rules = window.IM_FIXTURE.rules.map((r) => (r.guid === smoke2 ? Object.assign({}, r, { priority: 25 }) : r));
+      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { rules } });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000002"], site: "Главный офис" });
+      const inc = res.body && res.body.incidents ? res.body.incidents[0] : null;
+      return [Boolean(inc) && inc.priority === 75, `приоритет инцидента пожара на датчике дыма 2: ${inc ? inc.priority : res.status}`];
+    },
   };
 
   setTimeout(async () => {

@@ -8,7 +8,7 @@
 списке — почему модель порчу не проверяет (вне модели, мир модели, эквивалентна, кандидат в инвариант); такие
 порчи скрипт модели пропускает.
 
-Итого: обе — 75, только модель — 0, только тесты API — 0, никто — 0, модель не проверяет (пометка) — 37, не прогонялась — 0.
+Итого: обе — 75, только модель — 0, только тесты API — 0, никто — 0, модель не проверяет (пометка) — 38, не прогонялась — 0.
 
 | Порча | Что ломает | Модель Quint | Тесты API |
 |---|---|---|---|
@@ -124,3 +124,4 @@
 | `reopen-unlink-no-log` | снятие связи при переоткрытии не пишется в журнал основного (§11.4) | _не проверяет: журнал_ | Переоткрыли событие, закрытое вместе с основным, — оно само по себе: связи нет, у основного его нет, запись в журнале обоих (§11.4, BUG-42) |
 | `linked-access-ignored` | нет доступа к привязанному у адресата основного — не замечается (RULE-71) | инвариант noIncidentWithoutAccess (профиль «широкий») | У адресата основного нет доступа к привязанному — после эскалации или смены ролей привязанный отсоединяется и уходит в очередь (§11.4, §5, RULE-71) |
 | `active-limit-null-blocks` | лимит активных «без ограничения» (0) запрещает брать (§10.2, RULE-69) | сценарии mainCycleTest, reopenRestartsResolutionTest, resolutionEscalateSkipsOwnerTest, resolutionFiresOnceTest, targetCannotTakeoverTest, processedNeedsStepsTest, holdLimitTest, massForeignOnHoldTest, invisibleCannotActTest, answerRightsTest, mergeIntoMineTest, mergeTakesNewPrimaryTest, mergeAutoPicksUrgentTest, mergeAutoPicksEarlierTest, mergeAutoPicksMineTest, mergeRelinksTest, mergeAllOrNothingTest, mergeAnswersFinishTest, closeLinkedTest, relinkKeepsClosedTest, groupBreachSharedTest, releasedGroupStopsTest, detachAfterGroupBreachTest, detachInGroupWindowTest, detachClaimInGroupWindowTest, detachAtGroupDeadlineTest, takeoverLosesLinkedTest, breakHoldsWorkTest, silenceHoldThenReleaseTest, actingIsNotSilentTest, signOutReturnsWorkTest, lostAccessInWorkTest, windowClaimBreachTest, mergeWindowPrimaryBreachTest | Взять: в работе у меня, норматив реакции снят, норматив закрытия идёт, запись в журнале |
+| `intake-priority-first` | выбор правила по событию: приоритет сравнивается раньше точности условия (§14.5, ARCH-15) | _вне модели: выбор правила по событию_ | Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15) |

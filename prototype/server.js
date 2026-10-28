@@ -55,7 +55,12 @@
     let PLANS = [];
     let TREE = [];
     let SCENARIO_ROWS = {};
-    let SCENARIO_BY_TYPE = {};
+    // Правила-фильтры (§14.5, ARCH-15): как incident_rules сервера МИ — из эталонного набора, редактора нет (§17).
+    // createdAt — мс: последний шаг ранжирования
+    let RULES = [];
+    // События (§14.5): guid от источника → номер тревоги и инциденты по порядку создания. Повтор события с тем же
+    // guid ничего не создаёт. Набор отдельного списка не хранит — события собираются из eventGuid инцидентов
+    let EVENTS = new Map();
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
@@ -65,8 +70,8 @@
     // Шкала приоритета из контракта (Priority: целое 0–100) — границы, а не уровни справочника
     const SCALE = { min: 0, max: 100 };
     const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);
-    // Число от источника → уровень справочника: есть — как есть; нет — ближайший не выше; ниже самого
-    // низкого или без числа — самый низкий. Инцидент не кажется срочнее, чем по настройке
+    // Число → уровень справочника (подмена приоритета на стенде, §2.5): есть — как есть; нет — ближайший не выше;
+    // ниже самого низкого или без числа — самый низкий. Инцидент не кажется срочнее, чем по настройке
     function priorityLevel(n) {
       const lowest = PRIORITIES[PRIORITIES.length - 1];
       if (typeof n !== "number") return lowest.value;
@@ -85,9 +90,10 @@
     let rolesOverride = null;
     let myDevices = new Set();
     // Идентификаторы, которые сервер создаёт сам, — UUID (контракт): первая цифра — вид
-    // (7 — запись журнала, 8 — группа обработки, 9 — запуск макроса), дальше — номер
+    // (6 — инцидент, 7 — запись журнала, 8 — группа обработки, 9 — запуск макроса, e — событие без guid), дальше — номер
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
-    const serial = { macro: 0, incident: 0 };
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    const serial = { macro: 0, incident: 0, event: 0 };
     let events = [];
     let SIM = { enabled: false };
     let session = null;
@@ -135,6 +141,16 @@
         if (found) return found;
       }
       return null;
+    }
+    // Глубина группы в дереве: верхняя — 0; нет такой — 0
+    function depthOf(nodes, id, depth) {
+      for (const node of nodes) {
+        if (node.isDevice) continue;
+        if (node.id === id) return depth;
+        const found = depthOf(node.children || [], id, depth + 1);
+        if (found != null) return found;
+      }
+      return depth === 0 ? 0 : null;
     }
     function collectDeviceIds(node) {
       if (!node) return [];
@@ -198,9 +214,8 @@
     const rowKey = (guid, version) => `${guid}/${version}`;
     const rowOf = (ev) => SCENARIO_ROWS[rowKey(ev.scenarioGuid, ev.scenarioVersion)];
     const scriptOf = (ev) => rowOf(ev).script;
-    // Новый инцидент получает последнюю версию сценария своего типа события
-    function latestRow(typeId) {
-      const guid = SCENARIO_BY_TYPE[typeId];
+    // Новый инцидент получает последнюю версию сценария своего правила (§14.5)
+    function latestRow(guid) {
       return (
         Object.values(SCENARIO_ROWS)
           .filter((r) => r.guid === guid)
@@ -282,6 +297,9 @@
       can,
       isGroup: (id) => GROUPS.some((g) => g.id === id),
       inGroup: (ev, groupId) => touches(ev, collectDeviceIds(findNode(TREE, groupId))),
+      // Условия правил по группе (§14.5, ARCH-15): устройство — в группе или во вложенной; глубина — сколько над группой групп
+      deviceInGroup: (deviceId, groupId) => collectDeviceIds(findNode(TREE, groupId)).includes(deviceId),
+      groupDepth: (groupId) => depthOf(TREE, groupId, 0),
       agentState: () => session.agentState,
       // Стык с машиной сценариев (§14.5): наборы шагов, прогресс, курсор, перенос ответов при объединении
       stepsFilled: (ev, setId) => stepsFilledOf(ev, setId),
@@ -348,6 +366,7 @@
       lastHeartbeat = now();
       serial.incident = 0;
       serial.macro = 0;
+      serial.event = 0;
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
       const abs = (time) => (time == null ? null : Date.parse(time) + delta);
@@ -374,7 +393,7 @@
       const me = data.people.operators.find((o) => o.id === ME) || {};
       myDevices = accessibleDevices(rolesOverride || me.roles || []);
       SCENARIO_ROWS = Object.fromEntries(data.scenarios.rows.map((r) => [rowKey(r.guid, r.version), r]));
-      SCENARIO_BY_TYPE = data.scenarios.byEventType;
+      RULES = (data.rules || []).map((r) => Object.assign({}, r, { createdAt: Date.parse(r.createdAt) || 0 }));
       // Прохождение — тоже снимок: его времена сдвигаются вместе с остальными
       const at = (time) => iso(abs(time));
       const runOf = (r) =>
@@ -386,6 +405,10 @@
       events = data.incidents.map((inc) => ({
         id: inc.guid,
         number: inc.number,
+        // Событие, номер его тревоги и правило-победитель (§14.5). Инцидент набора без события — сам себе событие
+        eventGuid: inc.eventGuid || uuid("e", ++serial.event),
+        alarmNumber: inc.alarmNumber || inc.number,
+        ruleGuid: inc.ruleGuid || null,
         typeId: inc.eventType.id,
         typeGuid: inc.eventType.guid,
         type: inc.eventType.name,
@@ -428,6 +451,16 @@
         // Набор — снимок: время появления в МИ неизвестно, берётся время события
         createdAt: abs(inc.occurredAt),
       }));
+      // События набора — из инцидентов: первым — тот, чей номер — номер тревоги, затем по номеру
+      EVENTS = new Map();
+      events.forEach((ev) => {
+        const known = EVENTS.get(ev.eventGuid) || { guid: ev.eventGuid, typeId: ev.typeId, devices: ev.deviceIds, alarmNumber: ev.alarmNumber, incidentIds: [] };
+        known.incidentIds.push(ev.id);
+        EVENTS.set(ev.eventGuid, known);
+      });
+      const numbers = new Map(events.map((ev) => [ev.id, ev.number]));
+      const numberOf = (id) => Number(String(numbers.get(id)).replace(/\D/g, "")) || 0;
+      EVENTS.forEach((e) => e.incidentIds.sort((x, y) => (numbers.get(y) === e.alarmNumber) - (numbers.get(x) === e.alarmNumber) || numberOf(x) - numberOf(y)));
       // Таймеры: в наборе — с какого момента идут, длительность — норматив машины (§4).
       // Запуск в прошлом сдвигает дедлайн: «удержание началось 4 минуты назад»
       const shift = (ev, due, since, startedAt) => {
@@ -590,6 +623,9 @@
       return {
         guid: ev.id,
         number: ev.number,
+        eventGuid: ev.eventGuid,
+        alarmNumber: ev.alarmNumber,
+        ruleGuid: ev.ruleGuid || null,
         occurredAt: iso(ev.occurredAt),
         createdAt: iso(ev.createdAt),
         eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
@@ -816,6 +852,8 @@
       return Object.assign(base, {
         description: null,
         readOnly: !engine.canEditScenario(ev),
+        // Правило, по которому создан инцидент (§14.5): название — для оператора; правила нет в наборе — null
+        ruleName: (RULES.find((r) => r.guid === ev.ruleGuid) || {}).name || null,
         // Доступные действия карточки уже посчитаны в summary — условия машины второй раз не вычисляются
         note: noteView(ev, base.actions.filter((a) => a.enabled).map((a) => a.id)),
         source: src ? deviceRef(src) : null,
@@ -1624,30 +1662,47 @@
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
 
-    // Появился инцидент (§6.2, RULE-61): запись из события источника, затем переход машины create —
-    // он ставит владельца, уровень, норматив реакции и запись журнала. В продукте его вызывает
-    // приход события от источника, на стенде — POST /test/incidents
-    function createIncident(spec) {
+    // Событие источника (§14.5): тип, устройства (первое — источник), площадка, время у источника. guid — от
+    // источника (повтор приходит с тем же), нет — сервер даёт свой. Не годится — null
+    function eventOf(spec) {
       const type = eventTypes().find((t) => t.id === spec.eventTypeId);
-      const devices = spec.deviceIds || [];
-      const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= SCALE.min && spec.priority <= SCALE.max);
-      // Сценарий — последняя версия сценария типа события: на ней инцидент и доигрывает (§14.5)
-      const row = latestRow(spec.eventTypeId);
-      if (!type || !row || !devices.length || badPriority) return null;
-      const last = Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0));
-      const ev = {
-        id: uuid(6, ++serial.incident),
-        number: `INC-${last + 1}`,
-        typeId: type.id,
-        typeGuid: type.guid,
-        type: type.name,
-        priority: priorityLevel(spec.priority),
+      const devices = Array.isArray(spec.deviceIds) ? spec.deviceIds : [];
+      const badGuid = spec.eventGuid != null && !UUID.test(String(spec.eventGuid));
+      if (!type || !devices.length || badGuid) return null;
+      return {
+        guid: spec.eventGuid || uuid("e", ++serial.event),
+        type,
+        devices: devices.slice(),
         site: spec.site || null,
         location: spec.location || null,
         occurredAt: spec.occurredAt ? Date.parse(spec.occurredAt) : now(),
+      };
+    }
+    // Следующий номер инцидента: номера сквозные, INC-
+    const nextNumber = () => Math.max(0, ...events.map((e) => Number(String(e.number).replace(/\D/g, "")) || 0)) + 1;
+
+    // Инцидент события по правилу (§6.2, §14.5, RULE-61): запись из события, затем переход машины create — он ставит
+    // владельца, уровень, норматив реакции и запись журнала. Сценарий — последняя версия, на ней инцидент и доигрывает.
+    // В очередь не попадает: всё событие применяется вместе (commitEvent). Не создался — null
+    function newIncident(event, rule, scenarioGuid, number, alarmNumber, priority) {
+      const row = latestRow(scenarioGuid);
+      if (!row) return null;
+      const ev = {
+        id: uuid(6, ++serial.incident),
+        number,
+        eventGuid: event.guid,
+        alarmNumber,
+        ruleGuid: rule.guid,
+        typeId: event.type.id,
+        typeGuid: event.type.guid,
+        type: event.type.name,
+        priority,
+        site: event.site,
+        location: event.location,
+        occurredAt: event.occurredAt,
         createdAt: now(),
-        deviceIds: devices.slice(),
-        cameras: camerasOf(devices[0]),
+        deviceIds: event.devices.slice(),
+        cameras: camerasOf(event.devices[0]),
         state: null,
         owner: null,
         assignmentGroup: null,
@@ -1675,9 +1730,52 @@
         log: [],
         version: 1,
       };
-      if (!engine.create(ev).ok) return null;
-      events.unshift(ev);
-      emit("incident.created", ev, "dispatcher", {});
+      return engine.create(ev).ok ? ev : null;
+    }
+    // Запись события и его инциденты — одной транзакцией (§14.5): в очередь и в поток — все вместе
+    function commitEvent(event, alarmNumber, created) {
+      EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id) });
+      created.forEach((ev) => events.unshift(ev));
+      created.forEach((ev) => emit("incident.created", ev, "dispatcher", {}));
+    }
+
+    // Событие проходит через правила (§14.5, intake машины): повтор — прежние инциденты; иначе по инциденту на
+    // сценарий подошедших правил, правило-победитель — определения машины (engine.intake), от него приоритет;
+    // порядок создания — по старшинству победителей, номер тревоги — номер первого. Всё или ничего. Не годится — null
+    function intakeEvent(spec) {
+      const event = eventOf(spec);
+      if (!event) return null;
+      const known = EVENTS.get(event.guid);
+      if (known) return { eventGuid: known.guid, alarmNumber: known.alarmNumber, created: [], incidents: known.incidentIds.map(byId).filter(Boolean) };
+      const source = event.devices[0];
+      const picks = engine.intake(RULES, { guid: event.guid, eventType: event.type.id, device: source, deviceType: deviceSpec(source).type });
+      const first = nextNumber();
+      const alarmNumber = picks.length ? `INC-${first}` : null;
+      const created = [];
+      for (const [k, pick] of picks.entries()) {
+        const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, pick.rule.priority);
+        if (!ev) return null;
+        created.push(ev);
+      }
+      commitEvent(event, alarmNumber, created);
+      return { eventGuid: event.guid, alarmNumber, created, incidents: created };
+    }
+
+    // Базовое правило типа события: одно условие, в нём только тип (эталонный набор, §14.5)
+    const baseRule = (typeId) =>
+      RULES.find((r) => (r.scenarios || []).length && r.conditions.length === 1 && Object.keys(r.conditions[0]).join() === "eventTypeId" && r.conditions[0].eventTypeId === typeId) || null;
+    // Тестовый инцидент (POST /test/incidents): один инцидент в обход выбора — по правилу ruleGuid или базовому правилу
+    // типа, первый сценарий правила. Приоритет — правила; priority в теле — подмена на прогон, приводится к уровню
+    // справочника (§2.5). Каждый вызов — новое событие, номер тревоги — свой номер
+    function createIncident(spec) {
+      const event = eventOf(Object.assign({}, spec, { eventGuid: null }));
+      const badPriority = spec.priority != null && !(Number.isInteger(spec.priority) && spec.priority >= SCALE.min && spec.priority <= SCALE.max);
+      const rule = spec.ruleGuid != null ? RULES.find((r) => r.guid === spec.ruleGuid) || null : event && baseRule(event.type.id);
+      if (!event || !rule || !(rule.scenarios || []).length || badPriority) return null;
+      const number = `INC-${nextNumber()}`;
+      const ev = newIncident(event, rule, rule.scenarios[0], number, number, spec.priority != null ? priorityLevel(spec.priority) : rule.priority);
+      if (!ev) return null;
+      commitEvent(event, number, [ev]);
       return ev;
     }
 
@@ -1690,6 +1788,19 @@
             const ev = createIncident(body || {});
             if (!ev) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.bad_incident"]);
             return { status: 201, body: card(ev), headers: { ETag: etag(ev) } };
+          },
+        ],
+        [
+          "POST",
+          "/test/events",
+          (p, q, body) => {
+            const res = intakeEvent(body || {});
+            if (!res) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.bad_event"]);
+            // Создан хоть один — 201; повтор события или не подошло ни одно правило — 200
+            return {
+              status: res.created.length ? 201 : 200,
+              body: { eventGuid: res.eventGuid, alarmNumber: res.alarmNumber, created: res.created.length, incidents: res.incidents.map(card) },
+            };
           },
         ],
         [

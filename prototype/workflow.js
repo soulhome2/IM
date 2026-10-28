@@ -839,7 +839,7 @@ window.IM_WORKFLOW = {
     {
       "id": "create",
       "labelKey": "workflow.transition.create",
-      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент. Единственный переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно.",
+      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент. Единственный переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно. По правилу (intake, §14.5): приоритет — правила; все инциденты события — одной транзакцией с отметкой события (§14.5).",
       "from": [],
       "to": "new",
       "trigger": "event",
@@ -4024,6 +4024,9 @@ window.IM_WORKFLOW = {
     "workflow.error.test.bad_incident": {
       "vars": []
     },
+    "workflow.error.test.bad_event": {
+      "vars": []
+    },
     "workflow.journal.timer_overridden": {
       "vars": [
         "timer",
@@ -4082,7 +4085,8 @@ window.IM_WORKFLOW = {
         "linkedTo": "string",
         "linkedAt": "int",
         "leftGroup": "LeftGroup",
-        "scenario": "string"
+        "scenario": "string",
+        "eventGuid": "string"
       },
       "Timer": {
         "due": "int",
@@ -4192,6 +4196,25 @@ window.IM_WORKFLOW = {
         "maxMinutes": "opt<int>",
         "setBy": "string",
         "deadlineFromIdle": "bool"
+      },
+      "Event": {
+        "guid": "string",
+        "eventType": "string",
+        "device": "string",
+        "deviceType": "string"
+      },
+      "Condition": {
+        "eventType": "opt<string>",
+        "device": "opt<string>",
+        "deviceType": "opt<string>",
+        "group": "opt<string>"
+      },
+      "Rule": {
+        "guid": "string",
+        "priority": "int",
+        "createdAt": "int",
+        "scenarios": "list<string>",
+        "conditions": "list<Condition>"
       }
     },
     "world": {
@@ -4243,6 +4266,21 @@ window.IM_WORKFLOW = {
         },
         "returns": "bool",
         "$comment": "Устройство-источник инцидента — в группе устройств g"
+      },
+      "deviceInGroup": {
+        "params": {
+          "d": "string",
+          "g": "string"
+        },
+        "returns": "bool",
+        "$comment": "§14.5, ARCH-15. Устройство d — в группе устройств g или в одной из вложенных в неё: условие правила по группе"
+      },
+      "groupDepth": {
+        "params": {
+          "g": "string"
+        },
+        "returns": "int",
+        "$comment": "§14.5, ARCH-15. Глубина группы устройств в дереве — сколько над ней групп: верхняя — 0. Ранг условия по группе: вложенная точнее родителя"
       },
       "agentState": {
         "params": {
@@ -4323,6 +4361,14 @@ window.IM_WORKFLOW = {
         "returns": "list<Incident>",
         "ref": "incidents.filter(e, e.id != p.id && inGroupAt(e, p, at))",
         "$comment": "§11.4. Кто был в группе основного p в момент at (inGroupAt)"
+      },
+      "siblingsOf": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "list<Incident>",
+        "ref": "incidents.filter(s, x.eventGuid != '' && s.eventGuid == x.eventGuid && s.id != x.id)",
+        "$comment": "§14.5, ARCH-15. Соседи — инциденты того же события, кроме самого x: другие службы той же тревоги. Не привязка §11: у каждого свой владелец, сроки и закрытие"
       }
     },
     "settings": {
@@ -4716,8 +4762,73 @@ window.IM_WORKFLOW = {
         "returns": "bool",
         "expr": "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at) || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)",
         "$comment": "§11.4, BUG-73, BUG-75. Был в группе основного p в момент at: открытый привязанный, присоединённый не позже, или вышедший не раньше"
+      },
+      "conditionMatches": {
+        "params": {
+          "c": "Condition",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "(size(c.eventType) == 0 || c.eventType[0] == e.eventType) && (size(c.device) == 0 || c.device[0] == e.device) && (size(c.deviceType) == 0 || c.deviceType[0] == e.deviceType) && (size(c.group) == 0 || deviceInGroup(e.device, c.group[0]))",
+        "$comment": "§14.5, ARCH-15. Условие правила подошло событию: каждое заданное поле совпало (поля условия соединены «и»); группа — устройство-источник в ней или во вложенной"
+      },
+      "conditionRank": {
+        "params": {
+          "c": "Condition"
+        },
+        "returns": "int",
+        "expr": "size(c.device) > 0 ? 3000 : size(c.deviceType) > 0 ? 2000 : size(c.group) > 0 ? 1000 + groupDepth(c.group[0]) : 0",
+        "$comment": "§14.5, ARCH-15. Точность условия — по самому точному его полю: устройство 3000, тип устройства 2000, группа 1000 плюс глубина группы в дереве; только тип события — 0 (тип ранга не добавляет)"
+      },
+      "ruleRank": {
+        "params": {
+          "r": "Rule",
+          "e": "Event"
+        },
+        "returns": "int",
+        "expr": "cel.bind(ks, r.conditions.filter(c, conditionMatches(c, e)).map(c, conditionRank(c)), size(ks) == 0 ? -1 : ks.filter(k, ks.all(j, j <= k))[0])",
+        "$comment": "§14.5, ARCH-15. Точность правила для события — наибольшая из подошедших условий (условия соединены «или»); не подошло ни одно — -1"
+      },
+      "ruleMatches": {
+        "params": {
+          "r": "Rule",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))",
+        "$comment": "§14.5, ARCH-15. Правило подошло событию: у него есть сценарий и подошло хоть одно условие. Правило без сценария в выборе не участвует"
+      },
+      "ruleBeats": {
+        "params": {
+          "a": "Rule",
+          "b": "Rule",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "cel.bind(ra, ruleRank(a, e), cel.bind(rb, ruleRank(b, e), ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))))",
+        "$comment": "§14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил"
+      },
+      "ruleFor": {
+        "params": {
+          "rules": "list<Rule>",
+          "e": "Event",
+          "s": "string"
+        },
+        "returns": "list<Rule>",
+        "expr": "cel.bind(ms, rules.filter(r, ruleMatches(r, e) && s in r.scenarios), ms.filter(r, !ms.exists(o, ruleBeats(o, r, e))))",
+        "$comment": "§14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка. От него приоритет и ruleGuid инцидента"
       }
     }
+  },
+  "intake": {
+    "$comment": "§14.5, ARCH-15. Как событие становится инцидентами; исполняет сервер, смысл — определения машины, имена — отсюда. 1) Событие с тем же guid уже есть — ничего не создаётся, ответ — прежние инциденты. 2) Подошедшие правила — match (правило без сценария не подходит). 3) Для каждого сценария подошедших правил — один инцидент (uniqueKey: событие + сценарий); правило-победитель — первое из winner, от него приоритет и ruleGuid; сценарий — последняя версия. 4) Все инциденты события и запись события — одной транзакцией, каждый — переходом create; порядок создания и номеров: чей победитель старше (ruleBeats) — раньше, сценарии одного правила — по порядку его списка; номер тревоги события — номер первого созданного. 5) Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано как обработанное.",
+    "uniqueKey": [
+      "eventGuid",
+      "scenario"
+    ],
+    "match": "ruleMatches",
+    "winner": "ruleFor",
+    "create": "create"
   },
   "registries": {
     "$comment": "§14.8. Фиксированные реестры: продуктовая команда собирает схему из этих функций, разработчики расширяют сами реестры. Отмеченные extendsBaseRegistry добавлены при сборке по правилам v4 и позже сверх списка из §14.8 — их нужно реализовать.",
@@ -6518,6 +6629,8 @@ window.IM_WORKFLOW = {
     "transferToSelfForbidden": true,
     "terminalOnlyViaReopen": true,
     "actorSeesIncident": true,
+    "oneIncidentPerEventScenario": true,
+    "$commentOneIncidentPerEventScenario": "§14.5, ARCH-15. На событие — не больше одного инцидента каждого сценария (intake.uniqueKey): повтор события и пересекающиеся правила одного сценария второго инцидента не дают. Бэкенд — UNIQUE(event_guid, scenario_guid) и одна транзакция на событие.",
     "manualWinsOverTimer": {
       "graceSec": 3,
       "$comment": "§10.1, правило 5 (RULE-63). Переход по таймеру выполняется через graceSec после дедлайна; ручное действие в это окно выигрывает: срабатывание отменяется, нарушение, которое записал бы отменённый переход, записывается на момент дедлайна, в журнал — workflow.journal.timer_overridden; в ответе — canceledTimerTrigger. Ручное действие, после которого таймер продолжается (continuesOn — «Передать», «Отклонить» у реакции), срабатывание не отменяет: переход по таймеру выполняется по окончании окна, из нового состояния (RULE-83). Окно ждёт только действия человека: системный переход, готовый в окне, выполняется после перехода по таймеру, как без окна (RULE-67). 0 — окна нет."

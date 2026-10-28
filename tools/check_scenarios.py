@@ -567,10 +567,11 @@ def check_examples(validator, err, warn):
 
 def check_fixture(validator, err):
     """Сценарии эталонного набора — файлы fixtures/scenarios/ (строки как на сервере собирает tools/fixture.py) —
-    и прохождения инцидентов. Имя файла — <тип события>.v<версия>.json по scenario.id и version (DATA-09)."""
+    и прохождения инцидентов. Имя файла — <ключ>.v<версия>.json по scenario.id и version (DATA-09), ключ — scenarios.keys.
+    Сценарий инцидента — из сценариев его правила (rules, §14.5, ARCH-15)."""
     fx = fixture.load()
     rows = fx["scenarios"]["rows"]
-    kind = {guid: k for k, guid in fx["scenarios"]["byEventType"].items()}
+    kind = {guid: k for k, guid in fx["scenarios"]["keys"].items()}
     for name, script in fixture.scenario_files():
         meta = script.get("scenario", {})
         want = f"{kind.get(meta.get('id'), '?')}.v{meta.get('version')}.json"
@@ -589,14 +590,14 @@ def check_fixture(validator, err):
         if key in versions:
             err.append(f"{name}: версия повторяется")
         versions[key] = {s["id"] for s in script.get("steps", [])}
-    by_type = fx["scenarios"]["byEventType"]
-    for type_id, guid in by_type.items():
+    for k, guid in fx["scenarios"]["keys"].items():
         if not any(g == guid for g, _ in versions):
-            err.append(f"набор: у типа события {type_id} сценарий {guid}, которого нет")
+            err.append(f"набор: у ключа {k} сценарий {guid}, которого нет")
+    rules = {r.get("guid"): r for r in fx.get("rules", [])}
     for inc in fx.get("incidents", []):
         key = (inc.get("scenarioGuid"), inc.get("scenarioVersion"))
-        if by_type.get(inc["eventType"]["id"]) != key[0]:
-            err.append(f"набор: инцидент {inc.get('number')} — сценарий не тот, что у его типа события")
+        if key[0] not in (rules.get(inc.get("ruleGuid")) or {}).get("scenarios", []):
+            err.append(f"набор: инцидент {inc.get('number')} — сценарий не из сценариев его правила (§14.5)")
         if key not in versions:
             err.append(f"набор: инцидент {inc.get('number')} — нет сценария {key[0]} версии {key[1]}")
             continue

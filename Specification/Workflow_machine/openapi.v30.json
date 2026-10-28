@@ -1729,7 +1729,7 @@
         ],
         "operationId": "testCreateIncident",
         "summary": "Тестовый стенд: появился инцидент",
-        "description": "§6.2, RULE-61. Как будто источник прислал событие: сервер выполняет переход машины `create` — инцидент новый, без владельца и адресата, уровень эскалации 0, норматив реакции от появления, запись журнала, событие потока `incident.created` тем, кому инцидент виден (§5). Ответ — карточка нового инцидента.",
+        "description": "§6.2, RULE-61. Один инцидент в обход выбора правил (§14.5, ARCH-15): по правилу `ruleGuid` или базовому правилу типа события. Сервер выполняет переход машины `create` — инцидент новый, без владельца и адресата, уровень эскалации 0, норматив реакции от появления, запись журнала, событие потока `incident.created` тем, кому инцидент виден (§5). Приоритет — правила, `priority` — подмена (§2.5). Каждый вызов — новое событие, номер тревоги — свой номер. Ответ — карточка нового инцидента.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1747,6 +1747,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IncidentCard"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/test/events": {
+      "post": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testIntakeEvent",
+        "summary": "Тестовый стенд: источник прислал событие",
+        "description": "§14.5, ARCH-15. Событие проходит через правила (раздел `intake` машины): событие с тем же `eventGuid` уже было — ничего не создаётся, ответ — прежние инциденты (200). Иначе для каждого сценария подошедших правил (правило без сценария не подходит) — один инцидент по правилу-победителю: самое точное условие, затем выше приоритет, затем раньше созданное; приоритет — правила. Все инциденты события — одной транзакцией, каждый — переходом `create`, событие потока `incident.created` на каждый. Порядок создания и номеров — чей победитель старше; номер тревоги — номер первого. Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано (200).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Созданы инциденты события",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestEventResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Повтор события или не подошло ни одно правило: ничего не создано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestEventResult"
                 }
               }
             }
@@ -2552,6 +2597,11 @@
             "description": "ARCH-07. Язык выражений машины ([CEL.md](CEL.md)): `types` — типы значений выражений, `world` — факты мира, которые даёт сервер, `settings` — разделы машины как константы, `definitions` — общие понятия. Смысл условий и эффектов реестров — выражениями CEL в их полях `expr`, `failKey`, `failVars`, `do`.",
             "additionalProperties": true
           },
+          "intake": {
+            "type": "object",
+            "description": "§14.5, ARCH-15. Как событие становится инцидентами: `uniqueKey` — поля ключа уникальности инцидента (событие + сценарий), `match` — определение «правило подошло событию», `winner` — определение «правила-победители сценария», `create` — переход появления. Сервер берёт имена определений отсюда, смысл — `cel.definitions`.",
+            "additionalProperties": true
+          },
           "validation": {
             "type": "object",
             "additionalProperties": true
@@ -2559,7 +2609,7 @@
           "invariants": {
             "type": "object",
             "additionalProperties": true,
-            "description": "§10.1. Инварианты, которые сервер проверяет на каждом переходе. manualWinsOverTimer: { graceSec } — окно после дедлайна, в которое ручное действие выигрывает у таймера (RULE-63)."
+            "description": "§10.1. Инварианты, которые сервер проверяет на каждом переходе. manualWinsOverTimer: { graceSec } — окно после дедлайна, в которое ручное действие выигрывает у таймера (RULE-63). oneIncidentPerEventScenario — на событие не больше одного инцидента каждого сценария (§14.5, ARCH-15)."
           }
         }
       },
@@ -3746,6 +3796,8 @@
         "required": [
           "guid",
           "number",
+          "eventGuid",
+          "alarmNumber",
           "state",
           "version"
         ],
@@ -3757,6 +3809,22 @@
           "number": {
             "type": "string",
             "example": "INC-1847"
+          },
+          "eventGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "§14.5, ARCH-15. Событие, по которому создан инцидент: guid от источника. У инцидентов одного события — один; одно событие даёт по инциденту на сценарий подошедших правил."
+          },
+          "alarmNumber": {
+            "type": "string",
+            "description": "§14.5, ARCH-15. Номер тревоги — номер первого инцидента события (вид как у `number`): у первого он свой номер, у остальных инцидентов события — номер первого. Своего счётчика нет.",
+            "example": "INC-1847"
+          },
+          "ruleGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "§14.5, ARCH-15. Правило-победитель, по которому создан инцидент: от него приоритет и сценарий. Правила уже нет — null.",
+            "nullable": true
           },
           "occurredAt": {
             "type": "string",
@@ -4232,6 +4300,11 @@
               "readOnly": {
                 "type": "boolean",
                 "description": "Карточка открыта на просмотр (§6.3): шаги и макросы недоступны."
+              },
+              "ruleName": {
+                "type": "string",
+                "description": "§14.5, ARCH-15. Название правила, по которому создан инцидент; правила уже нет — null. Запись журнала появления правила не называет.",
+                "nullable": true
               },
               "note": {
                 "description": "§6.3, ARCH-08 в8. Пояснение в карточке под смотрящего — по правилам `cardNotes` машины: первое подходящее. Нет подходящего — null. Клиент его не вычисляет",
@@ -5792,11 +5865,16 @@
             "type": "string",
             "description": "Тип события из эталонного набора, например `fire`"
           },
+          "ruleGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "§14.5, ARCH-15. Правило, по которому создать инцидент, — в обход выбора: сценарий — первый сценарий правила, приоритет — правила. Без поля — базовое правило типа события (одно условие, в нём только тип). Неизвестное правило — 422."
+          },
           "priority": {
             "type": "integer",
             "minimum": 0,
             "maximum": 100,
-            "description": "§2.5. Число от источника. Есть в справочнике — как есть; нет — ближайший уровень не выше (83 → 75); ниже самого низкого или без поля — самый низкий."
+            "description": "§2.5, ARCH-15. Подмена приоритета на прогон. Без поля — приоритет правила. С полем — число приводится к уровню справочника: есть в справочнике — как есть; нет — ближайший уровень не выше (83 → 75); ниже самого низкого — самый низкий."
           },
           "deviceIds": {
             "type": "array",
@@ -5816,6 +5894,78 @@
             "type": "string",
             "format": "date-time",
             "description": "Время события у источника; без него — «сейчас»"
+          }
+        }
+      },
+      "TestEventRequest": {
+        "type": "object",
+        "required": [
+          "eventTypeId",
+          "deviceIds"
+        ],
+        "properties": {
+          "eventGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "§14.5. guid события от источника: повтор приходит с тем же и ничего не создаёт. Без поля — сервер даёт свой."
+          },
+          "eventTypeId": {
+            "type": "string",
+            "description": "Тип события из эталонного набора, например `fire`"
+          },
+          "deviceIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Устройства события; первое — источник: по нему подбираются правила и решается видимость (§5)"
+          },
+          "site": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Время события у источника; без него — «сейчас»"
+          }
+        }
+      },
+      "TestEventResult": {
+        "type": "object",
+        "required": [
+          "eventGuid",
+          "alarmNumber",
+          "created",
+          "incidents"
+        ],
+        "properties": {
+          "eventGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Событие"
+          },
+          "alarmNumber": {
+            "type": "string",
+            "description": "§14.5. Номер тревоги — номер первого созданного инцидента; не подошло ни одно правило — null. Повтор — прежний.",
+            "nullable": true,
+            "example": "INC-1847"
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Сколько инцидентов создано этим вызовом; повтор события — 0"
+          },
+          "incidents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncidentCard"
+            },
+            "description": "Инциденты события по порядку создания; у повтора — прежние"
           }
         }
       },

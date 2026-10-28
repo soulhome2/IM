@@ -160,7 +160,7 @@ MUTATIONS = [
     ("camera-links-duplicates", "server.js", "[...new Set(CAMERA_LINKS.filter((l) => l.devices.includes(source)).flatMap((l) => l.cameras))]", "CAMERA_LINKS.filter((l) => l.devices.includes(source)).flatMap((l) => l.cameras)", "api"),
     ("camera-links-reverse", "server.js", "new Set(CAMERA_LINKS.filter(", "new Set(CAMERA_LINKS.slice().reverse().filter(", "api"),
     ("camera-links-ignore-source", "server.js", "CAMERA_LINKS.filter((l) => l.devices.includes(source))", "CAMERA_LINKS.filter((l) => l.devices.length)", "api"),
-    ("camera-links-created-empty", "server.js", "cameras: camerasOf(devices[0]),", "cameras: [],", "api"),
+    ("camera-links-created-empty", "server.js", "cameras: camerasOf(event.devices[0]),", "cameras: [],", "api"),
     ("ui-camera-links-no-name", "app.js", "<tr><td>${asData(l.name)}</td><td>${names(l.devices)}</td>", "<tr><td>—</td><td>${names(l.devices)}</td>", "ui"),
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
     ("group-shift-ignored", "server.js", "(op.group ? membersOf(op).some((m) => present({ id: m })) :", "(op.group ? true :", "api"),
@@ -348,7 +348,7 @@ MUTATIONS = [
     # Цвет полоски очереди — из настройки приоритета, не свой в коде (§1, §4, BUG-39)
     ("ui-priority-color-ignored", "app.js", 'data-color="${escapeHtml(PRIORITIES[e.priority].color)}"', 'data-color="red"', "ui"),
     # Приоритеты — настраиваемый справочник (§2.5, RULE-68)
-    ("priority-coercion-off", "server.js", "priority: priorityLevel(spec.priority),", "priority: spec.priority,", "api"),
+    ("priority-coercion-off", "server.js", "spec.priority != null ? priorityLevel(spec.priority) : rule.priority", "spec.priority != null ? spec.priority : rule.priority", "api"),
     ("top-priority-fixed", "server.js", "const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);", "const topPriority = () => 100;", "api"),
     ("ui-priorities-not-reloaded", "app.js", 'if (msg.type === "reference.priorities_changed") {', "if (false) {", "ui"),
     # Лимиты без ограничения (§10.2, §11, RULE-69) и проверка лимита выборки на сервере (BUG-40)

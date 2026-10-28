@@ -30,7 +30,9 @@
   const LEVELS = window.IM_FIXTURE.priorities.map((p) => p.value).sort((a, b) => b - a);
   const TOP = LEVELS[0];
   // Новое событие пожара самого срочного уровня — их в демо два, однотипная пара для группы (§11)
-  const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP);
+  // Название сценария пожара: событие пожара даёт и инциденты других сценариев (медпункт, §14.5, ARCH-15)
+  const FIRE_TITLE = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === window.IM_FIXTURE.scenarios.keys.fire).name;
+  const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE && e.priority === TOP);
 
   /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
 
@@ -1719,17 +1721,145 @@
     }
   });
 
-  test("Приоритет от источника приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого или без числа — самый низкий (§2.5)", async () => {
+  test("Приоритет тестового инцидента приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого — самый низкий; без числа — приоритет правила (§2.5)", async () => {
     const env = await makeEnv();
     const lowest = LEVELS[LEVELS.length - 1];
     // Число между уровнями — ближайший не выше: инцидент не кажется срочнее, чем по настройке
     const between = LEVELS[1] + 1;
-    for (const [sent, expected] of [[TOP, TOP], [between, LEVELS[1]], [lowest - 1, lowest], [undefined, lowest]]) {
+    // Без числа — приоритет базового правила пожара (§2.5, ARCH-15: приоритет задаёт правило)
+    for (const [sent, expected] of [[TOP, TOP], [between, LEVELS[1]], [lowest - 1, lowest], [undefined, 75]]) {
       const res = await fireWith(env, sent);
       assert.status(res, 201, null, `приоритет ${sent}`);
       assert.eq(res.body.priority, expected, `${sent} → ${expected}`);
     }
     for (const bad of [101, -1, 50.5, "high"]) assert.status(await fireWith(env, bad), 422, null, `приоритет ${JSON.stringify(bad)} — не целое 0–100`);
+  });
+
+  /* ===== Одно событие — несколько инцидентов (§14.5, ARCH-15) ===== */
+
+  // Датчик дыма 5 — в торговом центре (правило медпункта), датчик дыма 2 — у него своё правило пожара
+  const S5 = "20000000-0002-4000-8000-000000000005";
+  const S2 = "20000000-0002-4000-8000-000000000002";
+  const RULE = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
+  // Сценарии набора по ключу (scenarios.keys): только имя файла сценария и ключ для тестов — выбирают правила
+  const KEYS = window.IM_FIXTURE.scenarios.keys;
+  const scenarioOf = (card) => card.scenario.scenarioGuid;
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fireAt = (device, extra) => Object.assign({ eventTypeId: "fire", deviceIds: [device], site: "Торговый центр", location: "тест" }, extra || {});
+  // Правило набора с изменёнными полями — для патча стенда (правила заменяются списком целиком)
+  const rulesWith = (change) => window.IM_FIXTURE.rules.map((r) => (change[r.guid] ? Object.assign({}, r, change[r.guid]) : r));
+  // Победитель среди правил одного сценария: стенд с этими правилами, событие пожара на S5 — один инцидент
+  async function winnerOf(rules) {
+    const env = await makeEnv({ fixturePatch: { rules } });
+    const res = await env.call("POST", "/test/events", fireAt(S5));
+    assert.status(res, 201, null, "событие с инцидентом");
+    assert.eq(res.body.created, 1, "один сценарий — один инцидент");
+    return res.body.incidents[0];
+  }
+
+  test("Событие через правила: инцидент на каждый сценарий подошедших правил, один номер тревоги, приоритет — от правила (§14.5, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await pause(300);
+    const res = await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: [S5], site: "Торговый центр" });
+    assert.status(res, 201, null, "событие с инцидентами");
+    const { eventGuid, alarmNumber, created, incidents } = res.body;
+    assert.eq(created, 2, "создано инцидентов");
+    assert.eq(incidents.map(scenarioOf).sort(), [KEYS.fire, KEYS.medical].sort(), "сценарии — пожар и медпункт");
+    assert.ok(eventGuid && incidents.every((c) => c.eventGuid === eventGuid), "у обоих — событие ответа");
+    // Первым — медпункт: его условие (группа) точнее условия базового правила (только тип), хотя пожар — тоже
+    assert.eq([incidents[0].number, scenarioOf(incidents[0])], ["INC-1854", KEYS.medical], "первым создан медпункт");
+    assert.eq([alarmNumber, ...incidents.map((c) => c.alarmNumber)], ["INC-1854", "INC-1854", "INC-1854"], "номер тревоги — номер первого");
+    const fire = incidents.find((c) => scenarioOf(c) === KEYS.fire);
+    const med = incidents.find((c) => scenarioOf(c) === KEYS.medical);
+    assert.eq([fire.number, fire.priority, fire.ruleGuid], ["INC-1855", 75, RULE(1)], "пожар — по базовому правилу");
+    assert.eq([med.priority, med.ruleGuid], [100, RULE(9)], "медпункт — по своему правилу");
+    await pause(300);
+    stop();
+    incidents.forEach((c) => assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === c.guid), `событие потока incident.created у ${c.number}`));
+  });
+
+  test("Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15)", async () => {
+    for (const [patch, priority] of [[null, 100], [{ [RULE("a")]: { priority: 25 } }, 25]]) {
+      const env = await makeEnv(patch ? { fixturePatch: { rules: rulesWith(patch) } } : undefined);
+      const res = await env.call("POST", "/test/events", fireAt(S2, { site: "Главный офис" }));
+      assert.status(res, 201, null, "событие с инцидентом");
+      assert.eq(res.body.created, 1, "базовое правило и правило датчика — один сценарий, один инцидент");
+      const c = res.body.incidents[0];
+      assert.eq([c.ruleGuid, c.priority], [RULE("a"), priority], `правило датчика (устройство) точнее базового, приоритет ${priority}`);
+    }
+  });
+
+  test("Ранжирование: вложенная группа точнее родителя; при равной точности — выше приоритет, затем раньше созданное (§14.5, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const tree = await env.ok("GET", "/operator/reference/source-groups");
+    const has = (n, d) => n.devices.some((x) => x.guid === d) || n.children.some((c) => has(c, d));
+    const mall = tree.find((n) => n.name === "Торговый центр");
+    const nested = mall.children.find((c) => has(c, S5));
+    assert.ok(nested, "в торговом центре есть вложенная группа с датчиком S5");
+    const rule = (guid, group, priority, createdAt) => ({
+      guid, name: `тест ${guid.slice(-1)}`, priority, createdAt, scenarios: [KEYS.fire], conditions: [{ eventTypeId: "fire", sourceGroupGuid: group }],
+    });
+    const parent = rule(RULE("b"), mall.guid, 100, "2026-09-01T09:00:00Z");
+    const child = rule(RULE("c"), nested.guid, 25, "2026-09-02T09:00:00Z");
+    const deep = await winnerOf([parent, child]);
+    assert.eq([deep.ruleGuid, deep.priority], [RULE("c"), 25], "вложенная группа точнее родителя, хотя приоритет ниже");
+    // Равная точность: выше приоритет; равный приоритет — раньше созданное (раньше в списке — позже созданное)
+    const later = rule(RULE("d"), mall.guid, 50, "2026-09-03T09:00:00Z");
+    const earlier = rule(RULE("e"), mall.guid, 50, "2026-09-02T09:00:00Z");
+    assert.eq((await winnerOf([later, earlier])).ruleGuid, RULE("e"), "равные точность и приоритет — раньше созданное");
+    assert.eq((await winnerOf([earlier, Object.assign({}, later, { priority: 75 })])).ruleGuid, RULE("d"), "равная точность — выше приоритет");
+  });
+
+  test("Повтор события ничего не создаёт: тот же eventGuid — 200, created 0, те же инциденты и номер тревоги (§14.5, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const first = await env.call("POST", "/test/events", fireAt(S5));
+    assert.status(first, 201, null, "первая доставка");
+    const before = (await env.all("all")).length;
+    const again = await env.call("POST", "/test/events", fireAt(S5, { eventGuid: first.body.eventGuid }));
+    assert.status(again, 200, null, "повтор");
+    assert.eq(again.body.created, 0, "повтор ничего не создаёт");
+    assert.eq(again.body.alarmNumber, first.body.alarmNumber, "номер тревоги — прежний");
+    assert.eq(again.body.incidents.map((c) => c.guid), first.body.incidents.map((c) => c.guid), "те же инциденты, в том же порядке");
+    assert.eq((await env.all("all")).length, before, "в очереди нового нет");
+  });
+
+  test("Правило без сценария не участвует; не подошло ни одно — инцидентов и номера тревоги нет (§14.5, ARCH-15)", async () => {
+    const sabotage = window.IM_FIXTURE.incidents.find((i) => i.eventType.id === "sabotage" && i.state === "new");
+    const device = sabotage.devices[0];
+    const bare = { guid: RULE("b"), name: "Саботаж без сценария", priority: 100, createdAt: "2026-09-01T09:00:00Z", scenarios: [], conditions: [{ eventTypeId: "sabotage", deviceGuid: device }] };
+    const env = await makeEnv({ fixturePatch: { rules: window.IM_FIXTURE.rules.concat(bare) } });
+    const res = await env.call("POST", "/test/events", { eventTypeId: "sabotage", deviceIds: [device], site: sabotage.site });
+    assert.status(res, 201, null, "событие с инцидентом");
+    assert.eq(res.body.created, 1, "один инцидент");
+    assert.eq([res.body.incidents[0].ruleGuid, res.body.incidents[0].priority], [RULE(3), 50], "по базовому правилу саботажа, правило без сценария не в счёт");
+    // Без базового правила разбития стекла событию не подходит ни одно правило
+    const glass = window.IM_FIXTURE.incidents.find((i) => i.eventType.id === "glass");
+    const none = await makeEnv({ fixturePatch: { rules: window.IM_FIXTURE.rules.filter((r) => r.guid !== RULE(7)) } });
+    const before = (await none.all("all")).length;
+    const quiet = await none.call("POST", "/test/events", { eventTypeId: "glass", deviceIds: [glass.devices[0]], site: glass.site });
+    assert.status(quiet, 200, null, "событие без инцидентов");
+    assert.eq([quiet.body.created, quiet.body.alarmNumber, quiet.body.incidents], [0, null, []], "ни инцидентов, ни номера тревоги");
+    assert.eq((await none.all("all")).length, before, "в очереди нового нет");
+    assert.status(await none.call("POST", "/test/events", { eventTypeId: "nope", deviceIds: [glass.devices[0]] }), 422, null, "неизвестный тип события");
+    assert.status(await none.call("POST", "/test/events", { eventTypeId: "glass", deviceIds: [] }), 422, null, "без устройства");
+  });
+
+  test("Тестовый инцидент: по базовому правилу типа или по ruleGuid; приоритет — правила, priority в теле — подмена (§2.5, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const plain = await env.call("POST", "/test/incidents", fireAt(S5));
+    assert.status(plain, 201, null, "без priority");
+    assert.eq([plain.body.priority, plain.body.ruleGuid, scenarioOf(plain.body)], [75, RULE(1), KEYS.fire], "базовое правило пожара");
+    assert.eq(plain.body.alarmNumber, plain.body.number, "своё событие — номер тревоги свой");
+    const med = await env.call("POST", "/test/incidents", fireAt(S5, { ruleGuid: RULE(9) }));
+    assert.status(med, 201, null, "с ruleGuid");
+    assert.eq([med.body.priority, med.body.ruleGuid, scenarioOf(med.body)], [100, RULE(9), KEYS.medical], "правило медпункта — его сценарий и приоритет");
+    assert.ok(med.body.eventGuid !== plain.body.eventGuid, "каждый вызов — новое событие");
+    const forced = await env.call("POST", "/test/incidents", fireAt(S5, { priority: 83 }));
+    assert.status(forced, 201, null, "с priority");
+    assert.eq(forced.body.priority, 75, "подмена приводится к уровню справочника: 83 → 75");
+    assert.status(await env.call("POST", "/test/incidents", fireAt(S5, { ruleGuid: RULE("f") })), 422, null, "неизвестное правило");
   });
 
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {
@@ -2331,7 +2461,8 @@
 
   test("Два основных со привязанными — «Взять в работу» как одно: все привязанные у нового основного, цепочек нет, у перешедших — запись в журнале (§11)", async () => {
     const env = await makeEnv();
-    const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
+    // Пожары сценария пожара: у соседа INC-1853 тип события тоже «пожар», а сценарий — медпункта (§14.5, ARCH-15)
+    const [a, b, c, d] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE);
     assert.ok(d, "в демо-данных четыре новых пожара");
     await (await mergeInto(env, a.guid, [b.guid])).body;
     await (await mergeInto(env, c.guid, [d.guid])).body;

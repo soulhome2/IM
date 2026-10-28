@@ -615,7 +615,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (!window.IM_SCENARIO_EXAMPLES) await loadScript("../tests/scenario-examples.js");
       // Новая версия сценария пожара — showcase: новый инцидент получает последнюю версию
-      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const fireGuid = window.IM_FIXTURE.scenarios.keys.fire;
       const rows = window.IM_FIXTURE.scenarios.rows;
       const version = Math.max(...rows.filter((r) => r.guid === fireGuid).map((r) => r.version)) + 1;
       const show = JSON.parse(JSON.stringify(window.IM_SCENARIO_EXAMPLES["showcase/00-primitives.json"]));
@@ -674,7 +674,7 @@
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Новая версия пожара: у «Тип сработки» два обязательных списка, после него — файл оператора
-      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const fireGuid = window.IM_FIXTURE.scenarios.keys.fire;
       const rows = window.IM_FIXTURE.scenarios.rows;
       const latest = rows.filter((r) => r.guid === fireGuid).sort((a, b) => b.version - a.version)[0];
       const script = JSON.parse(JSON.stringify(latest.script));
@@ -763,7 +763,7 @@
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Новая версия пожара: отметка «Подтверждаю» отмечена заранее, у классификации — вариант по умолчанию и описание
-      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const fireGuid = window.IM_FIXTURE.scenarios.keys.fire;
       const rows = window.IM_FIXTURE.scenarios.rows;
       const latest = rows.filter((r) => r.guid === fireGuid).sort((a, b) => b.version - a.version)[0];
       const script = JSON.parse(JSON.stringify(latest.script));
@@ -895,6 +895,38 @@
         return "замок — у «Эвакуации», «Владелец» переотвечается";
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Событие через правила: инцидент на каждый сценарий, повтор ничего не создаёт (§14.5, ARCH-15)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const keys = window.IM_FIXTURE.scenarios.keys;
+      const rule = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
+      // Датчик дыма 5 в торговом центре: базовое правило пожара и правило медпункта
+      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "selftest" };
+      const count = async () => (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.length;
+      try {
+        const before = await count();
+        const res = await stand.raw("POST", "/test/events", event);
+        expect(res.status === 201, `событие: ${res.status}`);
+        const b = res.body;
+        const sc = b.incidents.map((c) => c.scenario.scenarioGuid);
+        expect(b.created === 2 && sc.length === 2 && sc.includes(keys.fire) && sc.includes(keys.medical), `сценарии: ${sc.join(", ")}`);
+        expect(b.incidents.every((c) => c.eventGuid === b.eventGuid && c.alarmNumber === b.alarmNumber), "у инцидентов не одно событие и не один номер тревоги");
+        expect(b.alarmNumber === b.incidents[0].number && sc[0] === keys.medical, `номер тревоги ${b.alarmNumber} — не первого, медпункта`);
+        const fire = b.incidents.find((c) => c.scenario.scenarioGuid === keys.fire);
+        const med = b.incidents.find((c) => c.scenario.scenarioGuid === keys.medical);
+        expect(fire.priority === 75 && fire.ruleGuid === rule(1), `пожар: приоритет ${fire.priority}, правило ${fire.ruleGuid}`);
+        expect(med.priority === 100 && med.ruleGuid === rule(9), `медпункт: приоритет ${med.priority}, правило ${med.ruleGuid}`);
+        const again = await stand.raw("POST", "/test/events", Object.assign({ eventGuid: b.eventGuid }, event));
+        expect(again.status === 200 && again.body.created === 0 && again.body.alarmNumber === b.alarmNumber, `повтор: ${again.status}, создано ${again.body.created}`);
+        expect(again.body.incidents.map((c) => c.guid).join() === b.incidents.map((c) => c.guid).join(), "повтор вернул не те инциденты");
+        expect((await count()) === before + 2, "в очереди не два новых инцидента");
+        return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}`;
+      } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
       }
@@ -2149,7 +2181,8 @@
       expect(!wrong.length, `плашка не название сценария: ${wrong.map(([a, b]) => `«${a}» вместо «${b}»`).join(", ")}`);
       // Нет названия — «Без названия»: стенд убирает его у сценария пожара (в Merge Patch null удаляет поле)
       if (mode() !== "queue") await click($("backToQueue"));
-      const fireGuid = window.IM_FIXTURE.scenarios.byEventType.fire;
+      const fireGuid = window.IM_FIXTURE.scenarios.keys.fire;
+      const fireTitle = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === fireGuid).name;
       const rows = window.IM_FIXTURE.scenarios.rows.map((r) => (r.guid === fireGuid ? Object.assign({}, r, { name: null }) : r));
       await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows } } });
       // Смена фильтра перечитывает очередь с сервера
@@ -2162,7 +2195,9 @@
           if (nav && page > 1) await click(nav);
           $("eventsList").querySelectorAll(".event").forEach((row) => {
             const chip = row.querySelector(".event-prog");
-            if (chip && /Пожар/.test(row.querySelector(".event-title").textContent)) untitled += chip.textContent.trim() === "Без названия" ? 1 : -1000;
+            // Инциденты сценария пожара — по названию до правки; у соседа INC-1853 тип «пожар», а сценарий медпункта (ARCH-15)
+            const before = byGuid[row.dataset.id];
+            if (chip && before && before.scenarioTitle === fireTitle) untitled += chip.textContent.trim() === "Без названия" ? 1 : -1000;
           });
         }
       } finally {
@@ -2448,7 +2483,25 @@
       await click(fire);
       await click($("groupingConfirm"));
       // Как над очередью — «Открытые»: новые и свои в работе или отложенные
-      const picked = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.eventType.id === "fire").map((e) => e.guid);
+      const fires = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.eventType.id === "fire");
+      // Сосед INC-1853 — тоже «пожар», но сценарий медпункта (§14.5, ARCH-15): с ним «Взять в работу» недоступна —
+      // как одно берутся инциденты одного сценария (§11.3). Оператор снимает с него отметку
+      const fireTitle = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === window.IM_FIXTURE.scenarios.keys.fire).name;
+      const others = fires.filter((e) => e.scenarioTitle !== fireTitle);
+      const mixed = $("selBar").querySelector('[data-sel-do="merge"]');
+      expect(!others.length || (mixed && off(mixed)), "«Взять в работу» доступна на выборке разных сценариев");
+      for (const x of others) {
+        let box = null;
+        for (let page = 1; page <= 20 && !box; page++) {
+          const nav = $("eventsPager").querySelector(`[data-page="${page}"]`);
+          if (page > 1 && (!nav || nav.disabled)) break;
+          if (nav) await click(nav);
+          box = $("eventsList").querySelector(`[data-check="${x.guid}"]`);
+        }
+        expect(box, `у ${x.number} нет отметки в очереди`);
+        await click(box);
+      }
+      const picked = fires.filter((e) => e.scenarioTitle === fireTitle).map((e) => e.guid);
       expect(!$("selBar").hidden && $("selBar").textContent.includes(`${picked.length}`), `панель выборки: «${$("selBar").textContent.trim()}»`);
       const take = $("selBar").querySelector('[data-sel-do="merge"]');
       expect(take && !off(take), `«Взять в работу» недоступна: ${take ? take.title : "нет кнопки"}`);

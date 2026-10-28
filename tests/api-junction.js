@@ -6,7 +6,7 @@
   const { test, makeEnv, actionOf, assert, enc } = IMTest;
   const ME = "me";
   const FX = window.IM_FIXTURE;
-  const FIRE = FX.scenarios.byEventType.fire;
+  const FIRE = FX.scenarios.keys.fire;
   const LATEST_FIRE = Math.max(...FX.scenarios.rows.filter((r) => r.guid === FIRE).map((r) => r.version));
   const all = window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
 
