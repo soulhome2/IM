@@ -2826,7 +2826,8 @@
               "enum": [
                 "eventType",
                 "priority",
-                "sourceGroup"
+                "sourceGroup",
+                "scenario"
               ]
             },
             "description": "§4, правило 2. По каким признакам уточняется норматив: строка overrides с признаком не из этого списка не учитывается (ARCH-11)"
@@ -2847,6 +2848,10 @@
                   "$ref": "#/components/schemas/Priority"
                 },
                 "sourceGroup": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "scenario": {
                   "type": "string",
                   "format": "uuid"
                 },

@@ -132,6 +132,14 @@ def intake_priority_first(w):
     d["expr"] = d["expr"].replace(find, "a.priority > b.priority || (a.priority == b.priority && (ra > rb || (ra == rb && a.createdAt < b.createdAt)))")
 
 
+def override_scenario_ignored(w):
+    """Порча override-scenario-ignored из tools/mutations/machine.json: строка уточнения норматива со сценарием действует на любой сценарий."""
+    d = w["cel"]["definitions"]["overrideMatches"]
+    find = " && (size(o.scenario) == 0 || o.scenario[0] == x.scenario)"
+    assert find in d["expr"]
+    d["expr"] = d["expr"].replace(find, "")
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -200,6 +208,7 @@ MUTATIONS = [
     ),
     ("reopenNorm", "норматив закрытия после переоткрытия 60 с", lambda w: w["limits"].update(reopenResolutionSec=60)),
     ("intake-priority-first", "выбор правила по событию: приоритет раньше точности условия (§14.5, ARCH-15)", intake_priority_first),
+    ("override-scenario-ignored", "строка норматива со сценарием действует на любой сценарий (§4, правило 2; ARCH-15)", override_scenario_ignored),
 ]
 
 

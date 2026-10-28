@@ -714,5 +714,13 @@
   "find": "ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))",
   "replace": "a.priority > b.priority || (a.priority == b.priority && (ra > rb || (ra == rb && a.createdAt < b.createdAt)))",
   "model": "вне модели: выбор правила по событию"
+ },
+ {
+  "name": "override-scenario-ignored",
+  "what": "строка уточнения норматива со сценарием действует на инциденты любого сценария (§4, правило 2; ARCH-15)",
+  "find": " && (size(o.scenario) == 0 || o.scenario[0] == x.scenario)\"}",
+  "replace": "\"}",
+  "model": "мир модели: нормативы по сценарию в модели не различаются"
  }
 ]
+

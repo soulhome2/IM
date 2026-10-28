@@ -561,6 +561,20 @@
       const inc = res.body && res.body.incidents ? res.body.incidents[0] : null;
       return [Boolean(inc) && inc.priority === 75, `приоритет инцидента пожара на датчике дыма 2: ${inc ? inc.priority : res.status}`];
     },
+    // Норматив по сценарию (§4, правило 2; ARCH-15): единственная строка реакции — для медпункта, 90 с. Событие пожара в торговом центре
+    // даёт медпункт и пожар. По машине срок 90 с — у медпункта, у пожара прежний по приоритету; если сценарий игнорируется —
+    // строка действует и на пожар
+    async "override-scenario-ignored"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      const keys = window.IM_FIXTURE.scenarios.keys;
+      const timers = window.IM_WORKFLOW.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: [{ scenario: keys.medical, sec: 90 }] }) : t));
+      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { timers } });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр" });
+      const fire = res.body && res.body.incidents ? res.body.incidents.find((c) => c.scenario.scenarioGuid === keys.fire) : null;
+      const sec = fire ? (Date.parse(fire.timer.dueAt) - Date.parse(fire.createdAt)) / 1000 : null;
+      return [sec === 90, `норматив реакции пожара в торговом центре: ${sec === null ? res.status : sec} с`];
+    },
   };
 
   setTimeout(async () => {

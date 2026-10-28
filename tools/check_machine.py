@@ -254,6 +254,12 @@ def check_fixture(w, err):
             err.append(f"эталон: {where} позже снимка capturedAt")
 
     people = fx["people"]
+    # Строка уточнения норматива со сценарием — сценарий из набора (ARCH-15.3)
+    known_scenarios = {r.get("guid") for r in fx["scenarios"]["rows"]}
+    for t in w["timers"]:
+        for i, row in enumerate(t.get("overrides", [])):
+            if "scenario" in row and row["scenario"] not in known_scenarios:
+                err.append(f"таймер {t['id']}, overrides[{i}]: сценария {row['scenario']} нет в наборе")
     humans = {o["id"] for o in people["operators"]}
     groups = {g["id"] for g in people["dutyGroups"]}
     # Дежурные группы (§8.1): участники — люди с одной из ролей группы плюс названные отдельно

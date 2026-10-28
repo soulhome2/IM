@@ -1721,6 +1721,25 @@
     }
   });
 
+  test("Норматив по сценарию: строка со scenario даёт свой срок; строка из двух ключей точнее строки по приоритету (§4, правило 2; ARCH-15)", async () => {
+    const reaction = W.timers.find((t) => t.id === "reaction");
+    const rows = reaction.overrides.concat([{ scenario: KEYS.medical, sec: 120 }, { scenario: KEYS.medical, priority: TOP, sec: 90 }]);
+    const timers = (overridesBy, overrides) => W.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: overrides || rows, overridesBy }) : t));
+    const sec = async (by, overrides) => {
+      const env = await makeEnv({ workflowPatch: { timers: timers(by, overrides) } });
+      const res = await env.call("POST", "/test/events", fireAt(S5));
+      assert.status(res, 201, null, "событие с инцидентами");
+      const of = (key) => reactionSec(res.body.incidents.find((c) => scenarioOf(c) === key));
+      return { med: of(KEYS.medical), fire: of(KEYS.fire) };
+    };
+    // Медпункт (приоритет 100): две строки по сценарию и строка по приоритету — побеждает строка из двух ключей; пожар (75) своей строки по сценарию не имеет
+    assert.eq(await sec(reaction.overridesBy), { med: 90, fire: 420 }, "норматив реакции: медпункт — по строке из двух ключей, пожар — по приоритету");
+    // Без «scenario» в overridesBy строки по сценарию не действуют — остаётся строка по приоритету
+    assert.eq(await sec(reaction.overridesBy.filter((k) => k !== "scenario")), { med: 240, fire: 420 }, "без scenario в overridesBy — по приоритету");
+    // Одна строка по сценарию медпункта: другой сценарий (пожар) её не получает — у него срок по умолчанию
+    assert.eq(await sec(reaction.overridesBy, [{ scenario: KEYS.medical, sec: 120 }]), { med: 120, fire: reaction.defaultSec }, "строка по сценарию — только своему сценарию");
+  });
+
   test("Приоритет тестового инцидента приводится к уровню справочника: есть — как есть, нет — ближайший не выше, ниже самого низкого — самый низкий; без числа — приоритет правила (§2.5)", async () => {
     const env = await makeEnv();
     const lowest = LEVELS[LEVELS.length - 1];

@@ -327,7 +327,7 @@ window.IM_WORKFLOW = {
     {
       "id": "reaction",
       "labelKey": "workflow.timer.reaction",
-      "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет и группу устройств; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, sec }. Приоритет — число уровня из справочника приоритетов МИ (§2.5, RULE-68), в byPriority — тем же числом, строкой ключа; уровень без своего норматива получает defaultSec. Норматив реакции уровня автоэскалации — только в escalation.levels[].reactionSec (§8.3, RULE-114): в уточнениях его нет, иначе он задавался бы в двух местах.",
+      "$comment": "§4, правило 2. Нормативы задаются на тип события, приоритет, группу устройств и сценарий; в данных события норматива нет. Значение: самая специфичная строка overrides (больше совпавших условий), иначе byPriority, иначе defaultSec. Строка overrides: { eventType?, priority?, sourceGroup?, scenario?, sec }. Приоритет — число уровня из справочника приоритетов МИ (§2.5, RULE-68), в byPriority — тем же числом, строкой ключа; уровень без своего норматива получает defaultSec. Норматив реакции уровня автоэскалации — только в escalation.levels[].reactionSec (§8.3, RULE-114): в уточнениях его нет, иначе он задавался бы в двух местах.",
       "deadlineField": "reaction_due_at",
       "meaning": "Время от появления инцидента до взятия в работу",
       "startsOnEnter": [
@@ -352,7 +352,8 @@ window.IM_WORKFLOW = {
       "overridesBy": [
         "eventType",
         "priority",
-        "sourceGroup"
+        "sourceGroup",
+        "scenario"
       ],
       "overrides": [
         {
@@ -402,7 +403,8 @@ window.IM_WORKFLOW = {
       "overridesBy": [
         "eventType",
         "priority",
-        "sourceGroup"
+        "sourceGroup",
+        "scenario"
       ],
       "overrides": []
     },
@@ -4195,6 +4197,7 @@ window.IM_WORKFLOW = {
         "eventType": "opt<string>",
         "priority": "opt<int>",
         "sourceGroup": "opt<string>",
+        "scenario": "opt<string>",
         "sec": "int"
       },
       "HoldReason": {
@@ -4684,7 +4687,7 @@ window.IM_WORKFLOW = {
           "o": "Override"
         },
         "returns": "int",
-        "expr": "size(o.eventType) + size(o.priority) + size(o.sourceGroup)",
+        "expr": "size(o.eventType) + size(o.priority) + size(o.sourceGroup) + size(o.scenario)",
         "$comment": "Сколько условий у строки overrides: чем больше, тем строка специфичнее"
       },
       "overrideMatches": {
@@ -4693,7 +4696,7 @@ window.IM_WORKFLOW = {
           "o": "Override"
         },
         "returns": "bool",
-        "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0]))"
+        "expr": "(size(o.eventType) == 0 || o.eventType[0] == x.eventType) && (size(o.priority) == 0 || o.priority[0] == x.priority) && (size(o.sourceGroup) == 0 || inSourceGroup(x, o.sourceGroup[0])) && (size(o.scenario) == 0 || o.scenario[0] == x.scenario)"
       },
       "overrideAllowed": {
         "params": {
@@ -4701,7 +4704,7 @@ window.IM_WORKFLOW = {
           "o": "Override"
         },
         "returns": "bool",
-        "expr": "(size(o.eventType) == 0 || 'eventType' in t.overridesBy) && (size(o.priority) == 0 || 'priority' in t.overridesBy) && (size(o.sourceGroup) == 0 || 'sourceGroup' in t.overridesBy)",
+        "expr": "(size(o.eventType) == 0 || 'eventType' in t.overridesBy) && (size(o.priority) == 0 || 'priority' in t.overridesBy) && (size(o.sourceGroup) == 0 || 'sourceGroup' in t.overridesBy) && (size(o.scenario) == 0 || 'scenario' in t.overridesBy)",
         "$comment": "§4, правило 2. Строка уточнения учитывается, только если все её признаки — из overridesBy таймера (ARCH-11)"
       },
       "norm": {

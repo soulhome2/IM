@@ -900,6 +900,32 @@
       }
     });
 
+    await step("Норматив реакции по сценарию: у медпункта свой срок в заголовке карточки (§4, ARCH-15)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const keys = window.IM_FIXTURE.scenarios.keys;
+      const reaction = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction");
+      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "selftest" };
+      const timers = window.IM_WORKFLOW.timers.map((t) =>
+        t.id === "reaction" ? Object.assign({}, t, { overrides: t.overrides.concat([{ scenario: keys.medical, priority: 100, sec: 90 }]) }) : t);
+      try {
+        await standReset({ fixture: "demo", workflowPatch: { timers } });
+        const res = await stand.raw("POST", "/test/events", event);
+        expect(res.status === 201, `событие: ${res.status}`);
+        const secOf = (key) => {
+          const c = res.body.incidents.find((x) => x.scenario.scenarioGuid === key);
+          return (Date.parse(c.timer.dueAt) - Date.parse(c.createdAt)) / 1000;
+        };
+        const med = secOf(keys.medical);
+        const fire = secOf(keys.fire);
+        expect(med === 90 && fire === 420, `норматив реакции: медпункт ${med} с (ждали 90), пожар ${fire} с (ждали 420)`);
+        return `медпункт ${med} с, пожар ${fire} с`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Событие через правила: инцидент на каждый сценарий, повтор ничего не создаёт (§14.5, ARCH-15)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
