@@ -1283,10 +1283,26 @@ def check_rights_and_defaults(w, err):
     with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
         text = f.read()
     i = text.index("| Право | Что разрешает |")
-    rights = set(re.findall(r"^\| `([a-z_:]+)` \|", text[i : text.index("\n\n", i)], re.M))
+    block = text[i : text.index("\n\n", i)]
+    rights = set(re.findall(r"^\| `([a-z_:]+)` \|", block, re.M))
     machine = {p["key"] for p in w["permissions"]}
     if rights != machine:
         err.append(f"правила, §5: права {sorted(rights ^ machine)} — только в одном из двух: в правилах или в машине")
+    # Колонка «Право в облаке» — имя права в облаке (cloud у права машины)
+    rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in block.split("\n")]
+    if "Право в облаке" not in rows[0]:
+        err.append("правила, §5: в таблице прав колонка «Право в облаке» не найдена — сверка не работает")
+    else:
+        col = rows[0].index("Право в облаке")
+        cloud = {p["key"]: p.get("cloud") for p in w["permissions"]}
+        for row in rows[2:]:
+            key = re.fullmatch(r"`([a-z_:]+)`", row[0])
+            if not key or key.group(1) not in cloud:
+                continue
+            cell = row[col] if col < len(row) else ""
+            got = m.group(1) if (m := re.fullmatch(r"`([^`]+)`", cell)) else cell
+            if got != cloud[key.group(1)]:
+                err.append(f"правила, §5: {key.group(1)} — в облаке «{got}», в машине «{cloud[key.group(1)]}»")
     words = {"включена": True, "выключена": False, "алерт": "alert", "эскалация": "escalate", "без ограничения": None}
     checks = [
         (r"\| `enabled` \|[^\n]*\| (включена|выключена) \| `escalation\.enabled` \|", w["escalation"]["enabled"], "§9, enabled"),
@@ -1874,7 +1890,11 @@ MUTATIONS = [
     ("timers-machine", "машина: срок удержания не останавливается при объединении", MACHINE,
      '"stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed", "linked"],', '"stopsOnEnter": ["in_progress", "new", "pending_acceptance", "closed"],', "§4"),
     ("rights-list-rules", "§5: в списке прав нет «Обработать несколько как один»", RULES,
-     "| `incident:bulk` | Обработать несколько инцидентов как один |\n", "", "§5"),
+     "| `incident:bulk` | Обработать несколько инцидентов как один | `incident_manager.incidents.bulk.use` |\n", "", "§5"),
+    ("cloud-name-rules", "§5: у «Вернуть в очередь» в колонке «Право в облаке» — имя без use", RULES,
+     "| `incident:release` | Вернуть свой инцидент в очередь; отклонить адресованную передачу | `incident_manager.incidents.release.use` |",
+     "| `incident:release` | Вернуть свой инцидент в очередь; отклонить адресованную передачу | `incident_manager.incidents.release` |",
+     "в облаке «incident_manager.incidents.release»"),
     ("default-max-level", "машина: потолок эскалации 3, в правилах 2", MACHINE, '"maxLevel": 2', '"maxLevel": 3', "§9, max_level"),
     ("default-overdue", "машина: по нормативу закрытия — эскалация, в правилах алерт", MACHINE,
      '"onResolutionOverdue": "alert"', '"onResolutionOverdue": "escalate"', "§9, on_resolution_overdue"),
