@@ -1359,6 +1359,7 @@
     "workflow.error.test.clock_seconds": { "vars": [] },
     "workflow.error.test.bad_incident": { "vars": [] },
     "workflow.error.test.bad_event": { "vars": [] },
+    "workflow.error.test.event_failed": { "vars": ["rule", "scenario"] },
     "workflow.journal.timer_overridden": { "vars": ["timer", "transition"] },
     "workflow.label.unassigned": { "vars": [] },
     "workflow.label.role.system": { "vars": [] },

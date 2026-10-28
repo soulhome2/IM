@@ -1741,7 +1741,8 @@
 
     // Событие проходит через правила (§14.5, intake машины): повтор — прежние инциденты; иначе по инциденту на
     // сценарий подошедших правил, правило-победитель — определения машины (engine.intake), от него приоритет;
-    // порядок создания — по старшинству победителей, номер тревоги — номер первого. Всё или ничего. Не годится — null
+    // порядок создания — по старшинству победителей, номер тревоги — номер первого. Всё или ничего: не создался один —
+    // нет ни инцидентов, ни записи события, ответ — failed (какое правило и сценарий). Запрос не годится — null
     function intakeEvent(spec) {
       const event = eventOf(spec);
       if (!event) return null;
@@ -1754,7 +1755,7 @@
       const created = [];
       for (const [k, pick] of picks.entries()) {
         const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, pick.rule.priority);
-        if (!ev) return null;
+        if (!ev) return { failed: { rule: pick.rule.name || pick.rule.guid, scenario: pick.scenario } };
         created.push(ev);
       }
       commitEvent(event, alarmNumber, created);
@@ -1796,6 +1797,8 @@
           (p, q, body) => {
             const res = intakeEvent(body || {});
             if (!res) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.bad_event"]);
+            // Запрос верный, а инцидент не создался (у правила нет сценария в наборе): ничего не создано и не записано
+            if (res.failed) return problem(422, "FORM_FIELD_INVALID", ["workflow.error.test.event_failed", res.failed]);
             // Создан хоть один — 201; повтор события или не подошло ни одно правило — 200
             return {
               status: res.created.length ? 201 : 200,

@@ -412,6 +412,7 @@
   "workflow.transition.create": "Appeared",
   "workflow.error.test.bad_incident": "A known event type, at least one device, a known rule and a priority — a whole number from 0 to 100 — are required",
   "workflow.error.test.bad_event": "A known event type and at least one device are required; the event guid is a UUID",
+  "workflow.error.test.event_failed": "The event is not processed: rule «{rule}» has no scenario {scenario} in the data set. No incident was created and the event was not recorded",
   "workflow.notice.claim": "{who} took {id}",
   "workflow.notice.transfer": "{who} transferred {id} to you",
   "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",

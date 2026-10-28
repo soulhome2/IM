@@ -1780,6 +1780,39 @@
     incidents.forEach((c) => assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === c.guid), `событие потока incident.created у ${c.number}`));
   });
 
+  test("Порядок создания и номер тревоги — по точности победителя, а не по приоритету; сценарии одного правила — по его списку (§14.5, ARCH-15, решение 2026-10-28)", async () => {
+    // Медпункт с приоритетом ниже пожара: условие точнее (группа против только типа) — всё равно первый и номер тревоги
+    const env = await makeEnv({ fixturePatch: { rules: rulesWith({ [RULE(9)]: { priority: 25 } }) } });
+    const res = await env.call("POST", "/test/events", fireAt(S5));
+    assert.status(res, 201, null, "событие с инцидентами");
+    const order = res.body.incidents.map((c) => [c.number, scenarioOf(c), c.priority]);
+    assert.eq(order, [["INC-1854", KEYS.medical, 25], ["INC-1855", KEYS.fire, 75]], "первым — медпункт (точнее), хотя пожар срочнее");
+    assert.eq(res.body.alarmNumber, "INC-1854", "номер тревоги — номер медпункта, а не самого срочного");
+    // Одно правило с двумя сценариями — два инцидента, по порядку его списка (В4)
+    const both = (scenarios) => [{ guid: RULE("b"), name: "Два сценария", priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios, conditions: [{ eventTypeId: "fire" }] }];
+    for (const scenarios of [[KEYS.medical, KEYS.fire], [KEYS.fire, KEYS.medical]]) {
+      const two = await makeEnv({ fixturePatch: { rules: both(scenarios) } });
+      const got = await two.call("POST", "/test/events", fireAt(S5));
+      assert.status(got, 201, null, "событие с инцидентами");
+      assert.eq(got.body.incidents.map(scenarioOf), scenarios, "сценарии одного правила — по порядку его списка");
+      assert.eq(got.body.incidents.map((c) => c.ruleGuid), [RULE("b"), RULE("b")], "оба — по этому правилу");
+    }
+  });
+
+  test("Событие — всё или ничего: не создался один инцидент — нет ни одного, событие не записано, повтор снова обрабатывается (§14.5, ARCH-15)", async () => {
+    // Третье правило пожара — со сценарием, которого нет в наборе; по ранжированию его инцидент создавался бы последним
+    const broken = { guid: RULE("b"), name: "Без сценария в наборе", priority: 25, createdAt: "2026-09-20T09:00:00Z", scenarios: ["60000000-0000-4000-8000-0000000000ff"], conditions: [{ eventTypeId: "fire" }] };
+    const env = await makeEnv({ fixturePatch: { rules: window.IM_FIXTURE.rules.concat(broken) } });
+    const before = (await env.all("all")).map((e) => e.guid).sort();
+    const body = fireAt(S5, { eventGuid: "70000000-0000-4000-8000-0000000000ee" });
+    for (const attempt of ["первая доставка", "повтор того же события"]) {
+      const res = await env.call("POST", "/test/events", body);
+      assert.status(res, 422, null, attempt);
+      assert.eq(res.body.messageKey, "workflow.error.test.event_failed", `${attempt}: причина — не создался инцидент, а не неверный запрос`);
+      assert.eq((await env.all("all")).map((e) => e.guid).sort(), before, `${attempt}: в очереди нового нет — медпункт и пожар не созданы`);
+    }
+  });
+
   test("Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15)", async () => {
     for (const [patch, priority] of [[null, 100], [{ [RULE("a")]: { priority: 25 } }, 25]]) {
       const env = await makeEnv(patch ? { fixturePatch: { rules: rulesWith(patch) } } : undefined);

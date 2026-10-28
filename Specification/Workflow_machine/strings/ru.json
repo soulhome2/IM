@@ -412,6 +412,7 @@
   "workflow.transition.create": "Появился",
   "workflow.error.test.bad_incident": "Нужны известный тип события, хотя бы одно устройство, известное правило и приоритет — целое от 0 до 100",
   "workflow.error.test.bad_event": "Нужны известный тип события и хотя бы одно устройство; guid события — UUID",
+  "workflow.error.test.event_failed": "Событие не обработано: у правила «{rule}» нет сценария {scenario} в наборе. Не создан ни один инцидент, событие не записано",
   "workflow.notice.claim": "{id} взял в работу {who}",
   "workflow.notice.transfer": "{who} передал {id} вам",
   "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",

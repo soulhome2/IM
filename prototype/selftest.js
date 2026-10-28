@@ -925,7 +925,13 @@
         expect(again.status === 200 && again.body.created === 0 && again.body.alarmNumber === b.alarmNumber, `повтор: ${again.status}, создано ${again.body.created}`);
         expect(again.body.incidents.map((c) => c.guid).join() === b.incidents.map((c) => c.guid).join(), "повтор вернул не те инциденты");
         expect((await count()) === before + 2, "в очереди не два новых инцидента");
-        return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}`;
+        // Порядок — по точности победителя, а не по приоритету (решение 2026-10-28): медпункт с приоритетом 25 — всё равно первый
+        const rules = window.IM_FIXTURE.rules.map((r) => (r.guid === rule(9) ? Object.assign({}, r, { priority: 25 }) : r));
+        await standReset({ fixture: "demo", fixturePatch: { rules } });
+        const low = (await stand.raw("POST", "/test/events", event)).body;
+        const order = low.incidents.map((c) => `${c.scenario.scenarioGuid === keys.medical ? "медпункт" : "пожар"} ${c.priority}`).join(", ");
+        expect(order === "медпункт 25, пожар 75" && low.alarmNumber === low.incidents[0].number, `порядок при медпункте 25: ${order}, тревога ${low.alarmNumber}`);
+        return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}; медпункт 25 — первый`;
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);

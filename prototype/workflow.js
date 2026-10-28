@@ -4027,6 +4027,12 @@ window.IM_WORKFLOW = {
     "workflow.error.test.bad_event": {
       "vars": []
     },
+    "workflow.error.test.event_failed": {
+      "vars": [
+        "rule",
+        "scenario"
+      ]
+    },
     "workflow.journal.timer_overridden": {
       "vars": [
         "timer",

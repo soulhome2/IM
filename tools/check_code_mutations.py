@@ -61,6 +61,10 @@ if GENERATED:
 # (имя, файл, что заменить, на что, чем проверять: api — тесты API, ui — самопроверка, scenario — тесты исполнителя сценариев)
 MUTATIONS = [
     ("form-not-validated", "engine.js", "if (rule.required && empty) {", "if (false) {", "api"),
+    # Порядок создания инцидентов события (§14.5, решение 2026-10-28): по приоритету победителя вместо старшинства; сценарии
+    # одного правила — не по его списку
+    ("intake-order-by-priority", "engine.js", ": beats(x.rule, y.rule) ? -1 : beats(y.rule, x.rule) ? 1 :", ": y.rule.priority !== x.rule.priority ? Number(y.rule.priority - x.rule.priority) :", "api"),
+    ("intake-order-reversed-list", "engine.js", "x.rule.scenarios.indexOf(x.scenario) - y.rule.scenarios.indexOf(y.scenario)", "y.rule.scenarios.indexOf(y.scenario) - x.rule.scenarios.indexOf(x.scenario)", "api"),
     # Значение поля-списка — по правилам формы машины (ARCH-09)
     ("form-list-value-unchecked", "engine.js", "if (!offered) return {", "if (false) return {", "api"),
     ("form-list-hidden-accepted", "engine.js", "          rule.visible &&\n", "", "api"),
