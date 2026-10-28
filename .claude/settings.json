@@ -21,7 +21,6 @@
       "Bash(git fetch)"
     ],
     "ask": [
-      "Bash(git commit *)",
       "Bash(git push *)",
       "mcp__bitbucket__create_pull_request",
       "mcp__bitbucket__update_pull_request",
