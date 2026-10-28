@@ -9,6 +9,7 @@ prototype/shots/
 tests/scenario-examples.js
 Specification/Workflow_machine/TRANSITIONS.md
 Specification/Workflow_machine/SETTINGS.md
+Specification/Workflow_machine/openapi.v30.json
 Specification/Workflow_machine/quint/im.qnt
 Specification/State_rules/archive/
 tools/mutations/MACHINE.md

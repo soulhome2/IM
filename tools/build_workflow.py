@@ -93,6 +93,11 @@ def build_openapi30():
     """Копия контракта в OpenAPI 3.0 для генератора сервера (JSON, отступ 2, LF)."""
     with open(os.path.join(MACHINE, "openapi.json"), encoding="utf-8", newline="") as f:
         spec = openapi30.convert(json.load(f))
+    left = openapi30.leftovers(spec)
+    if left:
+        # Без этой остановки копия молча ушла бы генератору сервера с тем, чего 3.0 не знает
+        raise SystemExit("Specification/Workflow_machine/openapi.v30.json не собрана: в копии остались конструкции "
+                         "OpenAPI 3.1, которых перевод (tools/openapi30.py) не знает:\n  " + "\n  ".join(left))
     note = "Собрано из openapi.json скриптом tools/build_workflow.py (OpenAPI 3.0 для генератора сервера), руками не править."
     spec["info"]["description"] = (spec["info"].get("description", "") + "\n\n" + note).strip()
     return json.dumps(spec, ensure_ascii=False, indent=2) + "\n"

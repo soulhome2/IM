@@ -4,8 +4,10 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_workflow  # noqa: E402
 import openapi30  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +70,25 @@ class Openapi30Test(unittest.TestCase):
         before = json.dumps(spec)
         openapi30.convert(spec)
         self.assertEqual(json.dumps(spec), before)
+
+    def test_info_summary_dropped(self):
+        spec = wrap({"type": "string"})
+        spec["info"]["summary"] = "кратко"
+        out = openapi30.convert(spec)
+        self.assertNotIn("summary", out["info"])
+        self.assertEqual(openapi30.leftovers(spec), ["/info/summary"])
+        self.assertEqual(openapi30.leftovers(out), [])
+
+    def test_standalone_null_reported(self):
+        spec = wrap({"type": "object", "properties": {"x": {"type": "null", "description": "d"}}})
+        self.assertEqual(openapi30.leftovers(spec), ["/components/schemas/S/properties/x/type"])
+
+    def test_build_fails_on_leftovers(self):
+        """Сборка копии падает, если в ней остались конструкции 3.1 (переводчик чего-то не знает)"""
+        with mock.patch.object(build_workflow.openapi30, "convert", lambda spec: spec):
+            with self.assertRaises(SystemExit) as caught:
+                build_workflow.build_openapi30()
+        self.assertIn("openapi.v30.json", str(caught.exception))
 
     def test_whole_contract(self):
         with open(CONTRACT, encoding="utf-8") as f:

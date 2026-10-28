@@ -10,6 +10,10 @@
   examples: [..]                          -> example: первое значение
   const, if / then / else                 -> убираются (проверку делает машина и сервер, не схема)
   $ref рядом с другими полями             -> allOf: [{$ref}] плюс остальные поля
+И вне схем: info.summary (его нет в 3.0)   -> убирается.
+
+Чего перевод не знает, leftovers показывает — например, отдельную схему {"type": "null", ...}: в 3.0 её не
+выразить. Сборка (tools/build_workflow.py) с непустым leftovers падает.
 """
 import copy
 
@@ -32,6 +36,8 @@ def _schema(s, path, found):
             found.append(f"{path}/{key}")
             del s[key]
     t = s.get("type")
+    if t == "null":
+        found.append(f"{path}/type")              # в 3.0 нет; перевод не знает, что с ней делать
     if isinstance(t, list):
         found.append(f"{path}/type")
         rest = [x for x in t if x != "null"]
@@ -82,7 +88,7 @@ def _schema(s, path, found):
     return s
 
 
-def _walk(node, path, found, in_components_schemas=False):
+def _walk(node, path, found):
     """Обход всего документа: схемы лежат под components.schemas и под ключом schema."""
     if isinstance(node, dict):
         for key, val in node.items():
@@ -99,10 +105,19 @@ def _walk(node, path, found, in_components_schemas=False):
             _walk(val, f"{path}/{i}", found)
 
 
+def _document(spec, found):
+    """Перевод всего документа на месте: поля вне схем, затем схемы."""
+    info = spec.get("info")
+    if isinstance(info, dict) and "summary" in info:
+        found.append("/info/summary")
+        del info["summary"]
+    _walk(spec, "", found)
+
+
 def convert(spec):
     """Новая копия контракта в OpenAPI 3.0.3; исходник не меняется."""
     out = copy.deepcopy(spec)
-    _walk(out, "", [])
+    _document(out, [])
     out["openapi"] = "3.0.3"
     return out
 
@@ -110,5 +125,5 @@ def convert(spec):
 def leftovers(spec):
     """Пути конструкций, которых нет в 3.0 (у готовой копии список пуст)."""
     found = []
-    _walk(copy.deepcopy(spec), "", found)
+    _document(copy.deepcopy(spec), found)
     return found
