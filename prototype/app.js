@@ -1581,7 +1581,8 @@
         .join("");
       // Подсказка списка — пустой вариант, который нельзя выбрать обратно (§2.2)
       const empty = hasLbl(field, "placeholder") ? `<option value="" disabled>${escapeHtml(lbl(field, "placeholder"))}</option>` : "";
-      return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select></label>`;
+      // Под списком — предупреждение выбранного варианта (FieldOption.warning, §2.2): выбрать он не мешает
+      return `<label ${box}>${label}<select data-field="${field.name}">${empty}${options}</select><span class="field-warning" data-warning="${field.name}" hidden></span></label>`;
     }
     return `<label ${box}>${label}<textarea rows="3" data-field="${field.name}" placeholder="${escapeHtml(
       lbl(field, "placeholder")
@@ -1607,6 +1608,13 @@
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
       if (label) label.textContent = lbl(field) + (visible && fieldRequired(field, values) ? " *" : "");
+      const warn = $("dialogFields").querySelector(`[data-warning="${field.name}"]`);
+      if (warn) {
+        const picked = (field.options || []).find((o) => o.id === values[field.name]);
+        const w = picked && picked.warning;
+        warn.textContent = w ? say(w.key, w.vars) : "";
+        warn.hidden = !w;
+      }
     });
   }
 

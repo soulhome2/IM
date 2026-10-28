@@ -576,8 +576,10 @@
         fieldOptions[field.name] = {
           options: field.options.map((o) => {
             const reason = o.why ? say([o.why]) : null;
+            // Предупреждение варианта (§2.2, ARCH-15) — первое подходящее из машины; выбрать вариант не мешает
+            const warning = say(o.warning);
             return Object.assign(
-              { id: o.id, label: render(o.label), disabled: Boolean(o.disabled), reason: reason ? reason.text : null },
+              { id: o.id, label: render(o.label), disabled: Boolean(o.disabled), reason: reason ? reason.text : null, warning },
               o.role != null ? { role: o.role, available: o.available !== false, availabilityLabel: o.availabilityLabel || null } : {}
             );
           }),
@@ -1356,8 +1358,11 @@
         const options = f.options
           .filter((o) => others.every((x) => x.options.some((y) => y.id === o.id)))
           .map((o) => {
-            const off = [o].concat(others.map((x) => x.options.find((y) => y.id === o.id))).find((y) => y.disabled);
-            return off ? Object.assign({}, o, { disabled: true, reason: off.reason }) : o;
+            const same = [o].concat(others.map((x) => x.options.find((y) => y.id === o.id)));
+            const off = same.find((y) => y.disabled);
+            // Предупреждение — первое у отмеченных по порядку: хоть у одного есть — показывается
+            const warned = same.find((y) => y.warning);
+            return Object.assign({}, o, off ? { disabled: true, reason: off.reason } : {}, { warning: warned ? warned.warning : null });
           });
         const d = f.defaultValue;
         fieldOptions[name] = { options, defaultValue: d && others.every((x) => x.defaultValue === d) && options.some((o) => o.id === d && !o.disabled) ? d : null };

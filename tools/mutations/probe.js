@@ -588,6 +588,20 @@
       const sec = med ? (Date.parse(med.timer.dueAt) - Date.parse(med.createdAt)) / 1000 : null;
       return [sec === 240, `норматив реакции медпункта в торговом центре: ${sec === null ? res.status : sec} с`];
     },
+    // «Дубликат» при соседях (§2.2, ARCH-15): у пожара INC-1847 набора есть сосед — медпункт INC-1853. По машине у «Дубликата»
+    // в форме «Закрыть без обработки» предупреждение о соседях; если условие предупреждения сломано — его нет
+    async "duplicate-warning-off"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      await stand.raw("POST", "/test/reset", { fixture: "demo" });
+      const guid = window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1847").guid;
+      const before = await stand.raw("GET", `/operator/incidents/${guid}`);
+      await stand.raw("POST", `/operator/incidents/${guid}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      const card = await stand.raw("GET", `/operator/incidents/${guid}`);
+      const close = card.body && (card.body.actions || []).find((a) => a.id === "close");
+      const dup = close && close.fieldOptions ? close.fieldOptions.resultId.options.find((o) => o.id === "duplicate") : null;
+      return [Boolean(dup) && dup.warning === null, `предупреждение «Дубликата» у INC-1847: ${dup ? JSON.stringify(dup.warning && dup.warning.key) : `нет варианта (${card.status})`}`];
+    },
   };
 
   setTimeout(async () => {

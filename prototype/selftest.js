@@ -1016,6 +1016,53 @@
       }
     });
 
+    await step("Дубликат при соседях: предупреждение под списком результатов, закрыть можно (§2.2, ARCH-15)", async () => {
+      // Взять и открыть «Закрыть без обработки»; warning() — видимое предупреждение под списком результатов
+      const warning = () => {
+        const el = $("dialogFields").querySelector('[data-warning="resultId"]');
+        return el && !el.hidden ? el.textContent : "";
+      };
+      async function closeForm(number) {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", guidOf(number));
+        expect(claim, `у ${number} нет «Взять»`);
+        await click(claim);
+        expect(mode() === "work", `карточка ${number} не открылась`);
+        const close = button(root(), "close");
+        expect(close, `в карточке ${number} нет «Закрыть без обработки»`);
+        await click(close);
+        expect(!$("modalDialog").hidden, `форма закрытия ${number} не открылась`);
+      }
+      try {
+        // Тревога INC-1847 набора: у пожара INC-1847 сосед — медпункт INC-1853
+        await closeForm("INC-1847");
+        expect(!warning(), `предупреждение без выбранного результата: «${warning()}»`);
+        await setField("resultId", "duplicate");
+        const text = warning();
+        expect(/другие службы той же тревоги/.test(text), `у «Дубликата» нет предупреждения о соседях: «${text}»`);
+        expect(/\(1\)/.test(text), `число соседей в предупреждении: «${text}»`);
+        await setField("resultId", "false_alarm");
+        expect(!warning(), `у «Ложной тревоги» — предупреждение: «${warning()}»`);
+        // Предупреждение не запрещает: «Дубликат» с комментарием закрывает
+        await setField("resultId", "duplicate");
+        await confirmDialog(NOTE);
+        expect(mode() === "queue", "«Дубликатом» не закрылось");
+        // INC-1851 — без соседей
+        await closeForm("INC-1851");
+        await setField("resultId", "duplicate");
+        expect(!warning(), `у INC-1851 соседей нет, а предупреждение есть: «${warning()}»`);
+        document.querySelector('[data-close="modalDialog"]').click();
+        await wait();
+        return text;
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".badge.foreign"));

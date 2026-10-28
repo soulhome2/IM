@@ -242,6 +242,7 @@
   "workflow.form.close.note.1": "Scenario filled in: {filledSteps} of {totalSteps}.",
   "workflow.form.close.field.resultId": "Outcome",
   "workflow.form.close.field.resultId.placeholder": "Select a result",
+  "workflow.form.close.warn.duplicate_siblings": "This event has other incidents ({n}) — they are other services of the same alarm, not duplicates. You can close this one; it will not close them",
   "workflow.form.close.field.causeId": "Failure cause",
   "workflow.form.close.field.causeId.placeholder": "Select a cause",
   "workflow.form.close.field.comment": "Comment",

@@ -727,5 +727,12 @@
   "find": "overrideKeys(o) * 2 + size(o.scenario)",
   "replace": "overrideKeys(o)",
   "model": "мир модели: нормативы по сценарию в модели не различаются"
+ },
+ {
+  "name": "duplicate-warning-off",
+  "what": "у «Дубликата» нет предупреждения о соседях, даже когда они есть (§2.2, ARCH-15)",
+  "find": "\"expr\": \"option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0\"",
+  "replace": "\"expr\": \"false\"",
+  "model": "вне модели: правило интерфейса"
  }
 ]

@@ -778,7 +778,17 @@ window.IM_WORKFLOW = {
           "disabledKey": "workflow.guard.required_steps",
           "defaultExpr": "stepsFilled(incident, 'closing') ? 'processed' : ''",
           "placeholderKey": "workflow.form.close.field.resultId.placeholder",
-          "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultExpr или вариант один"
+          "warnings": [
+            {
+              "expr": "option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0",
+              "textKey": "workflow.form.close.warn.duplicate_siblings",
+              "vars": {
+                "n": "size(siblingsOf(incident).filter(s, hasAccess(me, s)))"
+              },
+              "$comment": "§2.2, §7, ARCH-15 (В7). Инцидент того же события другой службы — не дубликат: у «Дубликата» предупреждение, если есть видимые соседи — и закрытые тоже. Только предупреждение: закрыть можно, соседей это не закрывает"
+            }
+          ],
+          "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultExpr или вариант один. warnings — предупреждение варианта: первое подходящее, выбрать вариант оно не мешает"
         },
         {
           "name": "causeId",

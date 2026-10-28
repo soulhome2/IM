@@ -147,6 +147,14 @@ def override_scenario_tie_lost(w):
     d["expr"] = "overrideKeys(o)"
 
 
+def duplicate_warning_off(w):
+    """Порча duplicate-warning-off из tools/mutations/machine.json: условие предупреждения «Дубликата» о соседях — false (§2.2, ARCH-15)."""
+    form = next(f for f in w["forms"] if f["id"] == "close")
+    warning = next(x for x in form["fields"] if x["name"] == "resultId")["warnings"][0]
+    assert "siblingsOf(incident)" in warning["expr"]
+    warning["expr"] = "false"
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -217,6 +225,7 @@ MUTATIONS = [
     ("intake-priority-first", "выбор правила по событию: приоритет раньше точности условия (§14.5, ARCH-15)", intake_priority_first),
     ("override-scenario-ignored", "строка норматива со сценарием действует на любой сценарий (§4, правило 2; ARCH-15)", override_scenario_ignored),
     ("override-scenario-tie-lost", "при равном числе условий строка со сценарием не точнее (§4, правило 2; ARCH-15)", override_scenario_tie_lost),
+    ("duplicate-warning-off", "у «Дубликата» нет предупреждения о соседях (§2.2, ARCH-15)", duplicate_warning_off),
 ]
 
 

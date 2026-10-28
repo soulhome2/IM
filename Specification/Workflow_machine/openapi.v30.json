@@ -3039,6 +3039,34 @@
           "placeholderKey": {
             "type": "string",
             "description": "§14.9. Ключ подсказки в пустом поле, например `workflow.form.close.field.comment.placeholder`."
+          },
+          "warnings": {
+            "type": "array",
+            "description": "Предупреждения варианта поля-списка (ARCH-15): первое, чьё `expr` истинно, сервер отдаёт в `FieldOption.warning`. Выбрать вариант оно не мешает. Пример у «Дубликата»: `option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0`",
+            "items": {
+              "type": "object",
+              "required": [
+                "expr",
+                "textKey"
+              ],
+              "properties": {
+                "expr": {
+                  "type": "string",
+                  "description": "Выражение CEL над вариантом `option`: предупреждение относится к нему"
+                },
+                "textKey": {
+                  "type": "string",
+                  "description": "§14.9. Ключ текста предупреждения, например `workflow.form.close.warn.duplicate_siblings`"
+                },
+                "vars": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Подстановки в текст: имя → выражение CEL"
+                }
+              }
+            }
           }
         },
         "description": "Поле формы перехода в машине. Правила поля — выражения CEL (CEL.md, «Правила интерфейса»); вычисляет их сервер: варианты и значение по умолчанию — в `AvailableAction.fieldOptions`, видно ли поле и обязательно ли — в `AvailableAction.fieldRules`. Клиент выражений не вычисляет"
@@ -5828,6 +5856,24 @@
             "type": "string",
             "description": "Почему вариант недоступен, например «Заполните обязательные шаги закрытия»",
             "nullable": true
+          },
+          "warning": {
+            "description": "Предупреждение варианта — первое подходящее из warnings поля машины; нет — null. Выбрать вариант оно не мешает, сервер такой вариант не отклоняет. Интерфейс показывает предупреждение выбранного варианта под полем. Пример — у «Дубликата» формы «Закрыть», если у инцидента есть видимые оператору соседи, и закрытые тоже (§2.2, ARCH-15): ключ workflow.form.close.warn.duplicate_siblings, n — сколько их. На выборке — первое предупреждение варианта у отмеченных",
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "vars": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Подстановки. Значение, которое само переводится, — ключ каталога (§14.9)"
+              }
+            }
           },
           "role": {
             "type": "string",

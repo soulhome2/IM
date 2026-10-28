@@ -109,6 +109,15 @@ for (const f of rt ? W.forms : []) {
     });
     if (field.enabledExpr != null && !field.disabledKey) err.push(`${at}: есть enabledExpr, нет disabledKey — какую причину давать`);
     if ((field.optionExpr != null || field.enabledExpr != null || field.defaultExpr != null) && !field.source) err.push(`${at}: правила вариантов у поля без source`);
+    // Предупреждения варианта (ARCH-15): как правила вариантов — от значений формы не зависят, у поля-списка, с текстом
+    (field.warnings || []).forEach((w, i) => {
+      const wat = `${at}.warnings.${i}`;
+      if (!field.source) err.push(`${wat}: предупреждение варианта у поля без source`);
+      if (!w.textKey) err.push(`${wat}: нет textKey — какой текст показывать`);
+      [`${wat}.expr`, ...Object.keys(w.vars || {}).filter((k) => !k.startsWith("$")).map((k) => `${wat}.vars.${k}`)].forEach((r) => {
+        if (rt.formRefs(r).length) err.push(`${r}: читает значения формы — предупреждение варианта от них не зависит`);
+      });
+    });
   });
   (f.notes || []).forEach((n, i) => rt.formRefs(`forms.${f.id}.notes.${i}.expr`).length && err.push(`forms.${f.id}.notes.${i}: пояснение читает значения формы`));
 }

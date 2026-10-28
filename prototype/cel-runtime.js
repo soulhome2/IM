@@ -246,6 +246,11 @@
         [["visibleExpr", "bool"], ["optionExpr", "bool"], ["enabledExpr", "bool"], ["defaultExpr", "string"]].forEach(([k, t]) => {
           if (field[k] != null) uiRule(`${at}.${k}`, field[k], t);
         });
+        // Предупреждения варианта (ARCH-15): условие и подстановки в текст — над теми же именами, с option
+        (field.warnings || []).forEach((w, i) => {
+          uiRule(`${at}.warnings.${i}.expr`, w.expr, "bool");
+          own(w.vars).forEach(([k, e]) => uiRule(`${at}.warnings.${i}.vars.${k}`, e));
+        });
       });
     });
     // Значение правила: scope — как у условий (и actions — у пояснений карточки), option — вариант поля

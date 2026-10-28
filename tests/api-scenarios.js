@@ -1982,6 +1982,47 @@
     assert.eq(by, ["INC-1853"], "по номеру соседа — только он: его номер тревоги — не его номер");
   });
 
+  // Предупреждения вариантов результата в форме «Закрыть без обработки» карточки: id → ключ или null
+  const closeWarnings = async (env, guid) =>
+    Object.fromEntries(actionOf(await env.card(guid), "close").fieldOptions.resultId.options.map((o) => [o.id, o.warning ? o.warning.key : null]));
+
+  test("Дубликат при соседях: предупреждение у варианта, закрытие не запрещено; без соседей — без предупреждения (§2.2, §7, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const fire = await env.guidOf("INC-1847");
+    const med = await env.guidOf("INC-1853");
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    const options = actionOf(await env.card(fire), "close").fieldOptions.resultId.options;
+    const dup = options.find((o) => o.id === "duplicate");
+    assert.ok(dup && dup.warning, "у «Дубликата» есть предупреждение");
+    assert.eq([dup.warning.key, dup.warning.vars.n], ["workflow.form.close.warn.duplicate_siblings", 1], "ключ и число соседей");
+    assert.ok(/другие службы той же тревоги/.test(dup.warning.text), `текст предупреждения: «${dup.warning.text}»`);
+    assert.eq(options.filter((o) => o.id !== "duplicate").map((o) => [o.id, o.warning]), options.filter((o) => o.id !== "duplicate").map((o) => [o.id, null]), "у остальных вариантов — null");
+    const res = await env.act(fire, "close", { resultId: "duplicate", comment: "тест" });
+    assert.status(res, 200, null, "закрыть INC-1847 «Дубликатом»");
+    assert.eq([res.body.incident.state, res.body.incident.closeResultId], ["closed", "duplicate"], "закрыт «Дубликатом»");
+    assert.eq((await env.card(med)).state, "new", "сосед INC-1853 не тронут");
+    // Закрытый сосед — тоже другая служба той же тревоги: в число входит
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    const back = actionOf(await env.card(med), "close").fieldOptions.resultId.options.find((o) => o.id === "duplicate");
+    assert.eq([back.warning && back.warning.key, back.warning && back.warning.vars.n], ["workflow.form.close.warn.duplicate_siblings", 1], "у INC-1853 сосед INC-1847 закрыт — предупреждение есть");
+    // Без соседей — без предупреждения
+    const solo = await env.guidOf("INC-1851");
+    assert.status(await env.act(solo, "claim", {}, "queue"), 200, null, "взять INC-1851");
+    assert.eq((await closeWarnings(env, solo)).duplicate, null, "у INC-1851 соседей нет — предупреждения нет");
+  });
+
+  test("Дубликат: невидимый сосед не даёт предупреждения (§5, ARCH-15)", async () => {
+    // Медпункт — на датчике дыма 2 (главный офис): оператору ТЦ его не видно
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.incidents.find((i) => i.number === "INC-1853").devices = [S2];
+    const env = await makeEnv({ fixturePatch: { incidents: fixture.incidents } });
+    const fire = await env.guidOf("INC-1847");
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    assert.eq((await closeWarnings(env, fire)).duplicate, "workflow.form.close.warn.duplicate_siblings", "со всеми объектами — сосед виден, предупреждение есть");
+    assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "только ТЦ");
+    assert.eq((await closeWarnings(env, fire)).duplicate, null, "сосед не виден — предупреждения нет");
+  });
+
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {
     // Пять уровней, ни одного прежнего числа; у двух — один цвет; свои нормативы — только у двух
     const levels = [

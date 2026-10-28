@@ -242,6 +242,7 @@
   "workflow.form.close.note.1": "Сценарий заполнен: {filledSteps} из {totalSteps}.",
   "workflow.form.close.field.resultId": "Результат",
   "workflow.form.close.field.resultId.placeholder": "Выберите результат",
+  "workflow.form.close.warn.duplicate_siblings": "У этого события есть ещё инциденты ({n}) — это другие службы той же тревоги, а не дубликаты. Закрыть можно, их это не закроет",
   "workflow.form.close.field.causeId": "Причина сбоя",
   "workflow.form.close.field.causeId.placeholder": "Выберите причину",
   "workflow.form.close.field.comment": "Комментарий",

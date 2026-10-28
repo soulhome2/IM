@@ -631,6 +631,16 @@
       return catalog ? catalog.items.map((i) => ({ id: i.id, label: i.labelKey })) : [];
     }
 
+    // Предупреждение варианта поля (warnings машины, ARCH-15): первое, чьё условие истинно, — [ключ, подстановки];
+    // нет — null. Выбрать вариант оно не мешает
+    function warningOf(f, field, scope, option) {
+      const i = (field.warnings || []).findIndex((w, k) => ruleOf(fieldAt(f, field, `warnings.${k}.expr`), scope, option));
+      if (i < 0) return null;
+      const w = field.warnings[i];
+      const vars = Object.fromEntries(Object.keys(w.vars || {}).filter((k) => !k.startsWith("$")).map((k) => [k, cel.out(cel.rule(fieldAt(f, field, `warnings.${i}.vars.${k}`), scope, option))]));
+      return [w.textKey, vars];
+    }
+
     // Форма перехода под оператора и инцидент: варианты полей — те, что пропускает optionExpr, недоступные по
     // enabledExpr — с причиной disabledKey; значение по умолчанию — defaultExpr, если это доступный вариант.
     // rules — видно ли поле и обязательно ли; зависит от поля формы — таблицей по его вариантам (dependsOn, byValue)
@@ -642,7 +652,8 @@
         if (!field.source) return { field, options: null, defaultValue: null };
         const options = candidates(field, ev)
           .filter((o) => field.optionExpr == null || ruleOf(fieldAt(f, field, "optionExpr"), scope, o.id))
-          .map((o) => (field.enabledExpr == null || ruleOf(fieldAt(f, field, "enabledExpr"), scope, o.id) ? o : Object.assign({}, o, { disabled: true, why: field.disabledKey })));
+          .map((o) => (field.enabledExpr == null || ruleOf(fieldAt(f, field, "enabledExpr"), scope, o.id) ? o : Object.assign({}, o, { disabled: true, why: field.disabledKey })))
+          .map((o) => (field.warnings ? Object.assign({}, o, { warning: warningOf(f, field, scope, o.id) }) : o));
         const d = field.defaultExpr != null ? cel.rule(fieldAt(f, field, "defaultExpr"), scope) : "";
         return { field, options, defaultValue: d && options.some((o) => o.id === d && !o.disabled) ? d : null };
       });
