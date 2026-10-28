@@ -25,7 +25,7 @@ RULES = os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md")
 SECTION = re.compile(r"§\s?(\d+(?:\.\d+)*)")
 HEADING = re.compile(r"^##+ (\d+(?:\.\d+)?)\.? ", re.M)
 # Где «§» — не правила: архив и прошлые ревью, разделы дизайн-кита, собранные копии машины
-SKIP_DIRS = {"archive", "reviews", "node_modules"}
+SKIP_DIRS = {"archive", "reviews", "node_modules", "graphify-out"}  # graphify-out — локальный граф кода, не в git
 SKIP_FILES = {
     os.path.join("prototype", "README.md"),
     os.path.join("prototype", "workflow.js"),

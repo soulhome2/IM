@@ -1,0 +1,14 @@
+# Что graphify не берёт в граф: собранные файлы (исходник — машина, контракт, эталон; см. CLAUDE.md),
+# чужие библиотеки, снимки экранов и архив правил
+prototype/workflow.js
+prototype/openapi.js
+prototype/fixture.js
+prototype/strings.js
+prototype/vendor/
+prototype/shots/
+tests/scenario-examples.js
+Specification/Workflow_machine/TRANSITIONS.md
+Specification/Workflow_machine/SETTINGS.md
+Specification/Workflow_machine/quint/im.qnt
+Specification/State_rules/archive/
+tools/mutations/MACHINE.md
