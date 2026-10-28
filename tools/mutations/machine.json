@@ -738,7 +738,7 @@
  {
   "name": "bulk-close-all-scenarios",
   "what": "«Закрыть без обработки» на выборке закрывает отмеченные всех сценариев, а не только сценария основного (§11.1, ARCH-15)",
-  "find": ",\n        \"scope\": \"primaryScenario\"",
+  "find": ",\n        \"scope\": \"primaryScenario\",\n        \"scopeNoteKey\": \"workflow.form.close.bulk.note.scenario\",\n        \"skippedReasonKey\": \"workflow.error.selection.other_scenario\"",
   "replace": "",
   "model": "вне модели: выборки в модели нет"
  },

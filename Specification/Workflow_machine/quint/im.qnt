@@ -369,12 +369,12 @@ module im {
   def ruleMatches(r: Rule, e: Event): bool =
     ((r.scenarios.length() > 0) and r.conditions.foldl(false, (acc, c_64) => acc or conditionMatches(c_64, e)))
 
-  // §14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил
+  // §14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил, а он задан intake.ruleOrder (по guid), не порядком строк в базе
 
   def ruleBeats(a: Rule, b: Rule, e: Event): bool =
     { val ra_65 = ruleRank(a, e)  { val rb_66 = ruleRank(b, e)  ((ra_65 > rb_66) or ((ra_65 == rb_66) and ((a.priority > b.priority) or ((a.priority == b.priority) and (a.createdAt < b.createdAt))))) } }
 
-  // §14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка. От него приоритет и ruleGuid инцидента
+  // §14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка — rules упорядочены по intake.ruleOrder. От него приоритет и ruleGuid инцидента
 
   def ruleFor(rules: List[Rule], e: Event, s: str): List[Rule] =
     { val ms_67 = rules.select(r_68 => (ruleMatches(r_68, e) and r_68.scenarios.foldl(false, (acc, y69) => acc or y69 == s)))  ms_67.select(r_70 => not(ms_67.foldl(false, (acc, o_71) => acc or ruleBeats(o_71, r_70, e)))) }

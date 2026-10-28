@@ -330,7 +330,15 @@ MUTATIONS = [
     ("window-breach-not-shared", "engine.js", "canceled.tr.effects.filter((x) => x.fn === \"recordBreach\")", "[]", "api"),
     # Журнал срока группы (RULE-98)
     ("linked-timer-shown", "server.js", "      if (isDone(ev) || ev.state === \"linked\") return null;", "      if (isDone(ev)) return null;", "api"),
-    ("linked-version-not-bumped", "server.js", "      onBreachShared: (ev) => touch([ev]),", "      onBreachShared: () => {},", "api"),
+    ("linked-version-not-bumped", "server.js", "      onBreachShared: (ev, who) => {\n        touch([ev]);\n", "      onBreachShared: (ev, who) => {\n", "api"),
+    # Сосед закрыт «Ложной тревогой» (§6.1, ARCH-15): событие потока о новой версии — только адресату, не всем, кто видит
+    ("sibling-viewers-no-event", "server.js", "        emit(\"journal.appended\", ev, who || \"dispatcher\", {});\n", "", "api"),
+    # Полное равенство правил (§14.5, intake.ruleOrder): порядок строк набора вместо guid
+    ("intake-tie-by-list-order", "engine.js", "const ordered = rules.slice().sort(", "const ordered = rules.slice() || [].sort(", "api"),
+    # Пропущенные другого сценария (bulk.skippedReasonKey машины): причина не та
+    ("bulk-skipped-reason-key", "server.js", "reasonKey: bulkTr.bulk.skippedReasonKey", "reasonKey: bulkTr.bulk.scopeNoteKey", "api"),
+    # Форма «Массового сбоя» на выборке двух сценариев: пояснение области (bulk.scopeNoteKey) не узнано — в заголовке все отмеченные
+    ("ui-bulk-scope-note-ignored", "app.js", "a.formNote.key === noteKey ? a.formNote : null", "a.formNote.key === \"\" ? a.formNote : null", "ui"),
     ("ui-select-by-filter-menu-dead", "app.js", "      openFilter(state.groupId || \"all\");\n", "", "ui"),
     ("ui-absence-hidden", "app.js", 'o.available === false && o.availabilityLabel ? t(o.availabilityLabel) : ""', '""', "ui"),
     ("ui-target-typing-keeps-pick", "app.js", '      input.parentElement.querySelector("[data-field]").value = "";\n', "", "ui"),

@@ -326,8 +326,10 @@
             const id = target.id;
             after.push(() => ctx.onEvict && ctx.onEvict(real(id), who, transitionId, by));
           } else if (action === "touch") {
+            // Новая версия и событие потока всем, кому инцидент виден: кто выполнил переход — actor события
             const id = target.id;
-            after.push(() => ctx.onBreachShared && ctx.onBreachShared(real(id)));
+            const who = cur.actor;
+            after.push(() => ctx.onBreachShared && ctx.onBreachShared(real(id), who));
           }
         },
       };
@@ -472,11 +474,14 @@
       );
     // Какие инциденты даёт событие: по сценарию подошедших правил (intake.match) — правило-победитель (первое из
     // intake.winner). Порядок создания — чей победитель старше (ruleBeats), сценарии одного правила — по его списку,
-    // полное равенство — порядок списка правил. Ответ — [{ scenario, rule }] с правилами сервера; пусто — инцидентов нет
+    // полное равенство — порядок списка правил, а его задаёт машина (intake.ruleOrder, по guid), не порядок в наборе.
+    // Ответ — [{ scenario, rule }] с правилами сервера; пусто — инцидентов нет
     function intake(rules, event) {
       const I = W.intake;
       const e = cel.value("Event", event);
-      const all = rules.map(celRule);
+      const key = (r) => String(r[I.ruleOrder]).toLowerCase();
+      const ordered = rules.slice().sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+      const all = ordered.map(celRule);
       const scenarios = [...new Set(all.filter((r) => def(I.match, r, e)).flatMap((r) => Array.from(r.scenarios)))];
       const picks = scenarios.map((s) => ({ scenario: s, rule: def(I.winner, all, e, s)[0] }));
       const beats = (a, b) => def("ruleBeats", a, b, e);

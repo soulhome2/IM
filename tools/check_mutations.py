@@ -160,7 +160,8 @@ def bulk_close_all_scenarios(w):
     закрываются отмеченные всех сценариев (§11.1, ARCH-15)."""
     bulk = transition(w, "close")["bulk"]
     assert bulk.get("scope") == "primaryScenario"
-    del bulk["scope"]
+    for key in ("scope", "scopeNoteKey", "skippedReasonKey"):
+        bulk.pop(key, None)
 
 
 def sibling_notice_any_result(w):

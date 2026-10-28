@@ -956,7 +956,12 @@
         const low = (await stand.raw("POST", "/test/events", event)).body;
         const order = low.incidents.map((c) => `${c.scenario.scenarioGuid === keys.medical ? "медпункт" : "пожар"} ${c.priority}`).join(", ");
         expect(order === "медпункт 25, пожар 75" && low.alarmNumber === low.incidents[0].number, `порядок при медпункте 25: ${order}, тревога ${low.alarmNumber}`);
-        return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}; медпункт 25 — первый`;
+        // Правила равны во всём — решает guid (intake.ruleOrder машины), а не порядок строк набора
+        const tie = (tail, scenario) => ({ guid: rule(tail), name: `ничья ${tail}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [scenario], conditions: [{ eventTypeId: "fire" }] });
+        await standReset({ fixture: "demo", fixturePatch: { rules: [tie("e", keys.fire), tie("d", keys.medical)] } });
+        const tied = (await stand.raw("POST", "/test/events", event)).body;
+        expect(tied.incidents.map((c) => c.ruleGuid).join() === [rule("d"), rule("e")].join(), `при равенстве правил первым — не меньший guid: ${tied.incidents.map((c) => c.ruleGuid).join(", ")}`);
+        return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}; медпункт 25 — первый; равенство — по guid`;
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
@@ -3009,12 +3014,13 @@
     await step("Привязанных много — на вкладке «Привязанные инциденты» постранично; поиск по номеру привязанного — строка основного и страница найденного; «Отсоединить все» — со всех страниц (§11)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      // Ещё девять пожаров рядом с INC-1847 — копии с другими номерами
+      // Ещё четырнадцать пожаров рядом с INC-1847 — копии с другими номерами; у каждой своё событие и своя тревога (ARCH-15)
       const fx = window.IM_FIXTURE;
       const base = fx.incidents.find((i) => i.number === "INC-1847");
-      const extra = Array.from({ length: 14 }, (_, k) =>
-        Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
-      );
+      const extra = Array.from({ length: 14 }, (_, k) => {
+        const n = `99${String(k).padStart(2, "0")}`;
+        return Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-00000000${n}`, number: `INC-${n}`, eventGuid: `70000000-0000-4000-8000-00000000${n}`, alarmNumber: `INC-${n}` });
+      });
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo", fixturePatch: { incidents: fx.incidents.concat(extra) } });
       await wait(400);

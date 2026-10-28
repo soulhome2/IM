@@ -339,7 +339,12 @@
       },
       // Инцидент изменился не своим переходом (действие мира touch): нарушение основного записано тому, кто был
       // в группе (recordBreach, §11.4, BUG-73), запись о закрытом «Ложной тревогой» соседе (notifySiblings, ARCH-15) — новая версия
-      onBreachShared: (ev) => touch([ev]),
+      // и journal.appended всем, кому он виден, а не только адресату: карточка и выборка у них обновятся до следующего
+      // действия, и оно не получит неожиданный 412
+      onBreachShared: (ev, who) => {
+        touch([ev]);
+        emit("journal.appended", ev, who || "dispatcher", {});
+      },
       // Карточку увели (§9): в событии — кто выполнил переход и какой, по нему клиент называет причину (BUG-86).
       // Только если она открыта у оператора стенда (контракт, BUG-105). Свой перерыв и выход карточку не уводят — в машине
       onEvict: (ev, who, transitionId, by) => {
@@ -1370,7 +1375,8 @@
       const view = sharedFormOf(tr, scope.list);
       if (!scope.skipped.length) return view;
       const key = scenarioKey(scope.primary);
-      const note = say(["workflow.form.close.bulk.note.scenario", { scenario: scenarioName(key) || key || "", n: scope.list.length, total, skipped: scope.skipped.length }]);
+      // Ключ пояснения — машины (bulk.scopeNoteKey): по нему клиент узнаёт, что закроются не все отмеченные
+      const note = say([tr.bulk.scopeNoteKey, { scenario: scenarioName(key) || key || "", n: scope.list.length, total, skipped: scope.skipped.length }]);
       return Object.assign(view, { formNote: { text: note.text, key: note.key, vars: note.vars } });
     }
     function sharedFormOf(tr, list) {
@@ -1499,7 +1505,7 @@
           // Только те, кого действие касается (bulk.scope машины, §11.1, ARCH-15) — сервер проверяет сам, а не верит
           // панели: другой сценарий, чем у основного выборки, — в skipped, не меняется (ни версии, ни журнала)
           const scope = bulkScope(bulkTr, list);
-          const skipped = scope.skipped.map((ev) => ({ incidentGuid: ev.id, number: ev.number, reasonKey: "workflow.error.selection.other_scenario" }));
+          const skipped = scope.skipped.map((ev) => ({ incidentGuid: ev.id, number: ev.number, reasonKey: bulkTr.bulk.skippedReasonKey }));
           scope.list.forEach((ev) => {
             // Изменился после отметки — не трогается: устаревшая выборка не перебивает сделанное после неё (BUG-84)
             if (changedSince(ev, body.expectedVersions)) return failed.push({ incidentGuid: ev.id, problem: conflict(ev).body });

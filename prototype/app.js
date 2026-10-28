@@ -1336,8 +1336,11 @@
     state.dialog.bulkIds = guids;
     // Закроются не все отмеченные — только сценария основного (bulk.scope машины, §11.1, ARCH-15): пояснение — от
     // сервера (сколько закроется, сколько останется открытыми), в заголовке и на кнопке — сколько закроется
+    // Узнаётся по ключу пояснения из машины (bulk.scopeNoteKey перехода), а не по строке в коде
     const a = actionOf(ev, id);
-    const scoped = a && a.formNote && a.formNote.key === "workflow.form.close.bulk.note.scenario" ? a.formNote : null;
+    const bulk = (transitionDef(id) || {}).bulk || {};
+    const noteKey = bulk.scopeNoteKey;
+    const scoped = noteKey && a && a.formNote && a.formNote.key === noteKey ? a.formNote : null;
     const copy = bulkCopy(id, scoped ? scoped.vars.n : guids.length);
     if (copy) {
       $("dialogTitle").textContent = copy.title;

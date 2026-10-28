@@ -58,6 +58,7 @@ def check_workflow(w, err):
     timers = {t["id"] for t in w["timers"]}
     catalogs = set(w["reasonCatalogs"])
     step_sets = {k for k in w["stepSets"] if not k.startswith("$")}
+    ru_keys = set(load(os.path.join("strings", "ru.json")))
     transitions = {t["id"] for t in w["transitions"]}
 
     for name, ids in [
@@ -127,6 +128,12 @@ def check_workflow(w, err):
         # Пояснение формы и уведомление о пропущенных написаны про «Закрыть без обработки» (§11.1, ARCH-15, В8)
         if "scope" in b and t["id"] != "close":
             err.append(f"переход {t['id']}: bulk.scope — только у close: пояснение формы и уведомление о пропущенных — про закрытие")
+        # Тексты области — ключами машины, а не строками в коде сервера и клиента (как ui.bulkDoneKey)
+        for k in ("scopeNoteKey", "skippedReasonKey"):
+            if "scope" in b and not (isinstance(b.get(k), str) and b[k] in ru_keys):
+                err.append(f"переход {t['id']}: bulk.{k} — нужен ключ каталога строк при bulk.scope (§11.1, §14.9), а не {b.get(k)!r}")
+            if k in b and "scope" not in b:
+                err.append(f"переход {t['id']}: bulk.{k} без bulk.scope")
     for f in w["forms"]:
         for field in f["fields"]:
             src = field.get("source", "")
@@ -576,6 +583,10 @@ def check_intake(w, err):
     key = intake.get("uniqueKey")
     if not isinstance(key, list) or not key or any(k not in fields for k in key):
         err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
+    # Полное равенство в ruleBeats решает порядок списка правил: он задан машиной, а не порядком строк в базе
+    rule = w.get("cel", {}).get("types", {}).get("Rule", {})
+    if rule.get(intake.get("ruleOrder")) != "string":
+        err.append(f"машина: intake.ruleOrder {intake.get('ruleOrder')!r} — нужно строковое поле Rule, по которому упорядочен список правил (§14.5)")
 
 
 def check_open_questions(err):
@@ -2083,6 +2094,10 @@ MUTATIONS = [
     ("bulk-scope-not-close", "машина: bulk.scope у «Перехватить» (takeover), а не у «Закрыть» (§11.1, ARCH-15)", MACHINE,
      '"bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },\n      "ui": {\n        "bulkDoneKey": "workflow.transition.takeover.bulk.done",',
      '"bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "scope": "primaryScenario" },\n      "ui": {\n        "bulkDoneKey": "workflow.transition.takeover.bulk.done",', "только у close"),
+    ("bulk-scope-note-key", "машина: у «Закрыть» на выборке пояснение области — не ключом машины (§11.1, §14.9)", MACHINE,
+     '"scopeNoteKey": "workflow.form.close.bulk.note.scenario",\n', "", "bulk.scopeNoteKey"),
+    ("intake-rule-order", "машина: полное равенство правил решает не строковое поле Rule — createdAt вместо guid (§14.5)", MACHINE,
+     '"ruleOrder": "guid"', '"ruleOrder": "createdAt"', "intake.ruleOrder"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

@@ -1854,6 +1854,19 @@
     assert.eq((await winnerOf([earlier, Object.assign({}, later, { priority: 75 })])).ruleGuid, RULE("d"), "равная точность — выше приоритет");
   });
 
+  test("Полное равенство правил решает guid, а не порядок строк набора: победитель и порядок создания (§14.5, intake.ruleOrder машины)", async () => {
+    const tie = (guid, scenarios) => ({ guid, name: `ничья ${guid.slice(-1)}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios, conditions: [{ eventTypeId: "fire" }] });
+    for (const rules of [[tie(RULE("e"), [KEYS.fire]), tie(RULE("d"), [KEYS.fire])], [tie(RULE("d"), [KEYS.fire]), tie(RULE("e"), [KEYS.fire])]]) {
+      assert.eq((await winnerOf(rules)).ruleGuid, RULE("d"), `меньший guid — победитель при любом порядке набора (${rules.map((r) => r.guid.slice(-1)).join(", ")})`);
+    }
+    // Два сценария, правила равны во всём: первым создан инцидент правила с меньшим guid, его номер — номер тревоги
+    const env = await makeEnv({ fixturePatch: { rules: [tie(RULE("e"), [KEYS.fire]), tie(RULE("d"), [KEYS.medical])] } });
+    const res = await env.call("POST", "/test/events", fireAt(S5));
+    assert.status(res, 201, null, "событие с инцидентами");
+    assert.eq(res.body.incidents.map((c) => [c.ruleGuid, c.number]), [[RULE("d"), "INC-1854"], [RULE("e"), "INC-1855"]], "первым — правило с меньшим guid");
+    assert.eq(res.body.alarmNumber, "INC-1854", "номер тревоги — номер первого");
+  });
+
   test("Повтор события ничего не создаёт: тот же eventGuid — 200, created 0, те же инциденты и номер тревоги (§14.5, ARCH-15)", async () => {
     const env = await makeEnv();
     const first = await env.call("POST", "/test/events", fireAt(S5));
@@ -2125,6 +2138,29 @@
     card = await env.card(med);
     assert.eq([siblingNotices(card).length, card.state], [1, "in_progress"], "у моего INC-1853 запись есть, он в работе");
     assert.eq(got.length, 0, "себе не уведомляется");
+  });
+
+  test("Ложная тревога у соседа: journal.appended всем, кто видит соседа, а не только адресату — следующее действие без неожиданного 412 (§6.1, ARCH-15)", async () => {
+    // Медпункт INC-1853 — новый, адресата нет: уведомления никому, но я его вижу — мне событие потока о новой версии
+    const env = await makeEnv();
+    const [fire, med] = await Promise.all(["INC-1847", "INC-1853"].map((n) => env.guidOf(n)));
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    const before = await env.card(med);
+    assert.eq([before.state, before.owner, before.assignmentGroup], ["new", null, null], "INC-1853 новый, без адресата");
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await pause(300);
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    await pause(300);
+    stop();
+    const about = got.filter((m) => m.incidentGuid === med);
+    assert.eq(about.filter((m) => m.type === "incident.sibling_closed").length, 0, "адресата нет — уведомления нет");
+    const appended = about.filter((m) => m.type === "journal.appended");
+    const card = await env.card(med);
+    assert.eq(appended.length, 1, "тому, кто видит соседа, — одно событие journal.appended");
+    assert.eq([appended[0].incident.version, appended[0].actor && appended[0].actor.id], [card.version, "me"], "в событии — новая версия соседа и кто закрыл");
+    // Версия из события — актуальная: действие по ней проходит
+    assert.status(await env.act(med, "claim", {}, "queue", undefined, `"${appended[0].incident.version}"`), 200, null, "взять INC-1853 по версии из события");
   });
 
   // «Массовый сбой» на выборке: закрывается только сценарий основного выборки (§11.1, §11.3, ARCH-15, В8)
@@ -2812,7 +2848,10 @@
     // Закрытые вместе с прежним основным остаются при нём как история: E + F, закрыть, переоткрыть E, к A
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
-    const [e, f] = [0, 1].map((k) => Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000098${k}0`, number: `INC-98${k}0` }));
+    // Копии — каждая своё событие и своя тревога: ключ «событие + сценарий» (ARCH-15)
+    const [e, f] = [0, 1].map((k) =>
+      Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000098${k}0`, number: `INC-98${k}0`, eventGuid: `70000000-0000-4000-8000-0000000098${k}0`, alarmNumber: `INC-98${k}0` })
+    );
     const env2 = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat([e, f]) } });
     const lead = (await env2.all("open")).find((x) => x.number === "INC-1838");
     await (await mergeInto(env2, e.guid, [f.guid])).body;
@@ -3227,9 +3266,11 @@
   test("Журнал основного: присоединено много — первые пять номеров и «и ещё N»; мало — все номера (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
-    const extra = Array.from({ length: 6 }, (_, k) =>
-      Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
-    );
+    // Копии — каждая своё событие и своя тревога: ключ «событие + сценарий» (ARCH-15)
+    const extra = Array.from({ length: 6 }, (_, k) => {
+      const n = `99${String(k).padStart(2, "0")}`;
+      return Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-00000000${n}`, number: `INC-${n}`, eventGuid: `70000000-0000-4000-8000-00000000${n}`, alarmNumber: `INC-${n}` });
+    });
     const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
     const many = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
     const entry = (c) => c.journal.filter((e) => /merged_in/.test(e.templateKey)).pop();
