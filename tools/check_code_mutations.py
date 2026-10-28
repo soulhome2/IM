@@ -174,6 +174,12 @@ MUTATIONS = [
     # выборка устарела, а действие со scope всё равно выполняется по новому основному
     ("bulk-scope-route-dropped", "server.js", "const scope = bulkScope(bulkTr, list);", "const scope = { list, skipped: [] };", "api"),
     ("bulk-scope-stale-unchecked", "server.js", "if (outdated) return conflict(outdated, { current: card(outdated) });", "", "api"),
+    # Ложная тревога у соседа (§6.1, ARCH-15): событие потока адресату соседа не доставляется; исполнитель теряет, о каком
+    # инциденте уведомление; интерфейс не показывает его или отбрасывает как своё — закрыл сам, а я в группе-адресате
+    ("sibling-notice-not-delivered", "server.js", 'if (about && recipients.includes(ME)) emit("incident.sibling_closed"', 'if (false) emit("incident.sibling_closed"', "api"),
+    ("sibling-notice-about-lost", "engine.js", "const about = a.about ? a.about.id : null;", "const about = null;", "api"),
+    ("ui-sibling-notice-hidden", "app.js", '      toast(t("{n} того же события закрыт: {result}"', '      if (false) toast(t("{n} того же события закрыт: {result}"', "ui"),
+    ("ui-sibling-notice-own-dropped", "app.js", ' && msg.type !== "incident.sibling_closed") return;', ") return;", "ui"),
     ("ui-bulk-transfer-copy", "app.js", "title: t(form.bulkTitleKey, { n })", "title: t(form.titleKey)", "ui"),
     ("external-effects-dropped", "server.js", "journalEntries: journalView(ev).slice(before), externalEffects, canceledTimerTrigger", "journalEntries: journalView(ev).slice(before), externalEffects: [], canceledTimerTrigger", "api"),
     ("queue-not-sorted", "server.js", "      return list.sort((a, b) => cmp(a, b) || byNumber(a, b));", "      return list;", "api"),

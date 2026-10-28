@@ -741,5 +741,12 @@
   "find": ",\n        \"scope\": \"primaryScenario\"",
   "replace": "",
   "model": "вне модели: выборки в модели нет"
+ },
+ {
+  "name": "sibling-notice-any-result",
+  "what": "запись в журнал открытых соседей и уведомление их адресату — при любом результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)",
+  "find": "\"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"],",
+  "replace": "\"fn\": \"notifySiblings\", \"args\": [[\"processed\", \"false_alarm\", \"duplicate\", \"drill\", \"impossible\", \"mass\"],",
+  "model": "мир модели: уведомления модель не меняют"
  }
 ]

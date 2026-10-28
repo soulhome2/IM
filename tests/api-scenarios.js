@@ -2054,6 +2054,79 @@
     assert.eq(await n(), 1, "невидимый сосед в число не входит");
   });
 
+  // Ложная тревога у соседа (§6.1, ARCH-15, В9): записи «… того же события закрыт: …» в журнале
+  const siblingNotices = (card) => card.journal.filter((j) => j.templateKey === "workflow.journal.sibling_closed");
+  // Стенд: пожар INC-1847 у меня в работе, его сосед медпункт INC-1853 «Ожидает принятия» у группы старших операторов
+  // (я в ней) — уровень 1 эскалации — эта группа, 120 с; часы — за реакцию медпункта и окно после дедлайна
+  async function medPendingAtLeads() {
+    const levels = W.escalation.levels.map((l, i) => (i === 0 ? Object.assign({}, l, to("group:grp-leads"), { reactionSec: 120 }) : l));
+    const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { levels }) } });
+    const fire = await env.guidOf("INC-1847");
+    const med = await env.guidOf("INC-1853");
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    const due = Date.parse((await env.card(med)).timer.dueAt);
+    await env.advance(Math.max(1, Math.ceil((due - env.now) / 1000) + GRACE + 1));
+    const c = await env.card(med);
+    assert.eq([c.state, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", "grp-leads"], "INC-1853 ждёт принятия у группы старших операторов");
+    return { env, fire, med };
+  }
+  // Закрыть и собрать события потока за это время
+  async function closeWatching(env, guid, resultId) {
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await new Promise((r) => setTimeout(r, 300));
+    const res = await env.act(guid, "close", { resultId, comment: "тест" });
+    await new Promise((r) => setTimeout(r, 300));
+    stop();
+    return { res, got: got.filter((m) => m.type === "incident.sibling_closed") };
+  }
+
+  test("Ложная тревога у соседа: запись в журнал открытых соседей и уведомление их адресату; себе, закрытым и при другом результате — нет (§6.1, ARCH-15)", async () => {
+    // Закрыт «Ложной тревогой» — у соседа запись, его адресату (группа, я в ней) — событие потока
+    let { env, fire, med } = await medPendingAtLeads();
+    const before = await env.card(med);
+    let { res, got } = await closeWatching(env, fire, "false_alarm");
+    assert.status(res, 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    let card = await env.card(med);
+    const last = lastJournal(card);
+    assert.eq([last.templateKey, last.vars && last.vars.number], ["workflow.journal.sibling_closed", "INC-1847"], "у INC-1853 последняя запись — о ложной тревоге соседа");
+    assert.ok(/INC-1847 того же события закрыт: Ложная тревога/.test(last.text), `текст записи: «${last.text}»`);
+    assert.eq([card.state, card.assignmentGroup && card.assignmentGroup.id], ["pending_acceptance", "grp-leads"], "сосед не закрыт и адресат прежний");
+    assert.ok(Number(card.version) > Number(before.version), `у соседа новая версия — журнал изменился: ${before.version} → ${card.version}`);
+    assert.eq(
+      got.map((m) => [m.incidentGuid, m.payload.siblingGuid, m.payload.siblingNumber, m.payload.closeResultId]),
+      [[med, fire, "INC-1847", "false_alarm"]],
+      "в потоке — incident.sibling_closed о моём INC-1853, в payload — закрытый сосед"
+    );
+
+    // Другой результат — «Плановая проверка»: ни записи, ни события
+    ({ env, fire, med } = await medPendingAtLeads());
+    ({ res, got } = await closeWatching(env, fire, "drill"));
+    assert.status(res, 200, null, "закрыть INC-1847 «Плановой проверкой»");
+    assert.eq([siblingNotices(await env.card(med)).length, got.length], [0, 0], "«Плановая проверка» — у соседа записи нет, события нет");
+
+    // Сосед уже закрыт — ему ничего
+    env = await makeEnv();
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    assert.status(await env.act(med, "close", { resultId: "drill", comment: "тест" }), 200, null, "закрыть INC-1853");
+    const closed = await env.card(med);
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    ({ res, got } = await closeWatching(env, fire, "false_alarm"));
+    assert.status(res, 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    card = await env.card(med);
+    assert.eq([siblingNotices(card).length, card.version, got.length], [0, closed.version, 0], "закрытому соседу — ни записи, ни новой версии, ни события");
+
+    // Оба мои в работе — запись есть, уведомления себе нет (как BUG-30)
+    env = await makeEnv();
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    ({ res, got } = await closeWatching(env, fire, "false_alarm"));
+    assert.status(res, 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    card = await env.card(med);
+    assert.eq([siblingNotices(card).length, card.state], [1, "in_progress"], "у моего INC-1853 запись есть, он в работе");
+    assert.eq(got.length, 0, "себе не уведомляется");
+  });
+
   // «Массовый сбой» на выборке: закрывается только сценарий основного выборки (§11.1, §11.3, ARCH-15, В8)
   const massClose = (guids) => ({ incidentGuids: guids, formValues: { resultId: "mass", causeId: W.reasonCatalogs.mass_fault.items[0].id, comment: "тест" }, surface: "queue" });
 

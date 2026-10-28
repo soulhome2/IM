@@ -97,6 +97,7 @@
   "workflow.journal.answers_moved": "Перенесены ответы из {number}: шагов — {n}",
   "workflow.journal.group_breach": "Нарушен срок группы {primaryNumber}: {timer}",
   "workflow.journal.group_deadline": "Срок закрытия — по {number}: раньше своего",
+  "workflow.journal.sibling_closed": "{number} того же события закрыт: {result}",
   "workflow.journal.merged_in": "Присоединены инциденты: {ids}",
   "workflow.journal.merged_in_more": "Присоединены инциденты: {ids} и ещё {more}",
   "workflow.guard.no_transfer_target": "Передать некому: ни у кого нет права «Принимать» и доступа к объекту",

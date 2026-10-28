@@ -4323,7 +4323,8 @@
     const id = msg.incident ? msg.incident.number : msg.incidentGuid;
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
-    if (mine && msg.type !== "incident.card_evicted") return;
+    // Свой переход — без уведомления; но о закрытом мной соседе узнаёт и моя дежурная группа, я в ней тоже (ARCH-15)
+    if (mine && msg.type !== "incident.card_evicted" && msg.type !== "incident.sibling_closed") return;
     // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
     if (msg.type === "stream.reset") return reload();
     // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)
@@ -4354,6 +4355,11 @@
       // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
       const tr = transitionDef(tid);
       toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
+    } else if (msg.type === "incident.sibling_closed") {
+      // Сосед того же события закрыт «Ложной тревогой» (§6.1, ARCH-15): адресату моего инцидента — какой и чем
+      const p = msg.payload;
+      const item = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === p.closeResultId);
+      toast(t("{n} того же события закрыт: {result}", { n: p.siblingNumber, result: item ? lbl(item) : p.closeResultId }));
     } else if (msg.type === "incident.transitioned") {
       // Что сказать о чужом или автоматическом переходе — в машине (ui.observerNotice, RULE-60, BUG-32):
       // observers — всем, кто видит инцидент; newAddressee — новому адресату, лично или его группе

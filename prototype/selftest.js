@@ -2095,6 +2095,52 @@
       return toast.textContent;
     });
 
+    await step("Ложная тревога у соседа — уведомление адресату соседа (§6.1, ARCH-15)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Уровень 1 эскалации — группа старших операторов (я в ней): истекла реакция медпункта INC-1853 — он ждёт принятия у неё
+      const esc = window.IM_WORKFLOW.escalation;
+      const levels = esc.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetKind: "group", target: "grp-leads", reactionSec: 120 }) : l));
+      await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }) } });
+      await wait(300);
+      let toast = null;
+      try {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        // Пожар INC-1847 — у меня в работе, карточка открыта
+        const claim = await buttonOnPages("claim", guidOf("INC-1847"));
+        expect(claim, "у INC-1847 нет «Взять»");
+        await click(claim);
+        expect(mode() === "work", "карточка INC-1847 не открылась");
+        const med = guidOf("INC-1853");
+        const due = Date.parse((await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).timer.dueAt);
+        const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
+        let left = Math.ceil((due - Date.parse((await stand.raw("POST", "/test/clock", { advanceSec: 0 })).body.now)) / 1000) + grace + 1;
+        // Часы шагами короче порога «нет связи», перед каждым — признак активности
+        for (; left > 0; left -= 240) {
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: guidOf("INC-1847") });
+          await stand.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
+        }
+        await wait(200);
+        const state = (await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).state;
+        expect(state === "pending_acceptance", `INC-1853 не ждёт принятия: ${state}`);
+        const close = button(root(), "close");
+        expect(close, "в карточке INC-1847 нет «Закрыть без обработки»");
+        await click(close);
+        await setField("resultId", "false_alarm");
+        await confirmDialog(NOTE);
+        await wait(300);
+        const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
+        toast = toastWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
+        expect(toast, `нет уведомления о ложной тревоге соседа: ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return toast.textContent;
+    });
+
     await step("Свой выход с инцидентами в работе и открытой карточкой — ни одного «карточка только для просмотра» (BUG-105)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Два инцидента в работе: лимит активных самопроверки (1) снят

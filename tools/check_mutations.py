@@ -163,6 +163,14 @@ def bulk_close_all_scenarios(w):
     del bulk["scope"]
 
 
+def sibling_notice_any_result(w):
+    """Порча sibling-notice-any-result из tools/mutations/machine.json: запись и уведомление соседям — при любом
+    результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)."""
+    effect = next(e for e in transition(w, "close")["effects"] if e["fn"] == "notifySiblings")
+    assert effect["args"][0] == ["false_alarm"]
+    effect["args"][0] = [i["id"] for i in w["reasonCatalogs"]["close_result"]["items"]]
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -235,6 +243,7 @@ MUTATIONS = [
     ("override-scenario-tie-lost", "при равном числе условий строка со сценарием не точнее (§4, правило 2; ARCH-15)", override_scenario_tie_lost),
     ("duplicate-warning-off", "у «Дубликата» нет предупреждения о соседях (§2.2, ARCH-15)", duplicate_warning_off),
     ("bulk-close-all-scenarios", "«Закрыть без обработки» на выборке закрывает и другой сценарий (§11.1, ARCH-15)", bulk_close_all_scenarios),
+    ("sibling-notice-any-result", "запись соседям — при любом результате закрытия, не только «Ложной тревоге» (§6.1, ARCH-15)", sibling_notice_any_result),
 ]
 
 

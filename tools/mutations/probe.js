@@ -614,6 +614,20 @@
       const done = res.body && res.body.succeeded ? res.body.succeeded.map((e) => e.number).sort() : [];
       return [done.length === 3, `закрыты на выборке: ${done.join(", ") || res.status}`];
     },
+    // Запись соседям (§6.1, ARCH-15): пожар INC-1847 закрыт «Плановой проверкой». По машине (notifySiblings только для
+    // «Ложной тревоги») у соседа — медпункта INC-1853 — записи нет; при любом результате — есть
+    async "sibling-notice-any-result"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      await stand.raw("POST", "/test/reset", { fixture: "demo" });
+      const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
+      const before = await stand.raw("GET", `/operator/incidents/${fire}`);
+      const claimed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      const closed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/close`, { formValues: { resultId: "drill", comment: "проба" }, surface: "card" }, { "If-Match": `"${claimed.body.incident.version}"` });
+      const card = await stand.raw("GET", `/operator/incidents/${med}`);
+      const notes = card.body && card.body.journal ? card.body.journal.filter((j) => j.templateKey === "workflow.journal.sibling_closed").length : null;
+      return [notes === 1, `закрыт «Плановой проверкой» (${closed.status}) — записей о соседе у INC-1853: ${notes === null ? card.status : notes}`];
+    },
   };
 
   setTimeout(async () => {

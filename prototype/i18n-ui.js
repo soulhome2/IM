@@ -95,6 +95,7 @@ window.IM_DICT_UI = {
     "Устройств": "Devices",
     "Настройки администратора": "Administrator settings",
     "Алерт: {id} — {what}": "Alert: {id} — {what}",
+    "{n} того же события закрыт: {result}": "{n} of the same event was closed: {result}",
     "{id}: карточка только для просмотра — {what}": "{id}: the card is now view-only — {what}",
     "Вернуться с перерыва": "Back from break",
     "Перерыв окончен": "Break is over",

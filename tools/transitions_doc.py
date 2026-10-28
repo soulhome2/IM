@@ -220,6 +220,9 @@ class Doc:
             "copyPrimaryDeadline": lambda: f"{self.tm(a[0])} — остаток срока основного, на паузе",
             "notify": lambda: f"{'алерт' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
+            "notifySiblings": lambda: "результат "
+            + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0])
+            + f" — открытым соседям запись «{RU.get(a[1], a[1])}» и уведомление их адресату",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для эффекта {fn}: добавьте её в tools/transitions_doc.py")

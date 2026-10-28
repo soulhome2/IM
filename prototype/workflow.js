@@ -1677,7 +1677,7 @@ window.IM_WORKFLOW = {
       "id": "close",
       "labelKey": "workflow.transition.close",
       "hintKey": "workflow.transition.close.hint",
-      "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты.",
+      "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты. Закрыт «Ложной тревогой» — открытым соседям запись в журнал и уведомление их адресату, соседи не закрываются (notifySiblings, ARCH-15).",
       "from": [
         "new",
         "pending_acceptance",
@@ -1786,6 +1786,16 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "workflow.journal.close"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "notifySiblings",
+          "args": [
+            [
+              "false_alarm"
+            ],
+            "workflow.journal.sibling_closed"
           ]
         },
         {
@@ -6299,6 +6309,61 @@ window.IM_WORKFLOW = {
             }
           }
         ]
+      },
+      {
+        "fn": "notifySiblings",
+        "kind": "transactional",
+        "args": [
+          "results",
+          "key"
+        ],
+        "argTypes": {
+          "results": "list<string>",
+          "key": "string"
+        },
+        "do": [
+          {
+            "if": "form.resultId in results",
+            "then": [
+              {
+                "forEach": "s",
+                "in": "siblingsOf(incident).filter(x, !isDone(x))",
+                "do": [
+                  {
+                    "world": "log",
+                    "args": {
+                      "incident": "s",
+                      "key": "key",
+                      "vars": "{'number': incident.number, 'result': closeResults.filter(i, i.id == form.resultId).map(i, i.labelKey)}"
+                    }
+                  },
+                  {
+                    "world": "touch",
+                    "args": {
+                      "incident": "s"
+                    }
+                  },
+                  {
+                    "if": "addressee(s) != '' && addressee(s) != actor",
+                    "then": [
+                      {
+                        "world": "notify",
+                        "args": {
+                          "incident": "s",
+                          "to": "addressee(s)",
+                          "recipients": "recipients(addressee(s), s)",
+                          "alert": "false",
+                          "about": "incident"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "$comment": "§6.1, ARCH-15 (В9). Закрыт одним из результатов results — каждому открытому соседу (siblingsOf: инциденты того же события, другие службы) запись key в журнал ({number} — номер закрытого, {result} — подпись результата) и новая версия, как у нарушения группы; его адресату (addressee: владелец, адресат передачи или дежурная группа) — уведомление об этом инциденте (notify с about — закрытый инцидент), получат — recipients, как у notify. Нового соседа без адресата — только запись; себе и никому — не уведомляется (BUG-30); закрытым соседям — ничего. Соседи не закрываются: ложное для одной службы не значит ложное для другой. Запись — вместе с переходом, уведомление — после него"
       }
     ]
   },

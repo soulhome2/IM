@@ -331,11 +331,14 @@
       // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
       defaultTransferTarget: () => session.lastTransferTargetId,
       // Доставка уведомления (§9): получателей вычисляет машина (recipients). Алерт оператору стенда — событие
-      // потока; остальные уведомления интерфейс выводит из событий о переходах
-      deliver: (ev, recipients, { alert, transitionId }) => {
+      // потока; уведомление о закрытом «Ложной тревогой» соседе (about, notifySiblings, ARCH-15) — тоже; остальные
+      // уведомления интерфейс выводит из событий о переходах
+      deliver: (ev, recipients, { alert, transitionId, about, actor }) => {
         if (alert && recipients.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
+        if (about && recipients.includes(ME)) emit("incident.sibling_closed", ev, actor, { siblingGuid: about.id, siblingNumber: about.number, closeResultId: about.closeResult });
       },
-      // Нарушение основного записано тому, кто был в группе (recordBreach, §11.4, BUG-73) — ему новая версия
+      // Инцидент изменился не своим переходом (действие мира touch): нарушение основного записано тому, кто был
+      // в группе (recordBreach, §11.4, BUG-73), запись о закрытом «Ложной тревогой» соседе (notifySiblings, ARCH-15) — новая версия
       onBreachShared: (ev) => touch([ev]),
       // Карточку увели (§9): в событии — кто выполнил переход и какой, по нему клиент называет причину (BUG-86).
       // Только если она открыта у оператора стенда (контракт, BUG-105). Свой перерыв и выход карточку не уводят — в машине

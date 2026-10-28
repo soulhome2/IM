@@ -305,14 +305,16 @@
             const n = ctx.shareAnswers ? ctx.shareAnswers(target, p, now()) : 0;
             if (n && a.logKey) ctx.log(p, cur.actor, a.logKey, { number: target.number, n }, now());
           } else if (action === "notify") {
-            // Уведомление (§9): кому, кто получит и запись «некому» — выражения машины; сервер только доставляет
+            // Уведомление (§9): кому, кто получит и запись «некому» — выражения машины; сервер только доставляет.
+            // about — уведомление о другом инциденте: сосед закрыт «Ложной тревогой» (notifySiblings, ARCH-15)
             const { actor: who, transitionId } = cur;
             const id = target.id;
+            const about = a.about ? a.about.id : null;
             const recipients = Array.from(a.recipients || [], String);
             cur.external.push({ fn: "notify", target: a.to });
             after.push(() => {
               const inc = real(id);
-              if (ctx.deliver) ctx.deliver(inc, recipients, { alert: Boolean(a.alert), transitionId });
+              if (ctx.deliver) ctx.deliver(inc, recipients, { alert: Boolean(a.alert), transitionId, about: about && real(about), actor: who });
               if (!recipients.length && a.emptyLog) ctx.log(inc, who, a.emptyLog, {}, now());
             });
           } else if (action === "command") {
