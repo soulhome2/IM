@@ -628,6 +628,24 @@
       const notes = card.body && card.body.journal ? card.body.journal.filter((j) => j.templateKey === "workflow.journal.sibling_closed").length : null;
       return [notes === 1, `закрыт «Плановой проверкой» (${closed.status}) — записей о соседе у INC-1853: ${notes === null ? card.status : notes}`];
     },
+    // Основной выборки среди тех, что можно закрыть (§11.1, решение 2026-10-29): пожар INC-1847 (100) — в работе у Петровой,
+    // медпункт INC-1853 (75) — мой, отложен. По машине основной — медпункт, «Закрыть без обработки» на выборке доступно;
+    // если основной — самый срочный из всех, это чужой пожар, закрыть его нельзя — действие недоступно
+    async "bulk-primary-ignores-allowed"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      const incidents = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
+      incidents.find((i) => i.number === "INC-1853").priority = 75;
+      await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { incidents } });
+      const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
+      await stand.raw("POST", `/test/operators/petrova/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "card" });
+      const before = await stand.raw("GET", `/operator/incidents/${med}`);
+      const claimed = await stand.raw("POST", `/operator/incidents/${med}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      await stand.raw("POST", `/operator/incidents/${med}/transitions/hold`, { formValues: { reasonId: "third_party", comment: "проба" }, surface: "card" }, { "If-Match": `"${claimed.body.incident.version}"` });
+      const sel = await stand.raw("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
+      const close = sel.body && sel.body.actions ? sel.body.actions.find((a) => a.id === "close") : null;
+      return [Boolean(close) && close.enabled === false, `«Закрыть без обработки» на выборке [чужой пожар, мой отложенный медпункт]: ${close ? (close.enabled ? "доступно" : "недоступно") : sel.status}`];
+    },
   };
 
   setTimeout(async () => {

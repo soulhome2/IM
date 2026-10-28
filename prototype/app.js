@@ -4326,8 +4326,9 @@
     const id = msg.incident ? msg.incident.number : msg.incidentGuid;
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
-    // Свой переход — без уведомления; но о закрытом мной соседе узнаёт и моя дежурная группа, я в ней тоже (ARCH-15)
-    if (mine && msg.type !== "incident.card_evicted" && msg.type !== "incident.sibling_closed") return;
+    // Свой переход — без уведомления. О закрытом мной соседе сервер мне и не пишет — даже когда я в дежурной группе-адресате
+    // (§6.1, решение 2026-10-29)
+    if (mine && msg.type !== "incident.card_evicted") return;
     // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
     if (msg.type === "stream.reset") return reload();
     // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)

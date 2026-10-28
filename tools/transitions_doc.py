@@ -222,7 +222,7 @@ class Doc:
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
             "notifySiblings": lambda: "результат "
             + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0])
-            + f" — открытым соседям запись «{RU.get(a[1], a[1])}» и уведомление их адресату",
+            + f" — открытым соседям запись «{RU.get(a[1], a[1])}» и уведомление их адресату, кроме закрывшего",
         }
         if fn not in phrases:
             raise KeyError(f"Нет фразы для эффекта {fn}: добавьте её в tools/transitions_doc.py")

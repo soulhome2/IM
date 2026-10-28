@@ -1053,6 +1053,13 @@
         await setField("resultId", "duplicate");
         await confirmDialog(NOTE);
         expect(mode() === "queue", "«Дубликатом» не закрылось");
+        // У медпункта INC-1853 сосед INC-1847 теперь закрыт — свой текст: они уже закрыты
+        await closeForm("INC-1853");
+        await setField("resultId", "duplicate");
+        expect(/уже закрыты/.test(warning()), `у INC-1853 нет предупреждения о закрытых соседях: «${warning()}»`);
+        // Закрыть и его: лимит активных самопроверки — один
+        await confirmDialog(NOTE);
+        expect(mode() === "queue", "INC-1853 «Дубликатом» не закрылось");
         // INC-1851 — без соседей
         await closeForm("INC-1851");
         await setField("resultId", "duplicate");
@@ -2100,43 +2107,63 @@
       return toast.textContent;
     });
 
-    await step("Ложная тревога у соседа — уведомление адресату соседа (§6.1, ARCH-15)", async () => {
+    await step("Ложная тревога у соседа — уведомление адресату соседа, закрывшему — нет (§6.1, ARCH-15)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      // Уровень 1 эскалации — группа старших операторов (я в ней): истекла реакция медпункта INC-1853 — он ждёт принятия у неё
+      // Уровень 1 эскалации — группа старших операторов (я и Петрова): истекла реакция медпункта INC-1853 — он ждёт принятия у неё
       const esc = window.IM_WORKFLOW.escalation;
       const levels = esc.levels.map((l, i) => (i === 0 ? Object.assign({}, l, { targetKind: "group", target: "grp-leads", reactionSec: 120 }) : l));
-      await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }) } });
-      await wait(300);
-      let toast = null;
-      try {
-        if (mode() !== "queue") await click($("backToQueue"));
-        await setFilter("open");
-        // Пожар INC-1847 — у меня в работе, карточка открыта
-        const claim = await buttonOnPages("claim", guidOf("INC-1847"));
-        expect(claim, "у INC-1847 нет «Взять»");
-        await click(claim);
-        expect(mode() === "work", "карточка INC-1847 не открылась");
-        const med = guidOf("INC-1853");
+      const fire = guidOf("INC-1847");
+      const med = guidOf("INC-1853");
+      const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
+      const notice = new RegExp(`INC-1847 того же события закрыт: ${label}`);
+      // Действие Петровой — служебной операцией стенда, от её имени (§17)
+      const asPetrova = (transitionId, formValues) =>
+        stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(fire)}/transitions/${transitionId}`, { formValues: formValues || {}, surface: "card" });
+      // Часы — за реакцию медпункта и окно после дедлайна, шагами короче порога «нет связи», перед каждым — признак активности
+      async function medToLeads(openGuid) {
         const due = Date.parse((await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).timer.dueAt);
         const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
         let left = Math.ceil((due - Date.parse((await stand.raw("POST", "/test/clock", { advanceSec: 0 })).body.now)) / 1000) + grace + 1;
-        // Часы шагами короче порога «нет связи», перед каждым — признак активности
         for (; left > 0; left -= 240) {
-          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: guidOf("INC-1847") });
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: openGuid });
           await stand.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
         }
         await wait(200);
-        const state = (await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).state;
-        expect(state === "pending_acceptance", `INC-1853 не ждёт принятия: ${state}`);
+        const s = (await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).state;
+        expect(s === "pending_acceptance", `INC-1853 не ждёт принятия: ${s}`);
+      }
+      const toasts = () => [...$("toasts").children].map((x) => x.textContent).join(" | ");
+      let toast = null;
+      try {
+        // Закрываю я: пожар INC-1847 у меня в работе, карточка открыта; я в группе-адресате медпункта — но уведомления мне нет
+        await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }) } });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const claim = await buttonOnPages("claim", fire);
+        expect(claim, "у INC-1847 нет «Взять»");
+        await click(claim);
+        expect(mode() === "work", "карточка INC-1847 не открылась");
+        await medToLeads(fire);
         const close = button(root(), "close");
         expect(close, "в карточке INC-1847 нет «Закрыть без обработки»");
         await click(close);
         await setField("resultId", "false_alarm");
         await confirmDialog(NOTE);
         await wait(300);
-        const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
-        toast = toastWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
-        expect(toast, `нет уведомления о ложной тревоге соседа: ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+        expect(!toastWith(notice), `закрывшему — уведомление о своём закрытии: ${toasts()}`);
+        if (mode() !== "queue") await click($("backToQueue"));
+        // Закрывает Петрова: я — другой участник группы-адресата, уведомление мне есть. У неё уже есть инцидент в работе —
+        // лимит активных самопроверки (1) снят
+        await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }), limits: { maxActive: null } } });
+        await wait(300);
+        expect((await asPetrova("claim")).status === 200, "Петрова не взяла INC-1847");
+        await medToLeads(null);
+        const closed = await asPetrova("close", { resultId: "false_alarm", comment: "тест" });
+        expect(closed.status === 200, `Петрова не закрыла INC-1847: ${closed.status}`);
+        await wait(300);
+        toast = toastWith(notice);
+        expect(toast, `нет уведомления о ложной тревоге соседа: ${toasts()}`);
       } finally {
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         if (mode() !== "queue") await click($("backToQueue"));

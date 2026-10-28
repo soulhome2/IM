@@ -837,7 +837,8 @@
         const r = def("mergePrimary", Array.from(list, celIncident), ME);
         return r.length ? cel.source(r[0]) : null;
       },
-      // Основной выборки для действия со scope: primaryScenario (§11.1, ARCH-15): bulkPrimary машины; выборка пуста — null
+      // Основной выборки для действия со scope: primaryScenario (§11.1, ARCH-15): bulkPrimary машины; выборка пуста или
+      // закрыть нечего — null
       bulkPrimary: (list) => {
         const r = def("bulkPrimary", Array.from(list, celIncident), ME);
         return r.length ? cel.source(r[0]) : null;

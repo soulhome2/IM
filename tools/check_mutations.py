@@ -172,6 +172,15 @@ def sibling_notice_any_result(w):
     effect["args"][0] = [i["id"] for i in w["reasonCatalogs"]["close_result"]["items"]]
 
 
+def bulk_primary_ignores_allowed(w):
+    """Порча bulk-primary-ignores-allowed из tools/mutations/machine.json: основного по §11.3 нет — основной выборки
+    самый срочный из всех отмеченных, а не из тех, что оператор может закрыть (§11.1, решение 2026-10-29)."""
+    d = w["cel"]["definitions"]["bulkPrimary"]
+    find = "cel.bind(ok, xs.filter(e, closeOptions(who, e, 'queue').exists(o, stepsOk(o, e))), "
+    assert find in d["expr"]
+    d["expr"] = d["expr"].replace(find, "cel.bind(ok, xs, ")
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -245,6 +254,7 @@ MUTATIONS = [
     ("duplicate-warning-off", "у «Дубликата» нет предупреждения о соседях (§2.2, ARCH-15)", duplicate_warning_off),
     ("bulk-close-all-scenarios", "«Закрыть без обработки» на выборке закрывает и другой сценарий (§11.1, ARCH-15)", bulk_close_all_scenarios),
     ("sibling-notice-any-result", "запись соседям — при любом результате закрытия, не только «Ложной тревоге» (§6.1, ARCH-15)", sibling_notice_any_result),
+    ("bulk-primary-ignores-allowed", "основной выборки — самый срочный из всех отмеченных, даже чужой (§11.1, решение 2026-10-29)", bulk_primary_ignores_allowed),
 ]
 
 

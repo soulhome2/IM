@@ -780,12 +780,20 @@ window.IM_WORKFLOW = {
           "placeholderKey": "workflow.form.close.field.resultId.placeholder",
           "warnings": [
             {
-              "expr": "option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0",
+              "expr": "option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s) && !isDone(s))) > 0",
               "textKey": "workflow.form.close.warn.duplicate_siblings",
               "vars": {
-                "n": "size(siblingsOf(incident).filter(s, hasAccess(me, s)))"
+                "n": "size(siblingsOf(incident).filter(s, hasAccess(me, s) && !isDone(s)))"
               },
-              "$comment": "§2.2, §7, ARCH-15 (В7). Инцидент того же события другой службы — не дубликат: у «Дубликата» предупреждение, если есть видимые соседи — и закрытые тоже. Только предупреждение: закрыть можно, соседей это не закрывает"
+              "$comment": "§2.2, §7, ARCH-15 (В7). Инцидент того же события другой службы — не дубликат: у «Дубликата» предупреждение, если есть видимые открытые соседи; n — сколько их, как у «событие: ещё N» (решение 2026-10-29). Только предупреждение: закрыть можно, соседей это не закрывает"
+            },
+            {
+              "expr": "option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s) && isDone(s))) > 0",
+              "textKey": "workflow.form.close.warn.duplicate_siblings_closed",
+              "vars": {
+                "n": "size(siblingsOf(incident).filter(s, hasAccess(me, s) && isDone(s)))"
+              },
+              "$comment": "§2.2, §7, решение 2026-10-29. Открытых видимых соседей нет (тогда сработало бы первое), а закрытые есть — свой текст: другие службы той же тревоги уже закрыты, это не дубликаты; n — сколько закрытых"
             }
           ],
           "$comment": "§2.2 (RULE-23). Список с placeholder пуст, пока оператор не выберет сам: случайное «Закрыть» не должно записать результат, которого он не выбирал. Значение ставится, только если его задаёт defaultExpr или вариант один. warnings — предупреждение варианта: первое подходящее, выбрать вариант оно не мешает"
@@ -1677,7 +1685,7 @@ window.IM_WORKFLOW = {
       "id": "close",
       "labelKey": "workflow.transition.close",
       "hintKey": "workflow.transition.close.hint",
-      "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты. Закрыт «Ложной тревогой» — открытым соседям запись в журнал и уведомление их адресату, соседи не закрываются (notifySiblings, ARCH-15).",
+      "$comment": "§2.2, §6.1. Один переход для всех результатов (RULE-02). Откуда, по какому праву и с какими шагами — по строке справочника close_result, проверяет closeResultAllowed. /actions отдаёт в fieldOptions.resultId только доступные результаты. Закрыт «Ложной тревогой» — открытым соседям запись в журнал и уведомление их адресату, кроме самого закрывшего; соседи не закрываются (notifySiblings, ARCH-15).",
       "from": [
         "new",
         "pending_acceptance",
@@ -3348,7 +3356,7 @@ window.IM_WORKFLOW = {
     },
     {
       "id": "close_linked",
-      "$comment": "§11. Основной закрыт — привязанные закрываются с его результатом, причиной, комментарием и закрывшим, он же владелец (§2.1, BUG-89); связь остаётся историей",
+      "$comment": "§11. Основной закрыт — привязанные закрываются с его результатом, причиной, комментарием и закрывшим, он же владелец (§2.1, BUG-89); связь остаётся историей. Результат — «Ложная тревога»: открытым соседям привязанного запись и уведомление, как при «Закрыть» (notifySiblings, §6.1, решение 2026-10-29)",
       "labelKey": "workflow.transition.close_linked",
       "from": [
         "linked"
@@ -3386,6 +3394,16 @@ window.IM_WORKFLOW = {
           "fn": "appendLog",
           "args": [
             "workflow.journal.close_linked"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "notifySiblings",
+          "args": [
+            [
+              "false_alarm"
+            ],
+            "workflow.journal.sibling_closed"
           ]
         },
         {
@@ -4542,8 +4560,8 @@ window.IM_WORKFLOW = {
           "who": "string"
         },
         "returns": "list<Incident>",
-        "expr": "cel.bind(p, mergePrimary(xs, who), size(p) > 0 ? p : cel.bind(top, xs.filter(e, xs.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : [])))",
-        "$comment": "§11.1, ARCH-15 (В8). Основной выборки для действия со scope: primaryScenario — чей сценарий закрывается: основной по §11.3 (mergePrimary), а если его нет (отмечены только отложенные, ожидающие принятия, чужие) — из всех отмеченных самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки (по возрастанию номера, как у mergePrimary). Списком из одного или пустым (выборка пуста)"
+        "expr": "cel.bind(p, mergePrimary(xs, who), size(p) > 0 ? p : cel.bind(ok, xs.filter(e, closeOptions(who, e, 'queue').exists(o, stepsOk(o, e))), cel.bind(top, ok.filter(e, ok.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : []))))",
+        "$comment": "§11.1, ARCH-15 (В8). Основной выборки для действия со scope: primaryScenario («Закрыть без обработки») — чей сценарий закрывается: основной по §11.3 (mergePrimary), а если его нет (отмечены только отложенные, ожидающие принятия, чужие) — из отмеченных, которые этот оператор может закрыть из очереди (closeOptions и stepsOk — как у closeResultAllowed без выбранного результата; решение 2026-10-29), самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки (по возрастанию номера, как у mergePrimary). Списком из одного или пустым (выборка пуста или закрыть нечего — действие недоступно)"
       },
       "onDuty": {
         "params": {
@@ -6326,7 +6344,7 @@ window.IM_WORKFLOW = {
         },
         "do": [
           {
-            "if": "form.resultId in results",
+            "if": "incident.closeResultId in results",
             "then": [
               {
                 "forEach": "s",
@@ -6337,7 +6355,7 @@ window.IM_WORKFLOW = {
                     "args": {
                       "incident": "s",
                       "key": "key",
-                      "vars": "{'number': incident.number, 'result': closeResults.filter(i, i.id == form.resultId).map(i, i.labelKey)}"
+                      "vars": "{'number': incident.number, 'result': closeResults.filter(i, i.id == incident.closeResultId).map(i, i.labelKey)}"
                     }
                   },
                   {
@@ -6347,14 +6365,14 @@ window.IM_WORKFLOW = {
                     }
                   },
                   {
-                    "if": "addressee(s) != '' && addressee(s) != actor",
+                    "if": "addressee(s) != '' && addressee(s) != incident.closedBy",
                     "then": [
                       {
                         "world": "notify",
                         "args": {
                           "incident": "s",
                           "to": "addressee(s)",
-                          "recipients": "recipients(addressee(s), s)",
+                          "recipients": "recipients(addressee(s), s).filter(m, m != incident.closedBy)",
                           "alert": "false",
                           "about": "incident"
                         }
@@ -6366,7 +6384,7 @@ window.IM_WORKFLOW = {
             ]
           }
         ],
-        "$comment": "§6.1, ARCH-15 (В9). Закрыт одним из результатов results — каждому открытому соседу (siblingsOf: инциденты того же события, другие службы) запись key в журнал ({number} — номер закрытого, {result} — подпись результата) и новая версия, как у нарушения группы; его адресату (addressee: владелец, адресат передачи или дежурная группа) — уведомление об этом инциденте (notify с about — закрытый инцидент), получат — recipients, как у notify. Нового соседа без адресата — только запись; себе и никому — не уведомляется (BUG-30); закрытым соседям — ничего. Соседи не закрываются: ложное для одной службы не значит ложное для другой. Запись — вместе с переходом, уведомление — после него"
+        "$comment": "§6.1, §11.4, ARCH-15 (В9). Закрыт одним из результатов results — каждому открытому соседу (siblingsOf: инциденты того же события, другие службы) запись key в журнал ({number} — номер закрытого, {result} — подпись результата) и новая версия, как у нарушения группы; его адресату (addressee: владелец, адресат передачи или дежурная группа) — уведомление об этом инциденте (notify с about — закрытый инцидент), получат — recipients, как у notify, кроме закрывшего. Результат и закрывший — уже записанные в инцидент (closeResultId, closedBy): так эффект стоит и у «Закрыть» (из формы), и у close_linked (от основного, у которого формы нет; решение 2026-10-29). Нового соседа без адресата — только запись; закрывшему и никому — не уведомляется (BUG-30), и когда он в дежурной группе-адресате — получают остальные её участники (решение 2026-10-29); закрытым соседям — ничего. Соседи не закрываются: ложное для одной службы не значит ложное для другой. Запись — вместе с переходом, уведомление — после него"
       }
     ]
   },

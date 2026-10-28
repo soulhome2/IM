@@ -731,7 +731,7 @@
  {
   "name": "duplicate-warning-off",
   "what": "у «Дубликата» нет предупреждения о соседях, даже когда они есть (§2.2, ARCH-15)",
-  "find": "\"expr\": \"option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0\"",
+  "find": "\"expr\": \"option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s) && !isDone(s))) > 0\"",
   "replace": "\"expr\": \"false\"",
   "model": "вне модели: правило интерфейса"
  },
@@ -745,8 +745,36 @@
  {
   "name": "sibling-notice-any-result",
   "what": "запись в журнал открытых соседей и уведомление их адресату — при любом результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)",
-  "find": "\"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"],",
-  "replace": "\"fn\": \"notifySiblings\", \"args\": [[\"processed\", \"false_alarm\", \"duplicate\", \"drill\", \"impossible\", \"mass\"],",
+  "find": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"],",
+  "replace": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"processed\", \"false_alarm\", \"duplicate\", \"drill\", \"impossible\", \"mass\"],",
   "model": "мир модели: уведомления модель не меняют"
+ },
+ {
+  "name": "sibling-notice-linked-off",
+  "what": "привязанный закрыт вместе с основным «Ложной тревогой», а его открытым соседям ни записи, ни уведомления (§6.1, §11.4, решение 2026-10-29)",
+  "find": "\"workflow.journal.close_linked\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"], \"workflow.journal.sibling_closed\"] },",
+  "replace": "\"workflow.journal.close_linked\"] },",
+  "model": "мир модели: уведомления модель не меняют"
+ },
+ {
+  "name": "sibling-notice-to-closer",
+  "what": "закрывший в дежурной группе-адресате соседа получает уведомление о своём закрытии (§6.1, решение 2026-10-29)",
+  "find": "\"recipients\": \"recipients(addressee(s), s).filter(m, m != incident.closedBy)\"",
+  "replace": "\"recipients\": \"recipients(addressee(s), s)\"",
+  "model": "мир модели: уведомления модель не меняют"
+ },
+ {
+  "name": "duplicate-counts-closed",
+  "what": "в числе предупреждения «Дубликата» об открытых соседях — и закрытые (§2.2, §7, решение 2026-10-29)",
+  "find": "\"vars\": { \"n\": \"size(siblingsOf(incident).filter(s, hasAccess(me, s) && !isDone(s)))\" }",
+  "replace": "\"vars\": { \"n\": \"size(siblingsOf(incident).filter(s, hasAccess(me, s)))\" }",
+  "model": "вне модели: правило интерфейса"
+ },
+ {
+  "name": "bulk-primary-ignores-allowed",
+  "what": "основного по §11.3 нет — основной выборки самый срочный из всех отмеченных, даже если его не закрыть: «Закрыть без обработки» недоступно (§11.1, решение 2026-10-29)",
+  "find": "cel.bind(ok, xs.filter(e, closeOptions(who, e, 'queue').exists(o, stepsOk(o, e))), ",
+  "replace": "cel.bind(ok, xs, ",
+  "model": "вне модели: выборки в модели нет"
  }
 ]

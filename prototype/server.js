@@ -1298,10 +1298,12 @@
     const tooLarge = (list) => W.limits.maxBulk != null && list.length > W.limits.maxBulk;
     // Кого касается действие на выборке (bulk.scope машины, §11.1, ARCH-15): primaryScenario — только отмеченных сценария
     // основного выборки (bulkPrimary машины, выборка — по возрастанию номера, как у объединения); остальные пропускаются
-    // и не меняются. Без scope — все отмеченные
+    // и не меняются. Без scope — все отмеченные. Основного нет (закрыть оператору нечего) — тоже все: действие
+    // недоступно с причиной того, кто не проходит, а не «доступно» на пустой области
     function bulkScope(tr, list) {
       if (!tr || !tr.bulk || tr.bulk.scope !== "primaryScenario" || !list.length) return { list, skipped: [], primary: null };
       const primary = engine.bulkPrimary([...list].sort(byNumber));
+      if (!primary) return { list, skipped: [], primary: null };
       const key = scenarioKey(primary);
       return { list: list.filter((e) => scenarioKey(e) === key), skipped: list.filter((e) => scenarioKey(e) !== key), primary };
     }
@@ -1931,6 +1933,35 @@
             }
             const fired = runScheduler();
             return { status: 200, body: { operatorId: person.id, roles: person.roles, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
+          },
+        ],
+        [
+          "POST",
+          "/test/operators/{operatorId}/incidents/{incidentGuid}/transitions/{transitionId}",
+          (p, q, body) => {
+            // Переход от имени коллеги (§17): его исполнитель машины — его права, состояние и проверки, как в эмуляции
+            // коллег. Так тесты видят чужое действие глазами оператора стенда: уведомления, поток, карточку
+            const person = OPERATORS.find((o) => o.id === p.operatorId);
+            if (!person || person.id === ME) return problem(404, "NOT_FOUND", ["workflow.error.test.no_operator", { id: p.operatorId }]);
+            const ev = byId(p.incidentGuid);
+            if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            const actor = colleague(person.id);
+            const tr = actor.transition(p.transitionId);
+            if (!tr || tr.trigger !== "manual") return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
+            const formValues = (body && body.formValues) || {};
+            const surface = (body && body.surface) || "card";
+            const check = actor.availability(p.transitionId, ev, { form: formValues, surface });
+            if (!check.ok) return guardProblem(check);
+            const r = actor.run(p.transitionId, ev, formValues, { surface });
+            if (!r.ok) return problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
+            touch([ev]);
+            emitTransition(ev, p.transitionId, person.id, r.facts);
+            // Системные переходы, которые действие сделало возможными (закрыт основной — привязанные), — сразу
+            const fired = runScheduler();
+            return {
+              status: 200,
+              body: { operatorId: person.id, incidentGuid: ev.id, transitionId: p.transitionId, state: ev.state, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) },
+            };
           },
         ],
         [
