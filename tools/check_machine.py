@@ -578,6 +578,20 @@ def check_intake(w, err):
         err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
 
 
+def check_open_questions(err):
+    """§15 правил: вопросы, оставленные открытыми этапом 1б (ARCH-15) — их не должно потеряться. Каждый назван
+    характерными словами и стоит в таблице открытых вопросов, до строки «Решённые вопросы»."""
+    path = os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    start = text.index("\n## 15. Открытые вопросы")
+    end = text.index("Решённые вопросы", start)
+    section = text[start:end]
+    for words in ("цепочка эскалации по службе", "дежурной группе правила"):
+        if words not in section:
+            err.append(f"правила, §15: нет вопроса «{words}» (ARCH-15)")
+
+
 def check_layers(err):
     """Интерфейс прототипа говорит только с API: не трогает исполнитель, демо-данные и сервер
     напрямую. Единственное место, где он их называет, — создание встроенного сервера."""
@@ -1987,6 +2001,7 @@ def collect():
     check_fixture(w, err)
     check_rules(fixture_with_rows(), err)
     check_intake(w, err)
+    check_open_questions(err)
     check_api(w, o, err)
     return err
 
