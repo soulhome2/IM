@@ -3218,7 +3218,9 @@
     assert.eq(med.items.map((e) => e.number), ["INC-1853"], "очередь: только медпункт");
     const both = await env.ok("GET", `/operator/incidents?filter=all&scenarioGuid=${enc(MED)},${enc(FIRE)}&pageSize=1000`);
     assert.ok(both.items.some((e) => e.number === "INC-1853") && both.items.some((e) => e.number === "INC-1847"), "несколько сценариев через запятую");
-    assert.ok(both.total < (await env.ok("GET", "/operator/incidents?filter=all&pageSize=1000")).total || both.total > 1, "отбор сужает или равен очереди");
+    const titles = [MED, FIRE].map((g) => window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === g).name);
+    assert.ok(both.items.every((e) => titles.includes(e.scenarioTitle)), "в отборе только два названных сценария");
+    assert.eq(["INC-1847", "INC-1853"].filter((n) => !both.items.some((e) => e.number === n)), [], "оба соседа в отборе");
     const counted = await env.ok("GET", `/operator/incidents/counters?scenarioGuid=${enc(MED)}`);
     assert.eq(counted.open, 1, "счётчики с тем же параметром");
     const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "all", scenarioGuid: MED });

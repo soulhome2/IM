@@ -240,6 +240,8 @@ MUTATIONS = [
     ("linked-count-ignores-access", "server.js", "linkedCount: events.filter((e) => e.linkedTo === ev.id && canSee(e)).length,", "linkedCount: events.filter((e) => e.linkedTo === ev.id).length,", "api"),
     # Соседи тревоги — только видимые: невидимый не даёт ни числа, ни строки в карточке, ни статуса (§5, ARCH-15)
     ("siblings-ignore-access", "server.js", "e.eventGuid === ev.eventGuid && e.id !== ev.id && canSee(e));", "e.eventGuid === ev.eventGuid && e.id !== ev.id);", "api"),
+    # Фильтр «Сценарий» очереди: соседи по событию различаются только сценарием (§19.2, ARCH-15)
+    ("scenario-filter-ignored", "server.js", 'if (q.scenarioGuid && q.scenarioGuid !== "all" && !String(q.scenarioGuid).split(",").includes(e.scenarioGuid)) return false;', "", "api"),
     ("schema-version-literal", "server.js", "        schemaVersion: W.schema.version,", "        schemaVersion: 3,", "api"),
     ("ui-bulk-done-generic", "app.js", "const done = tr && tr.ui && tr.ui.bulkDoneKey;", "const done = null;", "ui"),
     ("ui-session-note-lost", "app.js", "return m && m.noteKey ? t(m.noteKey, vars || {}) : \"\";", "return \"\";", "ui"),
