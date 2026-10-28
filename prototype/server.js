@@ -1943,8 +1943,11 @@
             // коллег. Так тесты видят чужое действие глазами оператора стенда: уведомления, поток, карточку
             const person = OPERATORS.find((o) => o.id === p.operatorId);
             if (!person || person.id === ME) return problem(404, "NOT_FOUND", ["workflow.error.test.no_operator", { id: p.operatorId }]);
+            // Инцидент вне доступа коллеги для него — то же, что несуществующий, как у /operator/* для оператора (§5)
             const ev = byId(p.incidentGuid);
-            if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            if (!ev || !hasAccess(person.id, ev)) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            // Сначала догнать то, что к этому моменту должно было сработать, как перед запросом оператора (BUG-82)
+            const caught = runScheduler();
             const actor = colleague(person.id);
             const tr = actor.transition(p.transitionId);
             if (!tr || tr.trigger !== "manual") return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
@@ -1957,7 +1960,7 @@
             touch([ev]);
             emitTransition(ev, p.transitionId, person.id, r.facts);
             // Системные переходы, которые действие сделало возможными (закрыт основной — привязанные), — сразу
-            const fired = runScheduler();
+            const fired = caught.concat(runScheduler());
             return {
               status: 200,
               body: { operatorId: person.id, incidentGuid: ev.id, transitionId: p.transitionId, state: ev.state, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) },

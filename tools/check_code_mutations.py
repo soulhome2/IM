@@ -181,6 +181,7 @@ MUTATIONS = [
     ("ui-sibling-notice-hidden", "app.js", '      toast(t("{n} того же события закрыт: {result}"', '      if (false) toast(t("{n} того же события закрыт: {result}"', "ui"),
     # Действие коллеги служебной операцией стенда (§17): от имени оператора стенда, а не коллеги
     ("test-colleague-acts-as-me", "server.js", "const actor = colleague(person.id);", "const actor = engine;", "api"),
+    ("test-colleague-ignores-access", "server.js", "if (!ev || !hasAccess(person.id, ev)) return problem(404", "if (!ev) return problem(404", "api"),
     ("ui-bulk-transfer-copy", "app.js", "title: t(form.bulkTitleKey, { n })", "title: t(form.titleKey)", "ui"),
     ("external-effects-dropped", "server.js", "journalEntries: journalView(ev).slice(before), externalEffects, canceledTimerTrigger", "journalEntries: journalView(ev).slice(before), externalEffects: [], canceledTimerTrigger", "api"),
     ("queue-not-sorted", "server.js", "      return list.sort((a, b) => cmp(a, b) || byNumber(a, b));", "      return list;", "api"),

@@ -2189,6 +2189,21 @@
     assert.eq(got.map((m) => [m.incidentGuid, m.actor && m.actor.id]), [[med, "petrova"]], "другому участнику группы — событие о INC-1853");
   });
 
+  test("Переход от имени коллеги: инцидент вне его доступа — 404, ничего не меняется (§5, служебная операция стенда)", async () => {
+    // Петрова — только «Оператор ТЦ»: инцидент другой площадки ей не виден
+    const env = await makeEnv();
+    assert.status(await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] }), 200, null, "Петрова — только ТЦ");
+    const far = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    assert.ok(far, "есть новый инцидент не в торговом центре");
+    const before = await env.card(far.guid);
+    const res = await asColleague(env, "petrova", far.guid, "claim");
+    assert.status(res, 404, "NOT_FOUND", `${far.number} вне доступа Петровой`);
+    const after = await env.card(far.guid);
+    assert.eq([after.state, after.owner, after.version, after.journal.length], [before.state, before.owner, before.version, before.journal.length], "инцидент не тронут");
+    // В торговом центре — доступ есть, тот же запрос проходит
+    assert.status(await asColleague(env, "petrova", await env.guidOf("INC-1847"), "claim"), 200, null, "INC-1847 в торговом центре — Петрова берёт");
+  });
+
   test("Ложная тревога у основного: открытым соседям привязанных — запись и уведомление, как при «Закрыть» (§6.1, §11.4, ARCH-15)", async () => {
     // A — пожар INC-1851 (своё событие), B — пожар INC-1847, привязан к A; C — медпункт INC-1853, сосед B по событию, у меня в работе.
     // A закрывает Петрова: я передаю ей A вместе с привязанным, она принимает и закрывает

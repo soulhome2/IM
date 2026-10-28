@@ -2173,6 +2173,88 @@
       return toast.textContent;
     });
 
+    // Запрос оператора стенда с версией из карточки (If-Match)
+    async function standAct(guid, transitionId, formValues, surface) {
+      const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
+      return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${transitionId}`, { formValues: formValues || {}, surface: surface || "card" }, { "If-Match": card.headers.etag });
+    }
+    // Переход от имени Петровой — служебной операцией стенда (§17)
+    const petrovaAct = (guid, transitionId, formValues) =>
+      stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(guid)}/transitions/${transitionId}`, { formValues: formValues || {}, surface: "card" });
+
+    await step("Ложная тревога у основного — уведомление адресату соседа привязанного (§6.1, §11.4, решение 2026-10-29)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Пожар INC-1847 привязан к INC-1851; его сосед медпункт INC-1853 — у меня в работе. INC-1851 закрывает Петрова «Ложной тревогой»
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(300);
+      let toast = null;
+      try {
+        const [a, b, c] = ["INC-1851", "INC-1847", "INC-1853"].map(guidOf);
+        const merged = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: [a, b] });
+        expect(merged.status === 200, `INC-1851 и INC-1847 не взяты одним инцидентом: ${merged.status}`);
+        expect((await standAct(c, "claim", {}, "queue")).status === 200, "INC-1853 не взят");
+        expect((await standAct(a, "transfer", { targetId: "petrova", comment: "тест" })).status === 200, "INC-1851 не передан Петровой");
+        expect((await petrovaAct(a, "accept")).status === 200, "Петрова не приняла INC-1851");
+        const closed = await petrovaAct(a, "close", { resultId: "false_alarm", comment: "тест" });
+        expect(closed.status === 200, `Петрова не закрыла INC-1851: ${closed.status}`);
+        await wait(300);
+        const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
+        toast = toastWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
+        expect(toast, `нет уведомления о закрытом привязанном соседе: ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return toast.textContent;
+    });
+
+    await step("Массовый сбой на выборке без основного: основной — тот, что можно закрыть (§11.1, решение 2026-10-29)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Пожар INC-1847 (100) — у Петровой в работе, медпункт INC-1853 (75) — мой, отложен: закроется медпункт, пожар пропущен
+      const incidents = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
+      incidents.find((i) => i.number === "INC-1853").priority = 75;
+      await standReset({ fixture: "demo", fixturePatch: { incidents }, workflowPatch: { limits: { maxActive: null } } });
+      await wait(300);
+      const state = async (number) => (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guidOf(number))}`)).body.state;
+      async function tick(number) {
+        const first = $("eventsPager").querySelector('[data-page="1"]');
+        if (first && !first.disabled) await click(first);
+        const row = await rowOnPages(guidOf(number));
+        expect(row, `в «Открытых» нет ${number}`);
+        await click(row.querySelector(`[data-check="${guidOf(number)}"]`));
+      }
+      let text = "";
+      try {
+        expect((await petrovaAct(guidOf("INC-1847"), "claim")).status === 200, "Петрова не взяла INC-1847");
+        expect((await standAct(guidOf("INC-1853"), "claim", {}, "queue")).status === 200, "INC-1853 не взят");
+        expect((await standAct(guidOf("INC-1853"), "hold", { reasonId: "third_party", comment: "тест" })).status === 200, "INC-1853 не отложен");
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        for (const number of ["INC-1847", "INC-1853"]) await tick(number);
+        const btn = $("selBar").querySelector('[data-sel-do="close"]');
+        expect(btn && !off(btn), `«Закрыть без обработки» на панели выборки недоступна: ${btn ? btn.title : "нет кнопки"}`);
+        await click(btn);
+        expect(!$("modalDialog").hidden, "форма закрытия выборки не открылась");
+        const note = $("dialogNote").textContent;
+        expect(/1 из 2/.test(note), `пояснение формы: «${note}»`);
+        await setField("resultId", "mass");
+        await setField("causeId", window.IM_WORKFLOW.reasonCatalogs.mass_fault.items[0].id);
+        await confirmDialog(NOTE);
+        await wait(200);
+        text = ($("toasts").lastElementChild || {}).textContent || "";
+        expect(/Не закрыты — другой сценарий: INC-1847/.test(text), `уведомление: «${text}»`);
+        const states = [await state("INC-1847"), await state("INC-1853")];
+        expect(states.join(",") === "in_progress,closed", `состояния INC-1847, INC-1853: ${states.join(", ")}`);
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return text;
+    });
+
     await step("Свой выход с инцидентами в работе и открытой карточкой — ни одного «карточка только для просмотра» (BUG-105)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Два инцидента в работе: лимит активных самопроверки (1) снят
