@@ -56,7 +56,7 @@
 - Produces (прототип): `engine.intake(rules, event) -> [{scenario: string, rule: Rule}]` — по сценарию победитель; порядок создания — по `ruleBeats` победителей, сценарии одного правила — по его списку; номер тревоги — номер первого созданного; `server.intakeEvent(spec) -> {eventGuid, alarmNumber|null, created: Incident[], incidents: Incident[]}`.
 - Produces (контракт): `POST /test/events` → `201`/`200` `TestEventResult {eventGuid, alarmNumber, created, incidents: IncidentCard[]}`; `POST /test/incidents` — `ruleGuid?`.
 
-- [ ] **Step 1: Write the failing tests** — `tests/api-scenarios.js`, новый раздел «Одно событие — несколько инцидентов (§14.5, ARCH-15)»; `S5` — устройство `20000000-0002-4000-8000-000000000005` (торговый центр), `S2` — `…0002-…000000000002`:
+- [x] **Step 1: Write the failing tests** — `tests/api-scenarios.js`, новый раздел «Одно событие — несколько инцидентов (§14.5, ARCH-15)»; `S5` — устройство `20000000-0002-4000-8000-000000000005` (торговый центр), `S2` — `…0002-…000000000002`:
   - «Событие через правила: инцидент на каждый сценарий подошедших правил, один номер тревоги, приоритет — от правила (§14.5, ARCH-15)»: `POST /test/events {eventTypeId: "fire", deviceIds: [S5], site: "Торговый центр"}` → `201`, `created == 2`; сценарии — `{keys.fire, keys.medical}`; у обоих `eventGuid` = ответа; первым создан медпункт (точнее условие): `incidents[0].number == "INC-1854"`, у обоих `alarmNumber == "INC-1854"`; пожар — `INC-1855`, приоритет 75, `ruleGuid` `80…0001`; медпункт — 100, `80…0009`; по событию `incident.created` на каждый.
   - «Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15)»: событие пожара на `S2` → `created == 1`, `ruleGuid` `80…000a`, приоритет 100; с `fixturePatch`, где у `80…000a` приоритет 25, — снова `80…000a`, приоритет 25.
   - «Ранжирование: вложенная группа точнее родителя; при равной точности — выше приоритет, затем раньше созданное (§14.5, ARCH-15)»: `fixturePatch.rules` — два правила сценария пожара: группа «Торговый центр», приоритет 100, и её первая вложенная группа с `S5` (из `GET /operator/reference/source-groups`), приоритет 25 → победитель вложенная, приоритет 25; два правила с группой «Торговый центр» и приоритетом 50 — побеждает с меньшим `createdAt`.
@@ -67,14 +67,14 @@
   - `tests/api-properties.js`, `invariants()`: у каждого инцидента есть `eventGuid` и `alarmNumber`; пара `(eventGuid, scenarioTitle)` не повторяется; у инцидентов одного `eventGuid` один `alarmNumber`, и это номер одного из них, у которого `alarmNumber == number`.
   - `prototype/selftest.js`, шаг «Событие через правила: инцидент на каждый сценарий, повтор ничего не создаёт (§14.5, ARCH-15)» — через стенд, те же утверждения, что первый и четвёртый тесты.
   - `tools/check_machine.py`, проверка набора `check_rules(fx, err)`: guid и `createdAt` правил уникальны, `createdAt` не позже `capturedAt`; сценарии правил есть в `scenarios.rows`; поля условий ссылаются на существующие типы событий, устройства, типы устройств, группы; в условии хоть одно поле; у каждого типа события инцидентов — ровно одно базовое правило; у инцидента `eventGuid`, `alarmNumber`, `ruleGuid`; у инцидентов одного события — один номер тревоги, одно устройство-источник, один тип и разные сценарии; номер тревоги — номер инцидента этого события, у которого номер тревоги свой; у разных событий — разные номера; сценарий инцидента — в сценариях его правила. Раздел `intake` машины ссылается на существующие определения и переход с `trigger: event`. Две порчи в `MUTATIONS` check_machine: соседу набора — сценарий соседа; соседу — другой номер тревоги.
-- [ ] **Step 2: Run tests to verify they fail** — тесты API: новые падают на `404` у `/test/events`; `python3 tools/check_machine.py` — «нет раздела rules» и «нет раздела intake».
-- [ ] **Step 3: Implement the machine** — типы, мир, определения и раздел `intake` по Interfaces; `create.$comment` — «по правилу; приоритет — правила; все инциденты события — одной транзакцией с отметкой события (§14.5)»; `invariants.oneIncidentPerEventScenario: true` с `$comment`. Модель Quint — только заглушки в `world.qnt`, чтобы `im.qnt` собрался.
-- [ ] **Step 4: Implement the fixture** — правила по design-1b.md, раздел 2, номер тревоги у 27 инцидентов — свой номер (базовые приоритеты: пожар 75, проникновение 75, саботаж 50, праздношатание 25, СИЗ 50, алкоголь 75, стекло 75, оставленный предмет 75); `INC-1853` — «Медпомощь при пожаре», `new`, приоритет 100, событие и тревога `INC-1847`, устройства как у `INC-1847`, журнал — запись появления; `byEventType` → `keys` и правка потребителей (`selftest.js` четыре места, `api-junction.js`, `check_scenarios.py`).
-- [ ] **Step 5: Implement the server** — `load()`: правила, события из инцидентов; `engine.intake` через `W.intake.match` и `W.intake.winner`, мир `deviceInGroup` — по дереву (`inGroup`), `groupDepth` — число предков узла; `intakeEvent(spec)` по design-1b.md, раздел 3, всё или ничего, номер тревоги — номер первого созданного; `createIncident(spec)` — правило из `ruleGuid` или базовое, приоритет правила или подмена из тела; поля `eventGuid`, `alarmNumber`, `ruleGuid` в `summary()`, `ruleName` в `card()`; маршрут `POST /test/events`; ошибка — `422` `workflow.error.test.bad_event`.
-- [ ] **Step 6: Contract and rules** — контракт по Interfaces; правила: §1 («Событие», «Инцидент», новые «Правило», «Тревога», «Соседние инциденты»; `event_guid`, `alarm_number`, `rule_guid` в технических именах), §2.2 (поля), §2.5 («У инцидента» — от правила; приведение — при переоткрытии и подмене на стенде; удалять уровень нельзя, пока на него ссылается правило), §6.2 (`create`), §14.5 (алгоритм design-1b.md, раздел 3), §15 (вопросы о приоритете и о ранжировании — в решённые: «правило», «§14.5, решение 2026-10-28»), §17 (правила — из набора, редактора нет). CHANGELOG — строка «ARCH-15.1: событие проходит через правила — инцидент на каждый сценарий; приоритет от правила; ранжирование правил; номер тревоги — номер первого инцидента (решения 2026-10-28, 41-multi-service.md)».
-- [ ] **Step 7: Mutation** — `intake-priority-first`: в `ruleBeats` приоритет сравнивается раньше ранга; проба — событие на `S2` при приоритете `80…000a` 25 даёт приоритет 75; ловит тест «Пересекающиеся правила…»; в `quint-catchers.json` пометка «вне модели: выбор правила по событию». `python3 tools/check_mutations.py intake-priority-first`, `python3 tools/check_code_mutations.py intake-priority-first`, `python3 tools/mutation_table.py`.
-- [ ] **Step 8: Full run** — `python3 tools/build_workflow.py`, `node tools/gen_quint.mjs`, быстрые проверки, `python3 tools/check_scenarios.py`, самопроверка, тесты API, `tests/scenario.html`, `quint test …/im_test.qnt`. Ожидаемые правки старых тестов — только: приоритет тестового инцидента без числа (выше; следствие решения № 9 «приоритет задаёт правило»), счётчики устройства `S5` и группы «Торговый центр» (+1 от `INC-1853`), число инцидентов набора 27 → 28. Любое другое падение — разобрать, а не подгонять.
-- [ ] **Step 9: Commit** — `ARCH-15.1: событие проходит через правила — инцидент на каждый сценарий`; вторым коммитом — хэш в CHANGELOG.
+- [x] **Step 2: Run tests to verify they fail** — тесты API: новые падают на `404` у `/test/events`; `python3 tools/check_machine.py` — «нет раздела rules» и «нет раздела intake».
+- [x] **Step 3: Implement the machine** — типы, мир, определения и раздел `intake` по Interfaces; `create.$comment` — «по правилу; приоритет — правила; все инциденты события — одной транзакцией с отметкой события (§14.5)»; `invariants.oneIncidentPerEventScenario: true` с `$comment`. Модель Quint — только заглушки в `world.qnt`, чтобы `im.qnt` собрался.
+- [x] **Step 4: Implement the fixture** — правила по design-1b.md, раздел 2, номер тревоги у 27 инцидентов — свой номер (базовые приоритеты: пожар 75, проникновение 75, саботаж 50, праздношатание 25, СИЗ 50, алкоголь 75, стекло 75, оставленный предмет 75); `INC-1853` — «Медпомощь при пожаре», `new`, приоритет 100, событие и тревога `INC-1847`, устройства как у `INC-1847`, журнал — запись появления; `byEventType` → `keys` и правка потребителей (`selftest.js` четыре места, `api-junction.js`, `check_scenarios.py`).
+- [x] **Step 5: Implement the server** — `load()`: правила, события из инцидентов; `engine.intake` через `W.intake.match` и `W.intake.winner`, мир `deviceInGroup` — по дереву (`inGroup`), `groupDepth` — число предков узла; `intakeEvent(spec)` по design-1b.md, раздел 3, всё или ничего, номер тревоги — номер первого созданного; `createIncident(spec)` — правило из `ruleGuid` или базовое, приоритет правила или подмена из тела; поля `eventGuid`, `alarmNumber`, `ruleGuid` в `summary()`, `ruleName` в `card()`; маршрут `POST /test/events`; ошибка — `422` `workflow.error.test.bad_event`.
+- [x] **Step 6: Contract and rules** — контракт по Interfaces; правила: §1 («Событие», «Инцидент», новые «Правило», «Тревога», «Соседние инциденты»; `event_guid`, `alarm_number`, `rule_guid` в технических именах), §2.2 (поля), §2.5 («У инцидента» — от правила; приведение — при переоткрытии и подмене на стенде; удалять уровень нельзя, пока на него ссылается правило), §6.2 (`create`), §14.5 (алгоритм design-1b.md, раздел 3), §15 (вопросы о приоритете и о ранжировании — в решённые: «правило», «§14.5, решение 2026-10-28»), §17 (правила — из набора, редактора нет). CHANGELOG — строка «ARCH-15.1: событие проходит через правила — инцидент на каждый сценарий; приоритет от правила; ранжирование правил; номер тревоги — номер первого инцидента (решения 2026-10-28, 41-multi-service.md)».
+- [x] **Step 7: Mutation** — `intake-priority-first`: в `ruleBeats` приоритет сравнивается раньше ранга; проба — событие на `S2` при приоритете `80…000a` 25 даёт приоритет 75; ловит тест «Пересекающиеся правила…»; в `quint-catchers.json` пометка «вне модели: выбор правила по событию». `python3 tools/check_mutations.py intake-priority-first`, `python3 tools/check_code_mutations.py intake-priority-first`, `python3 tools/mutation_table.py`.
+- [x] **Step 8: Full run** — `python3 tools/build_workflow.py`, `node tools/gen_quint.mjs`, быстрые проверки, `python3 tools/check_scenarios.py`, самопроверка, тесты API, `tests/scenario.html`, `quint test …/im_test.qnt`. Ожидаемые правки старых тестов — только: приоритет тестового инцидента без числа (выше; следствие решения № 9 «приоритет задаёт правило»), счётчики устройства `S5` и группы «Торговый центр» (+1 от `INC-1853`), число инцидентов набора 27 → 28. Любое другое падение — разобрать, а не подгонять.
+- [x] **Step 9: Commit** — `ARCH-15.1: событие проходит через правила — инцидент на каждый сценарий`; вторым коммитом — хэш в CHANGELOG.
 
 ### Task 15.2: Модель Quint — событие в появлении инцидента
 
@@ -88,11 +88,11 @@
 **Interfaces:**
 - Consumes: `Incident.eventGuid` из 15.1.
 
-- [ ] **Step 1: Write the failing test** — `siblingsTwoScenariosTest`: `create("i1", "ev1", "sc1", 100)` и `create("i2", "ev1", "sc2", 75)` проходят, `create("i3", "ev1", "sc1", 100)` — нет; `merge` `i2` к `i1` не проходит (разные сценарии).
-- [ ] **Step 2: Run test to verify it fails** — `quint test` — неверное число аргументов `create`.
-- [ ] **Step 3: Implement** — по Files.
-- [ ] **Step 4: Run tests to verify they pass** — `node tools/gen_quint.mjs` и `--check`, `quint test …/im_test.qnt`, `quint run …/im.qnt --invariant inv`, `node tools/check_quint_replay.mjs`, `node tools/check_quint_mutations.mjs scenario-ignored`.
-- [ ] **Step 5: Commit** — `ARCH-15.2: модель Quint — событие, соседи, инварианты уникальности`.
+- [x] **Step 1: Write the failing test** — `siblingsTwoScenariosTest`: `create("i1", "ev1", "sc1", 100)` и `create("i2", "ev1", "sc2", 75)` проходят, `create("i3", "ev1", "sc1", 100)` — нет; `merge` `i2` к `i1` не проходит (разные сценарии).
+- [x] **Step 2: Run test to verify it fails** — `quint test` — неверное число аргументов `create`.
+- [x] **Step 3: Implement** — по Files.
+- [x] **Step 4: Run tests to verify they pass** — `node tools/gen_quint.mjs` и `--check`, `quint test …/im_test.qnt`, `quint run …/im.qnt --invariant inv`, `node tools/check_quint_replay.mjs`, `node tools/check_quint_mutations.mjs scenario-ignored`.
+- [x] **Step 5: Commit** — `ARCH-15.2: модель Quint — событие, соседи, инварианты уникальности`.
 
 ### Task 15.3: Нормативы по сценарию
 
@@ -106,12 +106,12 @@
 - Consumes: `Incident.scenario`, сосед `INC-1853` и `/test/events` из 15.1.
 - Produces: строка уточнения `{scenario?, eventType?, priority?, sourceGroup?, sec}`; точность — число заданных ключей.
 
-- [ ] **Step 1: Write the failing test** — «Норматив по сценарию: строка со scenario даёт свой срок; строка из двух ключей точнее строки по приоритету (§4, правило 2; ARCH-15)»: `workflowPatch` реакции — прежние строки плюс `{scenario: MED, sec: 120}` и `{scenario: MED, priority: 100, sec: 90}`; событие пожара на `S5` → у медпункта `dueAt − createdAt = 90 с`, у пожара (75) — 420 с; с `overridesBy` без `"scenario"` — у медпункта 240 с. Шаг самопроверки «Норматив реакции по сценарию: у медпункта свой срок в заголовке карточки (§4, ARCH-15)».
-- [ ] **Step 2: Run test to verify it fails** — у медпункта 240 с.
-- [ ] **Step 3: Implement** — машина по Files; `check_machine.py`: неизвестный сценарий в `overrides` — ошибка `таймер <id>, overrides[i]: сценария <guid> нет в наборе`; правило §4, правило 2: «на тип события, приоритет, группу устройств и сценарий»; CHANGELOG.
-- [ ] **Step 4: Mutation** — `override-scenario-ignored`: из `overrideMatches` убрано условие по сценарию; ловит тест выше; Quint — «мир модели: нормативы по сценарию в модели не различаются».
-- [ ] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тест и шаг самопроверки, `check_mutations.py override-scenario-ignored`, `check_code_mutations.py override-scenario-ignored`.
-- [ ] **Step 6: Commit** — `ARCH-15.3: нормативы реакции и закрытия по сценарию`.
+- [x] **Step 1: Write the failing test** — «Норматив по сценарию: строка со scenario даёт свой срок; строка из двух ключей точнее строки по приоритету (§4, правило 2; ARCH-15)»: `workflowPatch` реакции — прежние строки плюс `{scenario: MED, sec: 120}` и `{scenario: MED, priority: 100, sec: 90}`; событие пожара на `S5` → у медпункта `dueAt − createdAt = 90 с`, у пожара (75) — 420 с; с `overridesBy` без `"scenario"` — у медпункта 240 с. Шаг самопроверки «Норматив реакции по сценарию: у медпункта свой срок в заголовке карточки (§4, ARCH-15)».
+- [x] **Step 2: Run test to verify it fails** — у медпункта 240 с.
+- [x] **Step 3: Implement** — машина по Files; `check_machine.py`: неизвестный сценарий в `overrides` — ошибка `таймер <id>, overrides[i]: сценария <guid> нет в наборе`; правило §4, правило 2: «на тип события, приоритет, группу устройств и сценарий»; CHANGELOG.
+- [x] **Step 4: Mutation** — `override-scenario-ignored`: из `overrideMatches` убрано условие по сценарию; ловит тест выше; Quint — «мир модели: нормативы по сценарию в модели не различаются».
+- [x] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тест и шаг самопроверки, `check_mutations.py override-scenario-ignored`, `check_code_mutations.py override-scenario-ignored`.
+- [x] **Step 6: Commit** — `ARCH-15.3: нормативы реакции и закрытия по сценарию`.
 
 ### Task 15.4: Тревога и соседи в очереди и карточке
 
@@ -125,11 +125,11 @@
 - Consumes: `eventGuid`, `alarmNumber` из 15.1.
 - Produces: `siblingCount: int` — видимые незакрытые соседи; `alarm: {eventGuid, number, status: "open"|"closed", allFalseAlarm: bool, siblings: AlarmSibling[]}`; `AlarmSibling {guid, number, scenarioTitle, state, badge, owner, closeResultLabel}` — все видимые соседи, по номеру.
 
-- [ ] **Step 1: Write the failing tests** — «Соседи: siblingCount — видимые незакрытые, в карточке — все соседи и статус тревоги (§5, §7, ARCH-15)»: у `INC-1847` `siblingCount == 1`, `alarm.number == "INC-1847"`, `alarm.siblings` — `[INC-1853]`, `status == "open"`; взять и закрыть `INC-1853` «Ложной тревогой» → у `INC-1847` `siblingCount == 0`, в `siblings` — `INC-1853` с `state == "closed"`; закрыть `INC-1847` «Ложной тревогой» → `status == "closed"`, `allFalseAlarm == true`; у инцидента без соседей `siblings == []`, `siblingCount == 0`. «Поиск находит инциденты по номеру тревоги (§7, ARCH-15)»: `search=INC-1847` → `INC-1847` и `INC-1853`. Шаг самопроверки «Тревога в очереди и карточке: номер тревоги, «событие: ещё 1», блок «По этому событию» (§7, ARCH-15)»: строка `INC-1853` — «тревога INC-1847», строка `INC-1847` — без неё (номер тревоги свой, В17), у обеих чип `[data-siblings]` «событие: ещё 1»; в карточке блок `#alarmBlock` с «INC-1853 — Медпомощь при пожаре»; нажатие на номер открывает `INC-1853` на просмотр.
-- [ ] **Step 2: Run tests to verify they fail** — полей нет.
-- [ ] **Step 3: Implement** — сервер: соседи — `events` с тем же `eventGuid`, без себя, `canSee`; статус — по ним и себе. Интерфейс: «тревога INC-…» — в `event-sub` после номера инцидента, только если номер тревоги не свой; чип — не `.chip.linked`, свой значок, подсказка — номера и бейджи соседей; блок над шагами: «Тревога INC-1847 · открыта», строки соседей без кнопок действий, номер — действие `view`. Правила: §5 — соседи, число и статус — по видимым; §7 — строка очереди и блок; §19.1 — счётчики считают инциденты, не тревоги. CHANGELOG.
-- [ ] **Step 4: Run tests to verify they pass** — тесты, самопроверка, `python3 tools/check_ui.py`, `check_i18n.py`, `check_guide.py`, быстрые проверки.
-- [ ] **Step 5: Commit** — `ARCH-15.4: номер тревоги и соседи в очереди и карточке`.
+- [x] **Step 1: Write the failing tests** — «Соседи: siblingCount — видимые незакрытые, в карточке — все соседи и статус тревоги (§5, §7, ARCH-15)»: у `INC-1847` `siblingCount == 1`, `alarm.number == "INC-1847"`, `alarm.siblings` — `[INC-1853]`, `status == "open"`; взять и закрыть `INC-1853` «Ложной тревогой» → у `INC-1847` `siblingCount == 0`, в `siblings` — `INC-1853` с `state == "closed"`; закрыть `INC-1847` «Ложной тревогой» → `status == "closed"`, `allFalseAlarm == true`; у инцидента без соседей `siblings == []`, `siblingCount == 0`. «Поиск находит инциденты по номеру тревоги (§7, ARCH-15)»: `search=INC-1847` → `INC-1847` и `INC-1853`. Шаг самопроверки «Тревога в очереди и карточке: номер тревоги, «событие: ещё 1», блок «По этому событию» (§7, ARCH-15)»: строка `INC-1853` — «тревога INC-1847», строка `INC-1847` — без неё (номер тревоги свой, В17), у обеих чип `[data-siblings]` «событие: ещё 1»; в карточке блок `#alarmBlock` с «INC-1853 — Медпомощь при пожаре»; нажатие на номер открывает `INC-1853` на просмотр.
+- [x] **Step 2: Run tests to verify they fail** — полей нет.
+- [x] **Step 3: Implement** — сервер: соседи — `events` с тем же `eventGuid`, без себя, `canSee`; статус — по ним и себе. Интерфейс: «тревога INC-…» — в `event-sub` после номера инцидента, только если номер тревоги не свой; чип — не `.chip.linked`, свой значок, подсказка — номера и бейджи соседей; блок над шагами: «Тревога INC-1847 · открыта», строки соседей без кнопок действий, номер — действие `view`. Правила: §5 — соседи, число и статус — по видимым; §7 — строка очереди и блок; §19.1 — счётчики считают инциденты, не тревоги. CHANGELOG.
+- [x] **Step 4: Run tests to verify they pass** — тесты, самопроверка, `python3 tools/check_ui.py`, `check_i18n.py`, `check_guide.py`, быстрые проверки.
+- [x] **Step 5: Commit** — `ARCH-15.4: номер тревоги и соседи в очереди и карточке`.
 
 ### Task 15.5: Фильтр очереди по сценарию
 
@@ -142,11 +142,11 @@
 **Interfaces:**
 - Produces: `scenarioGuid` — один или несколько guid через запятую, как `eventTypeGuid`; `ScenarioRef {guid, name}` — сценарии правил и открытых инцидентов, по названию.
 
-- [ ] **Step 1: Write the failing tests** — «Фильтр очереди по сценарию: в очереди, счётчиках и выборке «Все в фильтре» — только инциденты сценария (§19.2, ARCH-15)»: `filter=all&scenarioGuid=MED` → только `INC-1853`; счётчики с тем же параметром → `open == 1`; `selection {mode: "all_in_filter", scenarioGuid: MED}` → один guid. «Справочник сценариев: сценарии правил и открытых инцидентов, по названию (§19.2, ARCH-15)»: есть `MED` и сценарий пожара, порядок по `name`. Шаг самопроверки «Фильтр «Сценарий»: в очереди только инциденты выбранного сценария (§19.2, ARCH-15)».
-- [ ] **Step 2: Run tests to verify they fail** — `404` справочника, параметр не действует.
-- [ ] **Step 3: Implement** — по Files; правило §19.2: «тип события, тип устройства и сценарий»; у соседей совпадает всё, кроме сценария, — фильтр разделяет службы. CHANGELOG.
-- [ ] **Step 4: Run tests to verify they pass** — тесты, самопроверка, `check_ui.py`, `check_i18n.py`, быстрые проверки.
-- [ ] **Step 5: Commit** — `ARCH-15.5: фильтр очереди по сценарию`.
+- [x] **Step 1: Write the failing tests** — «Фильтр очереди по сценарию: в очереди, счётчиках и выборке «Все в фильтре» — только инциденты сценария (§19.2, ARCH-15)»: `filter=all&scenarioGuid=MED` → только `INC-1853`; счётчики с тем же параметром → `open == 1`; `selection {mode: "all_in_filter", scenarioGuid: MED}` → один guid. «Справочник сценариев: сценарии правил и открытых инцидентов, по названию (§19.2, ARCH-15)»: есть `MED` и сценарий пожара, порядок по `name`. Шаг самопроверки «Фильтр «Сценарий»: в очереди только инциденты выбранного сценария (§19.2, ARCH-15)».
+- [x] **Step 2: Run tests to verify they fail** — `404` справочника, параметр не действует.
+- [x] **Step 3: Implement** — по Files; правило §19.2: «тип события, тип устройства и сценарий»; у соседей совпадает всё, кроме сценария, — фильтр разделяет службы. CHANGELOG.
+- [x] **Step 4: Run tests to verify they pass** — тесты, самопроверка, `check_ui.py`, `check_i18n.py`, быстрые проверки.
+- [x] **Step 5: Commit** — `ARCH-15.5: фильтр очереди по сценарию`.
 
 ### Task 15.6: «Дубликат» — предупреждение о соседях
 
@@ -162,12 +162,12 @@
 **Interfaces:**
 - Produces: предупреждение варианта — `{expr: "option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0", textKey: "workflow.form.close.warn.duplicate_siblings", vars: {n: "size(siblingsOf(incident).filter(s, hasAccess(me, s)))"}}`; `FieldOption.warning` — первое подходящее предупреждение варианта, нет — null.
 
-- [ ] **Step 1: Write the failing tests** — «Дубликат при соседях: предупреждение у варианта, закрытие не запрещено; без соседей — без предупреждения (§2.2, §7, ARCH-15)»: взять `INC-1847`; в форме закрытия у варианта `duplicate` — `warning.key == "workflow.form.close.warn.duplicate_siblings"`, `warning.vars.n == 1`; у остальных вариантов `warning == null`; закрыть «Дубликатом» с комментарием → `200`, `closed`, `INC-1853` по-прежнему `new`; взять `INC-1851` (соседей нет) — у `duplicate` `warning == null`. Шаг самопроверки «Дубликат при соседях: предупреждение под списком результатов, закрыть можно (§2.2, ARCH-15)»: в форме `INC-1847` выбрать «Дубликат» — виден `[data-warning]` с «другие службы той же тревоги»; у `INC-1851` — не виден.
-- [ ] **Step 2: Run tests to verify they fail** — `warning` нет.
-- [ ] **Step 3: Implement** — по Files и Interfaces; правила: §2.2 «Дубликат» — «Та же тревога уже разбирается в другом инциденте; инцидент того же события другой службы — не дубликат: при соседях форма предупреждает, закрыть можно»; §7 — предупреждение в форме «Закрыть без обработки»; CHANGELOG.
-- [ ] **Step 4: Mutation** — `duplicate-warning-off`: условие предупреждения — `false`; ловит тест выше; Quint — «вне модели: правило интерфейса».
-- [ ] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py duplicate-warning-off`, `check_code_mutations.py duplicate-warning-off`, `check_ui.py`, `check_i18n.py`, `check_guide.py`.
-- [ ] **Step 6: Commit** — `ARCH-15.6: предупреждение о соседях при «Дубликате»`.
+- [x] **Step 1: Write the failing tests** — «Дубликат при соседях: предупреждение у варианта, закрытие не запрещено; без соседей — без предупреждения (§2.2, §7, ARCH-15)»: взять `INC-1847`; в форме закрытия у варианта `duplicate` — `warning.key == "workflow.form.close.warn.duplicate_siblings"`, `warning.vars.n == 1`; у остальных вариантов `warning == null`; закрыть «Дубликатом» с комментарием → `200`, `closed`, `INC-1853` по-прежнему `new`; взять `INC-1851` (соседей нет) — у `duplicate` `warning == null`. Шаг самопроверки «Дубликат при соседях: предупреждение под списком результатов, закрыть можно (§2.2, ARCH-15)»: в форме `INC-1847` выбрать «Дубликат» — виден `[data-warning]` с «другие службы той же тревоги»; у `INC-1851` — не виден.
+- [x] **Step 2: Run tests to verify they fail** — `warning` нет.
+- [x] **Step 3: Implement** — по Files и Interfaces; правила: §2.2 «Дубликат» — «Та же тревога уже разбирается в другом инциденте; инцидент того же события другой службы — не дубликат: при соседях форма предупреждает, закрыть можно»; §7 — предупреждение в форме «Закрыть без обработки»; CHANGELOG.
+- [x] **Step 4: Mutation** — `duplicate-warning-off`: условие предупреждения — `false`; ловит тест выше; Quint — «вне модели: правило интерфейса».
+- [x] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py duplicate-warning-off`, `check_code_mutations.py duplicate-warning-off`, `check_ui.py`, `check_i18n.py`, `check_guide.py`.
+- [x] **Step 6: Commit** — `ARCH-15.6: предупреждение о соседях при «Дубликате»`.
 
 ### Task 15.7: «Массовый сбой» на выборке — только свой сценарий
 
@@ -183,12 +183,12 @@
 **Interfaces:**
 - Produces: `bulkPrimary(xs, who)` = `mergePrimary(xs, who)`, а если он пуст — из всех `xs` самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки (по возрастанию номера, как у `mergePrimary`). При `bulk.scope: "primaryScenario"` переход применяется к отмеченным со сценарием основного; доступность — по ним же; остальные — в `skipped` с `reasonKey: "workflow.error.selection.other_scenario"`, не меняются.
 
-- [ ] **Step 1: Write the failing tests** — «Массовый сбой на выборке: закрывает только сценарий основного, другие пропускает и называет (§11.1, ARCH-15)»: выборка `[INC-1847, INC-1851, INC-1853]` (все новые, приоритет 100; основной — `INC-1851`: появился раньше всех, 11:58:43 против 11:59:00; сценарий — пожар) — `close` `enabled == true`, `formNote.key == "workflow.form.close.bulk.note.scenario"`, `vars` `{n: 2, total: 3, skipped: 1}`; `POST …/transitions/close/bulk` с «Массовым сбоем» → `200`, `succeeded` — `INC-1847`, `INC-1851`; `skipped == [{number: "INC-1853", reasonKey: "workflow.error.selection.other_scenario", …}]`; `INC-1853` — `new`, версия прежняя. Второй случай: взять `INC-1853` — основной он (свой «В работе»), выборка `[INC-1847, INC-1853]` → закрыт `INC-1853`, `INC-1847` пропущен. Шаг самопроверки «Массовый сбой на выборке двух сценариев: закрыт свой сценарий, о пропущенных — уведомление (§11.1, ARCH-15)».
-- [ ] **Step 2: Run tests to verify they fail** — закрываются все три, `skipped` нет.
-- [ ] **Step 3: Implement** — по Files и Interfaces; правило §11.1: «Закрыть без обработки на выборке закрывает только инциденты сценария основного (§11.3; нет основного — самый срочный, затем появившийся раньше); остальные пропускаются и перечислены в форме и в уведомлении: массовый сбой одной службы не закрывает инциденты другой»; CHANGELOG.
-- [ ] **Step 4: Mutation** — `bulk-close-all-scenarios`: без `bulk.scope`; ловит тест выше; Quint — «вне модели: выборки в модели нет».
-- [ ] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py bulk-close-all-scenarios`, `check_code_mutations.py bulk-close-all-scenarios`, `check_ui.py`, `check_i18n.py`.
-- [ ] **Step 6: Commit** — `ARCH-15.7: «Массовый сбой» на выборке — только сценарий основного`.
+- [x] **Step 1: Write the failing tests** — «Массовый сбой на выборке: закрывает только сценарий основного, другие пропускает и называет (§11.1, ARCH-15)»: выборка `[INC-1847, INC-1851, INC-1853]` (все новые, приоритет 100; основной — `INC-1851`: появился раньше всех, 11:58:43 против 11:59:00; сценарий — пожар) — `close` `enabled == true`, `formNote.key == "workflow.form.close.bulk.note.scenario"`, `vars` `{n: 2, total: 3, skipped: 1}`; `POST …/transitions/close/bulk` с «Массовым сбоем» → `200`, `succeeded` — `INC-1847`, `INC-1851`; `skipped == [{number: "INC-1853", reasonKey: "workflow.error.selection.other_scenario", …}]`; `INC-1853` — `new`, версия прежняя. Второй случай: взять `INC-1853` — основной он (свой «В работе»), выборка `[INC-1847, INC-1853]` → закрыт `INC-1853`, `INC-1847` пропущен. Шаг самопроверки «Массовый сбой на выборке двух сценариев: закрыт свой сценарий, о пропущенных — уведомление (§11.1, ARCH-15)».
+- [x] **Step 2: Run tests to verify they fail** — закрываются все три, `skipped` нет.
+- [x] **Step 3: Implement** — по Files и Interfaces; правило §11.1: «Закрыть без обработки на выборке закрывает только инциденты сценария основного (§11.3; нет основного — самый срочный, затем появившийся раньше); остальные пропускаются и перечислены в форме и в уведомлении: массовый сбой одной службы не закрывает инциденты другой»; CHANGELOG.
+- [x] **Step 4: Mutation** — `bulk-close-all-scenarios`: без `bulk.scope`; ловит тест выше; Quint — «вне модели: выборки в модели нет».
+- [x] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py bulk-close-all-scenarios`, `check_code_mutations.py bulk-close-all-scenarios`, `check_ui.py`, `check_i18n.py`.
+- [x] **Step 6: Commit** — `ARCH-15.7: «Массовый сбой» на выборке — только сценарий основного`.
 
 ### Task 15.8: Уведомление соседям о ложной тревоге
 
@@ -202,12 +202,12 @@
 - Consumes: факт `siblingsOf` из 15.1, `recipients` и `addressee` машины.
 - Produces: событие потока `incident.sibling_closed` — `incident` получателя, `payload` — закрытый сосед.
 
-- [ ] **Step 1: Write the failing tests** — «Ложная тревога у соседа: запись в журнал открытых соседей и уведомление их адресату; себе, закрытым и при другом результате — нет (§6.1, ARCH-15)»: `workflowPatch` — уровень 1 эскалации — группа `grp-leads` (в ней оператор стенда), 120 с; взять `INC-1847`, часы вперёд шагами с признаком активности за реакцию `INC-1853` (240 с и окно) → он «Ожидает принятия» у `grp-leads`; закрыть `INC-1847` «Ложной тревогой» → у `INC-1853` последняя запись журнала `workflow.journal.sibling_closed` с `number == "INC-1847"`, в потоке — `incident.sibling_closed` с `incidentGuid == INC-1853`, `payload.siblingNumber == "INC-1847"`. Отрицательные: закрытие «Плановой проверкой» — записи и события нет; сосед уже закрыт — записи нет; оба инцидента мои в работе — запись есть, события потока нет (себе не уведомляется). Шаг самопроверки «Ложная тревога у соседа — уведомление адресату соседа (§6.1, ARCH-15)»: всплывающее «INC-1847 того же события закрыт: Ложная тревога».
-- [ ] **Step 2: Run tests to verify they fail** — записи нет.
-- [ ] **Step 3: Implement** — по Files; правило §6.1, «Закрыть»: «закрыт ложной тревогой — запись в журнал открытых соседей и уведомление их адресату; соседи не закрываются»; §14.10 — новое событие потока. CHANGELOG.
-- [ ] **Step 4: Mutation** — `sibling-notice-any-result`: в `close` — `notifySiblings` со всеми результатами; ловит отрицательный случай «Плановая проверка»; Quint — «мир модели: уведомления модель не меняют».
-- [ ] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py sibling-notice-any-result`, `check_code_mutations.py sibling-notice-any-result`, `check_ui.py`, `check_i18n.py`, `check_guide.py`.
-- [ ] **Step 6: Commit** — `ARCH-15.8: уведомление соседям о ложной тревоге`.
+- [x] **Step 1: Write the failing tests** — «Ложная тревога у соседа: запись в журнал открытых соседей и уведомление их адресату; себе, закрытым и при другом результате — нет (§6.1, ARCH-15)»: `workflowPatch` — уровень 1 эскалации — группа `grp-leads` (в ней оператор стенда), 120 с; взять `INC-1847`, часы вперёд шагами с признаком активности за реакцию `INC-1853` (240 с и окно) → он «Ожидает принятия» у `grp-leads`; закрыть `INC-1847` «Ложной тревогой» → у `INC-1853` последняя запись журнала `workflow.journal.sibling_closed` с `number == "INC-1847"`, в потоке — `incident.sibling_closed` с `incidentGuid == INC-1853`, `payload.siblingNumber == "INC-1847"`. Отрицательные: закрытие «Плановой проверкой» — записи и события нет; сосед уже закрыт — записи нет; оба инцидента мои в работе — запись есть, события потока нет (себе не уведомляется). Шаг самопроверки «Ложная тревога у соседа — уведомление адресату соседа (§6.1, ARCH-15)»: всплывающее «INC-1847 того же события закрыт: Ложная тревога».
+- [x] **Step 2: Run tests to verify they fail** — записи нет.
+- [x] **Step 3: Implement** — по Files; правило §6.1, «Закрыть»: «закрыт ложной тревогой — запись в журнал открытых соседей и уведомление их адресату; соседи не закрываются»; §14.10 — новое событие потока. CHANGELOG.
+- [x] **Step 4: Mutation** — `sibling-notice-any-result`: в `close` — `notifySiblings` со всеми результатами; ловит отрицательный случай «Плановая проверка»; Quint — «мир модели: уведомления модель не меняют».
+- [x] **Step 5: Run tests to verify they pass** — сборка, быстрые проверки, тесты, самопроверка, `check_mutations.py sibling-notice-any-result`, `check_code_mutations.py sibling-notice-any-result`, `check_ui.py`, `check_i18n.py`, `check_guide.py`.
+- [x] **Step 6: Commit** — `ARCH-15.8: уведомление соседям о ложной тревоге`.
 
 ### Task 15.9: Звук, открытые вопросы и документы для бэкенда
 
@@ -219,20 +219,37 @@
 
 **Interfaces:** нет новых.
 
-- [ ] **Step 1: Write the failing test** — `python3 tools/check_machine.py`: проверка `check_open_questions` — в §15 есть строки со словами «цепочка эскалации по службе» и «дежурной группе правила»; нет — `правила, §15: нет вопроса «…» (ARCH-15)`.
-- [ ] **Step 2: Run test to verify it fails.**
-- [ ] **Step 3: Implement** —
+- [x] **Step 1: Write the failing test** — `python3 tools/check_machine.py`: проверка `check_open_questions` — в §15 есть строки со словами «цепочка эскалации по службе» и «дежурной группе правила»; нет — `правила, §15: нет вопроса «…» (ARCH-15)`.
+- [x] **Step 2: Run test to verify it fails.**
+- [x] **Step 3: Implement** —
   - §8.1, §9: «Уведомления и алерты по инцидентам одной тревоги, пришедшие одному человеку за 10 секунд, — один звук; уведомления остаются отдельными. Звука у появления инцидента нет». §17 — звука в прототипе нет (как было).
   - §15, новые строки (кто решает — joynickray; срок — до этапа 3 встраивания, адресация — до второго шага): цепочка эскалации по службе (сценарию); адресация инцидента дежурной группе правила (М1) и «в группе никто не может принять»; доступ по правилу или службе; повторная тревога с новым `event_guid`; координатор тревоги и общий итог; звук на появление инцидента; предупреждение о пересечении правил одного сценария при сохранении правила.
   - `BACKEND.md`: все инциденты события и отметка «обработано» — одна транзакция; `UNIQUE(event_guid, scenario_guid)`; номер тревоги — номер первого созданного инцидента события, хранится на событии, только при созданных инцидентах; у правила нужен `created_at` (сейчас только `updated_at`); у инцидента — `event_guid`, `rule_guid` (вернуть ссылку, убранную миграцией 010); ранжирование — правило §14.5, исполнять определениями `intake` машины; «Массовый сбой» на выборке — по `bulk.scope`, ответ со `skipped`; служебные операции — пять; из «Что ещё не решено» убрать вопросы о приоритете и о ранжировании.
   - README машины — «Тестовый стенд» и «Эталонный набор» по Files.
-- [ ] **Step 4: Run tests to verify they pass** — `check_machine.py` и `--mutations`, `check_links.py`, `check_guide.py`.
-- [ ] **Step 5: Commit** — `ARCH-15.9: один звук на тревогу, вопросы §15, документы для бэкенда`; вторым — хэши в CHANGELOG.
+- [x] **Step 4: Run tests to verify they pass** — `check_machine.py` и `--mutations`, `check_links.py`, `check_guide.py`.
+- [x] **Step 5: Commit** — `ARCH-15.9: один звук на тревогу, вопросы §15, документы для бэкенда`; вторым — хэши в CHANGELOG.
 
 ### После этапа
 
-- [ ] `/im-fsm` — формальная проверка машины после ARCH-15: `close` (эффект `notifySiblings`, `bulk.scope`), предупреждение формы, раздел `intake`; находки — проходом в `reviews/2026-10-28/`.
-- [ ] Полные проверки из `CLAUDE.md`: быстрые, самопроверка, тесты API, `tests/scenario.html`, `check_scenarios.py`, `node tools/check_scenario_states.mjs`, `check_i18n.py`, `check_guide.py`, `check_ui.py` (менялись `app.js` и `styles.css`), `quint test`, `quint run --invariant inv`, `python3 tools/check_loopback.py`.
-- [ ] Полные мутации кода (`check_code_mutations.py`) — предложить: менялись `server.js`, `engine.js`, `app.js`; по умолчанию их гоняет CI.
-- [ ] Итоговый просмотр ветки свежим агентом (superpowers:requesting-code-review).
-- [ ] Строка в [reviews/README.md](../README.md): «2026-10-28 — этап 1б (ARCH-15): одно событие — несколько инцидентов».
+- [x] `/im-fsm` — формальная проверка машины после ARCH-15: `close` (эффект `notifySiblings`, `bulk.scope`), предупреждение формы, раздел `intake`; находки — проходом в `reviews/2026-10-28/`.
+- [x] Полные проверки из `CLAUDE.md`: быстрые, самопроверка, тесты API, `tests/scenario.html`, `check_scenarios.py`, `node tools/check_scenario_states.mjs`, `check_i18n.py`, `check_guide.py`, `check_ui.py` (менялись `app.js` и `styles.css`), `quint test`, `quint run --invariant inv`, `python3 tools/check_loopback.py`.
+- [ ] Полные мутации кода (`check_code_mutations.py`) — предложить: менялись `server.js`, `engine.js`, `app.js`; по умолчанию их гоняет CI. Не запускались: каждая задача прогоняла свои порчи по имени, устаревших нет (`stale()` → `[]`); полный прогон — CI или по просьбе.
+- [x] Итоговый просмотр ветки свежим агентом (superpowers:requesting-code-review).
+- [x] Строка в [reviews/README.md](../README.md): «2026-10-28 — этап 1б (ARCH-15): одно событие — несколько инцидентов».
+
+### Итог выполнения (2026-10-29)
+
+| Задача | Коммиты |
+|---|---|
+| 15.1 | `d46badc`, `0bc69d0`, исправления `44eb22e` |
+| 15.2 | `2eb2ee4` |
+| 15.3 | `ebebe53`, `28d34e3`, исправления `16df46b`, `3b7a701` |
+| 15.4 | `d94fe9d`, `b4fc8fe` |
+| 15.5 | `f60f2bb`, `ca4cf7b`, исправления `602a931` |
+| 15.6 | `6caf640`, `3d5e89b`, исправления `0744e12` |
+| 15.7 | `f20fd78`, `2f36bc9`, исправления `8fd79cd`, `7c75b0a` |
+| 15.8 | `9c0dfee`, `af3c05a` |
+| 15.9 | `ab7e348`, `1e74026`, `236d4b4` (звук убран — решение пользователя 2026-10-29) |
+| Итоговый просмотр | исправления `8ca9b95`, `b96179a` |
+| 15.10 — решения пользователя 2026-10-29 | `ef034bf`, `dbec28e`, `afd30ea` |
+| `/im-fsm` | [review.md](review.md), `e7ff886` — 7 находок (средняя RULE-137), решения — в таблице review.md |
