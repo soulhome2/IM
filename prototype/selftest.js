@@ -963,6 +963,59 @@
       }
     });
 
+    await step("Тревога в очереди и карточке: номер тревоги, «событие: ещё 1», блок «По этому событию» (§7, ARCH-15)", async () => {
+      // Тревога INC-1847 набора: пожар INC-1847 и сосед — медпункт INC-1853
+      const fire = guidOf("INC-1847");
+      const med = guidOf("INC-1853");
+      try {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const fireRow = await rowOnPages(fire);
+        expect(fireRow, "INC-1847 нет в «Открытых»");
+        const sub = (row) => row.querySelector(".event-sub").textContent;
+        // Текст чипа — без названия значка
+        const chip = (row) => [...((row.querySelector("[data-siblings]") || {}).childNodes || [])].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
+        expect(!/тревога/.test(sub(fireRow)), `у INC-1847 номер тревоги свой — не показывается: «${sub(fireRow)}»`);
+        expect(chip(fireRow) === "событие: ещё 1", `чип INC-1847: «${chip(fireRow)}»`);
+        expect(!fireRow.querySelector(".chip.linked[data-siblings]"), "чип соседей — не чип привязанных");
+        // Подсказка чипа — номера и бейджи соседей, подгружается при наведении
+        const fireChip = fireRow.querySelector("[data-siblings]");
+        fireChip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+        await wait(300);
+        expect(/INC-1853 — Медпомощь при пожаре · Новое/.test(fireChip.title), `подсказка чипа INC-1847: «${fireChip.title}»`);
+        const medRow = await rowOnPages(med);
+        expect(medRow, "INC-1853 нет в «Открытых»");
+        expect(/^INC-1853 · тревога INC-1847 · /.test(sub(medRow)), `у INC-1853 — после номера «тревога INC-1847»: «${sub(medRow)}»`);
+        expect(chip(medRow) === "событие: ещё 1", `чип INC-1853: «${chip(medRow)}»`);
+        // Карточка INC-1847: блок над шагами, строка соседа без кнопок действий
+        await setFilter("open");
+        const view = await buttonOnPages("view", fire);
+        expect(view, "у INC-1847 нет «Посмотреть»");
+        await click(view);
+        expect(mode() === "work", "карточка INC-1847 не открылась");
+        const block = $("alarmBlock");
+        expect(block, "в карточке нет блока «По этому событию»");
+        const text = block.textContent.replace(/\s+/g, " ");
+        expect(text.includes("Тревога INC-1847 · открыта"), `статус тревоги: «${text}»`);
+        expect(text.includes("INC-1853 — Медпомощь при пожаре"), `строка соседа: «${text}»`);
+        expect(!block.querySelector("[data-do]"), "в блоке соседей — кнопки действий");
+        expect(block.compareDocumentPosition(root().querySelector(".crumbs")) & Node.DOCUMENT_POSITION_FOLLOWING, "блок — не над шагами");
+        // Номер соседа — «Посмотреть»: карточка INC-1853 на просмотр
+        await click(block.querySelector(`[data-sibling="${med}"]`));
+        await wait(200);
+        const num = $("workTitle").querySelector(".work-num");
+        expect(mode() === "work" && num && num.textContent === "INC-1853", `открылся не INC-1853: «${num ? num.textContent : "нет"}»`);
+        const back = ($("alarmBlock") || { textContent: "" }).textContent.replace(/\s+/g, " ");
+        expect(back.includes("INC-1847 — "), `в карточке INC-1853 сосед — INC-1847: «${back}»`);
+        expect(!root().querySelector(".crumbs.live"), "карточка INC-1853 открылась не на просмотр");
+        return `INC-1853 · тревога INC-1847; «${chip(medRow)}»; ${block.querySelector(".alarm-head > span:last-child").textContent}`;
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".badge.foreign"));

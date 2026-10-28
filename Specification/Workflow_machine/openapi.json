@@ -550,7 +550,7 @@
           {
             "name": "search",
             "in": "query",
-            "description": "Поиск по номеру, площадке, типу, местоположению. Находит и по привязанным инцидентам: тогда в строке основного — `matchedLinked`.",
+            "description": "Поиск по номеру, номеру тревоги (§7, ARCH-15: `search=INC-1847` находит и соседей тревоги INC-1847), площадке, типу, местоположению. Находит и по привязанным инцидентам: тогда в строке основного — `matchedLinked`.",
             "schema": {
               "type": "string"
             }
@@ -4153,6 +4153,11 @@
             "minimum": 0,
             "description": "§11. Сколько событий объединено с этим инцидентом — привязанных, вместе с закрытыми с ним. Сами события — GET /operator/incidents/{incidentGuid}/linked, постранично."
           },
+          "siblingCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "§5, §7, ARCH-15. Сколько у инцидента незакрытых соседей — инцидентов того же события, кроме самого, — из видимых оператору: «событие: ещё N» в строке очереди. Невидимый сосед не считается. Сами соседи — `alarm.siblings` карточки."
+          },
           "matchedLinked": {
             "type": "array",
             "description": "§11. Только в странице очереди при `search`: привязанные инциденты этого инцидента, подошедшие под поиск. Сами привязанные в списках не видны — их находит строка основного.",
@@ -4451,6 +4456,49 @@
                 ],
                 "description": "§14.5, ARCH-15. Название правила, по которому создан инцидент; правила уже нет — null. Запись журнала появления правила не называет."
               },
+              "alarm": {
+                "type": "object",
+                "description": "§5, §7, ARCH-15. Тревога инцидента — все инциденты его события: блок «По этому событию» карточки. Соседи и статус — только по инцидентам, видимым оператору: невидимый сосед не показывается и на статус не влияет. Статус вычисляется, не хранится; в отчётах бэкенда — по всем инцидентам события.",
+                "required": [
+                  "eventGuid",
+                  "number",
+                  "status",
+                  "allFalseAlarm",
+                  "siblings"
+                ],
+                "properties": {
+                  "eventGuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "number": {
+                    "type": "string",
+                    "examples": [
+                      "INC-1847"
+                    ],
+                    "description": "Номер тревоги — то же, что `alarmNumber`."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "closed"
+                    ],
+                    "description": "`open` — открыт хоть один: сам инцидент или видимый сосед; `closed` — закрыты все."
+                  },
+                  "allFalseAlarm": {
+                    "type": "boolean",
+                    "description": "Все — сам и видимые соседи — закрыты результатом «Ложная тревога» (`false_alarm`). Пока тревога открыта — false."
+                  },
+                  "siblings": {
+                    "type": "array",
+                    "description": "Видимые соседи — и закрытые, по номеру. Нет соседей — пустой список.",
+                    "items": {
+                      "$ref": "#/components/schemas/AlarmSibling"
+                    }
+                  }
+                }
+              },
               "note": {
                 "anyOf": [
                   {
@@ -4549,6 +4597,59 @@
             }
           }
         ]
+      },
+      "AlarmSibling": {
+        "type": "object",
+        "description": "§7, ARCH-15. Соседний инцидент в блоке «По этому событию» карточки — только чтобы увидеть и открыть на просмотр: кнопок действий у строки нет.",
+        "required": [
+          "guid",
+          "number",
+          "state",
+          "badge"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string",
+            "examples": [
+              "INC-1853"
+            ]
+          },
+          "scenarioTitle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Название сценария соседа — его служба; `null`, если у сценария его нет."
+          },
+          "state": {
+            "$ref": "#/components/schemas/StateId"
+          },
+          "badge": {
+            "$ref": "#/components/schemas/Badge"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Владелец соседа, у закрытого — кто закрыл; нет — null."
+          },
+          "closeResultLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Подпись результата закрытия соседа; не закрыт — null."
+          }
+        }
       },
       "DeviceRef": {
         "type": "object",

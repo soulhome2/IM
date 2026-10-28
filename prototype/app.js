@@ -2179,10 +2179,10 @@
                   open.icon
                 )}</span>${title}</button>`
               : title
-          }${linkedChip(e)}</span>
+          }${linkedChip(e)}${siblingChip(e)}</span>
           <time datetime="${escapeHtml(e.occurredAt)}">${fmtTime(e.occurredAt)}</time>
         </div>
-        <div class="event-sub">${escapeHtml(e.number)} · ${te(e.site)} · ${te(e.location)}</div>
+        <div class="event-sub">${escapeHtml(e.number)}${alarmTag(e)} · ${te(e.site)} · ${te(e.location)}</div>
         ${
           e.matchedLinked
             ? `<div class="event-found"><span class="material-symbols-outlined" aria-hidden="true">link</span>${te("Найдено в привязанных: {ids}", {
@@ -2277,6 +2277,7 @@
         <div class="work-top">
           ${renderIncidentHead(ev)}
           ${workNote(ev)}
+          ${alarmBlock(ev)}
           ${workTabs(ev, tab)}
           ${
             tab !== "scenario"
@@ -3279,6 +3280,11 @@
       if (narrowQuery.matches) state.groupsOn = false;
       requery();
     });
+    // Подсказка «событие: ещё N» — номера и бейджи соседей, при первом наведении
+    $("eventsList").addEventListener("mouseover", (e) => {
+      const chip = e.target.closest("[data-siblings]");
+      if (chip) siblingTip(chip);
+    });
     $("eventsList").addEventListener("click", async (e) => {
       const check = e.target.closest("[data-check]");
       if (check) {
@@ -3426,6 +3432,11 @@
           toast(problemText(err));
         }
         await reload();
+        return;
+      }
+      const sibling = e.target.closest("[data-sibling]");
+      if (sibling) {
+        openSibling(sibling.dataset.sibling, sibling.dataset.number);
         return;
       }
       const act = e.target.closest("[data-do]");
@@ -3746,6 +3757,76 @@
     if (!e.linkedCount) return "";
     const text = t("+{n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}", { n: e.linkedCount });
     return `<span class="chip linked" data-work-tab="linked" title="${te("Объединено с этим инцидентом: {n}", { n: e.linkedCount })}"><span class="material-symbols-outlined" aria-hidden="true">link</span>${escapeHtml(text)}</span>`;
+  }
+
+  /* ===== Тревога: соседи — другие службы того же события (§7, ARCH-15) =====
+     Не привязка (§11): соседей не объединяют и не отсоединяют, поэтому и пометка своя, не .chip.linked */
+
+  // «тревога INC-1847» после номера — только если номер тревоги не свой (В17): у первого инцидента события он совпадает
+  function alarmTag(e) {
+    if (!e.alarmNumber || e.alarmNumber === e.number) return "";
+    return ` · <span class="event-alarm">${te("тревога {n}", { n: e.alarmNumber })}</span>`;
+  }
+
+  // «Событие: ещё N» — видимые незакрытые соседи (siblingCount от сервера). Подсказка — номера и бейджи соседей:
+  // в строке очереди их нет, они в карточке (alarm.siblings) и подгружаются при первом наведении
+  function siblingChip(e) {
+    if (!e.siblingCount) return "";
+    return `<span class="chip sibling" data-siblings="${escapeHtml(e.guid)}" title="${te("Тревога {alarm}: другие службы того же события — {n}", {
+      alarm: e.alarmNumber,
+      n: e.siblingCount,
+    })}"><span class="material-symbols-outlined" aria-hidden="true">diversity_3</span>${te("событие: ещё {n}", { n: e.siblingCount })}</span>`;
+  }
+  const doneState = (id) => Boolean(STATES[id]) && STATES[id].category === "done";
+  const siblingLine = (s) => `${s.number} — ${scenarioTitle(s)} · ${badgeView(s).text}`;
+  async function siblingTip(chip) {
+    if (chip.dataset.tip) return;
+    chip.dataset.tip = "1";
+    const card = await api.get(incPath(chip.dataset.siblings)).catch(() => null);
+    if (!card || !card.alarm || !chip.isConnected) return;
+    const open = card.alarm.siblings.filter((s) => !doneState(s.state));
+    chip.title = [t("Тревога {alarm}", { alarm: card.alarm.number })].concat(open.map(siblingLine)).join("\n");
+  }
+
+  // Блок «По этому событию» над шагами (В15): статус тревоги и соседи строками — номер, служба, бейдж, владелец,
+  // результат. Кнопок действий нет: номер — «Посмотреть», карточка соседа на просмотр. Соседей нет — блока нет
+  function alarmBlock(ev) {
+    const a = ev.alarm;
+    if (!a || !a.siblings.length) return "";
+    const status = a.status === "open" ? t("открыта") : a.allFalseAlarm ? t("ложная") : t("закрыта");
+    const view = navDef("view");
+    const rows = a.siblings
+      .map((s) => {
+        const b = badgeView(s);
+        const who = s.owner && actorName(s.owner) !== b.text ? `<span class="alarm-who">${escapeHtml(actorName(s.owner))}</span>` : "";
+        const result = s.closeResultLabel ? `<span class="alarm-who">${escapeHtml(t(s.closeResultLabel))}</span>` : "";
+        return `<li class="alarm-sib">
+          <span class="alarm-what"><button type="button" class="alarm-num" data-sibling="${escapeHtml(s.guid)}" data-number="${escapeHtml(s.number)}" title="${escapeHtml(
+          lbl(view)
+        )}">${escapeHtml(s.number)}</button> — ${escapeHtml(scenarioTitle(s))}</span>
+          <span class="badge ${b.cls}">${escapeHtml(b.text)}</span>${who}${result}
+        </li>`;
+      })
+      .join("");
+    return `<section class="alarm-block" id="alarmBlock" aria-label="${te("По этому событию")}">
+      <div class="alarm-head"><span class="material-symbols-outlined" aria-hidden="true">diversity_3</span><strong>${te("По этому событию")}</strong><span>${te(
+        "Тревога {alarm} · {status}",
+        { alarm: a.number, status }
+      )}</span></div>
+      <ul class="alarm-sibs">${rows}</ul>
+    </section>`;
+  }
+
+  // Номер соседа — «Посмотреть» (§6.3, §7): то же действие машины, что значок в очереди, по строке соседа из очереди.
+  // Привязанного к другому инциденту в списках нет — он открывается в карточке своего основного (§11.4)
+  async function openSibling(guid, number) {
+    const page = await api.get("/operator/incidents", { filter: "all", search: number, pageSize: 100 }).catch(() => null);
+    const row = page && page.items.find((x) => x.guid === guid);
+    if (!row) {
+      toast(t("{id} сейчас не открыть на просмотр", { id: number }));
+      return;
+    }
+    await openCard("view", row);
   }
 
   // Вкладки над сценарием: привязанных много — им своё место, а не блок над шагами

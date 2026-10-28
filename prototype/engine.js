@@ -108,6 +108,8 @@
     const isSelf = (id) => def("isSelf", ME, id || "");
     const isTarget = (ev) => def("isTarget", ME, celIncident(ev));
     const isDone = (ev) => def("isDone", celIncident(ev));
+    // Закрыт «Ложной тревогой» — для статуса тревоги в карточке (§7, ARCH-15)
+    const closedFalseAlarm = (ev) => def("closedFalseAlarm", celIncident(ev));
     const hasAccess = (id, ev) => def("hasAccess", id || "", celIncident(ev));
     const canAccept = (id, ev) => def("canAccept", id || "", celIncident(ev), "");
     const norm = (ev, timerId) => cel.out(def("norm", celIncident(ev), def("timerDef", timerId)));
@@ -784,6 +786,7 @@
       nav: (id) => navActions[id] || null,
       isNav: (id) => Boolean(navActions[id]),
       isDone,
+      closedFalseAlarm,
       isTarget,
       isSelf,
       addressee,

@@ -247,6 +247,8 @@ FOREIGN = [("filter", "foreign")]
 TICK_THREE = [f"#eventsList .event:nth-child({i}) [data-check]" for i in (1, 2, 3)]
 MERGE_FIRES = [
     "#groupsList .tree-all [data-filter='select']",
+    # Среди пожаров — сосед INC-1853 со сценарием медпункта (ARCH-15): одним инцидентом берутся только пожары одного сценария
+    "#groupingRows [data-same]",
     "#groupingRows [data-ms-toggle='0:eventTypeIds']",
     "#groupingRows [data-fkey='0:eventTypeIds'][value='fire']",
     "#groupingConfirm",

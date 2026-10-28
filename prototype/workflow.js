@@ -4549,6 +4549,14 @@ window.IM_WORKFLOW = {
         "returns": "bool",
         "expr": "states.exists(s, s.id == x.state && s.category == 'done')"
       },
+      "closedFalseAlarm": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "expr": "isDone(x) && x.closeResultId == 'false_alarm'",
+        "$comment": "§5, §7, ARCH-15. Закрыт «Ложной тревогой». Тревога ложная, когда так закрыты сам инцидент и все его соседи, видимые смотрящему (alarm.allFalseAlarm карточки). Определение — для сервера и бэкенда, переходы его не используют"
+      },
       "byId": {
         "params": {
           "xs": "list<Incident>",

@@ -216,6 +216,11 @@ module im {
   def isDone(x: Incident): bool =
     settings.states.foldl(false, (acc, s_20) => acc or ((s_20.id == x.state) and (s_20.category == "done")))
 
+  // §5, §7, ARCH-15. Закрыт «Ложной тревогой». Тревога ложная, когда так закрыты сам инцидент и все его соседи, видимые смотрящему (alarm.allFalseAlarm карточки). Определение — для сервера и бэкенда, переходы его не используют
+
+  def closedFalseAlarm(x: Incident): bool =
+    (isDone(x) and (x.closeResultId == "false_alarm"))
+
   // Инцидент по id — списком из одного или пустым
 
   def byId(xs: List[Incident], id: str): List[Incident] =

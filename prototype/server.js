@@ -618,6 +618,10 @@
       return { label: render(b.label[0], b.label[1]), style: b.style, template: b.label[0], vars: b.label[1] || {} };
     }
 
+    // Соседи — инциденты того же события, кроме самого (§1, §14.5, факт siblingsOf машины). Только видимые
+    // оператору: невидимый сосед не даёт ни номера, ни числа, ни статуса тревоги (§5, ARCH-15)
+    const siblingsOf = (ev) => events.filter((e) => e.eventGuid === ev.eventGuid && e.id !== ev.id && canSee(e));
+
     function summary(ev, surface) {
       const src = eventSource(ev);
       return {
@@ -657,6 +661,8 @@
         linkedTo: ev.linkedTo || null,
         // Сколько привязанных — те же, что в GET …/linked: только видимые оператору (§5, ARCH-08 в15)
         linkedCount: events.filter((e) => e.linkedTo === ev.id && canSee(e)).length,
+        // «Событие: ещё N» в строке очереди — видимые незакрытые соседи (§7, ARCH-15 В5)
+        siblingCount: siblingsOf(ev).filter((e) => !engine.isDone(e)).length,
         scenarioProgress: progressOf(ev),
         scenarioTitle: rowOf(ev).name == null ? null : rowOf(ev).name,
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
@@ -862,7 +868,31 @@
         journal: journalView(ev),
         media: mediaView(ev),
         result: ev.closeComment || null,
+        alarm: alarmView(ev),
       });
+    }
+
+    // Тревога инцидента в карточке (§5, §7, ARCH-15): номер, статус и соседи — все видимые, и закрытые, по номеру.
+    // Статус вычисляется по себе и видимым соседям: «закрыта», когда закрыты все; ложная — все «Ложной тревогой»
+    function alarmView(ev) {
+      const siblings = siblingsOf(ev).sort(byNumber);
+      const all = [ev].concat(siblings);
+      const closed = all.every((e) => engine.isDone(e));
+      return {
+        eventGuid: ev.eventGuid,
+        number: ev.alarmNumber,
+        status: closed ? "closed" : "open",
+        allFalseAlarm: closed && all.every((e) => engine.closedFalseAlarm(e)),
+        siblings: siblings.map((e) => ({
+          guid: e.id,
+          number: e.number,
+          scenarioTitle: rowOf(e).name == null ? null : rowOf(e).name,
+          state: e.state,
+          badge: badgeView(e),
+          owner: actorRef(e.owner),
+          closeResultLabel: e.closeResult ? render(engine.closeResultLabel(e)) : null,
+        })),
+      };
     }
 
     // План инцидента: тот, где стоит источник или первое устройство события с положением,
@@ -979,9 +1009,9 @@
       return list.sort((a, b) => cmp(a, b) || byNumber(a, b));
     }
 
-    // Поиск — по номеру, типу, площадке и месту. Привязанные инциденты в списках не видны, но ищутся:
-    // их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
-    const hit = (e, needle) => `${e.number} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
+    // Поиск — по номеру, номеру тревоги (§7, ARCH-15), типу, площадке и месту. Привязанные инциденты в списках
+    // не видны, но ищутся: их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
+    const hit = (e, needle) => `${e.number} ${e.alarmNumber} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
     const linkedHits = (e, needle) => events.filter((x) => x.linkedTo === e.id && canSee(x) && hit(x, needle));
     function visible(q) {
       // В списках — инциденты, которые проходят хоть один фильтр очереди машины: привязанные инциденты

@@ -949,6 +949,22 @@ select.search-input { padding-right: 36px; }
 .chip.linked { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); border-color: var(--accent); }
 .chip.linked .material-symbols-outlined { font-size: 14px; }
 .chip.linked[data-work-tab] { cursor: pointer; }
+/* Тревога (§7, ARCH-15): соседи — другие службы того же события, не привязка — своя пометка и свой цвет */
+.chip.sibling { display: inline-flex; align-items: center; gap: 4px; color: var(--duty-text); border-color: var(--duty-border); white-space: nowrap; }
+.chip.sibling .material-symbols-outlined { font-size: 14px; }
+.event-alarm { color: var(--text); }
+/* Блок «По этому событию» над шагами карточки: статус тревоги и соседи строками, без кнопок действий */
+.alarm-block { margin: 0 var(--card-x) 8px; padding: 8px 10px; border: 1px solid var(--stroke-2); border-radius: var(--radius-sm); font-size: 13px; }
+.alarm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.alarm-head .material-symbols-outlined { font-size: 16px; color: var(--duty-text); }
+.alarm-head > span:last-child { color: var(--muted); }
+.alarm-sibs { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.alarm-sib { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.alarm-what { min-width: 0; overflow-wrap: anywhere; }
+/* Номер соседа — «Посмотреть»: текстовый оттенок акцента, заливочный на тёмной панели ниже 4,5:1 */
+.alarm-num { padding: 0; border: 0; background: none; color: var(--accent-text, var(--accent)); font: inherit; font-weight: 500; text-decoration: underline; cursor: pointer; }
+.alarm-num:hover { text-decoration-thickness: 2px; }
+.alarm-who { color: var(--muted); }
 /* Вкладки карточки: «Сценарий» и «Привязанные инциденты» — над шагами */
 .work-tabs { display: flex; gap: 4px; margin: 12px var(--card-x) 12px; border-bottom: 1px solid var(--stroke-2); }
 .work-tab:first-child { padding-left: 0; }

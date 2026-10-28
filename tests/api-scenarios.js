@@ -1918,6 +1918,70 @@
     assert.status(await env.call("POST", "/test/incidents", fireAt(S5, { ruleGuid: RULE("f") })), 422, null, "неизвестное правило");
   });
 
+  // Тревога INC-1847 набора: пожар INC-1847 и его сосед — медпункт INC-1853 (§14.5, ARCH-15)
+  const siblingsOfCard = (card) => card.alarm.siblings.map((s) => [s.number, s.state]);
+
+  test("Соседи: siblingCount — видимые незакрытые, в карточке — все соседи и статус тревоги (§5, §7, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const fire = await env.guidOf("INC-1847");
+    const med = await env.guidOf("INC-1853");
+    let card = await env.card(fire);
+    assert.eq(card.siblingCount, 1, "у INC-1847 один незакрытый сосед");
+    assert.eq([card.alarm.eventGuid, card.alarm.number, card.alarm.status, card.alarm.allFalseAlarm], [card.eventGuid, "INC-1847", "open", false], "тревога открыта");
+    assert.eq(siblingsOfCard(card), [["INC-1853", "new"]], "сосед — медпункт");
+    const s = card.alarm.siblings[0];
+    assert.eq([s.guid, s.scenarioTitle, s.badge && s.badge.label, s.owner, s.closeResultLabel], [med, (await env.card(med)).scenarioTitle, (await env.card(med)).badge.label, null, null], "строка соседа — сценарий, бейдж, без владельца и результата");
+    assert.eq((await env.find((e) => e.guid === fire, "open")).siblingCount, 1, "в строке очереди — тоже");
+    // Сосед закрыт «Ложной тревогой» — в «ещё N» не считается, в карточке остаётся
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    assert.status(await env.act(med, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1853");
+    card = await env.card(fire);
+    assert.eq(card.siblingCount, 0, "закрытый сосед не считается");
+    assert.eq(siblingsOfCard(card), [["INC-1853", "closed"]], "закрытый сосед в карточке остаётся");
+    assert.eq([card.alarm.siblings[0].owner && card.alarm.siblings[0].owner.id, card.alarm.siblings[0].closeResultLabel], [ME, jt({ templateKey: "workflow.catalog.close_result.false_alarm" })], "кто закрыл и результат");
+    assert.eq(card.alarm.status, "open", "сам открыт — тревога открыта");
+    // Закрыты все «Ложной тревогой» — тревога закрыта и ложная
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847");
+    card = await env.card(fire);
+    assert.eq([card.alarm.status, card.alarm.allFalseAlarm], ["closed", true], "тревога закрыта, вся ложная");
+    const other = await env.card(med);
+    assert.eq([other.siblingCount, other.alarm.number, siblingsOfCard(other), other.alarm.status], [0, "INC-1847", [["INC-1847", "closed"]], "closed"], "у соседа — та же тревога");
+    // Без соседей: пустой список, своя тревога
+    const alone = (await env.all("open")).find((e) => e.eventGuid !== card.eventGuid);
+    const solo = await env.card(alone.guid);
+    assert.eq([solo.siblingCount, solo.alarm.siblings, solo.alarm.number, solo.alarm.status], [0, [], solo.number, "open"], "без соседей");
+  });
+
+  test("Не тот результат — тревога закрыта, но не ложная; невидимый сосед не виден ни в числе, ни в карточке, ни в поиске (§5, ARCH-15)", async () => {
+    // Медпункт — на датчике дыма 2 (главный офис): оператору ТЦ его не видно
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.incidents.find((i) => i.number === "INC-1853").devices = [S2];
+    const env = await makeEnv({ fixturePatch: { incidents: fixture.incidents } });
+    const fire = await env.guidOf("INC-1847");
+    const med = await env.guidOf("INC-1853");
+    assert.eq((await env.card(fire)).siblingCount, 1, "со всеми объектами — сосед виден");
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    assert.status(await env.act(med, "close", { resultId: "duplicate", comment: "тест" }), 200, null, "закрыть INC-1853 «Дубликатом»");
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847");
+    const all = await env.card(fire);
+    assert.eq([all.alarm.status, all.alarm.allFalseAlarm], ["closed", false], "сосед закрыт другим результатом — тревога не ложная");
+    assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "только ТЦ");
+    const card = await env.card(fire);
+    assert.eq([card.siblingCount, card.alarm.siblings, card.alarm.status, card.alarm.allFalseAlarm], [0, [], "closed", true], "невидимого соседа нет: ни числа, ни строки, статус — по видимым");
+    const found = (await env.ok("GET", "/operator/incidents?filter=all&search=INC-1847&pageSize=100")).items.map((e) => e.number);
+    assert.eq(found, ["INC-1847"], "поиск по номеру тревоги невидимого не находит");
+  });
+
+  test("Поиск находит инциденты по номеру тревоги (§7, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const found = (await env.ok("GET", "/operator/incidents?filter=all&search=INC-1847&pageSize=100")).items.map((e) => e.number).sort();
+    assert.eq(found, ["INC-1847", "INC-1853"], "по номеру тревоги — и сосед");
+    const by = (await env.ok("GET", "/operator/incidents?filter=all&search=inc-1853&pageSize=100")).items.map((e) => e.number);
+    assert.eq(by, ["INC-1853"], "по номеру соседа — только он: его номер тревоги — не его номер");
+  });
+
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {
     // Пять уровней, ни одного прежнего числа; у двух — один цвет; свои нормативы — только у двух
     const levels = [
@@ -2928,9 +2992,11 @@
   test("Поиск находит привязанный инцидент — строкой основного с «найдено в привязанных»; страница найденного среди привязанных (§11)", async () => {
     const fx = window.IM_FIXTURE;
     const base = fx.incidents.find((i) => i.number === "INC-1847");
-    const extra = Array.from({ length: 12 }, (_, k) =>
-      Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-0000000099${String(k).padStart(2, "0")}`, number: `INC-99${String(k).padStart(2, "0")}` })
-    );
+    // Копии — каждая своё событие и своя тревога: иначе номер тревоги INC-1847 нашёл бы их все (ARCH-15)
+    const extra = Array.from({ length: 12 }, (_, k) => {
+      const n = `99${String(k).padStart(2, "0")}`;
+      return Object.assign(JSON.parse(JSON.stringify(base)), { guid: `10000000-0000-4000-8000-00000000${n}`, number: `INC-${n}`, eventGuid: `70000000-0000-4000-8000-00000000${n}`, alarmNumber: `INC-${n}` });
+    });
     const env = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat(extra) } });
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [base.guid].concat(extra.map((e) => e.guid)) });
     const last = extra[extra.length - 1];
@@ -2938,7 +3004,9 @@
     assert.eq(res.items.map((e) => e.guid), [base.guid], "найден основной, привязанного строкой нет");
     assert.eq(res.items[0].matchedLinked, [{ guid: last.guid, number: last.number }], "в строке — какой привязанный подошёл");
     const plain = await env.ok("GET", `/operator/incidents?filter=open&search=${encodeURIComponent(base.number)}`);
-    assert.ok(plain.items.length === 1 && !plain.items[0].matchedLinked, "поиск по самому основному — без «найдено в привязанных»");
+    // Номер основного — и номер его тревоги: строкой находится и сосед INC-1853 (§7, ARCH-15)
+    assert.eq(plain.items.map((e) => e.number).sort(), ["INC-1847", "INC-1853"], "по номеру основного — он и сосед его тревоги");
+    assert.ok(plain.items.every((e) => !e.matchedLinked), "поиск по самому основному — без «найдено в привязанных»");
     const p1 = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(last.guid)}`);
     assert.eq(p1.focusPage, 3, "найденное — на третьей странице по 5");
     const none = await env.ok("GET", `/operator/incidents/${enc(base.guid)}/linked?pageSize=5&focusGuid=${enc(base.guid)}`);
@@ -3135,8 +3203,9 @@
     assert.eq(fire.total, all.filter((e) => e.eventType.id === "fire").length, "тип события: все пожарные и только они");
     const dev = await env.ok("GET", "/operator/incidents?filter=all&deviceTypeId=fire-detector&pageSize=1000");
     assert.ok(dev.items.every((e) => e.sourceDeviceTypeId === "fire-detector"), "тип устройства-источника");
-    const search = await env.ok("GET", "/operator/incidents?filter=all&search=INC-1847");
-    assert.eq(search.items.map((e) => e.number), ["INC-1847"], "поиск по номеру");
+    // Без соседей: у INC-1847 номер — и номер тревоги соседа INC-1853, его ищет свой тест (ARCH-15)
+    const search = await env.ok("GET", "/operator/incidents?filter=all&search=INC-1838");
+    assert.eq(search.items.map((e) => e.number), ["INC-1838"], "поиск по номеру");
     const open = tree[0].counters.open;
     assert.eq(open, (await env.ok("GET", `/operator/incidents?filter=open&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`)).total, "счётчик группы в дереве");
   });

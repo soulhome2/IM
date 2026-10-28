@@ -238,6 +238,8 @@ MUTATIONS = [
     ("stream-addressed-to-me-lost", "server.js", "addressedToMe: engine.isSelf(engine.addressee(ev)),", "addressedToMe: false,", "api"),
     ("summary-addressee-lost", "server.js", "группа (§8.1)\n        addressee: actorRef(engine.addressee(ev)),", "группа (§8.1)\n        addressee: null,", "api"),
     ("linked-count-ignores-access", "server.js", "linkedCount: events.filter((e) => e.linkedTo === ev.id && canSee(e)).length,", "linkedCount: events.filter((e) => e.linkedTo === ev.id).length,", "api"),
+    # Соседи тревоги — только видимые: невидимый не даёт ни числа, ни строки в карточке, ни статуса (§5, ARCH-15)
+    ("siblings-ignore-access", "server.js", "e.eventGuid === ev.eventGuid && e.id !== ev.id && canSee(e));", "e.eventGuid === ev.eventGuid && e.id !== ev.id);", "api"),
     ("schema-version-literal", "server.js", "        schemaVersion: W.schema.version,", "        schemaVersion: 3,", "api"),
     ("ui-bulk-done-generic", "app.js", "const done = tr && tr.ui && tr.ui.bulkDoneKey;", "const done = null;", "ui"),
     ("ui-session-note-lost", "app.js", "return m && m.noteKey ? t(m.noteKey, vars || {}) : \"\";", "return \"\";", "ui"),
