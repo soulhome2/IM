@@ -2449,6 +2449,10 @@
                 "labelKey": {
                   "type": "string",
                   "description": "§14.9. Ключ подписи права, например `workflow.permission.incident.claim`."
+                },
+                "cloud": {
+                  "type": "string",
+                  "description": "Имя права в каталоге прав облака (`incident_manager.<ресурс>.<глагол>[.own|.any]`); по нему облако выдаёт право роли."
                 }
               }
             }

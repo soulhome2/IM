@@ -1140,7 +1140,7 @@ def check_incidents_via_facts(w, err):
         elif isinstance(o, list):
             for i, v in enumerate(o):
                 walk(v, path + [str(i)])
-        elif isinstance(o, str) and re.search(r"\bincidents\b(?!_)", o) and path[-1] not in ("scope",):
+        elif isinstance(o, str) and re.search(r"\bincidents\b(?!_)", o) and path[-1] not in ("scope", "cloud"):
             err.append(f"{'.'.join(path)}: выражение читает incidents — только через факты мира (ARCH-12)")
     walk(w, [])
 
@@ -1239,6 +1239,42 @@ def check_states_timers_tables(w, err):
         for col, key in (("Запускается", "startsOnEnter"), ("Останавливается", "stopsOnEnter"), ("Удержание", "pausedInStates")):
             if cell(row[col]) != set(t.get(key) or []):
                 err.append(f"правила, §4, {row['Таймер']}, «{col}»: {sorted(cell(row[col]))}, в машине {key} — {sorted(t.get(key) or [])}")
+
+
+# Правило имени права облака — зеркало IsValidPermissionName (axxoncloudgo, model/permissions/methods.go): сегменты
+# [a-z][a-z0-9_]*, не меньше двух; первый — известное пространство; последний — глагол из actionsMap
+# (permissions.go) либо область из scopeMap, и тогда перед ней — глагол (всего не меньше трёх сегментов)
+CLOUD_NAMESPACE = "incident_manager"
+CLOUD_SCOPES = {"own", "any"}
+CLOUD_VERBS = set("create view edit delete manage use run share export import download apply bind encrypt block take "
+                  "close track assign suspend process".split())
+CLOUD_SEGMENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,}$")
+
+
+def cloud_name_valid(name):
+    if not CLOUD_SEGMENT.match(name):
+        return False
+    parts = name.split(".")
+    if parts[0] != CLOUD_NAMESPACE:
+        return False
+    if parts[-1] in CLOUD_SCOPES:
+        return len(parts) >= 3 and parts[-2] in CLOUD_VERBS
+    return parts[-1] in CLOUD_VERBS
+
+
+def check_cloud_permissions(w, err):
+    """У каждого права машины есть имя в облаке (cloud); оно проходит правило облака и не повторяется"""
+    seen = {}
+    for p in w["permissions"]:
+        name = p.get("cloud")
+        if not name:
+            err.append(f"машина, permissions: {p['key']} — нет имени облака")
+        elif not cloud_name_valid(name):
+            err.append(f"машина, permissions: {p['key']} — имя облака «{name}» не проходит правило облака")
+        elif name in seen:
+            err.append(f"машина, permissions: {p['key']} — имя облака «{name}» повторяется (есть у {seen[name]})")
+        else:
+            seen[name] = p["key"]
 
 
 def check_rights_and_defaults(w, err):
@@ -1784,6 +1820,7 @@ def collect():
     check_rights_column(w, err)
     check_states_timers_tables(w, err)
     check_rights_and_defaults(w, err)
+    check_cloud_permissions(w, err)
     check_catalog_tables(w, err)
     check_transitions_doc(w, err)
     check_declared_fields(w, o, err)
@@ -1854,6 +1891,10 @@ MUTATIONS = [
      "| Дубликат | То же событие уже разбирается в другом инциденте | не нужен | `incident:close:unprocessed` |", "§2.2"),
     ("doc-expr-changed", "машина: выражение agentReady сменилось, а фраза в TRANSITIONS.md — та же (PROC-83)", MACHINE,
      "!session.states.exists(s, s.id == agentState(me) && s.readOnly)", "!session.states.exists(s, s.id == agentState(me))", "TRANSITIONS.md"),
+    ("cloud-name-invalid", "машина: у «Вернуть в очередь» имя облака без глагола", MACHINE,
+     '"cloud": "incident_manager.incidents.release.use"', '"cloud": "incident_manager.incidents.release"', "не проходит правило облака"),
+    ("cloud-name-duplicate", "машина: у «Переоткрыть» то же имя облака, что у «Закрыть»", MACHINE,
+     '"cloud": "incident_manager.incidents.reopen.use"', '"cloud": "incident_manager.incidents.close"', "повторяется"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

@@ -254,59 +254,73 @@ window.IM_WORKFLOW = {
   "permissions": [
     {
       "key": "incident:claim",
-      "labelKey": "workflow.permission.incident.claim"
+      "labelKey": "workflow.permission.incident.claim",
+      "cloud": "incident_manager.incidents.take.own"
     },
     {
       "key": "incident:accept",
-      "labelKey": "workflow.permission.incident.accept"
+      "labelKey": "workflow.permission.incident.accept",
+      "cloud": "incident_manager.incidents.process"
     },
     {
       "key": "incident:hold",
-      "labelKey": "workflow.permission.incident.hold"
+      "labelKey": "workflow.permission.incident.hold",
+      "cloud": "incident_manager.incidents.suspend"
     },
     {
       "key": "incident:release",
-      "labelKey": "workflow.permission.incident.release"
+      "labelKey": "workflow.permission.incident.release",
+      "cloud": "incident_manager.incidents.release.use"
     },
     {
       "key": "incident:close",
-      "labelKey": "workflow.permission.incident.close"
+      "labelKey": "workflow.permission.incident.close",
+      "cloud": "incident_manager.incidents.close"
     },
     {
       "key": "incident:close:unprocessed",
-      "labelKey": "workflow.permission.incident.close.unprocessed"
+      "labelKey": "workflow.permission.incident.close.unprocessed",
+      "cloud": "incident_manager.incidents.unprocessed.close"
     },
     {
       "key": "incident:reopen",
-      "labelKey": "workflow.permission.incident.reopen"
+      "labelKey": "workflow.permission.incident.reopen",
+      "cloud": "incident_manager.incidents.reopen.use"
     },
     {
       "key": "incident:transfer:own",
-      "labelKey": "workflow.permission.incident.transfer.own"
+      "labelKey": "workflow.permission.incident.transfer.own",
+      "cloud": "incident_manager.incidents.assign.own"
     },
     {
       "key": "incident:transfer:any",
-      "labelKey": "workflow.permission.incident.transfer.any"
+      "labelKey": "workflow.permission.incident.transfer.any",
+      "cloud": "incident_manager.incidents.assign.any"
     },
     {
       "key": "incident:reassign",
-      "labelKey": "workflow.permission.incident.reassign"
+      "labelKey": "workflow.permission.incident.reassign",
+      "cloud": "incident_manager.incidents.take.any"
     },
     {
       "key": "incident:bulk",
-      "labelKey": "workflow.permission.incident.bulk"
+      "labelKey": "workflow.permission.incident.bulk",
+      "cloud": "incident_manager.incidents.bulk.use"
     },
     {
       "key": "incident:run_action",
-      "labelKey": "workflow.permission.incident.run_action"
+      "labelKey": "workflow.permission.incident.run_action",
+      "cloud": "incident_manager.incidents.actions.run"
     },
     {
       "key": "incident:schema:admin",
-      "labelKey": "workflow.permission.incident.schema.admin"
+      "labelKey": "workflow.permission.incident.schema.admin",
+      "cloud": "incident_manager.manage"
     },
     {
       "key": "agent:set_not_ready",
-      "labelKey": "workflow.permission.agent.set_not_ready"
+      "labelKey": "workflow.permission.agent.set_not_ready",
+      "cloud": "incident_manager.agent.not_ready.use"
     }
   ],
   "timers": [
