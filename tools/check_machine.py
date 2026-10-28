@@ -1140,7 +1140,7 @@ def check_incidents_via_facts(w, err):
         elif isinstance(o, list):
             for i, v in enumerate(o):
                 walk(v, path + [str(i)])
-        elif isinstance(o, str) and re.search(r"\bincidents\b(?!_)", o) and path[-1] not in ("scope", "cloud"):
+        elif isinstance(o, str) and re.search(r"\bincidents\b(?!_)", o) and path[-1] != "scope" and not (path[0] == "permissions" and path[-1] == "cloud"):
             err.append(f"{'.'.join(path)}: выражение читает incidents — только через факты мира (ARCH-12)")
     walk(w, [])
 
@@ -1895,6 +1895,8 @@ MUTATIONS = [
      '"cloud": "incident_manager.incidents.release.use"', '"cloud": "incident_manager.incidents.release"', "не проходит правило облака"),
     ("cloud-name-duplicate", "машина: у «Переоткрыть» то же имя облака, что у «Закрыть»", MACHINE,
      '"cloud": "incident_manager.incidents.reopen.use"', '"cloud": "incident_manager.incidents.close"', "повторяется"),
+    ("cloud-outside-permissions", "машина: ключ cloud вне permissions читает incidents — исключение только для имён прав облака", MACHINE,
+     '    "version": 4,\n', '    "version": 4,\n    "cloud": "incidents.size() > 0",\n', "читает incidents"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]
