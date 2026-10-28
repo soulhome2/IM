@@ -454,6 +454,18 @@
     }
   }
 
+  // 24. Ключ «событие + сценарий» (§14.5, ARCH-15; oneIncidentPerEventScenario машины): у двух появившихся инцидентов
+  //     одного события сценарии разные — повтор события и пересекающиеся правила второго инцидента сценария не дают
+  val eventScenarioUnique = INCIDENTS.forall(i => INCIDENTS.forall(j => {
+    val x = incOf(i)
+    val y = incOf(j)
+    (i != j and x.state != "" and y.state != "" and x.eventGuid == y.eventGuid) implies x.scenario != y.scenario
+  }))
+
+  // 25. Соседи — не привязка §11 (§14.5): у привязанного событие другое, чем у основного. Следствие linkedSameScenario
+  //     и eventScenarioUnique — страховка на случай, если одно из них ослабнет
+  val siblingsNotLinked = INCIDENTS.forall(i => incOf(i).linkedTo != NOBODY implies incOf(i).eventGuid != primaryOf(incOf(i)).eventGuid)
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -496,6 +508,8 @@
     resolutionLeftKept,
     noFixAfterAction,
     exitExists,
+    eventScenarioUnique,
+    siblingsNotLinked,
   }
 
   /* ===== Свидетели посылок (PROC-72) =====
@@ -508,3 +522,5 @@
   val premise_holdBreach = INCIDENTS.exists(i => incOf(i).state == "on_hold" and hasBreach(incOf(i), "hold"))
   // Два привязанных к одному основному (linkedShape, linkedSharesBreaches, linkedSameScenario)
   val premise_twoLinked = INCIDENTS.exists(p => INCIDENTS.filter(i => incOf(i).linkedTo == p).size() >= 2)
+  // Соседи — два появившихся инцидента одного события (eventScenarioUnique)
+  val premise_siblings = INCIDENTS.exists(i => INCIDENTS.exists(j => i != j and incOf(i).state != "" and incOf(j).state != "" and incOf(i).eventGuid == incOf(j).eventGuid))

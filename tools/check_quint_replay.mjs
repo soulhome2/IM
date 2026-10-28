@@ -207,7 +207,8 @@ function replay(states, name) {
     const a = st.lastAction;
     setFacts(states[k - 1]);
     if (a.kind === "create") {
-      const ev = { id: a.incident, number: a.incident, typeId: "fire", priority: a.prio, occurredAt: facts.clock, scenarioGuid: a.scenario, log: [], breaches: [] };
+      // Событие инцидента — из модели (§14.5, ARCH-15): ключ «событие + сценарий» соблюдает модель, исполнитель только хранит
+      const ev = { id: a.incident, number: a.incident, typeId: "fire", priority: a.prio, occurredAt: facts.clock, scenarioGuid: a.scenario, eventGuid: a.event, log: [], breaches: [] };
       events.push(ev);
       events.sort((x, y) => IDS.indexOf(x.id) - IDS.indexOf(y.id));
       const r = engines.a.create(ev);

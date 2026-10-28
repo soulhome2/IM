@@ -20,5 +20,5 @@ module im {
   type World = { inc: str -> Incident, answers: str -> Set[str] }
   type Transition = { id: str, trigger: str, actor: str, from: Set[str], timer: str, idleSec: int, ownedByAgent: bool, surfaces: Set[str], bulkOnly: bool }
   // Последнее действие — с параметрами: по ним историю модели повторяют на исполнителе прототипа
-  // (tools/check_quint_replay.mjs). others — набор объединения, prio и scenario — у появления
-  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str }
+  // (tools/check_quint_replay.mjs). others — набор объединения, prio, scenario и event — у появления
+  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str, event: str }

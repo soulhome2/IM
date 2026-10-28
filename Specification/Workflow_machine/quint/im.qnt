@@ -23,8 +23,8 @@ module im {
   type World = { inc: str -> Incident, answers: str -> Set[str] }
   type Transition = { id: str, trigger: str, actor: str, from: Set[str], timer: str, idleSec: int, ownedByAgent: bool, surfaces: Set[str], bulkOnly: bool }
   // Последнее действие — с параметрами: по ним историю модели повторяют на исполнителе прототипа
-  // (tools/check_quint_replay.mjs). others — набор объединения, prio и scenario — у появления
-  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str }
+  // (tools/check_quint_replay.mjs). others — набор объединения, prio, scenario и event — у появления
+  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str, event: str }
 
   /* ===== Типы машины (cel.types) ===== */
 
@@ -3518,6 +3518,14 @@ module im {
   // ответы — начало пути, и перенос объединением (shareAnswers) даёт то же, что настоящий перенос «по пути до
   // разрыва» (scenario.js, share); сверка ядра повторяет ответы и переносы на настоящем исполнителе (Р9 б, PROC-79)
   pure val STEP_ORDER: List[str] = ["s1", "s2"]
+  // События (§14.5, ARCH-15): у инцидента — своё событие или общее ev0, выбор из двух. Так бывают и соседи — инциденты
+  // общего события разных сценариев, — и три инцидента одного сценария, все с разными событиями: без них нет двух
+  // привязанных к одному основному (premise_twoLinked), а при двух событиях на всех их быть не может. Выбор правила по
+  // событию — вне модели: инцидент появляется сразу с событием и сценарием, модель проверяет ключ «событие +
+  // сценарий» (intake.uniqueKey машины)
+  pure val OWN_EVENT: str -> str = Map("i1" -> "ev1", "i2" -> "ev2", "i3" -> "ev3")
+  pure val SHARED_EVENT = "ev0"
+  pure def eventsFor(i: str): Set[str] = Set(OWN_EVENT.get(i), SHARED_EVENT)
   pure val PRIORITIES: Set[int] = Set(100, 50)
   // Часы с секунды: 0 у дедлайна и момента в машине — «нет»
   pure val START = 1000
@@ -3587,7 +3595,7 @@ module im {
   def sees(a: str, i: str): bool = cfg.access.get(a).contains(i)
   def incOf(i: str): Incident = world.inc.get(i)
   pure def act0(kind: str, name: str, actor: str, i: str): Action =
-    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "" }
+    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "" }
 
   /* ===== Ядро исполнения (CEL.md, «Ядро исполнения») — как у исполнителя прототипа prototype/engine.js ===== */
 
@@ -3674,14 +3682,21 @@ module im {
 
   /* ===== Появление инцидента (переход с trigger event) ===== */
 
-  action create(i: str, sc: str, prio: int): bool = {
+  // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий и приоритет; сам
+  // выбор правила по событию — вне модели. Ключ intake.uniqueKey машины — событие + сценарий: второго инцидента того
+  // же сценария на событие нет, повтор события и пересекающиеся правила его не дают
+  def createOk(i: str, ev: str, sc: str): bool = all {
+    incOf(i).state == "",
+    not(INCIDENTS.exists(j => incOf(j).state != "" and incOf(j).eventGuid == ev and incOf(j).scenario == sc)),
+  }
+  action create(i: str, ev: str, sc: str, prio: int): bool = {
     val t = ofTrigger("event")[0]
     val w0 = { ...world,
-      inc: world.inc.set(i, { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc }),
+      inc: world.inc.set(i, { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev }),
       answers: world.answers.set(i, Set()) }
     all {
-      incOf(i).state == "",
-      commit({ ...act0("create", t.id, DISPATCHER, i), prio: prio, scenario: sc }, trApply(t.id, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
+      createOk(i, ev, sc),
+      commit({ ...act0("create", t.id, DISPATCHER, i), prio: prio, scenario: sc, event: ev }, trApply(t.id, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
     }
   }
 
@@ -3968,9 +3983,10 @@ module im {
     }
   }
   action createAny(i: str): bool = {
+    nondet ev = eventsFor(i).oneOf()
     nondet sc = SCENARIOS.oneOf()
     nondet prio = PRIORITIES.oneOf()
-    create(i, sc, prio)
+    create(i, ev, sc, prio)
   }
   action manualAny(a: str, i: str, tids: Set[str], results: Set[str]): bool = {
     nondet tid = tids.oneOf()
@@ -4448,6 +4464,18 @@ module im {
     }
   }
 
+  // 24. Ключ «событие + сценарий» (§14.5, ARCH-15; oneIncidentPerEventScenario машины): у двух появившихся инцидентов
+  //     одного события сценарии разные — повтор события и пересекающиеся правила второго инцидента сценария не дают
+  val eventScenarioUnique = INCIDENTS.forall(i => INCIDENTS.forall(j => {
+    val x = incOf(i)
+    val y = incOf(j)
+    (i != j and x.state != "" and y.state != "" and x.eventGuid == y.eventGuid) implies x.scenario != y.scenario
+  }))
+
+  // 25. Соседи — не привязка §11 (§14.5): у привязанного событие другое, чем у основного. Следствие linkedSameScenario
+  //     и eventScenarioUnique — страховка на случай, если одно из них ослабнет
+  val siblingsNotLinked = INCIDENTS.forall(i => incOf(i).linkedTo != NOBODY implies incOf(i).eventGuid != primaryOf(incOf(i)).eventGuid)
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -4490,6 +4518,8 @@ module im {
     resolutionLeftKept,
     noFixAfterAction,
     exitExists,
+    eventScenarioUnique,
+    siblingsNotLinked,
   }
 
   /* ===== Свидетели посылок (PROC-72) =====
@@ -4502,4 +4532,6 @@ module im {
   val premise_holdBreach = INCIDENTS.exists(i => incOf(i).state == "on_hold" and hasBreach(incOf(i), "hold"))
   // Два привязанных к одному основному (linkedShape, linkedSharesBreaches, linkedSameScenario)
   val premise_twoLinked = INCIDENTS.exists(p => INCIDENTS.filter(i => incOf(i).linkedTo == p).size() >= 2)
+  // Соседи — два появившихся инцидента одного события (eventScenarioUnique)
+  val premise_siblings = INCIDENTS.exists(i => INCIDENTS.exists(j => i != j and incOf(i).state != "" and incOf(j).state != "" and incOf(i).eventGuid == incOf(j).eventGuid))
 }

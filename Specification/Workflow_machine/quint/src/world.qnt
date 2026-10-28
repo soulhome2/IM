@@ -22,6 +22,14 @@
   // ответы — начало пути, и перенос объединением (shareAnswers) даёт то же, что настоящий перенос «по пути до
   // разрыва» (scenario.js, share); сверка ядра повторяет ответы и переносы на настоящем исполнителе (Р9 б, PROC-79)
   pure val STEP_ORDER: List[str] = ["s1", "s2"]
+  // События (§14.5, ARCH-15): у инцидента — своё событие или общее ev0, выбор из двух. Так бывают и соседи — инциденты
+  // общего события разных сценариев, — и три инцидента одного сценария, все с разными событиями: без них нет двух
+  // привязанных к одному основному (premise_twoLinked), а при двух событиях на всех их быть не может. Выбор правила по
+  // событию — вне модели: инцидент появляется сразу с событием и сценарием, модель проверяет ключ «событие +
+  // сценарий» (intake.uniqueKey машины)
+  pure val OWN_EVENT: str -> str = Map("i1" -> "ev1", "i2" -> "ev2", "i3" -> "ev3")
+  pure val SHARED_EVENT = "ev0"
+  pure def eventsFor(i: str): Set[str] = Set(OWN_EVENT.get(i), SHARED_EVENT)
   pure val PRIORITIES: Set[int] = Set(100, 50)
   // Часы с секунды: 0 у дедлайна и момента в машине — «нет»
   pure val START = 1000
@@ -91,4 +99,4 @@
   def sees(a: str, i: str): bool = cfg.access.get(a).contains(i)
   def incOf(i: str): Incident = world.inc.get(i)
   pure def act0(kind: str, name: str, actor: str, i: str): Action =
-    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "" }
+    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "" }

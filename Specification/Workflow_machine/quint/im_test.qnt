@@ -62,7 +62,9 @@ module im_test {
   }
   def due(i: str, k: str): int = incOf(i).timers.get(k).due
   action expire(i: str, k: str): bool = jump(due(i, k) + GRACE_MS)
-  action newFire(i: str): bool = create(i, "fire", 100)
+  // В разделах 1–6 у каждого инцидента своё событие (OWN_EVENT модели): ключ «событие + сценарий» не мешает
+  // нескольким пожарам
+  action newFire(i: str): bool = create(i, OWN_EVENT.get(i), "fire", 100)
 
   def x1 = incOf("i1")
   def x2 = incOf("i2")
@@ -296,7 +298,7 @@ module im_test {
   // Основного не назвали — mergePrimary машины: свой в работе, иначе самый срочный, у равных — появившийся раньше
   run mergeAutoPicksUrgentTest =
     start
-      .then(create("i1", "fire", 50))
+      .then(create("i1", OWN_EVENT.get("i1"), "fire", 50))
       .then(newFire("i2"))
       .then(mergeAuto("a", Set("i1", "i2")))
       .expect(x2.state == "in_progress" and x1.state == "linked" and x1.linkedTo == "i2")
@@ -314,7 +316,7 @@ module im_test {
   run mergeAutoPicksMineTest =
     start
       .then(newFire("i1"))
-      .then(create("i2", "fire", 50))
+      .then(create("i2", OWN_EVENT.get("i2"), "fire", 50))
       .then(act("a", "claim", "i2"))
       .then(mergeAuto("a", Set("i1", "i2")))
       .expect(x2.state == "in_progress" and x1.state == "linked" and x1.linkedTo == "i2")
@@ -347,8 +349,8 @@ module im_test {
 
   run mergeDifferentScenarioTest =
     start
-      .then(create("i1", "fire", 100))
-      .then(create("i2", "water", 100))
+      .then(create("i1", OWN_EVENT.get("i1"), "fire", 100))
+      .then(create("i2", OWN_EVENT.get("i2"), "water", 100))
       .expect(not(trOk(MERGE, ctx("a", "a", { ...NO_FORM, primaryId: "i1" }, ""), "i2")))
       .expect(inv)
 
@@ -383,9 +385,9 @@ module im_test {
   // (основной второго объединения — срочный i3, взятый в работу: mergePrimary)
   run relinkKeepsClosedTest =
     start
-      .then(create("i1", "fire", 50))
-      .then(create("i2", "fire", 50))
-      .then(create("i3", "fire", 100))
+      .then(create("i1", OWN_EVENT.get("i1"), "fire", 50))
+      .then(create("i2", OWN_EVENT.get("i2"), "fire", 50))
+      .then(create("i3", OWN_EVENT.get("i3"), "fire", 100))
       .then(merge("a", "i1", Set("i2")))
       .then(actF("a", "close", "i1", result("false_alarm")))
       .then(fire("i2"))
@@ -660,5 +662,23 @@ module im_test {
       .then(jump(due("i1", "reaction") + 1))
       .then(merge("a", "i1", Set("i2")))
       .expect(x1.state == "in_progress" and breachesOf(x1, "reaction") == 1 and breachesOf(x2, "reaction") == 1)
+      .expect(inv)
+
+  /* ===== 7. Событие и соседи (§14.5, ARCH-15) ===== */
+
+  // Одно событие — по инциденту на сценарий: второй того же сценария на событие не появляется (createOk — условие
+  // create), а того же сценария на другое событие — появляется. Соседей (разные сценарии) не объединяют: у merge
+  // условие машины «тот же сценарий, что у основного» не проходит
+  run siblingsTwoScenariosTest =
+    start
+      .then(create("i1", "ev1", "sc1", 100))
+      .then(create("i2", "ev1", "sc2", 75))
+      .expect(x1.eventGuid == "ev1" and x2.eventGuid == "ev1" and x2.scenario == "sc2" and x2.priority == 75)
+      .expect(not(createOk("i3", "ev1", "sc1")) and not(createOk("i3", "ev1", "sc2")))
+      .expect(not(trOk(MERGE, ctx("a", "a", { ...NO_FORM, primaryId: "i1" }, ""), "i2")))
+      .expect(not(trOk(MERGE, ctx("a", "a", { ...NO_FORM, primaryId: "i2" }, ""), "i1")))
+      .expect(inv)
+      .then(create("i3", "ev2", "sc1", 100))
+      .expect(x3.eventGuid == "ev2" and x3.scenario == "sc1")
       .expect(inv)
 }
