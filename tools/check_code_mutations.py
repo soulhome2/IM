@@ -145,7 +145,7 @@ MUTATIONS = [
     ("card-ignores-access", "server.js", "      return ev && canSee(ev) ? ev : null;", "      return ev;", "api"),
     ("stream-leaks-hidden", "server.js", "      if (ev && !canSee(ev)) return;\n", "", "api"),
     ("tree-ignores-access", "server.js", ".filter((c) => c.isDevice && myDevices.has(c.id))", ".filter((c) => c.isDevice)", "api"),
-    ("counters-ignore-access", "server.js", "const list = visible({});", "const list = events;", "api"),
+    ("counters-ignore-access", "server.js", "const list = visible({ scenarioGuid: (q || {}).scenarioGuid });", "const list = events;", "api"),
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "        at = runAt;\n        let facts = null;", "        at = null;\n        let facts = null;", "api"),
@@ -350,7 +350,7 @@ MUTATIONS = [
     ("ui-sort-not-saved", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "", "ui"),
     ("ui-sort-no-requery", "app.js", 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });\n      requery(true);', 'await api.patch("/operator/session/preferences", { queueSort: e.target.value });', "ui"),
     ("ui-selection-survives-context", "app.js", "    if (!keepSelection) dropSelection();", "    if (false) dropSelection();", "ui"),
-    ("ui-filter-select-keeps-view", "app.js", "    Object.assign(state, { groupId: filt.node ? filt.node.guid : \"all\", deviceTypes: [], eventTypes: [], search: \"\", page: 1 });\n", "", "ui"),
+    ("ui-filter-select-keeps-view", "app.js", "    Object.assign(state, { groupId: filt.node ? filt.node.guid : \"all\", deviceTypes: [], eventTypes: [], scenarios: [], search: \"\", page: 1 });\n", "", "ui"),
     ("ui-schema-not-reloaded", "app.js", 'if (msg.type === "workflow.schema_published") {', "if (false) {", "ui"),
     ("schema-published-silent", "server.js", 'if (W !== before) emit("workflow.schema_published"', 'if (false) emit("workflow.schema_published"', "api"),
     # Цвет полоски очереди — из настройки приоритета, не свой в коде (§1, §4, BUG-39)

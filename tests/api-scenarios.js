@@ -2023,6 +2023,28 @@
     assert.eq((await closeWarnings(env, fire)).duplicate, null, "сосед не виден — предупреждения нет");
   });
 
+  test("Дубликат: в числе соседей — только видимые (§5, ARCH-15)", async () => {
+    // У тревоги INC-1847 второй сосед INC-9953 — на датчике дыма 2 (главный офис), своя служба; медпункт INC-1853 — в ТЦ
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    const med = fixture.incidents.find((i) => i.number === "INC-1853");
+    const far = Object.assign(JSON.parse(JSON.stringify(med)), {
+      guid: "10000000-0000-4000-8000-000000009953",
+      number: "INC-9953",
+      scenarioGuid: fixture.scenarios.keys.abandoned,
+      devices: [S2],
+    });
+    const env = await makeEnv({ fixturePatch: { incidents: fixture.incidents.concat([far]) } });
+    const fire = await env.guidOf("INC-1847");
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    const n = async () => {
+      const dup = actionOf(await env.card(fire), "close").fieldOptions.resultId.options.find((o) => o.id === "duplicate");
+      return dup.warning ? dup.warning.vars.n : null;
+    };
+    assert.eq(await n(), 2, "со всеми объектами — оба соседа");
+    assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "только ТЦ");
+    assert.eq(await n(), 1, "невидимый сосед в число не входит");
+  });
+
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {
     // Пять уровней, ни одного прежнего числа; у двух — один цвет; свои нормативы — только у двух
     const levels = [
