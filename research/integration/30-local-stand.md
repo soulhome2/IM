@@ -96,6 +96,44 @@
 
 Попутно: клиент сервера (`CodegenReqExec`) пишет в тексте ошибки `error %!w(<nil>)` — оборачивает пустую ошибку.
 
+## Шаг 4: операторский API (этап 2)
+
+Дата: 2026-10-29. Сервер: `~/Work/incident-manager-server`, ветка `feature/im_operator`. План этапа — [50-plan-stage2.md](50-plan-stage2.md), решение о пакете — `docs/adr/002-operator-api-package.md` в репозитории сервера.
+
+**Тесты сервера локально.** База — отдельный контейнер `im-test-db` (`postgres:9.6`, `127.0.0.1:55432`), не база стенда:
+
+```
+cd ~/Work/incident-manager-server && source ~/go/offline-env.sh
+make test-db-up        # из группы docker: sg docker -c "make test-db-up"
+make test-local        # go test ./... с IM_TEST_DB_URL
+```
+
+**Контракт и генерация.** `make vendor-operator-contract` копирует контракт и машину из этого репозитория в `api/im/operator/` (коммит-источник — в файле `SOURCE`). `make gen-api-operator` перегенерирует пакет `operatorgen` форком `oapi-codegen` v0.11.0 без сети; `GEN_GOPROXY` указывает на файловый прокси (`file://~/go/offline-proxy`), `GOTOOLCHAIN=local`.
+
+**Каталог и права.** Сервер при старте отправляет в облако ровно 14 прав машины (`PUT /ac/v1/global-permissions/catalog`; `filter.edit` и `track` убраны, `assign` → `assign.own`). Стенд после перезапуска сервера: процесс жив — облако каталог приняло (иначе сервер выходит при старте, причина — в конце `im-server.log`); `GET /operator/session` без токена → 401.
+
+**Скрипты стенда** (`~/Work/stand/`, вне репозиториев):
+
+| Скрипт | Что делает |
+|---|---|
+| `grant-im-permissions.sh` | Входит как `test@axxonnet.test`, читает `GET /roles/global`, у роли `cloud-admin` заменяет `incident_manager.*` на 14 имён из `workflow_schema.v1.json` (`permissions[].cloud`), `PATCH /roles/global`, затем печатает права `incident_manager` из `/me`. Повторный запуск безопасен. Запускать после очистки томов БД облака |
+| `check-operator-api.sh` | 8 запросов через шлюз `https://axxonnet.test/api/v1/im-backend`: `/operator/session` без токена → 401 `UNAUTHENTICATED` (`problem+json`), с токеном → 200, 14 прав, `agentState` `offline`; `POST /test/reset` → 501 `NOT_IMPLEMENTED`; `GET /operator/incidents` → 501; `take` без `If-Match` → 428 `PRECONDITION_REQUIRED`; `/operator/me` → 404 `problem+json`; старый `GET /incidents` → 200, без токена → 401 с `key`. Строки `OK`/`FAIL`, код выхода — число `FAIL` |
+| `sync-im-proto.sh` | `rsync` каталогов `prototype/` и `tests/` этого репозитория в `~/Work/axxoncloudgo/tools/compose/ui/im-proto/` (каталог `ui` в `.gitignore` облака, nginx стенда раздаёт его как есть) |
+
+Права после `grant-im-permissions.sh` (`GET /api/v3/ac-backend/me`, `capabilities.incident_manager`) — 14: `manage`, `incidents.take.own`/`.any`, `incidents.assign.own`/`.any`, `incidents.process`, `incidents.suspend`, `incidents.close`, `incidents.unprocessed.close`, `incidents.release.use`, `incidents.reopen.use`, `incidents.bulk.use`, `incidents.actions.run`, `agent.not_ready.use`. Прав `filter.edit` и `track` нет.
+
+**Страница тестов на стенде.** С того же адреса, что и облако (виден `localStorage.accessToken` от `dev-login.html`, CORS не участвует):
+
+```
+~/Work/stand/sync-im-proto.sh && D=$(mktemp -d) && google-chrome --headless=new --disable-gpu --no-first-run --ignore-certificate-errors --user-data-dir=$D --virtual-time-budget=60000 --dump-dom "https://axxonnet.test/dev-login.html?to=/im-proto/tests/api.html?api=https://axxonnet.test/api/v1/im-backend" | grep -o 'Тестовый стенд доступен — [^<]*'
+```
+
+Или в браузере: `https://axxonnet.test/dev-login.html?to=/im-proto/tests/api.html?api=https://axxonnet.test/api/v1/im-backend`. Ожидание после этапа 1 (прототип шлёт `Authorization: Bearer`): `POST /test/reset → 501`.
+
+**Результат 2026-10-29: `→ 401`.** `prototype/api.js` пока ходит с cookie (`credentials: "include"`), заголовок `Authorization` не шлёт: пользователь отложил это вместе со входом. Страница доходит до сервера, но без токена получает 401, поэтому критерий «вход проходит» закрывает `check-operator-api.sh` (все проверки `OK`, код 0), а прогон `api.html` с ожидаемым `→ 501` переносится на момент, когда `api.js` начнёт слать токен.
+
+**Временное на стенде** (удалить по окончании работ): копия прототипа `~/Work/axxoncloudgo/tools/compose/ui/im-proto/` (пересоздаётся `sync-im-proto.sh`; пропадает при новой распаковке `ui-AxxonNet.zip`) и контейнер `im-test-db` (`make test-db-down`).
+
 ## Что дальше
 
 Шаг 2 — сервер МИ и конфигуратор на стенде: план — [15, п. 6](15-deploy-configurator.md); сервер регистрирует каталог прав (`PUT /ac/v1/global-permissions/catalog` есть на ветке прав), после чего роли `incident_manager.*` назначаются группе. Для разработки — nginx стека проксирует `/im/` на Vite на машине, `/api/v1/im-backend/` — на сервер МИ из IDE.
