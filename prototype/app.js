@@ -629,6 +629,7 @@
     counters: {},
     tree: [],
     eventTypes: [],
+    scenarios: [],
     deviceTypes: [],
     targets: [],
     card: null,
@@ -654,8 +655,9 @@
     treeHitScroll: false,
     filter: "open",
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
-    // Несколько типов сразу; пусто — все. tbOpen — какой из двух списков раскрыт
+    // Несколько значений сразу; пусто — все. tbOpen — какой из трёх списков раскрыт; сценарий — свой у каждого соседа по событию (§19.2)
     eventTypes: [],
+    scenarios: [],
     deviceTypes: [],
     tbOpen: null,
     moreFilters: false,
@@ -864,6 +866,7 @@
       search: state.search,
       sourceGroupGuid: state.groupId === "all" ? null : state.groupId,
       eventTypeGuid: state.eventTypes.length ? state.eventTypes.join(",") : null,
+      scenarioGuid: state.scenarios.length ? state.scenarios.join(",") : null,
       deviceTypeId: state.deviceTypes.length ? state.deviceTypes.join(",") : null,
       page: state.page,
       pageSize: PAGE_SIZE,
@@ -1904,13 +1907,14 @@
   function renderTypeLists() {
     typeList("deviceTypeFilter", "deviceTypes", store.deviceTypes.map((d) => ({ id: d.id, label: d.label })), "Все типы устройств");
     typeList("eventTypeFilter", "eventTypes", store.eventTypes.map((e) => ({ id: e.guid, label: e.name })), "Все типы событий");
+    typeList("scenarioFilter", "scenarios", store.scenarios.map((s) => ({ id: s.guid, label: s.name })), "Все сценарии");
     if (state.tbOpen) comboFocus(document.querySelector(`[data-tb-toggle="${state.tbOpen}"]`));
     renderMoreFilters();
   }
   // Телефон (BUG-50): типы и порядок — под кнопкой «Фильтры»; число на ней — сколько типов выбрано,
   // чтобы скрытый фильтр не забылся. На широком экране кнопки нет, всё видно сразу
   function renderMoreFilters() {
-    const n = state.deviceTypes.length + state.eventTypes.length;
+    const n = state.deviceTypes.length + state.eventTypes.length + state.scenarios.length;
     $("eventsMoreN").hidden = !n;
     $("eventsMoreN").textContent = String(n);
     $("eventsToolbar").classList.toggle("more-open", state.moreFilters);
@@ -3167,7 +3171,7 @@
       state.tbQ = {};
       renderTypeLists();
     };
-    ["deviceTypeFilter", "eventTypeFilter"].forEach((id) => {
+    ["deviceTypeFilter", "eventTypeFilter", "scenarioFilter"].forEach((id) => {
       $(id).addEventListener("click", (e) => {
         const toggle = e.target.closest("[data-tb-toggle]");
         const clear = e.target.closest("[data-tb-clear]");
@@ -4092,7 +4096,7 @@
     // «Выделить»: подходящие отмечены — дальше панель выборки. Очередь — на узел окна, без типов и поиска:
     // на экране тот список, где отмечено (§11.1)
     $("modalGrouping").hidden = true;
-    Object.assign(state, { groupId: filt.node ? filt.node.guid : "all", deviceTypes: [], eventTypes: [], search: "", page: 1 });
+    Object.assign(state, { groupId: filt.node ? filt.node.guid : "all", deviceTypes: [], eventTypes: [], scenarios: [], search: "", page: 1 });
     $("eventSearch").value = "";
     renderTypeLists();
     renderGroups();
@@ -4356,12 +4360,13 @@
     await loadWorkflow();
     await loadPriorities();
     setInterval(() => heartbeat(true), WORKFLOW.session.heartbeatSec * 1000);
-    const [eventTypes, deviceTypes, targets] = await Promise.all([
+    const [eventTypes, scenarios, deviceTypes, targets] = await Promise.all([
       api.get("/operator/reference/event-types"),
+      api.get("/operator/reference/scenarios"),
       api.get("/operator/reference/device-types"),
       api.get("/operator/transfer-targets"),
     ]);
-    Object.assign(store, { eventTypes, deviceTypes, targets });
+    Object.assign(store, { eventTypes, scenarios, deviceTypes, targets });
     // Каталоги строк всех языков интерфейса (§14.9): язык переключается без новых запросов
     const catalogs = await Promise.all(LANGS.map((l) => api.get(`/operator/strings?locale=${enc(l.id)}`)));
     LANGS.forEach((l, i) => (CATALOGS[l.id] = catalogs[i].strings));

@@ -857,6 +857,8 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   gap: 8px;
 }
 .events-types .mselect { min-width: 0; position: relative; }
+/* Сценарий — во всю строку: названия длиннее типов (§19.2) */
+.events-types #scenarioFilter { grid-column: 1 / -1; }
 /* Кнопка «Фильтры» — только на телефоне (BUG-50) */
 .events-more { display: none; position: relative; }
 .events-more-n { min-width: 18px; padding: 0 5px; border-radius: 50px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-style: normal; font-weight: 600; line-height: 18px; text-align: center; }

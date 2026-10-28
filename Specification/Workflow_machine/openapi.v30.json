@@ -566,6 +566,14 @@
             "description": "§19. Фильтр по типу события поверх выбранной группы Один или несколько через запятую."
           },
           {
+            "name": "scenarioGuid",
+            "in": "query",
+            "description": "§19.2. Фильтр по сценарию инцидента поверх выбранной группы. Один или несколько guid через запятую. Соседи по событию различаются только сценарием.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "deviceTypeId",
             "in": "query",
             "description": "§19. Фильтр по типу устройства-источника поверх выбранной группы Один или несколько через запятую.",
@@ -667,7 +675,17 @@
         ],
         "operationId": "getQueueCounters",
         "summary": "Счётчики по фильтрам очереди",
-        "description": "Для бейджей на фильтрах и мобильной навигации. Отдельный лёгкий запрос, чтобы не тянуть страницу очереди ради чисел. Считаются только доступные оператору инциденты (§5).",
+        "description": "Для бейджей на фильтрах и мобильной навигации. Отдельный лёгкий запрос, чтобы не тянуть страницу очереди ради чисел. Считаются только доступные оператору инциденты (§5). С `scenarioGuid` — только инциденты этих сценариев (§19.2).",
+        "parameters": [
+          {
+            "name": "scenarioGuid",
+            "in": "query",
+            "description": "§19.2. Один или несколько guid сценариев через запятую.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Счётчики",
@@ -1299,6 +1317,34 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/EventType"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/operator/reference/scenarios": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "listScenarios",
+        "summary": "Сценарии",
+        "description": "Для фильтра очереди «Сценарий» (§19.2): сценарии правил и открытых инцидентов, доступных оператору, без повторов, по названию.",
+        "responses": {
+          "200": {
+            "description": "Сценарии",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScenarioRef"
                   }
                 }
               }
@@ -4566,6 +4612,10 @@
             "type": "string",
             "description": "Тип события — те же фильтры, что у очереди"
           },
+          "scenarioGuid": {
+            "type": "string",
+            "description": "Сценарий — один или несколько guid через запятую, как у очереди (§19.2)"
+          },
           "deviceTypeId": {
             "type": "string",
             "description": "Тип устройства-источника — те же фильтры, что у очереди"
@@ -5540,6 +5590,22 @@
           "labelKey": {
             "type": "string",
             "description": "§14.9. Ключ подписи позиции справочника, например `workflow.catalog.hold.third_party`; `label` — она же на языке оператора."
+          }
+        }
+      },
+      "ScenarioRef": {
+        "type": "object",
+        "required": [
+          "guid",
+          "name"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

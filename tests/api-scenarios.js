@@ -3210,6 +3210,32 @@
     assert.eq(open, (await env.ok("GET", `/operator/incidents?filter=open&sourceGroupGuid=${enc(tree[0].guid)}&pageSize=1000`)).total, "счётчик группы в дереве");
   });
 
+  test("Фильтр очереди по сценарию: в очереди, счётчиках и выборке «Все в фильтре» — только инциденты сценария (§19.2, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const MED = window.IM_FIXTURE.scenarios.keys.medical;
+    const FIRE = window.IM_FIXTURE.scenarios.keys.fire;
+    const med = await env.ok("GET", `/operator/incidents?filter=all&scenarioGuid=${enc(MED)}&pageSize=1000`);
+    assert.eq(med.items.map((e) => e.number), ["INC-1853"], "очередь: только медпункт");
+    const both = await env.ok("GET", `/operator/incidents?filter=all&scenarioGuid=${enc(MED)},${enc(FIRE)}&pageSize=1000`);
+    assert.ok(both.items.some((e) => e.number === "INC-1853") && both.items.some((e) => e.number === "INC-1847"), "несколько сценариев через запятую");
+    assert.ok(both.total < (await env.ok("GET", "/operator/incidents?filter=all&pageSize=1000")).total || both.total > 1, "отбор сужает или равен очереди");
+    const counted = await env.ok("GET", `/operator/incidents/counters?scenarioGuid=${enc(MED)}`);
+    assert.eq(counted.open, 1, "счётчики с тем же параметром");
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "all", scenarioGuid: MED });
+    assert.eq(sel.incidentGuids, [await env.guidOf("INC-1853")], "выборка «Все в фильтре» — один инцидент");
+  });
+
+  test("Справочник сценариев: сценарии правил и открытых инцидентов, по названию (§19.2, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const list = await env.ok("GET", "/operator/reference/scenarios");
+    const keys = window.IM_FIXTURE.scenarios.keys;
+    assert.ok(list.some((s) => s.guid === keys.medical), "есть медпункт");
+    assert.ok(list.some((s) => s.guid === keys.fire), "есть пожар");
+    assert.ok(list.every((s) => s.guid && s.name), "у каждого guid и название");
+    assert.eq(new Set(list.map((s) => s.guid)).size, list.length, "без повторов");
+    assert.eq(list.map((s) => s.name), list.map((s) => s.name).slice().sort((a, b) => a.localeCompare(b, "ru")), "по названию");
+  });
+
   test("Счётчик открытых в дереве — те же, что «Открытые» под узлом: привязанные не в счёт (BUG-77)", async () => {
     const env = await makeEnv();
     const same = async (when) => {

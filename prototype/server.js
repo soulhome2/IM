@@ -1027,6 +1027,8 @@
         if (q.filter && W.queueFilters.some((f) => f.id === q.filter) && !filters.get(e).includes(q.filter)) return false;
         // Типы события и устройства — одно значение или несколько через запятую
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && !String(q.eventTypeGuid).split(",").includes(e.typeGuid)) return false;
+        // Сценарий — свой у каждого инцидента: соседи по событию различаются только им (§19.2, ARCH-15)
+        if (q.scenarioGuid && q.scenarioGuid !== "all" && !String(q.scenarioGuid).split(",").includes(e.scenarioGuid)) return false;
         if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;
         if (q.state && !String(q.state).split(",").includes(e.state)) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
@@ -1057,7 +1059,8 @@
 
     function counters(q) {
       const out = {};
-      const list = visible({});
+      // Только сценарий сужает счётчики: остальные фильтры очереди — сами счётчики (§19.2)
+      const list = visible({ scenarioGuid: (q || {}).scenarioGuid });
       const passed = list.map((e) => engine.queueFilters(e));
       W.queueFilters.forEach((f) => (out[f.id] = passed.filter((ids) => ids.includes(f.id)).length));
       return out;
@@ -1092,6 +1095,18 @@
               : null,
           };
         });
+    }
+
+    // Справочник сценариев для фильтра очереди: сценарии правил и открытых инцидентов, по названию (§19.2)
+    function scenarioRefs() {
+      const seen = new Map();
+      const add = (guid) => {
+        const name = scenarioName(guid);
+        if (guid && name != null && !seen.has(guid)) seen.set(guid, { guid, name });
+      };
+      RULES.forEach((r) => (r.scenarios || []).forEach(add));
+      events.filter((e) => canSee(e) && !isDone(e)).forEach((e) => add(e.scenarioGuid));
+      return [...seen.values()].sort((x, y) => x.name.localeCompare(y.name, "ru"));
     }
 
     function eventTypes() {
@@ -1351,7 +1366,7 @@
     }
 
     function selection(body) {
-      const q = { filter: body.filter, search: body.search, sourceGroupGuid: body.sourceGroupGuid, eventTypeGuid: body.eventTypeGuid, deviceTypeId: body.deviceTypeId };
+      const q = { filter: body.filter, search: body.search, sourceGroupGuid: body.sourceGroupGuid, eventTypeGuid: body.eventTypeGuid, scenarioGuid: body.scenarioGuid, deviceTypeId: body.deviceTypeId };
       const max = W.limits.maxBulk;
       let list = [];
       // explicit — с отмеченными (minItems: 1 по контракту, BUG-98)
@@ -1428,7 +1443,7 @@
         },
       ],
       ["GET", "/operator/incidents", (p, q) => ({ status: 200, body: page(q) })],
-      ["GET", "/operator/incidents/counters", () => ({ status: 200, body: counters() })],
+      ["GET", "/operator/incidents/counters", (p, q) => ({ status: 200, body: counters({ scenarioGuid: q.scenarioGuid }) })],
       ["POST", "/operator/incidents/selection", (p, q, body) => selection(body || {})],
       [
         "POST",
@@ -1663,6 +1678,7 @@
         },
       ],
       ["GET", "/operator/reference/event-types", () => ({ status: 200, body: eventTypes() })],
+      ["GET", "/operator/reference/scenarios", () => ({ status: 200, body: scenarioRefs() })],
       [
         "GET",
         "/operator/reference/device-types",

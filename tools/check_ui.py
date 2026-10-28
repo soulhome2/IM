@@ -52,6 +52,8 @@ SCREENS = [
     ("закрытая карточка", [("filter", "done"), "#eventsList button[data-do=view]"]),
     # Блок «По этому событию» (§7, ARCH-15): первая строка очереди с «событие: ещё N» — тревога INC-1847 набора
     ("карточка с соседями", ["#eventsList .event:has([data-siblings]) button[data-do=view]"]),
+    # Панель «Фильтры» с тремя списками (§19.2, ARCH-15): тип устройства, тип события, сценарий; открыт список сценариев
+    ("панель «Фильтры»", ["#eventsMoreBtn", "#scenarioFilter [data-tb-toggle]"]),
     ("панель выборки", S.TICK_THREE),
     ("поиск в дереве", [("groups", "конференц")]),
     ("окно «Выделить по фильтру»", ["#groupsList .tree-all [data-filter='select']"]),

@@ -1492,6 +1492,26 @@
       return `${opt.textContent}: ${rows.length} из ${before}`;
     });
 
+    await step("Фильтр «Сценарий»: в очереди только инциденты выбранного сценария (§19.2, ARCH-15)", async () => {
+      await setFilter("all");
+      const before = $("eventsList").querySelectorAll(".event").length;
+      await click($("scenarioFilter").querySelector("[data-tb-toggle]"));
+      const boxes = [...$("scenarioFilter").querySelectorAll("[data-tb]")];
+      expect(boxes.length >= 2, "в фильтре меньше двух сценариев");
+      const box = boxes.find((b) => b.closest("label").textContent.trim() === window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === window.IM_FIXTURE.scenarios.keys.medical).name);
+      expect(box, "в фильтре нет сценария медпункта");
+      await click(box);
+      await wait();
+      const rows = [...$("eventsList").querySelectorAll(".event")];
+      const stray = rows.filter((r) => !r.textContent.includes("INC-1853"));
+      await click($("scenarioFilter").querySelector("[data-tb-clear]"));
+      await click($("eventsList"));
+      await setFilter("open");
+      expect(rows.length, "по сценарию ничего не нашлось");
+      expect(!stray.length, `в выборке есть инциденты другого сценария: ${stray.length}`);
+      return `${rows.length} из ${before}`;
+    });
+
     await step("Списки — поле с набором: текст отбирает варианты, Enter отмечает первый подходящий, Esc закрывает", async () => {
       const type = async (input, text) => {
         input.value = text;
