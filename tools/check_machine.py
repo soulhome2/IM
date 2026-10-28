@@ -1248,11 +1248,12 @@ CLOUD_NAMESPACE = "incident_manager"
 CLOUD_SCOPES = {"own", "any"}
 CLOUD_VERBS = set("create view edit delete manage use run share export import download apply bind encrypt block take "
                   "close track assign suspend process".split())
-CLOUD_SEGMENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,}$")
+CLOUD_SEGMENT = re.compile(r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,}")
 
 
 def cloud_name_valid(name):
-    if not CLOUD_SEGMENT.match(name):
+    # fullmatch, а не match с $: $ в Python пропускает перевод строки в конце, $ в Go — нет
+    if not CLOUD_SEGMENT.fullmatch(name):
         return False
     parts = name.split(".")
     if parts[0] != CLOUD_NAMESPACE:
@@ -1915,6 +1916,10 @@ MUTATIONS = [
      '"cloud": "incident_manager.incidents.release.use"', '"cloud": "incident_manager.incidents.release"', "не проходит правило облака"),
     ("cloud-name-duplicate", "машина: у «Переоткрыть» то же имя облака, что у «Закрыть»", MACHINE,
      '"cloud": "incident_manager.incidents.reopen.use"', '"cloud": "incident_manager.incidents.close"', "повторяется"),
+    ("cloud-name-missing", "машина: у «Обработать несколько как один» нет имени облака", MACHINE,
+     ', "cloud": "incident_manager.incidents.bulk.use" }', " }", "нет имени облака"),
+    ("cloud-column-missing", "§5: колонка «Право в облаке» переименована — сверка имён облака молча не работала бы", RULES,
+     "| Право | Что разрешает | Право в облаке |", "| Право | Что разрешает | Имя в облаке |", "колонка «Право в облаке» не найдена"),
     ("cloud-outside-permissions", "машина: ключ cloud вне permissions читает incidents — исключение только для имён прав облака", MACHINE,
      '    "version": 4,\n', '    "version": 4,\n    "cloud": "incidents.size() > 0",\n', "читает incidents"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
