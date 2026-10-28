@@ -122,6 +122,7 @@ window.IM_DICT_UI = {
     "Вернуть": "Return",
     "Вернуть в очередь": "Return to queue",
     "Не выполнено: {n}": "Not done: {n}",
+    "Не закрыты — {reason}: {ids}": "Not closed — {reason}: {ids}",
     "Взять": "Take",
     "Возобновить": "Resume",
     "Время до нарушения норматива закрытия": "Time left before the resolution target is breached",

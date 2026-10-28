@@ -602,6 +602,18 @@
       const dup = close && close.fieldOptions ? close.fieldOptions.resultId.options.find((o) => o.id === "duplicate") : null;
       return [Boolean(dup) && dup.warning === null, `предупреждение «Дубликата» у INC-1847: ${dup ? JSON.stringify(dup.warning && dup.warning.key) : `нет варианта (${card.status})`}`];
     },
+    // «Массовый сбой» на выборке (§11.1, ARCH-15): пожары INC-1847, INC-1851 и медпункт INC-1853 — сосед INC-1847. По машине
+    // (bulk.scope: primaryScenario) закрываются только пожары — сценарий основного INC-1851, медпункт пропущен. Без scope — закрыты все три
+    async "bulk-close-all-scenarios"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      await stand.raw("POST", "/test/reset", { fixture: "demo" });
+      const guids = ["INC-1847", "INC-1851", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
+      const formValues = { resultId: "mass", causeId: window.IM_WORKFLOW.reasonCatalogs.mass_fault.items[0].id, comment: "проба" };
+      const res = await stand.raw("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: guids, formValues, surface: "queue" });
+      const done = res.body && res.body.succeeded ? res.body.succeeded.map((e) => e.number).sort() : [];
+      return [done.length === 3, `закрыты на выборке: ${done.join(", ") || res.status}`];
+    },
   };
 
   setTimeout(async () => {

@@ -120,6 +120,10 @@ def check_workflow(w, err):
         b = t.get("bulk") or {}
         if b.get("allowed") and not (isinstance(b.get("minItems"), int) and b["minItems"] >= 2):
             err.append(f"переход {t['id']}: bulk.minItems — целое от 2")
+        # Кого касается действие на выборке (§11.1, ARCH-15): только сценарий основного и только у «каждому отмеченному» —
+        # у объединения свой основной и своё условие одного сценария
+        if "scope" in b and not (b["scope"] == "primaryScenario" and b.get("mode") == "each_allowed"):
+            err.append(f"переход {t['id']}: bulk.scope — только primaryScenario и только при mode: each_allowed")
     for f in w["forms"]:
         for field in f["fields"]:
             src = field.get("source", "")
@@ -2056,6 +2060,8 @@ MUTATIONS = [
      "| Право | Что разрешает | Право в облаке |", "| Право | Что разрешает | Имя в облаке |", "колонка «Право в облаке» не найдена"),
     ("cloud-outside-permissions", "машина: ключ cloud вне permissions читает incidents — исключение только для имён прав облака", MACHINE,
      '    "version": 4,\n', '    "version": 4,\n    "cloud": "incidents.size() > 0",\n', "читает incidents"),
+    ("bulk-scope-unknown", "машина: у «Закрыть» на выборке неизвестная область bulk.scope (§11.1, ARCH-15)", MACHINE,
+     '"scope": "primaryScenario"', '"scope": "allScenarios"', "bulk.scope"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

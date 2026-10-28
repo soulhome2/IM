@@ -1288,13 +1288,24 @@
 
     // Больше лимита выборки (§11, RULE-69): null — без ограничения
     const tooLarge = (list) => W.limits.maxBulk != null && list.length > W.limits.maxBulk;
+    // Кого касается действие на выборке (bulk.scope машины, §11.1, ARCH-15): primaryScenario — только отмеченных сценария
+    // основного выборки (bulkPrimary машины, выборка — по возрастанию номера, как у объединения); остальные пропускаются
+    // и не меняются. Без scope — все отмеченные
+    function bulkScope(tr, list) {
+      if (!tr || !tr.bulk || tr.bulk.scope !== "primaryScenario" || !list.length) return { list, skipped: [], primary: null };
+      const primary = engine.bulkPrimary([...list].sort(byNumber));
+      const key = scenarioKey(primary);
+      return { list: list.filter((e) => scenarioKey(e) === key), skipped: list.filter((e) => scenarioKey(e) !== key), primary };
+    }
     function selectionActions(list) {
       const manual = W.transitions.filter((t) => t.trigger === "manual");
       return manual.map((tr) => {
         const mode = tr.bulk || { allowed: false };
+        // Доступность и общая форма — только по тем, кого действие касается (bulk.scope, §11.1, ARCH-15)
+        const scope = mode.allowed && mode.mode === "each_allowed" ? bulkScope(tr, list) : { list, skipped: [] };
         // По каждому отмеченному: доступно ли, а если нет — почему. Ни к одному не относится
         // (скрыто у каждого, как в карточке) — на панели не показывается
-        const avail = list.map((e) => [e, engine.availability(tr.id, e)]);
+        const avail = scope.list.map((e) => [e, engine.availability(tr.id, e)]);
         const each = avail.every(([, a]) => a.ok);
         // Сначала тот, к кому действие относится, но не проходит (лимит, права), потом — не в том состоянии
         const failed = avail.find(([, a]) => !a.ok && !a.hidden) || avail.find(([, a]) => !a.ok);
@@ -1343,14 +1354,23 @@
             navigate: tr.ui.navigate || null,
             bulkAllowed: Boolean(mode.allowed),
           },
-          ok && tr.form && mode.mode === "each_allowed" ? sharedForm(tr, list) : {}
+          ok && tr.form && mode.mode === "each_allowed" ? sharedForm(tr, scope, list.length) : {}
         );
       });
     }
 
     // Форма действия на выборке — одна на всех (§11, ARCH-08 в14): варианты полей — те, что есть у каждого
-    // отмеченного (выборка — из очереди); недоступный хоть у одного — недоступен; по умолчанию — общее значение
-    function sharedForm(tr, list) {
+    // отмеченного, кого действие касается (выборка — из очереди); недоступный хоть у одного — недоступен; по умолчанию —
+    // общее значение. Есть пропущенные другого сценария (bulk.scope, §11.1, ARCH-15) — пояснение называет, сколько
+    // закроется и сколько останется открытыми
+    function sharedForm(tr, scope, total) {
+      const view = sharedFormOf(tr, scope.list);
+      if (!scope.skipped.length) return view;
+      const key = scenarioKey(scope.primary);
+      const note = say(["workflow.form.close.bulk.note.scenario", { scenario: scenarioName(key) || key || "", n: scope.list.length, total, skipped: scope.skipped.length }]);
+      return Object.assign(view, { formNote: { text: note.text, key: note.key, vars: note.vars } });
+    }
+    function sharedFormOf(tr, list) {
       const [first, ...rest] = list.map((e) => formView(tr, e, "queue"));
       const fieldOptions = {};
       Object.entries(first.fieldOptions).forEach(([name, f]) => {
@@ -1468,7 +1488,11 @@
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
           let navigate = null;
           const done = [];
-          list.forEach((ev) => {
+          // Только те, кого действие касается (bulk.scope машины, §11.1, ARCH-15) — сервер проверяет сам, а не верит
+          // панели: другой сценарий, чем у основного выборки, — в skipped, не меняется (ни версии, ни журнала)
+          const scope = bulkScope(bulkTr, list);
+          const skipped = scope.skipped.map((ev) => ({ incidentGuid: ev.id, number: ev.number, reasonKey: "workflow.error.selection.other_scenario" }));
+          scope.list.forEach((ev) => {
             // Изменился после отметки — не трогается: устаревшая выборка не перебивает сделанное после неё (BUG-84)
             if (changedSince(ev, body.expectedVersions)) return failed.push({ incidentGuid: ev.id, problem: conflict(ev).body });
             const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
@@ -1477,7 +1501,7 @@
               navigate = r.body.navigate || navigate;
             } else failed.push({ incidentGuid: ev.id, problem: r.body });
           });
-          const reply = () => ({ status: 200, body: { succeeded: done.map((ev) => summary(ev, "queue")), failed, navigate } });
+          const reply = () => ({ status: 200, body: { succeeded: done.map((ev) => summary(ev, "queue")), failed, skipped, navigate } });
           return Object.assign(reply(), { again: reply });
         },
       ],

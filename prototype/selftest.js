@@ -1063,6 +1063,46 @@
       }
     });
 
+    await step("Массовый сбой на выборке двух сценариев: закрыт свой сценарий, о пропущенных — уведомление (§11.1, ARCH-15)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const state = async (number) => (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guidOf(number))}`)).body.state;
+      // Отметить инцидент на любой странице «Открытых»: листание выборку не снимает
+      async function tick(number) {
+        const first = $("eventsPager").querySelector('[data-page="1"]');
+        if (first && !first.disabled) await click(first);
+        const row = await rowOnPages(guidOf(number));
+        expect(row, `в «Открытых» нет ${number}`);
+        await click(row.querySelector(`[data-check="${guidOf(number)}"]`));
+      }
+      try {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        // Пожары INC-1847 и INC-1851 и медпункт INC-1853 — сосед INC-1847; основной выборки — INC-1851 (пожар)
+        for (const number of ["INC-1847", "INC-1851", "INC-1853"]) await tick(number);
+        expect($("selBar").textContent.includes("Отмечено: 3"), `панель: «${$("selBar").textContent.trim()}»`);
+        const b = $("selBar").querySelector('[data-sel-do="close"]');
+        expect(b && !off(b), "«Закрыть без обработки» на панели выборки недоступна");
+        await click(b);
+        expect(!$("modalDialog").hidden, "форма закрытия выборки не открылась");
+        const note = $("dialogNote").textContent;
+        expect(/Закроются инциденты сценария .*2 из 3.*Других сценариев — 1/.test(note), `пояснение формы: «${note}»`);
+        await setField("resultId", "mass");
+        await setField("causeId", window.IM_WORKFLOW.reasonCatalogs.mass_fault.items[0].id);
+        await confirmDialog(NOTE);
+        await wait(200);
+        const text = ($("toasts").lastElementChild || {}).textContent || "";
+        expect(/Не закрыты — другой сценарий: INC-1853/.test(text), `уведомление: «${text}»`);
+        const states = [await state("INC-1847"), await state("INC-1851"), await state("INC-1853")];
+        expect(states.join(",") === "closed,closed,new", `состояния INC-1847, INC-1851, INC-1853: ${states.join(", ")}`);
+        return text;
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Бейдж чужого инцидента в работе — ФИО владельца: в очереди, в карточке и в строке состояния (§2.4, BUG-51)", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find((r) => r.querySelector(".badge.foreign"));

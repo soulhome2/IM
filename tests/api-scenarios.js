@@ -1590,7 +1590,8 @@
     const cause = W.reasonCatalogs.mass_fault.items[0].id;
     const bulk = await env.call("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: all.incidentGuids, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
     assert.status(bulk, 200, null, "массовое действие на всю выборку");
-    assert.eq(bulk.body.succeeded.length + bulk.body.failed.length, all.incidentGuids.length, "каждый инцидент выборки — в итоге");
+    // Инциденты не того сценария, что у основного, — в skipped (§11.1, ARCH-15)
+    assert.eq(bulk.body.succeeded.length + bulk.body.failed.length + bulk.body.skipped.length, all.incidentGuids.length, "каждый инцидент выборки — в итоге");
   });
 
   test("Сервер проверяет лимит выборки: в массовом действии больше maxBulk — 422 целиком (§11, BUG-40)", async () => {
@@ -2043,6 +2044,54 @@
     assert.eq(await n(), 2, "со всеми объектами — оба соседа");
     assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "только ТЦ");
     assert.eq(await n(), 1, "невидимый сосед в число не входит");
+  });
+
+  // «Массовый сбой» на выборке: закрывается только сценарий основного выборки (§11.1, §11.3, ARCH-15, В8)
+  const massClose = (guids) => ({ incidentGuids: guids, formValues: { resultId: "mass", causeId: W.reasonCatalogs.mass_fault.items[0].id, comment: "тест" }, surface: "queue" });
+
+  test("Массовый сбой на выборке: закрывает только сценарий основного, другие пропускает и называет (§11.1, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const [fire, solo, med] = await Promise.all(["INC-1847", "INC-1851", "INC-1853"].map((n) => env.guidOf(n)));
+    const guids = [fire, solo, med];
+    // Все новые, приоритет 100; основной — INC-1851: появился раньше всех (11:58:43 против 11:59:00), сценарий — пожар
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: guids });
+    const close = sel.actions.find((a) => a.id === "close");
+    assert.eq(close.enabled, true, "«Закрыть без обработки» на выборке доступно");
+    assert.eq(close.formNote && close.formNote.key, "workflow.form.close.bulk.note.scenario", "пояснение формы — о сценарии");
+    const v = close.formNote.vars;
+    assert.eq([v.n, v.total, v.skipped], [2, 3, 1], "закроются 2 из 3, другого сценария — 1");
+    assert.eq(v.scenario, FIRE_TITLE, "сценарий — пожар, сценарий основного");
+    const medBefore = await env.card(med);
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", massClose(guids));
+    assert.status(res, 200, null, "массовый сбой на выборке");
+    assert.eq(res.body.succeeded.map((e) => e.number).sort(), ["INC-1847", "INC-1851"], "закрыты пожары");
+    assert.eq(res.body.failed, [], "отказов нет");
+    assert.eq(
+      (res.body.skipped || []).map((s) => [s.incidentGuid, s.number, s.reasonKey]),
+      [[med, "INC-1853", "workflow.error.selection.other_scenario"]],
+      "медпункт INC-1853 пропущен — другой сценарий"
+    );
+    const medAfter = await env.card(med);
+    assert.eq([medAfter.state, medAfter.version, medAfter.journal.length], [medBefore.state, medBefore.version, medBefore.journal.length], "INC-1853 не тронут: то же состояние, та же версия, журнал прежний");
+    assert.eq(medAfter.state, "new", "INC-1853 — новый");
+  });
+
+  test("Массовый сбой на выборке: основной — мой в работе медпункт, закрыт он, пожар пропущен; прямой запрос не обходит (§11.1, §11.3, ARCH-15)", async () => {
+    const env = await makeEnv();
+    const fire = await env.guidOf("INC-1847");
+    const med = await env.guidOf("INC-1853");
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
+    const close = sel.actions.find((a) => a.id === "close");
+    assert.eq(close.enabled, true, "«Закрыть без обработки» доступно");
+    assert.eq([close.formNote.key, close.formNote.vars.n, close.formNote.vars.total, close.formNote.vars.skipped], ["workflow.form.close.bulk.note.scenario", 1, 2, 1], "закроется 1 из 2");
+    const fireBefore = await env.card(fire);
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", massClose([fire, med]));
+    assert.status(res, 200, null, "массовый сбой на выборке");
+    assert.eq(res.body.succeeded.map((e) => e.number), ["INC-1853"], "закрыт медпункт — сценарий основного");
+    assert.eq((res.body.skipped || []).map((s) => [s.number, s.reasonKey]), [["INC-1847", "workflow.error.selection.other_scenario"]], "пожар пропущен");
+    const fireAfter = await env.card(fire);
+    assert.eq([fireAfter.state, fireAfter.version], [fireBefore.state, fireBefore.version], "INC-1847 не тронут");
   });
 
   test("Другой справочник приоритетов — без правки кода: порядок, фильтр, самый срочный, нормативы, событие reference.priorities_changed (§2.5, RULE-68)", async () => {

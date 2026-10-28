@@ -1335,10 +1335,14 @@
     openDialog(id, ev, surface);
     if (!state.dialog) return false;
     state.dialog.bulkIds = guids;
-    const copy = bulkCopy(id, guids);
+    // Закроются не все отмеченные — только сценария основного (bulk.scope машины, §11.1, ARCH-15): пояснение — от
+    // сервера (сколько закроется, сколько останется открытыми), в заголовке и на кнопке — сколько закроется
+    const a = actionOf(ev, id);
+    const scoped = a && a.formNote && a.formNote.key === "workflow.form.close.bulk.note.scenario" ? a.formNote : null;
+    const copy = bulkCopy(id, scoped ? guids.slice(0, scoped.vars.n) : guids);
     if (copy) {
       $("dialogTitle").textContent = copy.title;
-      $("dialogNote").textContent = copy.note;
+      $("dialogNote").textContent = scoped ? say(scoped.key, scoped.vars) : copy.note;
       $("dialogNote").hidden = false;
       $("dialogConfirm").textContent = copy.confirm;
     }
@@ -1351,6 +1355,13 @@
     const why = problemText({ problem: main.problem });
     const ev = store.page.items.find((e) => e.guid === main.incidentGuid);
     return ev ? `${ev.number}: ${why}` : why;
+  }
+
+  // Пропущенные сервером — другой сценарий, чем у основного выборки (skipped, §11.1, ARCH-15): номера по причине
+  function skippedText(skipped) {
+    const by = new Map();
+    (skipped || []).forEach((s) => by.set(s.reasonKey, (by.get(s.reasonKey) || []).concat(s.number)));
+    return [...by].map(([key, numbers]) => t("Не закрыты — {reason}: {ids}", { reason: say(key), ids: numbers.join(", ") })).join(" ");
   }
 
   async function runBulk(id, guids, form, surface) {
@@ -1373,7 +1384,8 @@
     const copy = bulkCopy(id, done);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
     // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
-    toast(res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText);
+    const failedText = res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText;
+    toast(skippedText(res.skipped) ? `${failedText} ${skippedText(res.skipped)}` : failedText);
     state.selectedId = done[0].id;
     navigate(res.navigate);
     await reload();

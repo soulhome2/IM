@@ -1803,9 +1803,10 @@ window.IM_WORKFLOW = {
       "bulk": {
         "allowed": true,
         "mode": "each_allowed",
-        "$comment": "§11. Выборка закрывается одним результатом — если он доступен каждому отмеченному.",
+        "$comment": "§11. Выборка закрывается одним результатом — если он доступен каждому отмеченному. scope: primaryScenario (§11.1, ARCH-15, В8) — закрываются только отмеченные сценария основного выборки (определение bulkPrimary): массовый сбой одной службы не закрывает инциденты другой. Доступность и общая форма — по ним же; остальные не меняются, сервер возвращает их в skipped с причиной workflow.error.selection.other_scenario, а пояснение формы называет, сколько их (workflow.form.close.bulk.note.scenario).",
         "minItems": 2,
-        "sharedForm": true
+        "sharedForm": true,
+        "scope": "primaryScenario"
       },
       "ui": {
         "bulkDoneKey": "workflow.transition.close.bulk.done",
@@ -3844,6 +3845,19 @@ window.IM_WORKFLOW = {
       ],
       "$comment": "§11. Причина недоступности действия на панели выборки: номер инцидента, которому оно недоступно, и причина"
     },
+    "workflow.error.selection.other_scenario": {
+      "vars": [],
+      "$comment": "§11.1, ARCH-15. Отмеченный пропущен: сценарий не тот, что у основного выборки (bulk.scope: primaryScenario) — BulkTransitionResult.skipped[].reasonKey"
+    },
+    "workflow.form.close.bulk.note.scenario": {
+      "vars": [
+        "scenario",
+        "n",
+        "total",
+        "skipped"
+      ],
+      "$comment": "§11.1, ARCH-15. Пояснение формы «Закрыть без обработки» на выборке, где есть инциденты другого сценария: scenario — название сценария основного, n — сколько закроется, total — сколько отмечено, skipped — сколько останется открытыми"
+    },
     "workflow.error.merge.too_few": {
       "vars": []
     },
@@ -4509,6 +4523,15 @@ window.IM_WORKFLOW = {
         "returns": "list<Incident>",
         "expr": "cel.bind(mine, xs.filter(e, e.state == 'in_progress' && e.owner == who), cel.bind(c, size(mine) > 0 ? mine : xs.filter(e, e.state == 'new'), cel.bind(top, c.filter(e, c.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : []))))",
         "$comment": "§11. Основной при «Взять в работу» на выборке, если его не назвал оператор: свой в работе, иначе новый; из них — самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки: сервер передаёт её по возрастанию номера, а не в порядке отметки (строки в CEL и Quint не упорядочиваются). Списком из одного или пустым"
+      },
+      "bulkPrimary": {
+        "params": {
+          "xs": "list<Incident>",
+          "who": "string"
+        },
+        "returns": "list<Incident>",
+        "expr": "cel.bind(p, mergePrimary(xs, who), size(p) > 0 ? p : cel.bind(top, xs.filter(e, xs.all(k, k.priority <= e.priority)), cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), size(first) > 0 ? [first[0]] : [])))",
+        "$comment": "§11.1, ARCH-15 (В8). Основной выборки для действия со scope: primaryScenario — чей сценарий закрывается: основной по §11.3 (mergePrimary), а если его нет (отмечены только отложенные, ожидающие принятия, чужие) — из всех отмеченных самый срочный, у равных — появившийся раньше, у совсем равных — первый по порядку выборки (по возрастанию номера, как у mergePrimary). Списком из одного или пустым (выборка пуста)"
       },
       "onDuty": {
         "params": {

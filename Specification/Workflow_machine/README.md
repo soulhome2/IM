@@ -282,7 +282,7 @@ stateDiagram-v2
 | Эндпоинт | Отвечает за |
 |---|---|
 | `POST /operator/incidents/{guid}/transitions/{transitionId}` | **Единственный способ изменить состояние инцидента.** Сервер проверяет guard'ы, применяет транзакционные эффекты в одной транзакции, внешние ставит в очередь. Обязателен `If-Match` с версией записи |
-| `POST /operator/incidents/transitions/{transitionId}/bulk` | §11. Действие на выборку: одна форма причины на всех, отдельная запись в журнал каждого. Выполняется **частично успешно** — недоступные элементы попадают в `failed` с причиной, остальные обрабатываются. Отмеченных — не меньше `bulk.minItems` перехода (одно — как одиночное действие), меньше — `422 BULK_SELECTION_INVALID` |
+| `POST /operator/incidents/transitions/{transitionId}/bulk` | §11. Действие на выборку: одна форма причины на всех, отдельная запись в журнал каждого. Выполняется **частично успешно** — недоступные элементы попадают в `failed` с причиной, остальные обрабатываются. Отмеченных — не меньше `bulk.minItems` перехода (одно — как одиночное действие), меньше — `422 BULK_SELECTION_INVALID`. У перехода с `bulk.scope: primaryScenario` («Закрыть без обработки», §11.1, ARCH-15) — только отмеченные сценария основного выборки (`bulkPrimary`), остальные — в `skipped` и не меняются; сервер проверяет это сам |
 
 Идентификаторы переходов в URL — те же, что в схеме: `claim`, `accept`, `reject`, `hold`, `resume`, `release`, `transfer`, `takeover`, `close`, `reopen`. Отдельных эндпоинтов вида `/claim`, `/hold`, `/close` **намеренно нет**: добавление перехода в схему не должно требовать нового эндпоинта.
 
@@ -391,7 +391,7 @@ POST /operator/incidents/{g}/transitions/transfer  If-Match: "14"  formValues: {
 POST /operator/incidents/selection   { mode: "explicit", incidentGuids, candidateTransitionIds }
    → кому какое действие недоступно и почему; versions — версии отмеченных
 POST /operator/incidents/transitions/close/bulk   { incidentGuids, formValues, expectedVersions, idempotencyKey }
-   → частичный успех: недоступные — в failed с причиной
+   → частичный успех: недоступные — в failed с причиной; другой сценарий, чем у основного, — в skipped (§11.1)
 POST /operator/incidents/merge       { incidentGuids, expectedVersions, idempotencyKey }
    → «Взять в работу» как одно: основного выбирает сервер, остальные — привязанные; ответ — карточка основного
 ```

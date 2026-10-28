@@ -734,5 +734,12 @@
   "find": "\"expr\": \"option == 'duplicate' && size(siblingsOf(incident).filter(s, hasAccess(me, s))) > 0\"",
   "replace": "\"expr\": \"false\"",
   "model": "вне модели: правило интерфейса"
+ },
+ {
+  "name": "bulk-close-all-scenarios",
+  "what": "«Закрыть без обработки» на выборке закрывает отмеченные всех сценариев, а не только сценария основного (§11.1, ARCH-15)",
+  "find": ",\n        \"scope\": \"primaryScenario\"",
+  "replace": "",
+  "model": "вне модели: выборки в модели нет"
  }
 ]

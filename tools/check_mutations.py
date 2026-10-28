@@ -155,6 +155,14 @@ def duplicate_warning_off(w):
     warning["expr"] = "false"
 
 
+def bulk_close_all_scenarios(w):
+    """Порча bulk-close-all-scenarios из tools/mutations/machine.json: у «Закрыть» на выборке нет bulk.scope —
+    закрываются отмеченные всех сценариев (§11.1, ARCH-15)."""
+    bulk = transition(w, "close")["bulk"]
+    assert bulk.get("scope") == "primaryScenario"
+    del bulk["scope"]
+
+
 # Имя пробы, что меняется в машине, сама мутация
 MUTATIONS = [
     ("label", "название «Взять» → «Забрать»", lambda w: ru(w, transition(w, "claim")["labelKey"], "Забрать")),
@@ -226,6 +234,7 @@ MUTATIONS = [
     ("override-scenario-ignored", "строка норматива со сценарием действует на любой сценарий (§4, правило 2; ARCH-15)", override_scenario_ignored),
     ("override-scenario-tie-lost", "при равном числе условий строка со сценарием не точнее (§4, правило 2; ARCH-15)", override_scenario_tie_lost),
     ("duplicate-warning-off", "у «Дубликата» нет предупреждения о соседях (§2.2, ARCH-15)", duplicate_warning_off),
+    ("bulk-close-all-scenarios", "«Закрыть без обработки» на выборке закрывает и другой сценарий (§11.1, ARCH-15)", bulk_close_all_scenarios),
 ]
 
 
