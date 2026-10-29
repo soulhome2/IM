@@ -814,7 +814,7 @@
 
   const lib = { PER_NAME, PER_OUTCOME, normalize, kindOf, outcomeOf, select, idOf, recorder, compare, engines, replay };
   // Запись — tests/api.html?celVectors=1 (без ?api=), вместе с записью векторов CEL: кадр — её IMCelVectors.frame.
-  // Подключение к api.html — задача 7
+  // Блок transitionvectors-out читает tools/cel_vectors.mjs --update
   const params = typeof location !== "undefined" && location.search ? new URLSearchParams(location.search) : null;
   const recording = Boolean(params && params.get("celVectors") === "1" && !params.has("api") && window.IMEngine && window.IMCelVectors && window.IMCelVectors.recording);
   let rec = null;

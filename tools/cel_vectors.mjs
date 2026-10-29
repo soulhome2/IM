@@ -4,7 +4,10 @@
 //
 //   node tools/cel_vectors.mjs --update   — запись: Chrome на tests/api.html?celVectors=1 (около 6 мин), отбор
 //                                           (lib.select), синтетика на границах; затем всё, что делает --check,
-//                                           и только потом запись файла. Тесты API не pass — стоп без записи
+//                                           и только потом запись файла. Тесты API не pass — стоп без записи.
+//                                           Тем же прогоном — fixtures/transition-vectors.json (блок
+//                                           transitionvectors-out): любой счётчик skipped не 0 или файл больше
+//                                           4 МБ — стоп, не пишется ни один из двух файлов
 //   node tools/cel_vectors.mjs --check    — быстро, без Chrome: файл есть, собран от этой машины (sha256 байтов),
 //                                           равен своей канонической записи, каждый вектор повторяется по ленте
 //                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер
@@ -24,6 +27,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MACHINE = path.join(ROOT, "Specification/Workflow_machine/workflow_schema.v1.json");
 const FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json");
 const MAX_BYTES = 8 * 1024 * 1024;
+const TRANSITIONS_FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/transition-vectors.json");
+const TRANSITIONS_MAX_BYTES = 4 * 1024 * 1024;
+const TRANSITIONS_COMMENT = "Собрано tools/cel_vectors.mjs --update из записи tests/api.html?celVectors=1. Руками не править. Формат — CEL.md, «Векторы переходов»";
+const OPS = ["create", "merge", "run", "runAll"];
+// Переходы без вектора ok, с причиной словами (имя → причина); не больше 3. Покрытие проверяет задача 11
+const UNCOVERED_TRANSITIONS_OK = {};
 // Запись: виртуальное время страницы (таймеры тестов) и настоящее — запись идёт около 6 минут, почти всё — JS
 // кодирования входов, а он виртуального времени не тратит
 const VIRTUAL_BUDGET_MS = 180000;
@@ -76,6 +85,28 @@ function serialize(lib, { incidents, vectors, machineSha256, skipped }) {
     `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)},\n` +
     `"vectors":[\n${vs.map((v) => lib.canonical(v)).join(",\n")}]}\n`
   );
+}
+
+// Файл переходов: векторы — по id, пул — как записан (в нём только инциденты оставленных векторов), counts — по op
+function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped, uncovered }) {
+  const vs = [...vectors].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const counts = Object.fromEntries(OPS.map((o) => [o, vs.filter((v) => v.op === o).length]));
+  return (
+    `{"$comment":${JSON.stringify(TRANSITIONS_COMMENT)},"counts":${lib.canonical(counts)},"format":1,\n` +
+    `"incidents":{\n${Object.keys(incidents).sort().map((k) => `${JSON.stringify(k)}:${lib.canonical(incidents[k])}`).join(",\n")}},\n` +
+    `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)},"uncovered":${lib.canonical(uncovered)},\n` +
+    `"vectors":[\n${vs.map((v) => lib.canonical(v)).join(",\n")}]}\n`
+  );
+}
+
+// Стоп до записи: любой счётчик skipped не 0 (запись переходов неполна) или файл больше 4 МБ
+function transitionsText(lib, tr, machineSha256) {
+  const bad = Object.entries(tr.skipped || {}).filter(([, n]) => n !== 0);
+  if (bad.length) throw new Error(`запись переходов: skipped.${bad[0][0]} = ${bad[0][1]}${bad.length > 1 ? ` (и ещё ${bad.length - 1})` : ""}, а нужен 0. Файлы не записаны`);
+  const text = serializeTransitions(lib, { incidents: tr.incidents, vectors: tr.vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
+  const size = Buffer.byteLength(text, "utf8");
+  if (size > TRANSITIONS_MAX_BYTES) throw new Error(`файл переходов ${(size / 1048576).toFixed(2)} МБ — больше 4 МБ. Файлы не записаны`);
+  return text;
 }
 
 /* ===== Проверка ===== */
@@ -381,7 +412,9 @@ function record(tmpRoot) {
     if (!pre || !pre[2]) throw new Error("в странице нет записи векторов (celvectors-out пустой)");
     const stats = JSON.parse(unescape((/data-stats="([^"]*)"/.exec(pre[1]) || [, "null"])[1]));
     if (!stats || stats.tapeRepeat == null) throw new Error("в записи нет счётчиков (data-stats)");
-    return { summary: unescape(summary || ""), stats, data: JSON.parse(unescape(pre[2])) };
+    const tpre = /<pre id="transitionvectors-out"[^>]*>([\s\S]*?)<\/pre>/.exec(dom);
+    if (!tpre || !tpre[1]) throw new Error("в странице нет записи переходов (transitionvectors-out пустой)");
+    return { summary: unescape(summary || ""), stats, data: JSON.parse(unescape(pre[2])), transitions: JSON.parse(unescape(tpre[1])) };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
@@ -415,11 +448,15 @@ if (argv.includes("--update")) {
       machineSha256: sha256(env.bytes),
       skipped: { tapeRepeat: rec.stats.tapeRepeat, worldError: rec.stats.skipped },
     });
+    // Переходы — тоже до записи: стоп любого из двух файлов не оставляет записанным ни один
+    const trText = transitionsText(env.lib, rec.transitions, sha256(env.bytes));
     // Всё, что делает --check, — на свежем исполнителе, до записи
     ok = check(text, load(machinePath), rel(file));
     if (ok) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, text);
+      fs.writeFileSync(TRANSITIONS_FILE, trText);
+      console.log(`записано ${rel(TRANSITIONS_FILE)}: векторов ${rec.transitions.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
       console.log(`записано ${rel(file)}: отобрано из записи ${chosen.length}, синтетика ${synth.vectors.length}; всего ${((Date.now() - t0) / 1000).toFixed(0)} с`);
     } else console.log("файл не записан");
   } catch (e) {
