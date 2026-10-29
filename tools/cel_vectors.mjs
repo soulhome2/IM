@@ -12,8 +12,9 @@
 //   node tools/cel_vectors.mjs --check    — быстро, без Chrome: файл есть, собран от этой машины (sha256 байтов),
 //                                           равен своей канонической записи, каждый вектор повторяется по ленте
 //                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер;
-//                                           затем векторы переходов: каждый повторяется по ленте на ядре прототипа
-//                                           (prototype/engine.js, по ядру на me), сравнение — решение 41. --update
+//                                           затем векторы переходов: покрытие (transitionCoverage), каждый
+//                                           повторяется по ленте на ядре прототипа (prototype/engine.js, по ядру
+//                                           на me), сравнение — решение 41. --update
 //                                           делает то же до записи; расхождение или промах — не пишется ни один файл
 //   --file=путь — другой файл векторов; --transitions=путь — другой файл векторов переходов; --machine=путь —
 //   другая машина (проверка хэша); --tmp=папка — где
@@ -36,8 +37,12 @@ const TRANSITIONS_FILE = path.join(ROOT, "Specification/Workflow_machine/fixture
 const TRANSITIONS_MAX_BYTES = 4 * 1024 * 1024;
 const TRANSITIONS_COMMENT = "Собрано tools/cel_vectors.mjs --update из записи tests/api.html?celVectors=1 и синтетики. Руками не править. Формат — CEL.md, «Векторы переходов»";
 const OPS = ["create", "merge", "run", "runAll"];
-// Переходы без вектора ok, с причиной словами (имя → причина); не больше 3. Покрытие проверяет задача 11
+// Требования покрытия векторов переходов без вектора — с причиной словами (ключ → причина); не больше 3, больше —
+// синтетика (syntheticTransitions). Ключ — как у требования в transitionCoverage: имя перехода («reopen», «create») —
+// нет вектора ok с этим именем; «op:refusal» («run:refusal», «runAll:refusal», «merge:refusal») — нет отказа у op;
+// «run:canceled» — нет вектора run с canceled. Пишется в поле uncovered файла переходов
 const UNCOVERED_TRANSITIONS_OK = {};
+const UNCOVERED_TRANSITIONS_MAX = 3;
 // Запись: виртуальное время страницы (таймеры тестов) и настоящее — запись идёт около 6 минут, почти всё — JS
 // кодирования входов, а он виртуального времени не тратит
 const VIRTUAL_BUDGET_MS = 180000;
@@ -203,10 +208,36 @@ function check(text, env, where) {
   return good;
 }
 
+// Покрытие векторов переходов: требование (ключ, как в UNCOVERED_TRANSITIONS_OK) → есть ли вектор. У каждого ручного
+// перехода машины (trigger: manual) и у create — вектор ok с этим именем, любой op (detach — run и runAll, merge —
+// merge); у run, runAll и merge — хотя бы один отказ; хотя бы один вектор run с canceled. Синтетика считается.
+// Требование без вектора и не в UNCOVERED_TRANSITIONS_OK — провал. Возвращает число без векторов и строки «что не так»
+function transitionCoverage(lib, W, data) {
+  const has = (test) => data.vectors.some((v) => v.expect && test(v));
+  const need = {};
+  W.transitions
+    .filter((t) => t.trigger === "manual")
+    .map((t) => t.id)
+    .concat("create")
+    .forEach((n) => (need[n] = has((v) => v.name === n && v.expect.ok)));
+  ["run", "runAll", "merge"].forEach((o) => (need[`${o}:refusal`] = has((v) => v.op === o && v.expect.refusal)));
+  need["run:canceled"] = has((v) => v.op === "run" && v.expect.ok && Object.keys(v.expect.ok.canceled || {}).length > 0);
+  const ok = UNCOVERED_TRANSITIONS_OK;
+  const missing = Object.keys(need).filter((k) => !need[k] && !ok[k]);
+  const stale = Object.keys(ok).filter((k) => !(k in need) || need[k] || !String(ok[k]).trim());
+  const problems = [];
+  if (missing.length) problems.push(`без векторов: ${missing.join(", ")} — синтетика в tools/cel_vectors.mjs или UNCOVERED_TRANSITIONS_OK с причиной`);
+  if (stale.length) problems.push(`UNCOVERED_TRANSITIONS_OK: требование покрыто, его нет или без причины: ${stale.join(", ")}`);
+  if (Object.keys(ok).length > UNCOVERED_TRANSITIONS_MAX) problems.push(`UNCOVERED_TRANSITIONS_OK: ${Object.keys(ok).length} записей — больше ${UNCOVERED_TRANSITIONS_MAX}: добавьте синтетику`);
+  if (lib.canonical(data.uncovered ?? null) !== lib.canonical(ok)) problems.push("поле uncovered файла не равно UNCOVERED_TRANSITIONS_OK: node tools/cel_vectors.mjs --update");
+  return { missing: missing.length, problems };
+}
+
 // Векторы переходов: text — содержимое файла, env — ядро прототипа на машине, с которой сверяем. Файл собран от этой
-// машины, равен своей канонической записи, запись цела (lib.recordedProblem); каждый вектор повторяется по ленте на
-// ядре прототипа — по ядру на me (lib.engines), сравнение — lib.compare (решение 41). Неиспользованные записи ленты
-// и closeResultLabel [""] — только счёт. Печатает итог, возвращает true/false
+// машины, запись цела (lib.recordedProblem), покрытие (transitionCoverage), файл равен своей канонической записи;
+// каждый вектор повторяется по ленте на ядре прототипа — по ядру на me (lib.engines), сравнение — lib.compare
+// (решение 41). Неиспользованные записи ленты и closeResultLabel [""] — только счёт. Печатает итог, возвращает
+// true/false
 function checkTransitions(text, env, where) {
   const { lib, tlib, W } = env;
   const fail = (msg) => (console.log(msg), false);
@@ -220,6 +251,9 @@ function checkTransitions(text, env, where) {
   if (data.format !== 1) return fail(`${where}: формат ${data.format}, а этот инструмент знает 1`);
   const problem = tlib.recordedProblem(data);
   if (problem) return fail(`${where}: правлен руками — ${problem}: node tools/cel_vectors.mjs --update`);
+  // Покрытие — до сверки с канонической записью: его видно и у файла, правленого руками
+  const cover = transitionCoverage(lib, W, data);
+  cover.problems.forEach((p) => console.log(p));
   let canon;
   try {
     canon = serializeTransitions(lib, data);
@@ -246,13 +280,13 @@ function checkTransitions(text, env, where) {
     else if (!r.ok) mismatch.push(`${v.id}: ${r.diffs.join(", ")}${r.got.thrown != null ? ` — ${r.got.thrown}` : ""}`);
   });
   const by = (o) => data.vectors.filter((v) => v.op === o).length;
-  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}`);
+  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}, без векторов: ${cover.missing}`);
   console.log(`  синтетика переходов: ${data.vectors.filter((v) => v.case != null).length}`);
   console.log(`  неиспользованных записей ленты: ${unused}; closeResultLabel [""] как "": ${closeResultLabel}`);
   const list = (title, xs) => xs.length && console.log(`${title}:\n  ${xs.slice(0, 30).join("\n  ")}${xs.length > 30 ? `\n  … ещё ${xs.length - 30}` : ""}`);
   list("расхождения переходов", mismatch);
   list("промахи ленты переходов", missed);
-  return !mismatch.length && !missed.length;
+  return !mismatch.length && !missed.length && !cover.problems.length;
 }
 
 /* ===== Синтетика на границах ===== */
@@ -457,13 +491,19 @@ function synthetic(env) {
 function syntheticTransitions(env) {
   const { W, lib, tlib } = env;
   const NOW = lib.NOW;
-  const want = { graceSec: 3, reactionDefaultSec: 300, levels: ["petrova", "noc"], reactionByPriority60: false };
+  const SCENARIO = "60000000-0000-4000-8000-000000000002";
+  const want = { graceSec: 3, reactionDefaultSec: 300, levels: ["petrova", "noc"], reactionNorm60: "defaultSec" };
   const reaction = W.timers.find((t) => t.id === "reaction");
+  // Норматив реакции у инцидента случая «приоритет 60» — определением norm машины (строки overrides по overridesBy,
+  // затем byPriority, затем defaultSec): он идёт за defaultSec, только если своего норматива у приоритета 60 нет
+  const cel = env.IMCel.create(W);
+  const x60 = cel.value("Incident", { eventType: "fire", scenario: SCENARIO, priority: 60 });
+  const norm60 = (sec) => Number(cel.call("norm", [x60, cel.value("TimerDef", Object.assign({}, reaction, { defaultSec: sec }))], { inSourceGroup: () => false }));
   const have = {
     graceSec: ((W.invariants || {}).manualWinsOverTimer || {}).graceSec,
     reactionDefaultSec: reaction.defaultSec,
     levels: W.escalation.levels.map((l) => l.target),
-    reactionByPriority60: reaction.overrides.some((o) => o.priority === 60) || "60" in (reaction.byPriority || {}),
+    reactionNorm60: norm60(reaction.defaultSec) === reaction.defaultSec && norm60(reaction.defaultSec + 1) === reaction.defaultSec + 1 ? "defaultSec" : `свой, ${norm60(reaction.defaultSec)} с`,
   };
   if (lib.canonical(want) !== lib.canonical(have)) throw new Error(`синтетика переходов написана под настройки ${lib.canonical(want)}, а в машине ${lib.canonical(have)}: поправьте случаи в tools/cel_vectors.mjs`);
   // Запись CEL — до первого IMEngine.create: через неё ядро получает исполнитель, и её кадр видит факты мира
@@ -471,7 +511,6 @@ function syntheticTransitions(env) {
   env.IMCel.create = celRec.create;
   const out = { vectors: [], incidents: {} };
   const ID = (n) => `10000000-0000-4000-8000-00000000${n}`;
-  const SCENARIO = "60000000-0000-4000-8000-000000000002";
   // Мир: op1 и op2 могут всё; petrova и noc (уровни эскалации) — ничего: эскалировать некому
   const world = {
     can: (who) => who !== "petrova" && who !== "noc",
@@ -603,7 +642,7 @@ function syntheticTransitions(env) {
     engine.runAll("detach", [events[0], events[1]], {}, { surface: "card" });
   }, (v) => refusal(v, { notFrom: true, id: ID(9002) }));
 
-  // Норматив при появлении: приоритета 60 нет ни в уточнениях, ни в byPriority — defaultSec реакции (300 с)
+  // Норматив при появлении: у приоритета 60 своего норматива нет (reactionNorm60 выше) — defaultSec реакции (300 с)
   add("Появление с приоритетом 60 без своего норматива — реакция defaultSec: due = now + 300000", (engine, events, mk) => {
     events.push(mk(9002));
     engine.create(mk(9001, { state: "", priority: 60 }));
