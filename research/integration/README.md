@@ -47,6 +47,7 @@ AxxonData (`PROJ/axxondatago`) в исследование не входит: п
 | [41-multi-service.md](41-multi-service.md) | Одно событие — несколько служб: итог консилиума ([41-consilium/](41-consilium/)) |
 | [42-was-will-be.md](42-was-will-be.md) | Для коллег: как МИ создаёт инциденты — было и будет |
 | [50-plan-stage2.md](50-plan-stage2.md) | План этапа 2: каркас операторского API в сервере МИ |
+| [51-plan-stage3.md](51-plan-stage3.md) | План этапа 3: данные инцидента и «событие → инцидент» в сервере МИ |
 
 ## Как обновлять
 
