@@ -165,11 +165,35 @@ def bulk_close_all_scenarios(w):
 
 
 def sibling_notice_any_result(w):
-    """Порча sibling-notice-any-result из tools/mutations/machine.json: запись и уведомление соседям — при любом
-    результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)."""
-    effect = next(e for e in transition(w, "close")["effects"] if e["fn"] == "notifySiblings")
+    """Порча sibling-notice-any-result из tools/mutations/machine.json: запись соседям — при любом результате закрытия,
+    а не только при «Ложной тревоге» (§6.1, ARCH-15)."""
+    effect = next(e for e in transition(w, "close")["effects"] if e["fn"] == "logSiblings")
     assert effect["args"][0] == ["false_alarm"]
     effect["args"][0] = [i["id"] for i in w["reasonCatalogs"]["close_result"]["items"]]
+
+
+def sibling_notice_linked_to_nobody(w):
+    """Порча sibling-notice-linked-to-nobody из tools/mutations/machine.json: у привязанного соседа уведомление — его
+    пустому адресату, а не адресату основного (§6.1, §11.4, RULE-138)."""
+    effect = next(e for e in w["registries"]["effects"] if e["fn"] == "notifySiblings")
+    lead = effect["do"][0]["then"][0]["do"][0]
+    assert lead.get("let") == "lead" and "s.linkedTo" in lead["value"]
+    lead["value"] = "addressee(s)"
+
+
+def bulk_primary_unchecked(w):
+    """Порча bulk-primary-11-3-unchecked из tools/mutations/machine.json: основной по §11.3 — среди всех отмеченных,
+    даже если его не закрыть (§11.1, §11.3, RULE-140)."""
+    d = w["cel"]["definitions"]["bulkPrimary"]
+    find = "cel.bind(p, mergePrimary(ok, who), "
+    assert find in d["expr"]
+    d["expr"] = d["expr"].replace(find, "cel.bind(p, mergePrimary(xs, who), ")
+
+
+def intake_unique_key_event_only(w):
+    """Порча intake-unique-key-event-only из tools/mutations/machine.json: ключ уникальности — только событие (PROC-93)."""
+    assert w["intake"]["uniqueKey"] == ["eventGuid", "scenario"]
+    w["intake"]["uniqueKey"] = ["eventGuid"]
 
 
 def bulk_primary_ignores_allowed(w):
@@ -255,6 +279,9 @@ MUTATIONS = [
     ("bulk-close-all-scenarios", "«Закрыть без обработки» на выборке закрывает и другой сценарий (§11.1, ARCH-15)", bulk_close_all_scenarios),
     ("sibling-notice-any-result", "запись соседям — при любом результате закрытия, не только «Ложной тревоге» (§6.1, ARCH-15)", sibling_notice_any_result),
     ("bulk-primary-ignores-allowed", "основной выборки — самый срочный из всех отмеченных, даже чужой (§11.1, решение 2026-10-29)", bulk_primary_ignores_allowed),
+    ("bulk-primary-11-3-unchecked", "основной по §11.3 — мой «В работе», хотя его не закрыть: закрывается не тот сценарий (§11.1, RULE-140)", bulk_primary_unchecked),
+    ("sibling-notice-linked-to-nobody", "привязанный сосед: уведомление о ложной тревоге никому, а не адресату основного (§6.1, §11.4, RULE-138)", sibling_notice_linked_to_nobody),
+    ("intake-unique-key-event-only", "ключ уникальности — только событие: событие пожара даёт один инцидент (§14.5, PROC-93)", intake_unique_key_event_only),
 ]
 
 

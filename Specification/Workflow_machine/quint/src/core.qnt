@@ -84,16 +84,19 @@
   /* ===== Появление инцидента (переход с trigger event) ===== */
 
   // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий и приоритет; сам
-  // выбор правила по событию — вне модели. Ключ intake.uniqueKey машины — событие + сценарий: второго инцидента того
-  // же сценария на событие нет, повтор события и пересекающиеся правила его не дают
+  // выбор правила по событию — вне модели (его держат тесты API и порчи кода intake-*). Ключ — intake.uniqueKey машины
+  // (intakeKeySame, генерируется; сейчас событие + сценарий, PROC-93): второго инцидента с тем же ключом нет, повтор события
+  // и пересекающиеся правила его не дают
+  def born(i: str, ev: str, sc: str, prio: int): Incident =
+    { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev }
   def createOk(i: str, ev: str, sc: str): bool = all {
     incOf(i).state == "",
-    not(INCIDENTS.exists(j => incOf(j).state != "" and incOf(j).eventGuid == ev and incOf(j).scenario == sc)),
+    not(INCIDENTS.exists(j => incOf(j).state != "" and intakeKeySame(incOf(j), born(i, ev, sc, 0)))),
   }
   action create(i: str, ev: str, sc: str, prio: int): bool = {
     val t = ofTrigger("event")[0]
     val w0 = { ...world,
-      inc: world.inc.set(i, { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev }),
+      inc: world.inc.set(i, born(i, ev, sc, prio)),
       answers: world.answers.set(i, Set()) }
     all {
       createOk(i, ev, sc),

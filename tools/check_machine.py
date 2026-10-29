@@ -248,6 +248,18 @@ def check_api(w, o, err):
         if name not in schemas:
             err.append(f"API: $ref на несуществующую схему {name}")
 
+    # Ответы самого сервера до операции — с кодами контракта (решение 2026-10-29): 401 и 400 называют код из Problem.code;
+    # код, названный в описании любого общего ответа, — из Problem.code
+    codes = set(schemas["Problem"]["properties"]["code"]["enum"])
+    responses = o["components"].get("responses", {})
+    for name, code in (("Unauthorized", "UNAUTHENTICATED"), ("BadRequest", "BAD_REQUEST")):
+        if code not in codes or f"`{code}`" not in responses.get(name, {}).get("description", ""):
+            err.append(f"API: ответ {name} — код {code} должен быть в Problem.code и в описании ответа (решение 2026-10-29)")
+    for name, resp in responses.items():
+        for code in re.findall(r"Код `([A-Z_]+)`", resp.get("description", "")):
+            if code not in codes:
+                err.append(f"API: ответ {name} называет код {code}, а в Problem.code его нет")
+
 
 def check_fixture(w, err):
     """Эталонный набор fixtures/demo.json с файлами сценариев (tools/fixture.py): время — UTC и не позже снимка,
@@ -583,6 +595,10 @@ def check_intake(w, err):
     key = intake.get("uniqueKey")
     if not isinstance(key, list) or not key or any(k not in fields for k in key):
         err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
+    # Ключ считают до создания инцидента — исполнитель (intake в engine.js) и модель (createOk): только поля, известные
+    # к этому моменту (PROC-93)
+    elif any(k not in ("eventGuid", "eventType", "scenario") for k in key):
+        err.append(f"машина: intake.uniqueKey {key} — до создания инцидента известны только eventGuid, eventType, scenario (PROC-93)")
     # Полное равенство в ruleBeats решает порядок списка правил: он задан машиной, а не порядком строк в базе
     rule = w.get("cel", {}).get("types", {}).get("Rule", {})
     if rule.get(intake.get("ruleOrder")) != "string":
@@ -992,6 +1008,67 @@ def check_registry_comments(w, err):
         for entry in w["registries"][kind]:
             if entry.get("extendsBaseRegistry") and not str(entry.get("$comment", "")).strip():
                 err.append(f"реестр: {entry['fn']} сверх базового реестра без $comment — бэкенду нечего реализовать (DOC-26)")
+
+
+def check_registry_base(w, err):
+    """Базовый реестр — списки §14.8 правил («Реестр условий», «Реестр эффектов»). Функция не из них — сверх базового
+    реестра: помечена extendsBaseRegistry, иначе бэкенд не узнает, что её надо реализовать (RULE-139); помеченная
+    функция из базового списка — тоже ошибка."""
+    with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+        rules = f.read()
+    for kind, title in (("guards", "Реестр условий"), ("effects", "Реестр эффектов")):
+        m = re.search(rf"^{title}: (.+)$", rules, re.M)
+        if not m:
+            err.append(f"§14.8: строка «{title}: …» не найдена — базовый реестр не с чем сверить (RULE-139)")
+            continue
+        base = {re.sub(r"\(.*\)", "", name) for name in re.findall(r"`([^`]+)`", m.group(1))}
+        for entry in w["registries"][kind]:
+            marked = bool(entry.get("extendsBaseRegistry"))
+            if entry["fn"] not in base and not marked:
+                err.append(f"реестр: {entry['fn']} нет в базовом реестре §14.8, а extendsBaseRegistry не стоит — бэкенд не узнает, что её надо реализовать (RULE-139)")
+            if entry["fn"] in base and marked:
+                err.append(f"реестр: {entry['fn']} есть в базовом реестре §14.8, а помечена extendsBaseRegistry (RULE-139)")
+
+
+# Действия мира, которые уходят наружу, — уведомления и внешние команды: их эффект — external, после транзакции перехода
+# (README машины, «Эффекты»). Остальное — запись в журнал, новая версия, курсор, перенос ответов, вытеснение
+# карточки — часть транзакции
+OUTBOUND_WORLD = {"notify", "command"}
+
+
+def check_effect_kinds(w, err):
+    """Класс эффекта (RULE-139): эффект, который шлёт уведомление или внешнюю команду, — external, а external ничего
+    в транзакции не меняет (set, append, действия мира, кроме уведомления и команды); у перехода — тот же класс, что
+    в реестре. Иначе бэкенд по kind отправит уведомление внутри транзакции, и сбой доставки откатит переход."""
+    effects = {e["fn"]: e for e in w["registries"]["effects"]}
+
+    def ops(node, seen):
+        out = set()
+        if isinstance(node, dict):
+            if "world" in node:
+                out.add(node["world"])
+            if "set" in node or "append" in node:
+                out.add("set")
+            if node.get("call") in effects and node["call"] not in seen:
+                out |= ops(effects[node["call"]].get("do"), seen | {node["call"]})
+            for v in node.values():
+                out |= ops(v, seen)
+        elif isinstance(node, list):
+            for v in node:
+                out |= ops(v, seen)
+        return out
+
+    for fn, entry in effects.items():
+        found = ops(entry.get("do"), {fn})
+        if found & OUTBOUND_WORLD and entry.get("kind") != "external":
+            err.append(f"реестр: {fn} шлёт уведомление или команду ({', '.join(sorted(found & OUTBOUND_WORLD))}), а kind — {entry.get('kind')}, не external (RULE-139)")
+        if entry.get("kind") == "external" and found - OUTBOUND_WORLD:
+            err.append(f"реестр: {fn} — external, а меняет транзакцию ({', '.join(sorted(found - OUTBOUND_WORLD))}): разделите на два эффекта (RULE-139)")
+    for t in w["transitions"]:
+        for e in t.get("effects", []):
+            reg = effects.get(e["fn"])
+            if reg and e.get("kind") != reg.get("kind"):
+                err.append(f"переход {t['id']}: у {e['fn']} kind {e.get('kind')}, а в реестре {reg.get('kind')} (RULE-139)")
 
 
 STATE_OWNERS = ("none", "transfer_target", "operator", "closed_by")
@@ -2006,6 +2083,8 @@ def collect():
         show_continuing(w)
     check_registry_used(w, err)
     check_registry_comments(w, err)
+    check_registry_base(w, err)
+    check_effect_kinds(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
@@ -2023,6 +2102,7 @@ def collect():
 MACHINE = "Specification/Workflow_machine/workflow_schema.v1.json"
 RULES = "Specification/State_rules/States rules IM.md"
 FIXTURE = "Specification/Workflow_machine/fixtures/demo.json"
+OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
@@ -2098,6 +2178,23 @@ MUTATIONS = [
      '"scopeNoteKey": "workflow.form.close.bulk.note.scenario",\n', "", "bulk.scopeNoteKey"),
     ("intake-rule-order", "машина: полное равенство правил решает не строковое поле Rule — createdAt вместо guid (§14.5)", MACHINE,
      '"ruleOrder": "guid"', '"ruleOrder": "createdAt"', "intake.ruleOrder"),
+    ("intake-key-late-field", "машина: в ключе уникальности поле, которого до создания инцидента нет (PROC-93)", MACHINE,
+     '"uniqueKey": ["eventGuid", "scenario"]', '"uniqueKey": ["eventGuid", "owner"]', "intake.uniqueKey"),
+    ("registry-base-unmarked", "машина: notifySiblings сверх базового реестра §14.8 без extendsBaseRegistry (RULE-139)", MACHINE,
+     '"about": "incident"}}]}]}]}], "extendsBaseRegistry": true, ', '"about": "incident"}}]}]}]}], ', "extendsBaseRegistry"),
+    ("registry-base-marked", "машина: appendLog из базового реестра помечен extendsBaseRegistry (RULE-139)", MACHINE,
+     '{ "fn": "appendLog", "kind": "transactional",', '{ "fn": "appendLog", "extendsBaseRegistry": true, "kind": "transactional",', "extendsBaseRegistry"),
+    ("effect-notify-transactional", "машина: notifySiblings шлёт уведомление, а помечен transactional (RULE-139)", MACHINE,
+     '{ "fn": "notifySiblings", "kind": "external",', '{ "fn": "notifySiblings", "kind": "transactional",', "не external"),
+    ("effect-external-logs", "машина: notifySiblings external, а пишет в журнал — запись и уведомление в одном эффекте (RULE-139)", MACHINE,
+     '"do": [{"let": "lead",', '"do": [{"world": "touch", "args": {"incident": "s"}}, {"let": "lead",', "меняет транзакцию"),
+    ("effect-kind-use", "машина: у «Закрыть» notifySiblings помечен transactional, в реестре — external (RULE-139)", MACHINE,
+     '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "external", "fn": "notifySiblings"',
+     '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "transactional", "fn": "notifySiblings"', "в реестре external"),
+    ("contract-401-code", "контракт: в Problem.code нет UNAUTHENTICATED (решение 2026-10-29)", OPENAPI,
+     '"PRIORITY_IN_USE",\n              "UNAUTHENTICATED",', '"PRIORITY_IN_USE",', "UNAUTHENTICATED"),
+    ("contract-400-no-code", "контракт: ответ BadRequest не называет код (решение 2026-10-29)", OPENAPI,
+     "Код `BAD_REQUEST`, ключ текста", "Ключ текста", "BAD_REQUEST"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

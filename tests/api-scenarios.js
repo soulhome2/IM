@@ -1833,6 +1833,20 @@
     }
   });
 
+  test("Ключ уникальности — из машины (intake.uniqueKey): ключ «только событие» — событие даёт один инцидент, первый по порядку создания (§14.5, PROC-93)", async () => {
+    // По машине ключ — событие + сценарий: пожар на S5 даёт медпункт и пожар. Ключ «только событие» — один инцидент на событие:
+    // остаётся тот, что создавался бы первым, — медпункт (его условие точнее). Исполнитель берёт ключ из машины, а не из кода
+    const env = await makeEnv({ workflowPatch: { intake: { uniqueKey: ["eventGuid"] } } });
+    const body = fireAt(S5, { eventGuid: "70000000-0000-4000-8000-0000000000ed" });
+    const res = await env.call("POST", "/test/events", body);
+    assert.status(res, 201, null, "событие с инцидентом");
+    assert.eq(res.body.created, 1, "ключ — только событие: на событие один инцидент");
+    assert.eq([res.body.incidents[0].number, scenarioOf(res.body.incidents[0]), res.body.alarmNumber], ["INC-1854", KEYS.medical, "INC-1854"], "остался первый по порядку создания — медпункт");
+    const again = await env.call("POST", "/test/events", body);
+    assert.status(again, 200, null, "повтор события");
+    assert.eq([again.body.created, again.body.incidents.map((c) => c.number)], [0, ["INC-1854"]], "повтор — прежний инцидент, нового нет");
+  });
+
   test("Ранжирование: вложенная группа точнее родителя; при равной точности — выше приоритет, затем раньше созданное (§14.5, ARCH-15)", async () => {
     const env = await makeEnv();
     const tree = await env.ok("GET", "/operator/reference/source-groups");
@@ -2242,6 +2256,45 @@
     assert.eq([siblingNotices(await env.card(c)).length, got.length], [0, 0], "у INC-1853 записи нет, события нет");
   });
 
+  test("Ложная тревога у соседа, привязанного к чужому основному: запись у соседа, уведомление — адресату основного, закрывшему — нет (§6.1, §11.4, RULE-138)", async () => {
+    // P — второй медпункт, своё событие, у меня в работе; C — медпункт INC-1853, сосед пожара INC-1847 по событию, привязан к P.
+    // Своего адресата у привязанного нет: его ведёт тот, кто ведёт основной (§11.4), — ему и уведомление о C
+    async function stand() {
+      const env = await makeEnv();
+      const [fire, c] = await Promise.all(["INC-1847", "INC-1853"].map((n) => env.guidOf(n)));
+      const made = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [S5], site: "Торговый центр", location: "тест", ruleGuid: RULE(9) });
+      assert.status(made, 201, null, "второй медпункт — своим событием");
+      const p = made.body.guid;
+      assert.status(await env.act(p, "claim", {}, "queue"), 200, null, `взять ${made.body.number}`);
+      const merged = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [p, c] });
+      assert.status(merged, 200, null, `взять ${made.body.number} и INC-1853 одним инцидентом`);
+      const linked = await env.card(c);
+      assert.eq([merged.body.incident.guid, linked.state, linked.linkedTo, linked.owner, linked.assignmentGroup], [p, "linked", p, null, null], "INC-1853 привязан ко второму медпункту, своего адресата нет");
+      return { env, fire, c };
+    }
+    // Закрывает Петрова: у C запись, мне — адресату основного — событие о C
+    let { env, fire, c } = await stand();
+    assert.status(await asColleague(env, "petrova", fire, "claim"), 200, null, "Петрова берёт INC-1847");
+    const before = await env.card(c);
+    let { res, got } = await closeWatching(env, fire, "false_alarm", "petrova");
+    assert.status(res, 200, null, "Петрова закрывает INC-1847 «Ложной тревогой»");
+    const card = await env.card(c);
+    assert.eq(siblingNotices(card).map((j) => j.vars && j.vars.number), ["INC-1847"], "у привязанного INC-1853 — запись о ложной тревоге соседа");
+    assert.eq(card.state, "linked", "привязанный не закрыт и остаётся привязанным");
+    assert.ok(Number(card.version) > Number(before.version), `у привязанного новая версия: ${before.version} → ${card.version}`);
+    assert.eq(
+      got.map((m) => [m.incidentGuid, m.payload.siblingGuid, m.payload.siblingNumber, m.payload.closeResultId, m.actor && m.actor.id]),
+      [[c, fire, "INC-1847", "false_alarm", "petrova"]],
+      "мне, адресату основного, — incident.sibling_closed о привязанном INC-1853"
+    );
+    // Закрываю я — я и адресат основного: запись у C есть, события мне нет
+    ({ env, fire, c } = await stand());
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    ({ res, got } = await closeWatching(env, fire, "false_alarm"));
+    assert.status(res, 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    assert.eq([siblingNotices(await env.card(c)).length, got.length], [1, 0], "запись у привязанного есть, закрывшему — события нет");
+  });
+
   test("Ложная тревога у соседа: journal.appended всем, кто видит соседа, а не только адресату — следующее действие без неожиданного 412 (§6.1, ARCH-15)", async () => {
     // Медпункт INC-1853 — новый, адресата нет: уведомления никому, но я его вижу — мне событие потока о новой версии
     const env = await makeEnv();
@@ -2336,6 +2389,27 @@
     const theirs = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, await env.guidOf("INC-1846")] });
     const none = theirs.actions.find((a) => a.id === "close");
     assert.eq(none && none.enabled, false, "у отмеченных только чужие в работе — «Закрыть без обработки» недоступно");
+  });
+
+  test("Массовый сбой на выборке: основной по §11.3 есть, но его не закрыть — основной среди тех, что можно закрыть (§11.1, §11.3, RULE-140)", async () => {
+    // Справочник сужен: «Массовый сбой» — только из «Новый». Пожар INC-1847 — мой в работе: основной по §11.3, но «Массовым
+    // сбоем» его не закрыть. Медпункт INC-1853 — новый: его закрыть можно — основной выборки он, закрывается его сценарий
+    const workflow = JSON.parse(JSON.stringify(W));
+    workflow.reasonCatalogs.close_result.items.find((i) => i.id === "mass").fromStates = ["new"];
+    const env = await standWith({ workflow });
+    const [fire, med] = await Promise.all(["INC-1847", "INC-1853"].map((n) => env.guidOf(n)));
+    assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
+    const close = sel.actions.find((a) => a.id === "close");
+    assert.eq(close.enabled, true, `«Закрыть без обработки» на выборке доступно: ${close.reason}`);
+    const medTitle = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === KEYS.medical).name;
+    const v = close.formNote && close.formNote.vars;
+    assert.eq(v && [v.scenario, v.n, v.skipped], [medTitle, 1, 1], "закроется медпункт, пожар пропущен");
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expectedVersions: sel.versions }));
+    assert.status(res, 200, null, "массовый сбой на выборке");
+    assert.eq(res.body.succeeded.map((e) => e.number), ["INC-1853"], "закрыт медпункт");
+    assert.eq((res.body.skipped || []).map((s) => [s.number, s.reasonKey]), [["INC-1847", "workflow.error.selection.other_scenario"]], "мой пожар пропущен — другой сценарий");
+    assert.eq((await env.card(fire)).state, "in_progress", "INC-1847 — у меня в работе");
   });
 
   test("Массовый сбой по устаревшей выборке: основной ушёл к коллеге после отметки — действие отклоняется целиком, другой сценарий не закрыт (§11.1, BUG-84, ARCH-15)", async () => {

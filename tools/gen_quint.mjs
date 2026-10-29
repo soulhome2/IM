@@ -521,6 +521,12 @@ function header() {
   branchSettings(byPath);
   emit(`  pure val HOLD_REASONS_BY_OPERATOR: Set[str] = Set(${W.reasonCatalogs.hold.items.filter((i) => i.setBy !== "system").map((i) => JSON.stringify(i.id)).join(", ")})`);
   emit(`  pure val CLOSE_RESULT_IDS: Set[str] = Set(${W.reasonCatalogs.close_result.items.map((i) => JSON.stringify(i.id)).join(", ")})`);
+  // Ключ уникальности появления (intake.uniqueKey, §14.5, PROC-93): одинаковый ключ у двух инцидентов — по полям ключа.
+  // Условие create (createOk) берёт его отсюда, а не пишет «событие + сценарий» руками. Поля — те, что известны до создания
+  const KEY_FIELDS = ["eventGuid", "eventType", "scenario"];
+  const uniqueKey = (W.intake || {}).uniqueKey || [];
+  if (!uniqueKey.length || uniqueKey.some((f) => !KEY_FIELDS.includes(f))) fail(`intake.uniqueKey ${JSON.stringify(uniqueKey)}: нужны поля из ${KEY_FIELDS.join(", ")}`);
+  emit(`  pure def intakeKeySame(x: Incident, y: Incident): bool = and {\n${uniqueKey.map((f) => `    x.${f} == y.${f},`).join("\n")}\n  }`);
   // Профиль «смена» (PROC-72): права — типовые наборы валидатора (§14.7); закрытие с результатом, которому нужен
   // пройденный сценарий, — переходы, у которых набор шагов задаёт результат, и такие результаты
   const typical = W.validation.typicalPermissionSets.items;

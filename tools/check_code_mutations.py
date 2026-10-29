@@ -65,6 +65,9 @@ MUTATIONS = [
     # одного правила — не по его списку
     ("intake-order-by-priority", "engine.js", ": beats(x.rule, y.rule) ? -1 : beats(y.rule, x.rule) ? 1 :", ": y.rule.priority !== x.rule.priority ? Number(y.rule.priority - x.rule.priority) :", "api"),
     ("intake-order-reversed-list", "engine.js", "x.rule.scenarios.indexOf(x.scenario) - y.rule.scenarios.indexOf(y.scenario)", "y.rule.scenarios.indexOf(y.scenario) - x.rule.scenarios.indexOf(x.scenario)", "api"),
+    # Ключ уникальности появления (intake.uniqueKey, PROC-93): одинаковый ключ не отсекается; ключ зашит в коде, а не из машины
+    ("intake-unique-key-ignored", "engine.js", "        if (seen.has(k)) return false;\n", "", "api"),
+    ("intake-unique-key-fixed", "engine.js", "I.uniqueKey.map((f) => {", '["eventGuid", "scenario"].map((f) => {', "api"),
     # Значение поля-списка — по правилам формы машины (ARCH-09)
     ("form-list-value-unchecked", "engine.js", "if (!offered) return {", "if (false) return {", "api"),
     ("form-list-hidden-accepted", "engine.js", "          rule.visible &&\n", "", "api"),

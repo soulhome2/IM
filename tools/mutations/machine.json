@@ -744,23 +744,23 @@
  },
  {
   "name": "sibling-notice-any-result",
-  "what": "запись в журнал открытых соседей и уведомление их адресату — при любом результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)",
-  "find": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"],",
-  "replace": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"processed\", \"false_alarm\", \"duplicate\", \"drill\", \"impossible\", \"mass\"],",
+  "what": "запись в журнал открытых соседей — при любом результате закрытия, а не только при «Ложной тревоге» (§6.1, ARCH-15)",
+  "find": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"logSiblings\", \"args\": [[\"false_alarm\"],",
+  "replace": "\"workflow.journal.close\"] },\n        { \"kind\": \"transactional\", \"fn\": \"logSiblings\", \"args\": [[\"processed\", \"false_alarm\", \"duplicate\", \"drill\", \"impossible\", \"mass\"],",
   "model": "мир модели: уведомления модель не меняют"
  },
  {
   "name": "sibling-notice-linked-off",
   "what": "привязанный закрыт вместе с основным «Ложной тревогой», а его открытым соседям ни записи, ни уведомления (§6.1, §11.4, решение 2026-10-29)",
-  "find": "\"workflow.journal.close_linked\"] },\n        { \"kind\": \"transactional\", \"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"], \"workflow.journal.sibling_closed\"] },",
+  "find": "\"workflow.journal.close_linked\"] },\n        { \"kind\": \"transactional\", \"fn\": \"logSiblings\", \"args\": [[\"false_alarm\"], \"workflow.journal.sibling_closed\"] },\n        { \"kind\": \"external\", \"fn\": \"notifySiblings\", \"args\": [[\"false_alarm\"]] },",
   "replace": "\"workflow.journal.close_linked\"] },",
   "model": "мир модели: уведомления модель не меняют"
  },
  {
   "name": "sibling-notice-to-closer",
   "what": "закрывший в дежурной группе-адресате соседа получает уведомление о своём закрытии (§6.1, решение 2026-10-29)",
-  "find": "\"recipients\": \"recipients(addressee(s), s).filter(m, m != incident.closedBy)\"",
-  "replace": "\"recipients\": \"recipients(addressee(s), s)\"",
+  "find": "\"recipients\": \"recipients(lead, s).filter(m, m != incident.closedBy)\"",
+  "replace": "\"recipients\": \"recipients(lead, s)\"",
   "model": "мир модели: уведомления модель не меняют"
  },
  {
@@ -772,9 +772,29 @@
  },
  {
   "name": "bulk-primary-ignores-allowed",
-  "what": "основного по §11.3 нет — основной выборки самый срочный из всех отмеченных, даже если его не закрыть: «Закрыть без обработки» недоступно (§11.1, решение 2026-10-29)",
+  "what": "основной выборки — среди всех отмеченных, даже тех, кого не закрыть: основного по §11.3 нет — самый срочный чужой, «Закрыть без обработки» недоступно (§11.1, решение 2026-10-29)",
   "find": "cel.bind(ok, xs.filter(e, closeOptions(who, e, 'queue').exists(o, stepsOk(o, e))), ",
   "replace": "cel.bind(ok, xs, ",
   "model": "вне модели: выборки в модели нет"
+ },
+ {
+  "name": "bulk-primary-11-3-unchecked",
+  "what": "основной выборки по §11.3 берётся среди всех отмеченных: мой «В работе», которого не закрыть, всё равно основной — закрывается не тот сценарий (§11.1, §11.3, RULE-140)",
+  "find": "cel.bind(p, mergePrimary(ok, who), ",
+  "replace": "cel.bind(p, mergePrimary(xs, who), ",
+  "model": "вне модели: выборки в модели нет"
+ },
+ {
+  "name": "sibling-notice-linked-to-nobody",
+  "what": "сосед привязан к другому основному — уведомление о ложной тревоге его пустому адресату, то есть никому, а не адресату основного (§6.1, §11.4, RULE-138)",
+  "find": "\"value\": \"s.linkedTo != '' ? cel.bind(ps, incidentById(s.linkedTo), size(ps) > 0 && !isDone(ps[0]) ? addressee(ps[0]) : '') : addressee(s)\"",
+  "replace": "\"value\": \"addressee(s)\"",
+  "model": "мир модели: уведомления модель не меняют"
+ },
+ {
+  "name": "intake-unique-key-event-only",
+  "what": "ключ уникальности — только событие: на событие один инцидент, второй службе тревога не приходит (§14.5, PROC-93)",
+  "find": "\"uniqueKey\": [\"eventGuid\", \"scenario\"]",
+  "replace": "\"uniqueKey\": [\"eventGuid\"]"
  }
 ]

@@ -172,6 +172,8 @@
   "workflow.error.no_schema_admin": "Нет права настраивать схему",
   "workflow.error.catalog_not_found": "Справочник не найден",
   "workflow.error.no_route": "Нет маршрута {method} {path}",
+  "workflow.error.unauthenticated": "Вход не выполнен: войдите заново",
+  "workflow.error.bad_request": "Запрос не разобран: неверные параметры или заголовки",
   "workflow.error.test.no_fixture": "Нет эталонного набора {name}",
   "workflow.error.test.no_operator": "Нет оператора {id}",
   "workflow.error.test.clock_backwards": "Время назад не идёт",

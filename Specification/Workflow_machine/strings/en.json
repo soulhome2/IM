@@ -172,6 +172,8 @@
   "workflow.error.no_schema_admin": "No permission to configure the schema",
   "workflow.error.catalog_not_found": "Catalog not found",
   "workflow.error.no_route": "No route {method} {path}",
+  "workflow.error.unauthenticated": "Not signed in: sign in again",
+  "workflow.error.bad_request": "Request not understood: invalid parameters or headers",
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
   "workflow.error.test.clock_backwards": "Time does not go backwards",

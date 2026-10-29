@@ -56,6 +56,7 @@
  "hold-no-owner": "инвариант actionRights (профиль «широкий»)",
  "idle-release-skips-break": "инвариант silentOwnerHandled (профиль «широкий»)",
  "if-person-any": "инвариант ownerByState (профиль «широкий»)",
+ "intake-unique-key-event-only": "сценарии siblingsTwoScenariosTest",
  "left-group-not-recorded": "сценарии detachInGroupWindowTest, detachClaimInGroupWindowTest, detachAtGroupDeadlineTest",
  "level-cannot-accept-ignored": "инвариант autoEscalateToSomeone (профиль «широкий»)",
  "level-ceiling-ignored": "инвариант levelBounded (профиль «широкий»)",

@@ -646,6 +646,54 @@
       const close = sel.body && sel.body.actions ? sel.body.actions.find((a) => a.id === "close") : null;
       return [Boolean(close) && close.enabled === false, `«Закрыть без обработки» на выборке [чужой пожар, мой отложенный медпункт]: ${close ? (close.enabled ? "доступно" : "недоступно") : sel.status}`];
     },
+    // Основной по §11.3, которого не закрыть (§11.1, RULE-140): «Массовый сбой» сужен до «Новый», пожар INC-1847 — мой в работе,
+    // медпункт INC-1853 — новый. По машине основной выборки — медпункт (его можно закрыть); если §11.3 берётся среди всех —
+    // мой пожар, и форма называет сценарий пожара
+    async "bulk-primary-11-3-unchecked"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      const close_result = JSON.parse(JSON.stringify(window.IM_WORKFLOW.reasonCatalogs.close_result));
+      close_result.items.find((i) => i.id === "mass").fromStates = ["new"];
+      await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { reasonCatalogs: { close_result } } });
+      const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
+      const before = await stand.raw("GET", `/operator/incidents/${fire}`);
+      await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      const sel = await stand.raw("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
+      const close = sel.body && sel.body.actions ? sel.body.actions.find((a) => a.id === "close") : null;
+      const scenario = close && close.formNote ? close.formNote.vars.scenario : null;
+      const fireTitle = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === window.IM_FIXTURE.scenarios.keys.fire).name;
+      return [scenario === fireTitle, `сценарий основного выборки [мой пожар в работе, новый медпункт]: ${scenario || sel.status}`];
+    },
+    // Привязанный сосед (§6.1, §11.4, RULE-138): медпункт INC-1853 привязан ко второму медпункту, он у меня в работе; Петрова
+    // закрывает пожар INC-1847 «Ложной тревогой». По машине мне, адресату основного, — incident.sibling_closed; если уведомление —
+    // адресату самого привязанного, то никому
+    async "sibling-notice-linked-to-nobody"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      await stand.raw("POST", "/test/reset", { fixture: "demo" });
+      const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
+      const made = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "проба", ruleGuid: "80000000-0000-4000-8000-000000000009" });
+      const p = made.body.guid;
+      await stand.raw("POST", `/operator/incidents/${p}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": made.headers.etag });
+      const merged = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: [p, med] });
+      await stand.raw("POST", `/test/operators/petrova/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "card" });
+      const got = [];
+      server.subscribe((m) => got.push(m));
+      const closed = await stand.raw("POST", `/test/operators/petrova/incidents/${fire}/transitions/close`, { formValues: { resultId: "false_alarm", comment: "проба" }, surface: "card" });
+      await new Promise((r) => setTimeout(r, 100));
+      const notices = got.filter((m) => m.type === "incident.sibling_closed").length;
+      return [merged.status === 200 && closed.status === 200 && notices === 0, `объединение ${merged.status}, закрытие ${closed.status}; incident.sibling_closed мне: ${notices}`];
+    },
+    // Ключ уникальности (§14.5, PROC-93): событие пожара в торговом центре. По машине (событие + сценарий) — медпункт и пожар;
+    // ключ «только событие» — один инцидент
+    async "intake-unique-key-event-only"() {
+      const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const stand = IMApi.create({ server });
+      await stand.raw("POST", "/test/reset", { fixture: "demo" });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр" });
+      const n = res.body ? res.body.created : null;
+      return [n === 1, `инцидентов от события пожара в торговом центре: ${n === null ? res.status : n}`];
+    },
   };
 
   setTimeout(async () => {

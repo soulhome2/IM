@@ -475,6 +475,8 @@
     // Какие инциденты даёт событие: по сценарию подошедших правил (intake.match) — правило-победитель (первое из
     // intake.winner). Порядок создания — чей победитель старше (ruleBeats), сценарии одного правила — по его списку,
     // полное равенство — порядок списка правил, а его задаёт машина (intake.ruleOrder, по guid), не порядок в наборе.
+    // Один инцидент на ключ уникальности intake.uniqueKey машины (PROC-93): ключ — из полей будущего инцидента, из тех, что
+    // известны до создания; у кого ключ совпал — создаётся первый по порядку создания.
     // Ответ — [{ scenario, rule }] с правилами сервера; пусто — инцидентов нет
     function intake(rules, event) {
       const I = W.intake;
@@ -482,7 +484,7 @@
       const key = (r) => String(r[I.ruleOrder]).toLowerCase();
       const ordered = rules.slice().sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
       const all = ordered.map(celRule);
-      const scenarios = [...new Set(all.filter((r) => def(I.match, r, e)).flatMap((r) => Array.from(r.scenarios)))];
+      const scenarios = all.filter((r) => def(I.match, r, e)).flatMap((r) => Array.from(r.scenarios));
       const picks = scenarios.map((s) => ({ scenario: s, rule: def(I.winner, all, e, s)[0] }));
       const beats = (a, b) => def("ruleBeats", a, b, e);
       picks.sort((x, y) =>
@@ -490,7 +492,22 @@
           ? x.rule.scenarios.indexOf(x.scenario) - y.rule.scenarios.indexOf(y.scenario)
           : beats(x.rule, y.rule) ? -1 : beats(y.rule, x.rule) ? 1 : all.indexOf(x.rule) - all.indexOf(y.rule)
       );
-      return picks.map((p) => ({ scenario: p.scenario, rule: cel.source(p.rule) }));
+      const fields = (p) => ({ eventGuid: event.guid, eventType: event.eventType, scenario: p.scenario });
+      const keyOf = (p) =>
+        JSON.stringify(
+          I.uniqueKey.map((f) => {
+            if (!(f in fields(p))) throw new Error(`intake.uniqueKey: field ${f} is unknown before the incident is created`);
+            return fields(p)[f];
+          })
+        );
+      const seen = new Set();
+      const unique = picks.filter((p) => {
+        const k = keyOf(p);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      return unique.map((p) => ({ scenario: p.scenario, rule: cel.source(p.rule) }));
     }
 
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
