@@ -125,7 +125,7 @@
 
 Как сделать (решение 5): `let` — `ctx[name] = snapshot(v)`: запись — новый экземпляр того же класса с копиями полей и тем же `source`, `Map` и массивы — копии, простые значения — как есть. `forEach` — элемент-инцидент (экземпляр `Incident`) заменяется на `store.instance(x.id)`. Корень пути `set`/`append` — `incident` или имя `forEach` из области видимости, иначе ошибка сборки. Повтор ключа — у узла `map` два одинаковых литерала-ключа. Макрос по словарю — у `rcall` из `METHODS` тип получателя (`env.check` над `expr.slice(recv.start, recv.end)` в том же окружении) начинается с `map`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Копия машины — `structuredClone(W)`; эффекты-пробы дописываются в `registries.effects`, условия — в `registries.guards`. `store` пробы: `incidents: () => list`, `instance: (id) => list.find((x) => x.id === id)`, `touch() {}`, `world() {}`. Инцидент `x` — `cel.value("Incident", {id: "x", timers: {reaction: {due: 100}, resolution: {}, hold: {}}})`.
 
@@ -143,14 +143,14 @@ test("подмножество — таблица SUBSET", ...)           // к�
 test("машина репозитория собирается без ошибок", ...) // IMCel.create(W).errors → []
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git fetch && node tools/test_cel.mjs`
 Expected: FAIL — «let — снимок», «set от имени let», «повтор ключа», «макрос по словарю», таблица `SUBSET`. «forEach» и «машина репозитория» проходят и на старом коде: их дело — не сломаться от снимка.
 
-- [ ] **Step 3: Реализация** в `cel-runtime.js` и `engine.js`.
+- [x] **Step 3: Реализация** в `cel-runtime.js` и `engine.js`.
 
-- [ ] **Step 4: Тесты проходят, прототип ведёт себя как раньше**
+- [x] **Step 4: Тесты проходят, прототип ведёт себя как раньше**
 
 Run: `node tools/test_cel.mjs && node tools/check_cel.mjs | tail -1`
 Expected: `test_cel: 7 из 7`; `Ошибок в выражениях машины: 0`.
@@ -161,7 +161,7 @@ Expected: `data-selftest="pass"`, `data-apitest="pass"`, итог тестов A
 Run: `python3 -c "import sys; sys.path.insert(0, 'tools'); import check_code_mutations as m; bad = m.stale(); print(len(m.MUTATIONS), 'порч, устаревших:', len(bad), bad)"`
 Expected: устаревших — 0. Если `quint` в PATH — `node tools/check_quint_replay.mjs --traces=100`: 0 расхождений; нет — записать в журнал «не прогнано: нет quint, идёт в CI».
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «PROC-44: let в эффектах — снимок, элемент forEach — инцидент черновика; в разрешённой части CEL — без повтора ключей и макросов по словарю».
 Run: `git add prototype/cel-runtime.js prototype/engine.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/52-plan-stage4a/commit-msg.txt`
@@ -187,7 +187,7 @@ Run: `git add prototype/cel-runtime.js prototype/engine.js tools/test_cel.mjs &&
 
 Запись (только при `?celVectors=1` и без `?api=`): при загрузке файла — `Date.now = () => 1790845200000` (2026-10-01T09:00:00Z) и `Math.random` — mulberry32 с зерном 1. `IMCel.create` оборачивается: машина — не `window.IM_WORKFLOW` (ни тем же объектом, ни тем же JSON — `workflowPatch` тестов) — возвращается как есть. Иначе `guard`, `rule`, `call`, `effect` пишут вектор: вход — до вызова, мир — обёртка над `scope.world` (у `call` — над `w`) на каждый факт без `ref`, список инцидентов — при первом обращении (у эффекта — снимок `store.incidents()` на начало, в вектор — если эффект его спрашивал), ответ — результат или исключение (исключение пробрасывается дальше). Вложенное вычисление — свой вектор. Один `id` — два разных `expect` — исключение «один вход — два ответа».
 
-- [ ] **Step 1: Тесты библиотеки** (в `tools/test_cel.mjs`)
+- [x] **Step 1: Тесты библиотеки** (в `tools/test_cel.mjs`)
 
 ```js
 test("canonical: ключи по алфавиту; 1.5 и 2 ** 60 — ошибка", ...)
@@ -199,14 +199,14 @@ test("запись и повтор: условие по ленте даёт то
   // обёрнутый create(W), hasPermission ['incident:claim'] с миром can → true; replay → ok; лента без can → misses = ["can"]
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `node tools/test_cel.mjs`
 Expected: FAIL — `IMCelVectors` не объявлен.
 
-- [ ] **Step 3: Реализация** `tests/cel-vectors.js`, правки `api.html` и `harness.js`.
+- [x] **Step 3: Реализация** `tests/cel-vectors.js`, правки `api.html` и `harness.js`.
 
-- [ ] **Step 4: Тесты проходят; запись в Chrome зелёная и повторяется**
+- [x] **Step 4: Тесты проходят; запись в Chrome зелёная и повторяется**
 
 Run: `node tools/test_cel.mjs`
 Expected: `test_cel: 13 из 13`.
@@ -214,7 +214,7 @@ Expected: `test_cel: 13 из 13`.
 Run: `S=<scratchpad> && cd /mnt/hgfs/VmWareShared/soul2home/IM && for n in 1 2; do google-chrome --headless=new --disable-gpu --no-first-run --user-data-dir=$S/chrome$n --virtual-time-budget=180000 --dump-dom "file://$PWD/tests/api.html?celVectors=1" > $S/rec$n.html; done && python3 -c "import html,re,sys,json,hashlib;[print('pass' if 'data-apitest=\"pass\"' in p else 'FAIL', re.search(r'apitest-summary\">(.*?)<',p).group(1), (lambda d: (len(d['vectors']), sorted({v['kind'] for v in d['vectors']}), hashlib.sha256(json.dumps(d,sort_keys=True).encode()).hexdigest()[:12]))(json.loads(html.unescape(re.search(r'<pre id=\"celvectors-out\"[^>]*>(.*?)</pre>',p,re.S).group(1))))) for p in [open(f,encoding='utf-8').read() for f in sys.argv[1:]]]" $S/rec1.html $S/rec2.html`
 Expected: обе строки — `pass`, итог тестов API — то же число, что без параметра; виды — `definition`, `effect`, `guard`, `rule`; число векторов и хэш в двух прогонах совпадают. Тесты API без параметра (`tests/api.html`) — `pass`, блок `celvectors-out` пустой.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «PROC-44: запись векторов CEL при тестах API — tests/api.html?celVectors=1, лента фактов мира, пул инцидентов».
 Run: `git add tests/cel-vectors.js tests/api.html tests/harness.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/52-plan-stage4a/commit-msg.txt`
@@ -256,29 +256,29 @@ Run: `git add tests/cel-vectors.js tests/api.html tests/harness.js tools/test_ce
 
 Регистрация: в CI, шаг «Машина состояний» — `node tools/test_cel.mjs` и `node tools/cel_vectors.mjs --check`; в `CLAUDE.md` — обе команды в быстрых проверках; строка таблицы сгенерированных файлов `Specification/Workflow_machine/fixtures/cel-vectors.json` | машина, запись тестов API, синтетика | `node tools/cel_vectors.mjs --update` (~6 мин, Chrome); в «Что поменял»: машину — `--update`; `prototype/cel-runtime.js`, `engine.js` — `node tools/test_cel.mjs` и `--check`; README, «Проверки» — пункт про `tools/cel_vectors.mjs` и `tools/test_cel.mjs`; `.graphifyignore` — файл векторов.
 
-- [ ] **Step 1: Проверка без файла падает**
+- [x] **Step 1: Проверка без файла падает**
 
 Run: `node tools/cel_vectors.mjs --check; echo $?`
 Expected: «нет файла, соберите: node tools/cel_vectors.mjs --update», `1`.
 
-- [ ] **Step 2: Реализация** `tools/cel_vectors.mjs` и синтетики.
+- [x] **Step 2: Реализация** `tools/cel_vectors.mjs` и синтетики.
 
-- [ ] **Step 3: Сборка, повторяемость, проверка**
+- [x] **Step 3: Сборка, повторяемость, проверка**
 
 Run: `S=<scratchpad> && node tools/cel_vectors.mjs --update && sha256sum Specification/Workflow_machine/fixtures/cel-vectors.json > $S/v1 && node tools/cel_vectors.mjs --update && sha256sum -c $S/v1 && time node tools/cel_vectors.mjs --check`
 Expected: файл собран; второй `--update` дал те же байты (`OK`); `--check` — код 0, `расхождений: 0, промахов ленты: 0, без векторов: 0`, меньше 10 с. Каждое имя в `UNCOVERED_OK` — с причиной; если там больше 10 имён — добавить синтетику, а не расширять список.
 
-- [ ] **Step 4: Проверка ловит порчу**
+- [x] **Step 4: Проверка ловит порчу**
 
 Run: `S=<scratchpad> && F=Specification/Workflow_machine/fixtures/cel-vectors.json && python3 -c "import sys;l=open(sys.argv[1],encoding='utf-8').read().split('\n');i=next(k for k,x in enumerate(l) if '\"kind\":\"guard\"' in x and '\"value\":null' in x);l[i]=l[i].replace('\"value\":null','\"value\":{\"key\":\"x\"}');open(sys.argv[2],'w',encoding='utf-8').write('\n'.join(l))" $F $S/bad.json && node tools/cel_vectors.mjs --check --file=$S/bad.json; echo $?; python3 -c "import json,sys;w=json.load(open(sys.argv[1]));w['\$comment']+='.';json.dump(w,open(sys.argv[2],'w'),ensure_ascii=False)" Specification/Workflow_machine/workflow_schema.v1.json $S/w.json && node tools/cel_vectors.mjs --check --machine=$S/w.json; echo $?`
 Expected: первый — код `1`, в списке расхождений — `id` испорченного вектора (правка сохраняет канонический вид, её ловит повтор); второй — «машина изменилась после сборки векторов», `1`. Ещё одна проба канона: любая строка файла с лишним пробелом (`--file=` копии) — «правлен руками», `1`.
 
-- [ ] **Step 5: Документы и проверки**
+- [x] **Step 5: Документы и проверки**
 
 Run: быстрые проверки IM (с `test_cel.mjs` и `--check`) и `python3 tools/check_links.py`.
 Expected: всё зелёное; ссылки целы.
 
-- [ ] **Step 6: Commit (два)**
+- [x] **Step 6: Commit (два)**
 
 Сообщение: «PROC-44: векторы CEL для бэкенда — tools/cel_vectors.mjs --update | --check, fixtures/cel-vectors.json, синтетика на границах; CEL.md и BACKEND.md — раздел «Векторы»».
 Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/cel-vectors.json Specification/Workflow_machine/CEL.md Specification/Workflow_machine/BACKEND.md README.md CLAUDE.md .github/workflows/checks.yml .graphifyignore && git commit -q -F .superpowers/sdd/52-plan-stage4a/commit-msg.txt`
@@ -301,34 +301,34 @@ Run: `git add reviews/2026-10-22/plan.md && git commit -q -F .superpowers/sdd/52
 **Interfaces:**
 - Produces: `api/im/operator/cel-vectors.json` — копия векторов (не встраивается в бинарник: читают только тесты, по пути).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestCELVectorsMatchMachine(t *testing.T) // os.ReadFile("cel-vectors.json"); format == 1; machineSha256 == hex(sha256(Machine))
 func TestServerCodesFromContract(t *testing.T) // CodeUnauthenticated == operatorgen.ProblemCodeUNAUTHENTICATED; CodeBadRequest == operatorgen.ProblemCodeBADREQUEST
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./api/im/operator/ ./internal/im/handler/operator/ 2>&1 | tail -5`
 Expected: FAIL — нет `cel-vectors.json`; `ProblemCodeUNAUTHENTICATED` не объявлен.
 
-- [ ] **Step 3: Копия и генерация**
+- [x] **Step 3: Копия и генерация**
 
 Run: `git -C /mnt/hgfs/VmWareShared/soul2home/IM status --porcelain -- Specification/Workflow_machine && make vendor-operator-contract && cat api/im/operator/SOURCE && PATH=$PATH:$HOME/go/bin make gen-api-operator && git status --short`
 Expected: `status` IM пуст; в `SOURCE` — хэш отметки PROC-44 без `dirty`; изменены четыре файла копии и `cel-vectors.json`, из сгенерированных — только `spec.go` и `types.go`. Затем правка `problem.go`.
 
-- [ ] **Step 4: Замок `ruleselect` — только комментарий**
+- [x] **Step 4: Замок `ruleselect` — только комментарий**
 
 Run: `python3 -c "import json,subprocess as s;o=json.loads(s.check_output(['git','show','3282d96:api/im/operator/workflow_schema.v1.json']));n=json.load(open('api/im/operator/workflow_schema.v1.json'));D=['conditionMatches','conditionRank','ruleRank','ruleMatches','ruleBeats','ruleFor'];print(all(o['cel']['definitions'][k]==n['cel']['definitions'][k] for k in D), all(o['cel']['world'][k]==n['cel']['world'][k] for k in ['deviceInGroup','groupDepth']), all(o['cel']['types'][k]==n['cel']['types'][k] for k in ['Event','Rule','Condition']), {k:v for k,v in o['intake'].items() if k!='\$comment'}=={k:v for k,v in n['intake'].items() if k!='\$comment'}, o['intake']['\$comment']!=n['intake']['\$comment'])"`
 Expected: `True True True True True` — изменился только `intake.$comment` (уточнение PROC-93 про ключ уникальности; сервер так и работает с этапа 3). Иначе — **стоп, спросить**. `intakePinSHA256` = `026a9bafa0cd54864ecf9303e4526ba1285654699f20f4ec1360a0eea1f51c41` (посчитано 2026-10-29 на машине IM `a569c45`; задачи 1–3 машину не меняют), комментарий `// vendored <SOURCE>`.
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `go build ./... && go test ./api/... ./internal/im/handler/operator/... ./internal/im/ruleselect/ ./internal/im/service/intake/ && make test-local 2>&1 | tail -8 && golangci-lint run ./...`
 Expected: PASS всех пакетов (тесты этапов 2 и 3 — без правок); lint — 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 4а: копия контракта, машины, строк и векторов CEL с IM <SOURCE>; коды 401 и 400 — из контракта».
 Run: `git add Makefile api/im/operator internal/im/handler/operator internal/im/ruleselect/pin_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -367,7 +367,7 @@ Run: `git add Makefile api/im/operator internal/im/handler/operator internal/im/
 
 Проверка подмножества — обход проверенного дерева: можно константы `bool`, `int`, `string`; списки; словари (повтор ключа-литерала — ошибка); поле, `[]`; операторы `== != < <= > >= && || ! ?: + - *`, унарный `-`, `in`; `size`; вызовы членов `__w` из макросов; генераторы (comprehension) — только если их исходный макрос `exists`, `all`, `filter`, `map` над списком (тип `IterRange` — не словарь) или `bind`. Всё прочее — ошибка: `double`, `/`, `%`, методы, `has`, `exists_one`, неизвестная функция, `__w` в тексте выражения.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestLoadVendoredMachine(t *testing.T)    // NoError; Counts() == Counts{Types: 22, Settings: 8, WorldFacts: 14, RefFacts: 6, Definitions: 52, Guards: 35, Effects: 27, UIRules: 73}
@@ -392,22 +392,22 @@ func TestSubset(t *testing.T)                 // таблица ниже; пер
 | `b ? 1 == 1 : false`, `-n < 0`, `!b` | `has(f.comment)`, `xs.exists_one(x, x == 'a')`, `nope(1)` |
 | | `{'a': 1, 'a': 2}['a'] == 1`, `m.exists(k, k == 'a')` |
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./internal/im/machine/ 2>&1 | tail -3`
 Expected: FAIL — пакета нет.
 
-- [ ] **Step 3: Зависимость и реализация**
+- [x] **Step 3: Зависимость и реализация**
 
 Run: команда добавления cel-go из Global Constraints, затем `git diff go.mod`.
 Expected: в `go.mod` — ровно добавления из Global Constraints. Затем — код пакета.
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/machine/ -v 2>&1 | tail -15 && go build ./... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4а: пакет machine — машина из копии, типы и настройки, окружение cel-go с миром на вычисление, разрешённая часть CEL; cel-go v0.26.1».
 Run: `git add go.mod go.sum internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -435,7 +435,7 @@ Run: `git add go.mod go.sum internal/im/machine && git commit -q -F .git/COMMIT_
 
 Смысл — как `guard`, `contextOf`, `rule`, `call` в `cel-runtime.js` и `availability`, `firstFail` в `engine.js`: аргумент `setting` — значение по пути в машине как `dyn`; аргумент `list<T>` не списком — `[arg]`; условие выполнено, только если результат `true`; иначе ключ — `failKey` (выражение) или `failKeys[0]`, подстановки — `failVars` (выражение-словарь или словарь выражений); ошибка мира — `fmt.Errorf("world %s: %w", name, err)`. `Availability`: переход или `navActions.items` по id; нет такого — `{Hidden: true}`; у перехода `s.Incident["state"]` не из `from` — `{Hidden: true, NotFrom: true, Fail: &Fail{Key: "workflow.guard.wrong_state"}}`; условия по порядку, первое невыполненное — `{Hidden: onFail == "hide", Fail, Guard: fn}`; все выполнены — `{OK: true}`; ошибка любого — `(Availability{}, err)`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Мир теста — `factWorld map[string]func(args []any) (any, error)`, неизвестный факт — ошибка. Инцидент `inc(state, owner)` — полный, все три таймера.
 
@@ -456,19 +456,19 @@ func TestRecipientsKeepWorldOrder(t *testing.T) // recipients("g", x): isGroup g
 func TestWorldIsPerEvaluation(t *testing.T)     // 32 горутины × 100 Guard(hasPermission): мир горутины i — can = (i%2 == 0) ⇒ каждая видит своё
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/machine/ -run 'Guard|Availability|UIRule|Definition|Recipients|World|RefFact' 2>&1 | tail -3`
 Expected: FAIL — не собирается (`Guard` не объявлен).
 
-- [ ] **Step 3: Реализация** `eval.go`.
+- [x] **Step 3: Реализация** `eval.go`.
 
-- [ ] **Step 4: Тесты проходят, гонок нет**
+- [x] **Step 4: Тесты проходят, гонок нет**
 
 Run: `go test -race ./internal/im/machine/ 2>&1 | tail -5 && golangci-lint run ./...`
 Expected: PASS без `DATA RACE`; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4а: исполнитель — условия (первое невыполненное, onFail, failKey и failVars), правила интерфейса, определения; мир — свой у каждого вычисления, ошибка — не false».
 Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -503,7 +503,7 @@ call f(a)        → значения аргументов; тело f с me, ac
 world a(args)    → Action{a, значения args}
 ```
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestEffectExprArg(t *testing.T)            // setOwner ["actor"], Actor "op2" ⇒ Changed()[0]["owner"] == "op2"
@@ -524,19 +524,19 @@ func TestEffectWorldActions(t *testing.T)       // notify ["addressee(incident)"
 func TestDraftKeepsOrder(t *testing.T)          // NewDraft([a, b, c]); запись в c, затем в a ⇒ Changed ids [c, a]; Incidents ids [a, b, c]
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/machine/ -run 'Effect|Draft' 2>&1 | tail -3`
 Expected: FAIL — `Effect` не объявлен.
 
-- [ ] **Step 3: Реализация** `effect.go` (каждая функция — в пределах `funlen`).
+- [x] **Step 3: Реализация** `effect.go` (каждая функция — в пределах `funlen`).
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/machine/ 2>&1 | tail -5 && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4а: исполнитель — эффекты на черновике в памяти: set, append, let снимком, if, forEach по id, call, действия мира; ${аргумент} и expr<T>».
 Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -554,7 +554,7 @@ Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
 
 Сравнение — по значению после разворота `$ref` (обе стороны — данные: `int64`, строки, списки, словари). Условие — `nil` ⇒ `null`, иначе `{"key", "vars"}` (`vars` — если есть). Эффект: `NewDraft(scope.incidents)` или `[scope.incident]`, `Effect`, затем `{"incidents": Changed() по id, "actions": Actions()}`. `expect.error` — Go должен вернуть ошибку (текст не сравнивается).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestTapeWorld(t *testing.T) // попадание — out; json.Number("5") и int64(5) — одно; аргумент-инцидент — по id; вызова нет — ошибка и misses == ["can(...)"]
@@ -563,17 +563,17 @@ func TestVectors(t *testing.T)   // vectorFile.MachineSHA256 == sha256(operatora
                                  // в конце t.Logf: "vectors N (guard …, rule …, definition …, effect …), mismatches M, tape misses K, unused tape entries U"
 ```
 
-- [ ] **Step 2: Прогон**
+- [x] **Step 2: Прогон**
 
 Run: `go test ./internal/im/machine/ -run 'TestVectors|TestTapeWorld' -v 2>&1 | grep -E '^(=== RUN|--- FAIL|ok|FAIL)|vectors [0-9]' | tail -30`
 Expected сначала: FAIL — `runVector` не объявлен; затем — расхождения, если есть. Каждое разобрать: правится исполнитель (задачи 5–7), а не вектор; похоже на ошибку прототипа — **стоп, спросить**. Каждую причину — в журнал работ.
 
-- [ ] **Step 3: Тесты проходят**
+- [x] **Step 3: Тесты проходят**
 
 Run: `go test -race ./internal/im/machine/ -v -run TestVectors 2>&1 | grep -E 'vectors [0-9]|^ok|FAIL' && golangci-lint run ./...`
 Expected: `ok`; итог `mismatches 0, tape misses 0`; число векторов — как `counts` файла; lint — 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4а: сверка исполнителя Go с прототипом — все векторы CEL совпадают, мир — по ленте, промах ленты — провал».
 Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -602,7 +602,7 @@ Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4A`
 
 `Intake` — тот же порядок, что `ruleselect.Intake` (`intake.$comment` машины), но каждое суждение — определение машины: `ruleMatches(r, e)`, `ruleFor(ordered, e, s)` (победитель — первый, правило — по `guid`), `ruleBeats(x, y, e)`. Мир — переходник: `deviceInGroup`, `groupDepth` → `IntakeWorld`, любой другой факт — ошибка. Сортировка ошибок не возвращает, поэтому `ruleBeats` для пар победителей считается до `sort.SliceStable`. Ошибка вычисления → `Intake` возвращает ошибку → `Process` — `fmt.Errorf("intake: %w", err)` (`500`, ничего не записано).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Перенести 16 тестов `ruleselect_test.go` с прежними именами и проверками (`TestIntake_IncidentPerScenarioOfMatchedRules` … `TestOrderRules`; `TestConditionMatches`, `TestConditionRank`, `TestRuleRank*`, `TestRuleBeats_Strict` — через `m.Definition`) и из `pin_test.go` — `TestMachineIntakeShape`, `TestUniqueKeyFromMachine_Errors`. Новые:
 
@@ -613,19 +613,19 @@ func TestIntake_CreatedAtIsMillis(t *testing.T)   // два правила од�
 func TestIntake_EvalErrorIsError(t *testing.T)    // копия: ruleMatches.expr = "r.conditions[5].eventType == []" ⇒ Intake возвращает ошибку, Picks nil
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/machine/ -run 'Intake|RuleFor|Condition|RuleRank|RuleBeats|OrderRules|UniqueKey|ApplyUnique' 2>&1 | tail -3`
 Expected: FAIL — `Intake` не объявлен.
 
-- [ ] **Step 3: Реализация и переключение сервиса**
+- [x] **Step 3: Реализация и переключение сервиса**
 
-- [ ] **Step 4: Тесты этапа 3 — без правок и зелёные**
+- [x] **Step 4: Тесты этапа 3 — без правок и зелёные**
 
 Run: `git diff --exit-code 3282d96 -- internal/im/service/intake/service_test.go internal/im/handler/test/ && go test -race ./internal/im/machine/ ./internal/im/service/intake/ && make test-local 2>&1 | tail -10 && grep -rn 'ruleselect\.' --include=*.go internal | grep -v '^internal/im/ruleselect/' && golangci-lint run ./...`
 Expected: `git diff` пуст; PASS всех пакетов, тесты с базой (`TestEvent*`, `TestProcess_*`, `TestTreeWorld*`) — тоже; `ruleselect.` — только в `service_test.go:350`; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4а: выбор правил при приёме события — определения машины на исполнителе вместо зеркала ruleselect; тесты этапа 3 без правок».
 Run: `git add -A internal/im && git commit -q -F .git/COMMIT_MSG_STAGE4A`
@@ -641,21 +641,44 @@ Run: `git add -A internal/im && git commit -q -F .git/COMMIT_MSG_STAGE4A`
 **Interfaces:**
 - Consumes: всё из задач 1–9.
 
-- [ ] **Step 1: ADR-004** — пакет `machine` и почему так: мир через макросы и `__w` (поздних функций в cel-go v0.26.1 нет), типы из машины, `ref` над списком в 4а и SQL в 4б, эффекты как `ops()` Quint, числа и ошибки, векторы и лента, `ruleselect` → исполнитель и переходник до 4б, что дальше (4б: переходы в транзакции, векторы переходов; 4в: API).
+- [x] **Step 1: ADR-004** — пакет `machine` и почему так: мир через макросы и `__w` (поздних функций в cel-go v0.26.1 нет), типы из машины, `ref` над списком в 4а и SQL в 4б, эффекты как `ops()` Quint, числа и ошибки, векторы и лента, `ruleselect` → исполнитель и переходник до 4б, что дальше (4б: переходы в транзакции, векторы переходов; 4в: API).
 
-- [ ] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
+- [x] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && python3 tools/check_links.py && node tools/cel_vectors.mjs --check`
 Expected: ссылки целы; векторы — 0 расхождений.
 
-- [ ] **Step 3: Последний прогон сервера**
+- [x] **Step 3: Последний прогон сервера**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test -race ./internal/im/machine/ && make test-local 2>&1 | tail -15 && go vet ./... && golangci-lint run ./...`
 Expected: всё PASS; `go vet` чисто; lint — 0.
 
-- [ ] **Step 4: Commit (два репозитория)**
+- [x] **Step 4: Commit (два репозитория)**
 
 Сервер — «Этап 4а: ADR об исполнителе машины». Run: `git add docs/adr/004-machine-executor.md && git commit -q -F .git/COMMIT_MSG_STAGE4A`
 IM — «Этап 4а встраивания: исполнитель CEL на Go и векторы — план отмечен». Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git add research/integration/40-plan.md research/integration/52-plan-stage4a.md && git commit -q -F .superpowers/sdd/52-plan-stage4a/commit-msg.txt`
+
+---
+
+## Итог этапа 4а
+
+Этап сделан. Исполнитель CEL на Go вычисляет условия, правила интерфейса, определения и эффекты машины; на всех 2324 общих векторах он даёт тот же результат, что прототип (расхождений 0, промахов ленты 0). Приём события работает на нём. Решения плана и замечания ревью — в ADR-004 сервера (`docs/adr/004-machine-executor.md`).
+
+| Задача | Репозиторий | Коммиты |
+|---|---|---|
+| 1. `let` снимком, элемент `forEach` из черновика, запреты подмножества | IM | `7dd7d35` |
+| 2. Запись векторов при тестах API | IM | `ddffbd5` |
+| 3. `cel_vectors.mjs`, файл векторов, раздел «Векторы», проверки | IM | `4dd1cc2`, `3e05db2` (отметка PROC-44), `aefa3e8` (правка плана), `ab9898c` (векторы-ошибки на границах) |
+| 4. Копия контракта, машины, строк и векторов с IM `ab9898c` | сервер | `2e29f77` |
+| 5. Пакет `machine`: загрузка, типы, окружение, разрешённая часть CEL | сервер | `00ee8b0`, `c63a03b` (`__w` нельзя и как имя переменной макроса) |
+| 6. Мир, условия, доступность, правила интерфейса, определения | сервер | `4f8023d` |
+| 7. Эффекты на черновике в памяти | сервер | `4227bb0` |
+| 8. Сверка с прототипом по векторам | сервер | `8309d9e` |
+| 9. Выбор правил при приёме события — на исполнителе | сервер | `09db367` |
+| 10. ADR-004, документы, последний прогон | сервер, IM | этот коммит (в каждом репозитории) |
+
+Последний прогон: `go test -race ./internal/im/machine/`, `make test-local`, `go vet ./...`, `golangci-lint run ./...` — чисто; `check_links.py` — 0 нерабочих ссылок; `cel_vectors.mjs --check` — 0 расхождений.
+
+Что осталось на 4б (договорённости для него записаны в ADR-004): черновик эффекта сразу в новом состоянии `to`; инцидент, который получает факт мира, — запись до транзакции; `ruleselect.UniqueKeyFromMachine` убрать вместе с импортом в `service_test.go`; закрепить `cel.world` для `deviceInGroup` и `groupDepth` (`treeWorld` держит их смысл руками).
 
 ---
 
