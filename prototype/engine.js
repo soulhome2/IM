@@ -72,7 +72,9 @@
         ev
       );
     // Факты мира (cel.world машины) — из данных сервера; «я» — оператор этого исполнителя
-    const celWorld = {
+    // ctx.world — факты мира, заданные напрямую (запись и повтор векторов переходов, tests/transition-vectors.js):
+    // функции cel.world с теми же именами и аргументами. Не задан — факты из данных сервера, как раньше
+    const celWorld = ctx.world || {
       can: (who, p) => (who === ME ? ctx.can(p) : Boolean(ctx.permsOf && ctx.permsOf(who).includes(p))),
       access: (who, x) => Boolean(ctx.hasAccess && ctx.hasAccess(who, cel.source(x))),
       isOperator: (id) => Boolean(ctx.isOperator && ctx.isOperator(id)),
@@ -275,6 +277,21 @@
         else delete fired[id];
       });
       ev.firedTimers = fired;
+    }
+    // Инцидент прототипа из celView (обратный мост для векторов переходов): base — поля сервера вне celView
+    // (log, run, version…), затем поля celIncident и writeBack. Таймер, которого нет в plain, — нулевая запись;
+    // scenarioGuid — из plain.scenario (у celView это ctx.scenarioKey(ev))
+    function fromView(plain, base) {
+      const p = Object.assign({}, plain, { timers: Object.assign({}, plain.timers) });
+      W.timers.forEach((t) => {
+        if (!p.timers[t.id]) p.timers[t.id] = {};
+      });
+      const ev = Object.assign({}, base, {
+        id: plain.id, number: plain.number, typeId: plain.eventType, priority: plain.priority, occurredAt: plain.occurredAt,
+        eventGuid: plain.eventGuid, scenarioGuid: plain.scenario,
+      });
+      writeBack(cel.value("Incident", p), ev);
+      return ev;
     }
     // Эффекты перехода на черновиках: инциденты перехода и те, кого эффекты коснулись. Журнал, курсор
     // сценария и перенос ответов — в черновики; уведомления, внешние команды, вытеснение карточки, новая
@@ -844,6 +861,7 @@
       norm,
       // Инцидент так, как его видят выражения машины: для сверки с моделью Quint (tools/check_quint_replay.mjs)
       celView: (ev) => cel.plain(celIncident(ev)),
+      fromView,
       // Ключи порядка очереди (queueSort.keys машины): меньше — выше
       sortKeys: (ev, orderId) => {
         const scope = celScope(ev);

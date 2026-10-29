@@ -16,7 +16,7 @@ const W = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_mac
 const g = { console, TextEncoder, TextDecoder };
 g.window = g;
 vm.createContext(g);
-for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "tests/cel-vectors.js"]) {
+for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js", "tests/cel-vectors.js", "tests/transition-vectors.js"]) {
   // Библиотеки векторов может не быть — тогда падают только её тесты
   if (f.startsWith("tests/") && !fs.existsSync(path.join(ROOT, f))) continue;
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), g, { filename: f });
@@ -25,6 +25,11 @@ const { IMCel } = g;
 const vectors = () => {
   if (!g.IMCelVectors) throw new Error("IMCelVectors не объявлен: нет tests/cel-vectors.js");
   return g.IMCelVectors.lib;
+};
+
+const tvectors = () => {
+  if (!g.IMTransitionVectors) throw new Error("IMTransitionVectors не объявлен: нет tests/transition-vectors.js");
+  return g.IMTransitionVectors.lib;
 };
 
 const results = [];
@@ -294,7 +299,7 @@ test("запись и повтор: условие по ленте даёт то
   const miss = lib.replay(plainCel, bare, incidents);
   ok(!miss.ok && JSON.stringify(miss.misses) === '["can"]', `без can: ${JSON.stringify(miss)}`);
   // Тот же вход ещё раз — та же запись
-  cel.guard("hasPermission", ["incident:claim"], Object.assign({}, scope, { world: { can: () => true } }), {});
+  cel.guard("hasPermission", ["incident:claim"], Object.assign({}, scope, { world: { can: () => true, agentState: () => "available", isGroup: () => false, members: () => [], dutyGroups: () => [], idleSec: () => 0, access: () => true, isOperator: () => true } }), {});
   ok(rec.take().vectors.length === 1, "тот же вход записан дважды");
   // Один вход — два ответа: исключение. Копия машины с тем же JSON — исходная машина, она записывается; настройку
   // по пути условие читает из машины при вычислении, а в векторе её нет — правка после сборки даёт другой ответ
@@ -393,6 +398,73 @@ test("idOf: id вектора — вид, имя и 10 hex sha256 канона �
   ok(lib.idOf(v) === want, `${lib.idOf(v)} ≠ ${want}`);
   const u = Object.assign({}, v, { use: { scopeRule: "x" } });
   ok(lib.idOf(u) === `guard:a:${sha256(lib.canonical({ args: [1], scope: { now: 1 }, use: { scopeRule: "x" }, world: [] })).slice(0, 10)}`, "use — во входе");
+});
+
+/* ===== Стыки ядра прототипа для векторов переходов: fromView и ctx.world ===== */
+
+// Ядро прототипа в vm; мир — словарь (как в check_quint_replay.mjs)
+function engineWith(extra = {}) {
+  const events = [];
+  const ctx = Object.assign({ workflow: structuredClone(W), me: "me", now: () => 1000, events: () => events, scenarioKey: (ev) => ev.scenarioGuid, can: () => false, permsOf: () => [], isGroup: () => false, stepsFilled: () => true, inGroup: () => false, log() {} }, extra);
+  return { engine: g.IMEngine.create(ctx), events };
+}
+
+test("fromView: celView(fromView(x)) == x для инцидентов пула fixtures/cel-vectors.json", () => {
+  const lib = tvectors();
+  const pool = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json"), "utf8")).incidents;
+  const { engine } = engineWith();
+  const ids = Object.keys(pool);
+  ok(ids.length > 1000, `в пуле ${ids.length}`);
+  ids.forEach((key) => {
+    const x = pool[key];
+    const ev = engine.fromView(x, {});
+    const back = engine.celView(ev);
+    const a = JSON.stringify(lib.normalize(back, W));
+    const b = JSON.stringify(lib.normalize(x, W));
+    ok(a === b, `${key}: ${a} ≠ ${b}`);
+    ok(ev.scenarioGuid === x.scenario, `${key}: scenarioGuid ${ev.scenarioGuid} ≠ ${x.scenario}`);
+  });
+});
+
+test("fromView: base сохраняется, поля celView перезаписываются", () => {
+  const { engine } = engineWith();
+  const x = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json"), "utf8")).incidents;
+  const plain = x[Object.keys(x)[0]];
+  const ev = engine.fromView(plain, { log: [1], version: 7, state: "junk" });
+  ok(JSON.stringify(ev.log) === "[1]" && ev.version === 7, "base потерян");
+  ok(ev.state === plain.state && ev.id === plain.id, "поля celView не перезаписаны");
+});
+
+test("ctx.world: факт мира берётся из ctx.world", () => {
+  const { engine, events } = engineWith({ can: () => false, world: { can: () => true, agentState: () => "available", isGroup: () => false, members: () => [], dutyGroups: () => [], idleSec: () => 0, access: () => true, isOperator: () => true } });
+  const x = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json"), "utf8")).incidents;
+  const plain = Object.values(x).find((i) => i.state === "new" && !i.owner && !i.linkedTo);
+  ok(plain, "нет подходящего инцидента");
+  const ev = engine.fromView(plain, {});
+  events.push(ev);
+  ok(engine.availability("claim", ev).ok === true, "claim недоступен при ctx.world.can → true");
+  const off = engineWith({ can: () => false });
+  const ev2 = off.engine.fromView(plain, {});
+  off.events.push(ev2);
+  ok(off.engine.availability("claim", ev2).ok !== true, "без ctx.world claim доступен при can → false");
+});
+
+test("lib.normalize: null в поле — нулевое значение типа поля", () => {
+  const lib = tvectors();
+  const n = lib.normalize({ owner: null, closedAt: null, slaBreached: null, priority: null, holdReasonId: null, timers: {}, breaches: null, leftGroup: null }, W);
+  ok(n.owner === "" && n.closedAt === 0 && n.slaBreached === false && n.priority === 0 && n.holdReasonId === "", JSON.stringify(n));
+  ok(Array.isArray(n.breaches) && n.breaches.length === 0, "breaches");
+  ok(JSON.stringify(n.leftGroup) === '{"at":0,"linkedAt":0,"primaryId":""}', JSON.stringify(n.leftGroup));
+});
+
+test("lib.normalize: недостающий таймер — нулевая запись, since не у hold — 0", () => {
+  const lib = tvectors();
+  const t = (since) => ({ due: 5, fired: 0, left: 0, paused: false, since });
+  const n = lib.normalize({ timers: { hold: t(7), resolution: t(9) } }, W);
+  ok(JSON.stringify(Object.keys(n.timers).sort()) === JSON.stringify(W.timers.map((x) => x.id).sort()), Object.keys(n.timers));
+  ok(n.timers.hold.since === 7 && n.timers.hold.due === 5, "hold изменён");
+  ok(n.timers.resolution.since === 0 && n.timers.resolution.due === 5, "since resolution не обнулён");
+  ok(JSON.stringify(n.timers.reaction) === '{"due":0,"fired":0,"left":0,"paused":false,"since":0}', JSON.stringify(n.timers.reaction));
 });
 
 results.forEach(([name, e]) => console.log(e ? `FAIL ${name}\n    ${String(e.message || e)}` : `ok   ${name}`));
