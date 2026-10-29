@@ -146,7 +146,7 @@
 
 Миграция: `-- +migrate Up` — `ALTER TABLE incidents ADD COLUMN …` по таблице «Строка базы ↔ инцидент машины»; индексы `idx_incidents_owner_state`, `idx_incidents_linked_to`, `idx_incidents_left_group_primary` оттуда же; `ALTER TABLE incident_journal ADD COLUMN kind text NOT NULL DEFAULT 'transition'`, `ADD CONSTRAINT incident_journal_kind_check CHECK (…)`, `UPDATE incident_journal SET kind = 'system' WHERE actor IN ('dispatcher', 'system')`. `-- +migrate Down` — как у 012: `DROP INDEX IF EXISTS …`, `ALTER TABLE incident_journal DROP CONSTRAINT IF EXISTS …, DROP COLUMN IF EXISTS kind`, `ALTER TABLE incidents DROP COLUMN IF EXISTS …` по каждому новому столбцу.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestMigration018(t *testing.T)
@@ -163,19 +163,19 @@ func TestJournalEntriesRoundTrip(t *testing.T) // тот же тест этап�
 func TestJournalKindOf(t *testing.T)           // пакет model: три случая выше
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./internal/im/model/ 2>&1 | tail -3 && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestMigration018|TestIncidentMachineColumnsRoundTrip|TestJournalEntriesRoundTrip' 2>&1 | tail -5`
 Expected: FAIL — не собирается (`Owner`, `Kind`, `JournalKindOf` не объявлены).
 
-- [ ] **Step 3: Реализация** миграции, модели, DTO, конвертеров.
+- [x] **Step 3: Реализация** миграции, модели, DTO, конвертеров.
 
-- [ ] **Step 4: Тесты проходят, этап 3 цел**
+- [x] **Step 4: Тесты проходят, этап 3 цел**
 
 Run: `go build ./... && go test ./internal/im/model/ && make test-local 2>&1 | tail -8 && golangci-lint run ./...`
 Expected: PASS всех пакетов; тесты этапа 3 (`TestEvent*`, `TestProcess_*`) — без правок; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: миграция 018 — поля машины у инцидента (владелец, адресат, таймеры, нарушения, связи, закрытие) и kind у журнала; старые поля читаются обратно».
 Run: `git add internal/im/service/storing internal/im/model internal/im/handler/test/migration_018_test.go internal/im/handler/test/intake_store_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -197,7 +197,7 @@ Run: `git add internal/im/service/storing internal/im/model internal/im/handler/
   - `func FromMachine(x map[string]any, inc *model.Incident) error` — пишет в `inc` только изменяемые поля; `id`, `number`, `eventType`, `priority`, `occurredAt`, `scenario`, `eventGuid` в `x` отличаются от `inc` — ошибка `read-only field <имя>`; `timers` — все ключи из `x`;
   - `func TimerIDs(m *machine.Machine) []string` — id из `timers` машины по порядку.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestToMachineTypes(t *testing.T)
@@ -217,19 +217,19 @@ func TestGetMachineIncidents(t *testing.T)     // база, inRolledBackTx: со
                                                // priority 50; удалённый — не отдаётся; инцидент другого арендатора — не отдаётся
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ 2>&1 | tail -3`
 Expected: FAIL — пакета нет.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/service/transition/ && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run TestGetMachineIncidents && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: инцидент машины из строки базы и обратно — целые числа, пусто как в машине, все таймеры; неизменяемые поля только читаются».
 Run: `git add internal/im/model internal/im/service/storing internal/im/service/transition internal/im/handler/test/transition_store_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -248,7 +248,7 @@ Run: `git add internal/im/model internal/im/service/storing internal/im/service/
   - `Scope.Refs RefSource` — задан: факт с `ref` вычисляет своё выражение над `Refs.Candidates(имя, аргументы)`, а не над `Scope.Incidents` или черновиком; не задан — как в 4а (векторы CEL не меняются);
   - `Action.Target map[string]any` — инцидент действия (`args.incident`, у `shareAnswers` — `args.from`) таким, каким он был в черновике в момент действия; нет инцидента — `nil`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestRefSourceAnswersRefFacts(t *testing.T)
@@ -263,19 +263,19 @@ func TestActionTargetIsSnapshot(t *testing.T)
   // Actions()[0].Target["owner"] == "", Get(id)["owner"] == "x"
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/machine/ -run 'RefSource|ActionTarget' 2>&1 | tail -3`
 Expected: FAIL — не собирается (`RefSource`, `Target` не объявлены).
 
-- [ ] **Step 3: Реализация** и gofmt трёх мест.
+- [x] **Step 3: Реализация** и gofmt трёх мест.
 
-- [ ] **Step 4: Тесты проходят, векторы 4а — тоже**
+- [x] **Step 4: Тесты проходят, векторы 4а — тоже**
 
 Run: `go test -race ./internal/im/machine/ -v -run TestVectors 2>&1 | grep -E 'vectors [0-9]|^ok|FAIL' && go test -race ./internal/im/machine/ ./internal/im/service/intake/ && gofmt -l internal/im && golangci-lint run ./...`
 Expected: `ok`; `vectors 2324 …, mismatches 0, tape misses 0`; `gofmt -l` пусто; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: исполнитель — кандидаты фактов над инцидентами от вызывающего (Scope.Refs), снимок инцидента у действия мира; gofmt».
 Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -296,7 +296,7 @@ Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4B`
 
 Аргументы перехода приводятся к данным (JSON туда и обратно с `UseNumber`, целые — `int64`), программа строится из приведённых, ключ кэша — их JSON (как сейчас). Ошибка сборки, которую дают и сборка по переходу, и сборка как `call`, в `errors.Join` — один раз (по тексту).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestDraftPut(t *testing.T)                 // Put(x со state "in_progress") ⇒ Changed — [x.id], Get(x.id)["state"] == "in_progress"; Put(id "nope") ⇒ ошибка
@@ -311,19 +311,19 @@ func TestLoadReportsBrokenEffectOnce(t *testing.T)
   // копия: у pauseTimer в do — "incident.nope == 1" ⇒ в тексте ошибки Load каждая строка "registries.effects.pauseTimer…" — один раз
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/machine/ -run 'DraftPut|ScopeState|ViewError|NormalizedArgs|BrokenEffectOnce' 2>&1 | tail -3`
 Expected: FAIL — не собирается (`Put`, `Err`, `ErrScopeDraftMismatch` не объявлены).
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят, векторы 4а — тоже**
+- [x] **Step 4: Тесты проходят, векторы 4а — тоже**
 
 Run: `go test -race ./internal/im/machine/ -v -run TestVectors 2>&1 | grep -E 'vectors [0-9]|^ok|FAIL' && go test -race ./internal/im/machine/ && gofmt -l internal/im && golangci-lint run ./...`
 Expected: `ok`; `mismatches 0, tape misses 0`; `gofmt -l` пусто; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: исполнитель — Draft.Put и Draft.Err, ошибка при расхождении Scope с черновиком; программа эффекта из приведённых аргументов, одна ошибка сборки на эффект».
 Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -356,7 +356,7 @@ Run: `git add internal/im/machine && git commit -q -F .git/COMMIT_MSG_STAGE4B`
 
 Каркас `Run` (как начало `run` в `engine.js`): `DoInTx` → `LockFamily` (нет инцидента — `ErrNotFound`) → `Expect` (`*VersionConflict`) → переход машины (нет — `Refusal{Key: "workflow.error.unknown_action"}`) → `machine.Availability` (`Scope.Refs` — кандидаты без черновика; отказ — `Key`, `Vars`, `Guard`, `NotFrom`). Форма — задача 6, эффекты — задача 7, семья и версии — задача 8, окно — задача 9.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Инцидент `inc(id, number, state, owner)` — полный, приоритет 50, все три таймера; мир по умолчанию (`FactWorld`): `can` — true, `agentState` — `ready`, `access` — true, `isGroup` — false, `members` — `[]`, `ActorName(id)` — `"Имя " + id`, `""` — `["workflow.label.unassigned"]`, `Progress` — (1, 3), `StepNumber` — 2. `Me` — `op1`, `Now` — 1790845200000.
 
@@ -369,19 +369,19 @@ func TestRunNotFound(t *testing.T)          // id не из репозитори
 func TestRunUnknownTransition(t *testing.T) // "nope" ⇒ Refusal{Key "workflow.error.unknown_action"}
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'TestRun' 2>&1 | tail -3`
 Expected: FAIL — не собирается (`Run` не объявлен).
 
-- [ ] **Step 3: Реализация** (каждая функция — в пределах `funlen`).
+- [x] **Step 3: Реализация** (каждая функция — в пределах `funlen`).
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро перехода — каркас: семья под блокировкой, сверка версии, доступность; отказ — не ошибка и ничего не пишет».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -399,7 +399,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Как `validateForm`: поля формы перехода по порядку; невидимое — не обязательно; обязательное пустое (нет значения или одни пробелы) — `workflow.error.reason_required` у `kind: text`, иначе `workflow.error.field_required {name: [labelKey]}`; у непустого поля с `source` значение должно быть видно, среди вариантов (`reasonCatalog:<id>` — позиции справочника машины, `transferTargets` — факт мира `transferTargets`), пройти `optionExpr` и `enabledExpr`; иначе `workflow.error.field_invalid {name: [labelKey]}`, `Code: "FORM_FIELD_INVALID"`.
 
-- [ ] **Step 1: Тесты** (мир задачи 5)
+- [x] **Step 1: Тесты** (мир задачи 5)
 
 ```go
 func TestRunFormRequired(t *testing.T)     // hold у владельца op1 без reasonId ⇒ Refusal{Key "workflow.error.field_required", Vars {"name": ["workflow.form.hold.field.reasonId"]}}
@@ -409,19 +409,19 @@ func TestRunFormTransferTarget(t *testing.T) // transfer targetId "op9", transfe
 func TestRunFormSpacesAreEmpty(t *testing.T) // hold reasonId "  " ⇒ field_required
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'TestRunForm' 2>&1 | tail -3`
 Expected: FAIL — отказа формы нет (дальше идёт каркас без эффектов).
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро перехода — проверка формы по правилам интерфейса машины: обязательные поля, варианты справочника и адресатов».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -439,7 +439,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 После формы (решения 6, 13, 14, 21): черновик из семьи (`NewDraft` по `Order`) → `before` = инцидент черновика, `previousOwnerName` = `ActorName(addressee(before))`, `Put` со `state` = `to` → эффекты перехода по порядку (`Scope.Incident` — инцидент черновика, `Before`, `Form`, `Actor` = `Me`; неизвестный эффект — ошибка) → действия `Draft.Actions()` по порядку: `log` — подстановки из `args.vars` или, если их нет, как `vars()` прототипа по `Action.Target` (`comment` из формы, `stepNumber`, `holdReasonLabel`, `targetName` — `ActorName(addressee(цель))`, `escalationLevel`, `closeResultLabel`, `filledSteps`, `totalSteps`, `escalationReason` — `[escalation.reasonKey]`, `primaryNumber`) плюс `previousOwnerName`; `actor` — из действия или шага; `kind` — `JournalKindOf`; `setCursor`, `shareAnswers` — `World` (у `shareAnswers` с `n > 0` и `logKey` — запись основному `{number, n}`); `notify`, `evict`, `touch` — в `After`; `notify`, `command` — в `External` инцидента шага → `Facts` (`From` — до операции, `To` — после эффектов перехода) → выдать `ID` записям → `Write`. Любая ошибка — `(nil, err)`, `DoInTx` откатывает.
 
-- [ ] **Step 1: Тесты** (мир задачи 5)
+- [x] **Step 1: Тесты** (мир задачи 5)
 
 ```go
 func TestRunClaim(t *testing.T)
@@ -459,19 +459,19 @@ func TestRunShareAnswersLog(t *testing.T)
 func TestJournalIDsInOrder(t *testing.T)    // у записей одной операции ID — UUID v7 по возрастанию в порядке Journal
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'TestRunClaim|TestLogVars|TestRunEffectError|TestRunStateSet|TestRunShareAnswers|TestJournalIDs' 2>&1 | tail -3`
 Expected: FAIL — `Incidents` и `Journal` пусты (эффектов ещё нет).
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро перехода — эффекты на черновике, состояние to перед эффектами, журнал с подстановками машины, действия мира в транзакции и после неё».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -489,7 +489,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Запись (`Draft.Changed()`), запись журнала или `touch` у инцидента не из семьи — `ErrFamilyChanged`. Элемент `forEach`, которого нет в черновике, — строка кандидатов, прочитанная в этой же транзакции; писать в него можно, только если он из семьи (так закрыт хвост 4а «элемент добавляется из записи, а не загружается по id»). `ErrFamilyChanged` — повтор операции целиком (новый `DoInTx`), всего до 3 попыток.
 
-- [ ] **Step 1: Тесты** (мир задачи 5)
+- [x] **Step 1: Тесты** (мир задачи 5)
 
 ```go
 func TestRunVersionPlusOneForChanged(t *testing.T)
@@ -505,19 +505,19 @@ func TestRunWriteOutsideFamilyIsError(t *testing.T)
 func TestRunRetriesFamilyChanged(t *testing.T) // HideFromFamily(s, 1) ⇒ вторая попытка проходит: Result без отказа, LockCalls() == 2, Writes() == 1
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'PlusOne|RefsSeeDraft|OutsideFamily|RetriesFamily' 2>&1 | tail -3`
 Expected: FAIL — сосед не записан, `countMine` даёт 0, ошибки `ErrFamilyChanged` нет.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро перехода — факты над инцидентами по кандидатам с черновиком, версия +1 изменённым, запись вне семьи — повтор операции, потом ошибка».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -536,7 +536,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Окно (как `overridden`, `windowBefore`, `windowAfter`; `invariants.manualWinsOverTimer.graceSec` машины): переходы `trigger: timer` из нынешнего состояния с условием `timerExpired [t]`; дедлайн `due` ≠ 0, `due ≤ now < due + graceSec·1000`, `timers[t].fired ≠ due`, переход не в `timers[t].continuesOn`; условия перехода выполняются при `Now = due`; из подходящих — с наименьшим `due`, при равенстве — первый по машине. Найден (после формы, до черновика шага): `before` окна = инцидент до действия, затем `timers[t].fired = due` в черновике; `before` шага берётся уже после отметки (так `celApply` снимает его с черновика, где отметка есть). После эффектов шага и его «некому» (`Facts.To` взят до окна) — эффекты `recordBreach` отменённого перехода по его аргументам на том же черновике (`Actor` `dispatcher`, `Deadline` = `due`, `Before` = `before` окна, состояние не меняется); `Facts.Breach` — их первый аргумент; запись `workflow.journal.timer_overridden {timer: [labelKey таймера], transition: [labelKey отменённого]}` от `dispatcher` — первой в хвосте инцидента (решение 13). `once` у `log`: запись с тем же ключом и `at == now` у того же инцидента — в этой операции или в `JournalAt` — получает новые подстановки, новой записи нет. `emptyLog`: у `notify` без получателей — запись `emptyLog` с подстановками `{}` от шага, после записей эффектов шага, в порядке `notify`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Мир задачи 5; инцидент x `new`, `timers.reaction.due` = D = 1790845200000; эскалировать некому (`can` для `petrova` и `noc` — false).
 
@@ -558,19 +558,19 @@ func TestEmptyLogAfterOperationRows(t *testing.T)
   // Journal[x] — [claim, alert_no_recipient (Actor "op1", Vars {})]; After — [notify {Incident x, Recipients [], Alert true}]
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'Window|LogOnce|EmptyLog' 2>&1 | tail -3`
 Expected: FAIL — `Canceled` пуст, записи `timer_overridden` нет, у `once` две записи.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ручное действие в окне после дедлайна отменяет переход по таймеру — нарушение и запись в той же транзакции, запись о таймере первой; log.once и запись «некому» — как у прототипа».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -597,7 +597,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Кандидаты (надмножество `ref` машины, решение 12): `incidentById(id)` — `guid = id`; `linkedOf(id)` — `linked_to = id`; `countMine`, `mineOf(who, state, except)` — `owner = who AND state = state`; `groupMembersAt(p, at)` — `linked_to = p.id OR left_group->>'primaryId' = p.id`; `siblingsOf(x)` — `event_guid = x.eventGuid` (у пустого — пусто). Не UUID в аргументе (`incidentById('nope')`) — пустой список, не ошибка.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Набор `family` (база, `inRolledBackTx`, номера — из счётчика): основной P (in_progress, op1); L1 (linked к P, открыт), L2 (linked к P, closed), W (вышел из группы P: `left_group.primaryId` = P); X (new), Y (in_progress, op1); S1, S2 — соседи P по событию; Z — инцидент другого арендатора с `linked_to` = P.
 
@@ -614,19 +614,19 @@ func TestWriteJournalOrder(t *testing.T)    // Write с тремя запися�
 func TestJournalAt(t *testing.T)            // записи в Now и Now+1 ⇒ JournalAt(Now) — только первая; Kind сохраняется
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run TestEveryRefFactHasSQL 2>&1 | tail -3 && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestCandidatesSuperset|TestLockFamily|TestWrite|TestJournalAt' 2>&1 | tail -5`
 Expected: FAIL — не собирается (`NewStoreRepo`, `LockIncidentFamily` не объявлены).
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/service/transition/ && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestCandidatesSuperset|TestLockFamily|TestWrite|TestJournalAt' -v 2>&1 | grep -E '^(--- |ok|FAIL)' && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: хранилище переходов — семья инцидента под блокировкой в порядке номеров, кандидаты фактов над инцидентами по индексу, запись с проверкой версии, статусом по состоянию и порядком журнала».
 Run: `git add internal/im/model internal/im/service/storing internal/im/service/transition internal/im/handler/test/transition_store_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -652,7 +652,7 @@ Run: `git add internal/im/model internal/im/service/storing internal/im/service/
 
 Факт мира читает только `id` и `eventGuid` инцидента-аргумента и данные сервера, а не поля машины (ADR-004, «Contract for 4b»: инцидент у факта — запись до транзакции).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestServerWorldCanForRequestUser(t *testing.T)
@@ -667,19 +667,19 @@ func TestServerWorldIgnoresMachineFields(t *testing.T)
 func TestMachineTreeFactsPinned(t *testing.T)  // хэш — deviceInGroup, groupDepth и inSourceGroup (с $comment); сообщение называет treeWorld и NewServerWorld
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run ServerWorld 2>&1 | tail -3`
 Expected: FAIL — `NewServerWorld` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/ ./internal/im/machine/ && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run ServerWorld && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: мир сервера для переходов — группы источников по дереву, права и доступ пользователя запроса; остальное — от вызывающего; inSourceGroup под замком хэша».
 Run: `git add internal/im/service/transition internal/im/machine/intake_test.go internal/im/handler/test/transition_world_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -696,7 +696,7 @@ Run: `git add internal/im/service/transition internal/im/machine/intake_test.go 
 
 Тесты с фиксацией (не `inRolledBackTx`): каждый создаёт свои инциденты с номерами из счётчика арендатора теста и удаляет их в `t.Cleanup`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestRunOnPostgres(t *testing.T)
@@ -714,17 +714,17 @@ func TestLockFamilyNoDeadlock(t *testing.T)
   // затем первая — [L1], вторая — [S2] (семьи пересекаются частично: P, S1, S2) ⇒ ни одной ошибки, нет SQLSTATE 40P01
 ```
 
-- [ ] **Step 2: Тесты падают** — до помощников набора.
+- [x] **Step 2: Тесты падают** — до помощников набора.
 
 Run: `TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestRunOnPostgres|TestRunAllOrNothingOnPostgres|TestRunWindowOnPostgres|TestConcurrentClaim|TestLockFamilyNoDeadlock' 2>&1 | tail -5`
 Expected: FAIL — не собирается (помощники набора не объявлены); после — падение показывает расхождение, правится ядро или хранилище (задачи 5–10), а не тест.
 
-- [ ] **Step 3: Тесты проходят, гонок нет**
+- [x] **Step 3: Тесты проходят, гонок нет**
 
 Run: `IM_TEST_DB_URL=$TESTDB go test -race -count=3 ./internal/im/handler/test/ -run 'TestRunOnPostgres|TestRunAllOrNothingOnPostgres|TestRunWindowOnPostgres|TestConcurrentClaim|TestLockFamilyNoDeadlock' && make test-local 2>&1 | tail -8 && golangci-lint run ./...`
 Expected: PASS три раза подряд; без `DATA RACE`; все пакеты; lint — 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: переход на PostgreSQL — всё или ничего при сбое журнала, окно после дедлайна, два «Взять» одного инцидента: один выигрывает, второй — отказ или конфликт версии; без взаимной блокировки».
 Run: `git add internal/im/handler/test/transition_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -742,7 +742,7 @@ Run: `git add internal/im/handler/test/transition_test.go && git commit -q -F .g
   - `func (c *Core) Create(w World, now int64, incidents []map[string]any) ([]*Created, error)` — переход `trigger: event` машины на каждом новом инциденте по порядку, каждый — своим черновиком (как `engine.create`); `actor` — `actor` перехода (`dispatcher`); фактов над инцидентами у `create` машины нет: `Scope.Refs` не задан, попросит — ошибка (её поймает вектор `create` в 4б-2); в базу ничего не пишет;
   - `type Created struct { Incident map[string]any; Journal []JournalEntry; After []After; External []External; Facts Facts }` — `ID` записей выданы (решение 21).
 
-- [ ] **Step 1: Тесты** (мир задачи 5)
+- [x] **Step 1: Тесты** (мир задачи 5)
 
 ```go
 func TestCreateStartsReaction(t *testing.T)
@@ -754,19 +754,19 @@ func TestCreateEachIncidentOwnDraft(t *testing.T) // два инцидента �
 func TestCreateEvalErrorIsError(t *testing.T)  // копия: у create первым эффектом stopTimer ["nope"] ⇒ ошибка, Created nil
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run TestCreate 2>&1 | tail -3`
 Expected: FAIL — `Create` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро — переход create машины на новых инцидентах события: норматив реакции, журнал с подстановками, без записи в базу».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -788,7 +788,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 `service.create()`: `now := s.now().UTC().Truncate(time.Millisecond)` (решение 20) → инцидент модели как раньше (`Version: 1`, `CreatedAt: now`, `State: ""` до перехода) → `ToMachine` (тип события, приоритет правила, `OccurredAt`) → `Core.Create(world, now.UnixMilli(), …)` на всех инцидентах события → `FromMachine` → `InsertIncident`; журнал — записи `Created.Journal` (`Transition: "create"`, `Kind` по `actor`, `At` = `now`), одним `InsertJournalEntries`. Ошибка `Create` — `fmt.Errorf("intake: %w", err)`: `500`, событие не отмечено, ничего не записано.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 // service_test.go:
@@ -801,19 +801,19 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 //   TestEventCreateFields: inc.CreatedAt.Equal(journal[0].At) — по-прежнему true (оба — мс); у инцидента timers.reaction.due > 0; у записи журнала kind "system"
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/intake/ 2>&1 | tail -5`
 Expected: FAIL — не собирается (`NewService` без ядра, `ClosurePairs` у `fakeTree` нет).
 
-- [ ] **Step 3: Реализация и переключение приёма**
+- [x] **Step 3: Реализация и переключение приёма**
 
-- [ ] **Step 4: Тесты проходят; `ruleselect` нет**
+- [x] **Step 4: Тесты проходят; `ruleselect` нет**
 
 Run: `go build ./... && go test -race $(go list ./internal/im/... | grep -v /handler/test) 2>&1 | tail -15 && make test-local 2>&1 | tail -10 && ! grep -rn 'ruleselect' --include=*.go internal && golangci-lint run ./...`
 Expected: PASS всех пакетов; `grep` ничего не нашёл; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: приём события — инцидент создаётся эффектами перехода create машины (норматив реакции запущен, журнал с подстановками машины, часы в мс); переходник ruleselect убран».
 Run: `git add -A internal/im && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -827,27 +827,27 @@ Run: `git add -A internal/im && git commit -q -F .git/COMMIT_MSG_STAGE4B`
 
 Проверка на стенде, что миграция 018 и `create` с таймером идут на базе `imdb` с данными этапа 3 (как запускается стенд — [30-local-stand.md, шаг 5](30-local-stand.md#шаг-5-событие--инцидент-этап-3)). Меняются данные стенда, не код.
 
-- [ ] **Step 1: Копия базы до миграции** (требование шага 5 файла 30)
+- [x] **Step 1: Копия базы до миграции** (требование шага 5 файла 30)
 
 Run: `mkdir -p ~/Work/stand/backup && sg docker -c "docker exec \$(docker ps -qf name=ac_db) pg_dump -U im imdb" > ~/Work/stand/backup/imdb-before-018.sql && wc -c ~/Work/stand/backup/imdb-before-018.sql`
 Expected: файл не пустой.
 
-- [ ] **Step 2: Сервер стенда с новым кодом** — остановить прежний (`pkill -f "$HOME/Work/stand/bin/im"`), запустить `~/Work/stand/run-im-server.sh > ~/Work/stand/im-server.log 2>&1` в фоне (`run_in_background`), подождать строку старта в логе.
+- [x] **Step 2: Сервер стенда с новым кодом** — остановить прежний (`pkill -f "$HOME/Work/stand/bin/im"`), запустить `~/Work/stand/run-im-server.sh > ~/Work/stand/im-server.log 2>&1` в фоне (`run_in_background`), подождать строку старта в логе.
 
 Run: `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc \"SELECT id FROM im_db_migrations ORDER BY id DESC LIMIT 1\"" && grep -c panic ~/Work/stand/im-server.log`
 Expected: `018_incident_machine.sql`; `panic` — `0`.
 
-- [ ] **Step 3: Событие → инцидент, как в этапе 3**
+- [x] **Step 3: Событие → инцидент, как в этапе 3**
 
 Run: `L=demo-$(date +%s) && ~/Work/stand/bin/agent-emulator replay --run $L && ~/Work/stand/check-demo-intake.sh $L; echo $?`
 Expected: `отправлено 27, пропущено 0`; все строки `OK`, код `0` — 30 новых инцидентов, как в этапе 3.
 
-- [ ] **Step 4: Норматив реакции и журнал у новых инцидентов**
+- [x] **Step 4: Норматив реакции и журнал у новых инцидентов**
 
 Run: `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -c \"SELECT i.number, i.state, i.owner = '' AS unowned, (i.timers->'reaction'->>'due')::bigint > 0 AS reaction, j.kind FROM incidents i JOIN incident_journal j ON j.incident_guid = i.guid ORDER BY i.number DESC LIMIT 5\""`
 Expected: `new`, `t`, `t`, `system` в каждой строке. Инциденты, созданные до миграции, — с `timers` `{}` (открытый вопрос 6).
 
-- [ ] **Step 5: Журнал работ** — итог в `.superpowers/sdd/53-plan-stage4b/progress.md`; коммита нет.
+- [x] **Step 5: Журнал работ** — итог в `.superpowers/sdd/53-plan-stage4b/progress.md`; коммита нет.
 
 ---
 
@@ -861,21 +861,50 @@ Expected: `new`, `t`, `t`, `system` в каждой строке. Инциден
 **Interfaces:**
 - Consumes: всё из задач 1–15.
 
-- [ ] **Step 1: ADR-005** — ядро `transition` и почему так: одна транзакция на операцию, семья под блокировкой в порядке номеров и её точное правило, повтор при `ErrFamilyChanged` и `412` в 4в, версия в `UPDATE`, факты над инцидентами — SQL-кандидаты ∪ черновик и `ref` машины, черновик и `to` перед эффектами инцидента, порядок записей журнала и `guid` по порядку, окно после дедлайна в той же транзакции, мир: что настоящее и что от вызывающего, столбцы и время в мс, `since`, `create` при приёме; известные пределы: `countMine` вне семьи (снимок, лимит может превыситься на один при одновременных запросах одного оператора), версия +1 шире `server.js` (решение 16), прогресс сценария у приёма — 0 до этапа 6; дальше — 4б-2 (векторы, объединение, «Отсоединить все»), 4в.
+- [x] **Step 1: ADR-005** — ядро `transition` и почему так: одна транзакция на операцию, семья под блокировкой в порядке номеров и её точное правило, повтор при `ErrFamilyChanged` и `412` в 4в, версия в `UPDATE`, факты над инцидентами — SQL-кандидаты ∪ черновик и `ref` машины, черновик и `to` перед эффектами инцидента, порядок записей журнала и `guid` по порядку, окно после дедлайна в той же транзакции, мир: что настоящее и что от вызывающего, столбцы и время в мс, `since`, `create` при приёме; известные пределы: `countMine` вне семьи (снимок, лимит может превыситься на один при одновременных запросах одного оператора), версия +1 шире `server.js` (решение 16), прогресс сценария у приёма — 0 до этапа 6; дальше — 4б-2 (векторы, объединение, «Отсоединить все»), 4в.
 
-- [ ] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
+- [x] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && python3 tools/check_links.py && node tools/cel_vectors.mjs --check | head -1`
 Expected: «Нерабочих ссылок: 0»; `векторов: 2324 (guard 350, rule 626, definition 685, effect 663), расхождений: 0, промахов ленты: 0, без векторов: 0` (машина не менялась).
 
-- [ ] **Step 3: Последний прогон сервера**
+- [x] **Step 3: Последний прогон сервера**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && make test-local 2>&1 | tail -15 && go vet ./... && gofmt -l internal/im && golangci-lint run ./...`
 Expected: всё PASS; `go vet` и `gofmt -l` чисто; lint — 0.
 
-- [ ] **Step 4: Commit (два репозитория)**
+- [x] **Step 4: Commit (два репозитория)**
 
 Сервер — «Этап 4б: ADR о переходах в транзакции; ADR-004 — действия мира в транзакции и после неё». Run: `git add docs/adr && git commit -q -F .git/COMMIT_MSG_STAGE4B`
 IM — «Этап 4б-1 встраивания: столбцы инцидента и переход в транзакции — план отмечен». Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git add research/integration/40-plan.md research/integration/53-plan-stage4b.md && git commit -q -F .superpowers/sdd/53-plan-stage4b/commit-msg.txt`
+
+---
+
+## Итог этапа 4б-1
+
+Этап сделан. Сервер хранит инцидент со всеми полями машины и выполняет ручной переход одной транзакцией PostgreSQL: доступность, форма, окно после дедлайна, эффекты, журнал, версия — всё или ничего. Приём события создаёт инцидент эффектами перехода `create` машины, норматив реакции запущен. Зеркало `ruleselect` и дерево `treeWorld` у приёма убраны. Проверено на стенде (задача 15): миграция 018 применилась на данных этапа 3, повторный прогон `replay` дал 27 событий → новые инциденты с таймером реакции и записью `create` в журнале, `check-demo-intake` 30 из 30, ошибок 0. Решения и пределы — в ADR-005 сервера (`docs/adr/005-transitions-in-transaction.md`) и ADR-004.
+
+| Задача | Репозиторий | Коммиты |
+|---|---|---|
+| 1. Миграция 018 — столбцы машины у инцидента, `kind` у журнала | сервер | `9564cd6` |
+| 2. Строка базы ↔ инцидент машины | сервер | `cf66f86` |
+| 3. Исполнитель — кандидаты фактов над инцидентами, снимок цели действия | сервер | `fec8178`, `2cec08b` (тест: факт видит запись эффекта, договор `RefSource`) |
+| 4. Исполнитель — черновик для ядра (`Put`, `Err`), хвосты 4а | сервер | `bd5bcc7`, `4805158` (ошибка сборки вызванного эффекта по одному разу, копия после `Put`) |
+| 5. Ядро — каркас перехода и отказы | сервер | `bdbecd9` |
+| 6. Ядро — проверка формы | сервер | `00b01a7` |
+| 7. Ядро — эффекты, журнал, действия мира | сервер | `673f739` |
+| 8. Ядро — семья, кандидаты с черновиком, версии, повтор | сервер | `ddbb385`, `7ec47b2` (тесты: версия черновика сильнее кандидата, порядок, инцидент без места) |
+| 9. Окно после дедлайна, `once`, запись «некому» | сервер | `3831913`, `a1228e5` (`once` ищет сначала в журнале базы), `38a237f` (тесты окна, форма окна пустая) |
+| 10. Хранилище PostgreSQL — семья, кандидаты, запись с версией | сервер | `49cb88b` |
+| 11. Мир сервера — дерево групп и пользователь запроса | сервер | `ba64903`, `6dba1a9` (пустой `eventGuid` — не в группе) |
+| 12. Ядро на PostgreSQL — всё или ничего, конкурентность, точка сохранения на попытку | сервер | `85843d3` |
+| 13. Ядро — `Core.Create` | сервер | `5f16e1f` |
+| 14. Приём события — `create` эффектами, `ruleselect` убран | сервер | `c96e05b`, `e961f76` (тест группы вне дерева, статус по итоговому состоянию, действия `create` не теряются) |
+| 15. Стенд — приём события и норматив реакции | — (без кода; дамп `~/Work/stand/backup/imdb-before-018.sql`) | нет |
+| 16. ADR-005, ADR-004, документы, последний прогон | сервер, IM | этот коммит (сервер), этот коммит (IM) |
+
+Последний прогон — в отчёте задачи 16 (`.superpowers/sdd/53-plan-stage4b/task-16-report.md`): `go test -race`, `make test-local`, `go vet`, `gofmt`, `golangci-lint` — чисто; `check_links.py` — 0 нерабочих ссылок; `cel_vectors.mjs --check` — 0 расхождений (машина не менялась).
+
+Что осталось: 4б-2 ([54](54-plan-stage4b2.md)) — векторы переходов, объединение, «Отсоединить все»; для него записано: объединение должно блокировать `form.primaryId`, `Facts.To` ядро берёт по шагу (прототип — после всей операции). 4в — HTTP, `412`, массовые действия, `shareAnswers` без `logKey` (версия +1). Инциденты стенда, созданные до миграции 018, остались без таймера (открытый вопрос 6).
 
 ---
 
