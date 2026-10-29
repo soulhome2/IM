@@ -112,7 +112,7 @@
 | 8 | `incident_journal (guid UUID PK, incident_guid UUID NOT NULL REFERENCES incidents ON DELETE CASCADE, customer_guid UUID NOT NULL REFERENCES customers, at TIMESTAMPTZ NOT NULL, actor TEXT NOT NULL, transition TEXT, template_key TEXT NOT NULL, vars JSONB)`, индекс `(incident_guid, at)` |
 | Down | обратно в обратном порядке; снятые дубли `Down` не возвращает — сказать в комментарии |
 
-- [ ] **Step 1: Тесты модели**
+- [x] **Step 1: Тесты модели**
 
 ```go
 func TestStatusCodeForState(t *testing.T) {
@@ -129,7 +129,7 @@ func TestFormatIncidentNumber(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Тесты хранения (с базой)**
+- [x] **Step 2: Тесты хранения (с базой)**
 
 Хранилище — `storing.NewStore(Config, logging.DefaultLogger)`, как `deleteAllSources`; событие, приоритет, сценарий — через API, как в `TestPermissions`.
 
@@ -142,25 +142,25 @@ func TestMarkEventProcessedSetsAlarm(t *testing.T) // MarkEventProcessed(g, &n) 
 func TestJournalEntriesRoundTrip(t *testing.T)     // две записи → GetJournalEntries по at, поля и Vars те же
 ```
 
-- [ ] **Step 3: Тесты падают**
+- [x] **Step 3: Тесты падают**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./internal/im/model/ 2>&1 | tail -5`
 Expected: FAIL — не собирается (`StatusCodeForState` не объявлен).
 
-- [ ] **Step 4: Миграция, модель, хранение**
+- [x] **Step 4: Миграция, модель, хранение**
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `go test ./internal/im/model/ && make test-local 2>&1 | tail -15`
 Expected: PASS всех пакетов (миграция применилась к `im-test-db` при старте тестов).
 
-- [ ] **Step 6: Миграция на копии базы стенда**
+- [x] **Step 6: Миграция на копии базы стенда**
 
 Копия — в `im-test-db`, отдельная база `imcopy`; стенд не трогаем.
 Run: `sg docker -c "docker exec im-test-db psql -U postgres -c 'DROP DATABASE IF EXISTS imcopy' -c 'CREATE DATABASE imcopy' && docker exec \$(docker ps -qf name=ac_db) pg_dump -O -x -U im imdb | docker exec -i im-test-db psql -q -U postgres imcopy" && sed -n '/+migrate Up/,/+migrate Down/p' internal/im/service/storing/migrations/014_incident_intake.sql | sg docker -c "docker exec -i im-test-db psql -v ON_ERROR_STOP=1 -1 -q -U postgres imcopy" && sg docker -c "docker exec im-test-db psql -U postgres imcopy -tAc \"SELECT count(*) FROM (SELECT 1 FROM incidents WHERE deleted_at IS NULL GROUP BY event_guid, scenario_guid HAVING count(*) > 1) d; SELECT count(*) FROM incidents WHERE number IS NULL; SELECT last_number = (SELECT max(number) FROM incidents) FROM incident_counters\""`
 Expected: миграция без ошибок; `0`, `0`, `t`. Затем `DROP DATABASE imcopy`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Сообщение: «Этап 3: миграция 014 — номер, версия, состояние, правило и ключ «событие + сценарий» у инцидента, номер тревоги и время события, журнал».
 Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -183,7 +183,7 @@ Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
   - `func (s *AppServices) CustomerGUID() uuid.UUID`;
   - `GetServices` возвращает ошибку `IM_CUSTOMER_GUID <guid>: no such customer`, если строки нет в `customers` (сервер не стартует; строку создаёт миграция 002 — сервер её не заводит сам).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestConfigCustomer(t *testing.T) // умолчание разбирается; "nope" → ошибка, в тексте "IM_CUSTOMER_GUID"
@@ -197,19 +197,19 @@ func TestNoFakedataCustomerInServerCode(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/model/ -run TestConfigCustomer 2>&1 | tail -3`
 Expected: FAIL — не собирается.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/model/ && make test-local 2>&1 | tail -10 && golangci-lint run ./...`
 Expected: PASS; lint без замечаний.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 3: арендатор — установка, customer_guid из IM_CUSTOMER_GUID вместо fakedata».
 Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -235,7 +235,7 @@ Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
   - `func (s *Store) LoadIntakeRules(ctx model.AppContext, customerGUID uuid.UUID) ([]*model.IntakeRule, error)` — три запроса (правила с `priorities.value`; сценарии `LEFT JOIN scenarios_actual` по `rule_guid, position`; условия `LEFT JOIN source_event_types` за `uid`), сборка в Go; порядок правил не важен (его задаёт `ruleselect`);
   - `func (s *Store) GetSourceGroupGUIDs(ctx model.AppContext, sourceGUID uuid.UUID) ([]uuid.UUID, error)` — прямые группы источника.
 
-- [ ] **Step 1: Тесты (с базой)**
+- [x] **Step 1: Тесты (с базой)**
 
 ```go
 func TestIncidentRuleScenariosKeepOrder(t *testing.T) {
@@ -257,19 +257,19 @@ func TestLoadIntakeRules(t *testing.T) {
 func TestGetSourceGroupGUIDs(t *testing.T) // источник в двух группах → обе; источник без групп → пусто
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `make test-local 2>&1 | grep -E 'FAIL|ok' | head`
 Expected: FAIL — `LoadIntakeRules` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `make test-local 2>&1 | tail -10 && golangci-lint run ./...`
 Expected: PASS всех пакетов (прежние тесты правил — тоже); lint без замечаний.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 3: сценарии правила — в порядке конфигуратора, время создания правила, правила и группы источника для выбора».
 Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -300,7 +300,7 @@ Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
 
 `Intake` — как `intake()` в `engine.js`: `ordered := OrderRules(rules)`; сценарии — по первому появлению в `ordered` среди подошедших (`RuleMatches`), без повторов; победитель сценария — `RuleFor(w, ordered, e, s)[0]`; порядок — `sort.SliceStable` с правилом: одно правило — по индексу сценария в его `Scenarios`; иначе `RuleBeats(x, y)` — раньше `x`, `RuleBeats(y, x)` — раньше `y`; иначе по индексу правила в `ordered`.
 
-- [ ] **Step 1: Тесты по разделу «Одно событие — несколько инцидентов» `api-scenarios.js`**
+- [x] **Step 1: Тесты по разделу «Одно событие — несколько инцидентов» `api-scenarios.js`**
 
 Мир теста: группа `mall` (глубина 0) ⊃ `nested` (глубина 1) ∋ `S5`; `S2` вне групп. Правила как в наборе: `R1` {fire} P75 `createdAt` 2026-08-01 → [FIRE]; `R9` {fire, group mall} P100 → [MED]; `Ra` {fire, device S2} P100 2026-09-15 → [FIRE]; `R3` {sabotage} P50 → [SAB]. Событие `fireAt(d)` = {EventType "fire", Device d, DeviceType "smoke"}.
 
@@ -321,7 +321,7 @@ func TestConditionRank(t *testing.T)                           // device+group 3
 func TestRuleRank(t *testing.T)                                // максимум из подошедших; ни одного → −1
 ```
 
-- [ ] **Step 2: Тест-замок на машину**
+- [x] **Step 2: Тест-замок на машину**
 
 Канон: из `operatorapi.Machine` взять `intake` без `uniqueKey` (его читает сервер, задача 5), `cel.definitions` (`conditionMatches`, `conditionRank`, `ruleRank`, `ruleMatches`, `ruleBeats`, `ruleFor`), `cel.world` (`deviceInGroup`, `groupDepth`), `cel.types` (`Event`, `Rule`, `Condition`); рекурсивно убрать ключи, начинающиеся с `$`; `json.Marshal` (Go сортирует ключи); `sha256` в hex. Комментарии `$comment` в хэш не входят — правка текста не будит тест, правка выражения будит.
 
@@ -342,19 +342,19 @@ func TestMachineIntakeShape(t *testing.T) {
 
 Хэш посчитан этой процедурой на копии `afd30ea` и на рабочей копии IM 2026-10-29 — совпадает.
 
-- [ ] **Step 3: Тесты падают**
+- [x] **Step 3: Тесты падают**
 
 Run: `go test ./internal/im/ruleselect/ 2>&1 | tail -3`
 Expected: FAIL — не собирается.
 
-- [ ] **Step 4: Реализация `ruleselect.go`**
+- [x] **Step 4: Реализация `ruleselect.go`**
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `go test ./internal/im/ruleselect/ -v 2>&1 | tail -20 && golangci-lint run ./...`
 Expected: PASS; lint без замечаний.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 3: выбор правил по §14.5 — зеркало определений машины на Go, замок на раздел intake».
 Run: `git add internal/im/ruleselect && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -383,7 +383,7 @@ Run: `git add internal/im/ruleselect && git commit -q -F .git/COMMIT_MSG_STAGE3`
 
 `Process` по шагам: правила (`LoadIntakeRules`) и группы источника → `ruleselect.Intake` → `ApplyUniqueKey` → нет выбора: `MarkEventProcessed(guid, nil)`, пустой результат. Иначе: у каждого выбранного сценария есть версия, иначе `fmt.Errorf("%w: rule %q, scenario %s", ErrIntakeScenarioUnavailable, …)`; статус — `GetStatusByCode(StatusCodeForState(StateNew))`, `ErrEntryNotFound` → `ErrStatusNotConfigured`; один `now()` на всё событие; `first := ReserveIncidentNumbers(customer, len)`; инциденты по порядку выбора: `Number first+k`, `State StateNew`, `Version 1`, `StatusGUID` статуса, `PriorityGUID`/`RuleGUID` победителя, сценарий и его версия, `EventGUID`, `CustomerGUID`, `CreatedAt now`, `Name` — прежний вид «правило сценарий источник»; запись журнала на каждый (`ActorDispatcher`, `TransitionCreate`, `JournalCreate`, `At now`, `Vars nil`); `MarkEventProcessed(guid, &first)`. Каждая функция — в пределах `funlen`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestProcess_NoMatch(t *testing.T)                     // правил нет → MarkEventProcessed(g, nil); Reserve/Insert не вызывались; результат: AlarmNumber nil, 0 инцидентов
@@ -398,19 +398,19 @@ func TestProcess_UniqueKeyEventOnly(t *testing.T)                 // NewService(
 func TestTreeWorld(t *testing.T)                                   // устройство во вложенной группе — в родителе тоже; глубины 0/1; чужое устройство — false; группы нет — false и 0
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/intake/ 2>&1 | tail -3`
 Expected: FAIL — не собирается.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/service/intake/ -v 2>&1 | tail -15 && golangci-lint run ./...`
 Expected: PASS; lint без замечаний.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 3: сервис «событие → инциденты» — выбор правил, номера, переход create, журнал, отметка события».
 Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -435,7 +435,7 @@ Run: `git add internal/im && git commit -q -F .git/COMMIT_MSG_STAGE3`
   - `func (s *AppService) CreateEvent(ctx model.AppContext, creator *model.Agent, received *model.EventReceived) error` — подпись прежняя. Внутри: источник и тип события — как сейчас (вне транзакции, 404 как раньше); `transactor.DoInTx`: `InsertEventIfNew` (`OccurredAt` = из тела или время приёма) → `false` — повтор, `nil`; иначе `intake.Process`. Снаружи `DoInTx` — `defer recover()`: паника → лог со стеком и ошибка `500`. `ErrIntakeScenarioUnavailable` → `apierror.NewUnprocessable(KeyEventIntakeFailed, err.Error())`;
   - `func NewUnprocessable(key Key, description string) *APIError` — 422.
 
-- [ ] **Step 1: Тесты без базы**
+- [x] **Step 1: Тесты без базы**
 
 ```go
 func TestOccurredAtFromPayload(t *testing.T) // {"occurredAt":"2026-10-03T11:59:00Z"} → это время; нет поля, число, "вчера", не JSON → nil
@@ -443,7 +443,7 @@ func TestCreateEvent_PanicBecomesError(t *testing.T) // поддельный int
 func TestCreateEvent_ScenarioUnavailableIs422(t *testing.T) // intake → ErrIntakeScenarioUnavailable ⇒ *apierror.APIError, Code 422, Key "error.event.intake.failed"
 ```
 
-- [ ] **Step 2: Тесты с базой**
+- [x] **Step 2: Тесты с базой**
 
 Помощники в `intake_test.go`: `newIntakeWorld(t)` — агент, тип источника, тип события, источники `D1`, `D2`, дерево групп `mall ⊃ nested ∋ D1`, приоритеты 25/50/75/100, сценарии; в начале — `deleteAllIncidentRuleConditions` (чужое условие без полей подошло бы любому событию); `send(t, guid, src) error`; `incidentsOf(t, guid)` и `eventOf(t, guid)` — через хранилище задачи 1. Все проверки — по инцидентам своего события.
 
@@ -471,19 +471,19 @@ func TestIncidentNumbersFollowEvents(t *testing.T)   // два события п
 
 `TestPermissions`, `TestOldIncidentRoutesPermissions`, `TestOldIncidentCardOutsideAccessLooksLikeMissing` — без `time.Sleep`: инцидент есть сразу после ответа `CreateEvent`.
 
-- [ ] **Step 3: Тесты падают**
+- [x] **Step 3: Тесты падают**
 
 Run: `go test ./internal/im/model/ ./internal/im/appservice/event/ 2>&1 | tail -5 && make test-local 2>&1 | grep -E '^(--- FAIL|FAIL|ok)' | head -20`
 Expected: FAIL — `OccurredAtFromPayload` не объявлен; после объявления — тесты с базой падают на повторе (500) и числе инцидентов.
 
-- [ ] **Step 4: Реализация**
+- [x] **Step 4: Реализация**
 
-- [ ] **Step 5: Тесты проходят, гонок нет**
+- [x] **Step 5: Тесты проходят, гонок нет**
 
 Run: `make test-local 2>&1 | tail -15 && go test -race ./internal/im/appservice/event/ ./internal/im/service/intake/ && golangci-lint run ./...`
 Expected: PASS всех пакетов, без `DATA RACE`; `grep -rn 'time.Sleep(1 \* time.Second)' internal/im/handler/test/` пусто; lint без замечаний.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 3: POST /events — событие и его инциденты одной транзакцией, повтор — 200 без новых инцидентов, фоновый обработчик убран».
 Run: `git add internal && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -506,7 +506,7 @@ Run: `git add internal && git commit -q -F .git/COMMIT_MSG_STAGE3`
   - `replay [--limit N] [--run <метка>]` — `occurredAt` в теле — из набора; ответ 404 `error.source.event.type.not.found` → строка `пропущено: <guid> <тип> от <устройство> — у типа события на сервере другой тип устройства` и дальше; другие ошибки — стоп с кодом 1; в конце — `отправлено N, пропущено M`, код 0;
   - `demo-config --token <токен пользователя> [--replace-rules]` — через API настройки, повторный запуск безопасен: приоритеты набора (есть с таким `value` — взять, нет — создать «<ru> (<value>)»); дерево `sourceGroups` и состав (группа ищется по имени у того же родителя); сценарии — последний файл `fixtures/scenarios/<ключ>.v<N>.json` рядом с набором, имя `Демо: <scenario.name>`, `script` — файл целиком (есть с таким именем — взять); правила — имя `Демо: <name>`: прежние «Демо: …» удалить и создать заново в порядке `createdAt` набора (тогда `created_at` и guid v7 сервера идут в том же порядке), сценарии — в порядке набора, условия — `eventTypeId` → тип события по `uid`, `deviceGuid` → источник по `uid`, `deviceTypeId` → тип источника по `uid`, `sourceGroupGuid` → созданная группа. Есть правила не «Демо: …» — без `--replace-rules` стоп со списком имён, с ним — удалить.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestReplayEventsOnePerEventGuid(t *testing.T) {
@@ -521,19 +521,19 @@ func TestReplayRunGUID(t *testing.T) {
 
 Набор — `--fixture` по умолчанию; тест пропускается (`t.Skip`), если файла нет.
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./tools/agent-emulator/ 2>&1 | tail -3`
 Expected: FAIL — `replayEvents` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят, сборка**
+- [x] **Step 4: Тесты проходят, сборка**
 
 Run: `go test ./tools/agent-emulator/ -v 2>&1 | tail -8 && go build -o ~/Work/stand/bin/agent-emulator ./tools/agent-emulator && golangci-lint run ./...`
 Expected: PASS; бинарник собран; lint без замечаний.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 3: агент-эмулятор — повтор набора по событиям с их guid и временем, загрузка правил, групп, сценариев и приоритетов демо».
 Run: `git add tools/agent-emulator && git commit -q -F .git/COMMIT_MSG_STAGE3`
@@ -595,7 +595,7 @@ Expected: удалено правило «Стенд: тревога в офис
 - [x] **Step 4: Прогон и повтор** (результат: `отправлено 27, пропущено 0`, 30 инцидентов, все `OK`, повтор — `N1 = N2`)
 
 Run: `M=demo-$(date +%s) && ~/Work/stand/bin/agent-emulator replay --run $M; ~/Work/stand/check-demo-intake.sh $M; N1=$(sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc 'SELECT count(*) FROM incidents'"); ~/Work/stand/bin/agent-emulator replay --run $M; N2=$(sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc 'SELECT count(*) FROM incidents'"); echo "$N1 $N2"; ~/Work/stand/bin/agent-emulator event --device 20000000-0001-4000-8000-000000000009 --type intrusion --guid $(python3 -c "import uuid;print(uuid.uuid5(uuid.UUID('70000000-0000-4000-8000-000000001826'),'$M'))") && echo repeat-ok`
-Expected: первый `replay` — `отправлено 25, пропущено 2`; проверка — все `OK`, код 0; второй `replay` — без ошибок, `N1 = N2`; повтор одного события — `repeat-ok` (200, не 500); в `im-server.log` нет `panic`.
+Expected: первый `replay` — `отправлено 27, пропущено 0` (27 событий → 30 инцидентов, пропущено 0); проверка — все `OK`, код 0; второй `replay` — без ошибок, `N1 = N2`; повтор одного события — `repeat-ok` (200, не 500); в `im-server.log` нет `panic`.
 
 - [x] **Step 5: ADR сервера**
 
@@ -657,18 +657,38 @@ IM — «Этап 3 встраивания: событие → инцидент 
 
 **Files:** `internal/im/appservice/scenario/*` (удаление), `internal/im/service/storing/*scenario*` (запрос «правила со сценарием»), `internal/util/apierror/keys.go` (ключ `error.scenario.in_use`), `api/im/backend.openapi.yaml` (ответ `409` у `DELETE /scenarios/{guid}`, только описание), тест в `internal/im/handler/test/`.
 
-- [ ] **Step 1: Тест** `TestDeleteScenarioUsedByRule409`: правило ссылается на сценарий → `DELETE /scenarios/{guid}` → `409`, `key` = `error.scenario.in_use`, в `description` — имя правила; сценарий не архивирован; после удаления сценария из правила — `DELETE` проходит.
-- [ ] **Step 2: Реализация** — проверка в той же транзакции, что и архивирование.
-- [ ] **Step 3: Прогон** — тесты с базой, lint.
-- [ ] **Step 4: Commit** «Этап 3: сценарий, который используют правила, не удаляется — 409».
+- [x] **Step 1: Тест** `TestDeleteScenarioUsedByRule409`: правило ссылается на сценарий → `DELETE /scenarios/{guid}` → `409`, `key` = `error.scenario.in_use`, в `description` — имя правила; сценарий не архивирован; после удаления сценария из правила — `DELETE` проходит.
+- [x] **Step 2: Реализация** — проверка в той же транзакции, что и архивирование.
+- [x] **Step 3: Прогон** — тесты с базой, lint.
+- [x] **Step 4: Commit** «Этап 3: сценарий, который используют правила, не удаляется — 409».
 
 ### Task 10: Тип события — по паре «тип устройства + uid»
 
 **Files:** синхронизация агента (`appservice/sync*` / `source_event_types`), приём события (`appservice/event/event.go` — поиск типа события по типу источника и `eventTypeUid`), миграция (уникальность `source_event_types` — по `(customer_guid, source_type_guid, uid)`, если сейчас по `uid`), `ruleselect` — сравнение типа события по `id` (`uid`) остаётся, тест.
 
-- [ ] **Step 1: Тест** `TestSameEventTypeUidForTwoDeviceTypes`: синхронизация двух типов устройств с одинаковым `uid` типа события (`fire` у камеры и у датчика) → оба типа событий есть; события от обоих устройств принимаются (`200`), инциденты создаются по правилам.
-- [ ] **Step 2: Реализация** — уникальность и поиск по паре; правила с условием `sourceEventTypeGuid` продолжают работать.
-- [ ] **Step 3: Прогон** — тесты с базой, lint; `check-demo-intake.sh` (задача 8) — все события демо проходят.
-- [ ] **Step 4: Commit** «Этап 3: тип события различается по типу устройства и uid».
+- [x] **Step 1: Тест** `TestSameEventTypeUidForTwoDeviceTypes`: синхронизация двух типов устройств с одинаковым `uid` типа события (`fire` у камеры и у датчика) → оба типа событий есть; события от обоих устройств принимаются (`200`), инциденты создаются по правилам.
+- [x] **Step 2: Реализация** — уникальность и поиск по паре; правила с условием `sourceEventTypeGuid` продолжают работать.
+- [x] **Step 3: Прогон** — тесты с базой, lint; `check-demo-intake.sh` (задача 8) — все события демо проходят.
+- [x] **Step 4: Commit** «Этап 3: тип события различается по типу устройства и uid».
 
 Задачи 9 и 10 выполняются перед задачей 8 (стенд), порядок: 1–7, 9, 10, 8.
+
+## Итог этапа 3 (2026-10-29)
+
+Коммиты — в репозитории сервера, ветка `feature/im_operator`, если не сказано иное. Журнал работ — `.superpowers/sdd/51-plan-stage3/progress.md`.
+
+| Задача | Что сделано | Коммиты |
+|---|---|---|
+| 1 | Миграция 014 и хранение новых полей (номер, версия, состояние, журнал, счётчик) | `ce04e40` |
+| 2 | Арендатор из настройки `IM_CUSTOMER_GUID` | `ef4df55` |
+| 3 | Правила для выбора: порядок сценариев, время создания, группы источника | `ce9599c` |
+| 4 | Пакет `ruleselect` — зеркало определений машины под замком-хэшем | `9ca02cb` |
+| 5 | Сервис `intake`: событие → инциденты в транзакции; миграция 015 | `3b41c6b`, `e3fcfa0` |
+| 6 | Синхронный `POST /events`; фоновый обработчик убран | `b4bb1c6` |
+| 7 | Агент-эмулятор: повтор по событиям набора, загрузка правил демо | `e0171a2`, `9f5c2dd`, `1ad0352` |
+| 9 | Запрет удалять сценарий, который используют правила (409), и ссылаться на сценарий без версии (404) | `bd05bfa`, `aa678d4` |
+| 10 | Тип события — по паре «тип устройства + uid»; миграция 016 | `89c477f` |
+| 8 | Проверка на стенде и документы: 27 событий → 30 инцидентов, пропущено 0, повтор ничего не создаёт | сервер `75d88b0`, `1b3baee`; IM `b8519bf` |
+| Итоговый просмотр | Миграция 017 (связи с архивными сценариями), ADR-003, описания 409/404, тест одновременных событий; стенд и BACKEND.md уточнены | сервер `3282d96`; IM — коммит «Этап 3 встраивания: итоги» |
+
+Открыто: сопоставление типа события в условии правила — по `uid` (как в машине) или по паре (тип устройства, `uid`) — вопрос пользователю от 2026-10-29.
