@@ -263,6 +263,10 @@
       out.dataset.stats = JSON.stringify(IMCelVectors.stats());
       out.textContent = JSON.stringify(IMCelVectors.take());
     }
+    // Запись векторов переходов (тот же ?celVectors=1, tests/transition-vectors.js): {incidents, vectors, skipped}
+    if (window.IMTransitionVectors && IMTransitionVectors.recording) {
+      document.getElementById("transitionvectors-out").textContent = JSON.stringify(IMTransitionVectors.take());
+    }
   }
 
   async function run() {
