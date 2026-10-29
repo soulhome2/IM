@@ -369,6 +369,9 @@
     // Стек вычислений: факт мира пишется на ленту верхнего. Исполнитель держит мир в одной переменной, и после
     // вложенного вычисления он бывает чужим — лента от этого не путается
     const stack = [];
+    // Кадры записи (frame): открыт кадр — каждый вызов факта мира без ref в любом вычислении идёт и в его ленту.
+    // Один кадр — один вызов ядра (переходы, PROC-44, этап 4б). Кадр вычислений не трогает: ни векторов, ни stats
+    const open = [];
 
     function reference_(W) {
       if (W === reference) return true;
@@ -449,9 +452,10 @@
               throw e;
             }
             checkRaw(cel, f.returns, raw, `cel.world.${fn}`);
-            if (to.length) {
+            if (to.length || open.length) {
               const entry = { fn, args: a.map(encodeArg), out: encode(cel, f.returns, cel.value(f.returns, raw), {}) };
               to.forEach((x) => x.tape.push(entry));
+              open.forEach((x) => x.note(entry));
             }
             return raw;
           };
@@ -610,7 +614,38 @@
       });
     }
 
+    // Открыть кадр. close() снимает его и возвращает {tape, tapeRepeat}: лента — на один вызов (fn и аргументы) одна
+    // запись, первая; тот же вызов с другим ответом не добавляется, а считается в tapeRepeat. Повторный close() —
+    // тот же итог
+    function frame() {
+      const tape = [];
+      const first = new Map();
+      let tapeRepeat = 0;
+      let closed = false;
+      const f = {
+        note(e) {
+          const k = `${e.fn}|${canonical(e.args)}`;
+          const out = canonical(e.out);
+          if (!first.has(k)) {
+            first.set(k, out);
+            tape.push(e);
+          } else if (first.get(k) !== out) tapeRepeat++;
+        },
+        close() {
+          if (!closed) {
+            closed = true;
+            const i = open.lastIndexOf(f);
+            if (i >= 0) open.splice(i, 1);
+          }
+          return { tape: tape.slice(), tapeRepeat };
+        },
+      };
+      open.push(f);
+      return { close: f.close };
+    }
+
     return {
+      frame,
       create(W) {
         const cel = create(W);
         if (!reference_(W)) return cel;
@@ -655,6 +690,8 @@
   window.IMCelVectors = {
     lib,
     recording,
+    // Кадр активной записи; без записи (Node, vm) — пустой кадр, чтобы вызывающему не ветвиться
+    frame: () => (rec ? rec.frame() : { close: () => ({ tape: [], tapeRepeat: 0 }) }),
     take: () => (rec ? rec.take() : { incidents: {}, vectors: [] }),
     stats: () => (rec ? rec.stats() : null),
   };

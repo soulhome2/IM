@@ -467,6 +467,59 @@ test("lib.normalize: недостающий таймер — нулевая за
   ok(JSON.stringify(n.timers.reaction) === '{"due":0,"fired":0,"left":0,"paused":false,"since":0}', JSON.stringify(n.timers.reaction));
 });
 
+test("кадр: факты мира всех вычислений внутри кадра — в его ленте; повтор с тем же ответом — одна запись, с другим — tapeRepeat", () => {
+  const lib = vectors();
+  const w = machine({ guards: [probeGuard("_fr", "idleSec(me) > 0 && size(linkedOf(me)) >= 0"), probeGuard("_fr2", "idleSec(me) > 0 && idleSec(me) > 1")] });
+  const rec = lib.recorder(IMCel.create, w);
+  const cel = rec.create(w);
+  ok(typeof rec.frame === "function", "rec.frame нет");
+  const x = cel.value("Incident", { id: "x", timers: { reaction: {}, resolution: {}, hold: {} } });
+  const mk = (world) => ({ me: "me", actor: "me", incident: x, incidents: () => [x], form: {}, surface: "card", now: 1000, world });
+  const same = mk({ idleSec: () => 5, linkedOf: () => [] });
+  const f = rec.frame();
+  cel.guard("_fr", [], same, {});
+  cel.guard("_fr", [], same, {}); // то же с тем же ответом
+  let n = 0;
+  cel.guard("_fr2", [], mk({ idleSec: (who) => (who === "me" ? 5 + ++n : 0) }), {}); // idleSec(me): 6 и 7 — разные ответы на один вызов
+  cel.guard("_fr", [], mk({ idleSec: () => 5, linkedOf: () => [] }), {});
+  const r = f.close();
+  ok(lib.canonical(r.tape.map((e) => e.fn)) === '["idleSec"]', `лента: ${lib.canonical(r.tape)}`);
+  ok(r.tape.length === 1 && lib.canonical(r.tape[0]) === '{"args":["me"],"fn":"idleSec","out":5}', `первая запись остаётся: ${lib.canonical(r.tape)}`);
+  ok(r.tapeRepeat === 2, `tapeRepeat = ${r.tapeRepeat}`); // ответы 6 и 7 против записанного 5
+  ok(!r.tape.some((e) => e.fn === "linkedOf"), "факт с ref на ленте кадра");
+  // Закрытый кадр больше не пишется; повторное закрытие — тот же итог
+  cel.guard("_fr", [], mk({ idleSec: () => 9, linkedOf: () => [] }), {});
+  ok(lib.canonical(f.close()) === lib.canonical(r), "закрытый кадр изменился");
+  // Два разных вызова — две записи, в порядке вызовов
+  const f2 = rec.frame();
+  cel.guard("_fr2", [], mk({ idleSec: () => 8 }), {});
+  cel.guard("_fr", [], mk({ idleSec: () => 8, linkedOf: () => [] }), {});
+  ok(f2.close().tape.length === 1, "один вызов idleSec(me) → 8 дважды — одна запись");
+});
+
+test("кадр не меняет запись CEL: те же векторы с открытым кадром и без", () => {
+  const lib = vectors();
+  const w = structuredClone(W);
+  const run = (withFrame) => {
+    const rec = lib.recorder(IMCel.create, w);
+    const cel = rec.create(w);
+    const x = cel.value("Incident", { id: "x", assignmentGroup: "g1", timers: { reaction: {}, resolution: {}, hold: {} } });
+    const scope = { me: "me", actor: "me", incident: x, incidents: () => [x], form: {}, surface: "card", now: 1000, world: { isGroup: (id) => id === "g1", members: (g) => (g === "g1" ? ["me"] : []), can: () => true } };
+    const f = withFrame ? rec.frame() : null;
+    cel.guard("isTarget", [], scope, {});
+    cel.guard("hasPermission", ["incident:claim"], scope, {});
+    const tape = f ? f.close().tape : null;
+    return { out: lib.canonical(rec.take()), stats: lib.canonical(rec.stats()), tape };
+  };
+  const a = run(false);
+  const b = run(true);
+  ok(a.out === b.out && a.stats === b.stats, "запись с кадром отличается");
+  ok(b.tape.length > 0 && b.tape.every((e) => e.fn && "out" in e), `лента кадра: ${lib.canonical(b.tape)}`);
+  ok(typeof g.IMCelVectors.frame === "function", "IMCelVectors.frame в Node не достижим");
+  const none = g.IMCelVectors.frame();
+  ok(lib.canonical(none.close()) === '{"tape":[],"tapeRepeat":0}', "без записи кадр не пустой");
+});
+
 results.forEach(([name, e]) => console.log(e ? `FAIL ${name}\n    ${String(e.message || e)}` : `ok   ${name}`));
 const failed = results.filter(([, e]) => e).length;
 console.log(`test_cel: ${results.length - failed} из ${results.length}`);
