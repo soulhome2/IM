@@ -1095,6 +1095,185 @@ test("merge без присоединяемых — только «Взять»,
   ok(C.canonical(o.external) === "{}" && Object.keys(o.facts).join() === "p" && o.facts.p.to.state === "in_progress", `external / facts: ${C.canonical(o.external)} ${C.canonical(o.facts)}`);
 });
 
+/* --- повтор по ленте на ядре прототипа (lib.replay, lib.engines): мир — лента вектора, сравнение — решение 41 --- */
+
+test("повтор: run по ленте даёт тот же expect; лента без can — промах", () => {
+  const C = vectors();
+  const lib = tvectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  let allowed = true;
+  const { rec, engine, events, mk } = trEngine({ machineW: w, cel: celRec, frame: celRec.frame, ctx: { can: () => allowed } });
+  const x = mk("x");
+  const y = mk("y");
+  events.push(x, y);
+  ok(engine.run("claim", x, {}, { surface: "card" }).ok, "claim");
+  allowed = false;
+  ok(!engine.run("claim", y, {}, { surface: "card" }).ok, "claim без права прошёл");
+  const { incidents, vectors: vs } = rec.take();
+  ok(vs.length === 2 && vs[0].expect.ok && vs[1].expect.refusal, `векторы: ${vs.map((v) => C.canonical(v.expect).slice(0, 40))}`);
+  // Ядро повтора — одно на me: мир отвечает по ленте того вектора, который повторяется сейчас
+  const engineFor = lib.engines(g.IMEngine.create, w);
+  ok(engineFor("me") === engineFor("me"), "ядро повтора создано дважды");
+  vs.forEach((v) => {
+    const r = lib.replay(engineFor, v, incidents);
+    ok(r.ok && r.misses.length === 0, `${v.id}: ${JSON.stringify({ misses: r.misses, diffs: r.diffs, got: r.got }).slice(0, 600)}`);
+  });
+  const [v] = vs;
+  const without = (fn) => Object.assign({}, v, { world: v.world.filter((e) => e.fn !== fn) });
+  const miss = lib.replay(engineFor, without("can"), incidents);
+  ok(!miss.ok && JSON.stringify(miss.misses) === '["can"]', `без can: ${JSON.stringify({ misses: miss.misses, got: miss.got })}`);
+  // Функция сервера мимо cel.world — тоже по ленте: нет записи — промах, а не undefined
+  const noName = lib.replay(engineFor, without("ctx.actorName"), incidents);
+  ok(!noName.ok && noName.misses.includes("ctx.actorName"), `без ctx.actorName: ${JSON.stringify({ misses: noName.misses, got: noName.got })}`);
+  // Другой ответ ленты — другой итог, без промахов
+  const denied = lib.replay(engineFor, Object.assign({}, v, { world: v.world.map((e) => (e.fn === "can" ? Object.assign({}, e, { out: false }) : e)) }), incidents);
+  ok(!denied.ok && denied.misses.length === 0 && denied.got.refusal, `can — false: ${JSON.stringify(denied.got)}`);
+  // То же ядро после промахов снова повторяет вектор
+  ok(lib.replay(engineFor, v, incidents).ok, "после промаха повтор не проходит");
+  ok(x.state === "in_progress" && incidents[v.incidents[0].$ref].state === "new", "повтор изменил инциденты записи или пул");
+});
+
+test("повтор: transfer — варианты поля targetId из ленты transferTargets", () => {
+  const C = vectors();
+  const lib = tvectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  const { rec, engine, events, mk } = trEngine({
+    machineW: w,
+    cel: celRec,
+    frame: celRec.frame,
+    ctx: {
+      permsOf: () => ({ includes: () => true }),
+      hasAccess: () => true,
+      // b — первым и тоже может принять: условие hasTransferTarget находит его, факты о b — на ленте
+      isOperator: (id) => id === "a" || id === "b",
+      transferTargets: () => [{ id: "b", label: "B" }, { id: "a", label: "A" }],
+      deliver() {},
+      onEvict() {},
+    },
+  });
+  const x = mk("x");
+  events.push(x);
+  ok(engine.run("claim", x, {}, { surface: "card" }).ok, "claim");
+  const r = engine.run("transfer", x, { targetId: "a", comment: "смена" }, { surface: "card" });
+  ok(r.ok, `transfer: ${JSON.stringify(r)}`);
+  const { incidents, vectors: vs } = rec.take();
+  const v = vs.find((u) => u.name === "transfer");
+  ok(v && v.expect.ok && incidents[v.expect.ok.incidents.x.$ref].owner === "a", `вектор transfer: ${v && C.canonical(v.expect).slice(0, 200)}`);
+  ok(v.world.some((e) => C.canonical(e) === '{"args":[],"fn":"transferTargets","out":["b","a"]}'), `лента: ${C.canonical(v.world)}`);
+  const engineFor = lib.engines(g.IMEngine.create, w);
+  const same = lib.replay(engineFor, v, incidents);
+  ok(same.ok && same.misses.length === 0, `повтор: ${JSON.stringify({ misses: same.misses, diffs: same.diffs })}`);
+  // Варианты поля — только с ленты: на ленте нет a — значение формы недопустимо (условия перехода те же и проходят)
+  const tape = (out) => Object.assign({}, v, { world: v.world.map((e) => (e.fn === "transferTargets" ? Object.assign({}, e, { out }) : e)) });
+  const noA = lib.replay(engineFor, tape(["b"]), incidents);
+  ok(!noA.ok && noA.misses.length === 0 && noA.got.refusal && noA.got.refusal.code === "FORM_FIELD_INVALID", `без a на ленте: ${JSON.stringify({ misses: noA.misses, got: noA.got })}`);
+  const none = lib.replay(engineFor, Object.assign({}, v, { world: v.world.filter((e) => e.fn !== "transferTargets") }), incidents);
+  ok(!none.ok && none.misses.includes("transferTargets"), `без transferTargets: ${JSON.stringify({ misses: none.misses, got: none.got })}`);
+});
+
+test("повтор merge: записи server: true не сравниваются", () => {
+  const C = vectors();
+  const lib = tvectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  const { rec, engine, events, mk } = trEngine({ machineW: w, cel: celRec, frame: celRec.frame, ctx: { shareAnswers: () => 0 } });
+  const p = mk("p");
+  const a = mk("a");
+  const b = mk("b");
+  events.push(p, a, b);
+  ok(engine.merge(p, [a, b]).ok, "merge");
+  mergedIn(p);
+  const { incidents, vectors: vs } = rec.take();
+  ok(vs.length === 1 && vs[0].op === "merge", `векторы: ${vs.map((u) => u.id)}`);
+  const [v] = vs;
+  const rows = v.expect.ok.journal.p;
+  ok(rows[rows.length - 1].server === true, `журнал основного: ${C.canonical(rows)}`);
+  const engineFor = lib.engines(g.IMEngine.create, w);
+  const r = lib.replay(engineFor, v, incidents);
+  ok(r.ok && r.misses.length === 0, `повтор: ${JSON.stringify({ misses: r.misses, diffs: r.diffs })}`);
+  ok(!r.got.ok.journal.p.some((e) => e.templateKey === "workflow.journal.merged_in"), "ядро прототипа записало merged_in");
+  // Сравнение для Go (server: true) — запись server.js сравнивается: итога ядра прототипа без неё мало
+  const go = lib.compare(v, r.got, { pool: incidents, W: w, server: true });
+  ok(go.diffs.length === 1 && go.diffs[0] === "journal.p", `server: true — ${JSON.stringify(go.diffs)}`);
+  // Запись ядра без пометки server — сравнивается и в повторе
+  const cut = structuredClone(v);
+  cut.expect.ok.journal.p = rows.slice(1);
+  const c = lib.replay(engineFor, cut, incidents);
+  ok(!c.ok && c.diffs.includes("journal.p"), `без записи ядра основного: ${JSON.stringify(c.diffs)}`);
+});
+
+test("lib.compare: since только у hold, null — \"\", vars nil — {}, Transition и ID записи журнала, closeResultLabel, отказ и ошибка", () => {
+  const lib = tvectors();
+  const base = Object.assign({}, newPlain(), { id: "x" });
+  const after = structuredClone(base);
+  Object.assign(after, { state: "in_progress", owner: "me" });
+  after.timers.reaction = Object.assign({}, after.timers.reaction, { since: 500 });
+  const pool = { before: base, after };
+  const row = { actor: "me", at: 1000, kind: "transition", templateKey: "k", vars: { closeResultLabel: "", n: 1 } };
+  const v = {
+    op: "run",
+    incidents: [{ $ref: "before" }],
+    target: { id: "x" },
+    expect: {
+      ok: {
+        incidents: { x: { $ref: "after" } },
+        journal: { x: [row, { actor: "me", at: 1000, kind: "transition", templateKey: "s", vars: {}, server: true }] },
+        after: [{ action: "evict", incident: { $incident: "x" }, who: "", transitionId: "t", by: "" }],
+        scenario: [],
+        external: { x: [] },
+        facts: { x: { from: { state: "new", owner: "", addressee: "", breaches: 0 }, to: { state: "in_progress", owner: "me", addressee: "me", breaches: 0 }, breach: "" } },
+      },
+    },
+  };
+  const got = structuredClone(v.expect);
+  got.ok.incidents.x = structuredClone(after);
+  got.ok.incidents.x.timers.reaction.since = 777; // since не у hold — не сравнивается
+  got.ok.incidents.x.owner = "me";
+  got.ok.journal.x = [Object.assign({}, row, { vars: { closeResultLabel: [""], n: 1 }, Transition: "t", ID: 5 })];
+  got.ok.after[0].who = null;
+  got.ok.facts.x.from.owner = null;
+  got.ok.facts.x.breach = null;
+  got.ok.canceled = { x: "y" }; // у run — сравнивается
+  const cmp = (g2, opts = {}) => lib.compare(v, g2, Object.assign({ pool, W, server: false }, opts));
+  let r = cmp(got);
+  ok(JSON.stringify(r.diffs) === '["canceled"]' && r.closeResultLabel === 1, `нормализации: ${JSON.stringify(r)}`);
+  delete got.ok.canceled;
+  ok(cmp(got).diffs.length === 0, `без canceled: ${JSON.stringify(cmp(got).diffs)}`);
+  ok(lib.compare(Object.assign({}, v, { op: "runAll" }), Object.assign({}, got, { ok: Object.assign({}, got.ok, { canceled: { x: "y" } }) }), { pool, W, server: false }).diffs.length === 0, "canceled у runAll сравнивается");
+  // since у hold — сравнивается
+  const held = structuredClone(got);
+  held.ok.incidents.x.timers.hold = Object.assign({}, held.ok.incidents.x.timers.hold, { since: 9 });
+  ok(JSON.stringify(cmp(held).diffs) === '["incidents.x"]', `since у hold: ${JSON.stringify(cmp(held).diffs)}`);
+  // Изменился только since не у hold — как не изменился: инцидента может не быть с одной стороны
+  const onlySince = structuredClone(v);
+  onlySince.expect.ok.incidents.x = Object.assign(structuredClone(base), { timers: Object.assign({}, base.timers, { reaction: Object.assign({}, base.timers.reaction, { since: 3 }) }) });
+  const noInc = structuredClone(got);
+  delete noInc.ok.incidents;
+  ok(lib.compare(onlySince, noInc, { pool, W, server: false }).diffs.length === 0, "since не у hold считается изменением");
+  // vars: null и нет — {}
+  const nilVars = { ok: { journal: { x: [{ actor: "me", at: 1, kind: "system", templateKey: "k", vars: null }] } } };
+  ok(lib.compare({ op: "create", incidents: [], target: {}, expect: { ok: { journal: { x: [{ actor: "me", at: 1, kind: "system", templateKey: "k", vars: {} }] } } } }, nilVars, { pool, W }).diffs.length === 0, "vars null ≠ {}");
+  // server: true — запись server.js сравнивается
+  ok(JSON.stringify(cmp(got, { server: true }).diffs) === '["journal.x"]', `server: true: ${JSON.stringify(cmp(got, { server: true }).diffs)}`);
+  // external — только у инцидентов ожидаемого
+  const ext = structuredClone(got);
+  ext.ok.external.y = [{ fn: "notify", target: "z" }];
+  ok(cmp(ext).diffs.length === 0, `external чужого: ${JSON.stringify(cmp(ext).diffs)}`);
+  ext.ok.external.x = [{ fn: "notify", target: "z" }];
+  ok(JSON.stringify(cmp(ext).diffs) === '["external.x"]', `external: ${JSON.stringify(cmp(ext).diffs)}`);
+  // Отказ: поля, которые есть в ожидаемом; ничего не записано
+  const refusal = { op: "run", incidents: [], target: {}, expect: { refusal: { why: ["k", { p: 1 }], guard: "g" } } };
+  const rc = (gotR) => lib.compare(refusal, gotR, { pool, W }).diffs;
+  ok(rc({ refusal: { why: ["k", { p: 1 }], guard: "g", code: "C", id: "x" } }).length === 0, "лишние поля отказа сравниваются");
+  ok(rc({ refusal: { why: ["k", { p: 2 }], guard: "g" } }).length === 1 && rc({ refusal: { why: ["k", { p: 1 }], guard: "h" } }).length === 1, "подстановки или guard отказа не сравниваются");
+  ok(rc({ refusal: { why: ["k", { p: 1 }], guard: "g" }, writes: 1 }).length === 1 && rc({ error: "x" }).length === 1 && rc(got).length === 1, "отказ с записью, ошибка или ok вместо отказа");
+  // Ошибка: текст не сравнивается
+  const error = { op: "run", incidents: [], target: {}, expect: { error: "a" } };
+  ok(lib.compare(error, { error: "b" }, { pool, W }).diffs.length === 0 && lib.compare(error, { refusal: { why: ["k"] } }, { pool, W }).diffs.length === 1, "ошибка");
+});
+
 test("lib.kindOf: dispatcher и system — system, остальные — transition", () => {
   const lib = tvectors();
   ok(lib.kindOf("dispatcher") === "system" && lib.kindOf("system") === "system", "system");

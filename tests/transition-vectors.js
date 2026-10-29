@@ -135,6 +135,301 @@
     return `${at}:${C().sha256(C().canonical(input, at)).slice(0, 10)}`;
   }
 
+  /* ===== Итог вызова ядра — общий у записи и повтора ===== */
+
+  const factsOf = (f) => ({
+    from: Object.fromEntries(Object.entries(f.from || {}).map(([k, v]) => [k, blank(v)])),
+    to: Object.fromEntries(Object.entries(f.to || {}).map(([k, v]) => [k, blank(v)])),
+    breach: blank(f.breach),
+  });
+  // Действия после фиксации (ctx.deliver, ctx.onEvict, ctx.onBreachShared) — записи ожидаемого; пусто — ""
+  const afterOf = {
+    notify: (ev, recipients, o) => {
+      const { alert, transitionId, about, actor } = o || {};
+      return { action: "notify", incident: ref(ev.id), recipients: data(Array.from(recipients || [])), alert: Boolean(alert), about: about ? ref(about.id) : "", actor: blank(actor), transitionId: blank(transitionId) };
+    },
+    evict: (ev, who, transitionId, by) => ({ action: "evict", incident: ref(ev.id), who: blank(who), transitionId: blank(transitionId), by: blank(by) }),
+    touch: (ev, who) => ({ action: "touch", incident: ref(ev.id), actor: blank(who) }),
+  };
+  // Что ядро прототипа отдаёт в итоге ok, по виду вызова (решение 27): external, facts, у run — canceled. on —
+  // инциденты вызова: ev (run, create), list (runAll), primary и list (merge)
+  const resultOf = {
+    run: (r, { ev }) => {
+      const o = { external: { [ev.id]: data(r.external || []) }, facts: { [ev.id]: factsOf(r.facts) } };
+      if (r.canceled) o.canceled = { [ev.id]: r.canceled };
+      return o;
+    },
+    runAll: (r, { list }) => ({
+      external: Object.fromEntries(list.map((ev, i) => [ev.id, data((r.external || [])[i] || [])])),
+      facts: Object.fromEntries(list.map((ev, i) => [ev.id, factsOf((r.facts || [])[i] || {})])),
+    }),
+    create: (r, { ev }) => ({ external: { [ev.id]: data((r.external || [])[0] || []) }, facts: { [ev.id]: factsOf(r.facts || {}) } }),
+    // external — только присоединяемых, facts — присоединяемых и основного, если его взяли
+    merge: (r, { primary, list }) => {
+      const facts = Object.fromEntries(list.map((ev, i) => [ev.id, factsOf((r.facts || [])[i] || {})]));
+      if (r.taken) facts[primary.id] = factsOf(r.taken.facts || {});
+      return { external: Object.fromEntries(list.map((ev, i) => [ev.id, data((r.external || [])[i] || [])])), facts };
+    },
+  };
+
+  // Снимок инцидента — только celView (cel.value и cel.plain): никаких условий, правил и определений
+  function snapshot(engine, ev, now) {
+    const view = engine.celView(ev);
+    const log = ev.log || [];
+    return { ev, view, key: C().keyOf(view), len: log.length, atNow: log.filter((e) => e.at === now).map(entryOf) };
+  }
+  const same = (a, b) => a.key === b.key && a.len === b.len && C().canonical(a.atNow) === C().canonical(b.atNow);
+
+  // Ожидаемое вызова ядра r по снимкам «до» и «после» инцидентов tracked: {expect, writes}. writes — сколько
+  // инцидентов изменил отказ или ошибка (у ядра — 0). put(s) — инцидент снимка в ожидаемом (запись — ссылка в пул,
+  // повтор — сам celView); call — {after, scenario} вызова; result(r) — итог ok по виду вызова (resultOf)
+  function expectOf(r, tracked, before, after, now, put, call, result) {
+    if (!r || !r.ok) {
+      const writes = after.filter((s, i) => !same(s, before[i])).length;
+      const why = data((r && r.why) || []);
+      if (why[0] === FAILED) return { expect: { error: String((why[1] && why[1].error) || "") }, writes };
+      const refusal = { why };
+      if (r.guard) refusal.guard = r.guard;
+      if (r.notFrom) refusal.notFrom = true;
+      if (r.code) refusal.code = r.code;
+      if (r.ev) refusal.id = r.ev.id;
+      return { expect: { refusal }, writes };
+    }
+    const ok = {};
+    const changed = after.filter((s, i) => s.key !== before[i].key);
+    if (changed.length) ok.incidents = Object.fromEntries(changed.map((s) => [s.ev.id, put(s)]));
+    const journal = tracked.map((ev, i) => [ev.id, (ev.log || []).slice(before[i].len).map(entryOf)]).filter(([, l]) => l.length);
+    if (journal.length) ok.journal = Object.fromEntries(journal);
+    // Записи в момент now, что были до вызова: once меняет их подстановки на месте
+    const atNow = tracked.map((ev, i) => [ev.id, before[i].atNow.length ? (ev.log || []).slice(0, before[i].len).filter((e) => e.at === now).map(entryOf) : []]).filter(([, l]) => l.length);
+    if (atNow.length) ok.journalAtNow = Object.fromEntries(atNow);
+    ok.after = call.after;
+    ok.scenario = call.scenario;
+    Object.assign(ok, result(r));
+    return { expect: { ok }, writes: 0 };
+  }
+
+  /* ===== Сравнение (решение 41): одни правила у повтора на JS (--check), Compare и Same на Go ===== */
+
+  // Пусто: null — "" вглубь (решение 26)
+  const blankAll = (v) => (v == null ? "" : Array.isArray(v) ? v.map(blankAll) : typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, blankAll(x)])) : v);
+  const keysOf = (...maps) => [...new Set(maps.flatMap((m) => Object.keys(m || {})))].sort();
+
+  // Итог got против vector.expect. pool — пул вектора; W — машина (нулевые значения типов у инцидентов); server —
+  // сравнивать ли записи журнала с server: true (их пишет server.js после ядра): повтор на ядре прототипа — false,
+  // ядро Go — true. Инциденты got — celView или {$ref}. Ответ: diffs — что не совпало (пусто — совпало),
+  // closeResultLabel — сколько подстановок [""] сравнено как "" (решение 37)
+  function compare(vector, got, { pool = {}, W, server = true } = {}) {
+    const diffs = [];
+    let closeResultLabel = 0;
+    const eq = (a, b) => C().canonical(a) === C().canonical(b);
+    const exp = vector.expect || {};
+    const kind = (x) => (!x ? "" : x.refusal ? "refusal" : "error" in x ? "error" : x.ok ? "ok" : "");
+    if (kind(got) !== kind(exp)) return { diffs: [kind(exp)], closeResultLabel };
+    // Отказ и ошибка: ничего не записано; у отказа — поля, которые есть в ожидаемом; текст ошибки не сравнивается
+    if (kind(exp) !== "ok") {
+      if (got.writes) diffs.push("writes");
+      if (exp.refusal) {
+        const a = exp.refusal;
+        const b = got.refusal;
+        const why = (x) => x.why || [];
+        if (why(a)[0] !== why(b)[0] || (why(a).length > 1 && !eq(blankAll(why(a)[1]), blankAll(why(b)[1] == null ? {} : why(b)[1])))) diffs.push("refusal.why");
+        ["guard", "notFrom", "code", "id"].forEach((f) => {
+          if (f in a && a[f] !== b[f]) diffs.push(`refusal.${f}`);
+        });
+      }
+      return { diffs, closeResultLabel };
+    }
+    const a = exp.ok;
+    const b = got.ok;
+    const resolve = (x) => (x && x.$ref != null ? pool[x.$ref] : x);
+    // Инциденты: изменённые с любой стороны; кого сторона не назвала — исходный (список вектора, новый у create).
+    // since — только у hold (решение 25), пусто — нулевое значение типа (normalize)
+    const source = new Map();
+    (vector.incidents || []).concat(vector.target && vector.target.incident ? [vector.target.incident] : []).forEach((d) => {
+      const p = resolve(d);
+      if (p) source.set(p.id, p);
+    });
+    const incident = (x) => (x ? C().canonical(normalize(x, W)) : null);
+    keysOf(a.incidents, b.incidents).forEach((id) => {
+      const x = incident(resolve((a.incidents || {})[id]) || source.get(id));
+      const y = incident(resolve((b.incidents || {})[id]) || source.get(id));
+      if (x == null || x !== y) diffs.push(`incidents.${id}`);
+    });
+    // Записи журнала: actor, at, kind, templateKey, vars (nil — {}); Transition, ID и версии не сравниваются
+    const entry = (e) => {
+      const vars = blankAll(e.vars == null ? {} : e.vars);
+      const l = vars.closeResultLabel;
+      if (Array.isArray(l) && l.length === 1 && l[0] === "") {
+        vars.closeResultLabel = "";
+        closeResultLabel++;
+      }
+      return { actor: blank(e.actor), at: e.at, kind: blank(e.kind), templateKey: blank(e.templateKey), vars };
+    };
+    const rows = (l) => (l || []).filter((e) => server || !e.server).map(entry);
+    ["journal", "journalAtNow"].forEach((k) =>
+      keysOf(a[k], b[k]).forEach((id) => {
+        if (!eq(rows((a[k] || {})[id]), rows((b[k] || {})[id]))) diffs.push(`${k}.${id}`);
+      })
+    );
+    ["after", "scenario"].forEach((k) => {
+      if (!eq(blankAll(a[k] || []), blankAll(b[k] || []))) diffs.push(k);
+    });
+    // external — только у инцидентов ожидаемого; canceled — только у run (решение 27)
+    Object.keys(a.external || {}).forEach((id) => {
+      if (!eq(blankAll(a.external[id]), blankAll((b.external || {})[id] || []))) diffs.push(`external.${id}`);
+    });
+    keysOf(a.facts, b.facts).forEach((id) => {
+      if (!eq(blankAll((a.facts || {})[id] || {}), blankAll((b.facts || {})[id] || {}))) diffs.push(`facts.${id}`);
+    });
+    if (vector.op === "run" && !eq(blankAll(a.canceled || {}), blankAll(b.canceled || {}))) diffs.push("canceled");
+    return { diffs, closeResultLabel };
+  }
+
+  /* ===== Повтор по ленте (tools/cel_vectors.mjs --check) ===== */
+
+  // Ядро повтора → {world, state}: мир и данные вызова, которые replay меняет перед каждым вектором
+  const replayState = new WeakMap();
+
+  // Ядра повтора: create — IMEngine.create, W — машина векторов. engineFor(me) — ядро для me, созданное один раз:
+  // celWorld ядра связывается при создании (ctx.world), поэтому мир — один объект, а отвечает он по ленте того
+  // вектора, который сейчас повторяет replay (world.tape)
+  function engines(create, W) {
+    const made = new Map();
+    return (me) => {
+      if (!made.has(me)) made.set(me, replayEngine(create, W, me));
+      return made.get(me);
+    };
+  }
+  function replayEngine(create, W, me) {
+    const state = { events: [], now: 0, after: [], scenario: [] };
+    const world = { tape: [], misses: [] };
+    let indexed = null;
+    let calls = new Map();
+    let twice = new Set();
+    // Ответ ленты: вызов ищется по fn и аргументам, равным по значению (как у векторов CEL). Нет на ленте или на один
+    // вызов два ответа — промах: в misses и исключение, а не undefined
+    function answer(fn, args) {
+      if (indexed !== world.tape) {
+        calls = new Map();
+        twice = new Set();
+        (world.tape || []).forEach((e) => {
+          const k = `${e.fn}|${C().canonical(e.args)}`;
+          if (calls.has(k)) twice.add(k);
+          calls.set(k, e.out);
+        });
+        indexed = world.tape;
+      }
+      const k = `${fn}|${C().canonical(args)}`;
+      if (!calls.has(k) || twice.has(k)) {
+        world.misses.push(fn);
+        throw new Error(`transition-vectors: на ленте ${twice.has(k) ? "два ответа на" : "нет"} ${fn}(${C().canonical(args).slice(1, -1)})`);
+      }
+      return JSON.parse(JSON.stringify(calls.get(k)));
+    }
+    // Факты cel.world без ref (ref считает исполнитель выражений над списком инцидентов): все — с ленты
+    Object.entries(W.cel.world).forEach(([fn, f]) => {
+      if (!fn.startsWith("$") && f && typeof f === "object" && f.ref == null) world[fn] = (...a) => answer(fn, a.map(C().encodeArg));
+    });
+    const engine = create({
+      workflow: W,
+      me,
+      world,
+      now: () => state.now,
+      events: () => state.events,
+      scenarioKey: (ev) => ev.scenarioGuid,
+      log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
+      // Функции сервера мимо cel.world — с ленты под приставкой ctx. (решение 26); null в аргументах — ""
+      actorName: (id) => answer("ctx.actorName", [blank(id)]),
+      progress: (ev) => answer("ctx.progress", [ref(ev.id)]),
+      stepNumber: (ev) => answer("ctx.stepNumber", [ref(ev.id)]),
+      // Варианты поля с source: transferTargets — факт transferTargets той же ленты
+      transferTargets: () => answer("transferTargets", []).map((id) => ({ id })),
+      // Сценарий внутри транзакции и действия после фиксации — в итог повтора
+      setCursor: (ev) => state.scenario.push({ action: "setCursor", incident: ref(ev.id) }),
+      shareAnswers: (from, to, at) => {
+        state.scenario.push({ action: "shareAnswers", from: ref(from.id), to: ref(to.id) });
+        return answer("ctx.shareAnswers", [ref(from.id), ref(to.id), blank(at)]);
+      },
+      deliver: (...a) => state.after.push(afterOf.notify(...a)),
+      onEvict: (...a) => state.after.push(afterOf.evict(...a)),
+      onBreachShared: (...a) => state.after.push(afterOf.touch(...a)),
+    });
+    replayState.set(engine, { world, state });
+    return engine;
+  }
+
+  // Вызов ядра вектора v на инцидентах пула: итог в виде expect (инциденты — celView), writes — у отказа и ошибки,
+  // если ядро что-то изменило
+  function replayCall(engine, state, v, pool) {
+    const plain = (d) => {
+      if (!d || !pool[d.$ref]) throw new Error(`transition-vectors: в пуле нет ${d && d.$ref}`);
+      return pool[d.$ref];
+    };
+    // Журнал до вызова — записи в момент now (journalAtNow): ядро читает только их (once); прочие ему нужны лишь
+    // длиной — запись timer_overridden встаёт перед хвостом вызова и без них
+    const logOf = (id) => ((v.journalAtNow || {})[id] || []).map((e) => ({ at: e.at, whoId: e.actor, kind: e.kind, k: e.templateKey, v: data(e.vars) }));
+    const make = (d) => {
+      const p = plain(d);
+      return engine.fromView(p, { log: logOf(p.id) });
+    };
+    const events = (v.incidents || []).map(make);
+    const byId = (id) => {
+      const ev = events.find((e) => e.id === id);
+      if (!ev) throw new Error(`transition-vectors: в списке нет ${id}`);
+      return ev;
+    };
+    const t = v.target || {};
+    const form = data(v.form || {});
+    const opts = { surface: v.surface };
+    let on;
+    let call;
+    if (v.op === "run") {
+      on = { ev: byId(t.id) };
+      call = () => engine.run(v.name, on.ev, form, opts);
+    } else if (v.op === "runAll") {
+      on = { list: (t.ids || []).map(byId) };
+      call = () => engine.runAll(v.name, on.list, form, opts);
+    } else if (v.op === "merge") {
+      on = { primary: byId(t.primaryId), list: (t.ids || []).map(byId) };
+      call = () => engine.merge(on.primary, on.list);
+    } else if (v.op === "create") {
+      on = { ev: make(t.incident) };
+      call = () => engine.create(on.ev);
+    } else throw new Error(`transition-vectors: op ${v.op}`);
+    const extra = [on.primary, on.ev].concat(on.list || []).filter(Boolean);
+    const tracked = events.concat(extra.filter((e) => !events.includes(e)));
+    Object.assign(state, { events, now: v.now, after: [], scenario: [] });
+    const before = tracked.map((ev) => snapshot(engine, ev, v.now));
+    const r = call();
+    const after = tracked.map((ev) => snapshot(engine, ev, v.now));
+    const { expect, writes } = expectOf(r, tracked, before, after, v.now, (s) => s.view, state, (x) => resultOf[v.op](x, on));
+    return writes ? Object.assign(expect, { writes }) : expect;
+  }
+
+  // Повтор вектора на ядре прототипа по ленте: engineFor — из engines(). Ответ {ok, got, misses, diffs}: got — итог в
+  // виде expect, misses — промахи ленты, diffs — расхождения по compare (записи server: true не сравниваются: их пишет
+  // server.js, а повтор зовёт только ядро). ok — ни промахов, ни расхождений
+  function replay(engineFor, vector, pool) {
+    const engine = engineFor(vector.me);
+    const rs = replayState.get(engine);
+    if (!rs) throw new Error("transition-vectors: ядро повтора — не из lib.engines");
+    const misses = [];
+    let got;
+    rs.world.tape = vector.world || [];
+    rs.world.misses = misses;
+    try {
+      got = replayCall(engine, rs.state, vector, pool);
+    } catch (e) {
+      got = { thrown: String((e && e.message) || e) };
+    } finally {
+      rs.world.tape = [];
+      rs.world.misses = [];
+    }
+    const { diffs } = compare(vector, got, { pool, W: engine.workflow, server: false });
+    return { ok: !misses.length && !diffs.length, got, misses, diffs };
+  }
+
   /* ===== Запись ===== */
 
   // create — IMEngine.create; reference — исходная машина (запись только её ядер); frame — открыть кадр записи CEL
@@ -272,35 +567,24 @@
         note("ctx.shareAnswers", [ref(from.id), ref(to.id), blank(at)], n);
         return n;
       });
-      // Действия после фиксации — в ожидаемое по порядку; пусто — ""
-      on("deliver", (f) => (ev, recipients, o) => {
-        const { alert, transitionId, about, actor } = o || {};
-        if (cur) cur.after.push({ action: "notify", incident: ref(ev.id), recipients: data(Array.from(recipients || [])), alert: Boolean(alert), about: about ? ref(about.id) : "", actor: blank(actor), transitionId: blank(transitionId) });
-        return f(ev, recipients, o);
-      });
-      on("onEvict", (f) => (ev, who, transitionId, by) => {
-        if (cur) cur.after.push({ action: "evict", incident: ref(ev.id), who: blank(who), transitionId: blank(transitionId), by: blank(by) });
-        return f(ev, who, transitionId, by);
-      });
-      on("onBreachShared", (f) => (ev, who) => {
-        if (cur) cur.after.push({ action: "touch", incident: ref(ev.id), actor: blank(who) });
-        return f(ev, who);
-      });
+      // Действия после фиксации — в ожидаемое по порядку (afterOf)
+      [
+        ["deliver", afterOf.notify],
+        ["onEvict", afterOf.evict],
+        ["onBreachShared", afterOf.touch],
+      ].forEach(([k, entry]) =>
+        on(k, (f) => (...a) => {
+          if (cur) cur.after.push(entry(...a));
+          return f(...a);
+        })
+      );
       return out;
     }
 
     /* --- вызов ядра --- */
 
-    // Снимок инцидента — только celView (cel.value и cel.plain): никаких условий, правил и определений
-    function snapshot(engine, ev, now) {
-      const view = engine.celView(ev);
-      const log = ev.log || [];
-      return { ev, view, key: C().keyOf(view), len: log.length, atNow: log.filter((e) => e.at === now).map(entryOf) };
-    }
-    const same = (a, b) => a.key === b.key && a.len === b.len && C().canonical(a.atNow) === C().canonical(b.atNow);
-
-    // spec: op, name, surface, form, target, extra (инциденты вызова вне списка), result(r, done) — external,
-    // facts, canceled итога ok. fn — сам вызов ядра
+    // spec: op, name, surface, form, target, extra (инциденты вызова вне списка), result(r) — external, facts,
+    // canceled итога ok (resultOf). fn — сам вызов ядра
     function record(engine, ctx, spec, fn) {
       settle();
       if (cur) {
@@ -374,39 +658,16 @@
       }
       vector.world = world;
       const after = tracked.map((ev) => snapshot(engine, ev, now));
-      if (!r || !r.ok) {
-        // Отказ и ошибка: ничего не изменилось — иначе это не ядро
-        if (after.some((s, i) => !same(s, before[i]))) {
-          skipped.outsideEngine++;
-          return r;
-        }
-        const why = data((r && r.why) || []);
-        if (why[0] === FAILED) vector.expect = { error: String((why[1] && why[1].error) || "") };
-        else {
-          const refusal = { why };
-          if (r.guard) refusal.guard = r.guard;
-          if (r.notFrom) refusal.notFrom = true;
-          if (r.code) refusal.code = r.code;
-          if (r.ev) refusal.id = r.ev.id;
-          vector.expect = { refusal };
-        }
-      } else {
-        const ok = {};
-        const changed = after.filter((s, i) => s.key !== before[i].key);
-        if (changed.length) ok.incidents = Object.fromEntries(changed.map((s) => [s.ev.id, put(s)]));
-        const journal = tracked.map((ev, i) => [ev.id, (ev.log || []).slice(before[i].len).map(entryOf)]).filter(([, l]) => l.length);
-        if (journal.length) ok.journal = Object.fromEntries(journal);
-        // Записи в момент now, что были до вызова: once меняет их подстановки на месте
-        const atNow = tracked.map((ev, i) => [ev.id, before[i].atNow.length ? (ev.log || []).slice(0, before[i].len).filter((e) => e.at === now).map(entryOf) : []]).filter(([, l]) => l.length);
-        if (atNow.length) ok.journalAtNow = Object.fromEntries(atNow);
-        ok.after = call.after;
-        ok.scenario = call.scenario;
-        Object.assign(ok, spec.result(r));
-        vector.expect = { ok };
-        if (spec.mergedIn) {
-          hold(mergeClose(engine, ctx, after, spec.mergedIn, vector, pool));
-          return r;
-        }
+      const { expect, writes } = expectOf(r, tracked, before, after, now, put, call, spec.result);
+      // Отказ и ошибка, которые что-то изменили, — не ядро
+      if (writes) {
+        skipped.outsideEngine++;
+        return r;
+      }
+      vector.expect = expect;
+      if (expect.ok && spec.mergedIn) {
+        hold(mergeClose(engine, ctx, after, spec.mergedIn, vector, pool));
+        return r;
       }
       keep(vector, pool);
       return r;
@@ -445,12 +706,6 @@
       };
     }
 
-    const factsOf = (f) => ({
-      from: Object.fromEntries(Object.entries(f.from || {}).map(([k, v]) => [k, blank(v)])),
-      to: Object.fromEntries(Object.entries(f.to || {}).map(([k, v]) => [k, blank(v)])),
-      breach: blank(f.breach),
-    });
-
     function wrap(engine, ctx) {
       const out = {};
       Object.keys(engine).forEach((k) => {
@@ -479,11 +734,7 @@
             form,
             extra: [ev],
             target: () => ({ id: ev.id }),
-            result: (r) => {
-              const o = { external: { [ev.id]: data(r.external || []) }, facts: { [ev.id]: factsOf(r.facts) } };
-              if (r.canceled) o.canceled = { [ev.id]: r.canceled };
-              return o;
-            },
+            result: (r) => resultOf.run(r, { ev }),
           },
           () => engine.run(id, ev, form, opts)
         );
@@ -499,10 +750,7 @@
             form,
             extra: Array.from(list || []),
             target: () => ({ ids: Array.from(list || [], (ev) => ev.id) }),
-            result: (r) => ({
-              external: Object.fromEntries(Array.from(list || [], (ev, i) => [ev.id, data((r.external || [])[i] || [])])),
-              facts: Object.fromEntries(Array.from(list || [], (ev, i) => [ev.id, factsOf((r.facts || [])[i] || {})])),
-            }),
+            result: (r) => resultOf.runAll(r, { list: Array.from(list || []) }),
           },
           () => engine.runAll(id, list, form, opts)
         );
@@ -517,12 +765,12 @@
             form: {},
             extra: [ev],
             target: (put) => ({ incident: put(ev) }),
-            result: (r) => ({ external: { [ev.id]: data((r.external || [])[0] || []) }, facts: { [ev.id]: factsOf(r.facts || {}) } }),
+            result: (r) => resultOf.create(r, { ev }),
           },
           () => engine.create(ev)
         );
-      // Объединение: присоединяемые в порядке вызова, основной — target.primaryId; external — только присоединяемых,
-      // facts — присоединяемых и основного, если его взяли. Успех закрывается позже (mergeClose), отказ — на возврате
+      // Объединение: присоединяемые в порядке вызова, основной — target.primaryId; итог ok — resultOf.merge. Успех
+      // закрывается позже (mergeClose), отказ — на возврате
       const mergeTr = (engine.workflow.transitions || []).find((t) => t.bulk && t.bulk.mode === "merge");
       out.merge = (primary, others) => {
         const list = Array.from(others || []);
@@ -536,11 +784,7 @@
             form: {},
             extra: [primary].concat(list),
             target: () => ({ primaryId: primary.id, ids: list.map((ev) => ev.id) }),
-            result: (r) => {
-              const facts = Object.fromEntries(list.map((ev, i) => [ev.id, factsOf((r.facts || [])[i] || {})]));
-              if (r.taken) facts[primary.id] = factsOf(r.taken.facts || {});
-              return { external: Object.fromEntries(list.map((ev, i) => [ev.id, data((r.external || [])[i] || [])])), facts };
-            },
+            result: (r) => resultOf.merge(r, { primary, list }),
             mergedIn: primary,
           },
           () => engine.merge(primary, others)
@@ -568,7 +812,7 @@
     };
   }
 
-  const lib = { PER_NAME, PER_OUTCOME, normalize, kindOf, outcomeOf, select, idOf, recorder };
+  const lib = { PER_NAME, PER_OUTCOME, normalize, kindOf, outcomeOf, select, idOf, recorder, compare, engines, replay };
   // Запись — tests/api.html?celVectors=1 (без ?api=), вместе с записью векторов CEL: кадр — её IMCelVectors.frame.
   // Подключение к api.html — задача 7
   const params = typeof location !== "undefined" && location.search ? new URLSearchParams(location.search) : null;
