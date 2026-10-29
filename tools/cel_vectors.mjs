@@ -6,8 +6,9 @@
 //                                           (lib.select), синтетика на границах; затем всё, что делает --check,
 //                                           и только потом запись файла. Тесты API не pass — стоп без записи.
 //                                           Тем же прогоном — fixtures/transition-vectors.json (блок
-//                                           transitionvectors-out): любой счётчик skipped не 0 или файл больше
-//                                           4 МБ — стоп, не пишется ни один из двух файлов
+//                                           transitionvectors-out и синтетика переходов в Node): любой счётчик
+//                                           skipped не 0, файл больше 4 МБ или случай синтетики не показал своё —
+//                                           стоп, не пишется ни один из двух файлов
 //   node tools/cel_vectors.mjs --check    — быстро, без Chrome: файл есть, собран от этой машины (sha256 байтов),
 //                                           равен своей канонической записи, каждый вектор повторяется по ленте
 //                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер;
@@ -33,7 +34,7 @@ const FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vector
 const MAX_BYTES = 8 * 1024 * 1024;
 const TRANSITIONS_FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/transition-vectors.json");
 const TRANSITIONS_MAX_BYTES = 4 * 1024 * 1024;
-const TRANSITIONS_COMMENT = "Собрано tools/cel_vectors.mjs --update из записи tests/api.html?celVectors=1. Руками не править. Формат — CEL.md, «Векторы переходов»";
+const TRANSITIONS_COMMENT = "Собрано tools/cel_vectors.mjs --update из записи tests/api.html?celVectors=1 и синтетики. Руками не править. Формат — CEL.md, «Векторы переходов»";
 const OPS = ["create", "merge", "run", "runAll"];
 // Переходы без вектора ok, с причиной словами (имя → причина); не больше 3. Покрытие проверяет задача 11
 const UNCOVERED_TRANSITIONS_OK = {};
@@ -105,11 +106,14 @@ function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped,
 }
 
 // Стоп до записи: запись переходов неполна (нет skipped или его счётчика, счётчик не 0, векторов нет —
-// lib.recordedProblem) или файл больше 4 МБ
-function transitionsText(env, tr, machineSha256) {
+// lib.recordedProblem) или файл больше 4 МБ. synth — синтетика переходов: вход, совпавший с записанным, остаётся
+// синтетикой (с названием случая)
+function transitionsText(env, tr, synth, machineSha256) {
   const problem = env.tlib.recordedProblem(tr);
   if (problem) throw new Error(`запись переходов: ${problem}. Файлы не записаны`);
-  const text = serializeTransitions(env.lib, { incidents: tr.incidents, vectors: tr.vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
+  const ids = new Set(synth.vectors.map((v) => v.id));
+  const vectors = tr.vectors.filter((v) => !ids.has(v.id)).concat(synth.vectors);
+  const text = serializeTransitions(env.lib, { incidents: Object.assign({}, tr.incidents, synth.incidents), vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
   const size = Buffer.byteLength(text, "utf8");
   if (size > TRANSITIONS_MAX_BYTES) throw new Error(`файл переходов ${(size / 1048576).toFixed(2)} МБ — больше 4 МБ. Файлы не записаны`);
   return text;
@@ -243,6 +247,7 @@ function checkTransitions(text, env, where) {
   });
   const by = (o) => data.vectors.filter((v) => v.op === o).length;
   console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}`);
+  console.log(`  синтетика переходов: ${data.vectors.filter((v) => v.case != null).length}`);
   console.log(`  неиспользованных записей ленты: ${unused}; closeResultLabel [""] как "": ${closeResultLabel}`);
   const list = (title, xs) => xs.length && console.log(`${title}:\n  ${xs.slice(0, 30).join("\n  ")}${xs.length > 30 ? `\n  … ещё ${xs.length - 30}` : ""}`);
   list("расхождения переходов", mismatch);
@@ -443,6 +448,172 @@ function synthetic(env) {
   return out;
 }
 
+/* ===== Синтетика векторов переходов ===== */
+
+// На исходной машине, ожидаемое — запись на ядре прототипа (решение 31): каждый случай — своя запись переходов, кадр —
+// запись CEL этого исполнителя (её векторы CEL не берутся). env — свой load(): IMCel.create подменяется. Инциденты —
+// с UUID, своим событием и номером INC-%04d (их можно положить в PostgreSQL). Что случай должен показать, проверяет
+// shows: не показал — стоп
+function syntheticTransitions(env) {
+  const { W, lib, tlib } = env;
+  const NOW = lib.NOW;
+  const want = { graceSec: 3, reactionDefaultSec: 300, levels: ["petrova", "noc"], reactionByPriority60: false };
+  const reaction = W.timers.find((t) => t.id === "reaction");
+  const have = {
+    graceSec: ((W.invariants || {}).manualWinsOverTimer || {}).graceSec,
+    reactionDefaultSec: reaction.defaultSec,
+    levels: W.escalation.levels.map((l) => l.target),
+    reactionByPriority60: reaction.overrides.some((o) => o.priority === 60) || "60" in (reaction.byPriority || {}),
+  };
+  if (lib.canonical(want) !== lib.canonical(have)) throw new Error(`синтетика переходов написана под настройки ${lib.canonical(want)}, а в машине ${lib.canonical(have)}: поправьте случаи в tools/cel_vectors.mjs`);
+  // Запись CEL — до первого IMEngine.create: через неё ядро получает исполнитель, и её кадр видит факты мира
+  const celRec = lib.recorder(env.IMCel.create, W);
+  env.IMCel.create = celRec.create;
+  const out = { vectors: [], incidents: {} };
+  const ID = (n) => `10000000-0000-4000-8000-00000000${n}`;
+  const SCENARIO = "60000000-0000-4000-8000-000000000002";
+  // Мир: op1 и op2 могут всё; petrova и noc (уровни эскалации) — ничего: эскалировать некому
+  const world = {
+    can: (who) => who !== "petrova" && who !== "noc",
+    access: () => true,
+    isOperator: (id) => ["op1", "op2", "petrova", "noc"].includes(id),
+    isGroup: () => false,
+    members: () => [],
+    dutyGroups: () => [],
+    inSourceGroup: () => false,
+    deviceInGroup: () => false,
+    groupDepth: () => 0,
+    agentState: () => "ready",
+    idleSec: () => 0,
+    stepsFilled: () => true,
+    lastTransferTarget: () => "",
+    transferTargets: () => ["op2"],
+  };
+  // Инцидент n (9001…): своё событие, сценарий «Пожар», приоритет 50, все таймеры машины
+  const plain = (n, over = {}) =>
+    Object.assign({ id: ID(n), number: `INC-${n}`, eventGuid: `70000000-0000-4000-8000-00000000${n}`, eventType: "fire", scenario: SCENARIO, priority: 50, occurredAt: NOW - 600000, state: "new", owner: "" }, over, {
+      timers: Object.fromEntries(W.timers.map((t) => [t.id, Object.assign({}, (over.timers || {})[t.id])])),
+    });
+
+  // Один случай: своя запись, вызов call(engine, events, mk), один вектор; shows(v, pool) — что не так ([] — всё так)
+  function add(label, call, shows) {
+    const rec = tlib.recorder(env.IMEngine.create, W, celRec.frame);
+    const events = [];
+    const engine = rec.create({
+      workflow: W,
+      me: "op1",
+      now: () => NOW,
+      events: () => events,
+      scenarioKey: (ev) => ev.scenarioGuid,
+      world,
+      log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
+      actorName: (id) => (id ? `name:${id}` : ["workflow.label.unassigned"]),
+      progress: () => ({ filled: 0, total: 2 }),
+      stepNumber: () => 1,
+      transferTargets: () => world.transferTargets().map((id) => ({ id })),
+      setCursor() {},
+      shareAnswers: () => 0,
+      deliver() {},
+      onEvict() {},
+      onBreachShared() {},
+    });
+    const mk = (n, over) => engine.fromView(plain(n, over), { log: [] });
+    call(engine, events, mk);
+    const taken = rec.take();
+    const skipped = Object.entries(taken.skipped).filter(([, x]) => x);
+    if (skipped.length || taken.vectors.length !== 1) throw new Error(`синтетика переходов «${label}»: векторов ${taken.vectors.length}, skipped ${lib.canonical(taken.skipped)}`);
+    const [v] = taken.vectors;
+    const problems = shows(v, taken.incidents);
+    if (problems.length) throw new Error(`синтетика переходов «${label}»: ${problems.join("; ")}; а записано ${lib.canonical(v.expect).slice(0, 600)}`);
+    if (out.vectors.some((x) => x.id === v.id || x.case === label)) throw new Error(`синтетика переходов «${label}»: тот же вход или то же название, что у другого случая (${v.id})`);
+    v.case = label;
+    out.vectors.push(v);
+    Object.assign(out.incidents, taken.incidents);
+  }
+
+  // Проверки ожидаемого: каждая — текст, если не так
+  const ok = (v) => (v.expect.ok ? [] : ["ждали ok"]);
+  const canceled = (v, id, tr) => {
+    const c = (v.expect.ok || {}).canceled;
+    const got = c ? c[id] : undefined;
+    return got === tr ? [] : [`ждали canceled ${tr || "нет"}, а ${got || "нет"}`];
+  };
+  const keys = (v, id) => (((v.expect.ok || {}).journal || {})[id] || []).map((e) => e.templateKey);
+  const after = (v, pool, id) => {
+    const d = ((v.expect.ok || {}).incidents || {})[id];
+    return d ? pool[d.$ref] : null;
+  };
+  const refusal = (v, fields) => {
+    const r = v.expect.refusal;
+    if (!r) return ["ждали отказ"];
+    return Object.entries(fields)
+      .filter(([k, x]) => lib.canonical(k === "key" ? r.why[0] : k === "name" ? (r.why[1] || {}).name : r[k]) !== lib.canonical(x))
+      .map(([k, x]) => `ждали ${k} ${lib.canonical(x)}`);
+  };
+  const OVERRIDDEN = "workflow.journal.timer_overridden";
+  const id1 = ID(9001);
+
+  // Окно после дедлайна (graceSec 3 с): дедлайн реакции в new, переход по таймеру — escalation_ceiling (эскалировать некому)
+  add("«Взять» в окне после дедлайна: reaction.due = now − 2999 — срабатывание escalation_ceiling отменено, нарушение reaction на момент дедлайна, журнал [timer_overridden, claim]", (engine, events, mk) => {
+    events.push(mk(9001, { timers: { reaction: { due: NOW - 2999 } } }), mk(9002));
+    engine.run("claim", events[0], {}, { surface: "card" });
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    const breach = x && x.breaches.find((b) => b.kind === "reaction");
+    return ok(v).concat(
+      canceled(v, id1, "escalation_ceiling"),
+      breach && breach.at === NOW - 2999 ? [] : [`ждали нарушение reaction на ${NOW - 2999}`],
+      ((v.expect.ok || {}).facts || {})[id1] && v.expect.ok.facts[id1].breach === "reaction" ? [] : ["ждали facts.breach reaction"],
+      lib.canonical(keys(v, id1)) === lib.canonical([OVERRIDDEN, "workflow.journal.claim"]) ? [] : [`ждали журнал [timer_overridden, claim], а ${lib.canonical(keys(v, id1))}`]
+    );
+  });
+  add("«Взять» на конце окна: reaction.due = now − 3000 — окно кончилось, отмены и нарушения нет", (engine, events, mk) => {
+    events.push(mk(9001, { timers: { reaction: { due: NOW - 3000 } } }), mk(9002));
+    engine.run("claim", events[0], {}, { surface: "card" });
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(
+      canceled(v, id1, undefined),
+      x && !x.breaches.length ? [] : ["ждали без нарушений"],
+      keys(v, id1).includes(OVERRIDDEN) ? ["timer_overridden в журнале"] : []
+    );
+  });
+  add("«Передать» op2 в окне: reaction.due = now − 1000 — реакция продолжается (continuesOn), срабатывание не отменено", (engine, events, mk) => {
+    events.push(mk(9001, { timers: { reaction: { due: NOW - 1000 } } }), mk(9002));
+    engine.run("transfer", events[0], { targetId: "op2", comment: "передаю" }, { surface: "card" });
+  }, (v) => ok(v).concat(canceled(v, id1, undefined), keys(v, id1).includes(OVERRIDDEN) ? ["timer_overridden в журнале"] : []));
+
+  // Форма
+  add("«Отложить» с чужой причиной: reasonId «nope» — значение недопустимо", (engine, events, mk) => {
+    events.push(mk(9001, { state: "in_progress", owner: "op1" }), mk(9002));
+    engine.run("hold", events[0], { reasonId: "nope" }, { surface: "card" });
+  }, (v) => refusal(v, { key: "workflow.error.field_invalid", code: "FORM_FIELD_INVALID", name: ["workflow.form.hold.field.reasonId"] }));
+  add("«Закрыть» без результата: форма {} — поле результата обязательно", (engine, events, mk) => {
+    events.push(mk(9001, { state: "in_progress", owner: "op1" }), mk(9002));
+    engine.run("close", events[0], {}, { surface: "card" });
+  }, (v) => refusal(v, { key: "workflow.error.field_required", name: ["workflow.form.close.field.resultId"] }));
+  add("«Закрыть» «Массовый сбой» без причины: resultId mass — поле причины обязательно", (engine, events, mk) => {
+    events.push(mk(9001, { state: "in_progress", owner: "op1" }), mk(9002));
+    engine.run("close", events[0], { resultId: "mass" }, { surface: "card" });
+  }, (v) => refusal(v, { key: "workflow.error.field_required", name: ["workflow.form.close.field.causeId"] }));
+
+  // «Отсоединить все»: первый привязан к основному 9003 (в работе у op1 — primaryEditable), второй не привязан
+  add("«Отсоединить все»: [9001 привязан к 9003, 9002 new] — второй не в linked, отказ называет его", (engine, events, mk) => {
+    events.push(mk(9001, { state: "linked", linkedTo: ID(9003), linkedAt: NOW - 60000 }), mk(9002), mk(9003, { state: "in_progress", owner: "op1" }));
+    engine.runAll("detach", [events[0], events[1]], {}, { surface: "card" });
+  }, (v) => refusal(v, { notFrom: true, id: ID(9002) }));
+
+  // Норматив при появлении: приоритета 60 нет ни в уточнениях, ни в byPriority — defaultSec реакции (300 с)
+  add("Появление с приоритетом 60 без своего норматива — реакция defaultSec: due = now + 300000", (engine, events, mk) => {
+    events.push(mk(9002));
+    engine.create(mk(9001, { state: "", priority: 60 }));
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(x && x.timers.reaction.due === NOW + 300000 ? [] : [`ждали reaction.due ${NOW + 300000}, а ${x && x.timers.reaction.due}`]);
+  });
+  return out;
+}
+
 /* ===== Запись в Chrome ===== */
 
 const unescape = (s) => s.replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " })[e]);
@@ -494,6 +665,9 @@ if (argv.includes("--update")) {
     // Синтетика — первой: она быстрая, и её ошибка видна до шести минут записи
     const synth = synthetic(env);
     console.log(`синтетика: ${synth.vectors.length} векторов`);
+    // Синтетика переходов — на своём исполнителе (подменяет IMCel.create)
+    const trSynth = syntheticTransitions(load(machinePath));
+    console.log(`синтетика переходов: ${trSynth.vectors.length} векторов`);
     console.log(`запись: Chrome на tests/api.html?celVectors=1 (около 6 мин, предел ${WALL_TIMEOUT_MS / 60000} мин)…`);
     const rec = record(opt("tmp") && path.resolve(opt("tmp")));
     console.log(`  тесты API — ${rec.summary}; записано векторов ${rec.data.vectors.length}, ${((Date.now() - t0) / 1000).toFixed(0)} с`);
@@ -507,7 +681,7 @@ if (argv.includes("--update")) {
       skipped: { tapeRepeat: rec.stats.tapeRepeat, worldError: rec.stats.skipped },
     });
     // Переходы — тоже до записи: стоп любого из двух файлов не оставляет записанным ни один
-    const trText = transitionsText(env, rec.transitions, sha256(env.bytes));
+    const trText = transitionsText(env, rec.transitions, trSynth, sha256(env.bytes));
     // Всё, что делает --check, — на свежем исполнителе и ядре, до записи: расхождение или промах в любом — стоп
     const okCel = check(text, load(machinePath), rel(file));
     const okTransitions = checkTransitions(trText, load(machinePath), rel(transitionsFile));
@@ -517,7 +691,7 @@ if (argv.includes("--update")) {
       fs.mkdirSync(path.dirname(transitionsFile), { recursive: true });
       fs.writeFileSync(file, text);
       fs.writeFileSync(transitionsFile, trText);
-      console.log(`записано ${rel(transitionsFile)}: векторов ${rec.transitions.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
+      console.log(`записано ${rel(transitionsFile)}: из записи ${rec.transitions.vectors.length}, синтетика ${trSynth.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
       console.log(`записано ${rel(file)}: отобрано из записи ${chosen.length}, синтетика ${synth.vectors.length}; всего ${((Date.now() - t0) / 1000).toFixed(0)} с`);
     } else console.log("файлы не записаны");
   } catch (e) {
