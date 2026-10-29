@@ -106,6 +106,9 @@
         const [m, recv, args] = n.args;
         const bind = m === "bind" && recv.op === "id" && recv.args === "cel";
         if (!bind && !METHODS.has(m)) errors.push(`${where}: метод .${m}() — не из разрешённой части CEL (CEL.md)`);
+        // Макрос по словарю перебирает ключи, а их порядок у исполнителей разный: тип получателя — из проверки типов
+        const t = recv.checkedType;
+        if (!bind && METHODS.has(m) && t && String(t.name).startsWith("map")) errors.push(`${where}: .${m}() по словарю — макросы только по списку (CEL.md)`);
         if (!bind) subset(recv, where);
         args.forEach((a) => subset(a, where));
       } else if (n.op === "call") {
@@ -113,7 +116,19 @@
         if (!known.has(fn)) errors.push(`${where}: ${fn}() — не факт мира и не определение`);
         args.forEach((a) => subset(a, where));
       } else if (n.op === ".") subset(n.args[0], where);
-      else if (n.op === "map") n.args.forEach(([k, v]) => (subset(k, where), subset(v, where)));
+      else if (n.op === "map") {
+        // Повтор ключа-литерала: исполнители молча берут последний — в машине это ошибка
+        const seen = new Set();
+        n.args.forEach(([k, v]) => {
+          if (k && k.op === "value") {
+            const key = `${typeof k.args}:${String(k.args)}`;
+            if (seen.has(key)) errors.push(`${where}: ключ «${String(k.args)}» в словаре повторяется`);
+            seen.add(key);
+          }
+          subset(k, where);
+          subset(v, where);
+        });
+      }
       else if (Array.isArray(n.args)) n.args.forEach((a) => subset(a, where));
       else subset(n.args, where);
     }
@@ -126,8 +141,10 @@
       const env = root.clone();
       Object.entries(vars).forEach(([n, t]) => env.registerVariable(n, t));
       try {
-        subset(CEL.parse(expr).ast, where);
-        const chk = env.check(expr);
+        // Проверка подмножества — по дереву после проверки типов (у узлов есть checkedType); вычисляет — своё дерево
+        const probe = env.parse(expr);
+        const chk = probe.check();
+        subset(probe.ast, where);
         if (!chk.valid) {
           errors.push(`${where}: ${String(chk.error.message).split("\n")[0]}`);
           return null;
@@ -312,9 +329,12 @@
         if (keys.join() !== want.join()) errors.push(`${where}: поля словаря ${keys.join(", ")}, а у ${type} — ${want.join(", ")}`);
       } else if (v !== "dyn" && v !== celType(type)) errors.push(`${where}: значение ${v}, а нужно ${type}`);
     }
-    function compileOps(ops, scope, where, sub, shapes) {
+    // writable — имена, через которые эффект меняет инцидент черновика: incident и элемент-инцидент forEach.
+    // Значение let — снимок, запись в него потерялась бы
+    function compileOps(ops, scope, where, sub, shapes, writable) {
       scope = Object.assign({}, scope);
       shapes = Object.assign({}, shapes);
+      writable = new Set(writable || ["incident"]);
       return (ops || []).map((op, i) => {
         const at = `${where}.do[${i}]`;
         const x = (e) => compile(at, scope, sub(e));
@@ -322,6 +342,7 @@
           const fn = x(op.value);
           scope[op.let] = fn ? fn.celType : "dyn";
           shapes[op.let] = sub(op.value);
+          writable.delete(op.let);
           return { kind: "let", name: op.let, fn };
         }
         if ("set" in op || "append" in op) {
@@ -329,6 +350,7 @@
           const p = pathOf(sub(op[kind]), scope, at);
           const fn = x(op.value);
           if (!p) return { kind: "skip" };
+          if (!writable.has(p.root)) return errors.push(`${at}: set / append — менять можно incident или элемент forEach, а не ${p.root}`), { kind: "skip" };
           let type = p.type;
           if (kind === "append") {
             const m = /^list<(.+)>$/.exec(type);
@@ -338,12 +360,16 @@
           fits(at, type, fn, sub(op.value), shapes);
           return { kind, path: p, type, fn };
         }
-        if ("if" in op) return { kind: "if", fn: compile(at, scope, sub(op.if), "bool"), then: compileOps(op.then, scope, `${at}.then`, sub, shapes), else: compileOps(op.else, scope, `${at}.else`, sub, shapes) };
+        if ("if" in op) return { kind: "if", fn: compile(at, scope, sub(op.if), "bool"), then: compileOps(op.then, scope, `${at}.then`, sub, shapes, writable), else: compileOps(op.else, scope, `${at}.else`, sub, shapes, writable) };
         if ("forEach" in op) {
           const fn = x(op.in);
           const m = /^list<(.+)>$/.exec(fn ? fn.celType : "");
           if (fn && !m) errors.push(`${at}: forEach — по списку, а ${op.in} — ${fn.celType}`);
-          return { kind: "forEach", name: op.forEach, fn, body: compileOps(op.do, Object.assign({}, scope, { [op.forEach]: m ? m[1] : "dyn" }), at, sub, shapes) };
+          // Менять можно только элемент-инцидент: его исполнитель читает из черновика по id
+          const inner = new Set(writable);
+          if (m && m[1] === "Incident") inner.add(op.forEach);
+          else inner.delete(op.forEach);
+          return { kind: "forEach", name: op.forEach, fn, body: compileOps(op.do, Object.assign({}, scope, { [op.forEach]: m ? m[1] : "dyn" }), at, sub, shapes, inner) };
         }
         if ("call" in op) {
           const callee = effectDefs[op.call];
@@ -394,16 +420,31 @@
         put: (v) => (last.field ? (holder[last.field] = v) : holder.set(ctx[last.index], v)),
       };
     }
+    // Снимок значения для let (PROC-44, как в модели Quint): запись — новый экземпляр того же типа с тем же
+    // источником, словари и списки — копии; простые значения — как есть. Запись после let снимок не меняет
+    const recordClasses = new Set(Object.values(classes));
+    function snapshot(v) {
+      if (Array.isArray(v)) return v.map(snapshot);
+      if (v instanceof Map) return new Map(Array.from(v, ([k, x]) => [k, snapshot(x)]));
+      if (v && recordClasses.has(v.constructor)) {
+        const copy = new v.constructor(Object.fromEntries(Object.entries(v).map(([k, x]) => [k, snapshot(x)])));
+        if (sources.has(v)) sources.set(copy, sources.get(v));
+        return copy;
+      }
+      return v;
+    }
     function runOps(ops, ctx, store) {
       for (const op of ops) {
-        if (op.kind === "let") ctx[op.name] = op.fn(ctx);
+        if (op.kind === "let") ctx[op.name] = snapshot(op.fn(ctx));
         else if (op.kind === "set" || op.kind === "append") {
           const at = locate(op.path, ctx);
           const v = value(op.type, op.fn(ctx));
           at.put(op.kind === "set" ? v : at.get().concat([v]));
           store.touch(at.root);
         } else if (op.kind === "if") runOps(op.fn(ctx) ? op.then : op.else, Object.assign({}, ctx), store);
-        else if (op.kind === "forEach") Array.from(op.fn(ctx)).forEach((item) => runOps(op.body, Object.assign({}, ctx, { [op.name]: item }), store));
+        // Элементы — сначала все, затем каждый инцидент читается из черновика по id: запись через элемент видна
+        // incident и фактам над инцидентами, а снимок let не мешает
+        else if (op.kind === "forEach") Array.from(op.fn(ctx)).forEach((item) => runOps(op.body, Object.assign({}, ctx, { [op.name]: classes.Incident && item instanceof classes.Incident ? store.instance(item.id) : item }), store));
         else if (op.kind === "call") {
           const base = Object.fromEntries(Object.keys(EFFECT_TOP).map((n) => [n, ctx[n]]));
           runProgram(program(op.fn, null, "call"), Object.assign({}, lists, base, Object.fromEntries(op.args.map(([a, f]) => [a, f ? f(ctx) : undefined]))), store);

@@ -288,6 +288,8 @@
       let cur = null;
       const store = {
         incidents: () => ctx.events().map((e) => inst(e.id)),
+        // Живой инцидент черновика по id: им эффект меняет элемент forEach
+        instance: inst,
         touch: (x) => writeBack(x, draft(x.id)),
         world: (action, a) => {
           const target = a.incident || a.from ? draft((a.incident || a.from).id) : null;
