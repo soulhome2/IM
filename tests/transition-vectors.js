@@ -9,8 +9,9 @@
      сценария и после фиксации — в ожидаемое; снимок «после» — тоже только celView;
    - снимки зовут только celView (cel.value, cel.plain): условия, правила и определения в снимке дали бы лишние
      векторы CEL;
-   - остальные методы ядра — насквозь; каждый обёрнутый вызов сначала закрывает открытый вектор (решение 39,
-     объединение — задача 5);
+   - открытый вектор (объединение, решение 39 — задача 5) закрывают только меняющие вызовы ядра — run, runAll,
+     merge, create, tick, startTimer…resumeTimer — и take(); чтение (isDone, availability, badge…) идёт насквозь:
+     server.js после merge зовёт isDone раньше, чем пишет merged_in;
    - отбор — при закрытии (решение 40): на op:name не больше PER_NAME исходов, на исход не больше PER_OUTCOME
      векторов; lib.select в take() даёт то же, что на полной записи; пул — только инциденты оставленных.
    Файл грузится и в Node (tools/test_cel.mjs, vm). */
@@ -18,6 +19,8 @@
   const PER_NAME = 20;
   const PER_OUTCOME = 4;
   const FAILED = "workflow.error.transition_failed";
+  // Меняющие вызовы ядра: закрывают открытый вектор (решение 39). runScheduler сервера зовёт tick
+  const CLOSERS = new Set(["run", "runAll", "merge", "create", "tick", "startTimer", "stopTimer", "pauseTimer", "resumeTimer"]);
 
   // Канонический JSON, sha256, ключ пула, аргументы ленты — общие с векторами CEL
   const C = () => {
@@ -145,8 +148,9 @@
     const skipped = { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 };
     // Идёт записываемый вызов ядра: в него пишут функции ctx любого обёрнутого ядра
     let cur = null;
-    // Открытый вектор, который закрывает следующий вызов любого обёрнутого ядра или take() (решение 39):
-    // {close()}. Задача 5 (merge) кладёт сюда вектор объединения; run, runAll, create закрываются на возврате
+    // Открытый вектор, который закрывает следующий меняющий вызов любого обёрнутого ядра (CLOSERS) или take()
+    // (решение 39): {close()}. Задача 5 (merge) кладёт сюда вектор объединения; run, runAll, create закрываются
+    // на возврате
     let pending = null;
     function settle() {
       if (!pending) return;
@@ -316,17 +320,19 @@
         journalAtNow: Object.fromEntries(before.filter((s) => s.atNow.length).map((s) => [s.ev.id, s.atNow])),
       };
       const call = { now, tape: [], first: new Map(), repeat: 0, scenario: [], after: [], nowChanged: false, worldError: false, nested: false };
-      cur = call;
-      const f = frame();
+      let f = null;
       let r;
       let closed;
       try {
+        cur = call;
+        f = frame();
         r = fn();
       } catch (e) {
         if (call.worldError) skipped.worldError++;
         throw e;
       } finally {
-        closed = f.close();
+        // Кадр не открылся — вызова не было; cur сбрасывается всегда, иначе следующие вызовы шли бы как вложенные
+        closed = f ? f.close() : { tape: [], tapeRepeat: 0 };
         cur = null;
       }
       if (call.worldError) {
@@ -404,17 +410,20 @@
       const out = {};
       Object.keys(engine).forEach((k) => {
         const v = engine[k];
-        // Любой обёрнутый вызов сначала закрывает открытый вектор (решение 39)
+        // Меняющий вызов сначала закрывает открытый вектор (решение 39); остальное — как есть
         out[k] =
-          typeof v !== "function"
-            ? v
-            : (...a) => {
+          typeof v === "function" && CLOSERS.has(k)
+            ? (...a) => {
                 settle();
                 return v(...a);
-              };
+              }
+            : v;
       });
       out.run = (id, ev, form, opts) => {
-        if (!ev) return engine.run(id, ev, form, opts);
+        if (!ev) {
+          settle();
+          return engine.run(id, ev, form, opts);
+        }
         return record(
           engine,
           ctx,
@@ -475,6 +484,12 @@
       create(ctx) {
         if (!ctx || !reference_(ctx.workflow)) return create(ctx);
         return wrap(create(wrapCtx(ctx)), ctx);
+      },
+      // Открытый вектор {close()} — его закроет следующий меняющий вызов или take(). Для тестов; задача 5 кладёт
+      // вектор объединения в pending сама
+      hold(p) {
+        settle();
+        pending = p;
       },
       // Записанное: отбор select, пул — только инциденты оставленных векторов
       take() {

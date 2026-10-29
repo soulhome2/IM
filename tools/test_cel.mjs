@@ -795,6 +795,157 @@ test("запись переходов не меняет запись CEL: те �
   ok(a.out === b.out, "векторы CEL с обёрткой ядра другие");
 });
 
+test("открытый вектор закрывают только меняющие вызовы ядра и take(); чтение — насквозь", () => {
+  const { rec, engine, events, mk } = trEngine();
+  const x = mk("x");
+  events.push(x);
+  let closed = 0;
+  const hold = () => rec.hold({ close: () => closed++ });
+  hold();
+  engine.isDone(x);
+  engine.availability("claim", x);
+  engine.badge(x);
+  engine.actions(x, "card");
+  engine.celView(x);
+  engine.queueFilters(x);
+  ok(closed === 0, `чтение закрыло вектор: ${closed}`);
+  engine.tick();
+  ok(closed === 1, `tick не закрыл: ${closed}`);
+  hold();
+  engine.run("claim", null, {}, {}); // run без инцидента — тоже меняющий вызов
+  ok(closed === 2, `run без инцидента не закрыл: ${closed}`);
+  hold();
+  engine.startTimer(x, "reaction", "start");
+  ok(closed === 3, `startTimer не закрыл: ${closed}`);
+  hold();
+  rec.take();
+  ok(closed === 4, `take не закрыл: ${closed}`);
+  rec.take();
+  ok(closed === 4, "закрыт дважды");
+});
+
+test("кадр не открылся — вызова нет, следующий вызов записывается (не как вложенный)", () => {
+  let n = 0;
+  const frame = () => {
+    if (n++ === 0) throw new Error("кадр сломан");
+    return { close: () => ({ tape: [], tapeRepeat: 0 }) };
+  };
+  const { rec, engine, events, mk } = trEngine({ frame });
+  const x = mk("x");
+  events.push(x);
+  ok(throws(() => engine.run("claim", x, {}, {})), "исключение кадра не проброшено");
+  ok(x.state === "new", "ядро вызвано без кадра");
+  ok(engine.run("claim", x, {}, {}).ok, "claim");
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1 && JSON.stringify(skipped) === ZERO_SKIPPED, `векторов ${vs.length}, skipped ${JSON.stringify(skipped)}`);
+});
+
+test("journalAtNow и once: запись в момент now до вызова — во входе, с новыми подстановками — в ожидаемом", () => {
+  const C = vectors();
+  const w = machine({ effects: [probeEffect("_once", [{ world: "log", args: { incident: "incident", key: "'k.once'", vars: "{'n': 2}", once: "true" } }])] });
+  w.transitions.find((t) => t.id === "claim").effects.push({ fn: "_once", args: [] });
+  const { rec, engine, events, mk } = trEngine({ machineW: w });
+  const x = mk("x");
+  x.log.push({ at: 900, whoId: "me", k: "k.once", v: { n: 0 } }, { at: 1000, whoId: "dispatcher", k: "k.once", v: { n: 1 } });
+  events.push(x);
+  ok(engine.run("claim", x, {}, {}).ok, "claim");
+  const [v] = rec.take().vectors;
+  ok(C.canonical(v.journalAtNow) === '{"x":[{"actor":"dispatcher","at":1000,"kind":"system","templateKey":"k.once","vars":{"n":1}}]}', `вход: ${C.canonical(v.journalAtNow)}`);
+  const o = v.expect.ok;
+  ok(C.canonical(o.journalAtNow) === '{"x":[{"actor":"dispatcher","at":1000,"kind":"system","templateKey":"k.once","vars":{"n":2}}]}', `после: ${C.canonical(o.journalAtNow)}`);
+  // Заменённая запись — не в хвосте журнала
+  ok(o.journal.x.map((e) => e.templateKey).join() === "workflow.journal.claim", `хвост: ${C.canonical(o.journal)}`);
+});
+
+test("canceled: ручной переход в окне после дедлайна отменяет переход по таймеру", () => {
+  const C = vectors();
+  const w = structuredClone(W);
+  w.escalation.enabled = false;
+  const { rec, engine, events, mk } = trEngine({ machineW: w });
+  const x = mk("x");
+  Object.assign(x, { reactionDueAt: 900, reactionLeftMs: null, firedTimers: {} });
+  events.push(x);
+  const r = engine.run("claim", x, {}, {});
+  ok(r.ok && r.canceled === "reaction_overdue", `claim: ${JSON.stringify(r)}`);
+  const o = rec.take().vectors[0].expect.ok;
+  ok(C.canonical(o.canceled) === '{"x":"reaction_overdue"}', `canceled: ${C.canonical(o.canceled)}`);
+  ok(o.journal.x[0].templateKey === "workflow.journal.timer_overridden" && o.journal.x[0].actor === "dispatcher" && o.journal.x[0].kind === "system", `журнал: ${C.canonical(o.journal)}`);
+});
+
+test("лента: transferTargets (варианты поля) и ctx.shareAnswers; after: null — \"\"", () => {
+  const C = vectors();
+  const w = machine({
+    effects: [
+      probeEffect("_after", [
+        { world: "notify", args: { incident: "incident", to: "'lead'", recipients: "['a']", alert: "false" } },
+        { world: "evict", args: { incident: "incident" } },
+        { world: "shareAnswers", args: { from: "incident", to: "form.primaryId" } },
+      ]),
+    ],
+  });
+  const form = w.forms.find((f) => f.fields.some((x) => x.source === "transferTargets"));
+  const field = form.fields.find((x) => x.source === "transferTargets");
+  w.transitions.push({ id: "_probe", trigger: "manual", from: ["new"], to: null, guards: [], effects: [{ fn: "_after", args: [] }], labelKey: "x", ui: { surface: [], navigate: null } });
+  w.transitions.push({ id: "_probeForm", trigger: "manual", from: ["new"], to: null, guards: [], effects: [], form: form.id, labelKey: "x", ui: { surface: [], navigate: null } });
+  let delivered = 0;
+  const { rec, engine, events, mk } = trEngine({
+    machineW: w,
+    ctx: { me: null, shareAnswers: () => 1, deliver: () => delivered++, onEvict() {}, transferTargets: () => [{ id: "a", label: "A" }, { id: "g1", label: "G" }] },
+  });
+  const x = mk("x");
+  const y = mk("y");
+  events.push(x, y);
+  ok(engine.run("_probe", x, { primaryId: "y" }, {}).ok, "_probe");
+  engine.run("_probeForm", x, { [field.name]: "a" }, {});
+  const vs = rec.take().vectors;
+  ok(vs.length === 2, `векторов ${vs.length}`);
+  const [p, f] = vs;
+  ok(p.me === "", `me: ${p.me}`);
+  const o = p.expect.ok;
+  ok(delivered === 1, "deliver сервера не вызван");
+  ok(
+    C.canonical(o.after) ===
+      '[{"about":"","action":"notify","actor":"","alert":false,"incident":{"$incident":"x"},"recipients":["a"],"transitionId":"_probe"},{"action":"evict","by":"","incident":{"$incident":"x"},"transitionId":"_probe","who":""}]',
+    `after: ${C.canonical(o.after)}`
+  );
+  ok(C.canonical(o.scenario) === '[{"action":"shareAnswers","from":{"$incident":"x"},"to":{"$incident":"y"}}]', `scenario: ${C.canonical(o.scenario)}`);
+  ok(p.world.some((e) => C.canonical(e) === '{"args":[{"$incident":"x"},{"$incident":"y"},1000],"fn":"ctx.shareAnswers","out":1}'), `лента: ${C.canonical(p.world)}`);
+  ok(C.canonical(o.external) === '{"x":[{"fn":"notify","target":"lead"}]}', `external: ${C.canonical(o.external)}`);
+  ok(f.world.some((e) => C.canonical(e) === '{"args":[],"fn":"transferTargets","out":["a","g1"]}'), `лента формы: ${C.canonical(f.world)}`);
+});
+
+test("outsideEngine: отказ, который что-то изменил; ядро внутри ядра", () => {
+  let x;
+  const { rec, engine, events, mk } = trEngine({
+    ctx: {
+      can: () => {
+        x.priority = 99;
+        return false;
+      },
+    },
+  });
+  x = mk("x");
+  events.push(x);
+  ok(!engine.run("claim", x, {}, {}).ok, "claim без права прошёл");
+  const s1 = rec.take();
+  ok(s1.vectors.length === 0 && s1.skipped.outsideEngine === 1, `отказ с изменением: ${JSON.stringify(s1.skipped)}, векторов ${s1.vectors.length}`);
+  // Ядро внутри ядра: setCursor сервера зовёт runAll — внешнего вектора нет, внутренний идёт насквозь
+  let inner = null;
+  const t = trEngine({ ctx: { setCursor: () => (inner = t.engine.runAll("detach", [], {}, {})) } });
+  const z = t.mk("z");
+  t.events.push(z);
+  ok(t.engine.run("claim", z, {}, {}).ok && inner && inner.ok, "claim или вложенный runAll");
+  const s2 = t.rec.take();
+  ok(s2.vectors.length === 0 && s2.skipped.outsideEngine === 1, `вложенный: ${JSON.stringify(s2.skipped)}, векторов ${s2.vectors.length}`);
+  // Следующий вызов — снова записывается
+  const z2 = t.mk("z2");
+  t.events.length = 0;
+  t.events.push(z2);
+  inner = null;
+  t.engine.runAll("detach", [], {}, {});
+  ok(t.rec.take().vectors.length === 1, "после вложенного запись не идёт");
+});
+
 test("lib.kindOf: dispatcher и system — system, остальные — transition", () => {
   const lib = tvectors();
   ok(lib.kindOf("dispatcher") === "system" && lib.kindOf("system") === "system", "system");
