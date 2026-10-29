@@ -108,7 +108,7 @@ make test-db-up        # из группы docker: sg docker -c "make test-db-up
 make test-local        # go test ./... с IM_TEST_DB_URL
 ```
 
-**Контракт и генерация.** `make vendor-operator-contract` копирует контракт и машину из этого репозитория в `api/im/operator/` (коммит-источник — в файле `SOURCE`). `make gen-api-operator` перегенерирует пакет `operatorgen` форком `oapi-codegen` v0.11.0 без сети; `GEN_GOPROXY` указывает на файловый прокси (`file://~/go/offline-proxy`), `GOTOOLCHAIN=local`.
+**Контракт и генерация.** `make vendor-operator-contract` копирует контракт и машину из этого репозитория в `api/im/operator/` (коммит-источник — в файле `SOURCE`). `make gen-api-operator` перегенерирует пакет `operatorgen` форком `oapi-codegen` v0.11.0 без сети; `GOTOOLCHAIN=local`. Умолчание `GEN_GOPROXY` — корпоративный прокси, без VPN его не достать, а `~` в `file://` не раскрывается. Установка генератора без VPN: `source ~/go/offline-env.sh && make get-generator GEN_GOPROXY="$GOPROXY"` (в `$GOPROXY` уже раскрытый путь файлового прокси). Если генератор от форка уже стоит, `make get-generator` ничего не переустанавливает.
 
 **Каталог и права.** Сервер при старте отправляет в облако ровно 14 прав машины (`PUT /ac/v1/global-permissions/catalog`; `filter.edit` и `track` убраны, `assign` → `assign.own`). Стенд после перезапуска сервера: процесс жив — облако каталог приняло (иначе сервер выходит при старте, причина — в конце `im-server.log`); `GET /operator/session` без токена → 401.
 

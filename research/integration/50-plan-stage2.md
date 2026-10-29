@@ -77,32 +77,32 @@
 **Interfaces:**
 - Produces: `IM_TEST_DB_URL` — если задана, `Config.DBURL` берётся из неё. Цели `make test-db-up`, `make test-db-down`, `make test-local`. Переменные Makefile: `TEST_DB_CONTAINER ?= im-test-db`, `TEST_DB_PORT ?= 55432`, `TEST_DB_URL ?= postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable`.
 
-- [ ] **Step 1: Убедиться, что тесты с базой сейчас не идут**
+- [x] **Step 1: Убедиться, что тесты с базой сейчас не идут**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./internal/im/handler/test/ 2>&1 | tail -5`
 Expected: FAIL — ошибка подключения к `db:5432` (хост не найден).
 
-- [ ] **Step 2: Подмена адреса базы в `setupTesting`**
+- [x] **Step 2: Подмена адреса базы в `setupTesting`**
 
 После `configuring.GetConfig(...)`: если `os.Getenv("IM_TEST_DB_URL") != ""` — `Config.DBURL` = это значение. Остальное не трогать.
 
-- [ ] **Step 3: Цели Makefile**
+- [x] **Step 3: Цели Makefile**
 
 - `test-db-up`: `docker start $(TEST_DB_CONTAINER)` или, если контейнера нет, `docker run -d --name $(TEST_DB_CONTAINER) -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1:$(TEST_DB_PORT):5432 postgres:9.6` (как `prepare-test`, образ уже загружен; порт только на `127.0.0.1` — машина видна в домашней сети); затем ждать `docker exec $(TEST_DB_CONTAINER) pg_isready -U postgres` (до 30 с).
 - `test-db-down`: `docker rm -f $(TEST_DB_CONTAINER)`.
 - `test-local`: `IM_TEST_DB_URL='$(TEST_DB_URL)' go test ./...` — без `GOPROXY` из Makefile; окружение Go — от вызывающего.
 
-- [ ] **Step 4: Прогнать все тесты — исходная точка**
+- [x] **Step 4: Прогнать все тесты — исходная точка**
 
 Run: `cd ~/Work/incident-manager-server && sg docker -c "make test-db-up" && source ~/go/offline-env.sh && make test-local 2>&1 | tail -30`
 Expected: PASS всех пакетов. Если какой-то тест падает и без наших правок — **не чинить**: записать имя и причину в отчёт задачи и спросить пользователя, идти ли дальше.
 
-- [ ] **Step 5: golangci-lint из модулей**
+- [x] **Step 5: golangci-lint из модулей**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && GOTOOLCHAIN=go1.27.1 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 && golangci-lint version && golangci-lint run ./... 2>&1 | tail -5`
 Expected: версия 2.14.0, собранная go1.27.1; `golangci-lint run` — без замечаний (или записать замечания, которые были до нас). Не поставился (нет сети до proxy.golang.org) — дальше `go vet ./...`, lint — в CI; так и записать в отчёт.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 2: тесты сервера локально — Postgres 9.6 в Docker и IM_TEST_DB_URL».
 Run: `git add Makefile internal/im/handler/test/common.go && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -127,7 +127,7 @@ Run: `git add Makefile internal/im/handler/test/common.go && git commit -q -F .g
   - пакет `operatorgen`: всё, что генерирует форк (`ServerInterface`, `RegisterHandlersWithOptions(router gin.IRouter, auth AuthMiddleWares, si ServerInterface, opts GinServerOptions)`, `GinServerOptions{BaseURL, Middlewares, ErrorHandler}`, `Problem`, `ProblemCode*`, `OperatorSession`, `OperatorSessionAgentStateOffline`, …);
   - `type BearerAuth gin.HandlerFunc` с методом `bearerAuthAuthMiddleWare(c *gin.Context)` — вызывает саму функцию.
 
-- [ ] **Step 1: Переменные и цели Makefile**
+- [x] **Step 1: Переменные и цели Makefile**
 
 - `IM_REPO ?= /mnt/hgfs/VmWareShared/soul2home/IM`, `GEN_GOPROXY ?= http://npm.itvgroup.ru:3000`, `OAPI_CODEGEN ?= oapi-codegen`, `OP_GEN_DIR := internal/im/handler/operator/generated`.
 - `get-generator`: `$(OAPI_CODEGEN) --version || GOSUMDB=off GOPROXY=$(GEN_GOPROXY) go install src.axxonsoft.dev/bitbucket/proj/oapi-codegen/cmd/oapi-codegen@v0.11.0`. Локально: `make get-generator GEN_GOPROXY="$GOPROXY"` после `source ~/go/offline-env.sh` (проверено: ставится из `~/go/offline-proxy` без сети).
@@ -135,16 +135,16 @@ Run: `git add Makefile internal/im/handler/test/common.go && git commit -q -F .g
 - `gen-api-operator`: `rm -f` ровно четырёх файлов `$(OP_GEN_DIR)/{server,spec,types,client}.go` (не `*.go` — иначе пропадут адаптер и тест), затем четыре вызова `$(OAPI_CODEGEN) -package operatorgen` с теми же `-generate`, что у `gen-api-im` (`custom-gin,custom-strict-server` → `server.go`; `spec`; `types`; `client`), источник `api/im/operator/openapi.v30.json`.
 - `gen: get-generator gen-api-im gen-api-operator`.
 
-- [ ] **Step 2: Копия и генерация**
+- [x] **Step 2: Копия и генерация**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && make get-generator GEN_GOPROXY="$GOPROXY" && make vendor-operator-contract && make gen-api-operator && cat api/im/operator/SOURCE`
 Expected: четыре файла в `$(OP_GEN_DIR)` с `package operatorgen`, в `SOURCE` — короткий хэш IM.
 
-- [ ] **Step 3: `embed.go` и `auth_adapter.go`**
+- [x] **Step 3: `embed.go` и `auth_adapter.go`**
 
 `embed.go`: `package operatorapi`, четыре `//go:embed`. `auth_adapter.go`: шапка «Hand-written, not generated: gen-api-operator removes only server/spec/types/client.go», тип `BearerAuth` и метод. 
 
-- [ ] **Step 4: Тест копии**
+- [x] **Step 4: Тест копии**
 
 ```go
 // operations — отсортированные "METHOD /path" из JSON контракта
@@ -163,12 +163,12 @@ func TestBearerAuthAdapterCallsHandler(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Тест проходит, генерация повторяема**
+- [x] **Step 5: Тест проходит, генерация повторяема**
 
 Run: `go test ./internal/im/handler/operator/generated/ && go build ./... && sha256sum internal/im/handler/operator/generated/*.go > .git/gen.sha256 && make gen-api-operator && sha256sum -c --quiet .git/gen.sha256 && echo same`
 Expected: PASS, сборка без ошибок, `same` (повторная генерация даёт те же файлы, адаптер и тест на месте).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 2: копия контракта оператора из IM и пакет operatorgen, генерация без сети».
 Run: `git add Makefile api/im/operator internal/im/handler/operator/generated && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -210,7 +210,7 @@ Run: `git add Makefile api/im/operator internal/im/handler/operator/generated &&
 
 Дерево: `incident_manager` → `incident_manager.administration` (`manage`), `incident_manager.incidents` (12 прав `incidents.*` в порядке машины), новая группа `incident_manager.agent` — «Operator state» / «Состояние оператора» (`agent.not_ready.use`). У каждого права `i18n.<lang>.description` — текст `labelKey` права машины из `strings/<lang>.json` (BACKEND.md «Каталог прав»: подпись из каталога строк); `title` — короткий, из таблицы, чтобы список прав в ролях облака читался.
 
-- [ ] **Step 1: Тесты против копии машины и правил облака**
+- [x] **Step 1: Тесты против копии машины и правил облака**
 
 ```go
 func TestCatalogMatchesMachinePermissions(t *testing.T) {
@@ -250,21 +250,21 @@ func TestParseExternalPermissionsDropsUnknown(t *testing.T) {
 
 В `TestPermissionCatalog`: групп 3, в `administration` 1 право, в `incidents` 12, в `agent` 1.
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/model/ -run 'Catalog|Machine|UUID|ParseExternal' -v 2>&1 | tail -20`
 Expected: FAIL — не собирается (`MachinePermissions`, `PermIncidentsAssignOwn` не объявлены).
 
-- [ ] **Step 3: Константы, `AllPermissionsInfo`, `MachinePermissions`, дерево и `Description` по таблице**
+- [x] **Step 3: Константы, `AllPermissionsInfo`, `MachinePermissions`, дерево и `Description` по таблице**
 
 Описания `PermissionInfo.Description` (англ., коротко, как сейчас) — для новых прав по смыслу `labelKey`. Тексты `i18n.description` — дословно из `strings/en.json` и `strings/ru.json` копии.
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/model/ -v 2>&1 | tail -20 && go build ./...`
 Expected: PASS; сборка без ошибок (`PermIncidentsAssign` больше нигде не используется).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 2: каталог прав сервера — 14 прав машины, assign.own с прежним UUID, без filter.edit и track».
 Run: `git add internal/im/model && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -291,7 +291,7 @@ Run: `git add internal/im/model && git commit -q -F .git/COMMIT_MSG_STAGE2`
   - `func WritePreconditionRequired(c *gin.Context)` — 428, `PRECONDITION_REQUIRED`, `messageKey` `workflow.error.precondition_required`;
   - `func WriteVersionConflict(c *gin.Context, current any)` — 412, `VERSION_CONFLICT`, `messageKey` `workflow.error.version_conflict`, поле `current`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestCheckIfMatch(t *testing.T) {
@@ -331,21 +331,21 @@ func TestWriteVersionConflict(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/handler/operator/ -v 2>&1 | tail -10`
 Expected: FAIL — не собирается.
 
-- [ ] **Step 3: Реализация `problem.go` и `version.go`**
+- [x] **Step 3: Реализация `problem.go` и `version.go`**
 
 `CheckIfMatch`: пустая строка после `TrimSpace` → `ErrPreconditionRequired`; иначе части через `,`, у каждой `TrimSpace` и `TrimPrefix("W/")`; `*` или `ETag(version)` → `nil`; иначе `ErrVersionConflict`. `message` — короткий англ. текст (язык оператора — этап 5).
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/handler/operator/ -v 2>&1 | tail -10`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 2: ошибки problem+json и версия записи — ETag, If-Match, 412 и 428».
 Run: `git add internal/im/handler/operator/*.go && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -380,7 +380,7 @@ Strict-обработчик (`NewStrictHandler`) в этапе 2 **не испо
   - `func (h *Handler) notImplemented(c *gin.Context)` — 501 `NOT_IMPLEMENTED`, `details` = `{"method": c.Request.Method, "route": c.FullPath()}`; все методы `ServerInterface`, включая `GetOperatorSession`, пока вызывают его;
   - `handler.GetHandler(handler *v1.Handler, logger)` — подпись прежняя; внутри: `operator.Register(engine, operator.NewHandler(handler, logger), model.BasePath)` и `engine.NoRoute(operator.NoRoute(model.BasePath))`.
 
-- [ ] **Step 1: Тесты в процессе (без базы)**
+- [x] **Step 1: Тесты в процессе (без базы)**
 
 Помощник: `newTestEngine(t, users map[string]*model.User) *gin.Engine` — `gin.New()`, `Register(engine, NewHandler(fakeAuth{users}, logrus.New()), "/api/v1/im-backend")`, `engine.NoRoute(NoRoute(...))`; `fakeAuth` берёт токен из `Authorization: Bearer <t>`, нет такого — ошибка. `do(engine, method, path, token, ifMatch, body) *httptest.ResponseRecorder`.
 
@@ -417,7 +417,7 @@ func TestUnknownPathOutsideOperatorKeepsGinDefault(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Тест с базой — оба пакета на одном gin**
+- [x] **Step 2: Тест с базой — оба пакета на одном gin**
 
 ```go
 func TestOperatorRoutesMountedNextToV1(t *testing.T) {
@@ -431,21 +431,21 @@ func TestOldRoutesKeepKeyErrors(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Тесты падают**
+- [x] **Step 3: Тесты падают**
 
 Run: `go test ./internal/im/handler/operator/ 2>&1 | tail -5`
 Expected: FAIL — не собирается (`Register`, `NewHandler` не объявлены).
 
-- [ ] **Step 4: Реализация**
+- [x] **Step 4: Реализация**
 
 Файлы и подписи — по Interfaces. Методы `stubs.go` — с подписями ровно как в `operatorgen.ServerInterface` (параметры пути и `…Params` не используются). `cmd/im/main.go` не меняется.
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `go test ./internal/im/handler/operator/... -v 2>&1 | tail -20 && IM_TEST_DB_URL='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' go test ./internal/im/handler/test/ 2>&1 | tail -5 && go vet ./...`
 Expected: PASS; старые тесты обработчиков тоже PASS. Если golangci-lint есть — `golangci-lint run ./...` без замечаний.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 2: операторский API на общем gin — вход через облако, 501, ошибки параметров 400 и 428, 404 problem+json».
 Run: `git add .golangci.yml internal/im/handler && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -465,7 +465,7 @@ Run: `git add .golangci.yml internal/im/handler && git commit -q -F .git/COMMIT_
 - Consumes: `MachinePermissions` (задача 3), `userFromContext` (задача 5).
 - Produces: `func (p Permissions) MachineKeys() []string` — ключи машины в порядке `MachinePermissions`, повторы один раз, незнакомые пропускаются, результат не `nil`; `func (h *Handler) GetOperatorSession(c *gin.Context)` — 200, `application/json`, `operatorgen.OperatorSession{Operator.Guid: strconv.FormatInt(user.ID, 10), Operator.Name: user.Name (если не пусто), Permissions: user.Permissions.MachineKeys(), AgentState: OperatorSessionAgentStateOffline}`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestMachineKeys(t *testing.T) {
@@ -499,19 +499,19 @@ func TestSessionManageOnly(t *testing.T) {
 
 В `TestEveryContractOperationIsRouted`: `GET /operator/session` → 200, остальные 49 → 501.
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/model/ ./internal/im/handler/operator/ -run 'MachineKeys|Session|EveryContract' 2>&1 | tail -10`
 Expected: FAIL — `MachineKeys` не объявлен.
 
-- [ ] **Step 3: `MachineKeys` и `GetOperatorSession`**
+- [x] **Step 3: `MachineKeys` и `GetOperatorSession`**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./internal/im/model/ ./internal/im/handler/operator/... 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 2: GET /operator/session — права пользователя ключами машины».
 Run: `git add internal/im/model internal/im/handler/operator && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -539,7 +539,7 @@ Run: `git add internal/im/model internal/im/handler/operator && git commit -q -F
 - Consumes: `MachinePermissions` (задача 3).
 - Produces: `Has(perm)` — точное совпадение; `func (p Permissions) HasAnyMachinePermission() bool`; `func (c *Client) GetIncident(ctx context.Context, authToken string, guid uuid.UUID) (*model.Incident, error)` — порядок аргументов как у `GetIncidentRule`.
 
-- [ ] **Step 1: Тесты модели**
+- [x] **Step 1: Тесты модели**
 
 ```go
 func TestHasIsExact(t *testing.T) {
@@ -555,7 +555,7 @@ func TestHasAnyMachinePermission(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Тест маршрутов (с базой)**
+- [x] **Step 2: Тест маршрутов (с базой)**
 
 `TestOldIncidentRoutesPermissions` — подготовка как в `TestPermissions` (агент, тип, источник, сценарий, приоритет, правило с условием на источник, событие → один инцидент, правило доступа группы 1 на источник). Пользователи в `FakeCloudUsers` (ID, не занятые другими тестами):
 
@@ -568,21 +568,21 @@ func TestHasAnyMachinePermission(t *testing.T) {
 
 Прежний `TestPermissions` (оператор с `take.any`) должен проходить без правок.
 
-- [ ] **Step 3: Тесты падают**
+- [x] **Step 3: Тесты падают**
 
 Run: `go test ./internal/im/model/ -run 'HasIsExact|HasAny' 2>&1 | tail -5 && IM_TEST_DB_URL='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' go test ./internal/im/handler/test/ -run TestOldIncidentRoutesPermissions 2>&1 | tail -10`
 Expected: FAIL — `HasAnyMachinePermission` не объявлен; после объявления заглушкой — пользователь 12 получает 403.
 
-- [ ] **Step 4: Реализация**
+- [x] **Step 4: Реализация**
 
 `Has` — `slices.Contains(p, perm)`. `HasAnyMachinePermission` — есть ли среди `p` хоть одно `MachinePermissions[i].Cloud`. В `GetIncidents` и `GetIncident` первая проверка — `HasAnyMachinePermission`, дальше прежний код (`IsManager` → всё, иначе ACL).
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `source ~/go/offline-env.sh && make test-local 2>&1 | tail -15` (контейнер `im-test-db` из задачи 1 запущен)
 Expected: PASS всех пакетов.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 2: права старых маршрутов инцидентов — любое право МИ и правила доступа; manage не надмножество».
 Run: `git add internal/im/model internal/im/appservice/incident internal/im/handler/v1/incident_client.go internal/im/handler/test/permission_test.go && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -610,7 +610,7 @@ Run: `git add internal/im/model internal/im/appservice/incident internal/im/hand
 
 Правила `Do`: пустой `key.Value` — `run` без запоминания; ключ уже есть и не истёк — копия ответа, `replayed = true`, `run` не вызывается; ключ сейчас выполняется — ждать конца (или `ctx.Done()` → `ctx.Err()`); `Status >= 500` — не запоминать; паника в `run` — ключ освобождается, ждущие получают `ErrAborted`, паника идёт дальше; при каждом вызове истёкшие записи удаляются; наружу — копии (`Header.Clone()`, копия `Body`).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Часы — `fakeClock` с `Advance(d)`; `run` считает вызовы.
 
@@ -627,21 +627,21 @@ func TestDo_ReturnedCopyIsIndependent(t *testing.T)    // правка Body/Head
 func TestDo_ExpiredEntriesSwept(t *testing.T)          // после +10m и любого Do во внутренней карте нет старого ключа
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/handler/operator/idempotency/ 2>&1 | tail -5`
 Expected: FAIL — не собирается.
 
-- [ ] **Step 3: Реализация `MemoryStore`**
+- [x] **Step 3: Реализация `MemoryStore`**
 
 Карта `map[Key]*entry` под `sync.Mutex`; `entry` — готовый ответ со сроком или канал `done` для ждущих.
 
-- [ ] **Step 4: Тесты проходят, гонок нет**
+- [x] **Step 4: Тесты проходят, гонок нет**
 
 Run: `go test -race -count=3 ./internal/im/handler/operator/idempotency/ -v 2>&1 | tail -15`
 Expected: PASS, без `DATA RACE`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 2: хранилище ключей повтора в памяти — 10 минут, один запуск на ключ; подключение — этап 4».
 Run: `git add internal/im/handler/operator/idempotency && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -664,18 +664,18 @@ Run: `git add internal/im/handler/operator/idempotency && git commit -q -F .git/
 **Interfaces:**
 - Consumes: всё из задач 2–8.
 
-- [ ] **Step 1: Сервер с новым каталогом**
+- [x] **Step 1: Сервер с новым каталогом**
 
 Run: `pkill -f '^/home/slava/Work/stand/bin/im$'; ~/Work/stand/run-im-server.sh >> ~/Work/stand/im-server.log 2>&1` (в фоне, `run_in_background`), через 10 с — `pgrep -f '^/home/slava/Work/stand/bin/im$' && curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/v1/im-backend/operator/session`
 Expected: процесс жив — значит, облако приняло каталог (иначе сервер выходит при старте; причина — в конце `im-server.log`); без токена — `401`.
 
-- [ ] **Step 2: 14 прав группе `cloud-admin`**
+- [x] **Step 2: 14 прав группе `cloud-admin`**
 
 `grant-im-permissions.sh` (python внутри скрипта): вход `test@axxonnet.test` (`POST /api/v3/ac-backend/users/login`), `GET /api/v3/ac-backend/roles/global`, у роли `cloud-admin` — список прав без `incident_manager.*` плюс 14 имён из `api/im/operator/workflow_schema.v1.json` (`permissions[].cloud`), `PATCH /api/v3/ac-backend/roles/global` — массив ролей целиком (список прав заменяется, [30, шаг 2.4](30-local-stand.md#шаг-2-сервер-ми-на-стенде)).
 Run: `~/Work/stand/grant-im-permissions.sh`
 Expected: `PATCH` → 200; `GET /api/v3/ac-backend/me` с токеном показывает в `incident_manager` все 14 прав и не показывает `filter.edit` и `track`.
 
-- [ ] **Step 3: Скрипт проверки API**
+- [x] **Step 3: Скрипт проверки API**
 
 `check-operator-api.sh`: токен — входом, как выше; каждая проверка — строка `OK|FAIL <что>`, код выхода — число FAIL.
 
@@ -693,7 +693,7 @@ Expected: `PATCH` → 200; `GET /api/v3/ac-backend/me` с токеном пок�
 Run: `~/Work/stand/check-operator-api.sh`
 Expected: все строки `OK`, код выхода 0.
 
-- [ ] **Step 4: `tests/api.html` против стенда**
+- [x] **Step 4: `tests/api.html` против стенда**
 
 `sync-im-proto.sh`: `rsync -a --delete` каталогов `prototype/` и `tests/` из `/mnt/hgfs/VmWareShared/soul2home/IM` в `~/Work/axxoncloudgo/tools/compose/ui/im-proto/`, права `644`/`755`.
 Run: `~/Work/stand/sync-im-proto.sh && D=$(mktemp -d) && google-chrome --headless=new --disable-gpu --no-first-run --ignore-certificate-errors --user-data-dir=$D --virtual-time-budget=60000 --dump-dom "https://axxonnet.test/dev-login.html?to=/im-proto/tests/api.html?api=https://axxonnet.test/api/v1/im-backend" | grep -o 'Тестовый стенд доступен — [^<]*'`
@@ -701,11 +701,11 @@ Expected (этап 1 сделан): `Тестовый стенд доступе�
 
 Ручная проверка (то же глазами): открыть в браузере `https://axxonnet.test/dev-login.html?to=/im-proto/tests/api.html?api=https://axxonnet.test/api/v1/im-backend` — на странице одна строка FAIL с `→ 501`.
 
-- [ ] **Step 5: ADR сервера**
+- [x] **Step 5: ADR сервера**
 
 `docs/adr/002-operator-api-package.md` (англ., по образцу ADR-001): второй пакет из копии контракта IM в том же процессе; `vendor-operator-contract` и `gen-api-operator`, офлайн-генератор (`GEN_GOPROXY`); адаптер `bearerAuth` и почему не переименование схемы; `problem+json` только на `/operator/*` и `/test/*`, свои коды 401/400/501; strict-обработчик не используется до настоящих тел (`-templates`); 412/428; каталог = 14 прав машины, UUID; правило старых маршрутов; идемпотентность — механизм сейчас, подключение в этапе 4.
 
-- [ ] **Step 6: Документы IM**
+- [x] **Step 6: Документы IM**
 
 Перед правкой — `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; есть новое — сказать пользователю.
 - `30-local-stand.md`: новый раздел «Шаг 4: операторский API (этап 2)» — тесты сервера локально (`make test-db-up`, `make test-local`), `make vendor-operator-contract` / `gen-api-operator`, три скрипта стенда и что они проверяют, команда `api.html`; в «Временное на стенде» — копия прототипа `tools/compose/ui/im-proto/` и контейнер `im-test-db`.
@@ -714,12 +714,12 @@ Expected (этап 1 сделан): `Тестовый стенд доступе�
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && python3 tools/check_links.py`
 Expected: без ошибок ссылок.
 
-- [ ] **Step 7: Последний прогон**
+- [x] **Step 7: Последний прогон**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && make test-local 2>&1 | tail -15 && go vet ./... && (golangci-lint run ./... || true)`
 Expected: все тесты PASS, `go vet` чисто; lint — без новых замечаний (или «lint — в CI», если не поставился).
 
-- [ ] **Step 8: Commit (два репозитория)**
+- [x] **Step 8: Commit (два репозитория)**
 
 Сервер — сообщение «Этап 2: ADR о пакете операторского API». Run: `git add docs/adr/002-operator-api-package.md && git commit -q -F .git/COMMIT_MSG_STAGE2`
 IM — сообщение «Этап 2 встраивания: проверка операторского API на стенде». Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git add research/integration/30-local-stand.md research/integration/40-plan.md research/integration/50-plan-stage2.md && git commit -q -F .git/COMMIT_MSG_STAGE2`
@@ -755,3 +755,19 @@ IM — сообщение «Этап 2 встраивания: проверка 
 
 - Добавить в `Problem.code` контракта IM коды для 401 и 400 (а 501 — временный и в контракт не нужен)? Сейчас ответ 401 контракта ссылается на `Problem`, а подходящего кода в перечне нет.
 - Этап 1 в IM не закончен: `prototype/api.js` не шлёт `Authorization`. Пока его нет, критерий «`api.html` проходит вход» на стенде не выполнить — только скриптом.
+
+## Итог выполнения (2026-10-29)
+
+| Задача | Коммиты сервера |
+|---|---|
+| 1. Локальный прогон тестов | e95febc |
+| 2. Копия контракта и генерация | ab51c7e, 8687637 |
+| 3. Каталог прав | db39786 |
+| 4. problem+json и версия записи | 227ff76 |
+| 5. Пакет оператора на общем gin | 04d6f90, ccca263 |
+| 6. GET /operator/session | f1e944c |
+| 7. Старые маршруты, Has без надмножества | c4bf418 |
+| 8. Хранилище ключей идемпотентности | 285d3b6, 2f0715f |
+| 9. Проверка на стенде и документы | 57ce47e, 7a43659 (IM: ba1cd66) |
+
+Итоговый просмотр — исправления: d247713 (сервер), IM — коммит этого же изменения.
