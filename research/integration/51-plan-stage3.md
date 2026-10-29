@@ -546,7 +546,9 @@ Run: `git add tools/agent-emulator && git commit -q -F .git/COMMIT_MSG_STAGE3`
 
 **«Как в демо» — по правилам, а не по снимку.** Инциденты `demo.json` — снимок, собранный руками (`$commentRules`): он не следует §14.5. Ожидание ниже посчитано по правилам набора независимой проверкой на Python (ранжирование §14.5 заново, не через Go-код). Расхождения со снимком, о которых говорит `$commentRules`: у событий `…1847` и `…1851` первым идёт медпункт (условие по группе точнее), и номер тревоги — его; у `…1851` медпункт есть; у `…1838` побеждает правило датчика `…0a` (приоритет 100); приоритеты пожаров и проникновений — от правил, а не из снимка. Два события сервер не примет: у типа события на сервере один тип устройства (стенд, шаг 3) — `fire` от камеры (`…1834`) и `intrusion` от тревожной кнопки (`…1843`).
 
-Ожидание: 25 событий → 27 инцидентов, по возрастанию `occurredAt`; «сценарий · приоритет · правило»; номер тревоги — номер первого в строке; номера внутри события подряд, между событиями растут.
+**Итог после задач 9 и 10 (2026-10-29):** принимаются все 27 событий набора, два «пропуска» в таблице ниже больше не пропуски. `…1834` (пожар с камеры «Кухня ресторана», устройство в группе «Торговый центр») даёт `medical · 100 · …09; fire · 75 · …01`, `…1843` — `intrusion · 75 · …02`. Итого 27 событий → 30 инцидентов. Таблица ниже — как была в плане.
+
+Ожидание (по плану, до задач 9 и 10): 25 событий → 27 инцидентов, по возрастанию `occurredAt`; «сценарий · приоритет · правило»; номер тревоги — номер первого в строке; номера внутри события подряд, между событиями растут.
 
 | # | событие | тип | инциденты | | # | событие | тип | инциденты |
 |---|---|---|---|---|---|---|---|---|
@@ -575,31 +577,31 @@ Run: `git add tools/agent-emulator && git commit -q -F .git/COMMIT_MSG_STAGE3`
 **Interfaces:**
 - Consumes: всё из задач 1–7.
 
-- [ ] **Step 1: Копия базы стенда и сервер с миграцией 014**
+- [x] **Step 1: Копия базы стенда и сервер с миграцией 014** (сервер перезапущен контролёром, миграции 014–016 применены; копию базы до миграций не снимали)
 
 Run: `mkdir -p ~/Work/stand/backup && sg docker -c "docker exec \$(docker ps -qf name=ac_db) pg_dump -U im imdb" > ~/Work/stand/backup/imdb-before-014.sql && source ~/go/offline-env.sh && go build -o ~/Work/stand/bin/im ./cmd/im && pkill -f '^/home/slava/Work/stand/bin/im$'; ~/Work/stand/run-im-server.sh >> ~/Work/stand/im-server.log 2>&1` (в фоне), через 10 с — `pgrep -f '^/home/slava/Work/stand/bin/im$' && sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc \"SELECT id FROM im_db_migrations WHERE id LIKE '014%'\""`
 Expected: процесс жив, строка `014_incident_intake.sql`; в `imdb` нет живых дублей пары «событие + сценарий» (запрос из задачи 1, шаг 6).
 
-- [ ] **Step 2: Загрузка демо**
+- [x] **Step 2: Загрузка демо**
 
 `load-demo.sh`: вход `test@axxonnet.test` (как `check-operator-api.sh`) → токен; `agent-emulator sync`; `agent-emulator demo-config --token "$TOKEN" "$@"`.
 Run: `~/Work/stand/load-demo.sh --replace-rules`
 Expected: удалено правило «Стенд: тревога в офисе»; создано 10 правил «Демо: …», 9 сценариев, группы набора; приоритеты 25/50/75/100 есть. Если сервер отверг `script` сценария набора — **стоп, спросить пользователя**.
 
-- [ ] **Step 3: Скрипт проверки очереди**
+- [x] **Step 3: Скрипт проверки очереди**
 
 `check-demo-intake.sh [метка]` (python внутри): guid событий — как `replayEvents` (`uuid5` от `eventGuid` при метке); запрос к `imdb` через `docker exec … psql -tA`: по каждому событию — `events.alarm_number`, `processed`, живые инциденты по `number` с ключом сценария (по имени «Демо: …» → `scenarios.keys`), `priorities.value`, именем правила. Сверка с таблицей выше: те же инциденты в том же порядке, те же приоритеты и правила, номер тревоги = номер первого, номера внутри события подряд, между событиями растут; пропущенные события — нет в `events`. Строки `OK|FAIL`, код выхода — число `FAIL`.
 
-- [ ] **Step 4: Прогон и повтор**
+- [x] **Step 4: Прогон и повтор** (результат: `отправлено 27, пропущено 0`, 30 инцидентов, все `OK`, повтор — `N1 = N2`)
 
 Run: `M=demo-$(date +%s) && ~/Work/stand/bin/agent-emulator replay --run $M; ~/Work/stand/check-demo-intake.sh $M; N1=$(sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc 'SELECT count(*) FROM incidents'"); ~/Work/stand/bin/agent-emulator replay --run $M; N2=$(sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im -d imdb -tAc 'SELECT count(*) FROM incidents'"); echo "$N1 $N2"; ~/Work/stand/bin/agent-emulator event --device 20000000-0001-4000-8000-000000000009 --type intrusion --guid $(python3 -c "import uuid;print(uuid.uuid5(uuid.UUID('70000000-0000-4000-8000-000000001826'),'$M'))") && echo repeat-ok`
 Expected: первый `replay` — `отправлено 25, пропущено 2`; проверка — все `OK`, код 0; второй `replay` — без ошибок, `N1 = N2`; повтор одного события — `repeat-ok` (200, не 500); в `im-server.log` нет `panic`.
 
-- [ ] **Step 5: ADR сервера**
+- [x] **Step 5: ADR сервера**
 
 `docs/adr/003-event-intake.md` (англ., по образцу ADR-002): синхронная обработка в `POST /events` и почему (транзакция события + инцидентов + отметки; повтор через `ON CONFLICT`; без опроса и кэша — нет `nil` от удалённого правила; тот же `Process` для `POST /test/events` этапа 7); `ruleselect` — зеркало определений, замок по хэшу, замена исполнителем CEL в этапе 4; RULE-137 как есть и `422` для агента; `state` — истина, `status_guid` — из таблицы для конфигуратора; номер из `incident_counters`; частичный уникальный индекс и снятие дублей миграцией; `occurred_at` из тела или время приёма; `IM_CUSTOMER_GUID`; что отложено на этапы 4–6.
 
-- [ ] **Step 6: Документы IM**
+- [x] **Step 6: Документы IM**
 
 Перед правкой — `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; есть новое — сказать пользователю.
 - `30-local-stand.md`: «Шаг 5: событие → инцидент (этап 3)» — миграция 014 и копия базы, `load-demo.sh`, `replay --run`, `check-demo-intake.sh`, ожидание (25 → 27, 2 пропуска и почему), повтор; в «Временное на стенде» — `~/Work/stand/backup/`.
@@ -608,12 +610,12 @@ Expected: первый `replay` — `отправлено 25, пропущено
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && python3 tools/check_links.py`
 Expected: без ошибок ссылок.
 
-- [ ] **Step 7: Последний прогон**
+- [x] **Step 7: Последний прогон**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && make test-local 2>&1 | tail -15 && go vet ./... && golangci-lint run ./...`
 Expected: все тесты PASS, `go vet` чисто, lint — 0 замечаний.
 
-- [ ] **Step 8: Commit (два репозитория)**
+- [x] **Step 8: Commit (два репозитория)**
 
 Сервер — «Этап 3: ADR о событии → инциденте». Run: `git add docs/adr/003-event-intake.md && git commit -q -F .git/COMMIT_MSG_STAGE3`
 IM — «Этап 3 встраивания: событие → инцидент на стенде». Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git add research/integration/30-local-stand.md research/integration/40-plan.md research/integration/51-plan-stage3.md && git commit -q -F .git/COMMIT_MSG_STAGE3`
