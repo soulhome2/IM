@@ -223,6 +223,8 @@
     const diffs = [];
     let closeResultLabel = 0;
     const eq = (a, b) => C().canonical(a) === C().canonical(b);
+    // Исключение повтора — расхождение всегда, какой бы ни был expect (и пустой, и битый)
+    if (got && got.thrown != null) return { diffs: ["thrown"], closeResultLabel };
     const exp = vector.expect || {};
     const kind = (x) => (!x ? "" : x.refusal ? "refusal" : "error" in x ? "error" : x.ok ? "ok" : "");
     if (kind(got) !== kind(exp)) return { diffs: [kind(exp)], closeResultLabel };
@@ -303,7 +305,8 @@
   }
   function replayEngine(create, W, me) {
     const state = { events: [], now: 0, after: [], scenario: [] };
-    const world = { tape: [], misses: [] };
+    // used — ключи ленты, на которые мир ответил (неиспользованные записи — только счёт, решение 41)
+    const world = { tape: [], misses: [], used: new Set() };
     let indexed = null;
     let calls = new Map();
     let twice = new Set();
@@ -325,6 +328,7 @@
         world.misses.push(fn);
         throw new Error(`transition-vectors: на ленте ${twice.has(k) ? "два ответа на" : "нет"} ${fn}(${C().canonical(args).slice(1, -1)})`);
       }
+      world.used.add(k);
       return JSON.parse(JSON.stringify(calls.get(k)));
     }
     // Факты cel.world без ref (ref считает исполнитель выражений над списком инцидентов): все — с ленты
@@ -407,27 +411,45 @@
     return writes ? Object.assign(expect, { writes }) : expect;
   }
 
-  // Повтор вектора на ядре прототипа по ленте: engineFor — из engines(). Ответ {ok, got, misses, diffs}: got — итог в
-  // виде expect, misses — промахи ленты, diffs — расхождения по compare (записи server: true не сравниваются: их пишет
-  // server.js, а повтор зовёт только ядро). ok — ни промахов, ни расхождений
+  // Повтор вектора на ядре прототипа по ленте: engineFor — из engines(). Ответ {ok, got, misses, diffs, unused,
+  // closeResultLabel}: got — итог в виде expect, misses — промахи ленты, diffs — расхождения по compare (записи
+  // server: true не сравниваются: их пишет server.js, а повтор зовёт только ядро; исключение — всегда расхождение
+  // thrown), unused — записей ленты, на которые мир не ответил (только счёт, не провал), closeResultLabel — счёт
+  // compare. ok — ни промахов, ни расхождений
   function replay(engineFor, vector, pool) {
     const engine = engineFor(vector.me);
     const rs = replayState.get(engine);
     if (!rs) throw new Error("transition-vectors: ядро повтора — не из lib.engines");
     const misses = [];
+    const used = new Set();
+    const tape = vector.world || [];
     let got;
-    rs.world.tape = vector.world || [];
-    rs.world.misses = misses;
+    Object.assign(rs.world, { tape, misses, used });
     try {
       got = replayCall(engine, rs.state, vector, pool);
     } catch (e) {
       got = { thrown: String((e && e.message) || e) };
     } finally {
-      rs.world.tape = [];
-      rs.world.misses = [];
+      Object.assign(rs.world, { tape: [], misses: [], used: new Set() });
     }
-    const { diffs } = compare(vector, got, { pool, W: engine.workflow, server: false });
-    return { ok: !misses.length && !diffs.length, got, misses, diffs };
+    const unused = tape.filter((e) => !used.has(`${e.fn}|${C().canonical(e.args)}`)).length;
+    const { diffs, closeResultLabel } = compare(vector, got, { pool, W: engine.workflow, server: false });
+    return { ok: !misses.length && !diffs.length, got, misses, diffs, unused, closeResultLabel };
+  }
+
+  // Счётчики skipped записи переходов (recorder, take): все четыре должны быть и быть 0
+  const SKIPPED = ["nowChanged", "outsideEngine", "tapeRepeat", "worldError"];
+  // Что не так с записанным блоком переходов (take() или transitionvectors-out) перед записью файла: "" — всё цело.
+  // Нет skipped или в нём нет счётчика, счётчик не 0, векторов нет — запись неполна
+  function recordedProblem(taken) {
+    const s = taken && taken.skipped;
+    if (!s || typeof s !== "object") return "нет skipped";
+    const lost = SKIPPED.filter((k) => typeof s[k] !== "number");
+    if (lost.length) return `в skipped нет счётчика ${lost.map((k) => `skipped.${k}`).join(", ")}`;
+    const bad = Object.entries(s).filter(([, n]) => n !== 0);
+    if (bad.length) return `skipped.${bad[0][0]} = ${bad[0][1]}${bad.length > 1 ? ` (и ещё ${bad.length - 1})` : ""}, а нужен 0`;
+    if (!Array.isArray(taken.vectors) || !taken.vectors.length) return "нет ни одного вектора (vectors пуст)";
+    return "";
   }
 
   /* ===== Запись ===== */
@@ -812,7 +834,7 @@
     };
   }
 
-  const lib = { PER_NAME, PER_OUTCOME, normalize, kindOf, outcomeOf, select, idOf, recorder, compare, engines, replay };
+  const lib = { PER_NAME, PER_OUTCOME, normalize, kindOf, outcomeOf, select, idOf, recorder, compare, engines, replay, recordedProblem };
   // Запись — tests/api.html?celVectors=1 (без ?api=), вместе с записью векторов CEL: кадр — её IMCelVectors.frame.
   // Блок transitionvectors-out читает tools/cel_vectors.mjs --update
   const params = typeof location !== "undefined" && location.search ? new URLSearchParams(location.search) : null;

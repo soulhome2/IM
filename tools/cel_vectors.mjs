@@ -10,8 +10,12 @@
 //                                           4 МБ — стоп, не пишется ни один из двух файлов
 //   node tools/cel_vectors.mjs --check    — быстро, без Chrome: файл есть, собран от этой машины (sha256 байтов),
 //                                           равен своей канонической записи, каждый вектор повторяется по ленте
-//                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер
-//   --file=путь — другой файл векторов; --machine=путь — другая машина (проверка хэша); --tmp=папка — где
+//                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер;
+//                                           затем векторы переходов: каждый повторяется по ленте на ядре прототипа
+//                                           (prototype/engine.js, по ядру на me), сравнение — решение 41. --update
+//                                           делает то же до записи; расхождение или промах — не пишется ни один файл
+//   --file=путь — другой файл векторов; --transitions=путь — другой файл векторов переходов; --machine=путь —
+//   другая машина (проверка хэша); --tmp=папка — где
 //   --update держит профиль Chrome (иначе — системная временная папка); CHROME — другой исполняемый файл Chrome
 //
 // Библиотека векторов (канон, пул, лента, повтор, отбор, запись) — tests/cel-vectors.js. Код выхода — 0 или 1.
@@ -52,10 +56,11 @@ function load(machinePath) {
   const g = { console, TextEncoder, TextDecoder };
   g.window = g;
   vm.createContext(g);
-  for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "tests/cel-vectors.js"]) {
+  // Ядро прототипа и библиотека векторов переходов — для их повтора, как в tools/check_quint_replay.mjs
+  for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js", "tests/cel-vectors.js", "tests/transition-vectors.js"]) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), g, { filename: f });
   }
-  return { W, bytes, IMCel: g.IMCel, lib: g.IMCelVectors.lib };
+  return { W, bytes, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
 }
 const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
@@ -99,11 +104,12 @@ function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped,
   );
 }
 
-// Стоп до записи: любой счётчик skipped не 0 (запись переходов неполна) или файл больше 4 МБ
-function transitionsText(lib, tr, machineSha256) {
-  const bad = Object.entries(tr.skipped || {}).filter(([, n]) => n !== 0);
-  if (bad.length) throw new Error(`запись переходов: skipped.${bad[0][0]} = ${bad[0][1]}${bad.length > 1 ? ` (и ещё ${bad.length - 1})` : ""}, а нужен 0. Файлы не записаны`);
-  const text = serializeTransitions(lib, { incidents: tr.incidents, vectors: tr.vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
+// Стоп до записи: запись переходов неполна (нет skipped или его счётчика, счётчик не 0, векторов нет —
+// lib.recordedProblem) или файл больше 4 МБ
+function transitionsText(env, tr, machineSha256) {
+  const problem = env.tlib.recordedProblem(tr);
+  if (problem) throw new Error(`запись переходов: ${problem}. Файлы не записаны`);
+  const text = serializeTransitions(env.lib, { incidents: tr.incidents, vectors: tr.vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
   const size = Buffer.byteLength(text, "utf8");
   if (size > TRANSITIONS_MAX_BYTES) throw new Error(`файл переходов ${(size / 1048576).toFixed(2)} МБ — больше 4 МБ. Файлы не записаны`);
   return text;
@@ -191,6 +197,57 @@ function check(text, env, where) {
     good = false;
   }
   return good;
+}
+
+// Векторы переходов: text — содержимое файла, env — ядро прототипа на машине, с которой сверяем. Файл собран от этой
+// машины, равен своей канонической записи, запись цела (lib.recordedProblem); каждый вектор повторяется по ленте на
+// ядре прототипа — по ядру на me (lib.engines), сравнение — lib.compare (решение 41). Неиспользованные записи ленты
+// и closeResultLabel [""] — только счёт. Печатает итог, возвращает true/false
+function checkTransitions(text, env, where) {
+  const { lib, tlib, W } = env;
+  const fail = (msg) => (console.log(msg), false);
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    return fail(`${where}: правлен руками — не JSON (${e.message}): node tools/cel_vectors.mjs --update`);
+  }
+  if (data.machineSha256 !== sha256(env.bytes)) return fail(`${where}: машина изменилась после сборки векторов переходов: node tools/cel_vectors.mjs --update`);
+  if (data.format !== 1) return fail(`${where}: формат ${data.format}, а этот инструмент знает 1`);
+  const problem = tlib.recordedProblem(data);
+  if (problem) return fail(`${where}: правлен руками — ${problem}: node tools/cel_vectors.mjs --update`);
+  let canon;
+  try {
+    canon = serializeTransitions(lib, data);
+  } catch (e) {
+    return fail(`${where}: правлен руками — ${e.message}: node tools/cel_vectors.mjs --update`);
+  }
+  if (canon !== text) {
+    const a = text.split("\n");
+    const b = canon.split("\n");
+    let i = 0;
+    while (i < a.length && a[i] === b[i]) i++;
+    return fail(`${where}: правлен руками — файл не равен своей канонической записи (первое отличие — строка ${i + 1}): node tools/cel_vectors.mjs --update`);
+  }
+  const engineFor = tlib.engines(env.IMEngine.create, W);
+  const mismatch = [];
+  const missed = [];
+  let unused = 0;
+  let closeResultLabel = 0;
+  data.vectors.forEach((v) => {
+    const r = tlib.replay(engineFor, v, data.incidents);
+    unused += r.unused;
+    closeResultLabel += r.closeResultLabel;
+    if (r.misses.length) missed.push(`${v.id} (${[...new Set(r.misses)].join(", ")})`);
+    else if (!r.ok) mismatch.push(`${v.id}: ${r.diffs.join(", ")}${r.got.thrown != null ? ` — ${r.got.thrown}` : ""}`);
+  });
+  const by = (o) => data.vectors.filter((v) => v.op === o).length;
+  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}`);
+  console.log(`  неиспользованных записей ленты: ${unused}; closeResultLabel [""] как "": ${closeResultLabel}`);
+  const list = (title, xs) => xs.length && console.log(`${title}:\n  ${xs.slice(0, 30).join("\n  ")}${xs.length > 30 ? `\n  … ещё ${xs.length - 30}` : ""}`);
+  list("расхождения переходов", mismatch);
+  list("промахи ленты переходов", missed);
+  return !mismatch.length && !missed.length;
 }
 
 /* ===== Синтетика на границах ===== */
@@ -426,6 +483,7 @@ const argv = process.argv.slice(2);
 const opt = (name) => (argv.find((a) => a.startsWith(`--${name}=`)) || "").slice(name.length + 3) || null;
 const file = path.resolve(opt("file") || FILE);
 const machinePath = path.resolve(opt("machine") || MACHINE);
+const transitionsFile = path.resolve(opt("transitions") || TRANSITIONS_FILE);
 const rel = (p) => (path.relative(ROOT, p).startsWith("..") ? p : path.relative(ROOT, p));
 
 if (argv.includes("--update")) {
@@ -449,26 +507,32 @@ if (argv.includes("--update")) {
       skipped: { tapeRepeat: rec.stats.tapeRepeat, worldError: rec.stats.skipped },
     });
     // Переходы — тоже до записи: стоп любого из двух файлов не оставляет записанным ни один
-    const trText = transitionsText(env.lib, rec.transitions, sha256(env.bytes));
-    // Всё, что делает --check, — на свежем исполнителе, до записи
-    ok = check(text, load(machinePath), rel(file));
+    const trText = transitionsText(env, rec.transitions, sha256(env.bytes));
+    // Всё, что делает --check, — на свежем исполнителе и ядре, до записи: расхождение или промах в любом — стоп
+    const okCel = check(text, load(machinePath), rel(file));
+    const okTransitions = checkTransitions(trText, load(machinePath), rel(transitionsFile));
+    ok = okCel && okTransitions;
     if (ok) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.mkdirSync(path.dirname(transitionsFile), { recursive: true });
       fs.writeFileSync(file, text);
-      fs.writeFileSync(TRANSITIONS_FILE, trText);
-      console.log(`записано ${rel(TRANSITIONS_FILE)}: векторов ${rec.transitions.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
+      fs.writeFileSync(transitionsFile, trText);
+      console.log(`записано ${rel(transitionsFile)}: векторов ${rec.transitions.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
       console.log(`записано ${rel(file)}: отобрано из записи ${chosen.length}, синтетика ${synth.vectors.length}; всего ${((Date.now() - t0) / 1000).toFixed(0)} с`);
-    } else console.log("файл не записан");
+    } else console.log("файлы не записаны");
   } catch (e) {
     console.log(`cel_vectors --update: ${e.message}`);
   }
   process.exitCode = ok ? 0 : 1;
 } else if (argv.includes("--check")) {
-  if (!fs.existsSync(file)) {
-    console.log("нет файла, соберите: node tools/cel_vectors.mjs --update");
-    process.exitCode = 1;
-  } else process.exitCode = check(fs.readFileSync(file, "utf8"), load(machinePath), rel(file)) ? 0 : 1;
+  let okCel = false;
+  let okTransitions = false;
+  if (!fs.existsSync(file)) console.log("нет файла, соберите: node tools/cel_vectors.mjs --update");
+  else okCel = check(fs.readFileSync(file, "utf8"), load(machinePath), rel(file));
+  if (!fs.existsSync(transitionsFile)) console.log("нет файла векторов переходов, соберите: node tools/cel_vectors.mjs --update");
+  else okTransitions = checkTransitions(fs.readFileSync(transitionsFile, "utf8"), load(machinePath), rel(transitionsFile));
+  process.exitCode = okCel && okTransitions ? 0 : 1;
 } else {
-  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--machine=путь] [--tmp=папка]");
+  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--transitions=путь] [--machine=путь] [--tmp=папка]");
   process.exitCode = 1;
 }

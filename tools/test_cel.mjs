@@ -1274,6 +1274,60 @@ test("lib.compare: since только у hold, null — \"\", vars nil — {}, T
   ok(lib.compare(error, { error: "b" }, { pool, W }).diffs.length === 0 && lib.compare(error, { refusal: { why: ["k"] } }, { pool, W }).diffs.length === 1, "ошибка");
 });
 
+test("повтор: неиспользованная запись ленты — только счёт unused; closeResultLabel — в ответе", () => {
+  const C = vectors();
+  const lib = tvectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  const { rec, engine, events, mk } = trEngine({ machineW: w, cel: celRec, frame: celRec.frame });
+  const x = mk("x");
+  events.push(x);
+  ok(engine.run("claim", x, {}, { surface: "card" }).ok, "claim");
+  const { incidents, vectors: [v] } = rec.take();
+  const engineFor = lib.engines(g.IMEngine.create, w);
+  const same = lib.replay(engineFor, v, incidents);
+  ok(same.ok && same.unused === 0 && same.closeResultLabel === 0, `повтор: ${JSON.stringify({ unused: same.unused, closeResultLabel: same.closeResultLabel, diffs: same.diffs })}`);
+  // Лишняя запись на ленте — не провал, только счёт
+  const extra = lib.replay(engineFor, Object.assign({}, v, { world: v.world.concat([{ fn: "can", args: ["nope"], out: true }]) }), incidents);
+  ok(extra.ok && extra.misses.length === 0 && extra.unused === 1, `лишняя запись: ${JSON.stringify({ ok: extra.ok, unused: extra.unused, misses: extra.misses })}`);
+});
+
+test("lib.compare: исключение повтора — всегда расхождение thrown, и при пустом или битом expect", () => {
+  const lib = tvectors();
+  const thrown = { thrown: "в списке нет x" };
+  [undefined, {}, { ok: {} }, { refusal: { why: ["k"] } }, { error: "e" }, { nope: 1 }].forEach((expect) => {
+    const r = lib.compare({ op: "run", incidents: [], target: { id: "x" }, expect }, thrown, { W });
+    ok(JSON.stringify(r.diffs) === '["thrown"]', `expect ${JSON.stringify(expect)}: ${JSON.stringify(r.diffs)}`);
+  });
+  // replay: цель вне списка — исключение ядра повтора, вектор не проходит и с пустым expect
+  const engineFor = lib.engines(g.IMEngine.create, structuredClone(W));
+  const r = lib.replay(engineFor, { op: "run", me: "me", name: "claim", incidents: [], target: { id: "x" }, world: [], now: 1, expect: {} }, {});
+  ok(!r.ok && r.got.thrown && JSON.stringify(r.diffs) === '["thrown"]', `replay: ${JSON.stringify(r)}`);
+});
+
+test("lib.recordedProblem: skipped — все четыре счётчика и все 0, векторы не пусты", () => {
+  const lib = tvectors();
+  const zero = { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 };
+  const rec = (over) => Object.assign({ incidents: {}, vectors: [{ id: "t" }], skipped: Object.assign({}, zero) }, over);
+  ok(lib.recordedProblem(rec()) === "", `целая запись: ${lib.recordedProblem(rec())}`);
+  const without = (k) => {
+    const s = Object.assign({}, zero);
+    delete s[k];
+    return rec({ skipped: s });
+  };
+  [
+    [rec({ skipped: undefined }), "skipped"],
+    [without("worldError"), "skipped.worldError"],
+    [without("nowChanged"), "skipped.nowChanged"],
+    [rec({ skipped: Object.assign({}, zero, { tapeRepeat: 2 }) }), "skipped.tapeRepeat = 2"],
+    [rec({ vectors: [] }), "vectors"],
+    [rec({ vectors: undefined }), "vectors"],
+  ].forEach(([r, want]) => {
+    const p = lib.recordedProblem(r);
+    ok(p.includes(want), `${JSON.stringify(r).slice(0, 120)}: «${p}», ждали «${want}»`);
+  });
+});
+
 test("lib.kindOf: dispatcher и system — system, остальные — transition", () => {
   const lib = tvectors();
   ok(lib.kindOf("dispatcher") === "system" && lib.kindOf("system") === "system", "system");
