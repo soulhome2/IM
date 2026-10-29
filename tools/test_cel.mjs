@@ -520,6 +520,307 @@ test("кадр не меняет запись CEL: те же векторы с �
   ok(lib.canonical(none.close()) === '{"tape":[],"tapeRepeat":0}', "без записи кадр не пустой");
 });
 
+/* ===== Запись векторов переходов: обёртка IMEngine.create (tests/transition-vectors.js) ===== */
+
+let celPool = null;
+const newPlain = () => {
+  if (!celPool) celPool = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json"), "utf8")).incidents;
+  return Object.values(celPool).find((i) => i.state === "new" && !i.owner && !i.linkedTo);
+};
+// Ядро прототипа под записью переходов. frame — кадр записи CEL (по умолчанию пустой кадр Node); cel — запись CEL,
+// через которую ядро получает исполнитель выражений (тогда кадр видит факты мира)
+function trEngine({ frame, cel, ctx: extra = {}, machineW } = {}) {
+  const lib = tvectors();
+  const w = machineW || structuredClone(W);
+  const rec = lib.recorder(g.IMEngine.create, w, frame || g.IMCelVectors.frame);
+  const events = [];
+  const ctx = Object.assign(
+    {
+      workflow: w,
+      me: "me",
+      now: () => 1000,
+      events: () => events,
+      scenarioKey: (ev) => ev.scenarioGuid,
+      can: () => true,
+      permsOf: () => [],
+      isGroup: () => false,
+      stepsFilled: () => true,
+      inGroup: () => false,
+      agentState: () => "available",
+      agentStateOf: () => "available",
+      idleSec: () => 0,
+      log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v }),
+      actorName: (id) => (id ? `name:${id}` : ["workflow.label.unassigned"]),
+      progress: () => ({ filled: 0, total: 2 }),
+      stepNumber: () => 1,
+      setCursor() {},
+    },
+    extra
+  );
+  const real = g.IMCel.create;
+  if (cel) g.IMCel.create = cel.create;
+  let engine;
+  try {
+    engine = rec.create(ctx);
+  } finally {
+    g.IMCel.create = real;
+  }
+  const mk = (id, more = {}) => engine.fromView(Object.assign({}, newPlain(), { id }, more), { log: [] });
+  return { rec, engine, events, mk, w, ctx };
+}
+const ZERO_SKIPPED = '{"nowChanged":0,"outsideEngine":0,"tapeRepeat":0,"worldError":0}';
+
+test("запись run: вектор с журналом и неизменённым остальным", () => {
+  const C = vectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  const { rec, engine, events, mk } = trEngine({ machineW: w, cel: celRec, frame: celRec.frame });
+  const x = mk("x");
+  const y = mk("y");
+  events.push(x, y);
+  const r = engine.run("claim", x, {}, { surface: "card" });
+  ok(r.ok, `claim: ${JSON.stringify(r)}`);
+  const { incidents, vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1, `векторов ${vs.length}`);
+  const [v] = vs;
+  ok(v.kind === "transition" && v.op === "run" && v.name === "claim" && v.me === "me" && v.now === 1000 && v.surface === "card", `вектор: ${C.canonical(Object.assign({}, v, { world: [], expect: {} }))}`);
+  ok(C.canonical(v.target) === '{"id":"x"}' && C.canonical(v.form) === "{}" && C.canonical(v.journalAtNow) === "{}", `target ${C.canonical(v.target)}`);
+  ok(v.incidents.length === 2 && incidents[v.incidents[0].$ref].id === "x" && incidents[v.incidents[1].$ref].id === "y", "список инцидентов");
+  const { id, case: _c, expect, ...input } = v;
+  ok(id === `transition:run:claim:${sha256(C.canonical(input)).slice(0, 10)}`, `id ${id}`);
+  const o = expect.ok;
+  ok(o, `expect: ${C.canonical(expect)}`);
+  ok(Object.keys(o.incidents).join() === "x", `изменённые: ${Object.keys(o.incidents)}`);
+  const after = incidents[o.incidents.x.$ref];
+  ok(after.state === "in_progress" && after.owner === "me", `x после: ${after.state} ${after.owner}`);
+  ok(Object.keys(o.journal).join() === "x" && o.journal.x.length === 1, `журнал: ${C.canonical(o.journal)}`);
+  const j = o.journal.x[0];
+  ok(j.templateKey === "workflow.journal.claim" && j.kind === "transition" && j.actor === "me" && j.at === 1000 && j.vars && typeof j.vars === "object", `запись: ${C.canonical(j)}`);
+  ok(C.canonical(o.scenario) === '[{"action":"setCursor","incident":{"$incident":"x"}}]', `scenario: ${C.canonical(o.scenario)}`);
+  ok(C.canonical(o.after) === "[]", `after: ${C.canonical(o.after)}`);
+  ok(C.canonical(o.external) === '{"x":[]}', `external: ${C.canonical(o.external)}`);
+  ok(o.facts.x.from.owner === "" && o.facts.x.from.addressee === "" && o.facts.x.to.owner === "me" && o.facts.x.breach === "", `facts: ${C.canonical(o.facts)}`);
+  ok(!("canceled" in o) && !("journalAtNow" in o), "canceled или journalAtNow без причины");
+  const has = (fn, args) => v.world.some((e) => e.fn === fn && C.canonical(e.args) === args);
+  ok(has("ctx.actorName", '[""]') && !v.world.some((e) => e.fn === "ctx.actorName" && e.args[0] === null), `ctx.actorName: ${C.canonical(v.world)}`);
+  ok(has("ctx.stepNumber", '[{"$incident":"x"}]') && has("ctx.progress", '[{"$incident":"x"}]'), `ctx.*: ${C.canonical(v.world)}`);
+  // Факты cel.world — кадром записи CEL
+  ok(v.world.some((e) => e.fn === "can" && C.canonical(e) === '{"args":["me","incident:claim"],"fn":"can","out":true}') && has("agentState", '["me"]'), `факты мира: ${C.canonical(v.world)}`);
+  ok(C.canonical(skipped) === ZERO_SKIPPED, `skipped: ${C.canonical(skipped)}`);
+  ok(Object.keys(incidents).length === 3, `пул: ${Object.keys(incidents).length}`); // x до, y, x после
+});
+
+test("запись runAll с пустым списком — вектор ok без изменений", () => {
+  const C = vectors();
+  const { rec, engine, events, mk } = trEngine();
+  events.push(mk("x"));
+  const r = engine.runAll("detach", [], {}, { surface: "card" });
+  ok(r.ok, `runAll: ${JSON.stringify(r)}`);
+  const vs = rec.take().vectors;
+  ok(vs.length === 1 && vs[0].op === "runAll" && vs[0].name === "detach", `векторы: ${vs.map((v) => v.id)}`);
+  ok(C.canonical(vs[0].target) === '{"ids":[]}', `target ${C.canonical(vs[0].target)}`);
+  const o = vs[0].expect.ok;
+  ok(o && !("incidents" in o) && !("journal" in o) && !("journalAtNow" in o) && !("canceled" in o), `expect: ${C.canonical(vs[0].expect)}`);
+  ok(C.canonical(o) === '{"after":[],"external":{},"facts":{},"scenario":[]}', `expect.ok: ${C.canonical(o)}`);
+});
+
+test("отказ: expect.refusal, инциденты не изменились", () => {
+  const C = vectors();
+  const { rec, engine, events, mk } = trEngine({ ctx: { can: () => false } });
+  const x = mk("x");
+  const y = mk("y");
+  events.push(x, y);
+  ok(!engine.run("claim", x, {}, { surface: "card" }).ok, "claim без права прошёл");
+  ok(!engine.runAll("claim", [x, y], {}, { surface: "card" }).ok, "runAll без права прошёл");
+  const vs = rec.take().vectors;
+  ok(vs.length === 2, `векторов ${vs.length}`);
+  ok(C.canonical(vs[0].expect) === '{"refusal":{"why":["workflow.guard.no_permission",{"p":"incident:claim"}]}}', `run: ${C.canonical(vs[0].expect)}`);
+  // runAll называет, кто не прошёл, и какое условие
+  ok(C.canonical(vs[1].expect) === '{"refusal":{"guard":"hasPermission","id":"x","why":["workflow.guard.no_permission",{"p":"incident:claim"}]}}', `runAll: ${C.canonical(vs[1].expect)}`);
+  ok(x.state === "new" && !x.owner && x.log.length === 0, "x изменился");
+});
+
+test("отбор при записи: 25 одинаковых claim — 4 вектора, пул — только их инциденты", () => {
+  const { rec, engine, events, mk, w } = trEngine();
+  for (let i = 0; i < 25; i++) {
+    events.length = 0;
+    const x = mk(`x${i}`);
+    events.push(x);
+    ok(engine.run("claim", x, {}, {}).ok, `claim x${i}`);
+  }
+  const { incidents, vectors: vs } = rec.take();
+  ok(vs.length === 4, `векторов ${vs.length}`);
+  ok(vs.map((v) => v.target.id).join() === "x0,x1,x2,x3", `оставлены: ${vs.map((v) => v.target.id)}`);
+  const refs = new Set(vs.flatMap((v) => v.incidents.map((d) => d.$ref).concat(Object.values(v.expect.ok.incidents).map((d) => d.$ref))));
+  ok(Object.keys(incidents).length === refs.size && Object.keys(incidents).every((k) => refs.has(k)), `пул: ${Object.keys(incidents).length}, ссылок ${refs.size}`);
+  ok(Object.values(incidents).every((p) => ["x0", "x1", "x2", "x3"].includes(p.id)), `в пуле чужие: ${Object.values(incidents).map((p) => p.id)}`);
+  // Тот же вход и тот же ответ — без исключения; тот же вход, другой ответ — исключение и у отброшенного вектора
+  events.length = 0;
+  events.push(mk("x10"));
+  engine.run("claim", events[0], {}, {});
+  const claim = w.transitions.find((t) => t.id === "claim");
+  claim.effects = claim.effects.filter((e) => e.fn !== "setCursor");
+  events.length = 0;
+  events.push(mk("x10"));
+  let err = null;
+  try {
+    engine.run("claim", events[0], {}, {});
+  } catch (e) {
+    err = e;
+  }
+  ok(err && /один вход — два ответа/.test(err.message), `нет исключения «один вход — два ответа»: ${err && err.message}`);
+});
+
+test("now меняется во время вызова — вектора нет, skipped.nowChanged 1", () => {
+  let t = 1000;
+  const { rec, engine, events, mk } = trEngine({ ctx: { now: () => t++ } });
+  const x = mk("x");
+  events.push(x);
+  ok(engine.run("claim", x, {}, {}).ok, "claim");
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 0 && skipped.nowChanged === 1, `векторов ${vs.length}, skipped ${JSON.stringify(skipped)}`);
+});
+
+test("запись create: новый инцидент — target, список — без него, журнал от dispatcher — system", () => {
+  const C = vectors();
+  const { rec, engine, events, mk } = trEngine();
+  events.push(mk("x"));
+  const n = mk("n", { state: "", owner: "" });
+  ok(engine.create(n).ok, "create");
+  const { incidents, vectors: vs } = rec.take();
+  ok(vs.length === 1 && vs[0].op === "create" && vs[0].name === "create", `векторы: ${vs.map((v) => v.id)}`);
+  const [v] = vs;
+  ok(incidents[v.target.incident.$ref].id === "n" && incidents[v.target.incident.$ref].state === "", "target — не новый до перехода");
+  ok(v.incidents.length === 1 && incidents[v.incidents[0].$ref].id === "x", "в списке новый");
+  ok(v.surface === "" && C.canonical(v.form) === "{}", "surface или form");
+  const o = v.expect.ok;
+  ok(Object.keys(o.incidents).join() === "n" && incidents[o.incidents.n.$ref].state === "new", `изменённые: ${C.canonical(o.incidents)}`);
+  ok(o.journal.n.length > 0 && o.journal.n.every((e) => e.actor === "dispatcher" && e.kind === "system"), `журнал: ${C.canonical(o.journal)}`);
+  ok(o.facts.n && o.facts.n.to.state === "new" && Array.isArray(o.external.n), `facts / external: ${C.canonical(o.facts)} ${C.canonical(o.external)}`);
+});
+
+test("запись: машина не исходная — как есть; ошибка мира, исключение ядра, повтор на ленте — вектора нет, кадр закрыт", () => {
+  const patched = structuredClone(W);
+  patched.limits.maxOnHold = 7;
+  const lib = tvectors();
+  const rec0 = lib.recorder(g.IMEngine.create, W, g.IMCelVectors.frame);
+  const base = trEngine({ machineW: patched });
+  const plainEngine = rec0.create(base.ctx);
+  const p = base.mk("p");
+  base.events.push(p);
+  ok(plainEngine.run("claim", p, {}, {}).ok && rec0.take().vectors.length === 0, "машина не исходная — записана");
+  // Кадры считаются: открыт — закрыт
+  let opened = 0;
+  let closed = 0;
+  let repeat = 0;
+  const frame = () => {
+    opened++;
+    return { close: () => (closed++, { tape: [], tapeRepeat: repeat }) };
+  };
+  let broken = false;
+  const { rec, engine, events, mk } = trEngine({
+    frame,
+    ctx: {
+      agentState: () => {
+        if (broken) throw new Error("мир сломан");
+        return "available";
+      },
+    },
+  });
+  const x = mk("x");
+  events.push(x);
+  broken = true;
+  let err = null;
+  try {
+    engine.run("claim", x, {}, {});
+  } catch (e) {
+    err = e;
+  }
+  const s1 = rec.take();
+  // Исключение пробрасывается (cel-js заворачивает его в своё — текст не сравнивается)
+  ok(err && s1.vectors.length === 0 && s1.skipped.worldError === 1, `ошибка мира: ${err && err.message}, ${JSON.stringify(s1.skipped)}, векторов ${s1.vectors.length}`);
+  ok(opened === 1 && closed === 1, `кадры: открыто ${opened}, закрыто ${closed}`);
+  broken = false;
+  // Ошибка перехода (transition_failed) — expect.error
+  const bad = mk("b");
+  delete bad.log;
+  events.length = 0;
+  events.push(bad);
+  const r = engine.run("claim", bad, {}, {});
+  ok(!r.ok && r.why[0] === "workflow.error.transition_failed", `без журнала: ${JSON.stringify(r)}`);
+  const s2 = rec.take();
+  ok(s2.vectors.length === 1 && typeof s2.vectors[0].expect.error === "string" && s2.vectors[0].expect.error.length > 0, `error: ${JSON.stringify(s2.vectors.map((v) => v.expect))}`);
+  // Мир ответил на один вызов по-разному — skipped.tapeRepeat
+  repeat = 1;
+  events.length = 0;
+  events.push(mk("z"));
+  engine.run("claim", events[0], {}, {});
+  ok(rec.take().skipped.tapeRepeat === 1, "tapeRepeat не посчитан");
+  ok(opened === closed && opened === 3, `кадры: открыто ${opened}, закрыто ${closed}`);
+  // Прочие методы ядра — насквозь, без записи и без кадра
+  ok(engine.availability("claim", events[0]).hidden === true, "availability");
+  ok(Array.isArray(engine.tick()) && engine.workflow && engine.session && typeof engine.merge === "function" && typeof engine.resumeTimer === "function", "методы ядра");
+  ok(rec.take().vectors.length === 1 && opened === 3, "прочие методы записали вектор или открыли кадр");
+});
+
+test("запись переходов не меняет запись CEL: те же векторы CEL с обёрткой ядра и без", () => {
+  const C = vectors();
+  const run = (wrapped) => {
+    const w = structuredClone(W);
+    const celRec = C.recorder(IMCel.create, w);
+    const real = g.IMCel.create;
+    g.IMCel.create = celRec.create;
+    let t;
+    try {
+      t = wrapped ? trEngine({ machineW: w, cel: celRec, frame: celRec.frame }) : null;
+      if (!wrapped) {
+        const events = [];
+        const base = trEngine({ machineW: w });
+        const engine = g.IMEngine.create(Object.assign({}, base.ctx, { events: () => events }));
+        t = { engine, events, mk: (id) => engine.fromView(Object.assign({}, newPlain(), { id }), { log: [] }) };
+      }
+    } finally {
+      g.IMCel.create = real;
+    }
+    const x = t.mk("x");
+    t.events.push(x, t.mk("y"));
+    t.engine.run("claim", x, {}, { surface: "card" });
+    t.engine.runAll("detach", [], {}, {});
+    return { out: C.canonical(celRec.take()), stats: C.canonical(celRec.stats()), n: celRec.take().vectors.length };
+  };
+  const a = run(false);
+  const b = run(true);
+  ok(a.n > 0, "запись CEL пустая — сравнивать нечего");
+  ok(a.stats === b.stats, `stats: ${a.stats} ≠ ${b.stats}`);
+  ok(a.out === b.out, "векторы CEL с обёрткой ядра другие");
+});
+
+test("lib.kindOf: dispatcher и system — system, остальные — transition", () => {
+  const lib = tvectors();
+  ok(lib.kindOf("dispatcher") === "system" && lib.kindOf("system") === "system", "system");
+  ok(lib.kindOf("me") === "transition" && lib.kindOf("") === "transition" && lib.kindOf(null) === "transition", "transition");
+});
+
+test("lib.select: не больше 20 на op:name, 4 на исход, по кругу исходов", () => {
+  const lib = tvectors();
+  const v = (i, outcome, name = "claim") => ({ id: `transition:run:${name}:${i}`, op: "run", name, expect: { refusal: { why: [`k${outcome}`] } } });
+  // Шесть исходов по 10: по кругу — 4 круга по 6 = 24 > 20, берётся 20; ни одного исхода больше 4
+  const all = Array.from({ length: 60 }, (_, i) => v(i, i % 6));
+  const s = lib.select(all, { perName: 20, perOutcome: 4 });
+  const per = s.reduce((o, x) => ((o[x.expect.refusal.why[0]] = (o[x.expect.refusal.why[0]] || 0) + 1), o), {});
+  ok(s.length === 20 && Object.values(per).every((n) => n <= 4), `${s.length}, ${JSON.stringify(per)}`);
+  ok(s.every((x, i, a) => i === 0 || Number(a[i - 1].id.split(":")[3]) < Number(x.id.split(":")[3])), "порядок итога не как на входе");
+  // Одинаковые исходы — 4; другое имя — свой предел; по умолчанию — 20 и 4
+  const same = lib.select(Array.from({ length: 25 }, (_, i) => v(i, 0)).concat([v(0, 0, "hold")]));
+  ok(same.length === 5 && same.filter((x) => x.name === "hold").length === 1, `одинаковые: ${same.length}`);
+  // ok: исход — ключи журнала, виды after и timer_overridden
+  const okv = (i, keys, after = []) => ({ id: `t:${i}`, op: "run", name: "x", expect: { ok: { journal: { a: keys.map((k) => ({ templateKey: k })) }, after: after.map((a) => ({ action: a })) } } });
+  ok(lib.outcomeOf(okv(0, ["a", "b"]).expect) === lib.outcomeOf(okv(1, ["b", "a"]).expect), "порядок ключей журнала меняет исход");
+  ok(lib.outcomeOf(okv(0, ["a"]).expect) !== lib.outcomeOf(okv(1, ["a"], ["notify"]).expect), "after не меняет исход");
+  ok(lib.outcomeOf({ refusal: { why: ["a", { x: 1 }] } }) === lib.outcomeOf({ refusal: { why: ["a", { x: 2 }] } }), "подстановки отказа меняют исход");
+  ok(lib.outcomeOf({ error: "a" }) === lib.outcomeOf({ error: "b" }), "текст ошибки меняет исход");
+});
+
 results.forEach(([name, e]) => console.log(e ? `FAIL ${name}\n    ${String(e.message || e)}` : `ok   ${name}`));
 const failed = results.filter(([, e]) => e).length;
 console.log(`test_cel: ${results.length - failed} из ${results.length}`);
