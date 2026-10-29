@@ -946,6 +946,155 @@ test("outsideEngine: отказ, который что-то изменил; яд
   ok(t.rec.take().vectors.length === 1, "после вложенного запись не идёт");
 });
 
+/* --- объединение: лента закрыта на возврате, запись merged_in* server.js — в ожидаемом (решение 39) --- */
+
+// Запись основному, как log в server.js mergeIncidents после engine.merge
+const mergedIn = (ev, k = "workflow.journal.merged_in", v = { ids: "INC-0002, INC-0003" }, whoId = "me") => ev.log.push({ at: 1000, whoId, k, v });
+
+test("запись merge: merged_in после ядра — в expect с server: true", () => {
+  const C = vectors();
+  const { rec, engine, events, mk } = trEngine();
+  const p = mk("p");
+  const a = mk("a");
+  const b = mk("b");
+  events.push(p, a, b);
+  const r = engine.merge(p, [a, b]);
+  ok(r.ok && r.taken, `merge: ${JSON.stringify(r)}`);
+  // server.js: isDone (чтение) — до записи merged_in, вектор не закрывает
+  engine.isDone(p);
+  mergedIn(p);
+  // «Сервер» вызывает ядро ещё раз — вектор объединения закрыт
+  ok(engine.runAll("detach", [], {}, {}).ok, "runAll");
+  const { incidents, vectors: vs, skipped } = rec.take();
+  ok(vs.length === 2 && vs[0].op === "merge" && vs[1].op === "runAll", `векторы: ${vs.map((v) => v.id)}`);
+  const [v] = vs;
+  ok(v.name === "merge" && v.me === "me" && v.now === 1000 && v.surface === "" && C.canonical(v.form) === "{}", `вектор: ${v.id} ${v.surface} ${C.canonical(v.form)}`);
+  ok(C.canonical(v.target) === '{"ids":["a","b"],"primaryId":"p"}', `target ${C.canonical(v.target)}`);
+  ok(v.incidents.map((d) => incidents[d.$ref].id).join() === "p,a,b", "список инцидентов");
+  const o = v.expect.ok;
+  ok(o, `expect: ${C.canonical(v.expect)}`);
+  ok(Object.keys(o.incidents).sort().join() === "a,b,p", `изменённые: ${Object.keys(o.incidents)}`);
+  ok(incidents[o.incidents.a.$ref].linkedTo === "p" && incidents[o.incidents.p.$ref].state === "in_progress", "a не привязан или p не взят");
+  const last = o.journal.p[o.journal.p.length - 1];
+  ok(C.canonical(last) === '{"actor":"me","at":1000,"kind":"transition","server":true,"templateKey":"workflow.journal.merged_in","vars":{"ids":"INC-0002, INC-0003"}}', `последняя запись основного: ${C.canonical(last)}`);
+  // Записи ядра — без пометки
+  ok(o.journal.p.slice(0, -1).some((e) => e.templateKey === "workflow.journal.claim") && Object.values(o.journal).flat().filter((e) => e.server).length === 1, `журнал: ${C.canonical(o.journal)}`);
+  ok(o.journal.a && o.journal.b, `журнал присоединяемых: ${C.canonical(o.journal)}`);
+  // external — только присоединяемые; facts — присоединяемые и основной, которого взяли
+  ok(Object.keys(o.external).join() === "a,b", `external: ${C.canonical(o.external)}`);
+  ok(Object.keys(o.facts).sort().join() === "a,b,p" && o.facts.p.to.owner === "me" && o.facts.a.to.state === "linked", `facts: ${C.canonical(o.facts)}`);
+  ok(C.canonical(skipped) === ZERO_SKIPPED, `skipped: ${C.canonical(skipped)}`);
+});
+
+test("закрытие merge вызовом ядра коллеги и tick", () => {
+  const C = vectors();
+  const { rec, engine, events, mk, ctx } = trEngine();
+  const colleague = rec.create(Object.assign({}, ctx, { me: "colleague" }));
+  const p = mk("p");
+  const a = mk("a");
+  const c = mk("c");
+  events.push(p, a, c);
+  ok(engine.merge(p, [a]).ok, "merge 1");
+  mergedIn(p, "workflow.journal.merged_in_more", { ids: "INC-0002", more: 3 });
+  // Ядро коллеги (другой me) закрывает вектор: изменение основного после — уже не наше
+  ok(colleague.run("claim", c, {}, {}).ok, "claim коллеги");
+  p.priority = 99;
+  const q = mk("q");
+  const d = mk("d");
+  events.push(q, d);
+  ok(engine.merge(q, [d]).ok, "merge 2");
+  mergedIn(q);
+  engine.tick(); // runScheduler сервера
+  q.log.push({ at: 1000, whoId: "me", k: "workflow.journal.comment", v: null });
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.map((v) => `${v.op}:${v.me}`).join() === "merge:me,run:colleague,merge:me", `векторы: ${vs.map((v) => `${v.op}:${v.me}`)}`);
+  ok(C.canonical(skipped) === ZERO_SKIPPED, `skipped: ${C.canonical(skipped)}`);
+  const tail = (v, id) => v.expect.ok.journal[id][v.expect.ok.journal[id].length - 1];
+  ok(tail(vs[0], "p").templateKey === "workflow.journal.merged_in_more" && tail(vs[0], "p").server === true && C.canonical(tail(vs[0], "p").vars) === '{"ids":"INC-0002","more":3}', `merged_in_more: ${C.canonical(tail(vs[0], "p"))}`);
+  ok(tail(vs[2], "q").templateKey === "workflow.journal.merged_in" && tail(vs[2], "q").server === true, `merged_in: ${C.canonical(tail(vs[2], "q"))}`);
+  // Изменения после закрытия в вектор не вошли
+  ok(!Object.values(vs[2].expect.ok.journal).flat().some((e) => e.templateKey === "workflow.journal.comment"), "запись после tick — в векторе");
+});
+
+test("лента merge закрыта на возврате: факт мира после merge в ленту не идёт", () => {
+  const C = vectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  let late = false;
+  // После возврата мир отвечает иначе: попади эти ответы в ленту — tapeRepeat или лишние факты
+  const { rec, engine, events, mk } = trEngine({ machineW: w, cel: celRec, frame: celRec.frame, ctx: { can: () => !late, actorName: (id) => (late ? "late" : `name:${id}`) } });
+  const p = mk("p");
+  const a = mk("a");
+  events.push(p, a);
+  ok(engine.merge(p, [a]).ok, "merge");
+  late = true;
+  // Как emitTransition и card(primary) в server.js
+  engine.addressee(p);
+  engine.actions(p, "card");
+  engine.availability("hold", p);
+  engine.badge(p);
+  mergedIn(p);
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1 && C.canonical(skipped) === ZERO_SKIPPED, `векторов ${vs.length}, skipped ${C.canonical(skipped)}`);
+  const [v] = vs;
+  ok(v.world.some((e) => e.fn === "can" && C.canonical(e.args) === '["me","incident:bulk"]' && e.out === true), `факты merge: ${C.canonical(v.world)}`);
+  ok(v.world.every((e) => e.out !== false && e.out !== "late"), `факт после возврата в ленте: ${C.canonical(v.world)}`);
+  const hold = w.transitions.find((t) => t.id === "hold");
+  const holdPerms = (hold.guards || []).filter((x) => x.fn === "hasPermission").map((x) => x.args[0]);
+  ok(!v.world.some((e) => e.fn === "can" && holdPerms.includes(e.args[1])), `право hold в ленте: ${C.canonical(v.world)}`);
+});
+
+test("запись: запись журнала вне ядра с другим ключом или изменение другого инцидента списка — вектора нет, skipped.outsideEngine 1", () => {
+  const C = vectors();
+  const cases = {
+    "другой ключ": ({ p }) => mergedIn(p, "workflow.journal.comment"),
+    "две записи merged_in": ({ p }) => (mergedIn(p), mergedIn(p)),
+    "merged_in не от me": ({ p }) => mergedIn(p, undefined, undefined, "colleague"),
+    "запись присоединяемому": ({ p, a }) => (mergedIn(p), mergedIn(a)),
+    "изменён присоединяемый": ({ p, a }) => (mergedIn(p), (a.priority = 99)),
+    "изменён другой инцидент списка": ({ p, y }) => (mergedIn(p), (y.priority = 99)),
+    "запись другому инциденту списка": ({ y }) => y.log.push({ at: 1000, whoId: "me", k: "workflow.journal.comment", v: null }),
+    "изменён основной": ({ p }) => (mergedIn(p), (p.priority = 99)),
+    "прежняя запись основного заменена": ({ p }) => (p.log[0] = Object.assign({}, p.log[0], { v: { x: 1 } })),
+  };
+  Object.entries(cases).forEach(([name, change]) => {
+    const { rec, engine, events, mk } = trEngine();
+    const t = { p: mk("p"), a: mk("a"), y: mk("y") };
+    events.push(t.p, t.a, t.y);
+    ok(engine.merge(t.p, [t.a]).ok, `${name}: merge`);
+    change(t);
+    const { vectors: vs, skipped } = rec.take();
+    ok(vs.length === 0 && skipped.outsideEngine === 1, `${name}: векторов ${vs.length}, skipped ${C.canonical(skipped)}`);
+  });
+  // Отказ объединения закрыт на возврате: изменения после — уже не его
+  const { rec, engine, events, mk } = trEngine({ ctx: { can: () => false } });
+  const p = mk("p");
+  const a = mk("a");
+  events.push(p, a);
+  ok(!engine.merge(p, [a]).ok, "merge без права прошёл");
+  mergedIn(p, "workflow.journal.comment");
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1 && vs[0].expect.refusal && vs[0].expect.refusal.id === "a" && C.canonical(skipped) === ZERO_SKIPPED, `отказ: ${vs.map((v) => C.canonical(v.expect))}, skipped ${C.canonical(skipped)}`);
+});
+
+test("merge без присоединяемых — только «Взять», без merged_in", () => {
+  const C = vectors();
+  const { rec, engine, events, mk } = trEngine();
+  const p = mk("p");
+  const y = mk("y");
+  events.push(p, y);
+  const r = engine.merge(p, []);
+  ok(r.ok && r.taken, `merge: ${JSON.stringify(r)}`);
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1 && C.canonical(skipped) === ZERO_SKIPPED, `векторов ${vs.length}, skipped ${C.canonical(skipped)}`);
+  const [v] = vs;
+  ok(v.op === "merge" && v.name === "merge" && C.canonical(v.target) === '{"ids":[],"primaryId":"p"}', `target ${C.canonical(v.target)}`);
+  const o = v.expect.ok;
+  ok(Object.keys(o.incidents).join() === "p" && Object.keys(o.journal).join() === "p", `изменённые: ${C.canonical(o.incidents)}, журнал ${C.canonical(o.journal)}`);
+  ok(o.journal.p.map((e) => e.templateKey).join() === "workflow.journal.claim" && !o.journal.p.some((e) => e.server), `журнал основного: ${C.canonical(o.journal.p)}`);
+  ok(C.canonical(o.external) === "{}" && Object.keys(o.facts).join() === "p" && o.facts.p.to.state === "in_progress", `external / facts: ${C.canonical(o.external)} ${C.canonical(o.facts)}`);
+});
+
 test("lib.kindOf: dispatcher и system — system, остальные — transition", () => {
   const lib = tvectors();
   ok(lib.kindOf("dispatcher") === "system" && lib.kindOf("system") === "system", "system");

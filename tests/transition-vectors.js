@@ -9,9 +9,10 @@
      сценария и после фиксации — в ожидаемое; снимок «после» — тоже только celView;
    - снимки зовут только celView (cel.value, cel.plain): условия, правила и определения в снимке дали бы лишние
      векторы CEL;
-   - открытый вектор (объединение, решение 39 — задача 5) закрывают только меняющие вызовы ядра — run, runAll,
-     merge, create, tick, startTimer…resumeTimer — и take(); чтение (isDone, availability, badge…) идёт насквозь:
-     server.js после merge зовёт isDone раньше, чем пишет merged_in;
+   - merge (решение 39): кадр закрыт и «после» снято на возврате; вектор открыт, пока его не закроет меняющий вызов
+     любого обёрнутого ядра — run, runAll, merge, create, tick, startTimer…resumeTimer — или take(); чтение (isDone,
+     availability, badge…) идёт насквозь: server.js после merge зовёт isDone раньше, чем пишет merged_in. На закрытии
+     у основного может быть одна новая запись merged_in* от me — в ожидаемое с server: true; прочее — вектора нет;
    - отбор — при закрытии (решение 40): на op:name не больше PER_NAME исходов, на исход не больше PER_OUTCOME
      векторов; lib.select в take() даёт то же, что на полной записи; пул — только инциденты оставленных.
    Файл грузится и в Node (tools/test_cel.mjs, vm). */
@@ -21,6 +22,8 @@
   const FAILED = "workflow.error.transition_failed";
   // Меняющие вызовы ядра: закрывают открытый вектор (решение 39). runScheduler сервера зовёт tick
   const CLOSERS = new Set(["run", "runAll", "merge", "create", "tick", "startTimer", "stopTimer", "pauseTimer", "resumeTimer"]);
+  // Записи основному, которые server.js mergeIncidents пишет после engine.merge (MERGED_IN_SHOWN — сколько номеров)
+  const MERGED_IN = new Set(["workflow.journal.merged_in", "workflow.journal.merged_in_more"]);
 
   // Канонический JSON, sha256, ключ пула, аргументы ленты — общие с векторами CEL
   const C = () => {
@@ -143,20 +146,25 @@
     const names = new Map(); // op:name → (исход → сколько оставлено); только то, что может выбрать select
     const kept = []; // [{vector, pool}]
     // Пропущенные вызовы: nowChanged — часы сдвинулись за вызов; outsideEngine — изменилось то, чего ядро не
-    // отдаёт (отказ с изменениями, вложенный вызов ядра; у объединения — задача 5); tapeRepeat — на один вызов
-    // мир ответил по-разному; worldError — функция сервера или факт мира бросили исключение
+    // отдаёт (отказ с изменениями, вложенный вызов ядра; у объединения — что-то кроме merged_in* основного до
+    // закрытия); tapeRepeat — на один вызов мир ответил по-разному; worldError — функция сервера или факт мира
+    // бросили исключение
     const skipped = { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 };
     // Идёт записываемый вызов ядра: в него пишут функции ctx любого обёрнутого ядра
     let cur = null;
     // Открытый вектор, который закрывает следующий меняющий вызов любого обёрнутого ядра (CLOSERS) или take()
-    // (решение 39): {close()}. Задача 5 (merge) кладёт сюда вектор объединения; run, runAll, create закрываются
-    // на возврате
+    // (решение 39): {close()}. Сюда кладётся вектор объединения (mergeClose); run, runAll, create и отказ merge
+    // закрываются на возврате
     let pending = null;
     function settle() {
       if (!pending) return;
       const p = pending;
       pending = null;
       p.close();
+    }
+    function hold(p) {
+      settle();
+      pending = p;
     }
 
     function reference_(W) {
@@ -395,9 +403,46 @@
         ok.scenario = call.scenario;
         Object.assign(ok, spec.result(r));
         vector.expect = { ok };
+        if (spec.mergedIn) {
+          hold(mergeClose(engine, ctx, after, spec.mergedIn, vector, pool));
+          return r;
+        }
       }
       keep(vector, pool);
       return r;
+    }
+
+    // Объединение (решение 39): кадр закрыт и «после» снято на возврате, вектор открыт до следующего меняющего вызова
+    // любого обёрнутого ядра или take(). Отложено только чтение новой записи основного — merged_in* от me, которую
+    // server.js пишет своим log после ядра: она идёт в ожидаемое с server: true. Прочие изменения у любого инцидента
+    // списка — не ядро: вектора нет, outsideEngine. after — снимки «после» record (celView, длина журнала)
+    function mergeClose(engine, ctx, after, primary, vector, pool) {
+      const journal = (ev, len) => C().canonical((ev.log || []).slice(0, len).map(entryOf));
+      const at = after.map((s) => journal(s.ev, s.len));
+      return {
+        close() {
+          let row = null;
+          const clean = after.every((s, i) => {
+            const { ev } = s;
+            if (C().keyOf(engine.celView(ev)) !== s.key || journal(ev, s.len) !== at[i]) return false;
+            const added = (ev.log || []).slice(s.len);
+            if (!added.length) return true;
+            if (ev !== primary || added.length > 1 || !MERGED_IN.has(added[0].k) || (added[0].whoId || "") !== blank(ctx.me)) return false;
+            row = Object.assign(entryOf(added[0]), { server: true });
+            return true;
+          });
+          if (!clean) {
+            skipped.outsideEngine++;
+            return;
+          }
+          if (row) {
+            const ok = vector.expect.ok;
+            ok.journal = ok.journal || {};
+            ok.journal[primary.id] = (ok.journal[primary.id] || []).concat([row]);
+          }
+          keep(vector, pool);
+        },
+      };
     }
 
     const factsOf = (f) => ({
@@ -476,7 +521,31 @@
           },
           () => engine.create(ev)
         );
-      // merge — пока насквозь (выше); запись и закрытие по решению 39 — задача 5 (pending)
+      // Объединение: присоединяемые в порядке вызова, основной — target.primaryId; external — только присоединяемых,
+      // facts — присоединяемых и основного, если его взяли. Успех закрывается позже (mergeClose), отказ — на возврате
+      const mergeTr = (engine.workflow.transitions || []).find((t) => t.bulk && t.bulk.mode === "merge");
+      out.merge = (primary, others) => {
+        const list = Array.from(others || []);
+        return record(
+          engine,
+          ctx,
+          {
+            op: "merge",
+            name: mergeTr ? mergeTr.id : "",
+            surface: "",
+            form: {},
+            extra: [primary].concat(list),
+            target: () => ({ primaryId: primary.id, ids: list.map((ev) => ev.id) }),
+            result: (r) => {
+              const facts = Object.fromEntries(list.map((ev, i) => [ev.id, factsOf((r.facts || [])[i] || {})]));
+              if (r.taken) facts[primary.id] = factsOf(r.taken.facts || {});
+              return { external: Object.fromEntries(list.map((ev, i) => [ev.id, data((r.external || [])[i] || [])])), facts };
+            },
+            mergedIn: primary,
+          },
+          () => engine.merge(primary, others)
+        );
+      };
       return out;
     }
 
@@ -485,12 +554,9 @@
         if (!ctx || !reference_(ctx.workflow)) return create(ctx);
         return wrap(create(wrapCtx(ctx)), ctx);
       },
-      // Открытый вектор {close()} — его закроет следующий меняющий вызов или take(). Для тестов; задача 5 кладёт
-      // вектор объединения в pending сама
-      hold(p) {
-        settle();
-        pending = p;
-      },
+      // Открытый вектор {close()} — его закроет следующий меняющий вызов или take(). Для тестов: merge кладёт свой
+      // вектор тем же hold
+      hold,
       // Записанное: отбор select, пул — только инциденты оставленных векторов
       take() {
         settle();
