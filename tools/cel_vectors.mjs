@@ -17,7 +17,7 @@
 //                                           на me), сравнение — решение 41. --update
 //                                           делает то же до записи; расхождение или промах — не пишется ни один файл
 //   --file=путь — другой файл векторов; --transitions=путь — другой файл векторов переходов; --machine=путь —
-//   другая машина (проверка хэша); --tmp=папка — где
+//   другая машина (проверка хэша); --engine=путь — копия prototype/engine.js для повтора переходов (пробы порчи; только с --check); --tmp=папка — где
 //   --update держит профиль Chrome (иначе — системная временная папка); CHROME — другой исполняемый файл Chrome
 //
 // Библиотека векторов (канон, пул, лента, повтор, отбор, запись) — tests/cel-vectors.js. Код выхода — 0 или 1.
@@ -56,7 +56,7 @@ const UNCOVERED_OK = {};
 
 /* ===== Исполнитель прототипа в Node ===== */
 
-function load(machinePath) {
+function load(machinePath, enginePath) {
   const bytes = fs.readFileSync(machinePath);
   const W = JSON.parse(bytes.toString("utf8"));
   const g = { console, TextEncoder, TextDecoder };
@@ -64,7 +64,9 @@ function load(machinePath) {
   vm.createContext(g);
   // Ядро прототипа и библиотека векторов переходов — для их повтора, как в tools/check_quint_replay.mjs
   for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js", "tests/cel-vectors.js", "tests/transition-vectors.js"]) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), g, { filename: f });
+    // enginePath — копия ядра для проб порчи (--engine): подменяет только prototype/engine.js
+    const src = f === "prototype/engine.js" && enginePath ? enginePath : path.join(ROOT, f);
+    vm.runInContext(fs.readFileSync(src, "utf8"), g, { filename: f });
   }
   return { W, bytes, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
 }
@@ -694,9 +696,17 @@ const opt = (name) => (argv.find((a) => a.startsWith(`--${name}=`)) || "").slice
 const file = path.resolve(opt("file") || FILE);
 const machinePath = path.resolve(opt("machine") || MACHINE);
 const transitionsFile = path.resolve(opt("transitions") || TRANSITIONS_FILE);
+const enginePath = opt("engine") && path.resolve(opt("engine"));
 const rel = (p) => (path.relative(ROOT, p).startsWith("..") ? p : path.relative(ROOT, p));
 
-if (argv.includes("--update")) {
+if (opt("engine") && argv.includes("--update")) {
+  // Порченое ядро не должно записать эталон
+  console.log("--engine — только для проб порчи с --check; с --update не допускается");
+  process.exitCode = 1;
+} else if (enginePath && !fs.existsSync(enginePath)) {
+  console.log(`--engine: нет файла ${opt("engine")}`);
+  process.exitCode = 1;
+} else if (argv.includes("--update")) {
   const t0 = Date.now();
   let ok = false;
   try {
@@ -743,9 +753,9 @@ if (argv.includes("--update")) {
   if (!fs.existsSync(file)) console.log("нет файла, соберите: node tools/cel_vectors.mjs --update");
   else okCel = check(fs.readFileSync(file, "utf8"), load(machinePath), rel(file));
   if (!fs.existsSync(transitionsFile)) console.log("нет файла векторов переходов, соберите: node tools/cel_vectors.mjs --update");
-  else okTransitions = checkTransitions(fs.readFileSync(transitionsFile, "utf8"), load(machinePath), rel(transitionsFile));
+  else okTransitions = checkTransitions(fs.readFileSync(transitionsFile, "utf8"), load(machinePath, enginePath), rel(transitionsFile));
   process.exitCode = okCel && okTransitions ? 0 : 1;
 } else {
-  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--transitions=путь] [--machine=путь] [--tmp=папка]");
+  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--transitions=путь] [--machine=путь] [--engine=путь] [--tmp=папка]");
   process.exitCode = 1;
 }
