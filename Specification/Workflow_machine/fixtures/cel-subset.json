@@ -1,0 +1,28 @@
+{
+  "$comment": "Разрешённая часть CEL (CEL.md, «Что из CEL можно») — таблица проб для двух исполнителей: tools/test_cel.mjs (прототип) и TestSubset сервера (копия этого файла, этап 4а). allowed — выражение собирается без ошибок, denied — ошибка сборки. vars — имена и типы, которые видит выражение; оно — значение let пробы, тип результата любой. Пишется руками; правка — оба исполнителя проверяют снова",
+  "vars": { "xs": "list<string>", "n": "int", "b": "bool", "s": "string", "m": "map<string, int>", "f": "Form" },
+  "allowed": [
+    "xs.exists(x, x == 'a')",
+    "xs.all(x, x != '')",
+    "xs.filter(x, x == 'a')",
+    "xs.map(x, x)",
+    "cel.bind(p, 1, p + 1) == 2",
+    "{'k': 1}['k'] == 1",
+    "size(xs) > 0",
+    "'a' in xs",
+    "b ? 1 == 1 : false",
+    "-n < 0",
+    "!b"
+  ],
+  "denied": [
+    "1.5 > 0",
+    "n / 2 == 1",
+    "n % 2 == 1",
+    "s.startsWith('a')",
+    "has(f.comment)",
+    "xs.exists_one(x, x == 'a')",
+    "nope(1)",
+    "{'a': 1, 'a': 2}['a'] == 1",
+    "m.exists(k, k == 'a')"
+  ]
+}

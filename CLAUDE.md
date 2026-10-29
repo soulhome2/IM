@@ -17,14 +17,16 @@ Production-кода нет. Обзор и порядок чтения — [READM
 | `prototype/workflow.js`, `openapi.js`, `fixture.js`, `strings.js`, `tests/scenario-examples.js`, `Specification/Workflow_machine/TRANSITIONS.md`, `SETTINGS.md`, `openapi.v30.json` | машина, контракт, эталонный набор, строки, примеры сценариев | `python3 tools/build_workflow.py` |
 | `Specification/Workflow_machine/quint/im.qnt` | машина + `quint/src/*.qnt` | `node tools/gen_quint.mjs` |
 | `tools/mutations/MACHINE.md` | `tools/mutations/machine.json` + итоги прогонов порч | `python3 tools/mutation_table.py` |
+| `Specification/Workflow_machine/fixtures/cel-vectors.json` | машина, запись тестов API, синтетика | `node tools/cel_vectors.mjs --update` (~6 мин, Chrome) |
 
 ## Что поменял → что проверить
 
-Быстрые (доли секунды) — после любой правки: `python3 tools/build_workflow.py --check`, `python3 tools/check_machine.py` (и `--mutations`), `python3 -m unittest tools/test_openapi30.py`, `node tools/check_cel.mjs`, `node tools/gen_quint.mjs --check`, `python3 tools/check_links.py`.
+Быстрые (доли секунды) — после любой правки: `python3 tools/build_workflow.py --check`, `python3 tools/check_machine.py` (и `--mutations`), `python3 -m unittest tools/test_openapi30.py`, `node tools/check_cel.mjs`, `node tools/test_cel.mjs`, `node tools/cel_vectors.mjs --check`, `node tools/gen_quint.mjs --check`, `python3 tools/check_links.py`.
 
 | Поменял | Дополнительно |
 |---|---|
-| машину, контракт, эталонный набор | сборка (выше), самопроверка и тесты API; затронутые мутации машины — `python3 tools/check_mutations.py <имя> …` |
+| машину, контракт, эталонный набор | сборка (выше), самопроверка и тесты API; затронутые мутации машины — `python3 tools/check_mutations.py <имя> …`; машину — ещё `node tools/cel_vectors.mjs --update` |
+| `prototype/cel-runtime.js`, `engine.js`, `tests/cel-vectors.js` | `node tools/test_cel.mjs`, `node tools/cel_vectors.mjs --check` |
 | `strings/*.json`, переводы | `python3 tools/check_i18n.py`, `python3 tools/check_guide.py` |
 | сценарии, `Scenario_machine/`, `prototype/scenario.js` | `python3 tools/check_scenarios.py`, `node tools/check_scenario_states.mjs` (и `--mutations`), `tests/scenario.html` |
 | `prototype/*.js` | самопроверка и тесты API; порчи кода не устарели (скилл im-fix) |

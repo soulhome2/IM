@@ -7,7 +7,8 @@
    с workflowPatch тестов — как есть, без записи. Условие (guard), правило интерфейса (rule), определение (call)
    и эффект (effect) — каждый вызов своим вектором, вложенный вызов — тоже своим:
    - вход — до вызова: аргументы, usage условия, имена верхнего уровня (scope);
-   - мир — лента: каждый вызов факта мира без ref — функция, аргументы, ответ;
+   - мир — лента: каждый вызов факта мира без ref — функция, аргументы, ответ; на один вызов — одна запись, мир
+     ответил на тот же вызов по-разному — вектор не пишется (stats.tapeRepeat);
    - список инцидентов — только если вычисление его спросило; инциденты — ссылками в общий пул;
    - ответ — значение или текст исключения (исключение пробрасывается дальше).
    Итог — <pre id="celvectors-out"> в конце прогона (tests/harness.js): {incidents, vectors}. Записанное уже
@@ -236,14 +237,24 @@
 
   /* ===== Повтор вектора по ленте (tools/cel_vectors.mjs --check) ===== */
 
-  // Лента: вызов ищется по fn и аргументам, равным по значению. Один ответ на эти аргументы — на любой вызов;
-  // несколько (мир менялся посреди вычисления) — по порядку, сверх записанного — промах
+  // id вектора: вид, имя и первые 10 hex sha256 канона входа — args, use (если есть), scope, world
+  function idOf(vector) {
+    const input = { args: vector.args, scope: vector.scope, world: vector.world };
+    if (vector.use) input.use = vector.use;
+    const at = `${vector.kind}:${vector.name}`;
+    return `${at}:${sha256(canonical(input, at)).slice(0, 10)}`;
+  }
+
+  // Лента: вызов ищется по fn и аргументам, равным по значению; на один вызов — один ответ, сколько бы раз его ни
+  // спросили (так же повторяет бэкенд). Вызова нет на ленте или на нём два ответа — промах. Запись векторов с двумя
+  // ответами на один вызов не пишет (tapeRepeat)
   function tapeWorld(tape, misses) {
     const calls = new Map();
+    const twice = new Set();
     (tape || []).forEach((e) => {
       const k = `${e.fn}|${canonical(e.args)}`;
-      if (!calls.has(k)) calls.set(k, { outs: [], next: 0 });
-      calls.get(k).outs.push(e.out);
+      if (calls.has(k)) twice.add(k);
+      calls.set(k, e.out);
     });
     return new Proxy(
       {},
@@ -253,12 +264,12 @@
             ? undefined
             : (...a) => {
                 const args = a.map(encodeArg);
-                const c = calls.get(`${fn}|${canonical(args)}`);
-                if (!c || (c.outs.length > 1 && c.next >= c.outs.length)) {
+                const k = `${fn}|${canonical(args)}`;
+                if (!calls.has(k) || twice.has(k)) {
                   misses.push(fn);
-                  throw new Error(`cel-vectors: на ленте нет ${fn}(${canonical(args).slice(1, -1)})`);
+                  throw new Error(`cel-vectors: на ленте ${twice.has(k) ? "два ответа на" : "нет"} ${fn}(${canonical(args).slice(1, -1)})`);
                 }
-                return c.outs.length === 1 ? c.outs[0] : c.outs[c.next++];
+                return calls.get(k);
               },
       }
     );
@@ -351,7 +362,10 @@
     const names = new Map(); // вид:имя → (канон ответа → векторы); только то, что может выбрать select
     const kept = [];
     const pool = {};
-    const stats = { evaluations: 0, distinct: 0, kept: 0, skipped: 0 };
+    // Пропущенные вычисления: skipped — факт мира бросил исключение; tapeRepeat — на один вызов факта мира
+    // (fn и аргументы) мир ответил по-разному (менялся посреди вычисления): по ленте с одним ответом на вызов
+    // такой вектор не повторить
+    const stats = { evaluations: 0, distinct: 0, kept: 0, skipped: 0, tapeRepeat: 0 };
     // Стек вычислений: факт мира пишется на ленту верхнего. Исполнитель держит мир в одной переменной, и после
     // вложенного вычисления он бывает чужим — лента от этого не путается
     const stack = [];
@@ -367,11 +381,13 @@
         stats.skipped++;
         return;
       }
+      if (frame.repeat) {
+        stats.tapeRepeat++;
+        return;
+      }
       vector.world = frame.tape;
-      const input = { args: vector.args, scope: vector.scope, world: vector.world };
-      if (vector.use) input.use = vector.use;
       const at = `${vector.kind}:${vector.name}`;
-      vector.id = `${at}:${sha256(canonical(input, at)).slice(0, 10)}`;
+      vector.id = idOf(vector);
       const e = canonical(vector.expect, `${at}.expect`);
       // Длинный ответ — хэшем: входов за прогон сотни тысяч
       const short = e.length > 64 ? sha256(e) : e;
@@ -404,12 +420,9 @@
       const guardSpec = Object.fromEntries((W.registries.guards || []).map((g) => [g.fn, g]));
       const effectSpec = Object.fromEntries((W.registries.effects || []).map((e) => [e.fn, e]));
       const cache = new WeakMap();
-      // inline — определение, вызванное из выражения: его факты мира нужны и вычислению, которое его вызвало
-      const enter = (inline) => {
-        const frame = { tape: [], pool: {}, broken: false, inline: Boolean(inline) };
-        stack.push(frame);
-        return frame;
-      };
+      // inline — определение, вызванное из выражения: его факты мира нужны и вычислению, которое его вызвало.
+      // В стек кадр кладёт run — уже после кодирования входа: исключение при кодировании кадра в стеке не оставляет
+      const frameOf = (inline) => ({ tape: [], pool: {}, broken: false, repeat: false, inline: Boolean(inline) });
       const leave = (frame) => stack.splice(stack.lastIndexOf(frame), 1);
       // Кадры, которым нужен факт мира: верхний и вверх по стеку, пока кадр — определение из выражения
       const frames = () => {
@@ -450,7 +463,7 @@
         cel.observeDefinitions((name, a, compute) => {
           const d = (W.cel.definitions || {})[name];
           if (!stack.length || !d) return compute();
-          const frame = enter(true);
+          const frame = frameOf(true);
           const vector = { kind: "definition", name, args: own(d.params).map(([, t], i) => encode(cel, t, a[i], frame.pool, cache)), scope: {} };
           const r = run(frame, vector, compute);
           vector.expect = { value: encode(cel, d.returns, r, frame.pool, cache) };
@@ -458,18 +471,18 @@
           return r;
         });
       }
-      // Ленту собрать: на одни аргументы — один ответ одной записью; разные ответы — все, по порядку вызовов
+      // Ленту собрать: на один вызов (fn и аргументы) — одна запись, первая. Разные ответы на один вызов — кадр
+      // помечен repeat, вектор не пишется (keep, tapeRepeat)
       function finishTape(frame) {
-        const groups = new Map();
-        frame.tape.forEach((e) => {
-          const k = `${e.fn}|${canonical(e.args)}`;
-          if (!groups.has(k)) groups.set(k, []);
-          groups.get(k).push(e);
-        });
-        const constant = new Set([...groups.values()].filter((l) => l.every((e) => canonical(e.out) === canonical(l[0].out))).map((l) => l[0]));
+        const first = new Map();
         frame.tape = frame.tape.filter((e) => {
-          const l = groups.get(`${e.fn}|${canonical(e.args)}`);
-          return l.length === 1 || !constant.has(l[0]) || e === l[0];
+          const k = `${e.fn}|${canonical(e.args)}`;
+          if (!first.has(k)) {
+            first.set(k, canonical(e.out));
+            return true;
+          }
+          if (first.get(k) !== canonical(e.out)) frame.repeat = true;
+          return false;
         });
       }
       // Имена верхнего уровня — значениями CEL, как их видит выражение
@@ -499,6 +512,7 @@
       }
       const failed = (e) => ({ error: String((e && e.message) || e) });
       function run(frame, vector, fn) {
+        stack.push(frame);
         let result;
         try {
           result = fn();
@@ -521,7 +535,7 @@
         },
         guard(fn, args, scope, use) {
           const g = guardSpec[fn] || {};
-          const frame = enter();
+          const frame = frameOf();
           const s = scopeOf(scope, frame);
           const vector = { kind: "guard", name: fn, args: args || [], scope: s };
           if (own(g.usage).length) {
@@ -539,7 +553,7 @@
           return r;
         },
         rule(where, scope, option) {
-          const frame = enter();
+          const frame = frameOf();
           const s = Object.assign(scopeOf(scope, frame), { option: cel.value("string", option), actions: encode(cel, "list<string>", cel.value("list<string>", scope.actions || []), frame.pool) });
           const vector = { kind: "rule", name: where, args: [], scope: s };
           const sc = Object.assign({}, scope, { world: worldOf(scope.world), incidents: listOf(scope, s, frame) });
@@ -551,7 +565,7 @@
         call(name, args, w) {
           const d = (W.cel.definitions || {})[name];
           if (!d) return cel.call(name, args, w);
-          const frame = enter();
+          const frame = frameOf();
           const vector = { kind: "definition", name, args: own(d.params).map(([, t], i) => encode(cel, t, args[i], frame.pool, cache)), scope: {} };
           const r = run(frame, vector, () => cel.call(name, args, worldOf(w)));
           vector.expect = { value: encode(cel, d.returns, r, frame.pool, cache) };
@@ -559,7 +573,7 @@
           return r;
         },
         effect(fn, args, scope, store) {
-          const frame = enter();
+          const frame = frameOf();
           const s = scopeOf(scope, frame);
           // Пропущенный аргумент (undefined) исполнитель берёт из defaults реестра — в векторе он тем же значением
           const e = effectSpec[fn] || {};
@@ -619,7 +633,7 @@
     };
   }
 
-  const lib = { PER_NAME, PER_OUTCOME, NOW, sha256, canonical, keyOf, encode, encodeArg, revive, replay, select, recorder };
+  const lib = { PER_NAME, PER_OUTCOME, NOW, sha256, canonical, keyOf, idOf, encode, encodeArg, revive, replay, select, recorder };
   const params = typeof location !== "undefined" && location.search ? new URLSearchParams(location.search) : null;
   const recording = Boolean(params && params.get("celVectors") === "1" && !params.has("api") && window.IMCel);
   let rec = null;

@@ -153,36 +153,14 @@ test("макрос по словарю от переменной внешнег�
   ok(errs.some((e) => e.includes(".exists() по словарю — макросы только по списку (CEL.md)")), `нет ошибки о макросе по словарю: ${JSON.stringify(errs)}`);
 });
 
-// Таблица SUBSET — та же, что TestSubset задачи 5 плана этапа 4а (сервер): переменные xs list<string>, n int,
-// b bool, s string, m map<string, int>, f Form. Выражение — значение let пробы: тип результата любой
-const SUBSET = {
-  allowed: [
-    "xs.exists(x, x == 'a')",
-    "xs.all(x, x != '')",
-    "xs.filter(x, x == 'a')",
-    "xs.map(x, x)",
-    "cel.bind(p, 1, p + 1) == 2",
-    "{'k': 1}['k'] == 1",
-    "size(xs) > 0",
-    "'a' in xs",
-    "b ? 1 == 1 : false",
-    "-n < 0",
-    "!b",
-  ],
-  denied: [
-    "1.5 > 0",
-    "n / 2 == 1",
-    "n % 2 == 1",
-    "s.startsWith('a')",
-    "has(f.comment)",
-    "xs.exists_one(x, x == 'a')",
-    "nope(1)",
-    "{'a': 1, 'a': 2}['a'] == 1",
-    "m.exists(k, k == 'a')",
-  ],
-};
+// Таблица SUBSET — общий файл fixtures/cel-subset.json: его же читает TestSubset сервера (задача 5 плана этапа 4а),
+// копия — без переписывания руками. Выражение — значение let пробы: тип результата любой
+const SUBSET_FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-subset.json");
 test("подмножество — таблица SUBSET", () => {
-  const vars = { xs: "list<string>", n: "int", b: "bool", s: "string", m: "map<string, int>", f: "Form" };
+  ok(fs.existsSync(SUBSET_FILE), `нет ${path.relative(ROOT, SUBSET_FILE)}`);
+  const SUBSET = JSON.parse(fs.readFileSync(SUBSET_FILE, "utf8"));
+  const vars = SUBSET.vars;
+  ok(SUBSET.allowed.length > 0 && SUBSET.denied.length > 0 && vars && Object.keys(vars).length > 0, "таблица пустая");
   const rows = [...SUBSET.allowed.map((e) => [e, true]), ...SUBSET.denied.map((e) => [e, false])];
   const cel = IMCel.create(machine({ effects: rows.map(([e], i) => probeEffect(`_subset${i}`, [{ let: "v", value: e }], Object.keys(vars), vars)) }));
   const bad = [];
@@ -353,6 +331,68 @@ test("определение из выражения — свой вектор; 
   const bad = vs.map((v) => [v.id, lib.replay(IMCel.create(w), v, incidents)]).filter(([, r]) => !r.ok);
   ok(!bad.length, `повтор: ${JSON.stringify(bad)}`);
   ok(rec.take().vectors.length === vs.length, "повтор записал векторы");
+});
+
+test("лента: на один вызов разные ответы — вектор не записан, счётчик tapeRepeat", () => {
+  // Повтор по ленте у бэкенда — один ответ на вызов (fn и аргументы): вектор, где мир ответил на тот же вызов
+  // по-разному, повторить нельзя, и запись его пропускает
+  const lib = vectors();
+  const w = machine({ guards: [probeGuard("_twice", "idleSec(me) > 0 && idleSec(me) > 1")] });
+  const rec = lib.recorder(IMCel.create, w);
+  const cel = rec.create(w);
+  let n = 0;
+  const scope = { me: "me", actor: "me", form: {}, surface: "card", now: 1000, world: { idleSec: () => ++n } };
+  ok(cel.guard("_twice", [], scope, {}) === null, "условие пробы не выполнено");
+  ok(!rec.take().vectors.some((v) => v.name === "_twice"), "вектор с разными ответами на один вызов записан");
+  ok(rec.stats().tapeRepeat === 1, `tapeRepeat = ${rec.stats().tapeRepeat}`);
+  // Тот же вызов дважды с одним ответом — одна запись ленты, вектор записан
+  cel.guard("_twice", [], Object.assign({}, scope, { world: { idleSec: () => 5 } }), {});
+  const v = rec.take().vectors.find((x) => x.name === "_twice");
+  ok(v && lib.canonical(v.world) === '[{"args":["me"],"fn":"idleSec","out":5}]', `лента: ${v && lib.canonical(v.world)}`);
+});
+
+test("повтор: на ленте два ответа на один вызов — промах, а не ответы по очереди", () => {
+  const lib = vectors();
+  const w = machine({ guards: [probeGuard("_twice", "idleSec(me) > 0 && idleSec(me) > 1")] });
+  const vec = {
+    id: "guard:_twice:0",
+    kind: "guard",
+    name: "_twice",
+    args: [],
+    scope: { me: "me", actor: "me", surface: "card", now: 1000, deadline: 1000, form: {} },
+    world: [
+      { fn: "idleSec", args: ["me"], out: 1 },
+      { fn: "idleSec", args: ["me"], out: 2 },
+    ],
+    expect: { value: null },
+  };
+  const r = lib.replay(IMCel.create(w), vec, {});
+  // && в CEL при ошибке слева вычисляет и правую часть: промахов — по вызову
+  ok(!r.ok && r.misses.length > 0 && r.misses.every((f) => f === "idleSec"), `повтор: ${JSON.stringify(r)}`);
+});
+
+test("запись: вход не кодируется — исключение, кадр записи не остаётся", () => {
+  // Брошенное при кодировании аргументов не должно оставлять кадр в стеке записи: иначе следующие вычисления
+  // вне записи (повтор, обычный вызов) пишутся как вложенные
+  const lib = vectors();
+  const w = structuredClone(W);
+  const rec = lib.recorder(IMCel.create, w);
+  const cel = rec.create(w);
+  ok(throws(() => cel.call("addressee", ["не инцидент"], {})), "кодирование не того типа — без исключения");
+  const x = IMCel.create(w).value("Incident", { id: "x", assignmentGroup: "g1", timers: { reaction: {}, resolution: {}, hold: {} } });
+  const scope = { me: "me", actor: "me", incident: x, form: {}, surface: "card", now: 1000, world: { isGroup: (id) => id === "g1", members: () => ["me"] } };
+  // Вычисление на исполнителе без записи: определения из выражения пишутся, только если стек записи не пуст
+  IMCel.create(w).guard("isTarget", [], scope, {});
+  ok(rec.take().vectors.length === 0, `после исключения записано вне записи: ${rec.take().vectors.map((v) => v.id)}`);
+});
+
+test("idOf: id вектора — вид, имя и 10 hex sha256 канона входа", () => {
+  const lib = vectors();
+  const v = { kind: "guard", name: "a", args: [1], scope: { now: 1 }, world: [], expect: { value: null } };
+  const want = `guard:a:${sha256(lib.canonical({ args: [1], scope: { now: 1 }, world: [] })).slice(0, 10)}`;
+  ok(lib.idOf(v) === want, `${lib.idOf(v)} ≠ ${want}`);
+  const u = Object.assign({}, v, { use: { scopeRule: "x" } });
+  ok(lib.idOf(u) === `guard:a:${sha256(lib.canonical({ args: [1], scope: { now: 1 }, use: { scopeRule: "x" }, world: [] })).slice(0, 10)}`, "use — во входе");
 });
 
 results.forEach(([name, e]) => console.log(e ? `FAIL ${name}\n    ${String(e.message || e)}` : `ok   ${name}`));

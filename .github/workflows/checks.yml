@@ -58,13 +58,17 @@ jobs:
         # check_cel.mjs — выражения CEL машины (CEL.md, ARCH-07); gen_quint.mjs --check — модель Quint собрана
         # из этой машины (сама модель — задачи quint-model и quint-mutations); Node на раннере уже есть.
         # check_machine.py --mutations — самопроверка: каждую порчу машины или правил ловит своя сверка (PROC-77);
-        # test_openapi30.py — перевод контракта в копию OpenAPI 3.0 для генератора сервера (ARCH-14)
+        # test_openapi30.py — перевод контракта в копию OpenAPI 3.0 для генератора сервера (ARCH-14);
+        # test_cel.mjs — исполнитель выражений и библиотека векторов; cel_vectors.mjs --check — векторы CEL для
+        # бэкенда собраны от этой машины и повторяются на исполнителе прототипа (CEL.md, «Векторы», PROC-44)
         run: |
           python3 tools/check_machine.py
           python3 tools/check_machine.py --mutations
           python3 -m unittest tools/test_openapi30.py
           python3 tools/build_workflow.py --check
           node tools/check_cel.mjs
+          node tools/test_cel.mjs
+          node tools/cel_vectors.mjs --check
           node tools/gen_quint.mjs --check
 
       - name: Машина сценариев — схема, смысл, стык
