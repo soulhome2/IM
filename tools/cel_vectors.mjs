@@ -151,7 +151,10 @@ function check(text, env, where) {
   list("на ленте два ответа на один вызов", repeat);
   list("без векторов (синтетика в tools/cel_vectors.mjs или UNCOVERED_OK с причиной)", uncovered);
   list("UNCOVERED_OK: имя покрыто, нет в машине или без причины", staleOk);
-  let good = !mismatch.length && !wrongId.length && !missed.length && !repeat.length && !uncovered.length && !staleOk.length;
+  // Ошибка вычисления — ошибка сервера (PROC-44 в3): у каждого вида вычислений есть вектор с expect.error
+  const noError = KINDS.filter((k) => !data.vectors.some((v) => v.kind === k && v.expect && "error" in v.expect));
+  list("нет вектора с ошибкой вычисления (синтетика в tools/cel_vectors.mjs)", noError);
+  let good = !mismatch.length && !wrongId.length && !missed.length && !repeat.length && !uncovered.length && !staleOk.length && !noError.length;
   if (size > MAX_BYTES) {
     console.log(`файл ${(size / 1048576).toFixed(2)} МБ — больше 8 МБ: уменьшите PER_NAME в tests/cel-vectors.js`);
     good = false;
@@ -188,10 +191,11 @@ function synthetic(env) {
     const { incidents, vectors } = rec.take();
     let v = vectors.filter((x) => x.kind === kind && x.name === name).pop();
     if (!v) throw new Error(`синтетика «${label}»: вектор ${kind}:${name} не записан`);
+    // post меняет вход до сверки: свой ответ (expect) он ставит сам — повтором на исполнителе без записи
+    if (post) post(v, incidents);
     const got = v.expect && "error" in v.expect ? ERROR : shown(v.expect.value, incidents);
     const ok = expected === ANY ? got !== ERROR : expected === ERROR ? got === ERROR : got !== ERROR && lib.canonical(got) === lib.canonical(expected);
     if (!ok) throw new Error(`синтетика «${label}»: ждали ${expected === ERROR ? "ошибку" : expected === ANY ? "значение" : lib.canonical(expected)}, а ${lib.canonical(v.expect)}`);
-    if (post) post(v, incidents);
     v.case = label;
     v.id = lib.idOf(v);
     if (out.vectors.some((x) => x.id === v.id)) throw new Error(`синтетика «${label}»: тот же вход, что у другого случая (${v.id})`);
@@ -323,6 +327,31 @@ function synthetic(env) {
         ["реакция не идёт", {}],
       ].forEach(([what, t]) => add("rule", where, `${where}: ${what}`, (cel) => cel.rule(where, scopeOf(incident(cel, { timers: t })), undefined), ANY))
     );
+
+  // Ошибки вычисления — ошибка сервера, не «не выполнено» и не значение (PROC-44 в3): в каждом виде вычислений.
+  // Таймер без ключа у условия — выше (timerExpired ['nope'])
+  const effect = (fn, args, label, raw, expected) =>
+    add("effect", fn, label, (cel) => {
+      const x = incident(cel, raw);
+      const list = [x];
+      const store = { incidents: () => list, instance: (id) => list.find((i) => i.id === id), touch() {}, world() {} };
+      cel.effect(fn, args, { me: "op1", actor: "op1", incident: x, before: incident(cel, raw), form: {}, surface: "card", now: NOW, world: {} }, store);
+    }, expected);
+  // Переполнение int64: now * now — больше 2^63. cel-js проверяет + - * так же, как cel-go
+  effect("restartTimer", ["reaction", "now * now"], "ошибка: restartTimer ['reaction', 'now * now'] — переполнение int64 в выражении аргумента", { timers: { reaction: { due: NOW + 1000 } } }, ERROR);
+  effect("pauseTimer", ["nope"], "ошибка: pauseTimer ['nope'] — таймера нет в машине: timerDef('nope') — элемент [0] пустого списка", {}, ERROR);
+  // Правило интерфейса и определение: у инцидента нет таймера машины — данные сервера неполные
+  const noReaction = () => Object.fromEntries(timerIds.filter((id) => id !== "reaction").map((id) => [id, {}]));
+  add("rule", "queueSort.keys.reaction_deadline.0", "ошибка: queueSort.keys.reaction_deadline.0 — в incident.timers нет reaction", (cel) => cel.rule("queueSort.keys.reaction_deadline.0", scopeOf(cel.value("Incident", { id: "s1", number: "INC-9001", state: "in_progress", owner: "op1", priority: 50, timers: noReaction() })), undefined), ERROR);
+  definition("timerRuns", "ошибка: определение timerRuns(x, 'nope') — таймера нет в incident.timers", (cel) => [incident(cel), "nope"], ERROR);
+  // Тип на входе: строка там, где int. Записать её нельзя (запись кодирует по типу), поэтому вход правится после
+  // записи, а ответ — повтор на исполнителе без записи. Дробное число в вектор не попадает вовсе (только целые)
+  definition("leftOf", "ошибка: определение leftOf — строка 'abc' в параметре now: int", (cel) => [incident(cel, { timers: { reaction: { due: NOW + 1 } } }), "reaction", cel.value("int", NOW)], ERROR, {}, (v, pool) => {
+    v.args[2] = "abc";
+    v.expect = lib.replay(IMCel.create(W), v, pool).got;
+  });
+  // Факт с ref без списка инцидентов: countMine у withinHoldLimit, а scope.incidents нет
+  guard("withinHoldLimit", [], "ошибка: withinHoldLimit — факт countMine (ref), а списка инцидентов нет", {}, ERROR, { incidents: undefined });
   return out;
 }
 
