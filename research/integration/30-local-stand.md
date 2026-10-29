@@ -18,7 +18,7 @@
 
 1. Docker CE 29, buildx, compose, `docker swarm init --advertise-addr 127.0.0.1` (у машины два интерфейса — `ens33` и туннель `amn0`, без адреса Swarm не выберет). Пользователь в группе `docker`.
 2. `/etc/hosts`: только `127.0.0.1 axxonnet.test`. Остальные имена из инструкции нужны, лишь если запускать сервис облака на машине вне Swarm.
-3. Go-модули без VPN: `source ~/go/offline-env.sh` (ставит `GOPROXY=file://~/go/offline-proxy,https://proxy.golang.org` и `GONOSUMDB=src.axxonsoft.dev/*`). Цели `make dep` и `gen-bp-prepare` жёстко прописывают `GOPROXY=http://npm.itvgroup.ru:3000` — их не вызывать; `go mod download` выполнить вручную. Проверка: `go mod verify` — «all modules verified».
+3. Go-модули без VPN: `source ~/go/offline-env.sh` (ставит `GOPROXY=file://$HOME/go/offline-proxy,https://proxy.golang.org` и `GONOSUMDB=src.axxonsoft.dev/*`). Цели `make dep` и `gen-bp-prepare` жёстко прописывают `GOPROXY=http://npm.itvgroup.ru:3000` — их не вызывать; `go mod download` выполнить вручную. Проверка: `go mod verify` — «all modules verified».
 4. Генерация кода (`make gen-bp`, `make gen`) не нужна: сгенерированные файлы в репозитории, все сервисы `build-all` компилируются как есть.
 5. Подмена базового образа `debian:bullseye` — см. «Ловушки», п. 1.
 6. `sg docker -c "source ~/go/offline-env.sh && make build-all"` — 10 образов `ac/*`, около 10 минут.
