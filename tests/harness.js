@@ -257,6 +257,12 @@
     console.log(`APITEST ${summary}`);
     document.getElementById("apitest-summary").textContent = summary;
     document.getElementById("apitest-log").textContent = lines.join("\n");
+    // Запись векторов CEL (?celVectors=1, tests/cel-vectors.js): записанное — в блок, его забирает tools/cel_vectors.mjs
+    if (window.IMCelVectors && IMCelVectors.recording) {
+      const out = document.getElementById("celvectors-out");
+      out.dataset.stats = JSON.stringify(IMCelVectors.stats());
+      out.textContent = JSON.stringify(IMCelVectors.take());
+    }
   }
 
   async function run() {

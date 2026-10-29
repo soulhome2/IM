@@ -90,11 +90,15 @@
     });
     const defs = {};
     const known = new Set(["size", ...own(spec.world).map(([n]) => n), ...own(spec.definitions).map(([n]) => n)]);
+    // Наблюдатель вызовов определений из выражений — запись векторов (tests/cel-vectors.js): (имя, аргументы,
+    // вычислить) → значение. На смысл не влияет: без него определение вычисляется так же
+    let observe = null;
     own(spec.definitions).forEach(([name, d]) => {
       const params = own(d.params);
       root.registerFunction(`${name}(${params.map(([, t]) => t).join(", ")}): ${d.returns}`, (...a) => {
         if (!defs[name]) throw new Error(`cel: definition ${name} is not compiled`);
-        return defs[name](Object.assign({}, lists, Object.fromEntries(params.map(([p], i) => [p, a[i]]))));
+        const run = () => defs[name](Object.assign({}, lists, Object.fromEntries(params.map(([p], i) => [p, a[i]]))));
+        return observe ? observe(name, a, run) : run();
       });
     });
 
@@ -329,12 +333,17 @@
         if (keys.join() !== want.join()) errors.push(`${where}: поля словаря ${keys.join(", ")}, а у ${type} — ${want.join(", ")}`);
       } else if (v !== "dyn" && v !== celType(type)) errors.push(`${where}: значение ${v}, а нужно ${type}`);
     }
-    // writable — имена, через которые эффект меняет инцидент черновика: incident и элемент-инцидент forEach.
-    // Значение let — снимок, запись в него потерялась бы
+    // writable — имена и можно ли через них менять инцидент черновика: true — incident и элемент-инцидент forEach;
+    // "let" — значение let (снимок, запись в него потерялась бы); "forEach" — элемент forEach не по инцидентам
+    const WRITE_ONLY = "менять можно только incident и элемент-инцидент forEach";
+    const notWritable = {
+      let: (n) => `${n} — значение let, а не инцидент черновика: ${WRITE_ONLY}`,
+      forEach: (n) => `${n} — элемент forEach не из списка инцидентов: ${WRITE_ONLY}`,
+    };
     function compileOps(ops, scope, where, sub, shapes, writable) {
       scope = Object.assign({}, scope);
       shapes = Object.assign({}, shapes);
-      writable = new Set(writable || ["incident"]);
+      writable = new Map(writable || [["incident", true]]);
       return (ops || []).map((op, i) => {
         const at = `${where}.do[${i}]`;
         const x = (e) => compile(at, scope, sub(e));
@@ -342,7 +351,7 @@
           const fn = x(op.value);
           scope[op.let] = fn ? fn.celType : "dyn";
           shapes[op.let] = sub(op.value);
-          writable.delete(op.let);
+          writable.set(op.let, "let");
           return { kind: "let", name: op.let, fn };
         }
         if ("set" in op || "append" in op) {
@@ -350,7 +359,8 @@
           const p = pathOf(sub(op[kind]), scope, at);
           const fn = x(op.value);
           if (!p) return { kind: "skip" };
-          if (!writable.has(p.root)) return errors.push(`${at}: set / append — менять можно incident или элемент forEach, а не ${p.root}`), { kind: "skip" };
+          const why = writable.get(p.root);
+          if (why !== true) return errors.push(`${at}: set / append — ${notWritable[why] ? notWritable[why](p.root) : `${WRITE_ONLY}, а не ${p.root}`}`), { kind: "skip" };
           let type = p.type;
           if (kind === "append") {
             const m = /^list<(.+)>$/.exec(type);
@@ -366,9 +376,8 @@
           const m = /^list<(.+)>$/.exec(fn ? fn.celType : "");
           if (fn && !m) errors.push(`${at}: forEach — по списку, а ${op.in} — ${fn.celType}`);
           // Менять можно только элемент-инцидент: его исполнитель читает из черновика по id
-          const inner = new Set(writable);
-          if (m && m[1] === "Incident") inner.add(op.forEach);
-          else inner.delete(op.forEach);
+          const inner = new Map(writable);
+          inner.set(op.forEach, m && m[1] === "Incident" ? true : "forEach");
           return { kind: "forEach", name: op.forEach, fn, body: compileOps(op.do, Object.assign({}, scope, { [op.forEach]: m ? m[1] : "dyn" }), at, sub, shapes, inner) };
         }
         if ("call" in op) {
@@ -481,6 +490,9 @@
 
     return {
       errors,
+      // Машина, из которой собрано окружение: типы параметров определений и usage условий — для повтора векторов
+      // (tests/cel-vectors.js)
+      machine: W,
       types,
       value,
       out,
@@ -508,6 +520,9 @@
         }
       },
       effect,
+      observeDefinitions: (fn) => {
+        observe = fn;
+      },
       // Правила интерфейса: есть ли правило, его значение, какие поля формы оно читает
       hasRule: (where) => Boolean(rules[where]),
       rule,
