@@ -27,14 +27,14 @@
 - **А. Потоки через настоящий маршрутизатор.** Тесты Go идут в `HTTPHandler` (весь обработчик, настоящие gin, разбор параметров и `Authenticate`) с `FakeCloudUsers` и базой `im-test-db`: взять → приостановить → возобновить → передать → принять → закрыть, отказы, каждый код условия из машины. Названия тестов из `tests/api-scenarios.js`, которым отвечает проверка, — в задаче 22.
 - **Б. Векторы через маршрут.** `TestTransitionVectorsOverHTTP`: из 87 векторов `run`, `runAll`, `merge` 85 кладутся в базу и повторяются запросом HTTP с миром-лентой; ещё 2, оба синтетические, маршрут не выражает (`a177f82f53`, `e2d6b4a01a`). Сравнивается то, чего не видит тест ядра: статус, код, `journalEntries`, `externalEffects`, `canceledTimerTrigger`, прирост версии, выбранный основной, строки после вызова. Отказов условий у `run` в векторах нет: все 12 отказов `run` — формы; коды условий и `409` у `run` закрывает уровень А. Правки IM не нужны.
 - **В. Контракт на каждом ответе.** Помощник тестов сверяет статус, заголовки и тело каждого ответа уровней А и Б со схемой `openapi.v30.json` (Go-аналог `IMContract.problems`). Исключения собраны в одном месте: коды сервера вне контракта (решение 62) и заведомо лишние статусы (решение 63).
-- **Г. Стенд.** `~/Work/stand/check-operator-transitions.sh`: настоящий токен облака через шлюз, инцидент от `agent-emulator`, только HTTP, базы `imdb` и `ac_db` скриптом не трогаются. Запускается руками, это не тест. Шаг передачи зависит от второго оператора: не вошёл — `SKIP` (решение 60).
+- **Г. Стенд.** `~/Work/stand/check-operator-transitions.sh`: настоящий токен облака через шлюз, инцидент от `agent-emulator`, только HTTP, базы `imdb` и `ac_db` скриптом напрямую (SQL) не трогаются; единственное исключение — правило доступа через старый HTTP API (решение 60). Запускается руками, это не тест. Шаг передачи зависит от второго оператора: не вошёл — `SKIP` (решение 60).
 
 **Что остаётся непроверенным до этапа 7:** полный `tests/api.html?api=…`. Часть сценариев там требует планировщика, сценариев и справочников и в 4в не воспроизводится в принципе. Уровни А–Г закрывают критерий по смыслу (переходы работают через HTTP на настоящем сервере), но не буквально. Строка 40-plan.md меняется на эти уровни в задаче 25.
 
 ## Global Constraints
 
 - Сервер — `~/Work/incident-manager-server`, ветка `feature/im_operator`, от `3f8a6be`. IM — `/mnt/hgfs/VmWareShared/soul2home/IM`, ветка `feature/im_operator`, от `68f5be5`. Пути в задачах — от корня репозитория задачи. Все задачи — на сервере; задача 24 ещё и в `~/Work/stand`; задача 25 — на сервере и в IM.
-- Только локально. Каждая задача — коммит; **push не делать никогда**. `~/Work/axxoncloudgo` не менять; кажется, что нужна правка облака, — **стоп, спросить пользователя**. В `ac_db` ничего не писать, пользователей облака не заводить (ни SQL, ни `CreateUser`): завести пользователя — решение пользователя.
+- Только локально. Каждая задача — коммит, кроме задачи 24 (скрипт лежит вне репозитория); **push не делать никогда**. `~/Work/axxoncloudgo` не менять; кажется, что нужна правка облака, — **стоп, спросить пользователя**. В `ac_db` ничего не писать, пользователей облака не заводить (ни SQL, ни `CreateUser`): завести пользователя — решение пользователя.
 - Вход отложен: `prototype/api.js` не меняется, новых способов подставить оператора в собранном сервере нет. Подмена оператора — только `Deps` в тестах.
 - Тесты с базой — только `IM_TEST_DB_URL='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable'`; база стенда `imdb` — никогда. На этой базе — только одна цепочка `make test-local` одновременно. Контейнер не запущен — `sg docker -c "make test-db-up"`. Пакеты без базы — `go test -race $(go list ./internal/im/... | grep -v /handler/test)`.
 - Перед любой командой `go` — `source ~/go/offline-env.sh` в той же строке. Новых зависимостей нет; `go.mod` и `go.sum` не меняются (`openapi3filter` и `routers/legacy` собираются офлайн; `gorillamux` не брать — `gorilla/mux` нет в `go.mod`; `golang.org/x/text` — непрямая зависимость, не импортировать). Адрес `npm.itvgroup.ru` недоступен. Docker — только через `sg docker -c "…"`.
@@ -77,7 +77,7 @@
 51. **Выборка — каждый инцидент своей транзакцией,** как `server.js` и BACKEND: один вызов `Run` на инцидент (ADR-005, решение 4), частичный успех, порядок — как в запросе. Со `scope` устаревшая выборка не выполняется целиком (412), основной выбирается заново, остальные — в `skipped`.
 52. **Объединение** — один вызов `Merge` (всё или ничего). Основной — `Core.MergePrimary` по списку, отсортированному по номеру. **Дописывание версий после объединения** — отдельная функция `TouchAfterMerge` после фиксации и отдельная задача 19, чтобы другой ответ на открытый вопрос 1 стоил одной задачи: +1 тем инцидентам, кто в `server.js` попал бы в `touch`, **и кого ядро этим вызовом не записало** (иначе основной получил бы +2). `incident.updated` — этап 5.
 53. **`/test/clock` работает только при `IM_TEST_SUPPORT=true`** (`model.Config`, по умолчанию `false`); иначе `404 NOT_FOUND`, вне контракта операции (решение 63). При включённом флаге на старте — `Warn` в журнал: двигать часы может любой вошедший; отдельного права нет, потому что на этапе 7 `tests/api.html` двигает часы из-под любой роли. Сдвиг прибавляется к часам `Deps.Now`; часы приёма событий не сдвигаются. Проверки — как `server.js` (`Number.isInteger`): тело разбирается с `UseNumber`, `1.0` — целое; не целое или нет поля — `422 FORM_FIELD_REQUIRED`, `workflow.error.test.clock_seconds`; отрицательное — `422`, `workflow.error.test.clock_backwards`. `runScheduler` и `serviceRestart` принимаются и ничего не делают (этап 6), `fired` — `[]`. Остальные `/test/*` — 501. Отдельный build tag — этап 7, вместе с остальными `/test/*`.
-54. **Идемпотентность — `idempotency.MemoryStore` на `executeTransition`, `executeBulkTransition`, `mergeIncidents`.** Ключ — (`user.ID`, метод, `c.Request.URL.Path`, `idempotencyKey` тела); 10 минут по тем же часам, что `Deps.Now` (как `now()` у `answered` в `handle`: сдвиг `/test/clock` сокращает память); пустой ключ — без памяти; повтор отдаёт сохранённый ответ любого статуса ниже 500, с `ETag`. Повторы проверяются раньше 404 и `If-Match`, как `handle`, кроме 428 обёртки (она срабатывает до обработчика; расхождение записывается в ADR). Хранилище в PostgreSQL — этап 5, вместе с несколькими экземплярами сервера.
+54. **Идемпотентность — `idempotency.MemoryStore` на `executeTransition`, `executeBulkTransition`, `mergeIncidents`.** Ключ — (`user.ID`, метод, `c.Request.URL.Path`, `idempotencyKey` тела); 10 минут по тем же часам, что `Deps.Now` (как `now()` у `answered` в `handle`: сдвиг `/test/clock` сокращает память); пустой ключ — без памяти; повтор отдаёт сохранённый ответ любого статуса ниже 500, с `ETag`. Повторы проверяются раньше 404 и `If-Match`, как `handle`, кроме 428 обёртки (она срабатывает до обработчика; расхождение записывается в ADR). Значит, повтор отдаёт сохранённый ответ и тому, кто потерял доступ (решение 65). Хранилище в PostgreSQL — этап 5, вместе с несколькими экземплярами сервера.
 55. **Ошибка вычисления — `500 INTERNAL_ERROR`,** а не `422` прототипа (открытый вопрос 2 плана 53, ADR-005). Кода в контракте нет, он собственный, как `NOT_IMPLEMENTED` (открытый вопрос 2, решение 62). В векторах таких случаев нет (`error` — 0 из 92).
 56. **Карточка этапа 4в.** `scenario` — нет в ответе (необязательное поле, этап 6); `media` — `{"cameras": [], "map": null}`, `mediaKinds` — `[]` (этап 10); `site`, `siteType`, `location`, `description` — `null`; `export`, `matchedLinked` — нет в ответе; `scenarioProgress` — `{0, 0}` из мира; `readOnly` — по `scenarioEdit.guards`; `journal` — весь; `alarm`, `note`, `badge`, `source`, `sourceGroup`, `devices`, `ruleName`, `scenarioTitle`, `eventType` — настоящие. Откуда что: `eventType` — `GetSourceEventType(ctx, event.SourceEventType.GUID)`: `id` — `UID`, `name` — `Name` (`GetEvent` заполняет у связанных только `GUID`); `source` — `GetSource` и `GetSourceType`: `typeId` — `UID`, `typeLabel` — `Name`; `sourceGroup` — из `GetSourceGroupGUIDs(ctx, source.GUID)` самая глубокая по `tree.PathFromRoot` (`sourceGroupOf`, `server.js:193`), имя — `GetSourceGroup(ctx, guid)`, групп нет — `null`. Поле, не названное здесь, — как в `summary` и `card`.
 57. **Язык ответов — константа `ru`** (`STAGE5`: настройки сессии). Строки — `operatorapi.StringsRU` и `StringsEN`; разбор ICU свой, только нужное: `{name}`, `{n, plural, …}` с `#`, вложенные `[ключ, подстановки]`, нет ключа в `en` — `ru`, нет нигде — сам ключ. В каталоге 14 строк с `plural` и ни одной с `select`. Правила множественного числа — как `Intl.PluralRules` для целых: `ru` — `one`, `few`, `many`, `en` — `one`, `other`; нет формы — `other`.
@@ -88,11 +88,12 @@
 62. **Коды сервера вне контракта — один список.** `operator.ServerOwnCodes = []string{CodeInternal, CodeNotImplemented}` в `internal/im/handler/operator/problem.go`, других мест с этим списком нет. Контракт в этапе не меняется: `checkContract` при загрузке дописывает эти коды к `Problem.code` только в памяти, файл копии не трогается. `UNAUTHENTICATED` и `BAD_REQUEST` в контракте уже есть, в список не входят. `TestServerOwnCodesAreOutsideContract` падает, как только контракт примет код: тогда он убирается из списка; пустой список — и сам механизм убирается.
 63. **Ответы вне контракта операции — два случая, оба названы.** Лишний статус с умыслом: `412` у `detachLinked` и `detachAllLinked` (`ErrFamilyChanged`, в контракте у них только 200, 403, 404) — таблица `contractExtraStatuses` рядом с `checkContract`. Запрос, который сам проверяет выход за контракт (`404` у `/test/clock` без флага), идёт через `operatorClient.raw` без сверки. Статусы 400, 401, 500, 501 контракт оговаривает общим правилом; если у операции их нет, тело сверяется со схемой `Problem` напрямую. Всё прочее вне контракта — провал теста.
 64. **`TestEveryContractOperationIsRouted` переделывается один раз, в задаче 7, дальше его никто не трогает.** Он больше не вызывает обработчики: сверяет операции контракта с `engine.Routes()`, а ответ `501` проверяет отдельный `TestStubAnswers501` на операции, которая остаётся заглушкой весь этап (`GET /operator/incidents/counters`). Список `implementedOperations` удаляется. Это меньше правок, чем шаг в каждой из 12 задач, и обработчикам с пустыми `Deps` незачем выполняться. Число заглушек сверяется в задаче 25.
+65. **Повтор отдаёт сохранённый ответ раньше проверки видимости** (решение 54, исключение из Review Focus 2). Потерявший доступ оператор с тем же ключом и тем же путём в течение 10 минут получит прежний ответ, в том числе карточку. Принято: ключ привязан к пользователю и пути, память живёт 10 минут, а чужому ответ не выдаётся. Записывается строкой в ADR-002 (задача 25).
 
 ## Review Focus
 
 1. **Двойное нажатие и две вкладки.** `If-Match` прошёл у обоих, ядро пустило одного: второй получает `412` с `current`, а не `500` и не вторую запись журнала. Тест — задача 14: `TestConcurrentClaimOneWins`.
-2. **Чужой инцидент виден по коду ответа.** Без доступа каждый маршрут инцидента отвечает `404`, а не `403`, `412`, `428` или `409`: без `If-Match`, со старым `If-Match`, с `manage`, по `linkedGuid`, в `failed` выборки, в объединении; счётчики и соседи его не выдают. Тесты: задача 15 — `TestInvisibleIncidentIsNotFoundEverywhere`; задача 17 — `TestBulkInvisibleGoesToFailed`; задача 18 — `TestMergeMissing`; задача 9 — `TestSummaryCountsVisibleOnly`; задача 10 — `TestAlarmHidesInvisibleSibling`.
+2. **Чужой инцидент виден по коду ответа.** Без доступа каждый маршрут инцидента отвечает `404`, а не `403`, `412`, `428` или `409`: без `If-Match`, со старым `If-Match`, с `manage`, по `linkedGuid`, в `failed` выборки, в объединении; счётчики и соседи его не выдают. Исключение одно: повтор с тем же ключом отдаёт сохранённый ответ (решение 65). Тесты: задача 15 — `TestInvisibleIncidentIsNotFoundEverywhere`; задача 17 — `TestBulkInvisibleGoesToFailed`; задача 18 — `TestMergeMissing`; задача 9 — `TestSummaryCountsVisibleOnly`; задача 10 — `TestAlarmHidesInvisibleSibling`.
 3. **Повтор сети после успеха.** Тот же ключ с уже устаревшим `If-Match` отдаёт сохранённый `200`, новой записи журнала нет; тот же ключ другого пользователя — выполняется; после `500` — выполняется снова. Тесты — задача 16: `TestIdempotentRepeatReplaysAfterVersionMoved`, `TestIdempotencyKeyIsPerUser`, `TestServerErrorIsNotRemembered`.
 4. **Смешанная выборка.** Один устарел, один чужой, один с отказом, один хороший, плюс повтор id: хороший выполнен и записан ровно один раз, остальные — каждый в `failed` со своей причиной, откатов соседа нет. Тест — задача 17: `TestBulkMixedSelection`.
 5. **Версии после объединения.** Отказ не трогает никого; основной и присоединённые получают ровно +1; ранее привязанные открытые — +1, закрытые — нет; отказ `Touch` после фиксации не превращает успех в ошибку. Тесты — задача 19: `TestMergeTouchesOnlyUnwritten`, `TestMergeRefusalTouchesNothing`, `TestMergeTouchErrorKeepsSuccess`.
@@ -124,23 +125,23 @@
 |---|---|---|
 | `internal/im/service/transition/run.go`, `errors.go`, `core.go`, `merge.go`, `runall.go` | `KeyUnknownAction`, `ErrDuplicateID`, непустые карты итога, `Core.Machine`, контракт вызова | 1 |
 | `internal/im/service/intake/service.go` | машина из ядра | 1 |
-| `internal/im/service/transition/pgrepo.go`, `transitiontest/` | `Repo.ReadFamily` | 2 |
+| `internal/im/service/transition/pgrepo.go`, `transitiontest/`, `internal/im/service/storing/incident_machine_queries.go` | `Repo.ReadFamily` | 2 |
 | `internal/im/service/transition/view.go` | `Actions`, основной выборки, `CanEditScenario` | 2 |
-| `internal/im/service/transition/view_form.go` | `Form` | 3 |
+| `internal/im/service/transition/view_form.go`, `internal/im/machine/formrefs.go` | `Form`, `FormRefs` | 3 |
 | `internal/im/service/transition/view_card.go` | `Presentation`: бейдж, пояснение, отношение | 4 |
 | `internal/im/service/catalog/catalog.go` | строки и ICU | 5 |
 | `internal/im/appservice/operator/directory.go`, `world.go` | `Directory`, мир 4в | 6 |
-| `internal/im/appservice/operator/deps.go`, `internal/im/appservice/appservice.go`, `internal/im/handler/v1/common.go`, `internal/im/service/intake/service.go` | `Deps`, сборка, одно ядро, `CreateContext` | 7 |
+| `internal/im/appservice/operator/deps.go`, `clock.go`, `internal/im/appservice/appservice.go`, `internal/im/handler/v1/common.go`, `internal/im/service/intake/service.go` | `Deps`, сборка, одно ядро, `CreateContext` | 7 |
 | `internal/im/handler/handler.go`, `cmd/im/main.go`, `internal/im/handler/test/common.go` | новая подпись `GetHandler` | 7 |
 | `internal/im/handler/operator/handler.go`, `handler_test.go`, `session.go`, `session_test.go` | `Deps` в обработчике, тест маршрутов | 7 |
 | `internal/im/handler/operator/stubs.go` | снятие заглушек | 9–12, 14, 17, 18, 20, 21 |
 | `internal/im/handler/operator/problem.go`, `internal/im/handler/test/fake_cloud_client.go` | `ServerOwnCodes`, копия пользователя в подделке облака | 8 |
-| `internal/im/handler/test/operator_helpers_test.go` | клиент оператора и сверка с контрактом | 8 |
+| `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go` | клиент оператора и сверка с контрактом | 8 |
 | `internal/im/appservice/incident/incident.go`, `internal/im/appservice/operator/load.go` | видимость, чтение инцидента | 9 |
-| `internal/im/handler/operator/view_summary.go`, `view_card.go`, `view_actions.go`, `view_journal.go` | виды ответов | 9–11 |
-| `internal/im/handler/operator/incident.go`, `reference.go`, `linked.go`, `testsupport.go` | маршруты чтения | 9–12, 20, 21 |
+| `internal/im/handler/operator/view_summary.go`, `view_card.go`, `view_actions.go`, `view_journal.go` | виды ответов | 9–10 |
+| `internal/im/handler/operator/incident.go`, `reply.go`, `reference.go`, `linked.go`, `testsupport.go` | маршруты чтения, ответ целиком | 9–12, 20, 21 |
 | `internal/im/handler/operator/mapping.go`, `params.go` | отображение в HTTP, 404 раньше `If-Match` | 13, 15 |
-| `internal/im/handler/operator/transition.go`, `bulk.go`, `merge.go`, `reply.go` | маршруты записи и идемпотентность | 14, 16–18 |
+| `internal/im/handler/operator/transition.go`, `bulk.go`, `merge.go` (идемпотентность — в `reply.go`) | маршруты записи и идемпотентность | 14, 16–18 |
 | `internal/im/appservice/operator/touch.go`, `internal/im/service/storing/incident_machine_queries.go` | `TouchAfterMerge` | 19 |
 | `internal/im/handler/test/operator_flows_test.go`, `operator_vectors_test.go` | уровни А и Б | 22, 23 |
 | `~/Work/stand/check-operator-transitions.sh`, `check-operator-api.sh` | уровень Г | 24 |
@@ -170,9 +171,9 @@ func TestNewServiceTakesMachineFromCore(t *testing.T)     // s.machine == core.M
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/service/transition/ ./internal/im/service/intake/`. Expected: ошибки сборки или падение названных тестов.
 
-- [ ] **Step 3: Implement.** Экспорт `KeyUnknownAction`, замена всех вхождений. `ErrDuplicateID` оборачивается в сообщениях повтора (`fmt.Errorf("…: %w", ErrDuplicateID)`) в `runall.go` и `merge.go`. Пустой итог — одна функция `emptyResult()`; `Compare` и `Same` пустое и `nil` не различают — проверить, что тесты векторов проходят. `Core.Machine`. `intake.NewService` убирает свой `machine.Vendored()` и берёт `core.Machine()`, подпись `NewService` не меняется, ошибка загрузки машины из него уходит. У типа `Core` — комментарий контракта вызова (решение 61).
+- [ ] **Step 3: Implement.** Экспорт `KeyUnknownAction`, замена всех вхождений. `ErrDuplicateID` оборачивается в сообщениях повтора (`fmt.Errorf("…: %w", ErrDuplicateID)`) в `runall.go` и `merge.go`. Пустой итог — одна функция `emptyResult()`; `Compare` и `Same` пустое и `nil` не различают — проверить, что тесты векторов проходят (Step 4: `TestTransitionVectors` без базы и `TestTransitionVectorsOnPostgres` с базой). `Core.Machine`. `intake.NewService` убирает свой `machine.Vendored()` и берёт `core.Machine()`; подпись `NewService` не меняется, `error` в ней остаётся (его дают проверки аргументов и `ApplyUniqueKey`), уходит только ветка ошибки загрузки машины. У типа `Core` — комментарий контракта вызова (решение 61).
 
-- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && golangci-lint run ./... && gofmt -l internal/im`. Expected: зелёно, вывод `gofmt` пуст.
+- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestTransitionVectorsOnPostgres' && golangci-lint run ./... && gofmt -l internal/im`. Expected: зелёно, вывод `gofmt` пуст.
 
 - [ ] **Step 5: Commit.** Сообщение: «Этап 4в: хвосты ядра — ключ неизвестного действия, ошибка повтора id, непустые карты итога, машина приёма из ядра». `git add internal/im/service`.
 
@@ -218,7 +219,7 @@ func (c *Core) Transition(id string) (map[string]any, bool)
 - [ ] **Step 1: Failing test**
 
 ```go
-func TestReadFamilyTakesNoLock(t *testing.T)       // на MemRepo: ReadFamily внутри чужого DoInTx не ждёт и не считается блокировкой; строки равны LockFamily
+func TestMemReadFamilyEqualsLockFamily(t *testing.T) // на MemRepo: строки ReadFamily равны строкам LockFamily (блокировок у памяти нет, о них тест ничего не утверждает)
 func TestActionsMirrorEngine(t *testing.T)         // new, свой оператор, card: claim, close, transfer; порядок — primary, затем nav, затем остальные; скрытые условием с onFail hide — нет
 func TestActionsOfSurfaceOnly(t *testing.T)        // queue: нет hold (surface только card); merge нет ни на какой поверхности
 func TestActionsDisabledHasHint(t *testing.T)      // нарушено условие без hide: Enabled false, Hint.Key — ключ условия, Guard — имя
@@ -228,7 +229,7 @@ func TestBulkPrimaryOnlyClosable(t *testing.T)     // основной — ср�
 func TestCanEditScenario(t *testing.T)             // владелец в in_progress — true; чужой — false; on_hold — false
 ```
 
-Плюс в `internal/im/handler/test/transition_read_test.go`: `TestReadFamilyOnPostgres` — другая открытая транзакция держит `FOR UPDATE` на строке, `ReadFamily` возвращает строку без ожидания.
+Плюс в `internal/im/handler/test/transition_read_test.go` (единственная проверка, что чтение не блокирует): `TestReadFamilyOnPostgres` — другая открытая транзакция держит `FOR UPDATE` на строке, `ReadFamily` возвращает строку без ожидания.
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/service/transition/`. Expected: FAIL (нет символов).
 
@@ -242,7 +243,7 @@ func TestCanEditScenario(t *testing.T)             // владелец в in_pro
 
 ### Task 3: Чтение ядра: форма
 
-**Files:** Create `internal/im/service/transition/view_form.go`, `view_form_test.go`. Modify `view.go`, типы `formDef` и `fieldDef` в `form.go` (добавить `defaultExpr`, `warnings`, `enabledExpr`, `disabledKey`, `notes`, каких нет).
+**Files:** Create `internal/im/service/transition/view_form.go`, `view_form_test.go`, `internal/im/machine/formrefs.go`, `formrefs_test.go`. Modify `view.go`, типы `formDef` и `fieldDef` в `form.go` (добавить `defaultExpr`, `warnings`, `enabledExpr`, `disabledKey`, `notes`, каких нет).
 
 **Interfaces:**
 - Consumes: `machine.UIRule`, `Scope.Option`, факт `transferTargets`.
@@ -287,13 +288,15 @@ func TestFormDependsOn(t *testing.T)                // close: comment завис
 func TestFormNoteVars(t *testing.T)                 // reopen или transfer: Note [key, vars] с ownerName, filledSteps, totalSteps, minutesSinceClose
 func TestFormTransferTargets(t *testing.T)          // source transferTargets: варианты из факта, optionExpr убрал себя
 func TestActionsCarryForm(t *testing.T)             // доступный transfer — Form != nil; недоступный — nil; claim без формы — nil
+// internal/im/machine/formrefs_test.go:
+func TestFormRefsParsed(t *testing.T)               // FormRefs("…requiredExpr") даёт имена form.* из разобранного выражения; подстрока в строковом литерале и в имени другого поля их не даёт; выражение без form.* — пусто
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/service/transition/ -run 'TestForm|TestActionsCarryForm'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/service/transition/ ./internal/im/machine/ -run 'TestForm|TestActionsCarryForm'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** по `form` и `noteFor` из `engine.js:654–720`; пути правил — `forms.<id>.fields.<name>.<expr>`, как уже разбирает `machine.UIRule`. Зависимость `dep` — первое имя `form.*` в `requiredExpr` или `visibleExpr`: из `cel.formRefs` прототипа; в Go — новый метод `machine.FormRefs(where string) []string` по разобранному выражению, а не поиском подстроки. `Option` — через `Scope.Option`.
+- [ ] **Step 3: Implement** по `form` и `noteFor` из `engine.js:654–720`; пути правил — `forms.<id>.fields.<name>.<expr>`, как уже разбирает `machine.UIRule`. Зависимость `dep` — первое имя `form.*` в `requiredExpr` или `visibleExpr`: из `cel.formRefs` прототипа; в Go — новый метод `(*Machine).FormRefs(where string) []string` пакета `internal/im/machine` (не `service/transition`) по разобранному выражению, а не поиском подстроки. `Option` — через `Scope.Option`.
 
-- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && golangci-lint run ./...`. Expected: зелёно.
+- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && golangci-lint run ./...`. Expected: зелёно (в том числе `./internal/im/machine/`).
 
 - [ ] **Step 5: Commit.** «Этап 4в: чтение ядра — форма перехода». `git add internal/im`.
 
@@ -394,7 +397,7 @@ func TestEveryPluralStringRenders(t *testing.T) // все строки ката�
 type Directory interface {
     Remember(u *model.User)
     Person(id string) (*model.User, bool)
-    People() []*model.User // in the order of id
+    People() []*model.User // in the order of the number User.ID (not of the string id: "9" before "10")
 }
 func NewSeenDirectory() *SeenDirectory
 
@@ -407,7 +410,7 @@ const AgentStateNow = "ready" // STAGE5
 - [ ] **Step 1: Failing test**
 
 ```go
-func TestSeenDirectoryRemembers(t *testing.T)       // Remember дважды — одна запись, новое имя и права заменяют старые; People по id; копия: правка входа после Remember не меняет запись
+func TestSeenDirectoryRemembers(t *testing.T)       // Remember дважды — одна запись, новое имя и права заменяют старые; People по числу `User.ID` (id 9 раньше 10, а не по строке); копия: правка входа после Remember не меняет запись
 func TestSeenDirectoryConcurrent(t *testing.T)      // параллельные Remember и People под -race
 func TestWorldOtherPerson(t *testing.T)             // can другого по его правам; незнакомый — false; isOperator — знакомый; transferTargets — все знакомые
 func TestWorldAgentState(t *testing.T)              // знакомый — ready; незнакомый — offline; me — ready
@@ -419,11 +422,11 @@ func TestWorldUnknownFactIsError(t *testing.T)      // неизвестный ф
 
 И в `internal/im/handler/test/transition_world_test.go` по образцу `TestServerWorldOnDatabase` из этого файла: `TestWorldAccessOfOtherPerson` — у другого с группой правила `access` истинно, без группы — ложно.
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/appservice/operator/`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && go test -race ./internal/im/appservice/operator/ && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestWorldAccessOfOtherPerson'`. Expected: FAIL.
 
 - [ ] **Step 3: Implement** (решение 45). Каждая заглушка — с тегом `STAGE5`, `STAGE6` или `STAGE7` в комментарии, как в `intakeRest`. `Remember` хранит копию `*model.User` с копией карт и срезов.
 
-- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race ./internal/im/appservice/operator/ && golangci-lint run ./...`. Expected: зелёно.
+- [ ] **Step 4: Run.** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && go test -race ./internal/im/appservice/operator/ && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestWorldAccessOfOtherPerson' && golangci-lint run ./...`. Expected: зелёно.
 
 - [ ] **Step 5: Commit.** «Этап 4в: память об операторах и мир операторских маршрутов». `git add internal/im/appservice/operator internal/im/handler/test`.
 
@@ -431,7 +434,7 @@ func TestWorldUnknownFactIsError(t *testing.T)      // неизвестный ф
 
 ### Task 7: Зависимости и сборка
 
-**Files:** Create `internal/im/appservice/operator/deps.go`. Modify `internal/im/appservice/appservice.go`, `internal/im/handler/handler.go`, `internal/im/handler/v1/common.go`, `internal/im/handler/operator/{handler.go,handler_test.go,auth.go,session.go,session_test.go}`, `internal/im/service/intake/service.go`, `cmd/im/main.go`, `internal/im/handler/test/common.go`, `internal/im/model/config.go`. Test: `internal/im/handler/test/operator_wiring_test.go`.
+**Files:** Create `internal/im/appservice/operator/deps.go`, `clock.go`, `clock_test.go`. Modify `internal/im/appservice/appservice.go`, `internal/im/handler/handler.go`, `internal/im/handler/v1/common.go`, `internal/im/handler/operator/{handler.go,handler_test.go,auth.go,session.go,session_test.go}`, `internal/im/service/intake/service.go`, `cmd/im/main.go`, `internal/im/handler/test/common.go`, `internal/im/model/config.go`. Test: `internal/im/handler/test/operator_wiring_test.go`.
 
 **Interfaces:**
 - Consumes: `idempotency.NewMemoryStore`, `catalog.Vendored`, `transition.NewStoreRepo`, `NewWorld`.
@@ -447,13 +450,19 @@ type Deps struct {
     Directory   Directory
     World       func(ctx model.AppContext, user *model.User) transition.World
     ViewWorld   func(ctx model.AppContext, user *model.User) transition.World
-    Visible     func(ctx model.AppContext, user *model.User, guid uuid.UUID) (bool, error)
+    Visible     func(ctx model.AppContext, user *model.User, guid uuid.UUID) (bool, error) // nil until Task 9 wires incident.AppService.Visible in appservice.go
     Context     func(c context.Context) model.AppContext // filled by GetHandler with v1.CreateContext
     Now         func() int64 // ms
     Actor       func(user *model.User) string
     Idempotency idempotency.Store
     Clock       *TestClock // nil unless IM_TEST_SUPPORT
 }
+
+// package operator, clock.go: the clock itself is made here, the flag, ClockFor and the route are Task 21
+type TestClock struct { /* atomic offset, ms */ }
+func NewTestClock() *TestClock
+func (c *TestClock) Advance(sec int64) // offset starts at 0
+func (c *TestClock) Now() int64        // time.Now().UnixMilli() plus the offset
 
 // package handler
 func GetHandler(handler *v1.Handler, deps opapp.Deps, logger logrus.FieldLogger) (http.Handler, error) // opapp — import alias of appservice/operator
@@ -481,11 +490,13 @@ func TestAuthenticateRemembers(t *testing.T)          // newTestEngine с Deps{D
 func TestSessionShowsMachinePermissions(t *testing.T) // ожидание agentState offline → ready (строка 78); остальное как было
 // operator_wiring_test.go
 func TestOneCoreForIntakeAndOperator(t *testing.T)    // require.Same(AppServices.Intake.Machine(), AppServices.Operator.Core.Machine())
+// internal/im/appservice/operator/clock_test.go, без базы
+func TestTestClockOffsetStartsAtZero(t *testing.T)    // Now() на новых часах — time.Now() с точностью до секунды; Advance(3600) сдвигает Now на час вперёд
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && go test -race ./internal/im/handler/operator/`. Expected: FAIL (нет `Deps`, сборка не идёт).
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && go test -race ./internal/im/handler/operator/ ./internal/im/appservice/operator/ && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestOneCoreForIntakeAndOperator'`. Expected: FAIL (нет `Deps`, сборка не идёт).
 
-- [ ] **Step 3: Implement.** Ядро и его машина создаются в `GetServices` до всех сервисов и передаются в `initEventAppService` как параметр (сейчас они внутри неё, `appservice.go:318–327`): одно ядро на приём событий и операторские маршруты (строка ADR-005 про машину приёма). `NewHandler` принимает пустые `Deps` — на этом стоят `newTestEngine` и `session_test.go`; все вызовы `NewHandler` в тестах (`handler_test.go:49`, 279, `session_test.go:105`) передают `opapp.Deps{}`. `v1.CreateContext` — обёртка над `createContext`, без переименования; `GetHandler` кладёт её в `deps.Context`, если поле пусто (`appservice` не может импортировать `v1`); обработчик передаёт `c` — `*gin.Context` и есть `context.Context`, как в `v1`. `Actor` — `strconv.FormatInt(user.ID, 10)`. `Now` — `time.Now().UnixMilli()` плюс сдвиг `Clock`, если он есть; те же часы идут в `NewMemoryStore` (решение 54). `Clock` здесь — только объявление `type TestClock struct{}`, логика — в задаче 21. `World` и `ViewWorld` — один `NewWorld`.
+- [ ] **Step 3: Implement.** Ядро и его машина создаются в `GetServices` до всех сервисов и передаются в `initEventAppService` как параметр (сейчас они внутри неё, `appservice.go:318–327`): одно ядро на приём событий и операторские маршруты (строка ADR-005 про машину приёма). `NewHandler` принимает пустые `Deps` — на этом стоят `newTestEngine` и `session_test.go`; все вызовы `NewHandler` в тестах (`handler_test.go:49`, 279, `session_test.go:105`) передают `opapp.Deps{}`. `v1.CreateContext` — обёртка над `createContext`, без переименования; `GetHandler` кладёт её в `deps.Context`, если поле пусто (`appservice` не может импортировать `v1`); обработчик передаёт `c` — `*gin.Context` и есть `context.Context`, как в `v1`. `Actor` — `strconv.FormatInt(user.ID, 10)`. `Now` — `Clock.Now()`, если часы есть, иначе `time.Now().UnixMilli()`; те же часы идут в `NewMemoryStore` (решение 54). `TestClock` с `NewTestClock`, `Now`, `Advance` пишется здесь, целиком (сдвиг 0 до первого `Advance`); в задаче 21 добавляются только флаг, `ClockFor`, маршрут и его тесты. `World` и `ViewWorld` — один `NewWorld`. `Visible` в сборке здесь не заполняется (`nil`): обработчики до задачи 9 его не зовут, `paramError` при `nil` ведёт себя как раньше (задача 15); подключение — в задаче 9.
 
 - [ ] **Step 4: Run.** `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && make test-local 2>&1 | tail -15 && golangci-lint run ./...`. Expected: зелёно; заглушки по-прежнему 501.
 
@@ -517,6 +528,7 @@ type apiReply struct { Status int; Header http.Header; Body map[string]any; Raw 
 func checkContract(method, path string, status int, header http.Header, raw []byte) error
 var contractExtraStatuses = map[string][]int{"detachLinked": {412}, "detachAllLinked": {412}}
 // engine is a handler of its own over a copy of AppServices.Operator after edit; a client of it is o.on(h).
+// It always builds Deps.Now and Deps.Idempotency (idempotency.NewMemoryStore) from one clock: the Deps.Clock the edit sets, else the real time (Tasks 16, 21, 22 rely on it).
 func (f *intakeFixture) engine(t *testing.T, edit func(*opapp.Deps)) http.Handler
 func (o *operatorClient) on(h http.Handler) *operatorClient
 // patchedCore is a core over the vendored machine after patch (machine.Load, transition.New).
@@ -553,10 +565,10 @@ func TestTimedIncidentHasReactionTimer(t *testing.T)     // ToMachine даёт t
 
 ### Task 9: Видимость и `getIncident` — сводка
 
-**Files:** Create `internal/im/appservice/operator/load.go`, `internal/im/handler/operator/incident.go`, `reply.go`, `view_summary.go`, `internal/im/handler/test/operator_card_test.go`. Modify `internal/im/appservice/incident/incident.go`, `stubs.go` (убрать `GetIncident`).
+**Files:** Create `internal/im/appservice/operator/load.go`, `internal/im/handler/operator/incident.go`, `reply.go`, `view_summary.go`, `internal/im/handler/test/operator_card_test.go`. Modify `internal/im/appservice/incident/incident.go`, `internal/im/appservice/appservice.go` (`Deps.Visible` = `incident.AppService.Visible`), `stubs.go` (убрать `GetIncident`).
 
 **Interfaces:**
-- Consumes: `Store.GetIncidentByUserGroupIDs`, `sourceGroupBLService.ClosurePairs`, `transition.ToMachine`, `Core.Present`, `Core.Actions`.
+- Consumes: `GetIncidentByUserGroupIDs` и `ClosurePairs` — внутри `AppService.Visible` (в `Store` задачи 7 их нет и не нужно), `Deps.Visible`, `transition.ToMachine`, `Core.Present`, `Core.Actions`.
 - Produces:
 
 ```go
@@ -578,7 +590,7 @@ type Loaded struct {
     Siblings     []*model.MachineIncident
     Groups       []uuid.UUID
 }
-// Load reads the incident of user's customer; Linked and Siblings hold only what Visible passes for user. ErrEntryNotFound — нет такого.
+// Load reads the incident of user's customer and does not check that the incident itself is visible (the caller, h.find, calls Deps.Visible first); Linked and Siblings hold only what Visible passes for user. ErrEntryNotFound — нет такого.
 func (d *Deps) Load(ctx model.AppContext, user *model.User, guid uuid.UUID) (*Loaded, error)
 
 // package handler/operator
@@ -604,9 +616,9 @@ func TestSummaryOwnerActorRef(t *testing.T)      // owner {id, kind operator, na
 func TestVisibleMissingIncident(t *testing.T)    // нет такого — false, nil
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestGetIncident|TestSummary'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestGetIncident|TestSummary|TestVisible'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `Visible` — решение 46: сначала `HasAnyMachinePermission`, без проверки `IsManager`; проверка клиента — отдельным сравнением (`GetIncidentByUserGroupIDs` клиента не проверяет). `Load` — источники данных по решению 56; `Linked` и `Siblings` — по одной проверке `Deps.Visible` на строку. Удалённая ссылка (правило, сценарий) — поле `null`, не ошибка. `summary` — по `server.js:635–706`, поля решения 56; `version` — `strconv`; времена — `time.UnixMilli(...).UTC()`. Все ответы — через `viewer` (структура с `ctx`, `user`, `me`, `now`, `locale`, `world`); `ViewOp.Surface` у сводки — `queue`, у карточки — `card`.
+- [ ] **Step 3: Implement.** Ответ задачи — сводка без `actions`, `journal`, `alarm`: в контракте `IncidentCard` — это `IncidentSummary` плюс необязательные поля (`required` у карточки нет, у сводки — `guid`, `number`, `eventGuid`, `alarmNumber`, `state`, `version`; проверено по `openapi.json`), поэтому `TestGetIncidentCardBasics` проходит сверку с контрактом; остальное добавляет задача 10. Видимость самого инцидента проверяет `find`: сначала `Deps.Visible` (не виден — 404), потом `Load`; `Load` видимость основного не проверяет, а только отбирает видимых для `Linked` и `Siblings`. `Visible` — решение 46: сначала `HasAnyMachinePermission`, без проверки `IsManager`; проверка клиента — отдельным сравнением (`GetIncidentByUserGroupIDs` клиента не проверяет). `Load` — источники данных по решению 56; `Linked` и `Siblings` — по одной проверке `Deps.Visible` на строку. Удалённая ссылка (правило, сценарий) — поле `null`, не ошибка. `summary` — по `server.js:635–706`, поля решения 56; `version` — `strconv`; времена — `time.UnixMilli(...).UTC()`. Все ответы — через `viewer` (структура с `ctx`, `user`, `me`, `now`, `locale`, `world`); `ViewOp.Surface` у сводки — `queue`, у карточки — `card`.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -616,11 +628,11 @@ func TestVisibleMissingIncident(t *testing.T)    // нет такого — fals
 
 ### Task 10: Карточка целиком
 
-**Files:** Create `internal/im/handler/operator/view_card.go`. Modify `view_summary.go`, `incident.go`, `operator_card_test.go`.
+**Files:** Create `internal/im/handler/operator/view_card.go`, `view_actions.go`, `view_journal.go`. Modify `view_summary.go`, `incident.go`, `operator_card_test.go`.
 
 **Interfaces:**
 - Consumes: `Core.Actions`, `Core.Present`, `Core.CanEditScenario`, `Store.GetJournalEntries`, `catalog.Text`.
-- Produces: `func (v *viewer) card(l *opapp.Loaded) (*operatorgen.IncidentCard, error)`, `func (v *viewer) journal(lines []*model.JournalEntry) []operatorgen.JournalEntry`, `func journalRows(customer uuid.UUID, lines []transition.JournalEntry) ([]*model.JournalEntry, error)` — новые строки из `Result.Journal` через `transition.JournalRow`, тот же вид в карточке и в `journalEntries`.
+- Produces: `func (v *viewer) card(l *opapp.Loaded) (*operatorgen.IncidentCard, error)` (`view_card.go`; дополняет сводку задачи 9), `func (v *viewer) actions(l *opapp.Loaded, surface string) ([]operatorgen.AvailableAction, error)` (`view_actions.go`; его же берёт задача 11), `func (v *viewer) journal(lines []*model.JournalEntry) []operatorgen.JournalEntry` (`view_journal.go`), `func journalRows(customer uuid.UUID, lines []transition.JournalEntry) ([]*model.JournalEntry, error)` — новые строки из `Result.Journal` через `transition.JournalRow`, тот же вид в карточке и в `journalEntries`.
 
 - [ ] **Step 1: Failing test**
 
@@ -636,9 +648,9 @@ func TestCardDevices(t *testing.T)       // source, devices, sourceGroup {guid, 
 func TestCardJSONHasNoNilArrays(t *testing.T) // actions, journal, siblings — [] а не null
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCard'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCard|TestAlarmHides'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** по `card` (864), `alarmView` (887), `journalView` (707), `actionsFor` (601), `formView` (576), `timerState` (555), `holdTimerState` (569). Журнал — `model.JournalKindOf`, текст — `catalog.Text(locale, TemplateKey, Vars)`. `reason` действия — `catalog.Text` по `Hint`. `fieldOptions` — варианты с `label`, у `transferTargets` дополнительно `role`, `available`, `availabilityLabel` из `Directory`.
+- [ ] **Step 3: Implement** по `card` (864), `alarmView` (887), `journalView` (707), `actionsFor` (601), `formView` (576), `timerState` (555), `holdTimerState` (569). Журнал — `model.JournalKindOf`, текст — `catalog.Text(locale, TemplateKey, Vars)`. `reason` действия — `catalog.Text` по `Hint`. `fieldOptions` — варианты с `label`, у `transferTargets` дополнительно `role`, `available`, `availabilityLabel` из `Directory` (`OptionView` из ядра их не несёт, обработчик берёт их из `Directory` по `ID`).
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -680,15 +692,15 @@ func TestJournalPage(t *testing.T)               // page=2&pageSize=1 — одн
 **Files:** Create `internal/im/handler/operator/reference.go`, `internal/im/handler/test/operator_reference_test.go`. Modify `stubs.go`.
 
 **Interfaces:**
-- Consumes: `machine.Data` (`reasonCatalogs`), `Directory.People`, `Core.Form`.
-- Produces: `ListReasons`, `ListTransferTargets`.
+- Consumes: `machine.Data` (`reasonCatalogs`), `Directory.People`, `Core.Form` (только с инцидентом: `Form(ctx, repo, w, op, formID, incident)` инцидент требует).
+- Produces: `ListReasons`, `ListTransferTargets`; для вызова без `incidentGuid` — функция обработчика `func (v *viewer) allTargets() []operatorgen.TransferTarget`: все из `Directory.People()`, кроме себя, без вызова ядра и без инцидента (как `targets().filter(!isSelf)` прототипа). С видимым `incidentGuid` — `Core.Form` формы, у которой есть поле `source == transferTargets`; невидимый или несуществующий — `allTargets()`.
 
 - [ ] **Step 1: Failing test**
 
 ```go
 func TestReasonsHold(t *testing.T)            // 200, items машины, label по-русски
 func TestReasonsUnknownCatalog(t *testing.T)  // 404 NOT_FOUND, workflow.error.catalog_not_found
-func TestTargetsWithoutIncident(t *testing.T) // второй оператор есть, себя нет; kind operator, name, available true (Directory общий на HTTPHandler: Contains, а не Equal)
+func TestTargetsWithoutIncident(t *testing.T) // не вызывает Core.Form; второй оператор есть, себя нет; kind operator, name, available true (Directory общий на HTTPHandler: Contains, а не Equal)
 func TestTargetsWithIncident(t *testing.T)    // без текущего адресата и владельца по optionExpr
 func TestTargetsInvisibleIncident(t *testing.T) // невидимый и несуществующий incidentGuid: 200, ответ побайтно равен ответу без параметра, ничего об инциденте не выдаёт (решение 46)
 func TestTargetsAfterRestartEmpty(t *testing.T) // новый Directory знает только вошедшего: [] (через Deps теста)
@@ -697,7 +709,7 @@ func TestTargetsHasNoLabelField(t *testing.T)   // как server.js: поле la
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestReasons|TestTargets'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** по маршрутам `server.js:1670`, 1718, `targets` (988). Параметр `incidentGuid` разбирается обёрткой.
+- [ ] **Step 3: Implement** по маршрутам `server.js:1670`, 1718, `targets` (988). Параметр `incidentGuid` разбирается обёрткой. `role`, `available`, `availabilityLabel` — из `Directory`, как в задаче 10.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -791,13 +803,14 @@ func TestMergeOnSingleRouteRefused(t *testing.T)  // 404 unknown_action, не 41
 func TestWrongState(t *testing.T)              // resume у new — 409 TRANSITION_NOT_ALLOWED_FROM_STATE
 func TestFormRequired(t *testing.T)            // hold без reasonId — 422 FORM_FIELD_REQUIRED; без изменений
 func TestBadJSON(t *testing.T)                 // 400 BAD_REQUEST
-func TestFormValueNotString(t *testing.T)      // число и список в formValues доходят до ядра, ответ 422 формы или 200, не 400
+func TestFormValueNotStringInSelect(t *testing.T) // hold, `reasonId: 5` и `reasonId: ["a"]`: оба — ровно 422 FORM_FIELD_INVALID (поле с источником; `offered` не строку не принимает), не 400; ничего не записано
+func TestFormValueNotStringInText(t *testing.T)   // hold с верной причиной и `comment: 5`: ровно 200 (поле text без источника, значение непустое), не 400
 func TestConcurrentClaimOneWins(t *testing.T)  // Review Focus 1: 8 горутин с одним If-Match: ровно один 200, остальные 412 с current; 500 нет; запись claim одна; версия +1
 ```
 
 Плюс в пакете `operator`, без базы: `TestTransitionOpKeepsEmptySurface` — `transitionOp` с `surface` `""` даёт `Op.Surface == ""`, `expect` nil — `Op.Expect` без ключа.
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ ./internal/im/handler/operator/ -run 'TestClaim|TestTransition|TestExpectedState|TestUnknownTransition|TestAutomatic|TestMergeOnSingle|TestWrongState|TestFormRequired|TestFormValueNotString|TestBadJSON|TestConcurrentClaim'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ ./internal/im/handler/operator/ -run 'TestClaim|TestTransition|TestExpectedState|TestUnknownTransition|TestAutomatic|TestMergeOnSingle|TestWrongState|TestFormRequired|TestFormValueNotString|TestTransitionOpKeepsEmptySurface|TestBadJSON|TestConcurrentClaim'`. Expected: FAIL.
 
 - [ ] **Step 3: Implement.** Тело — `transitionBody`, а не сгенерированный тип. `journalEntries` — `Result.Journal[id]` через `journalRows` и `viewer.journal`; `externalEffects` — `Result.External[id]` со `status: "queued"`, пустой — `[]`; `canceledTimerTrigger` — `Result.Canceled[id]` или `null`; `navigate` — `ui.navigate` перехода; карточка — заново `Load` после фиксации; ошибка чтения после фиксации — 500, но журнал ошибок содержит слово `committed` (переход уже выполнен). `Result.After` — решение 59. `current` у 412 — свежий `Load` и `viewer.card`; инцидент исчез — 404.
 
@@ -812,7 +825,7 @@ func TestConcurrentClaimOneWins(t *testing.T)  // Review Focus 1: 8 горути
 **Files:** Modify `internal/im/handler/operator/params.go`, `handler.go`, `handler_test.go` (`newTestEngine` получает `Deps.Visible`, `TestMissingIfMatchGives428`, `TestParamErrorHandlerKeeps400WhenIfMatchIsPresent`); `internal/im/handler/test/operator_transition_test.go`.
 
 **Interfaces:**
-- Consumes: `userFromContext`, `Deps.Visible`.
+- Consumes: `userFromContext`, `Deps.Visible` (подключён в задаче 9; до неё `nil`).
 - Produces: `func (h *Handler) paramError(c *gin.Context, err error, status int)`; свободная функция `ParamErrorHandler` удаляется, `Register` передаёт метод.
 
 - [ ] **Step 1: Failing test**
@@ -823,14 +836,15 @@ func TestMissingIfMatchOnVisible(t *testing.T)          // виден — 428
 func TestMissingIfMatchNoToken(t *testing.T)            // без токена — 401 раньше всего
 func TestMissingIfMatchOnScenarioAnswer(t *testing.T)   // answer на чужом — 404; на своём без заголовка — 428
 func TestBadGuidWithoutIfMatch(t *testing.T)            // 400 BAD_REQUEST
-// в handler_test.go:
-func TestMissingIfMatchGives428(t *testing.T)           // Deps.Visible да — 428; нет — 404 (заменяет прежний тест: случайный UUID без проверки видимости)
+// в handler_test.go (пакет operator, без базы):
+func TestMissingIfMatchGives428(t *testing.T)           // Deps.Visible да — 428; нет — 404 (заменяет прежний тест: случайный UUID без проверки видимости); Deps.Visible == nil (пустые Deps, как в session_test.go) — 428, как раньше
+// в handler/test/operator_transition_test.go (база, f.operator):
 func TestInvisibleIncidentIsNotFoundEverywhere(t *testing.T) // Review Focus 2: инцидент вне доступа, у оператора с manage и без: GET карточка, actions, journal, linked; POST transition без If-Match, со старым, с верным; DELETE linked и linked/{guid}; всюду 404, тело одно и то же
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestMissingIfMatch|TestBadGuidWithoutIfMatch'`. Expected: FAIL. `TestInvisibleIncidentIsNotFoundEverywhere` включается целиком только после задачи 20: до неё маршруты linked — 501; пока он с `t.Skip("task 20")`, а задача 20 убирает пропуск.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ ./internal/im/handler/operator/ -run 'TestMissingIfMatch|TestBadGuidWithoutIfMatch|TestParamErrorHandlerKeeps|TestInvisibleIncident'`. Expected: FAIL. `TestInvisibleIncidentIsNotFoundEverywhere` включается целиком только после задачи 20: до неё маршруты linked — 501; пока он с `t.Skip("task 20")`, а задача 20 убирает пропуск.
 
-- [ ] **Step 3: Implement** (решение 47). Ошибка `Visible` — 500. Прочие ошибки параметров — 400, как раньше. Тесты пакета, которые зовут `ParamErrorHandler`, переходят на метод. ADR-002, решение 7 — закрывается в задаче 25.
+- [ ] **Step 3: Implement** (решение 47). Ошибка `Visible` — 500. `Deps.Visible == nil` (пустые `Deps` в тестах пакета) — вести себя как раньше, то есть 428; записать это в комментарии к `paramError`. Прочие ошибки параметров — 400, как раньше. Тесты пакета, которые зовут `ParamErrorHandler`, переходят на метод. ADR-002, решение 7 — закрывается в задаче 25.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -861,7 +875,7 @@ func TestConcurrentSameKeyRunsOnce(t *testing.T)               // 4 горути
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'Idempoten|TestNoKeyNoMemory|TestServerErrorIsNot|TestConcurrentSameKey'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** (решение 54). Тело ответа маршалится в `run`, в `Response` — `Status`, `Header` (`ETag`, `Content-Type`), `Body`. `idempotency.ErrAborted` — 500. Отмена контекста клиента не отменяет выполнение: как `Do` уже делает, проверить чтением `memory.go`.
+- [ ] **Step 3: Implement** (решения 54, 65: повтор отдаёт сохранённый ответ раньше проверки видимости). Тело ответа маршалится в `run`, в `Response` — `Status`, `Header` (`ETag`, `Content-Type`), `Body`. `idempotency.ErrAborted` — 500. Отмена контекста клиента не отменяет выполнение: как `Do` уже делает, проверить чтением `memory.go`.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -883,7 +897,7 @@ func parseExpected(m *map[string]string) (map[string]int64, error)
 func (h *Handler) ExecuteBulkTransition(c *gin.Context, transitionId operatorgen.TransitionId)
 ```
 
-Порядок проверок — строго `server.js:1486–1525`; повторы в `incidentGuids` убираются первым делом, считается длина после этого.
+Порядок проверок — `server.js:1486–1525`, с одним отступлением: повторы в `incidentGuids` убираются первым делом и длина считается после этого (`server.js` считает `maxBulk` и `selection_too_small` по исходной длине); ядро всё равно отвергает повтор (`ErrDuplicateID`). Отступление записывается в ADR-005 (задача 25).
 
 - [ ] **Step 1: Failing test**
 
@@ -901,13 +915,15 @@ func TestBulkBadExpectedVersion(t *testing.T)   // "abc" — 400 BAD_REQUEST
 func TestBulkScopeStaleWhole412(t *testing.T)   // close со scope, один устарел — 412, current, ничего не выполнено
 func TestBulkScopeSkipsOtherScenario(t *testing.T) // другой сценарий — в skipped {incidentGuid, number, reasonKey}, версия не менялась
 func TestBulkExpectedKeyOutsideSelection(t *testing.T) // лишний ключ в expectedVersions — не ошибка
-func TestBulkMixedSelection(t *testing.T)       // Review Focus 4: хороший, устаревший, чужой, с отказом, повтор хорошего: succeeded — 1 (запись журнала одна), failed — 3 со своими кодами, у устаревшего VERSION_CONFLICT
+func TestBulkMixedSelection(t *testing.T)       // Review Focus 4: хороший, устаревший, чужой, с отказом, повтор хорошего: succeeded — 1 (запись журнала одна), failed — 3 со своими кодами, у устаревшего VERSION_CONFLICT и без поля current (в `failed` его нет, даже у конфликта версии)
+func TestBulkErrorOfOneIsFailed(t *testing.T)   // мир, давший ошибку факта на одном инциденте: он в failed с INTERNAL_ERROR, остальные выполнены
+func TestBulkDuplicatesAtMaxBulk(t *testing.T)  // отступление от server.js: patchedCore с maxBulk 2, ids [a, a, b] — длина 2 после снятия повтора, выполняется (по server.js было бы selection_too_large)
 func TestBulkIdempotent(t *testing.T)           // повтор с ключом — тот же ответ, переходы не повторяются
 ```
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run TestBulk`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** (решения 50, 51). `failed[].problem` — тело `problemReply`, с `current` только там, где он есть у `server.js` (у `conflict(ev)` — нет). `succeeded` — сводка `queue`. Порядок `succeeded` — как в запросе. Ошибка `500` одного инцидента — запись в `failed` с кодом `INTERNAL_ERROR`, остальные идут дальше; `TestBulkMixedSelection` это не закрывает, проверяется отдельной подстановкой мира в `TestBulkErrorOfOneIsFailed`: в `failed` код `INTERNAL_ERROR` (сверка контракта знает его по решению 62). Выборке `expect` — `nil`, если ключа нет.
+- [ ] **Step 3: Implement** (решения 50, 51). `failed[].problem` — тело `problemReply`, но `Current` в `failed` игнорируется: `current` в тело не кладётся никогда, даже у `*VersionConflict` (у `conflict(ev)` в `server.js` его нет). `succeeded` — сводка `queue`. Порядок `succeeded` — как в запросе. Ошибка `500` одного инцидента — запись в `failed` с кодом `INTERNAL_ERROR`, остальные идут дальше; `TestBulkMixedSelection` это не закрывает, проверяется отдельной подстановкой мира в `TestBulkErrorOfOneIsFailed`: в `failed` код `INTERNAL_ERROR` (сверка контракта знает его по решению 62). Выборке `expect` — `nil`, если ключа нет.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -964,9 +980,11 @@ func TestMergeNoRightsIs403(t *testing.T)     // нет права — PERMISSIO
 ```go
 // TouchAfterMerge raises by one the version of the incidents server.js touches after a merge and the core did not write: the open incidents linked to primary before the merge; the primary, when nothing was joined and it was not taken. No journal, no other column.
 func (d *Deps) TouchAfterMerge(ctx model.AppContext, customer, primary uuid.UUID, r *transition.Result, me string) error
-// in storing
+// in storing: does not open a transaction itself, MUST be called inside one (like the lock query noted in scenario_queries.go)
 TouchIncidents(ctx model.AppContext, customer uuid.UUID, guids []uuid.UUID) error
 ```
+
+`TouchIncidents` добавляется в интерфейс `Store` (`deps.go`). Транзакцию открывает `TouchAfterMerge` тем же способом, что ядро: `d.Repo.DoInTx(ctx, func() error { return d.Store.TouchIncidents(ctx, customer, guids) })` (`Repo.DoInTx` из `transition.Repo` уже есть, поверх `Store.DoInTx`; нового помощника для транзакции нет).
 
 - [ ] **Step 1: Failing test**
 
@@ -977,12 +995,12 @@ func TestMergeTakenPrimaryOnce(t *testing.T)         // основной взя�
 func TestMergeRefusalTouchesNothing(t *testing.T)    // отказ: версии всех без изменений
 func TestMergeTouchErrorKeepsSuccess(t *testing.T)   // Deps с Store, у которого TouchIncidents даёт ошибку: 200, ошибка в журнале; карточка отражает зафиксированное
 func TestTouchIncidentsOnlyVersion(t *testing.T)     // только version; другие столбцы равны; чужой клиент не затронут
-func TestTouchIncidentsWithMergeNoDeadlock(t *testing.T) // параллельно TouchIncidents по двум инцидентам и Merge по ним же: ни одного 40P01
+func TestTouchIncidentsWithMergeNoDeadlock(t *testing.T) // 20 кругов параллельно: TouchAfterMerge по двум инцидентам и Merge по ним же, обе стороны берут строки по номеру: ни одного 40P01 (тест ловит нарушение порядка блокировок, а не доказывает его отсутствие; при мигании — порядок в `TouchIncidents` проверить по коду, не ослаблять тест)
 ```
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestMergeTouch|TestMergeTaken|TestMergeRefusalTouches|TestTouchIncidents'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** (решение 52, по `server.js:1290–1300`). Вызов — после возврата `Merge`, отдельной транзакцией, вне транзакции ядра; ошибка не отменяет ответ. `TouchIncidents` сначала блокирует строки `SELECT … ORDER BY number FOR UPDATE`, потом обновляет: порядок тот же, что у `LockFamily`, один общий `UPDATE` мог бы взять строки в другом порядке. Ответ карточки читается после `Touch`. Множество — ровно как в `server.js`, минус записанные ядром (`Result.Incidents`); своей логики «нужно ли повышать» здесь нет.
+- [ ] **Step 3: Implement** (решение 52, по `server.js:1290–1300`). Вызов — после возврата `Merge`, отдельной транзакцией, вне транзакции ядра; ошибка не отменяет ответ. `TouchIncidents` (внутри `Repo.DoInTx`, см. Interfaces) сначала блокирует строки `SELECT … ORDER BY number FOR UPDATE`, потом обновляет: порядок тот же, что у `LockFamily`, один общий `UPDATE` мог бы взять строки в другом порядке. Ответ карточки читается после `Touch`. Множество — ровно как в `server.js`, минус записанные ядром (`Result.Incidents`); своей логики «нужно ли повышать» здесь нет.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -1026,17 +1044,14 @@ func TestDetachAllRefusalChangesNothing(t *testing.T) // основной в р�
 
 ### Task 21: `/test/clock`
 
-**Files:** Create `internal/im/appservice/operator/clock.go`, `internal/im/handler/operator/testsupport.go`, `internal/im/handler/test/operator_clock_test.go`. Modify `deps.go`, `stubs.go`, `internal/im/appservice/appservice.go`.
+**Files:** Create `internal/im/handler/operator/testsupport.go`, `internal/im/handler/test/operator_clock_test.go`. Modify `internal/im/appservice/operator/clock.go` (тип часов — из задачи 7), `stubs.go`, `internal/im/appservice/appservice.go`.
 
 **Interfaces:**
 - Consumes: `Config.TestSupport`.
 - Produces:
 
 ```go
-type TestClock struct { /* atomic offset, ms */ }
-func NewTestClock() *TestClock
-func (c *TestClock) Advance(sec int64)
-func (c *TestClock) Now() int64
+// TestClock, NewTestClock, Advance and Now are made in Task 7; this task adds:
 // ClockFor is nil when the flag is off; on, it logs a Warn: any signed-in user can move the clock.
 func ClockFor(cfg *model.Config, logger logrus.FieldLogger) *TestClock
 func (h *Handler) TestClock(c *gin.Context)
@@ -1056,9 +1071,9 @@ func TestClockShortensIdempotency(t *testing.T) // ключ запомнен, с
 func TestClockForWarns(t *testing.T)            // в пакете appservice/operator, без базы: TestSupport false — nil, журнал пуст; true — часы и одна запись Warn (logrus test hook)
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run TestClock`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/appservice/operator/ -run TestClockFor && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run TestClock`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** (решение 53). Тело разбирается с `UseNumber` в карту, а не в `TestClockRequest`: дробное число в `int` дало бы 400 вместо 422; целое — `Float64() == Trunc`. Маршрут остаётся под `Authenticate`. `/test/reset` и прочие — 501. `Deps.Clock` объявлен в задаче 7, здесь появляется сам тип; `appservice.go` берёт его из `ClockFor` и отдаёт те же часы `Deps.Now` и `NewMemoryStore`. Обработчик тестов `f.engine` собирает `Now` и `Idempotency` от своих часов так же.
+- [ ] **Step 3: Implement** (решение 53). Тело разбирается с `UseNumber` в карту, а не в `TestClockRequest`: дробное число в `int` дало бы 400 вместо 422; целое — `Float64() == Trunc`. Маршрут остаётся под `Authenticate`. `/test/reset` и прочие — 501. `Deps.Clock` и тип `TestClock` сделаны в задаче 7; `appservice.go` берёт часы из `ClockFor` и отдаёт те же часы `Deps.Now` и `NewMemoryStore`. `f.engine` (задача 8) уже собирает `Now` и `Idempotency` от одних часов, здесь он не меняется.
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -1095,6 +1110,7 @@ func TestFlowCloseProcessedNeedsSteps(t *testing.T) // resultId processed — 40
 // «Устаревшее состояние в запросе» (:91); «Версия записи»: (:100); «Переход не из этого состояния» (:125)
 func TestFlowConflicts(t *testing.T)
 // «Закрытие основного»: привязанные остаются linked до этапа 6
+// Закрепляет известный предел, а не желаемое поведение: в комментарии над ожиданием — маркер `STAGE6: сменить ожидание, когда появится close_linked`
 func TestFlowCloseLinkedStaysUntilStage6(t *testing.T)
 func TestFlowFullLifecycle(t *testing.T)         // критерий: взять, приостановить, возобновить, передать, принять, закрыть; после каждого шага GET карточки равен incident ответа; журнал на каждый шаг, версия растёт на 1
 // Коды условий: таблица строится по guards машины.
@@ -1134,7 +1150,7 @@ func TestGuardCodesOverHTTP(t *testing.T)
 - Consumes: `transitionVectors`, `f.seedVector`, `f.inRolledBackTx`, `transitiontest.NewTape`, `Tape.Misses`, `transition.NewStoreRepo`, `operator.NewHandler`, `operator.Register`.
 - Produces: `func TestTransitionVectorsOverHTTP(t *testing.T)`; помощник `expectedHTTP(v *transitiontest.TransitionVector) (status int, code string)`.
 
-Для каждого вектора `run`, `runAll`, `merge` — новый `gin`-обработчик с `Deps`, где `Context` возвращает `ctx` откатываемой транзакции, `World` — лента `NewTape(m, v.World)`, `Repo` — `countingRepo` поверх `NewStoreRepo` (считает `LockFamily`), `ViewWorld` — `readWorld()`, `Visible` — всегда `true`, `Now` — `v.Now`, `Actor` — `v.Me`, а `UserAuthenticator` — пользователь с `CustomerGUID` вектора.
+Для каждого вектора `run`, `runAll`, `merge` — новый `gin`-обработчик из `f.engine(t, edit)` (задача 8): `Deps` — копия `AppServices.Operator`, поэтому `Catalog`, `Core`, `Idempotency`, `Store`, `Directory` остаются как в сборке; `edit` меняет только перечисленное: `Context` возвращает `ctx` откатываемой транзакции, `World` — лента `NewTape(m, v.World)`, `Repo` — `countingRepo`, встраивающий `transition.Repo` от `NewStoreRepo` (чтобы остальные методы, в том числе `ReadFamily`, были у обёртки) и считающий `LockFamily`, `ViewWorld` — `readWorld()`, `Visible` — всегда `true`, `Now` — `v.Now`, `Actor` — `v.Me`, а `UserAuthenticator` — пользователь с `CustomerGUID` вектора.
 
 `readWorld()` — `transitiontest.DefaultWorld()` (`can`, `access` — да; `agentState` — `ready`; `isGroup` — нет; `members` — `[]`; `ActorName`, `Progress`, `StepNumber` — его) плюс факты: `isOperator` — да; `transferTargets`, `dutyGroups` — `[]`; `stepsFilled`, `inSourceGroup`, `deviceInGroup` — нет; `lastTransferTarget` — `""`; `idleSec`, `groupDepth` — `0`. Факты с `ref` отвечает ядро через `Repo.Candidates`. Строки после вызова — `f.storedOf`. Ответ разбирается с `UseNumber`, подстановки сравниваются правилами `Compare` (решение 41): `json.Number` и `int64` — одно, `closeResultLabel` `[""]` = `""`, `vars` `nil` = `{}`.
 
@@ -1197,22 +1213,22 @@ func TestTransitionVectorsOverHTTP(t *testing.T)
 
 ### Task 24: Проверка на стенде (уровень Г)
 
-**Files:** Create `~/Work/stand/check-operator-transitions.sh`. Modify `~/Work/stand/check-operator-api.sh`. Эти файлы вне git.
+**Files:** Create `~/Work/stand/check-operator-transitions.sh`. Modify `~/Work/stand/check-operator-api.sh`. Эти файлы вне git и вне репозитория сервера: коммита у задачи нет.
 
 **Interfaces:**
 - Consumes: вход `POST $CLOUD/api/v3/ac-backend/users/login`, помощники `req`, `check`, `jq_is`, `is_problem` из `check-operator-api.sh`; `run-im-server.sh`; `~/Work/stand/bin/agent-emulator replay --limit 1 --run <метка>`; `GET`, `POST`, `DELETE /access-rules` старого API.
 - Produces: строки `OK|FAIL|SKIP <что>`, код выхода — число `FAIL`.
 
-Запреты шага: в `ac_db` не писать и не читать (строки чтения из `check-demo-intake.sh` не копировать), `imdb` не трогать, пользователей не заводить (решение 60).
+Запреты шага: в `ac_db` не писать и не читать (строки чтения из `check-demo-intake.sh` не копировать), `imdb` скриптом напрямую (SQL) не трогать — правило доступа через старый HTTP API разрешено как исключение решения 60, — пользователей не заводить.
 
-- [ ] **Step 1: Обновить `check-operator-api.sh`.** `agentState` — `ready`; `GET /operator/incidents` — по-прежнему 501; запрос `transitions/take` со случайным UUID без `If-Match` — теперь **404** (решение 47); `/operator/me` — 404.
+- [ ] **Step 1: Обновить `check-operator-api.sh`.** `agentState` — `ready`; `GET /operator/incidents` — по-прежнему 501; запрос `transitions/take` со случайным UUID без `If-Match` — заменить на `transitions/claim` (в самом запросе и в тексте проверки: имя перехода здесь не проверяется, проверяется, что инцидента нет) и ждать теперь **404** (решение 47); `/operator/me` — 404.
 
 - [ ] **Step 2: Написать `check-operator-transitions.sh`.** Шаги:
   1. Вход `test@axxonnet.test`. Вход второго: `SECOND_EMAIL` (по умолчанию `user@gmail.com`), `SECOND_PASS` (по умолчанию `password`, 30-local-stand.md, шаг 9). Нет токена или в `GET /operator/session` нет `incident:accept` — `SECOND=` пусто и строка `SKIP второй оператор: <причина>; передача не проверяется, см. открытый вопрос 7 плана 55`.
   2. `GET /access-rules`: у группы 1 (`cloud-admin`) нет правила — создать через `POST /access-rules` на корневую группу источников. Только на стенде. Скрипт печатает отдельной строкой, что создал правило, его `guid` и готовую команду удаления (`DELETE /access-rules`); иначе — ничего не меняет.
   3. Оба делают `GET /operator/session` (`Directory` узнаёт их).
   4. `agent-emulator replay --limit 1 --run <метка от времени>`: один инцидент, а не 30. Его `guid` — самый новый `state: new` из старого `GET /incidents`.
-  5. `GET` карточки; `claim` с `If-Match`; повтор со старым — 412; `hold` — `reasonId` из `GET /operator/reference/reasons/hold` (первый с `setBy: operator`) и `comment`; `resume`; `transfer` второму с `comment`; `accept` вторым; `close` — `resultId: false_alarm`, `comment`, `surface: card`. Второго нет — `SKIP` передачи и принятия, закрывает первый.
+  5. `GET` карточки; `claim` с `If-Match`; повтор со старым — 412; `hold` — `reasonId` из `GET /operator/reference/reasons/hold` (первый с `setBy: operator`) и `comment`; `resume`; `transfer` второму с `comment` (все переходы — по именам машины: `claim`, `hold`, `resume`, `transfer`, `accept`, `close`; `take` нет); `accept` вторым; `close` — `resultId: false_alarm`, `comment`, `surface: card`. Второго нет — `SKIP` передачи и принятия, закрывает первый.
   6. На каждом шаге — `check` статуса и `state`.
 
 - [ ] **Step 3: Run.** `~/Work/stand/run-im-server.sh` (после сборки), затем `bash ~/Work/stand/check-operator-api.sh; bash ~/Work/stand/check-operator-transitions.sh`. Expected: `FAIL` нет, `SKIP` — только про второго оператора. Вход второго оператора система разрешений может запретить: не обходить, это тот же `SKIP`. Вывод — в журнал работ. Стенд не поднимается — записать причину в журнал работ и сказать ведущему; уровни А–В от этого не зависят.
@@ -1227,9 +1243,9 @@ func TestTransitionVectorsOverHTTP(t *testing.T)
 
 **Interfaces:** нет новых.
 
-- [ ] **Step 1: ADR-002.** Решение 7: расхождение закрыто, вариант (b), `paramError`. Решение 6: строгий обработчик по-прежнему не используется, свой писатель `problem+json`. Решение 10: подключено к трём операциям, хранилище в PostgreSQL — этап 5; 428 обёртки раньше повтора. «Consequences»: `agentState` — `ready`; работает 13 из 51 операции. Новый код `INTERNAL_ERROR` — в решении 5, список кодов вне контракта — `ServerOwnCodes`.
+- [ ] **Step 1: ADR-002.** Решение 7: расхождение закрыто, вариант (b), `paramError`. Решение 6: строгий обработчик по-прежнему не используется, свой писатель `problem+json`. Решение 10: подключено к трём операциям, хранилище в PostgreSQL — этап 5; 428 обёртки раньше повтора. «Consequences»: `agentState` — `ready`; работает 13 из 51 операции. Новый код `INTERNAL_ERROR` — в решении 5, список кодов вне контракта — `ServerOwnCodes`. Отдельной строкой — решение 65 плана: повтор с ключом отдаёт сохранённый ответ раньше проверки видимости, в том числе потерявшему доступ (исключение из правила «чужой инцидент — 404»; 10 минут, тот же пользователь и путь).
 
-- [ ] **Step 2: ADR-005.** Раздел «Carried to 4c» — разобрать полностью: выполненное убрать со ссылкой на решения плана, оставшееся перенести в «Carried to stages 5–7» (нотификации, вытеснение, поток; векторы планировщика; `shareAnswers`). Контракт вызова — в разделе «Consequences» (решение 61). «Known limits»: `countMine` вне блокировки, порядок списка, инциденты без таймера реакции — без изменений.
+- [ ] **Step 2: ADR-005.** Раздел «Carried to 4c» — разобрать полностью: выполненное убрать со ссылкой на решения плана, оставшееся перенести в «Carried to stages 5–7» (нотификации, вытеснение, поток; векторы планировщика; `shareAnswers`). Контракт вызова — в разделе «Consequences» (решение 61). «Known limits»: `countMine` вне блокировки, порядок списка, инциденты без таймера реакции — без изменений. Отступление от `server.js` на выборке: повторы id убираются до подсчёта длины (`maxBulk`, `selection_too_small`) — задача 17.
 
 - [ ] **Step 3: IM.** `40-plan.md`: строка «Что уже готово»; раздел этапа 4 — итог и подмена критерия уровнями А–Г; этап 7 — «критерий `tests/api.html` этапа 4 проверяется здесь». `30-local-stand.md`: `check-operator-transitions.sh`, второй оператор `user@gmail.com` (вошёл или `SKIP`), правило доступа, если скрипт его создал, и как удалить, `IM_TEST_SUPPORT`. В этом плане — отметить `[x]` и дописать «Итог» с числами векторов и хэшами.
 
@@ -1237,7 +1253,7 @@ func TestTransitionVectorsOverHTTP(t *testing.T)
 
 Сервер: `source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && make test-local 2>&1 | tail -15 && go vet ./... && gofmt -l internal/im && golangci-lint run ./...`. Expected: зелёно, вывод `gofmt` пуст.
 
-Проверить, что заглушек ровно 38: `grep -c '^func (h \*Handler)' internal/im/handler/operator/stubs.go`.
+Проверить, что заглушек ровно 38: `grep -c '^func (h \*Handler) [A-Z]' internal/im/handler/operator/stubs.go` (только экспортируемые методы `ServerInterface`; вспомогательные начинаются со строчной буквы и не считаются). Сверка по контракту: 51 операция минус 13, которые отвечают не `501` (`getOperatorSession` и 12 из этого этапа), равно 38.
 
 IM: `python3 tools/build_workflow.py --check && python3 tools/check_links.py`. Expected: зелёно.
 
@@ -1290,6 +1306,7 @@ IM: `python3 tools/build_workflow.py --check && python3 tools/check_links.py`. E
 - **62.** `Problem.code` — закрытый перечень, сверка отвергла бы и `500`, и `501`; правка контракта — решение пользователя (открытый вопрос 2). Один список и тест на него убирают обход, как только контракт догонит.
 - **63.** Без явного списка лишний статус либо пропустила бы сверка, либо тест пришлось бы ослаблять целиком.
 - **64.** Тест проверяет маршруты, а не тела операций; связанный с `501`, он ломался бы на первой настоящей операции и задевал бы 12 задач.
+- **65.** Проверка видимости перед повтором заставила бы читать инцидент на каждый повтор и разошлась бы с `handle` прототипа; риск ограничен 10 минутами и тем же пользователем.
 
 ## Открытые вопросы
 
