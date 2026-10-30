@@ -471,7 +471,7 @@ func NewHandler(auth UserAuthenticator, deps opapp.Deps, logger logrus.FieldLogg
 // package v1: wrapper, createContext stays (about 18 files use it)
 func CreateContext(c context.Context) model.AppContext
 // package intake
-func (s *Service) Machine() *machine.Machine
+func (s *Service) Core() *transition.Core
 // package appservice
 AppServices.Operator opapp.Deps
 AppServices.Intake   *intake.Service
@@ -489,7 +489,7 @@ func TestAuthenticateRemembers(t *testing.T)          // newTestEngine с Deps{D
 // session_test.go
 func TestSessionShowsMachinePermissions(t *testing.T) // ожидание agentState offline → ready (строка 78); остальное как было
 // operator_wiring_test.go
-func TestOneCoreForIntakeAndOperator(t *testing.T)    // require.Same(AppServices.Intake.Machine(), AppServices.Operator.Core.Machine())
+func TestOneCoreForIntakeAndOperator(t *testing.T)    // require.Same(AppServices.Intake.Core(), AppServices.Operator.Core): одно ядро, а не только одна машина (machine.Vendored — общий объект)
 // internal/im/appservice/operator/clock_test.go, без базы
 func TestTestClockOffsetStartsAtZero(t *testing.T)    // Now() на новых часах — time.Now() с точностью до секунды; Advance(3600) сдвигает Now на час вперёд
 ```
@@ -554,7 +554,7 @@ func TestTimedIncidentHasReactionTimer(t *testing.T)     // ToMachine даёт t
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCheckContract|TestFakeCloud|TestTimedIncident'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `checkContract`: `openapi3.NewLoader().LoadFromData(operatorapi.Contract)`; перечень `Problem.code` не дополняется — контракт знает оба кода (решение 62); `legacy.NewRouter(doc)`; адрес запроса — без хоста, `model.BasePath + path` (`http://localhost/…` даёт «no matching operation»); `openapi3filter.ValidateResponse` с `Options: &openapi3filter.Options{IncludeResponseStatus: true}` (без него необъявленный статус проходит). `openapi3filter.RegisterBodyDecoder("application/problem+json", openapi3filter.JSONBodyDecoder)` — один раз в `init` тестового файла. Необъявленные у операции статусы — решение 63. `operatorClient.do` падает с телом ответа в сообщении. `FakeCloudClient.AuthUser` возвращает копию `*FakeCloudUsers[id]`: `AuthenticateUser` пишет `u.CustomerGUID` в полученный указатель, общий объект даёт гонку под `-race` в параллельных тестах. Правило доступа — через `IMClient`, чтобы дерево групп в `AppServices` его видело.
+- [ ] **Step 3: Implement.** `checkContract`: `openapi3.NewLoader().LoadFromData(operatorapi.Contract)`; перечень `Problem.code` не дополняется — контракт знает оба кода (решение 62); `legacy.NewRouter(doc)`; адрес запроса — без хоста, `model.BasePath + path` (`http://localhost/…` даёт «no matching operation»); `openapi3filter.ValidateResponse` с `Options: &openapi3filter.Options{IncludeResponseStatus: true}` (без него необъявленный статус проходит). `openapi3filter.RegisterBodyDecoder("application/problem+json", openapi3filter.JSONBodyDecoder)` — один раз в `init` тестового файла. Необъявленные у операции статусы — решение 63. `operatorClient.do` падает с телом ответа в сообщении. `FakeCloudClient.AuthUser` не менять: `AuthenticateUser` уже работает с копией (задача 7), а копия в подделке спрятала бы гонку от `TestParallelRequestsWithOneToken`. Правило доступа — через `IMClient`, чтобы дерево групп в `AppServices` его видело.
 
 - [ ] **Step 4: Run.** `source ~/go/offline-env.sh && make test-local 2>&1 | tail -15 && golangci-lint run ./...`. Expected: зелёно.
 
@@ -564,7 +564,7 @@ func TestTimedIncidentHasReactionTimer(t *testing.T)     // ToMachine даёт t
 
 ### Task 9: Видимость и `getIncident` — сводка
 
-**Files:** Create `internal/im/appservice/operator/load.go`, `internal/im/handler/operator/incident.go`, `reply.go`, `view_summary.go`, `internal/im/handler/test/operator_card_test.go`. Modify `internal/im/appservice/incident/incident.go`, `internal/im/appservice/appservice.go` (`Deps.Visible` = `incident.AppService.Visible`), `stubs.go` (убрать `GetIncident`).
+**Files:** Create `internal/im/appservice/operator/load.go`, `internal/im/handler/operator/incident.go`, `reply.go`, `view_summary.go`, `internal/im/handler/test/operator_card_test.go`. Modify `internal/im/appservice/incident/incident.go`, `internal/im/appservice/appservice.go` (`Deps.Visible` = `incident.AppService.Visible`), `stubs.go` (убрать `GetIncident`), `internal/im/handler/test/operator_wiring_test.go` (`require.Nil(deps.Visible)` становится `NotNil`).
 
 **Interfaces:**
 - Consumes: `GetIncidentByUserGroupIDs` и `ClosurePairs` — внутри `AppService.Visible` (в `Store` задачи 7 их нет и не нужно), `Deps.Visible`, `transition.ToMachine`, `Core.Present`, `Core.Actions`.
