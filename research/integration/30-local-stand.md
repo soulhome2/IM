@@ -147,6 +147,17 @@ make test-local        # go test ./... с IM_TEST_DB_URL
 
 Результат 2026-10-29: `check-demo-intake.sh` — все 28 строк `OK`, код 0; число инцидентов до и после второго прогона одинаково.
 
+## Шаг 6: переходы через HTTP (этап 4в)
+
+Дата: 2026-10-31. План — [55-plan-stage4c.md](55-plan-stage4c.md) (уровень Г), решения — ADR-002 и ADR-005 сервера. Базы `imdb` и `ac_db` скрипты напрямую (SQL) не трогают.
+
+1. **`check-operator-api.sh`** (обновлён): `agentState` теперь `ready`; запрос по случайному guid идёт `transitions/claim` без `If-Match` и ждёт `404` с `code = NOT_FOUND` (404 раньше 428); `GET /operator/incidents` по-прежнему `501`. Итог: `OK 16`, `FAIL 0`.
+2. **`check-operator-transitions.sh`** (новый, `~/Work/stand/`, вне git; запускается руками, это не тест): настоящий токен `test@axxonnet.test` через шлюз, один инцидент от `agent-emulator`, дальше только HTTP: карточка, действия, `claim`, `hold`, `resume`, `transfer`, `accept`, `close`. Строки `OK`/`FAIL`/`SKIP`, код выхода — число `FAIL`. Итог: `OK 24`, `FAIL 0`, `SKIP 3`.
+3. **Второй оператор** — `user@gmail.com` (переменная `SECOND_EMAIL`). Пароль скрипт берёт из файла `SECOND_PASS_FILE` (по умолчанию `~/Work/stand/second-operator.pass`, права `600`); в чат и в скрипт пароль не кладут. Вошёл — проверяются передача и приём; нет файла или вход не удался — `SKIP`. **Файла нет:** вход не пробовали, ветка двух операторов не выполнялась ни разу, три `SKIP` — это второй оператор, `transfer` и `accept`. Передача и приём на стенде **не проверены**; покрыты потоками через маршрутизатор и векторами (уровни А и Б).
+4. **Правило доступа.** У `cloud-admin` не было правил, поэтому оператор не видел бы инциденты. Скрипт при первом запуске создал одно правило через старый HTTP API (`POST /access-rules`): guid `01a18ef7-cb72-7049-9109-bd03b0bcb516`, группа 1 `cloud-admin`, корень «Все камеры» (одна из 8 корневых групп источников). Оно **остаётся на стенде**: через операторский API `cloud-admin` видит только инциденты под этим корнем. Удалить (`TOKEN` — токен `test@axxonnet.test`; скрипт печатает ту же команду): `curl --cacert ~/Work/axxoncloudgo/tools/util/rootCA.axxonnet.test.pem -X DELETE -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '["01a18ef7-cb72-7049-9109-bd03b0bcb516"]' https://axxonnet.test/api/v1/im-backend/access-rules`.
+5. **`IM_TEST_SUPPORT`.** Маршрут `POST /test/clock` и часы операторских маршрутов включаются только переменной окружения `IM_TEST_SUPPORT=true` сервера МИ (по умолчанию выключено; при включении сервер пишет предупреждение, и любой вошедший может двигать часы). На стенде переменная не нужна и не включена.
+6. **Следы на стенде.** Три закрытых тестовых инцидента остались в `imdb`. Сервер МИ запущен из `~/Work/stand/bin/im` через `run-im-server.sh`.
+
 ## Что дальше
 
 Шаг 2 — сервер МИ и конфигуратор на стенде: план — [15, п. 6](15-deploy-configurator.md); сервер регистрирует каталог прав (`PUT /ac/v1/global-permissions/catalog` есть на ветке прав), после чего роли `incident_manager.*` назначаются группе. Для разработки — nginx стека проксирует `/im/` на Vite на машине, `/api/v1/im-backend/` — на сервер МИ из IDE.
