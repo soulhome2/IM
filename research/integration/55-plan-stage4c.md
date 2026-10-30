@@ -135,7 +135,7 @@
 | `internal/im/handler/handler.go`, `cmd/im/main.go`, `internal/im/handler/test/common.go` | новая подпись `GetHandler` | 7 |
 | `internal/im/handler/operator/handler.go`, `handler_test.go`, `session.go`, `session_test.go` | `Deps` в обработчике, тест маршрутов | 7 |
 | `internal/im/handler/operator/stubs.go` | снятие заглушек | 9–12, 14, 17, 18, 20, 21 |
-| `internal/im/handler/operator/problem.go`, `internal/im/handler/test/fake_cloud_client.go` | `CodeInternal`, копия пользователя в подделке облака | 8 |
+| `internal/im/handler/operator/problem.go` | `CodeInternal` | 8 |
 | `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go` | клиент оператора и сверка с контрактом | 8 |
 | `internal/im/appservice/incident/incident.go`, `internal/im/appservice/operator/load.go` | видимость, чтение инцидента | 9 |
 | `internal/im/handler/operator/view_summary.go`, `view_card.go`, `view_actions.go`, `view_journal.go` | виды ответов | 9–10 |
@@ -506,7 +506,7 @@ func TestTestClockOffsetStartsAtZero(t *testing.T)    // Now() на новых �
 
 ### Task 8: Клиент тестов и сверка с контрактом
 
-**Files:** Create `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go`. Modify `api/im/operator/` (новая копия контракта, шаг 0), `internal/im/handler/operator/problem.go`, `problem_test.go`, `internal/im/handler/test/fake_cloud_client.go`, `internal/im/handler/test/common.go` (пакетная `V1Handler`).
+**Files:** Create `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go`. Modify `api/im/operator/` (новая копия контракта, шаг 0), `internal/im/handler/operator/problem.go`, `problem_test.go`, `internal/im/handler/test/common.go` (пакетная `V1Handler`).
 
 **Interfaces:**
 - Consumes: `operatorapi.Contract`, `openapi3filter`, `routers/legacy`, `HTTPHandler`, `FakeCloudUsers`, `operator.Register`.
@@ -548,11 +548,10 @@ func TestCheckContractServerCodes(t *testing.T)          // 500 {INTERNAL_ERROR}
 func TestCheckContractDetach412(t *testing.T)         // 412 на detachLinked проходит с телом Problem по самому контракту; 412 на getIncident без объявления — ошибка
 func TestCheckContractReadsProblemJSON(t *testing.T)     // application/problem+json разбирается
 func TestCheckContractLeavesContractAlone(t *testing.T)  // operatorapi.Contract после загрузки — те же байты
-func TestFakeCloudGivesCopy(t *testing.T)                // два AuthUser — разные указатели; правка первого не меняет FakeCloudUsers; неизвестный id — nil, как было
 func TestTimedIncidentHasReactionTimer(t *testing.T)     // ToMachine даёт timers.reaction.due
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCheckContract|TestFakeCloud|TestTimedIncident'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCheckContract|TestTimedIncident'`. Expected: FAIL.
 
 - [ ] **Step 3: Implement.** `checkContract`: `openapi3.NewLoader().LoadFromData(operatorapi.Contract)`; перечень `Problem.code` не дополняется — контракт знает оба кода (решение 62); `legacy.NewRouter(doc)`; адрес запроса — без хоста, `model.BasePath + path` (`http://localhost/…` даёт «no matching operation»); `openapi3filter.ValidateResponse` с `Options: &openapi3filter.Options{IncludeResponseStatus: true}` (без него необъявленный статус проходит). `openapi3filter.RegisterBodyDecoder("application/problem+json", openapi3filter.JSONBodyDecoder)` — один раз в `init` тестового файла. Необъявленные у операции статусы — решение 63. `operatorClient.do` падает с телом ответа в сообщении. `FakeCloudClient.AuthUser` не менять: `AuthenticateUser` уже работает с копией (задача 7), а копия в подделке спрятала бы гонку от `TestParallelRequestsWithOneToken`. Правило доступа — через `IMClient`, чтобы дерево групп в `AppServices` его видело.
 
