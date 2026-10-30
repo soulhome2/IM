@@ -168,7 +168,7 @@
 - Produces: `func (r *MemRepo) SoftDelete(id string)` — строка помечена удалённой, как `deleted_at` у `Store.DeleteIncident`. Как `lockIncidentFamilySQL`: в `S0` идут только живые свои строки и их `linkedTo` (id удалённого основного в `S0` остаётся, живые привязанные к нему — в семье); сама удалённая строка в семью не идёт и событие в `S0` не даёт. `Candidates` её не отдаёт; `Rows()` — отдаёт; `Write` её — ошибка (у `storeRepo` она не взята блокировкой).
 - Changes: `operation.lock` — основной своей строки, которого нет среди взятых, — `ErrFamilyChanged` только когда он жив: `o.repo.Candidates(o.ctx, o.op.Customer, "incidentById", []any{primary})` отдаёт строку с этим id (так ищет `numberOf` в `journal.go`). Иначе операция идёт дальше (решение 33).
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Помощники — `closeRepo`, `closeFalseAlarm`, `zedRow` (`family_test.go`); `storeWrap` со счётом `locks` и `f.commit` (`transition_test.go`).
 
@@ -192,19 +192,19 @@ func TestRunDeletedPrimaryOnPostgres(t *testing.T)
   // NoError, Refusal nil, store.locks == 1; x в базе closed, версия +1; p не изменился
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./internal/im/service/transition/... -run 'PrimaryNotSibling|DeletedPrimary|SoftDelete' 2>&1 | tail -5`
 Expected: FAIL — `SoftDelete` не объявлен; после него — `TestRunDeletedPrimaryIsNotLocked` падает с `3 attempts: … the family of the incident changed`. `TestRunPrimaryNotSiblingOutsideFamilyIsError` проходит и до правки: он ловит удаление проверки, а не её отсутствие.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestRunDeletedPrimaryOnPostgres|TestRunOnPostgres|TestRunRetryInOuterTransaction|TestLockFamily|TestFamilyMemMatchesPostgres' && golangci-lint run ./...`
 Expected: PASS, прежние тесты ядра — без правки; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро — основной вне семьи даёт повтор, только если его строка жива: удалённый или отсутствующий основной не даёт ErrFamilyChanged; MemRepo — мягкое удаление».
 Run: `git add internal/im/service/transition internal/im/handler/test/transition_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -224,7 +224,7 @@ Run: `git add internal/im/service/transition internal/im/handler/test/transition
   - `ctx.world` — задан: факты мира ядра — его функции (имена и аргументы `cel.world`), а не обёртки над `ctx`; `celWorld` берётся один раз при `IMEngine.create`, поэтому повтор (задача 6) даёт устойчивый объект, который отвечает по ленте текущего вектора; не задан — как раньше;
   - `lib.normalize(incident, W)` — правило решения 25 (`since` у таймеров кроме `hold` — `0`) и пусто как у `cel.value`: `null` в поле — нулевое значение типа поля по `cel.types.Incident` (`""`, `0`, `false`); недостающий таймер машины — нулевая запись.
 
-- [ ] **Step 1: Тесты** (в `tools/test_cel.mjs`; ядро в `vm`, как в `check_quint_replay.mjs`, мир — словарь)
+- [x] **Step 1: Тесты** (в `tools/test_cel.mjs`; ядро в `vm`, как в `check_quint_replay.mjs`, мир — словарь)
 
 ```js
 test("fromView: celView(fromView(x)) == x для инцидентов пула fixtures/cel-vectors.json", ...)
@@ -233,14 +233,14 @@ test("fromView: celView(fromView(x)) == x для инцидентов пула f
 test("ctx.world: факт мира берётся из ctx.world", ...)  // ctx.can → false, ctx.world.can → true ⇒ availability('claim', x).ok
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git fetch && node tools/test_cel.mjs`
 Expected: FAIL — `fromView` нет, `IMTransitionVectors` не объявлен; прежние 20 проходят.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят; прототип — как раньше**
+- [x] **Step 4: Тесты проходят; прототип — как раньше**
 
 Run: `node tools/test_cel.mjs`
 Expected: `test_cel: 22 из 22`.
@@ -248,7 +248,7 @@ Expected: `test_cel: 22 из 22`.
 Run: быстрые проверки IM; самопроверка (`prototype/index.html?selftest`, бюджет 180000) и тесты API (`tests/api.html`, 120000) — по `CLAUDE.md`, профиль в `$S`; `python3 -c "import sys; sys.path.insert(0, 'tools'); import check_code_mutations as m; bad = m.stale(); print(len(m.MUTATIONS), 'порч, устаревших:', len(bad), bad)"`.
 Expected: всё зелёное; `data-selftest="pass"`, `data-apitest="pass"`, итог тестов API — тот же, что до задачи; устаревших порч — 0. Шага самопроверки нет (решение 32).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: стыки ядра прототипа для векторов переходов — обратный мост fromView и подмена мира ctx.world».
 Run: `git add prototype/engine.js tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -263,23 +263,23 @@ Run: `git add prototype/engine.js tests/transition-vectors.js tools/test_cel.mjs
 **Interfaces:**
 - Produces: `rec.frame()` записи 4а и `IMCelVectors.frame()` — открыть кадр: каждый вызов факта мира без `ref` в любом вычислении, пока кадр открыт, идёт и в его ленту; `close()` — лента кадра (повтор вызова с тем же ответом — одна запись, с другим — `tapeRepeat`). Векторы CEL кадр не меняет.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```js
 test("кадр: факты мира всех вычислений внутри кадра — в его ленте; повтор с тем же ответом — одна запись, с другим — tapeRepeat", ...)
 test("кадр не меняет запись CEL: те же векторы с открытым кадром и без", ...)
 ```
 
-- [ ] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `frame` нет; прежние 22 проходят.
+- [x] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `frame` нет; прежние 22 проходят.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят; векторы CEL — те же байты**
+- [x] **Step 4: Тесты проходят; векторы CEL — те же байты**
 
 Run: `S=<scratchpad> && node tools/test_cel.mjs && node tools/cel_vectors.mjs --update --tmp=$S && git diff --exit-code Specification/Workflow_machine/fixtures/cel-vectors.json`
 Expected: `test_cel: 24 из 24`; `git diff` пуст (код 0). Быстрые проверки IM — зелёные.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: кадры записи векторов CEL — лента фактов мира всех вычислений внутри вызова ядра».
 Run: `git add tests/cel-vectors.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -297,7 +297,7 @@ Run: `git add tests/cel-vectors.js tools/test_cel.mjs && git commit -q -F .super
 
 Запись (решения 24–27, 40): обёртка `IMEngine.create(ctx)` — машина не исходная — как есть; иначе обёрнуты функции `ctx` (`actorName`, `progress`, `stepNumber`, `shareAnswers` — в ленту, `null` в аргументах — `""`; `transferTargets` — в ленту как факт `transferTargets`; `setCursor`, `shareAnswers` — в `scenario`; `deliver`, `onEvict`, `onBreachShared` — в `after`, `null` в `about`, `who`, `by` — `""`) и методы ядра `run`, `runAll`, `create` (кадр, снимок «до»: `celView`, длины журналов и `journalAtNow` всех инцидентов списка; вызов; «после»; отбор). Снимки — только `celView` (`cel.value`/`plain`), без `cel.call`, `guard`, `rule`: иначе запись CEL получит лишние векторы. `now` изменился за вызов — вектора нет, `skipped.nowChanged`. Исключение ядра пробрасывается дальше и вектора не даёт. Один `id` — два разных `expect` — исключение «один вход — два ответа».
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```js
 test("запись run: вектор с журналом и неизменённым остальным", ...)
@@ -310,16 +310,16 @@ test("отбор при записи: 25 одинаковых claim — 4 век
 test("now меняется во время вызова — вектора нет, skipped.nowChanged 1", ...)
 ```
 
-- [ ] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `recorder` нет; прежние 24 проходят.
+- [x] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `recorder` нет; прежние 24 проходят.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `node tools/test_cel.mjs`
 Expected: `test_cel: 29 из 29`; быстрые проверки IM — зелёные.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: запись векторов переходов — обёртка ядра прототипа (run, runAll, create), лента мира кадром записи CEL, отбор при записи».
 Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -335,7 +335,7 @@ Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F
 - Consumes: задача 4.
 - Produces: обёртка `merge` по решению 39: кадр закрыт и «после» снято на возврате; закрытие — на следующем вызове любого обёрнутого ядра (общий счёт для всех ядер записи) или в `take()`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```js
 test("запись merge: merged_in после ядра — в expect с server: true", ...)
@@ -346,16 +346,16 @@ test("запись: запись журнала вне ядра с другим 
 test("merge без присоединяемых — только «Взять», без merged_in", ...)
 ```
 
-- [ ] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL; прежние 29 проходят.
+- [x] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL; прежние 29 проходят.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `node tools/test_cel.mjs`
 Expected: `test_cel: 34 из 34`; быстрые проверки IM — зелёные.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: запись векторов переходов — объединение: лента закрыта на возврате, записи merged_in от server.js — с пометкой server, прочее вне ядра — вектора нет».
 Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -371,7 +371,7 @@ Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F
 - Consumes: задачи 2, 4, 5.
 - Produces: `lib.replay(engineFor, vector, pool) → {ok, got, misses}`. `engineFor(me)` даёт ядро, созданное один раз с устойчивым `ctx.world`, который отвечает по ленте текущего вектора (`world.tape = v.world` перед вызовом). `ctx` повтора: `events` — инциденты пула через `fromView`, `now`, `ctx.*` по ленте, `transferTargets: () => tape("transferTargets", []).map((id) => ({id}))`, `scenarioKey` — `ev.scenarioGuid`, `log` — запись в журнал инцидента, `deliver`/`onEvict`/`onBreachShared`/`setCursor` — в итог. Сравнение — по решению 41.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```js
 test("повтор: run по ленте даёт тот же expect; лента без can — промах", ...) // replay → ok; misses = ["can"]
@@ -379,16 +379,16 @@ test("повтор: transfer — варианты поля targetId из лен�
 test("повтор merge: записи server: true не сравниваются", ...)
 ```
 
-- [ ] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `replay` нет; прежние 34 проходят.
+- [x] **Step 2: Тесты падают** — `node tools/test_cel.mjs`: FAIL — `replay` нет; прежние 34 проходят.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `node tools/test_cel.mjs`
 Expected: `test_cel: 37 из 37`; быстрые проверки IM — зелёные.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: повтор векторов переходов на ядре прототипа — мир по ленте, варианты передачи из ленты».
 Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -404,19 +404,19 @@ Run: `git add tests/transition-vectors.js tools/test_cel.mjs && git commit -q -F
 - Consumes: задачи 2–6.
 - Produces: блок `transitionvectors-out` в выводе `tests/api.html?celVectors=1` — `{incidents, vectors, skipped}`; без параметра — пустой.
 
-- [ ] **Step 1: Проверка до правки** — блока и скрипта нет.
+- [x] **Step 1: Проверка до правки** — блока и скрипта нет.
 
 Run: `grep -c 'transition-vectors.js\|transitionvectors-out' tests/api.html`
 Expected: `0`.
 
-- [ ] **Step 2: Реализация** правок `api.html` и `harness.js`.
+- [x] **Step 2: Реализация** правок `api.html` и `harness.js`.
 
-- [ ] **Step 3: Запись в Chrome зелёная и повторяется**
+- [x] **Step 3: Запись в Chrome зелёная и повторяется**
 
 Run: `S=<scratchpad> && for n in 1 2; do google-chrome --headless=new --disable-gpu --no-first-run --user-data-dir=$S/chrome$n --virtual-time-budget=180000 --dump-dom "file://$PWD/tests/api.html?celVectors=1" > $S/rec$n.html; done && python3 -c "import html,re,sys,json,hashlib;[print('pass' if 'data-apitest=\"pass\"' in p else 'FAIL', (lambda s: (len(s), (lambda d: (len(d['vectors']), sorted({v['op'] for v in d['vectors']}), d['skipped'], hashlib.sha256(json.dumps(d,sort_keys=True).encode()).hexdigest()[:12]))(json.loads(s))))(html.unescape(re.search(r'<pre id=\"transitionvectors-out\"[^>]*>(.*?)</pre>',p,re.S).group(1)))) for p in [open(f,encoding='utf-8').read() for f in sys.argv[1:]]]" $S/rec1.html $S/rec2.html`
 Expected: обе строки — `pass`; виды — `create`, `merge`, `run`, `runAll`; `skipped` — нули; размер блока, число векторов и хэш в двух прогонах совпадают; размер — в журнал работ (решение 40). Без параметра (`tests/api.html`) — `pass`, блок пустой. Блок `celvectors-out` сверяется в задаче 8 (`git diff --exit-code cel-vectors.json` после `--update`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: запись векторов переходов при тестах API — tests/api.html?celVectors=1 пишет и блок transitionvectors-out».
 Run: `git add tests/api.html tests/harness.js && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -433,16 +433,16 @@ Run: `git add tests/api.html tests/harness.js && git commit -q -F .superpowers/s
 - Consumes: задача 7.
 - Produces: `node tools/cel_vectors.mjs --update` — один прогон Chrome, оба блока; тесты API не `pass`, `skipped.outsideEngine` или `skipped.nowChanged` ≠ 0 — стоп без записи; файл — по формату (`counts`, `skipped`, `uncovered: {}`, пул, векторы по `id`); файл больше 4 МБ — стоп. Повтор перед записью — задача 9.
 
-- [ ] **Step 1: Проверка до правки** — `ls Specification/Workflow_machine/fixtures/transition-vectors.json`: файла нет.
+- [x] **Step 1: Проверка до правки** — `ls Specification/Workflow_machine/fixtures/transition-vectors.json`: файла нет.
 
-- [ ] **Step 2: Реализация**
+- [x] **Step 2: Реализация**
 
-- [ ] **Step 3: Сборка, повторяемость; векторы CEL — те же байты**
+- [x] **Step 3: Сборка, повторяемость; векторы CEL — те же байты**
 
 Run: `S=<scratchpad> && F=Specification/Workflow_machine/fixtures && /usr/bin/time -f '%e с' node tools/cel_vectors.mjs --update --tmp=$S && sha256sum $F/transition-vectors.json > $S/t1 && node tools/cel_vectors.mjs --update --tmp=$S && sha256sum -c $S/t1 && git diff --exit-code $F/cel-vectors.json && ls -l $F/transition-vectors.json`
 Expected: время `--update` — до 480 с (в журнал работ); второй `--update` дал те же байты (`OK`); `cel-vectors.json` не изменился; файл переходов — до 4 МБ (размер — в журнал работ).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: векторы переходов для бэкенда — fixtures/transition-vectors.json тем же прогоном --update».
 Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/transition-vectors.json && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -458,19 +458,19 @@ Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/tran
 - Consumes: задачи 6, 8.
 - Produces: `node tools/cel_vectors.mjs --check [--file=…] [--transitions=путь] [--machine=…]` — после строк векторов CEL (итог и строка «синтетика: …») — строка `векторов переходов: N (run …, runAll …, merge …, create …), расхождений: 0, промахов ленты: 0`; нет файла переходов — «нет файла векторов переходов, соберите: node tools/cel_vectors.mjs --update», код 1. `--update` перед записью делает то же. Повтор — ядро в `vm` по образцу `check_quint_replay.mjs`, по ядру на каждое `me`, `lib.replay`; сравнение — решение 41.
 
-- [ ] **Step 1: Проверка без файла переходов**
+- [x] **Step 1: Проверка без файла переходов**
 
 Run: `S=<scratchpad> && node tools/cel_vectors.mjs --check --transitions=$S/nope.json; echo $?`
 Expected сейчас (красное): код `0` — флаг не известен, файл не проверяется.
 
-- [ ] **Step 2: Реализация**
+- [x] **Step 2: Реализация**
 
-- [ ] **Step 3: Проверка проходит и ловит порчу**
+- [x] **Step 3: Проверка проходит и ловит порчу**
 
 Run: `time node tools/cel_vectors.mjs --check && S=<scratchpad> && F=Specification/Workflow_machine/fixtures/transition-vectors.json && python3 -c "import sys;l=open(sys.argv[1],encoding='utf-8').read().split('\n');i=next(k for k,x in enumerate(l) if '\"workflow.journal.claim\"' in x and '\"ok\"' in x);l[i]=l[i].replace('\"workflow.journal.claim\"','\"workflow.journal.claimX\"',1);open(sys.argv[2],'w',encoding='utf-8').write('\n'.join(l))" $F $S/bad.json && node tools/cel_vectors.mjs --check --transitions=$S/bad.json; echo $?`
 Expected: первый `--check` — код 0, обе строки векторов — `расхождений: 0, промахов ленты: 0`, меньше 20 с; второй — код `1`, в списке расхождений — `id` испорченного вектора. Шаг 1 теперь даёт «нет файла векторов переходов…», код `1`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: cel_vectors.mjs --check повторяет векторы переходов на ядре прототипа».
 Run: `git add tools/cel_vectors.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -499,16 +499,16 @@ Run: `git add tools/cel_vectors.mjs && git commit -q -F .superpowers/sdd/54-plan
 | `runAll detach`, второй не привязан | `[…9001 linked к …9003, …9002 new]`; `…9003` (`INC-9003`, своё событие) — в пуле, `in_progress` у `op1` (`primaryEditable`) | `refusal` `notFrom`, `id` `…9002` |
 | `create`, приоритет без своего норматива | приоритет 60 | `timers.reaction.due` = now + 300 000 |
 
-- [ ] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check | grep -c 'синтетика переходов'`: `0`.
+- [x] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check | grep -c 'синтетика переходов'`: `0`.
 
-- [ ] **Step 2: Реализация**
+- [x] **Step 2: Реализация**
 
-- [ ] **Step 3: Сборка и проверка**
+- [x] **Step 3: Сборка и проверка**
 
 Run: `S=<scratchpad> && F=Specification/Workflow_machine/fixtures && node tools/cel_vectors.mjs --update --tmp=$S && git diff --exit-code $F/cel-vectors.json && node tools/cel_vectors.mjs --check`
 Expected: «синтетика переходов: 8»; расхождений и промахов — 0; `cel-vectors.json` не изменился.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: синтетика векторов переходов — окно после дедлайна, форма, «Отсоединить все», норматив create».
 Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/transition-vectors.json && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -523,16 +523,16 @@ Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/tran
 **Interfaces:**
 - Produces: покрытие в `--check` и `--update`: у каждого перехода `trigger: manual` (12) и у `create` — вектор `ok`; у `run`, `runAll`, `merge` — хотя бы один `refusal`; хотя бы один вектор `run` с `canceled`; иначе имя — в `UNCOVERED_TRANSITIONS_OK` с причиной словами (не больше 3; больше — синтетика); `UNCOVERED_TRANSITIONS_OK` пишется в поле `uncovered` файла. Нарушено — «без векторов: …», код 1.
 
-- [ ] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check | grep -c 'без векторов'` на строке переходов: `0`.
+- [x] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check | grep -c 'без векторов'` на строке переходов: `0`.
 
-- [ ] **Step 2: Реализация**
+- [x] **Step 2: Реализация**
 
-- [ ] **Step 3: Покрытие и проба**
+- [x] **Step 3: Покрытие и проба**
 
 Run: `S=<scratchpad> && node tools/cel_vectors.mjs --update --tmp=$S && node tools/cel_vectors.mjs --check && python3 -c "import json,sys;d=json.load(open(sys.argv[1]));d['vectors']=[v for v in d['vectors'] if v['name']!='reopen'];json.dump(d,open(sys.argv[2],'w'))" Specification/Workflow_machine/fixtures/transition-vectors.json $S/noreopen.json && node tools/cel_vectors.mjs --check --transitions=$S/noreopen.json; echo $?`
 Expected: первый `--check` — строка переходов `…, без векторов: 0`; второй — «без векторов: reopen», код `1`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: покрытие векторов переходов — у каждого ручного перехода и create вектор ok, отказы у run, runAll, merge».
 Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/transition-vectors.json && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -547,16 +547,16 @@ Run: `git add tools/cel_vectors.mjs Specification/Workflow_machine/fixtures/tran
 **Interfaces:**
 - Produces: `--engine=путь` — только для проб порчи: повтор на копии `prototype/engine.js` вместо исходного.
 
-- [ ] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check --engine=prototype/engine.js; echo $?`: флаг не известен.
+- [x] **Step 1: Проверка до правки** — `node tools/cel_vectors.mjs --check --engine=prototype/engine.js; echo $?`: флаг не известен.
 
-- [ ] **Step 2: Реализация**
+- [x] **Step 2: Реализация**
 
-- [ ] **Step 3: Проба**
+- [x] **Step 3: Проба**
 
 Run: копия `engine.js` в `$S`, у `windowAfter` убран `splice` (запись о таймере — в конец); `node tools/cel_vectors.mjs --check --engine=$S/engine.js; echo $?`
 Expected: расхождение у вектора «`run claim` в окне», код `1`; с исходным `engine.js` — код 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: cel_vectors.mjs --engine — повтор векторов переходов на копии ядра для проб порчи».
 Run: `git add tools/cel_vectors.mjs && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -570,12 +570,12 @@ Run: `git add tools/cel_vectors.mjs && git commit -q -F .superpowers/sdd/54-plan
 
 Раздел «Векторы переходов» (по-русски, простыми словами): зачем — переход целиком, а не одно вычисление; уровень — ядро, не HTTP, версий нет; откуда (запись + синтетика), отбор при записи и почему `merged_in*` с пометкой `server`; формат (таблицы выше) и все правила сравнения решения 41; как повторяет бэкенд — лента, пул, порядок списка; что из этого следует для бэкенда: всё в одной транзакции (нарушение отменённого таймером перехода, «некому», `merged_in*`, перенос ответов); порядок записей журнала (решение 13 плана 53); состояние `to` — перед эффектами инцидента, факты — после всей операции; окно — у каждого шага; пустой список — не ошибка; отказ — не ошибка, ошибка вычисления — ошибка сервера; планировщик — этап 6. BACKEND.md — коротко и ссылкой; «Когда готово» — «векторы `fixtures/transition-vectors.json` проходят у ядра бэкенда (CEL.md, «Векторы переходов»)». Чисел машины в новых строках BACKEND.md нет.
 
-- [ ] **Step 1: Документы и проверки**
+- [x] **Step 1: Документы и проверки**
 
 Run: быстрые проверки IM и `python3 tools/check_links.py`.
 Expected: всё зелёное; «Нерабочих ссылок: 0».
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 Сообщение: «Этап 4б: CEL.md и BACKEND.md — раздел «Векторы переходов»; проверки и таблица сгенерированных файлов».
 Run: `git add Specification/Workflow_machine/CEL.md Specification/Workflow_machine/BACKEND.md README.md CLAUDE.md .graphifyignore && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -589,28 +589,28 @@ Run: `git add Specification/Workflow_machine/CEL.md Specification/Workflow_machi
 - Create (make): `api/im/operator/transition-vectors.json`; Modify (make): `api/im/operator/SOURCE` (сейчас `6e86123`)
 - Modify: `api/im/operator/vectors_test.go`
 
-- [ ] **Step 1: Тест**
+- [x] **Step 1: Тест**
 
 ```go
 func TestTransitionVectorsMatchMachine(t *testing.T) // как TestCELVectorsMatchMachine: os.ReadFile("transition-vectors.json"); format == 1; machineSha256 == hex(sha256(Machine)); counts run, runAll, merge, create > 0
 ```
 
-- [ ] **Step 2: Тест падает**
+- [x] **Step 2: Тест падает**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test ./api/im/operator/ 2>&1 | tail -3`
 Expected: FAIL — нет `transition-vectors.json`.
 
-- [ ] **Step 3: Копия**
+- [x] **Step 3: Копия**
 
 Run: `git -C /mnt/hgfs/VmWareShared/soul2home/IM status --porcelain -- Specification/Workflow_machine && make vendor-operator-contract && cat api/im/operator/SOURCE && git status --short`
 Expected: `status` IM пуст; в `SOURCE` — хэш задачи 13 без `dirty`; новый файл `transition-vectors.json` и `SOURCE`; машина, контракт, строки и `cel-vectors.json` — без изменений (машина в этапе не менялась). Иначе — **стоп, спросить**.
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test ./api/... ./internal/im/machine/ && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: копия векторов переходов с IM <SOURCE>».
 Run: `git add Makefile api/im/operator && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -632,19 +632,19 @@ Run: `git add Makefile api/im/operator && git commit -q -F .git/COMMIT_MSG_STAGE
   - записи `emptyLog` шагов копятся в операции и добавляются после всех шагов (сейчас — в конце шага, `actions`); `Facts` — после всех шагов, до окна после (сейчас — в `step`);
   - `Core.createOne` (зовёт `o.step(d, row)` и читает `o.res.Facts[id]`) после своего единственного шага добавляет «некому» и считает факты тем же кодом.
 
-- [ ] **Step 1: Проверка до правки** — все тесты пакета зелёные.
+- [x] **Step 1: Проверка до правки** — все тесты пакета зелёные.
 
 Run: `go test -race ./internal/im/service/transition/... -v 2>&1 | grep -c '^--- PASS'`
 Expected: число — в журнал работ.
 
-- [ ] **Step 2: Реализация** (только перестройка; нового поведения у `Run` и `Create` нет)
+- [x] **Step 2: Реализация** (только перестройка; нового поведения у `Run` и `Create` нет)
 
-- [ ] **Step 3: Тесты проходят без правки**
+- [x] **Step 3: Тесты проходят без правки**
 
 Run: `go test -race ./internal/im/service/transition/... -v 2>&1 | grep -c '^--- PASS' && go test -race ./internal/im/service/intake/... && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestRun|TestIntake|TestConcurrent|TestLockFamily' && golangci-lint run ./...`
 Expected: то же число; тесты 4б-1 (`TestRun*`, `TestCreate*`, `TestEmptyLogAfterOperationRows`, `TestRunWindow*`, приём события) — без правки и зелёные; lint — 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Сообщение: «Этап 4б: ядро — шаг операции на любом инциденте и переходе, окно у каждого шага, факты и «некому» после всей операции; у Run и Create итог прежний».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -662,7 +662,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Порядок (как `runAll` в `engine.js`): переход (нет — `unknown_action`) → список пуст — пустой `Result` → семья всех `op.IDs` одной блокировкой → `Expect` → для каждого по порядку доступность и форма, первый отказ — `Refusal` с `ID` этого инцидента → окно у каждого (отметка, `timer_overridden`) → один шаг на всех на одном черновике (у каждого `before`, `to` и эффекты — по очереди) → «некому» всех → факты всех → окно после у каждого → журнал, версии, `Write` одной транзакцией; повтор при `ErrFamilyChanged` — как у `Run`. Окна у `detach` не бывает (из `linked` нет переходов по таймеру); окно у каждого шага проверяет задача 17.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Основной P (`in_progress`, `op1`), привязанные L1, L2 (`linked`, `linkedTo` P); `me` — `op1`; мир — `transitiontest.DefaultWorld()` (`world()` тестов). Пробы — помощником `detachWith(t, uses, defs...)`, как `claimWith`, по байтам эффектов `detach` (`machineWith`); операции пробы — `{"if": …, "then": […]}`, `{"forEach": …}`, `{"world": "log", …}`, как в `effects_test.go`.
 
@@ -688,19 +688,19 @@ func TestRunAllEmptyLogAfterOperation(t *testing.T)
 func TestRunAllRetriesFamilyChanged(t *testing.T) // HideFromFamily(P, 1) ⇒ NoError, LockCalls() == 2, Writes() == 1
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run RunAll 2>&1 | tail -3`
 Expected: FAIL — `RunAll` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`
 Expected: PASS, прежние тесты — без правки; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро — «Отсоединить все» одним переходом на всех: проверки всех до эффектов, один черновик, отказ называет инцидент, всё или ничего; пустой список — пустой итог».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -724,7 +724,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Порядок (как `mergeCheck` и `merge` в `engine.js`; решения 13, 14 плана 53, 30, 34, 35, 38): семья основного и всех присоединяемых одной блокировкой → `Expect` → переход `bulk.mode: merge` доступен каждому присоединяемому с формой `{primaryId}` (первый отказ — `Refusal` с `ID`); основной в `from` перехода `grouping.takeWith` — «Взять» доступно основному (отказ — `ID` основного) → окно у каждого присоединяемого (по переходу объединения) и у основного (по «Взять»), отметки и `timer_overridden` — до шагов → шаг 1: объединение на присоединяемых, шаг 2: «Взять» на основном — один черновик → «некому» → факты → окно после: присоединяемые по порядку, затем основной → запись `merged_in*` основному последней → журнал, версии, `Write`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 Основной P `new`; A `new`, B `in_progress` у `op1`; у A привязанный C; один сценарий; `me` — `op1`; номера P, A, B, C — `INC-0001`…`INC-0004` (`MemRepo` в этом порядке); мир — `world()` с `ShareAnswersFunc`, который возвращает `0` (`copyAnswersToPrimary` спрашивает мир, а у `DefaultWorld` `ShareAnswers` нет); для окна — `windowWorld()` (`window_test.go`: `can` для `petrova` и `noc` — false, эскалировать некому) с тем же `ShareAnswersFunc`; в тесте с базой — `f.serverWorld(ctx, rest)` с таким же `rest`.
 
@@ -758,19 +758,19 @@ func TestConcurrentMergeAndClaimOnPostgres(t *testing.T)
   // ни у одного нет 40P01; основного берёт ровно один; у победившего Merge — A linked_to P в базе, журнал P кончается на merged_in
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run Merge 2>&1 | tail -3`
 Expected: FAIL — `Merge` и `Op.PrimaryID` не объявлены.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят**
+- [x] **Step 4: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/... && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestConcurrentMergeAndClaimOnPostgres|TestConcurrentClaim|TestLockFamilyNoDeadlock' && golangci-lint run ./...`
 Expected: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: ядро — объединение и «Взять» основного одной транзакцией на общем черновике; основной — в блокировке семьи; окно после дедлайна у каждого; запись merged_in — в той же транзакции, последней».
 Run: `git add internal/im/service/transition internal/im/handler/test/transition_test.go && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -785,19 +785,19 @@ Run: `git add internal/im/service/transition internal/im/handler/test/transition
 **Interfaces:**
 - Produces: `type TapeEntry struct { Fn string; Args []any; Out any }`; `func NewTape(m *machine.Machine, entries []TapeEntry) *Tape` — `transition.World`: `Fact` — по `fn` и аргументам, как `tapeWorld` 4а (`callKey`, `tapeArg`, `canon` из `internal/im/machine/tape_test.go` — тестовый файл, не импортируется: повторить; инцидент в аргументах — карта со всеми полями `m.Data("cel.types.Incident")`, по `id`; `json.Number` и `int64` — одно); `ActorName`, `Progress`, `StepNumber`, `ShareAnswers` — записи `ctx.*`; `SetCursor`, `ShareAnswers` — и в `Scenario()`; промах — ошибка и запись в `Misses()`; `Unused()` — счёт.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestTape(t *testing.T) // попадание — out; json.Number("5") и int64(5) — одно; инцидент — по id; ctx.actorName — по id; вызова нет — ошибка, Misses() == ["can(...)"]; два ответа — промах; Scenario() по порядку
 ```
 
-- [ ] **Step 2: Тесты падают** — `go test ./internal/im/service/transition/transitiontest/ -run TestTape`: FAIL — `NewTape` не объявлен.
+- [x] **Step 2: Тесты падают** — `go test ./internal/im/service/transition/transitiontest/ -run TestTape`: FAIL — `NewTape` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят** — `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`: PASS; lint — 0.
+- [x] **Step 4: Тесты проходят** — `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: лента мира для векторов переходов на Go — факты машины и функции сервера по записи прототипа».
 Run: `git add internal/im/service/transition/transitiontest && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -816,7 +816,7 @@ Run: `git add internal/im/service/transition/transitiontest && git commit -q -F 
   - `type Run struct { Before []transition.Row; Result *transition.Result; Created []*transition.Created; Err error; Repo *MemRepo; Tape *Tape }`;
   - `func Compare(v *TransitionVector, r *Run) []string` — расхождения с ожидаемым словами; `func Same(a, b *Run) []string` — расхождения двух прогонов; пусто — совпало. Оба — по решению 41; `create`: `Created` — инцидент, журнал, `After`, `External`, `Facts`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestCompareNormalizes(t *testing.T)
@@ -826,13 +826,13 @@ func TestCompareNormalizes(t *testing.T)
 func TestSameIgnores(t *testing.T) // Row.Order, абсолютные версии, JournalEntry.ID — не расхождение; другой Transition, Canceled, порядок After — расхождение
 ```
 
-- [ ] **Step 2: Тесты падают** — `go test ./internal/im/service/transition/transitiontest/ -run 'Compare|Same'`: FAIL — `Compare` не объявлен.
+- [x] **Step 2: Тесты падают** — `go test ./internal/im/service/transition/transitiontest/ -run 'Compare|Same'`: FAIL — `Compare` не объявлен.
 
-- [ ] **Step 3: Реализация**
+- [x] **Step 3: Реализация**
 
-- [ ] **Step 4: Тесты проходят** — `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`: PASS; lint — 0.
+- [x] **Step 4: Тесты проходят** — `go test -race ./internal/im/service/transition/... && golangci-lint run ./...`: PASS; lint — 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Сообщение: «Этап 4б: формат векторов переходов и сравнение на Go — пусто, числа, since, closeResultLabel, отказ и ошибка».
 Run: `git add internal/im/service/transition/transitiontest && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -851,7 +851,7 @@ Run: `git add internal/im/service/transition/transitiontest && git commit -q -F 
   - `func RunVector(core *transition.Core, m *machine.Machine, v *TransitionVector, order Order) *Run` — машина передаётся явно (`Core.m` не экспортирован, `Core` её не отдаёт); `NewMemRepo` из пула в порядке `order`, `journalAtNow` — `AddJournal` (с ID); лента — `NewTape(m, v.World)`; `op` — `core.Run`, `core.RunAll`, `core.Merge` (`Op.PrimaryID` — `target.primaryId`) или `core.Create(tape, v.Now, []map[string]any{incident})`; `Op.Customer` — любой UUID (`MemRepo` его не читает);
   - `func RunVectorOn(core *transition.Core, v *TransitionVector, ctx model.AppContext, repo transition.Repo, customer uuid.UUID, tape *Tape) *Run` — то же на чужом хранилище (задача 21: PostgreSQL), `Run.Repo` — `nil`.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestTransitionVectors(t *testing.T)
@@ -861,24 +861,24 @@ func TestTransitionVectorsCoverMachine(t *testing.T)
   // у каждого перехода trigger: manual и у create — вектор ok, кроме имён TransitionFile.Uncovered (то же, что UNCOVERED_TRANSITIONS_OK)
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `go test ./internal/im/service/transition/ -run 'TestTransitionVectors' 2>&1 | tail -3`
 Expected: FAIL — `RunVector` не объявлен.
 
-- [ ] **Step 3: Реализация** `RunVector`, `RunVectorOn`.
+- [x] **Step 3: Реализация** `RunVector`, `RunVectorOn`.
 
-- [ ] **Step 4: Прогон и разбор расхождений**
+- [x] **Step 4: Прогон и разбор расхождений**
 
 Run: `go test ./internal/im/service/transition/ -run 'TestTransitionVectors' -v 2>&1 | grep -E '^(--- FAIL|ok|FAIL)|transition vectors [0-9]' | tail -30`
 Expected: расхождения, если есть. Каждое разобрать: правится ядро (задачи 5–9 плана 53, задачи 1, 15–17 этого), а не вектор; похоже на ошибку прототипа — **стоп, спросить**. Каждую причину — в журнал работ.
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `go test -race ./internal/im/service/transition/ -v -run 'TestTransitionVectors' 2>&1 | grep -E 'transition vectors [0-9]|^ok|FAIL' && golangci-lint run ./...`
 Expected: `ok`; `mismatches 0, tape misses 0`, `closeResultLabel normalized 0`; число векторов — как `counts` файла; lint — 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 4б: сверка ядра переходов Go с прототипом — все векторы переходов совпадают в памяти; отказ и ошибка различаются, мир — по ленте».
 Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -896,7 +896,7 @@ Run: `git add internal/im/service/transition && git commit -q -F .git/COMMIT_MSG
 
 Для каждого вектора `op` `run`, `runAll`, `merge` (у `create` в ядре нет хранилища), который можно положить в базу (решение 31): `f.inRolledBackTx` → `seedVector` → `RunVectorOn(core, v, ctx, transition.NewStoreRepo(f.store, timerIDs(t)), customer, transitiontest.NewTape(m, v.World))` (ядро идёт в точке сохранения транзакции теста — ADR-005, решение 4); эталон — `RunVector(core, m, v, NumberOrder)`; сравнение — `Same` (решение 41), плюс журнал, прочитанный из базы; транзакция откатывается.
 
-- [ ] **Step 1: Тесты**
+- [x] **Step 1: Тесты**
 
 ```go
 func TestTransitionVectorsOnPostgres(t *testing.T)
@@ -906,24 +906,24 @@ func TestTransitionVectorsOnPostgres(t *testing.T)
 func TestSeedVectorRoundTrip(t *testing.T) // для 20 первых векторов: GetMachineIncidents по пулу (ToMachine) == инциденты вектора, linked_to — на месте
 ```
 
-- [ ] **Step 2: Тесты падают**
+- [x] **Step 2: Тесты падают**
 
 Run: `TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestTransitionVectorsOnPostgres|TestSeedVectorRoundTrip' 2>&1 | tail -3`
 Expected: FAIL — `seedVector` не объявлен.
 
-- [ ] **Step 3: Реализация** `seedVector`.
+- [x] **Step 3: Реализация** `seedVector`.
 
-- [ ] **Step 4: Прогон и разбор расхождений**
+- [x] **Step 4: Прогон и разбор расхождений**
 
 Run: `IM_TEST_DB_URL=$TESTDB go test ./internal/im/handler/test/ -run 'TestTransitionVectorsOnPostgres|TestSeedVectorRoundTrip' -v 2>&1 | grep -E '^(--- FAIL|ok|FAIL)|postgres vectors' | tail -20`
 Expected: расхождения, если есть: правится хранилище или ядро, не тест. `ErrFamilyChanged` у вектора после трёх попыток — семья (решение 15 плана 53) не берёт того, кому пишет машина: **стоп, спросить** (меняется правило семьи).
 
-- [ ] **Step 5: Тесты проходят**
+- [x] **Step 5: Тесты проходят**
 
 Run: `IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestTransitionVectorsOnPostgres|TestSeedVectorRoundTrip' -v 2>&1 | grep -E 'postgres vectors|^ok|FAIL' && make test-local 2>&1 | tail -10 && golangci-lint run ./...`
 Expected: `ok`; `mismatches 0`; время прогона — в журнал работ (больше 3 минут — **стоп, спросить**); числа `order-sensitive` и `memory-only` — в журнал работ, первое — и в ответ на открытый вопрос 3 плана 53; все пакеты; lint — 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Сообщение: «Этап 4б: векторы переходов на PostgreSQL — ядро на базе даёт то же, что в памяти: семья, кандидаты фактов, запись с версией, журнал».
 Run: `git add internal/im/handler/test && git commit -q -F .git/COMMIT_MSG_STAGE4B`
@@ -936,18 +936,18 @@ Run: `git add internal/im/handler/test && git commit -q -F .git/COMMIT_MSG_STAGE
 - Modify: `docs/adr/005-transitions-in-transaction.md` (векторы переходов и их итог, правила сравнения; `RunAll`, `Merge`, `Op.PrimaryID`, пустой список; шаги операции — решение 34; `merged_in*`; основной вне семьи — решение 33; число векторов, зависящих от порядка; «Carried to 4b-2 and 4c» — сделанное убрать, оставить пункты 4в), `docs/adr/004-machine-executor.md` (`Consequences`, «Next» — 4в)
 - Modify (IM): `research/integration/40-plan.md` (строка «Что уже готово» этапа 4б-1 — «Столбцы инцидента и переходы в транзакции (этап 4б)» со ссылками на 53 и 54; в разделе этапа 4 — 4а и 4б сделаны, 4в впереди), `research/integration/54-plan-stage4b2.md` (отметки, «Итог этапа 4б-2» — таблица задач и коммитов, как «Итог этапа 4б-1» плана 53)
 
-- [ ] **Step 1: ADR** — дописать в ADR-005 по итогам задач 1–21.
+- [x] **Step 1: ADR** — дописать в ADR-005 по итогам задач 1–21.
 
-- [ ] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
+- [x] **Step 2: Документы IM** — перед правкой `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; новое — сказать пользователю.
 Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && python3 tools/check_links.py && node tools/cel_vectors.mjs --check | grep -E '^(векторов|векторов переходов):'`
 Expected: «Нерабочих ссылок: 0»; обе строки векторов — `расхождений: 0`.
 
-- [ ] **Step 3: Последний прогон сервера**
+- [x] **Step 3: Последний прогон сервера**
 
 Run: `cd ~/Work/incident-manager-server && source ~/go/offline-env.sh && go test -race $(go list ./internal/im/... | grep -v /handler/test) && make test-local 2>&1 | tail -15 && go vet ./... && gofmt -l internal/im && golangci-lint run ./...`
 Expected: всё PASS; `go vet`, `gofmt -l` чисто; lint — 0.
 
-- [ ] **Step 4: Commit (два репозитория)**
+- [x] **Step 4: Commit (два репозитория)**
 
 Сервер — «Этап 4б: ADR-005 — векторы переходов, «Отсоединить все», объединение». Run: `git add docs/adr && git commit -q -F .git/COMMIT_MSG_STAGE4B`
 IM — «Этап 4б встраивания: столбцы инцидента, переходы в транзакции и векторы переходов — план отмечен». Run: `cd /mnt/hgfs/VmWareShared/soul2home/IM && git add research/integration/40-plan.md research/integration/54-plan-stage4b2.md && git commit -q -F .superpowers/sdd/54-plan-stage4b2/commit-msg.txt`
@@ -968,10 +968,12 @@ IM — «Этап 4б встраивания: столбцы инцидента,
 | `shareAnswers` без `logKey` не даёт версии +1 (сценарий меняется, версия нет) | 4в: версии — слой HTTP (`412`), векторы ядра версий не сравнивают; настоящий перенос ответов — этап 6, до него `ShareAnswers` сервера — заглушка `STAGE6` (`n = 0`) |
 | Вложенный `DoInTx` у `MemRepo` | не делается (решение 36): в 4б-2 вложения нет, путь с точкой сохранения проверен на PostgreSQL |
 | Массовое действие `each_allowed`, `bulk.scope`, выбор основного `mergePrimary`/`bulkPrimary`, `minItems`, `maxBulk`, `expectedVersions` | 4в |
-| Синтетика объединения (`merged_in_more`, `once` у `tightenPrimaryDeadline`) | не делается: запись `merged_in*` — у `server.js`, синтетика ядра её не даёт; случаи закрыты тестами Go `TestMergedInMore`, `TestMergeTakeSeesTightenedDeadline` (задача 17) и `TestLogOnce` (план 53, задача 9) |
+| Синтетика объединения: `merged_in_more` | не делается: случай закрыт тестом Go `TestMergedInMore` (задача 17), вектора у него нет. `once` у `tightenPrimaryDeadline` сделан: синтетический вектор замены записи журнала (задача 20б) и требование покрытия `journal:once`; синтетический случай пишет запись `merged_in` сам, как `server.js` (запись `merged_in*` — у `server.js`, ядро прототипа её не даёт). `TestMergeTakeSeesTightenedDeadline` (задача 17) и `TestLogOnce` (план 53, задача 9) остаются |
+| Версия и `incident.updated` у уже привязанных открытых инцидентов основного и у не взятого основного, когда никто не присоединён (так делает `server.js` при объединении, Go — нет) | 4в: открытый вопрос 7; рекомендация — обработчик трогает их после фиксации |
 | `canceled` у `runAll` и `merge`, `external` основного при объединении в векторах | не делается: ядро прототипа их не возвращает; у Go они есть и проверены тестами задач 16, 17 |
 | Перенос ответов сценария по-настоящему (`shareAnswers` с `n > 0`), курсор | 6; в векторах — по ленте `ctx.shareAnswers` |
-| Порядок списка инцидентов в прототипе по номеру | по ответу на открытый вопрос 3 плана 53 (пункт ревью IM) |
+| Порядок списка инцидентов в прототипе по номеру | по ответу на открытый вопрос 3 плана 53 (пункт ревью IM); ответ по измерению — в открытом вопросе 4 ниже, для подтверждения |
+| Из ядра в 4в без изменения поведения: соответствие `Refusal`, `VersionConflict`, `ErrFamilyChanged` кодам HTTP; отказ объединения без охранника — `422 BULK_SELECTION_INVALID`; пустой итог с `nil` вместо `{}`; ошибка повторного id — сторож и `400`, id убирает обработчик до ядра; только ручные переходы; один `Run` на транзакцию вызывающего, без REPEATABLE READ; машина приёма события — из ядра | 4в (ADR-005, «Carried to 4c») |
 
 ## Решения этого плана — обоснования (приняты ведущим 2026-10-30; 38–41 — по ревью плана)
 
@@ -1003,5 +1005,41 @@ IM — «Этап 4б встраивания: столбцы инцидента,
 2. Число номеров в записи `merged_in` (5, `MERGED_IN_SHOWN` в `server.js`) — оставить константой сервера (план) или перенести в машину (`grouping.mergedInShown`, правка IM)? (Вопрос 7 плана 53.)
 3. Отбор: 20 векторов переходов на `op:name`, 4 на исход, файл до 4 МБ — достаточно? (Вопрос 8 плана 53.)
 4. Вопросы 2–6 плана 53 остаются с ответами по умолчанию (`transition_failed` у прототипа — `422`; порядок списка инцидентов; `countMine` вне блокировки; прогресс сценария 0 при `create` до этапа 6; инциденты стенда без таймера реакции); ответ на 3 будет с числом из задачи 21.
+   **Порядок списка — ответ по измерению (задача 21), для подтверждения пользователем.** У 79 из 87 векторов на PostgreSQL порядок списка отличается от порядка номеров; на этих 79 число векторов, где итог ядра зависит от порядка, K = 0. С обратным пулом R = 0 из 87. Значит, на этих векторах итог ядра от порядка списка не зависит. Это не доказательство для любого пула: ни у одного вектора нет двух кандидатов одного факта, где машина берёт первого. Если такое правило появится, нужен вектор на него.
 5. Удалённый основной (решение 33): ядро идёт дальше, как будто основного нет, — у привязанного к нему инцидента условия машины решают сами (`detach` откажет по `primaryEditable`). Так оставить (план) или при мягком удалении основного отвязывать его привязанных (правило IM)?
 6. `closeResultLabel` (решение 37): нормализовать при сравнении (план) или сделать Go как прототип — `""` при пустом ключе подписи?
+7. Новый, для 4в. При объединении `server.js` поднимает версию (и шлёт `incident.updated`) у уже привязанных открытых инцидентов основного и у не взятого основного, когда никто не присоединён. Go этого не делает. Где это делать: в ядре, в обработчике после фиксации или оставить разницу? Рекомендация ведущего — обработчик трогает их после фиксации.
+
+## Итог этапа 4б-2
+
+Этап сделан. Ядро переходов сервера повторяет ядро прототипа по векторам: 92 вектора переходов (`run` 62, `runAll` 4, `merge` 21, `create` 5; из них 9 синтетических), записанных на ядре прототипа при тестах API, Go проходит в памяти, 0 расхождений. На PostgreSQL сверено 87 векторов, результат тот же, что в памяти, 0 расхождений; 5 векторов `create` пропущены, потому что ядро создаваемый инцидент не пишет. «Отсоединить все» (`RunAll`) и объединение с «Взять» основного (`Merge`) работают одной транзакцией, запись `merged_in*` в ней же, основной объединения — в блокировке семьи. Зависит ли итог ядра от порядка списка: на этих векторах нет (K = 0 из 79, R = 0 из 87) — ответ по измерению, для подтверждения. Решения и пределы — в ADR-005 сервера, раздел «Stage 4b-2», и в ADR-004.
+
+| Задача | Репозиторий | Коммиты |
+|---|---|---|
+| 1. Основной вне семьи — только живой, мягкое удаление в `MemRepo` | сервер | `9657c7d` |
+| 2. Стыки ядра `fromView` и `ctx.world` | IM | `c1db6a8` |
+| 3. Кадры записи CEL | IM | `2959867` |
+| 4. Запись `run`, `runAll`, `create`; отбор при записи | IM | `48b1fc5`, `7c20097` (закрывают вектор только изменяющие вызовы) |
+| 5. Закрытие вектора объединения | IM | `0f3f9a6` |
+| 6. Повтор по ленте | IM | `b384b93` |
+| 7. Запись векторов переходов при тестах API | IM | `3b6cae8` |
+| 8. `transition-vectors.json`: сборка `--update` | IM | `b4a0dac` |
+| 9. `--check` векторов переходов | IM | `d64b7be` |
+| 10. Синтетика векторов переходов | IM | `7042eff` |
+| 11. Покрытие векторов переходов | IM | `dad852a` |
+| 12. `--engine` и проба порчи ядра | IM | `b11da0d` |
+| 13. Раздел «Векторы переходов», проверки | IM | `9725a95`, `6f04e4e` (правки по просмотру) |
+| 14. Копия векторов переходов на сервере | сервер | `3673426` |
+| 15. Шаги операции (без нового поведения у `Run` и `Create`) | сервер | `39ac64d` |
+| 16. «Отсоединить все» (`RunAll`) | сервер | `f311d77` |
+| 17. Объединение и «Взять» основного (`Merge`), основной в блокировке | сервер | `4fab6bb` |
+| 18. Лента Go для векторов переходов | сервер | `60a07d7` |
+| 19. Формат векторов и сравнение на Go | сервер | `0dafa2f` |
+| 20. Сверка ядра Go с векторами в памяти | сервер | `0aa3c8d` |
+| 20б. Синтетический вектор замены записи журнала (`once`), покрытие `journal:once` (добавлена по ревью задачи 20: порча пути `once` пережила все 91 вектор) | IM, сервер | `53094d9` (IM), `f7b5bfd` (сервер) |
+| 21. Сверка на PostgreSQL: память и база дают одно; порядок списка | сервер | `bba664b`, `74a97e6` (знаменатель порядка 79, проба обратного порядка, пул в базе у каждого вектора) |
+| 22. ADR-005, ADR-004, документы, последний прогон | сервер, IM | `83e5629` (сервер), этот коммит (IM) |
+
+Последний прогон — в отчёте задачи 22 (`.superpowers/sdd/54-plan-stage4b2/task-22-report.md`): `go test -race` по `internal/im` без `handler/test`, `go test ./...` на `im-test-db` (порт 55432), `go vet`, `gofmt -l`, `golangci-lint` — чисто; `check_links.py` — 0 нерабочих ссылок; `cel_vectors.mjs --check` — 0 расхождений.
+
+Что осталось: 4в — отображение ответов ядра на HTTP, массовые действия, `expectedVersions`, версии при объединении (открытый вопрос 7), векторы уровня HTTP; планировщик и `tick` — этап 6; сценарий (`setCursor`, `shareAnswers` с `n > 0`) — этап 6.
