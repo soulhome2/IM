@@ -38,10 +38,10 @@
 - Вход отложен: `prototype/api.js` не меняется, новых способов подставить оператора в собранном сервере нет. Подмена оператора — только `Deps` в тестах.
 - Тесты с базой — только `IM_TEST_DB_URL='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable'`; база стенда `imdb` — никогда. На этой базе — только одна цепочка `make test-local` одновременно. Контейнер не запущен — `sg docker -c "make test-db-up"`. Пакеты без базы — `go test -race $(go list ./internal/im/... | grep -v /handler/test)`.
 - Перед любой командой `go` — `source ~/go/offline-env.sh` в той же строке. Новых зависимостей нет; `go.mod` и `go.sum` не меняются (`openapi3filter` и `routers/legacy` собираются офлайн; `gorillamux` не брать — `gorilla/mux` нет в `go.mod`; `golang.org/x/text` — непрямая зависимость, не импортировать). Адрес `npm.itvgroup.ru` недоступен. Docker — только через `sg docker -c "…"`.
-- `make gen` и `make gen-api-im` не запускать; `make gen-api-operator` — не нужен: контракт не меняется. Сгенерированное руками не править.
+- `make gen` и `make gen-api-im` не запускать; `make gen-api-operator` — только в задаче 8, шаг 0, и только если после `make vendor-operator-contract` сгенерированный код изменился (контракт меняется один раз, коммит IM `9526a09`). Сгенерированное руками не править.
 - `golangci-lint run ./...` — 0 замечаний в каждой задаче (`funlen` 120 строк / 60 операторов, `dupl` 150); `gofmt -l internal/im` — пусто.
 - Тесты — testify `require`, под `-race`. Тесты 4б (`internal/im/service/transition/...`, `internal/im/handler/test`) проходят без правки, кроме названных в задачах. Комментарии в коде и ADR — по-английски; документы IM — по-русски, простыми словами. Новых миграций нет (последняя — `018_incident_machine.sql`).
-- **Правила IM.** Правила меняются в машине, а не в `prototype/*.js`; в этапе машина, контракт, правила и прототип не меняются. Сгенерированные файлы IM собираются своим инструментом, руками не правятся (`CLAUDE.md` IM). `Specification/Workflow_machine/README.md` и `openapi.json` остаются в CRLF. Кажется, что нужна правка машины, контракта или вектора, — **стоп, спросить**. Перед правкой IM (задача 25) — `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; есть новое на GitHub — сказать пользователю.
+- **Правила IM.** Правила меняются в машине, а не в `prototype/*.js`; машина, правила и прототип в этапе не меняются; контракт меняется один раз, в коммите IM `9526a09` (решение пользователя 2026-10-30: `INTERNAL_ERROR` и `NOT_IMPLEMENTED` в `Problem.code`, `412` у `detachLinked` и `detachAllLinked`), остальной этап его не меняет. Сгенерированные файлы IM собираются своим инструментом, руками не правятся (`CLAUDE.md` IM). `Specification/Workflow_machine/README.md` и `openapi.json` остаются в CRLF. Кажется, что нужна правка машины, контракта или вектора, — **стоп, спросить**. Перед правкой IM (задача 25) — `git -C /mnt/hgfs/VmWareShared/soul2home/IM fetch`; есть новое на GitHub — сказать пользователю.
 - Быстрые проверки IM после задачи 25: `python3 tools/build_workflow.py --check && python3 tools/check_links.py` (меняются только документы `research/`).
 - Векторы руками не правятся. Go расходится с вектором — правится Go.
 - Временные файлы — в scratchpad сессии исполнителя; в командах ниже он `$S` (задать `S=…` в той же строке).
@@ -78,15 +78,15 @@
 52. **Объединение** — один вызов `Merge` (всё или ничего). Основной — `Core.MergePrimary` по списку, отсортированному по номеру. **Дописывание версий после объединения** — отдельная функция `TouchAfterMerge` после фиксации и отдельная задача 19, чтобы другой ответ на открытый вопрос 1 стоил одной задачи: +1 тем инцидентам, кто в `server.js` попал бы в `touch`, **и кого ядро этим вызовом не записало** (иначе основной получил бы +2). `incident.updated` — этап 5.
 53. **`/test/clock` работает только при `IM_TEST_SUPPORT=true`** (`model.Config`, по умолчанию `false`); иначе `404 NOT_FOUND`, вне контракта операции (решение 63). При включённом флаге на старте — `Warn` в журнал: двигать часы может любой вошедший; отдельного права нет, потому что на этапе 7 `tests/api.html` двигает часы из-под любой роли. Сдвиг прибавляется к часам `Deps.Now`; часы приёма событий не сдвигаются. Проверки — как `server.js` (`Number.isInteger`): тело разбирается с `UseNumber`, `1.0` — целое; не целое или нет поля — `422 FORM_FIELD_REQUIRED`, `workflow.error.test.clock_seconds`; отрицательное — `422`, `workflow.error.test.clock_backwards`. `runScheduler` и `serviceRestart` принимаются и ничего не делают (этап 6), `fired` — `[]`. Остальные `/test/*` — 501. Отдельный build tag — этап 7, вместе с остальными `/test/*`.
 54. **Идемпотентность — `idempotency.MemoryStore` на `executeTransition`, `executeBulkTransition`, `mergeIncidents`.** Ключ — (`user.ID`, метод, `c.Request.URL.Path`, `idempotencyKey` тела); 10 минут по тем же часам, что `Deps.Now` (как `now()` у `answered` в `handle`: сдвиг `/test/clock` сокращает память); пустой ключ — без памяти; повтор отдаёт сохранённый ответ любого статуса ниже 500, с `ETag`. Повторы проверяются раньше 404 и `If-Match`, как `handle`, кроме 428 обёртки (она срабатывает до обработчика; расхождение записывается в ADR). Значит, повтор отдаёт сохранённый ответ и тому, кто потерял доступ (решение 65). Хранилище в PostgreSQL — этап 5, вместе с несколькими экземплярами сервера.
-55. **Ошибка вычисления — `500 INTERNAL_ERROR`,** а не `422` прототипа (открытый вопрос 2 плана 53, ADR-005). Кода в контракте нет, он собственный, как `NOT_IMPLEMENTED` (открытый вопрос 2, решение 62). В векторах таких случаев нет (`error` — 0 из 92).
+55. **Ошибка вычисления — `500 INTERNAL_ERROR`,** а не `422` прототипа (открытый вопрос 2 плана 53, ADR-005). Код `INTERNAL_ERROR` — в контракте с коммита IM `9526a09`, как и `NOT_IMPLEMENTED` (решение 62). В векторах таких случаев нет (`error` — 0 из 92).
 56. **Карточка этапа 4в.** `scenario` — нет в ответе (необязательное поле, этап 6); `media` — `{"cameras": [], "map": null}`, `mediaKinds` — `[]` (этап 10); `site`, `siteType`, `location`, `description` — `null`; `export`, `matchedLinked` — нет в ответе; `scenarioProgress` — `{0, 0}` из мира; `readOnly` — по `scenarioEdit.guards`; `journal` — весь; `alarm`, `note`, `badge`, `source`, `sourceGroup`, `devices`, `ruleName`, `scenarioTitle`, `eventType` — настоящие. Откуда что: `eventType` — `GetSourceEventType(ctx, event.SourceEventType.GUID)`: `id` — `UID`, `name` — `Name` (`GetEvent` заполняет у связанных только `GUID`); `source` — `GetSource` и `GetSourceType`: `typeId` — `UID`, `typeLabel` — `Name`; `sourceGroup` — из `GetSourceGroupGUIDs(ctx, source.GUID)` самая глубокая по `tree.PathFromRoot` (`sourceGroupOf`, `server.js:193`), имя — `GetSourceGroup(ctx, guid)`, групп нет — `null`. Поле, не названное здесь, — как в `summary` и `card`.
 57. **Язык ответов — константа `ru`** (`STAGE5`: настройки сессии). Строки — `operatorapi.StringsRU` и `StringsEN`; разбор ICU свой, только нужное: `{name}`, `{n, plural, …}` с `#`, вложенные `[ключ, подстановки]`, нет ключа в `en` — `ru`, нет нигде — сам ключ. В каталоге 14 строк с `plural` и ни одной с `select`. Правила множественного числа — как `Intl.PluralRules` для целых: `ru` — `one`, `few`, `many`, `en` — `one`, `other`; нет формы — `other`.
 58. **`surface`.** На маршрутах переходов идёт в ядро как есть, пустой остаётся пустым (`body.surface` в `server.js`; вектор `transfer` с `surface: ""` это проверяет). У `getIncidentActions` по умолчанию `card`.
 59. **`Result.After` в 4в никуда не идёт** (`notify`, `evict`, `touch` — этап 5), пишется в отладочный журнал. `facts` не используется. Отсутствие потока событий — известное ограничение: клиент после перехода перечитывает карточку.
-60. **Второй оператор стенда — только `user@gmail.com`, если он может войти.** Он описан в 30-local-stand.md, шаг 9, живой вход не проверялся. В `ac_db` ничего не пишется, пользователи не заводятся, `CreateUser` облака не используется. Вход не удался или нет права `incident:accept` — передача пропускается строкой `SKIP` с причиной; это не провал уровня Г (открытый вопрос 7). Правило доступа для `cloud-admin` через старый HTTP API разрешено только на стенде: скрипт печатает, что создал его, и как удалить.
+60. **Второй оператор стенда — только `user@gmail.com`, если он может войти.** Он описан в 30-local-stand.md, шаг 9, живой вход не проверялся. В `ac_db` ничего не пишется, пользователи не заводятся, `CreateUser` облака не используется. Вход разрешён пользователем 2026-10-30 только на локальном стенде; пароль берётся из файла на стенде, не из чата и не из скрипта. Вход не удался, запрещён или нет права `incident:accept` — передача пропускается строкой `SKIP` с причиной; это не провал уровня Г (открытый вопрос 7). Правило доступа для `cloud-admin` через старый HTTP API разрешено только на стенде: скрипт печатает, что создал его, и как удалить.
 61. **Контракт вызова ядра записывается:** один вызов `Run`, `RunAll` или `Merge` на транзакцию вызывающего, REPEATABLE READ не использовать (комментарий у `Core`, раздел ADR-005). Обработчики вызывают ядро вне своей транзакции.
-62. **Коды сервера вне контракта — один список.** `operator.ServerOwnCodes = []string{CodeInternal, CodeNotImplemented}` в `internal/im/handler/operator/problem.go`, других мест с этим списком нет. Контракт в этапе не меняется: `checkContract` при загрузке дописывает эти коды к `Problem.code` только в памяти, файл копии не трогается. `UNAUTHENTICATED` и `BAD_REQUEST` в контракте уже есть, в список не входят. `TestServerOwnCodesAreOutsideContract` падает, как только контракт примет код: тогда он убирается из списка; пустой список — и сам механизм убирается.
-63. **Ответы вне контракта операции — два случая, оба названы.** Лишний статус с умыслом: `412` у `detachLinked` и `detachAllLinked` (`ErrFamilyChanged`, в контракте у них только 200, 403, 404) — таблица `contractExtraStatuses` рядом с `checkContract`. Запрос, который сам проверяет выход за контракт (`404` у `/test/clock` без флага), идёт через `operatorClient.raw` без сверки. Статусы 400, 401, 500, 501 контракт оговаривает общим правилом; если у операции их нет, тело сверяется со схемой `Problem` напрямую. Всё прочее вне контракта — провал теста.
+62. **Коды `500` и `501` — в контракте.** `INTERNAL_ERROR` и `NOT_IMPLEMENTED` внесены в `Problem.code` (решение пользователя 2026-10-30, коммит IM `9526a09`); сервер даёт `CodeInternal = "INTERNAL_ERROR"` в `internal/im/handler/operator/problem.go` наравне с остальными кодами. Списка кодов вне контракта и подмены перечня в памяти нет.
+63. **Ответы вне контракта операции — один случай.** `412` у `detachLinked` и `detachAllLinked` (`ErrFamilyChanged`) теперь в контракте (коммит IM `9526a09`), таблицы `contractExtraStatuses` нет. Запрос, который сам проверяет выход за контракт (`404` у `/test/clock` без флага), идёт через `operatorClient.raw` без сверки. Статусы 400, 401, 500, 501 контракт оговаривает общим правилом; если у операции их нет, тело сверяется со схемой `Problem` напрямую. Всё прочее вне контракта — провал теста.
 64. **`TestEveryContractOperationIsRouted` переделывается один раз, в задаче 7, дальше его никто не трогает.** Он больше не вызывает обработчики: сверяет операции контракта с `engine.Routes()`, а ответ `501` проверяет отдельный `TestStubAnswers501` на операции, которая остаётся заглушкой весь этап (`GET /operator/incidents/counters`). Список `implementedOperations` удаляется. Это меньше правок, чем шаг в каждой из 12 задач, и обработчикам с пустыми `Deps` незачем выполняться. Число заглушек сверяется в задаче 25.
 65. **Повтор отдаёт сохранённый ответ раньше проверки видимости** (решение 54, исключение из Review Focus 2). Потерявший доступ оператор с тем же ключом и тем же путём в течение 10 минут получит прежний ответ, в том числе карточку. Принято: ключ привязан к пользователю и пути, память живёт 10 минут, а чужому ответ не выдаётся. Записывается строкой в ADR-002 (задача 25).
 
@@ -135,7 +135,7 @@
 | `internal/im/handler/handler.go`, `cmd/im/main.go`, `internal/im/handler/test/common.go` | новая подпись `GetHandler` | 7 |
 | `internal/im/handler/operator/handler.go`, `handler_test.go`, `session.go`, `session_test.go` | `Deps` в обработчике, тест маршрутов | 7 |
 | `internal/im/handler/operator/stubs.go` | снятие заглушек | 9–12, 14, 17, 18, 20, 21 |
-| `internal/im/handler/operator/problem.go`, `internal/im/handler/test/fake_cloud_client.go` | `ServerOwnCodes`, копия пользователя в подделке облака | 8 |
+| `internal/im/handler/operator/problem.go`, `internal/im/handler/test/fake_cloud_client.go` | `CodeInternal`, копия пользователя в подделке облака | 8 |
 | `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go` | клиент оператора и сверка с контрактом | 8 |
 | `internal/im/appservice/incident/incident.go`, `internal/im/appservice/operator/load.go` | видимость, чтение инцидента | 9 |
 | `internal/im/handler/operator/view_summary.go`, `view_card.go`, `view_actions.go`, `view_journal.go` | виды ответов | 9–10 |
@@ -506,7 +506,7 @@ func TestTestClockOffsetStartsAtZero(t *testing.T)    // Now() на новых �
 
 ### Task 8: Клиент тестов и сверка с контрактом
 
-**Files:** Create `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go`. Modify `internal/im/handler/operator/problem.go`, `problem_test.go`, `internal/im/handler/test/fake_cloud_client.go`, `internal/im/handler/test/common.go` (пакетная `V1Handler`).
+**Files:** Create `internal/im/handler/test/operator_helpers_test.go`, `operator_contract_test.go`. Modify `api/im/operator/` (новая копия контракта, шаг 0), `internal/im/handler/operator/problem.go`, `problem_test.go`, `internal/im/handler/test/fake_cloud_client.go`, `internal/im/handler/test/common.go` (пакетная `V1Handler`).
 
 **Interfaces:**
 - Consumes: `operatorapi.Contract`, `openapi3filter`, `routers/legacy`, `HTTPHandler`, `FakeCloudUsers`, `operator.Register`.
@@ -514,8 +514,7 @@ func TestTestClockOffsetStartsAtZero(t *testing.T)    // Now() на новых �
 
 ```go
 // package handler/operator, problem.go (решение 62)
-const CodeInternal = "INTERNAL_ERROR" // typed as the other codes
-var ServerOwnCodes = []string{string(CodeInternal), string(CodeNotImplemented)}
+const CodeInternal = "INTERNAL_ERROR" // typed as the other codes; in the contract since IM 9526a09
 
 // tests
 type operatorClient struct { /* t, token, user, handler */ }
@@ -526,7 +525,6 @@ func (o *operatorClient) do(method, path string, body any, headers ...string) *a
 func (o *operatorClient) raw(method, path string, body any, headers ...string) *apiReply // without it (decision 63)
 type apiReply struct { Status int; Header http.Header; Body map[string]any; Raw []byte } // Body — UseNumber
 func checkContract(method, path string, status int, header http.Header, raw []byte) error
-var contractExtraStatuses = map[string][]int{"detachLinked": {412}, "detachAllLinked": {412}}
 // engine is a handler of its own over a copy of AppServices.Operator after edit; a client of it is o.on(h).
 // It always builds Deps.Now and Deps.Idempotency (idempotency.NewMemoryStore) from one clock: the Deps.Clock the edit sets, else the real time (Tasks 16, 21, 22 rely on it).
 func (f *intakeFixture) engine(t *testing.T, edit func(*opapp.Deps)) http.Handler
@@ -537,6 +535,8 @@ func patchedCore(t *testing.T, patch func(m map[string]any)) *transition.Core
 func (f *intakeFixture) timedIncidents(t *testing.T, n int, edit func(inc *model.Incident)) []*model.Incident
 ```
 
+- [ ] **Step 0: Новая копия контракта** (решение 62, 63). В IM контракт уже поправлен коммитом `9526a09`: `INTERNAL_ERROR` и `NOT_IMPLEMENTED` в `Problem.code`, `412` у `detachLinked` и `detachAllLinked`. В сервере: `git -C /mnt/hgfs/VmWareShared/soul2home/IM status --porcelain -- Specification/Workflow_machine` — пусто, затем `make vendor-operator-contract && cat api/im/operator/SOURCE` — `SOURCE` называет `9526a09`. Сгенерированный код изменился (`git status -- api/im/operator`) — `source ~/go/offline-env.sh && PATH=$PATH:$HOME/go/bin make gen-api-operator`, затем `go build ./...`. Сюда же `TestMachineIntakePinned`, если он упал на новой копии: правится только отметка копии, определения те же. Коммит — вместе с шагом 5 этой задачи (`git add api/im/operator`).
+
 - [ ] **Step 1: Failing test**
 
 ```go
@@ -544,22 +544,21 @@ func TestCheckContractAcceptsSession(t *testing.T)       // настоящий �
 func TestCheckContractRejectsBadBody(t *testing.T)       // тот же ответ без обязательного поля — ошибка
 func TestCheckContractRejectsUnknownStatus(t *testing.T) // 418 на getIncident — ошибка; 404 на /test/clock — ошибка
 func TestCheckContractServerStatuses(t *testing.T)       // 400, 401, 500, 501 на операции, где их нет: тело Problem проходит, тело не Problem — ошибка
-func TestCheckContractServerOwnCodes(t *testing.T)       // 500 {INTERNAL_ERROR}, 501 {NOT_IMPLEMENTED} проходят; 500 {code NOPE} — ошибка
-func TestCheckContractExtraStatus(t *testing.T)          // 412 на detachLinked проходит с телом Problem; на getIncident — ошибка
+func TestCheckContractServerCodes(t *testing.T)          // 500 {INTERNAL_ERROR}, 501 {NOT_IMPLEMENTED} проходят по Problem.code самого контракта; 500 {code NOPE} — ошибка
+func TestCheckContractDetach412(t *testing.T)         // 412 на detachLinked проходит с телом Problem по самому контракту; 412 на getIncident без объявления — ошибка
 func TestCheckContractReadsProblemJSON(t *testing.T)     // application/problem+json разбирается
 func TestCheckContractLeavesContractAlone(t *testing.T)  // operatorapi.Contract после загрузки — те же байты
-func TestServerOwnCodesAreOutsideContract(t *testing.T)  // ни одного кода ServerOwnCodes нет в Problem.code файла копии; появился — убрать из списка (решение 62)
 func TestFakeCloudGivesCopy(t *testing.T)                // два AuthUser — разные указатели; правка первого не меняет FakeCloudUsers; неизвестный id — nil, как было
 func TestTimedIncidentHasReactionTimer(t *testing.T)     // ToMachine даёт timers.reaction.due
 ```
 
-- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCheckContract|TestServerOwnCodes|TestFakeCloud|TestTimedIncident'`. Expected: FAIL.
+- [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestCheckContract|TestFakeCloud|TestTimedIncident'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `checkContract`: `openapi3.NewLoader().LoadFromData(operatorapi.Contract)`; к `doc.Components.Schemas["Problem"].Value.Properties["code"].Value.Enum` дописать `operator.ServerOwnCodes` (комментарий: ADR-002, решение 5; открытый вопрос 2); `legacy.NewRouter(doc)`; адрес запроса — без хоста, `model.BasePath + path` (`http://localhost/…` даёт «no matching operation»); `openapi3filter.ValidateResponse` с `Options: &openapi3filter.Options{IncludeResponseStatus: true}` (без него необъявленный статус проходит). `openapi3filter.RegisterBodyDecoder("application/problem+json", openapi3filter.JSONBodyDecoder)` — один раз в `init` тестового файла. Необъявленные у операции статусы — решение 63. `operatorClient.do` падает с телом ответа в сообщении. `FakeCloudClient.AuthUser` возвращает копию `*FakeCloudUsers[id]`: `AuthenticateUser` пишет `u.CustomerGUID` в полученный указатель, общий объект даёт гонку под `-race` в параллельных тестах. Правило доступа — через `IMClient`, чтобы дерево групп в `AppServices` его видело.
+- [ ] **Step 3: Implement.** `checkContract`: `openapi3.NewLoader().LoadFromData(operatorapi.Contract)`; перечень `Problem.code` не дополняется — контракт знает оба кода (решение 62); `legacy.NewRouter(doc)`; адрес запроса — без хоста, `model.BasePath + path` (`http://localhost/…` даёт «no matching operation»); `openapi3filter.ValidateResponse` с `Options: &openapi3filter.Options{IncludeResponseStatus: true}` (без него необъявленный статус проходит). `openapi3filter.RegisterBodyDecoder("application/problem+json", openapi3filter.JSONBodyDecoder)` — один раз в `init` тестового файла. Необъявленные у операции статусы — решение 63. `operatorClient.do` падает с телом ответа в сообщении. `FakeCloudClient.AuthUser` возвращает копию `*FakeCloudUsers[id]`: `AuthenticateUser` пишет `u.CustomerGUID` в полученный указатель, общий объект даёт гонку под `-race` в параллельных тестах. Правило доступа — через `IMClient`, чтобы дерево групп в `AppServices` его видело.
 
 - [ ] **Step 4: Run.** `source ~/go/offline-env.sh && make test-local 2>&1 | tail -15 && golangci-lint run ./...`. Expected: зелёно.
 
-- [ ] **Step 5: Commit.** «Этап 4в: клиент тестов со сверкой контракта, коды сервера вне контракта». `git add internal`.
+- [ ] **Step 5: Commit.** «Этап 4в: новая копия контракта, клиент тестов со сверкой контракта». `git add api/im/operator internal`.
 
 ---
 
@@ -1034,7 +1033,7 @@ func TestDetachAllRefusalChangesNothing(t *testing.T) // основной в р�
 
 - [ ] **Step 2: Run** `source ~/go/offline-env.sh && TESTDB='postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable' && IM_TEST_DB_URL=$TESTDB go test -race ./internal/im/handler/test/ -run 'TestListLinked|TestDetach|TestInvisibleIncident'`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** по `server.js:1560–1609`. Поверхность — `card`. Без `If-Match`: контракт его здесь не требует. Отказ `RunAll` — через `refusalProblem(opRun)`; `r.Refusal.ID` называет инцидент. `412` по `ErrFamilyChanged` возможен, в контракте его нет — он в `contractExtraStatuses` (решение 63).
+- [ ] **Step 3: Implement** по `server.js:1560–1609`. Поверхность — `card`. Без `If-Match`: контракт его здесь не требует. Отказ `RunAll` — через `refusalProblem(opRun)`; `r.Refusal.ID` называет инцидент. `412` по `ErrFamilyChanged` возможен и объявлен в контракте — он в контракте с коммита IM `9526a09` (решение 63).
 
 - [ ] **Step 4: Run** ту же команду и `golangci-lint run ./...`. Expected: зелёно.
 
@@ -1219,12 +1218,12 @@ func TestTransitionVectorsOverHTTP(t *testing.T)
 - Consumes: вход `POST $CLOUD/api/v3/ac-backend/users/login`, помощники `req`, `check`, `jq_is`, `is_problem` из `check-operator-api.sh`; `run-im-server.sh`; `~/Work/stand/bin/agent-emulator replay --limit 1 --run <метка>`; `GET`, `POST`, `DELETE /access-rules` старого API.
 - Produces: строки `OK|FAIL|SKIP <что>`, код выхода — число `FAIL`.
 
-Запреты шага: в `ac_db` не писать и не читать (строки чтения из `check-demo-intake.sh` не копировать), `imdb` скриптом напрямую (SQL) не трогать — правило доступа через старый HTTP API разрешено как исключение решения 60, — пользователей не заводить.
+Запреты шага: в `ac_db` не писать и не читать (строки чтения из `check-demo-intake.sh` не копировать), `imdb` скриптом напрямую (SQL) не трогать — правило доступа через старый HTTP API разрешено как исключение решения 60, — пользователей не заводить; пароль второго оператора в чат, журнал и вывод скрипта не попадает.
 
 - [ ] **Step 1: Обновить `check-operator-api.sh`.** `agentState` — `ready`; `GET /operator/incidents` — по-прежнему 501; запрос `transitions/take` со случайным UUID без `If-Match` — заменить на `transitions/claim` (в самом запросе и в тексте проверки: имя перехода здесь не проверяется, проверяется, что инцидента нет) и ждать теперь **404** (решение 47); `/operator/me` — 404.
 
 - [ ] **Step 2: Написать `check-operator-transitions.sh`.** Шаги:
-  1. Вход `test@axxonnet.test`. Вход второго: `SECOND_EMAIL` (по умолчанию `user@gmail.com`), `SECOND_PASS` (по умолчанию `password`, 30-local-stand.md, шаг 9). Нет токена или в `GET /operator/session` нет `incident:accept` — `SECOND=` пусто и строка `SKIP второй оператор: <причина>; передача не проверяется, см. открытый вопрос 7 плана 55`.
+  1. Вход `test@axxonnet.test`. Вход второго оператора — `user@gmail.com` (`SECOND_EMAIL`), только на локальном стенде, с разрешения пользователя 2026-10-30. Пароль — из файла на стенде (`SECOND_PASS_FILE`, по умолчанию `~/Work/stand/second-operator.pass`, права `600`, вне git); из чата и из текста скрипта он не берётся, скрипт его не печатает. Нет файла, вход не удался или запрещён, токена нет или в `GET /operator/session` нет `incident:accept` — `SECOND=` пусто и строка `SKIP второй оператор: <причина>; передача не проверяется, см. открытый вопрос 7 плана 55`.
   2. `GET /access-rules`: у группы 1 (`cloud-admin`) нет правила — создать через `POST /access-rules` на корневую группу источников. Только на стенде. Скрипт печатает отдельной строкой, что создал правило, его `guid` и готовую команду удаления (`DELETE /access-rules`); иначе — ничего не меняет.
   3. Оба делают `GET /operator/session` (`Directory` узнаёт их).
   4. `agent-emulator replay --limit 1 --run <метка от времени>`: один инцидент, а не 30. Его `guid` — самый новый `state: new` из старого `GET /incidents`.
@@ -1243,11 +1242,11 @@ func TestTransitionVectorsOverHTTP(t *testing.T)
 
 **Interfaces:** нет новых.
 
-- [ ] **Step 1: ADR-002.** Решение 7: расхождение закрыто, вариант (b), `paramError`. Решение 6: строгий обработчик по-прежнему не используется, свой писатель `problem+json`. Решение 10: подключено к трём операциям, хранилище в PostgreSQL — этап 5; 428 обёртки раньше повтора. «Consequences»: `agentState` — `ready`; работает 13 из 51 операции. Новый код `INTERNAL_ERROR` — в решении 5, список кодов вне контракта — `ServerOwnCodes`. Отдельной строкой — решение 65 плана: повтор с ключом отдаёт сохранённый ответ раньше проверки видимости, в том числе потерявшему доступ (исключение из правила «чужой инцидент — 404»; 10 минут, тот же пользователь и путь).
+- [ ] **Step 1: ADR-002.** Решение 7: расхождение закрыто, вариант (b), `paramError`. Решение 6: строгий обработчик по-прежнему не используется, свой писатель `problem+json`. Решение 10: подключено к трём операциям, хранилище в PostgreSQL — этап 5; 428 обёртки раньше повтора. «Consequences»: `agentState` — `ready`; работает 13 из 51 операции. Новый код `INTERNAL_ERROR` — в решении 5; он и `NOT_IMPLEMENTED` теперь в контракте (IM `9526a09`), `412` у отсоединения — тоже; кодов вне контракта нет. Отдельной строкой — решение 65 плана: повтор с ключом отдаёт сохранённый ответ раньше проверки видимости, в том числе потерявшему доступ (исключение из правила «чужой инцидент — 404»; 10 минут, тот же пользователь и путь).
 
 - [ ] **Step 2: ADR-005.** Раздел «Carried to 4c» — разобрать полностью: выполненное убрать со ссылкой на решения плана, оставшееся перенести в «Carried to stages 5–7» (нотификации, вытеснение, поток; векторы планировщика; `shareAnswers`). Контракт вызова — в разделе «Consequences» (решение 61). «Known limits»: `countMine` вне блокировки, порядок списка, инциденты без таймера реакции — без изменений. Отступление от `server.js` на выборке: повторы id убираются до подсчёта длины (`maxBulk`, `selection_too_small`) — задача 17.
 
-- [ ] **Step 3: IM.** `40-plan.md`: строка «Что уже готово»; раздел этапа 4 — итог и подмена критерия уровнями А–Г; этап 7 — «критерий `tests/api.html` этапа 4 проверяется здесь». `30-local-stand.md`: `check-operator-transitions.sh`, второй оператор `user@gmail.com` (вошёл или `SKIP`), правило доступа, если скрипт его создал, и как удалить, `IM_TEST_SUPPORT`. В этом плане — отметить `[x]` и дописать «Итог» с числами векторов и хэшами.
+- [ ] **Step 3: IM.** `40-plan.md`: строка «Что уже готово»; раздел этапа 4 — итог и подмена критерия уровнями А–Г; этап 7 — «критерий `tests/api.html` этапа 4 проверяется здесь». `30-local-stand.md`: `check-operator-transitions.sh`, второй оператор `user@gmail.com` (вошёл или `SKIP`; пароль — в файле на стенде, `SECOND_PASS_FILE`), правило доступа, если скрипт его создал, и как удалить, `IM_TEST_SUPPORT`. В этом плане — отметить `[x]` и дописать «Итог» с числами векторов и хэшами.
 
 - [ ] **Step 4: Итоговый прогон.**
 
@@ -1310,12 +1309,12 @@ IM: `python3 tools/build_workflow.py --check && python3 tools/check_links.py`. E
 
 ## Открытые вопросы
 
-Работу не задерживают: исполнитель идёт по ответам плана.
+Работу не задерживают: исполнитель идёт по ответам плана. Пользователь ответил 2026-10-30 на вопросы 1, 2, 5 (кроме источника на этапе 7) и 7, а также подтвердил критерий этапа (уровни А–Г; `tests/api.html` — критерий этапа 7).
 
-1. **Версии при объединении** (вопрос 7 плана 54). `server.js` повышает версию и шлёт `incident.updated` у ранее привязанных открытых инцидентов основного и у основного без взятия, когда присоединять некого. По умолчанию обработчик дописывает версии после фиксации (решение 52, задача 19); `incident.updated` — этап 5. Другой ответ меняет только задачу 19.
-2. **Код `500` в контракте.** В `Problem.code` нет кода сервера для внутренней ошибки; план берёт `INTERNAL_ERROR` вне контракта, тесты дописывают его к перечню только в памяти (решение 62). Внести в контракт — да или нет (правка IM, новая копия контракта). Туда же `412` у `detachLinked` и `detachAllLinked`: сервер может его дать, контракт не объявляет (решение 63).
+1. **Версии при объединении — отвечено 2026-10-30: как в плане.** (вопрос 7 плана 54). `server.js` повышает версию и шлёт `incident.updated` у ранее привязанных открытых инцидентов основного и у основного без взятия, когда присоединять некого. По умолчанию обработчик дописывает версии после фиксации (решение 52, задача 19); `incident.updated` — этап 5. Задача 19 остаётся как есть.
+2. **Код `500` в контракте — отвечено 2026-10-30: контракт меняется.** `INTERNAL_ERROR` и `NOT_IMPLEMENTED` внесены в `Problem.code`, `412` — в `detachLinked` и `detachAllLinked`; коммит IM `9526a09`, `500` и `412` остаются на сервере (решения 62, 63; задача 8, шаг 0).
 3. **Объединение через маршрут одного инцидента.** Сервер отказывает, `server.js` принимает. Поменять прототип (пункт ревью) или оставить расхождение.
 4. **Вопросы 2–6 плана 53 и 1–7 плана 54** с их значениями по умолчанию; подтверждения не было, в том числе `MERGED_IN_SHOWN`, тип события по `uid` или паре, удалённый основной, `closeResultLabel`. `transition_failed` этим планом решён как `500`.
-5. **Источник людей.** Адресаты передачи — только те, кто вошёл с момента старта сервера; настоящий список требует API облака, которого нет. Что будет источником на этапе 7 (BACKEND §15) — решает пользователь.
+5. **Источник людей — отвечено 2026-10-30 частично.** Адресаты передачи сейчас — те, кто вошёл с момента старта сервера, в памяти процесса. **Остаётся открытым:** настоящий источник (API облака, которого нет) — выбирается на этапе 7 (BACKEND §15), решает пользователь.
 6. **Ограничения для запуска оператором.** Пока нет этапов 5–6: закрыть можно только результатом без шагов; привязанные после закрытия основного остаются `linked`; таймеры не срабатывают.
-7. **Второй оператор на стенде.** Передача на уровне Г возможна, только если `user@gmail.com` может войти; живой вход никем не проверялся. Не вошёл — шаг `SKIP`. Завести другого пользователя — решение пользователя; план этого не делает.
+7. **Второй оператор на стенде — отвечено 2026-10-30.** Пробуем `user@gmail.com`, входим только на локальном стенде, база облака не меняется. Вход не удался или запрещён — шаг передачи `SKIP`. Пароль неизвестен — пользователь кладёт его в файл на стенде, не в чат и не в скрипт (задача 24).
