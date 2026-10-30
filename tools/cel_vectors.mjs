@@ -212,7 +212,8 @@ function check(text, env, where) {
 
 // Покрытие векторов переходов: требование (ключ, как в UNCOVERED_TRANSITIONS_OK) → есть ли вектор. У каждого ручного
 // перехода машины (trigger: manual) и у create — вектор ok с этим именем, любой op (detach — run и runAll, merge —
-// merge); у run, runAll и merge — хотя бы один отказ; хотя бы один вектор run с canceled. Синтетика считается.
+// merge); у run, runAll и merge — хотя бы один отказ; хотя бы один вектор run с canceled; хотя бы один вектор ok, где
+// journalAtNow ответа не равен входному (journal:once — once заменил подстановки записи). Синтетика считается.
 // Требование без вектора и не в UNCOVERED_TRANSITIONS_OK — провал. Возвращает число без векторов и строки «что не так»
 function transitionCoverage(lib, W, data) {
   const has = (test) => data.vectors.some((v) => v.expect && test(v));
@@ -224,6 +225,7 @@ function transitionCoverage(lib, W, data) {
     .forEach((n) => (need[n] = has((v) => v.name === n && v.expect.ok)));
   ["run", "runAll", "merge"].forEach((o) => (need[`${o}:refusal`] = has((v) => v.op === o && v.expect.refusal)));
   need["run:canceled"] = has((v) => v.op === "run" && v.expect.ok && Object.keys(v.expect.ok.canceled || {}).length > 0);
+  need["journal:once"] = has((v) => v.expect.ok && lib.canonical(v.expect.ok.journalAtNow || {}) !== lib.canonical(v.journalAtNow || {}));
   const ok = UNCOVERED_TRANSITIONS_OK;
   const missing = Object.keys(need).filter((k) => !need[k] && !ok[k]);
   const stale = Object.keys(ok).filter((k) => !(k in need) || need[k] || !String(ok[k]).trim());
@@ -651,6 +653,31 @@ function syntheticTransitions(env) {
   }, (v, pool) => {
     const x = after(v, pool, id1);
     return ok(v).concat(x && x.timers.reaction.due === NOW + 300000 ? [] : [`ждали reaction.due ${NOW + 300000}, а ${x && x.timers.reaction.due}`]);
+  });
+
+  // once (решения 21 и 27): запись с тем же ключом в момент now уже есть — её подстановки заменяются, новой нет.
+  // Основной 9003 в работе у op1, срок закрытия через час, в журнале в момент now уже «срок группы» {number INC-9002}
+  // (объединение в ту же миллисекунду); 9001 в работе у op1 со сроком через 10 мин — срок группы становится его
+  const GROUP = "workflow.journal.group_deadline";
+  const id3 = ID(9003);
+  add("Объединение 9001 в 9003: у основного в момент now уже есть group_deadline {number INC-9002} — once заменяет подстановку на INC-9001, новой записи нет", (engine, events, mk) => {
+    const primary = mk(9003, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW + 3600000 } } });
+    primary.log.push({ at: NOW, whoId: "op1", k: GROUP, v: { number: "INC-9002" } });
+    events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW + 600000 } } }), mk(9002), primary);
+    engine.merge(primary, [events[0]]);
+    // Запись server.js после ядра (в ожидаемом — с server: true): её пишет и ядро Go, вектор без неё с ним расходится
+    primary.log.push({ at: NOW, whoId: "op1", k: "workflow.journal.merged_in", v: { ids: "INC-9001" } });
+  }, (v, pool) => {
+    const x = after(v, pool, id3);
+    const line = (number) => [{ templateKey: GROUP, vars: { number } }];
+    const atNow = (j) => ((j || {})[id3] || []).map((e) => ({ templateKey: e.templateKey, vars: e.vars }));
+    return ok(v).concat(
+      lib.canonical(atNow(v.journalAtNow)) === lib.canonical(line("INC-9002")) ? [] : [`ждали на входе journalAtNow [group_deadline INC-9002], а ${lib.canonical(atNow(v.journalAtNow))}`],
+      lib.canonical(atNow((v.expect.ok || {}).journalAtNow)) === lib.canonical(line("INC-9001")) ? [] : [`ждали в ответе journalAtNow [group_deadline INC-9001], а ${lib.canonical(atNow((v.expect.ok || {}).journalAtNow))}`],
+      keys(v, id3).includes(GROUP) ? ["group_deadline — новой записью, а не заменой"] : [],
+      lib.canonical(keys(v, id3)) === lib.canonical(["workflow.journal.merged_in"]) ? [] : [`ждали у основного новую запись [merged_in], а ${lib.canonical(keys(v, id3))}`],
+      x && x.timers.resolution.due === NOW + 600000 ? [] : [`ждали resolution.due основного ${NOW + 600000}, а ${x && x.timers.resolution.due}`]
+    );
   });
   return out;
 }
