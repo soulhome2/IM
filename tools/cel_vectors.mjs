@@ -666,6 +666,7 @@ function syntheticTransitions(env) {
     events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW + 600000 } } }), mk(9002), primary);
     engine.merge(primary, [events[0]]);
     // Запись server.js после ядра (в ожидаемом — с server: true): её пишет и ядро Go, вектор без неё с ним расходится
+    // Эта строка повторяет обработчик объединения в prototype/server.js и меняется вместе с ним
     primary.log.push({ at: NOW, whoId: "op1", k: "workflow.journal.merged_in", v: { ids: "INC-9001" } });
   }, (v, pool) => {
     const x = after(v, pool, id3);
