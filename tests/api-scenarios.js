@@ -344,6 +344,7 @@
     const bulk = sel.actions.find((a) => a.id === "transfer");
     assert.ok(bulk && bulk.fieldOptions.targetId && bulk.fieldOptions.targetId.options.length > 0, "на выборке адресаты есть");
     assert.eq((await env.ok("GET", "/operator/incidents?filter=all&pageSize=1000")).pageSize, 200, "размер страницы урезан до 200");
+    assert.eq((await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/linked?pageSize=1000`)).pageSize, 200, "размер страницы привязанных урезан до 200");
   });
 
   test("Бейдж чужого инцидента в работе — ФИО владельца, ключом каталога: в очереди и в карточке (§2.4, BUG-51)", async () => {

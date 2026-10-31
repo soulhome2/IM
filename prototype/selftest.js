@@ -1181,6 +1181,42 @@
       return `${row.dataset.id}: адресатов ${picks}`;
     });
 
+    // Два быстрых нажатия на разные строки: форма открывается по последнему, ответ первого её не перебивает
+    await step("Два быстрых нажатия «Передать»: форма — по последней строке", async () => {
+      await setFilter("foreign");
+      const rows = [...$("eventsList").querySelectorAll(".event")].filter(
+        (r) => r.dataset.id !== foreignTransferred && r.querySelector('[data-do="transfer"]:not([aria-disabled="true"])')
+      );
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      // Сидоров — последний адресат передачи, на нём стоят следующие шаги: берём тех, кому его можно передать
+      const withSidorov = [];
+      for (const r of rows) {
+        const card = await stand.get(`/operator/incidents/${encodeURIComponent(r.dataset.id)}`);
+        const transfer = (card.actions || []).find((a) => a.id === "transfer");
+        const ids = transfer && transfer.fieldOptions && transfer.fieldOptions.targetId ? transfer.fieldOptions.targetId.options.map((o) => o.id) : [];
+        if (ids.includes("sidorov")) withSidorov.push(r.dataset.id);
+      }
+      expect(withSidorov.length >= 2, "нет двух чужих инцидентов, которые можно передать Сидорову");
+      const [first, second] = withSidorov;
+      const buttons = [first, second].map((g) => button($("eventsList"), "transfer", g));
+      expect(buttons.every(Boolean), `нет кнопок «Передать»: ${buttons.map(Boolean)}`);
+      buttons.forEach((b) => b.click());
+      await wait();
+      expect(!$("modalDialog").hidden, "форма передачи не открылась");
+      await click($("dialogFields").querySelector('[data-target-input="targetId"]'));
+      // Сидоров — последний адресат передачи, на нём стоят следующие шаги
+      const pick = $("dialogFields").querySelector('[data-target-pick="sidorov"]');
+      expect(pick, "в форме нет Сидорова");
+      await click(pick);
+      await confirmDialog(NOTE);
+      const stateOf = async (guid) => (await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).state;
+      const [s1, s2] = [await stateOf(first), await stateOf(second)];
+      expect(s2 === "pending_acceptance" && s1 !== "pending_acceptance", `передан не тот: первый «${s1}», второй «${s2}»`);
+      await setFilter("all");
+      return `${second}: передан последний из двух`;
+    });
+
     await step("Перехватить чужой инцидент", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find(

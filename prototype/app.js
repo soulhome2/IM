@@ -1666,7 +1666,9 @@
 
   // Форма — из машины (forms), варианты полей, правила полей и пояснение — из ответа сервера (fieldOptions, fieldRules, formNote)
   // Строка очереди не несёт варианты людей (решение 74): нет вариантов у поля с источником — их берут из карточки
+  let dialogSeq = 0;
   async function openDialog(id, ev, surface) {
+    const seq = ++dialogSeq;
     const tr = transitionDef(id);
     if (!tr || !tr.form || !ev) return;
     let a = actionOf(ev, id);
@@ -1680,9 +1682,12 @@
       try {
         card = await api.get(incPath(ev.guid));
       } catch (err) {
-        toast(problemText(err));
+        if (seq === dialogSeq) toast(problemText(err));
         return;
       }
+      // Пока шёл ответ, оператор нажал другую строку (побеждает последнее нажатие) или открылась другая форма
+      // («Перерыв», «Выход»): эту не показываем
+      if (seq !== dialogSeq || state.dialog) return;
       const fresh = actionOf(card, id);
       if (!fresh || !fresh.enabled) {
         toast(actionWhy(fresh) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
