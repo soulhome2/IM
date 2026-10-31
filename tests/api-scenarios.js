@@ -326,6 +326,26 @@
     assert.status(await env.act(inc.guid, "transfer", { targetId: "grp-leads", comment: "x" }), 403, "TRANSFER_TO_SELF_FORBIDDEN", "своей группе");
   });
 
+  test("Строка очереди без вариантов людей: у «Передать» нет targetId, у карточки он есть, «Закрыть» на месте; выборка — с адресатами; размер страницы не больше 200 (решение 74)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const row = (await env.all("mine")).find((e) => e.guid === inc.guid);
+    const inRow = actionOf(row, "transfer");
+    assert.ok(inRow.enabled, "в строке «Передать» доступна");
+    assert.eq(inRow.fieldOptions.targetId, undefined, "в строке нет вариантов адресата");
+    assert.ok(inRow.fieldRules && inRow.fieldRules.comment, "остальные поля формы в строке на месте");
+    const inCard = actionOf(await env.card(inc.guid), "transfer").fieldOptions.targetId;
+    assert.ok(inCard && inCard.options.length > 0, "в карточке варианты адресата есть");
+    assert.ok(actionOf(row, "close").fieldOptions.resultId.options.length > 0, "результаты закрытия в строке на месте");
+    // Форма выборки — по-прежнему с адресатами
+    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: two });
+    const bulk = sel.actions.find((a) => a.id === "transfer");
+    assert.ok(bulk && bulk.fieldOptions.targetId && bulk.fieldOptions.targetId.options.length > 0, "на выборке адресаты есть");
+    assert.eq((await env.ok("GET", "/operator/incidents?filter=all&pageSize=1000")).pageSize, 200, "размер страницы урезан до 200");
+  });
+
   test("Бейдж чужого инцидента в работе — ФИО владельца, ключом каталога: в очереди и в карточке (§2.4, BUG-51)", async () => {
     const env = await makeEnv();
     const guid = await env.guidOf("INC-1846");
@@ -3764,16 +3784,16 @@
     Object.entries(preset).forEach(([key, value]) => assert.eq(initial.preferences[key], value, `после сброса ${key} — из эталонного набора`));
     assert.eq(initial.lastTransferTargetId, null, "после сброса — никого");
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.site !== "Торговый центр");
-    assert.eq(actionOf(a, "transfer").fieldOptions.targetId.defaultValue || null, null, "передач ещё не было — поле пустое");
+    assert.eq(actionOf(await env.card(a.guid), "transfer").fieldOptions.targetId.defaultValue || null, null, "передач ещё не было — поле пустое");
     assert.status(await env.act(a.guid, "transfer", { targetId: "noc", comment: "тест" }, "queue"), 200, null, "передать Дежурному ЦОД");
     assert.eq((await env.session()).lastTransferTargetId, "noc", "сервер запомнил");
-    const again = (await env.all("open")).find((e) => e.guid === b.guid);
+    const again = await env.card(b.guid);
     assert.eq(actionOf(again, "transfer").fieldOptions.targetId.defaultValue, "noc", "в следующей форме — он же");
     // Адресату, которому этот инцидент передать нельзя (нет доступа), не подставляется
     const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
     assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову событие ТЦ");
     assert.eq((await env.session()).lastTransferTargetId, "kuznetsov", "последний — Кузнецов");
-    const office = (await env.all("open")).find((e) => e.guid === b.guid);
+    const office = await env.card(b.guid);
     assert.eq(actionOf(office, "transfer").fieldOptions.targetId.defaultValue || null, null, "Кузнецову вне ТЦ нельзя — не подставлен");
     assert.status(await env.heartbeat(a.guid), 204, null, "признак активности");
   });
@@ -3877,7 +3897,7 @@
   test("Дежурная группа с доступом ко всем объектам — в адресатах передачи у любого инцидента; своей группы там нет (§8.1)", async () => {
     const env = await makeEnv();
     const office = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
-    const options = actionOf(office, "transfer").fieldOptions.targetId.options;
+    const options = actionOf(await env.card(office.guid), "transfer").fieldOptions.targetId.options;
     const group = options.find((o) => o.id === "grp-response");
     assert.ok(group && !group.disabled, `«Группа реагирования» в форме передачи ${office.number}: ${options.map((o) => o.id)}`);
     const listed = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(office.guid)}`)).find((t) => t.id === "grp-response");
@@ -3899,7 +3919,7 @@
     assert.ok(!outside.includes("kuznetsov") && !outside.includes("grp-tc"), `вне ТЦ нет Кузнецова и «Охраны ТЦ»: ${outside}`);
     const inside = await targetsOf(mall[0]);
     assert.ok(inside.includes("kuznetsov") && inside.includes("grp-tc"), `в ТЦ они есть: ${inside}`);
-    const options = actionOf(elsewhere[0], "transfer").fieldOptions.targetId.options.map((o) => o.id);
+    const options = actionOf(await env.card(elsewhere[0].guid), "transfer").fieldOptions.targetId.options.map((o) => o.id);
     assert.ok(!options.includes("kuznetsov") && !options.includes("grp-tc"), "и в форме передачи их нет");
     for (const target of ["kuznetsov", "grp-tc"]) {
       const res = await env.act(elsewhere[0].guid, "transfer", { targetId: target, comment: "тест" }, "queue");
@@ -4113,7 +4133,7 @@
     const env = await makeEnv();
     const foreign = await env.guidOf("INC-1846");
     const fresh = (await env.all("open")).find((e) => e.state === "new");
-    const alone = actionOf(fresh, "transfer").fieldOptions.targetId.options.map((o) => o.id);
+    const alone = actionOf(await env.card(fresh.guid), "transfer").fieldOptions.targetId.options.map((o) => o.id);
     assert.ok(alone.includes("petrova"), "новому можно передать Петровой");
     const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fresh.guid, foreign] });
     const transfer = sel.actions.find((a) => a.id === "transfer");

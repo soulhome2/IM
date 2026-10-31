@@ -573,7 +573,9 @@
 
     // Варианты полей формы перехода для этого инцидента и значения по умолчанию, видно ли поле и обязательно ли
     // (form машины): интерфейс правил форм не вычисляет — смотрит в fieldRules
-    function formView(tr, ev, surface) {
+    // rowForm — форма в строке очереди: варианты людей (source: transferTargets) не несёт — их список длинный и
+    // нужен только при открытии формы, клиент берёт его из карточки (решение 74)
+    function formView(tr, ev, surface, rowForm = false) {
       if (!tr || !tr.form) return {};
       const f = engine.form(tr.form, ev, { surface });
       const fieldOptions = {};
@@ -581,6 +583,7 @@
       f.fields.forEach((field) => {
         fieldRules[field.name] = field.rules;
         if (!field.options) return;
+        if (rowForm && field.source === "transferTargets") return;
         fieldOptions[field.name] = {
           options: field.options.map((o) => {
             const reason = o.why ? say([o.why]) : null;
@@ -618,7 +621,7 @@
             icon: a.icon || null,
             bulkAllowed: Boolean(tr && tr.bulk && tr.bulk.allowed),
           },
-          a.enabled ? formView(tr, ev, surface) : {}
+          a.enabled ? formView(tr, ev, surface, surface === "queue") : {}
         );
       });
     }
@@ -1055,7 +1058,7 @@
 
     function page(q) {
       const list = visible(q);
-      const size = Math.max(1, Number(q.pageSize) || PAGE_SIZE);
+      const size = Math.min(200, Math.max(1, Number(q.pageSize) || PAGE_SIZE));
       const pages = Math.max(1, Math.ceil(list.length / size));
       const n = Math.min(Math.max(1, Number(q.page) || 1), pages);
       // На какой странице выбранный инцидент — если он виден при этих фильтрах (null — не виден)

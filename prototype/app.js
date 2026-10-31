@@ -1329,9 +1329,9 @@
     return Object.keys(copy).length ? copy : null;
   }
 
-  function openBulkDialog(id, ev, guids, surface) {
+  async function openBulkDialog(id, ev, guids, surface) {
     if (guids.length < 2) return false;
-    openDialog(id, ev, surface);
+    await openDialog(id, ev, surface);
     if (!state.dialog) return false;
     state.dialog.bulkIds = guids;
     // Закроются не все отмеченные — только сценария основного (bulk.scope машины, §11.1, ARCH-15): пояснение — от
@@ -1665,15 +1665,31 @@
   }
 
   // Форма — из машины (forms), варианты полей, правила полей и пояснение — из ответа сервера (fieldOptions, fieldRules, formNote)
-  function openDialog(id, ev, surface) {
+  // Строка очереди не несёт варианты людей (решение 74): нет вариантов у поля с источником — их берут из карточки
+  async function openDialog(id, ev, surface) {
     const tr = transitionDef(id);
     if (!tr || !tr.form || !ev) return;
-    const a = actionOf(ev, id);
+    let a = actionOf(ev, id);
     if (!a || !a.enabled) {
       toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
       return;
     }
     const def = WORKFLOW.forms.find((f) => f.id === tr.form);
+    if (def.fields.some((field) => field.source && !(a.fieldOptions || {})[field.name])) {
+      let card;
+      try {
+        card = await api.get(incPath(ev.guid));
+      } catch (err) {
+        toast(problemText(err));
+        return;
+      }
+      const fresh = actionOf(card, id);
+      if (!fresh || !fresh.enabled) {
+        toast(actionWhy(fresh) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
+        return;
+      }
+      a = fresh;
+    }
     // Форма «Закрыть» — закрытие без обработки: «Обработан» в ней не предлагается, им закрывает «Итог»
     const unprocessed = id === "close";
     const fields = def.fields.map((field) => {

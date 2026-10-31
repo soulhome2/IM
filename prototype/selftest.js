@@ -1157,6 +1157,30 @@
       return foreignTransferred;
     });
 
+    // Строка очереди не несёт адресатов (решение 74): форма берёт их из карточки при открытии
+    await step("Передача из строки очереди открывает форму с адресатами", async () => {
+      await setFilter("foreign");
+      const row = [...$("eventsList").querySelectorAll(".event")].find(
+        (r) => r.dataset.id !== foreignTransferred && r.querySelector('[data-do="transfer"]:not([aria-disabled="true"])')
+      );
+      expect(row, "нет чужого инцидента, который можно передать");
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const card = await stand.get(`/operator/incidents/${encodeURIComponent(row.dataset.id)}`);
+      const inRow = (await stand.get("/operator/incidents", { filter: "foreign", pageSize: 200 })).items.find((e) => e.guid === row.dataset.id);
+      const transfer = (ev) => (ev.actions || []).find((a) => a.id === "transfer");
+      expect(transfer(inRow) && !(transfer(inRow).fieldOptions || {}).targetId, "строка очереди несёт адресатов");
+      expect(transfer(card).fieldOptions.targetId.options.length, "у карточки нет адресатов");
+      await click(button($("eventsList"), "transfer", row.dataset.id));
+      expect(!$("modalDialog").hidden, "форма передачи из строки не открылась");
+      await click($("dialogFields").querySelector('[data-target-input="targetId"]'));
+      const picks = $("dialogFields").querySelectorAll("[data-target-pick]").length;
+      expect(picks === transfer(card).fieldOptions.targetId.options.length, `адресатов в форме ${picks}, в карточке ${transfer(card).fieldOptions.targetId.options.length}`);
+      await click($("modalDialog").querySelector('[data-close="modalDialog"]'));
+      await setFilter("all");
+      return `${row.dataset.id}: адресатов ${picks}`;
+    });
+
     await step("Перехватить чужой инцидент", async () => {
       await setFilter("foreign");
       const row = [...$("eventsList").querySelectorAll(".event")].find(

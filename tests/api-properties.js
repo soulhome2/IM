@@ -5,7 +5,13 @@
    Прогон воспроизводим: зерно (seed) задаёт всю последовательность. Свои зёрна —
    tests/api.html?seeds=1,2,3&steps=200. */
 (() => {
-  const { test, makeEnv, formFor, assert, enc } = IMTest;
+  const { test, makeEnv, formFor, actionOf, assert, enc } = IMTest;
+  // Строка очереди не несёт адресатов передачи (решение 74): форму «Передать» из строки собирают по карточке
+  const withTargets = async (env, inc, action) => {
+    if (action.id !== "transfer" || !action.enabled || (action.fieldOptions || {}).targetId) return action;
+    const targets = actionOf(await env.card(inc.guid), "transfer").fieldOptions.targetId;
+    return Object.assign({}, action, { fieldOptions: Object.assign({}, action.fieldOptions, { targetId: targets }) });
+  };
   const W = window.IM_WORKFLOW;
   const params = new URLSearchParams(location.search);
   const SEEDS = (params.get("seeds") || "11,23,37,41").split(",").map(Number);
@@ -228,7 +234,7 @@
         const actions = view.actions.filter((a) => a.kind === "transition");
         if (!actions.length) continue;
         const action = pick(r, actions);
-        const res = await env.act(inc.guid, action.id, formFor(action), surface, inc.state);
+        const res = await env.act(inc.guid, action.id, formFor(await withTargets(env, inc, action)), surface, inc.state);
         history.push(`${action.id} ${inc.guid} [${surface}${action.enabled ? "" : ", недоступно"}] → ${res.status}`);
         touched.add(inc.guid);
         // Главное свойство API: доступное выполняется, недоступное отклоняется
@@ -297,7 +303,7 @@
     };
     // Действие из показанных сервером: доступное выполняется, недоступное — отклоняется
     const act = async (step, inc, action, surface) => {
-      const res = await env.act(inc.guid, action.id, formFor(action), surface, inc.state);
+      const res = await env.act(inc.guid, action.id, formFor(await withTargets(env, inc, action)), surface, inc.state);
       history.push(`${action.id} ${inc.guid} [${surface}${action.enabled ? "" : ", недоступно"}] → ${res.status}`);
       if (action.enabled && res.status !== 200) fail(step, `«${action.id}» показано доступным, а сервер ответил ${res.status} ${res.body && res.body.message}`);
       if (!action.enabled && res.status === 200) fail(step, `«${action.id}» показано недоступным (${action.reason}), а сервер его выполнил`);
