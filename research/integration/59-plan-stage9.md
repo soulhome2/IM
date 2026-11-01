@@ -687,6 +687,8 @@ it('removes a toast after 3200 ms', ...);           // поддельные та
 it('shows the name, the role and the state label from the machine', ...);
 it('switches the theme', ...);                      // клик → html[data-theme] меняется, im-theme записан
 it('changes the language and tells the server', ...); // PATCH preferences {locale:'en'}, im-lang 'en'
+it('applies the saved language at start', ...);     // решение 158: im-lang, затем preferences.locale, затем i18n.language; не ru и не en → en; после сессии, до показа места
+it('keeps a white page out with an error boundary', ...); // схема вне контракта (`items: {}`) роняет ветку: строка отказа с data-operator-api="error", не пустая страница
 it('has no video button', ...);                     // нет элемента с подписью видеомонитора
 it('links to the configurator only with its rights', ...); // access.configurator true → ссылка CONFIGURATOR_PATH, false → нет; решение 135
 
@@ -1743,7 +1745,7 @@ it('adds no second notice when observers were told', ...); // BUG-105
 it('stays silent on my own sign out', ...);             // BUG-105
 it('closes the card when access is lost', ...);         // «вам больше не доступен»
 it('shows an alert and a sibling close', ...);
-it('re-reads the schema on a published schema', ...);   // инвалидация QK.workflow, без перезагрузки
+it('re-reads the schema on a published schema', ...);   // инвалидация QK.workflow, без перезагрузки; перечитывание отказано — видимое уведомление, старая схема остаётся
 it('re-reads priorities on their change', ...);         // инвалидация QK.priorities
 it('re-reads everything on stream.reset', ...);
 it('shows a lost connection line', ...);                // onState('lost') → data-stream="lost", текст в нижней строке
@@ -2184,7 +2186,7 @@ Expected: `итого ошибок: 0` в обоих, `code=0`. Найденно
 
 - аргумент выбора случаев: `node check-operator-entry.mjs 5`; без аргумента — все, как раньше;
 - случай 5: имя берётся из `[data-operator-name]`;
-- случай 4: `501` на загрузке при `session` 200 — `SKIP`, а не `FAIL`: страница уже не пустая и зовёт всю загрузку;
+- случай 4: `501` и `502`–`504` на загрузке при `session` 200 — `SKIP`, а не `FAIL`: страница уже не пустая и зовёт всю загрузку. Код читать из `data-api-status`, сейчас случай его не смотрит; плохой ответ `200` остаётся `FAIL`;
 - перед случаями, которые идут через вход, проверка `ss -ltn`: порт 5000 слушается — `SKIP сервер МИ поднят, вход записал бы в imdb`.
 
 Случаи 2, 3, 4 при поднятом сервере МИ пишут `Directory.Remember` в `imdb`, это запрещено в задачах 1–24. Поэтому здесь запускается только случай 5, на встроенном сервере. Остальные — только по слову контролёра, а полный прогон — только при лежащем сервере.
