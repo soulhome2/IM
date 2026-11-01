@@ -9,6 +9,10 @@
     "date-time": /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/,
   };
 
+  // Ответы самого сервера: могут прийти у любой операции, поэтому у операций не перечислены (Problem.code, сверка
+  // checkContract сервера). Тело всё равно сверяется — со схемой Problem
+  const SERVER_STATUSES = [400, 401, 500, 501];
+
   function checkSchema(spec, schema, value, where, out) {
     if (!schema || out.length > 40) return;
     if (schema.$ref) return checkSchema(spec, spec.components.schemas[schema.$ref.split("/").pop()], value, where, out);
@@ -74,6 +78,7 @@
           return;
         }
         let res = op.responses[String(r.status)];
+        if (!res && SERVER_STATUSES.includes(r.status)) res = { content: { "application/problem+json": { schema: { $ref: "#/components/schemas/Problem" } } } };
         if (res && res.$ref) res = spec.components.responses[res.$ref.split("/").pop()];
         if (!res) {
           out.push(`${r.method} ${r.template}: ответа ${r.status} нет в контракте`);

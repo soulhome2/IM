@@ -150,6 +150,7 @@
   "workflow.card.note.closed_why_reopen": "Incident closed: {why}. Reopening is available.",
   "workflow.card.note.closed_why_view": "Incident closed: {why}. The card is read-only.",
   "workflow.card.note.linked": "The incident is linked to {primaryNumber} — it is handled in the primary's card.",
+  "workflow.card.note.linked_hidden": "The incident is linked to another incident — it is handled in the primary's card.",
   "workflow.card.note.inbox_escalated": "The incident was addressed to you by auto-escalation, level {level}. Accept it or reject it with a reason.",
   "workflow.card.note.inbox": "The incident is addressed to you. Accept it or reject it with a reason.",
   "workflow.card.note.new": "A new incident — nobody has taken it yet. Read-only view.",

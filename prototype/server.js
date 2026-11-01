@@ -93,6 +93,7 @@
     // (6 — инцидент, 7 — запись журнала, 8 — группа обработки, 9 — запуск макроса, e — событие без guid), дальше — номер
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    const isGuid = (g) => typeof g === "string" && UUID.test(g.toLowerCase());
     const serial = { macro: 0, incident: 0, event: 0 };
     let events = [];
     let SIM = { enabled: false };
@@ -1237,14 +1238,22 @@
       });
     }
 
+    // Не выполнено: сбой вычисления эффектов — 500, текст ошибки в тело не попадает; форма не прошла — 422. Различаются
+    // по причине, а не по code: у пропущенного поля своего кода нет, FORM_FIELD_REQUIRED — код по умолчанию
+    const runFailure = (r) =>
+      r.why[0] === "workflow.error.transition_failed"
+        ? problem(500, "INTERNAL_ERROR", ["workflow.error.transition_failed", { error: "internal error" }])
+        : problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
+
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
-      if (!tr) return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
+      // Объединение — только через свой маршрут, выбор основного не дело клиента (RULE-101, решение 49)
+      if (!tr || (tr.bulk && tr.bulk.mode === "merge")) return problem(404, "NOT_FOUND", ["workflow.error.unknown_action"]);
       const check = engine.availability(id, ev, { form: formValues, surface });
       if (!check.ok) return guardProblem(check);
       const before = ev.log.length;
       const r = engine.run(id, ev, formValues, { surface });
-      if (!r.ok) return problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
+      if (!r.ok) return runFailure(r);
       touch([ev]);
       emitTransition(ev, id, ME, r.facts);
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
@@ -1489,6 +1498,8 @@
         "/operator/incidents/transitions/{transitionId}/bulk",
         (p, q, body) => {
           const guids = body.incidentGuids || [];
+          // Контракт обещает uuid: иное — запрос не разобран, до всего остального, и ключ повтора не тратится (решение 95)
+          if (!Array.isArray(guids) || !guids.every(isGuid)) return problem(400, "BAD_REQUEST", ["workflow.error.bad_request"]);
           // Лимит выборки проверяет сервер, а не только интерфейс (§11, BUG-40); null — без ограничения
           if (W.limits.maxBulk != null && guids.length > W.limits.maxBulk) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
           const list = guids.map(find).filter(Boolean);
@@ -1508,7 +1519,8 @@
           let navigate = null;
           const done = [];
           // Только те, кого действие касается (bulk.scope машины, §11.1, ARCH-15) — сервер проверяет сам, а не верит
-          // панели: другой сценарий, чем у основного выборки, — в skipped, не меняется (ни версии, ни журнала)
+          // панели: другой сценарий, чем у основного выборки, — в skipped, без изменений, кроме строки журнала открытого
+          // соседа при ложной тревоге и её версии (RULE-138)
           const scope = bulkScope(bulkTr, list);
           const skipped = scope.skipped.map((ev) => ({ incidentGuid: ev.id, number: ev.number, reasonKey: bulkTr.bulk.skippedReasonKey }));
           scope.list.forEach((ev) => {
@@ -1562,14 +1574,15 @@
         "DELETE",
         "/operator/incidents/{incidentGuid}/linked/{linkedGuid}",
         (p) => {
-          const primary = find(p.incidentGuid);
+          // Сначала привязанный, затем основной: кто не видит основного, отсоединяет, как через POST (решение 104)
           const ev = find(p.linkedGuid);
-          if (!primary || !ev || ev.linkedTo !== primary.id || ev.state !== "linked") return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          if (!ev || ev.linkedTo !== p.incidentGuid || ev.state !== "linked") return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // «Отсоединить» — ручной переход машины из linked
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const r = runTransition(detach.id, ev, {}, "card");
           if (r.status !== 200) return r;
-          const reply = () => ({ status: 200, body: card(primary) });
+          // Ответ — основной; не виден — карточка отсоединённого
+          const reply = () => ({ status: 200, body: card(find(p.incidentGuid) || ev) });
           return Object.assign(reply(), { again: reply });
         },
       ],
@@ -1600,7 +1613,7 @@
           const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
           const r = engine.runAll(detach.id, linked, {}, { surface: "card" });
-          if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
+          if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : runFailure(r);
           touch(linked);
           linked.forEach((ev, i) => emitTransition(ev, detach.id, ME, r.facts[i]));
           const reply = () => ({ status: 200, body: card(primary) });
@@ -2044,7 +2057,8 @@
       if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
       record(method, route.template, res.status, res.body, "http", res.headers);
       const out = { status: res.status, body: res.body, headers: res.headers };
-      if (idem) answered.set(idem, { at: now(), res: JSON.parse(JSON.stringify(out)) });
+      // Неразобранный запрос (400) ключ не тратит: исправленный запрос с тем же ключом выполнится (решение 95)
+      if (idem && res.status !== 400) answered.set(idem, { at: now(), res: JSON.parse(JSON.stringify(out)) });
       return out;
     }
 

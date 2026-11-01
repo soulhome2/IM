@@ -121,6 +121,20 @@ for (const f of rt ? W.forms : []) {
   });
   (f.notes || []).forEach((n, i) => rt.formRefs(`forms.${f.id}.notes.${i}.expr`).length && err.push(`forms.${f.id}.notes.${i}: пояснение читает значения формы`));
 }
+
+// Пояснения карточки (§6.3): текст и текст при скрытом основном — в каталоге на каждом языке. Текст с номером основного
+// не бывает без текста на случай, когда основной не виден (§5), а в том тексте номера нет: сервер его не подставит
+const catalogs = ["ru", "en"].map((lang) => [lang, JSON.parse(fs.readFileSync(path.join(ROOT, `Specification/Workflow_machine/strings/${lang}.json`), "utf8"))]);
+((W.cardNotes || {}).rules || []).forEach((n, i) => {
+  const at = `cardNotes.rules.${i}`;
+  for (const [lang, strings] of catalogs) {
+    for (const field of ["textKey", "hiddenTextKey"]) {
+      if (n[field] && strings[n[field]] === undefined) err.push(`${at}.${field}: ключа ${n[field]} нет в каталоге ${lang}`);
+    }
+    if (String(strings[n.textKey]).includes("{primaryNumber}") && !n.hiddenTextKey) err.push(`${at}: текст ${lang} с {primaryNumber}, нет hiddenTextKey`);
+    if (String(strings[n.hiddenTextKey]).includes("{primaryNumber}")) err.push(`${at}.hiddenTextKey: текст ${lang} с {primaryNumber} — основной скрыт, номера нет`);
+  }
+});
 for (const e of err) console.log(e);
 const done = rt ? rt.guardNames().length : 0;
 const doneEffects = rt ? rt.effectNames().length : 0;

@@ -4224,6 +4224,93 @@
     assert.eq(reset && reset.type, "stream.reset", "id нет в истории — stream.reset");
   });
 
+  /* ===== Этап 5б: объединение, сбой вычисления, не-guid, отсоединение (решения 49, 95, 104) ===== */
+
+  test("объединение через маршрут одного инцидента — 404 unknown_action", async () => {
+    const env = await makeEnv();
+    const [one, two] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").map((e) => e.guid);
+    const before = await env.card(one);
+    const merge = W.transitions.find((t) => t.bulk && t.bulk.mode === "merge").id;
+    const res = await env.act(one, merge, { primaryId: two }, "queue");
+    assert.status(res, 404, "NOT_FOUND", "переход объединения на маршруте одного инцидента");
+    assert.eq(res.body.messageKey, "workflow.error.unknown_action", "для этого маршрута такого действия нет");
+    const after = await env.card(one);
+    assert.eq([after.state, after.linkedTo, after.version], [before.state, before.linkedTo, before.version], "ничего не изменилось");
+  });
+
+  test("сбой вычисления условия — 500 INTERNAL_ERROR", async () => {
+    // Условие эффекта «снять связь» падает при вычислении: первый элемент пустого списка
+    const workflow = JSON.parse(JSON.stringify(W));
+    workflow.registries.effects.find((e) => e.fn === "clearLink").do[0].if = "incidentById(incident.id + '-нет')[0].number != ''";
+    const env = await standWith({ workflow });
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    const lead = (await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires })).incident.guid;
+    const other = fires.find((g) => g !== lead);
+    const before = await env.card(other);
+    assert.eq(before.state, "linked", "привязан");
+    const failed = (res, where) => {
+      assert.status(res, 500, "INTERNAL_ERROR", where);
+      // Текст ошибки в тело не попадает: контракт, Problem.code
+      assert.eq([res.body.messageKey, res.body.messageVars], ["workflow.error.transition_failed", { error: "internal error" }], `${where}: тело`);
+    };
+    failed(await env.act(other, "detach", {}, "card"), "маршрут перехода");
+    failed(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), "«Отсоединить все»");
+    const after = await env.card(other);
+    assert.eq([after.state, after.linkedTo, after.version], [before.state, before.linkedTo, before.version], "ничего не изменилось");
+  });
+
+  test("массовый маршрут: не-guid — 400 до расхода ключа", async () => {
+    const env = await makeEnv();
+    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    assert.eq(two.length, 2, "два новых в офисе");
+    const url = "/operator/incidents/transitions/transfer/bulk";
+    const body = (incidentGuids) => ({ incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, idempotencyKey: "not-a-guid-once" });
+    const bad = await env.call("POST", url, body([two[0], "not-a-guid"]));
+    assert.status(bad, 400, "BAD_REQUEST", "строка не-guid");
+    assert.eq(bad.body.messageKey, "workflow.error.bad_request", "текст");
+    assert.eq((await env.card(two[0])).transferCount, 0, "запрос не выполнен, даже для верного guid");
+    // Ключ не потрачен: тот же ключ с верным списком выполняется, а не получает прежний 400
+    const good = await env.call("POST", url, body(two));
+    assert.eq([good.status, good.body.succeeded && good.body.succeeded.length], [200, 2], "тот же ключ — обе переданы");
+  });
+
+  test("DELETE linked при невидимом основном — 200, карточка отсоединённого", async () => {
+    const mergedInOffice = async () => {
+      const env = await makeEnv();
+      const [mall, office] = await Promise.all(["INC-1847", "INC-1838"].map((n) => env.guidOf(n)));
+      assert.status(await env.act(office, "claim", {}, "queue"), 200, null, "основной — в офисе");
+      assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: [office, mall] }), 200, null, "привязанный — в ТЦ");
+      return { env, mall, office };
+    };
+    const onlyMall = async ({ env, mall, office }) => {
+      assert.status(await env.call("PUT", `/test/operators/${ME}/roles`, { roles: ["Оператор ТЦ"] }), 200, null, "роль только на ТЦ");
+      assert.status(await env.call("GET", `/operator/incidents/${enc(office)}`), 404, "NOT_FOUND", "основной не виден");
+      assert.eq((await env.card(mall)).state, "linked", "привязанный виден и привязан");
+    };
+
+    // Основной ничей: отсоединить может любой, и тот, кто основного не видит
+    const free = await mergedInOffice();
+    assert.status(await free.env.act(free.office, "release", { comment: "тест" }, "card"), 200, null, "основной — в очередь");
+    await onlyMall(free);
+    const res = await free.env.call("DELETE", `/operator/incidents/${enc(free.office)}/linked/${enc(free.mall)}`);
+    assert.status(res, 200, null, "отсоединить");
+    assert.eq([res.body.guid, res.body.state, res.body.linkedTo], [free.mall, "new", null], "в ответе — карточка отсоединённого");
+
+    // Основной ведёт другой: отказ primaryEditable, в теле нет ничего об основном
+    const taken = await mergedInOffice();
+    const number = (await taken.env.card(taken.office)).number;
+    assert.status(await taken.env.act(taken.office, "transfer", { targetId: "sidorov", comment: "тест" }, "card"), 200, null, "основной передан");
+    await onlyMall(taken);
+    const refused = await taken.env.call("DELETE", `/operator/incidents/${enc(taken.office)}/linked/${enc(taken.mall)}`);
+    assert.status(refused, 403, null, "основной ведёт другой");
+    assert.eq(refused.body.guard, "primaryEditable", "отказ — условие машины");
+    const text = JSON.stringify(refused.body);
+    assert.ok(!text.includes(taken.office) && !text.includes(number), `в отказе нет основного: ${text}`);
+    assert.eq((await taken.env.card(taken.mall)).state, "linked", "не отсоединён");
+    // Не привязан к этому основному — 404, как и прежде
+    assert.status(await taken.env.call("DELETE", `/operator/incidents/${enc(UNKNOWN)}/linked/${enc(taken.mall)}`), 404, "NOT_FOUND", "другой основной");
+  });
+
   // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
   IMTest.loaded("api-scenarios.js");
 })();

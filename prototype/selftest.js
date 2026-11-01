@@ -2338,6 +2338,18 @@
       }
     });
 
+    await step("Правила пояснения с номером основного — с текстом на случай скрытого основного (cardNotes, hiddenTextKey, §5)", async () => {
+      const ru = window.IM_STRINGS.ru;
+      const rules = window.IM_WORKFLOW.cardNotes.rules.filter((n) => String(ru[n.textKey]).includes("{primaryNumber}"));
+      expect(rules.length, "нет ни одного правила с {primaryNumber}");
+      rules.forEach((n) => {
+        expect(n.hiddenTextKey, `у правила ${n.textKey} нет hiddenTextKey`);
+        expect(ru[n.hiddenTextKey] !== undefined, `ключа ${n.hiddenTextKey} нет в каталоге`);
+        expect(!ru[n.hiddenTextKey].includes("{primaryNumber}"), `в тексте ${n.hiddenTextKey} есть номер основного`);
+      });
+      return `${rules.length} правил`;
+    });
+
     await step("На перерыве пояснение карточки адресованного мне не зовёт «примите» — только просмотр (cardNotes, BUG-97)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Свежий набор: INC-1843 ждёт моего принятия
