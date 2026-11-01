@@ -398,7 +398,7 @@
   - `(c *Core) MergeFits(w World, op ViewOp, primary, joined map[string]any) (bool, error)`;
   - `(c *Core) MergeCandidates(w World, me string, reps []map[string]any) ([]int, error)`;
   - `(v *View) Availability(id string, form map[string]any) (machine.Availability, error)`;
-  - `(c *Core) MergeCheck(ctx model.AppContext, repo Repo, w World, op ViewOp, list []map[string]any, primaryID string) (*MergeVerdict, error)`;
+  - `(c *Core) MergeCheck(views []*View, primaryID string) (*MergeVerdict, error)` — сам ничего не читает, виды передаёт вызывающий: этим держится один `ViewPage` решения 109;
   - `MergeVerdict{OK bool; Fail *machine.Fail; Guard, Incident string; Take bool}`.
 
 Пакет: `go test -race ./internal/im/service/transition/ -run 'TestClassRep|TestMergeFits|TestMergeCandidates|TestViewAvailability|TestMergeCheckOnRead'`.
