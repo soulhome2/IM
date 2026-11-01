@@ -1238,12 +1238,18 @@
       });
     }
 
-    // Не выполнено: сбой вычисления эффектов — 500, текст ошибки в тело не попадает; форма не прошла — 422. Различаются
-    // по причине, а не по code: у пропущенного поля своего кода нет, FORM_FIELD_REQUIRED — код по умолчанию
-    const runFailure = (r) =>
-      r.why[0] === "workflow.error.transition_failed"
-        ? problem(500, "INTERNAL_ERROR", ["workflow.error.transition_failed", { error: "internal error" }])
-        : problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
+    // Сбой вычисления — ошибка сервера: 500, текст ошибки в тело не попадает (CEL.md, PROC-44 в3)
+    const internalProblem = () => problem(500, "INTERNAL_ERROR", ["workflow.error.transition_failed", { error: "internal error" }]);
+    // Эффекты: ядро вернуло ошибку вместо отказа
+    const evaluationFailed = (r) => r.why[0] === "workflow.error.transition_failed";
+    // Условия и правила формы: ядро её бросает. Что бросил не CEL — ошибка самого прототипа, ей ответа нет
+    const failedToCompute = (err) => {
+      if (err.name !== "EvaluationError") throw err;
+      return internalProblem();
+    };
+    // Не выполнено: сбой вычисления или форма не прошла — 422. Различаются по причине, а не по code: у пропущенного поля
+    // своего кода нет, FORM_FIELD_REQUIRED — код по умолчанию
+    const runFailure = (r) => (evaluationFailed(r) ? internalProblem() : problem(422, r.code || "FORM_FIELD_REQUIRED", r.why));
 
     function runTransition(id, ev, formValues, surface) {
       const tr = engine.transition(id);
@@ -1290,7 +1296,7 @@
       if (!primary) return problem(422, "BULK_SELECTION_INVALID", ["workflow.guard.merge_primary"]);
       const others = list.filter((e) => e !== primary);
       const r = engine.merge(primary, others);
-      if (!r.ok) return r.guard ? guardProblem(r) : problem(422, "BULK_SELECTION_INVALID", r.why);
+      if (!r.ok) return r.guard ? guardProblem(r) : evaluationFailed(r) ? internalProblem() : problem(422, "BULK_SELECTION_INVALID", r.why);
       // Привязанные объединяемых перешли к новому основному (relinkToPrimary машины) — им тоже новая версия
       touch(events.filter((e) => e.linkedTo === primary.id && !others.includes(e) && !isDone(e)));
       // Присоединённых может быть сколько угодно: в журнале — первые номера и «и ещё N»
@@ -1526,13 +1532,31 @@
           scope.list.forEach((ev) => {
             // Изменился после отметки — не трогается: устаревшая выборка не перебивает сделанное после неё (BUG-84)
             if (changedSince(ev, body.expectedVersions)) return failed.push({ incidentGuid: ev.id, problem: conflict(ev).body });
-            const r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
+            // Сбой вычисления — строка failed, остальные выполняются: выборка частично успешна
+            let r;
+            try {
+              r = runTransition(p.transitionId, ev, body.formValues || {}, body.surface);
+            } catch (err) {
+              r = failedToCompute(err);
+            }
             if (r.status === 200) {
               done.push(ev);
               navigate = r.body.navigate || navigate;
             } else failed.push({ incidentGuid: ev.id, problem: r.body });
           });
-          const reply = () => ({ status: 200, body: { succeeded: done.map((ev) => summary(ev, "queue")), failed, skipped, navigate } });
+          const reply = () => {
+            // Переход выполнен, а строку не собрать: это строка failed, ошибка всего ответа потеряла бы строки остальных
+            const late = [];
+            const succeeded = done.flatMap((ev) => {
+              try {
+                return [summary(ev, "queue")];
+              } catch (err) {
+                late.push({ incidentGuid: ev.id, problem: failedToCompute(err).body });
+                return [];
+              }
+            });
+            return { status: 200, body: { succeeded, failed: failed.concat(late), skipped, navigate } };
+          };
           return Object.assign(reply(), { again: reply });
         },
       ],
@@ -2051,14 +2075,19 @@
       if (acting) runScheduler();
       // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
       if (acting) lastHeartbeat = now();
-      let res = route.fn(params, q, body || {}, lowerKeys(headers));
-      // После — системные переходы, которые запрос сделал возможными (передали вышедшему — сразу его группе), в
-      // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10)
-      if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
+      let res;
+      try {
+        res = route.fn(params, q, body || {}, lowerKeys(headers));
+        // После — системные переходы, которые запрос сделал возможными (передали вышедшему — сразу его группе), в
+        // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10)
+        if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
+      } catch (err) {
+        res = failedToCompute(err);
+      }
       record(method, route.template, res.status, res.body, "http", res.headers);
       const out = { status: res.status, body: res.body, headers: res.headers };
-      // Неразобранный запрос (400) ключ не тратит: исправленный запрос с тем же ключом выполнится (решение 95)
-      if (idem && res.status !== 400) answered.set(idem, { at: now(), res: JSON.parse(JSON.stringify(out)) });
+      // Неразобранный запрос (400) и ошибка сервера (5xx) ключ не тратят: тот же ключ выполнит запрос заново (решения 95, 113)
+      if (idem && res.status !== 400 && res.status < 500) answered.set(idem, { at: now(), res: JSON.parse(JSON.stringify(out)) });
       return out;
     }
 

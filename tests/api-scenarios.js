@@ -4238,25 +4238,109 @@
     assert.eq([after.state, after.linkedTo, after.version], [before.state, before.linkedTo, before.version], "ничего не изменилось");
   });
 
+  // Падает при вычислении: первый элемент пустого списка
+  const FAILS = "incidentById(incident.id + '-нет')[0].number != ''";
+  const internalError = (res, where) => {
+    assert.status(res, 500, "INTERNAL_ERROR", where);
+    // Текст ошибки в тело не попадает: контракт, Problem.code
+    assert.eq([res.body.messageKey, res.body.messageVars], ["workflow.error.transition_failed", { error: "internal error" }], `${where}: тело`);
+  };
+  // Машина, где условие перехода падает при вычислении, когда верно when; без when — всегда
+  const withFailingGuard = (transitionId, when) => {
+    const workflow = JSON.parse(JSON.stringify(W));
+    const guards = workflow.registries.guards;
+    const expr = when ? `!(${when}) || ${FAILS}` : FAILS;
+    guards.push(Object.assign({}, guards.find((g) => g.fn === "primaryEditable"), { fn: "failsToCompute", expr }));
+    workflow.transitions.find((t) => t.id === transitionId).guards.unshift({ fn: "failsToCompute" });
+    return workflow;
+  };
+  const failedLine = (body, guid) => (body.failed || []).find((f) => f.incidentGuid === guid);
+  const inJournal = async (env, guid, key) => (await env.ok("GET", `/operator/incidents/${enc(guid)}/journal`)).items.filter((j) => j.templateKey === key).length;
+
   test("сбой вычисления условия — 500 INTERNAL_ERROR", async () => {
+    const news = (await (await makeEnv()).all("open")).filter((e) => e.state === "new").slice(0, 3);
+    assert.eq(news.length, 3, "три новых");
+    const [one, broken, two] = news;
+    const form = { targetId: "sidorov", comment: "тест" };
+    const env = await standWith({ workflow: withFailingGuard("transfer", `incident.number == '${broken.number}'`) });
+
+    // Один инцидент: ошибка сервера, а не «условие не выполнено» и не обрыв запроса (CEL.md, PROC-44 в3)
+    internalError(await env.act(broken.guid, "transfer", form, "queue", undefined, "*"), "маршрут перехода");
+    internalError(await env.call("GET", `/operator/incidents/${enc(broken.guid)}/actions`), "/actions");
+
+    // Выборка: строка в failed, остальные выполняются, ответ целый — как runSelection сервера
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: [one, broken, two].map((e) => e.guid), formValues: form });
+    assert.status(bulk, 200, null, "массовый маршрут");
+    assert.eq(bulk.body.succeeded.map((e) => e.guid), [one.guid, two.guid], "другие выполнены");
+    assert.eq(bulk.body.failed.length, 1, "в failed одна строка");
+    const line = failedLine(bulk.body, broken.guid);
+    assert.eq([line.problem.code, line.problem.messageKey, line.problem.messageVars], ["INTERNAL_ERROR", "workflow.error.transition_failed", { error: "internal error" }], "строка failed");
+    assert.eq(await inJournal(env, broken.guid, "workflow.journal.transfer"), 0, "упавший не передан");
+    for (const e of [one, two]) assert.eq((await env.card(e.guid)).transferCount, 1, `${e.number} передан`);
+
+    // «Отсоединить все»: всё или ничего
+    const links = await standWith({ workflow: withFailingGuard("detach") });
+    const fires = (await links.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    const lead = (await links.ok("POST", "/operator/incidents/merge", { incidentGuids: fires })).incident.guid;
+    internalError(await links.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), "«Отсоединить все»");
+    assert.eq((await links.card(lead)).linkedCount, 1, "связь на месте");
+  });
+
+  test("сбой вычисления условия после фиксации — выполненный в failed, ответ целый", async () => {
+    const [first, second] = (await (await makeEnv()).all("open")).filter((e) => e.state === "new" && e.site === "Главный офис");
+    // Условие действия, которое появляется после передачи. У первого оно падает, только когда передан и второй: оба
+    // перехода выполнены и поток прошёл, падает сборка строки ответа
+    const after = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("pending_acceptance") && !t.from.includes("new") && t.ui.surface.includes("queue"));
+    const when = `incident.number == '${first.number}' && incidentById('${second.guid}')[0].state == 'pending_acceptance'`;
+    const env = await standWith({ workflow: withFailingGuard(after.id, when) });
+    const res = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: [first.guid, second.guid], formValues: { targetId: "sidorov", comment: "тест" } });
+    assert.status(res, 200, null, "ответ не потерян");
+    assert.eq(res.body.succeeded.map((e) => e.guid), [second.guid], "в succeeded — тот, чья строка собрана");
+    assert.eq(failedLine(res.body, first.guid).problem.code, "INTERNAL_ERROR", "строка в failed");
+    assert.eq(await inJournal(env, first.guid, "workflow.journal.transfer"), 1, "переход выполнен");
+  });
+
+  test("повтор после 500 с тем же ключом выполняется заново", async () => {
+    const workflow = JSON.parse(JSON.stringify(W));
+    workflow.registries.effects.push({ fn: "failsOnWord", kind: "transactional", args: [], argTypes: {}, do: [{ if: `form.comment == 'сбой' && ${FAILS}`, then: [] }] });
+    workflow.transitions.find((t) => t.id === "hold").effects.unshift({ kind: "transactional", fn: "failsOnWord" });
+    const env = await standWith({ workflow });
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const send = async (comment) =>
+      env.call("POST", `/operator/incidents/${enc(inc.guid)}/transitions/hold`, { formValues: { reasonId: "third_party", comment }, surface: "card", idempotencyKey: "after-500" }, { "If-Match": await env.etag(inc.guid) });
+    internalError(await send("сбой"), "первый раз");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "не выполнено");
+    const retry = await send("тест");
+    assert.status(retry, 200, null, "тот же ключ — запрос выполнен, а не прежний 500");
+    assert.eq(retry.body.incident.state, "on_hold", "отложен");
+    // Ответ 200 ключ тратит: третий раз — прежний ответ, второй записи нет
+    assert.eq((await send("тест")).body, retry.body, "повтор — тот же ответ");
+    assert.eq(await inJournal(env, inc.guid, "workflow.journal.hold"), 1, "одна запись");
+  });
+
+  test("сбой вычисления эффекта — 500 INTERNAL_ERROR", async () => {
     // Условие эффекта «снять связь» падает при вычислении: первый элемент пустого списка
     const workflow = JSON.parse(JSON.stringify(W));
-    workflow.registries.effects.find((e) => e.fn === "clearLink").do[0].if = "incidentById(incident.id + '-нет')[0].number != ''";
+    workflow.registries.effects.find((e) => e.fn === "clearLink").do[0].if = FAILS;
     const env = await standWith({ workflow });
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
     const lead = (await env.ok("POST", "/operator/incidents/merge", { incidentGuids: fires })).incident.guid;
     const other = fires.find((g) => g !== lead);
     const before = await env.card(other);
     assert.eq(before.state, "linked", "привязан");
-    const failed = (res, where) => {
-      assert.status(res, 500, "INTERNAL_ERROR", where);
-      // Текст ошибки в тело не попадает: контракт, Problem.code
-      assert.eq([res.body.messageKey, res.body.messageVars], ["workflow.error.transition_failed", { error: "internal error" }], `${where}: тело`);
-    };
-    failed(await env.act(other, "detach", {}, "card"), "маршрут перехода");
-    failed(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), "«Отсоединить все»");
+    internalError(await env.act(other, "detach", {}, "card"), "маршрут перехода");
+    internalError(await env.call("DELETE", `/operator/incidents/${enc(lead)}/linked`), "«Отсоединить все»");
     const after = await env.card(other);
     assert.eq([after.state, after.linkedTo, after.version], [before.state, before.linkedTo, before.version], "ничего не изменилось");
+
+    // Объединение: эффект, который переносит привязанных, падает — ни одной правки, 500, а не отказ выборки
+    const broken = JSON.parse(JSON.stringify(W));
+    broken.registries.effects.find((e) => e.fn === "relinkToPrimary").do.find((d) => d.if).if = FAILS;
+    const merging = await standWith({ workflow: broken });
+    const pair = (await merging.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    internalError(await merging.call("POST", "/operator/incidents/merge", { incidentGuids: pair }), "объединение");
+    for (const g of pair) assert.eq((await merging.card(g)).state, "new", "ничего не изменилось");
   });
 
   test("массовый маршрут: не-guid — 400 до расхода ключа", async () => {
