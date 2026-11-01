@@ -427,7 +427,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Реализовать**
 
-Типы — дословно имена полей контракта. `OperatorSession` расширяется в `operatorApi.ts` вместе со схемой zod этапа 8: новые поля необязательные, старые тесты не трогать. Проверка `workflow` схемой zod с `.passthrough()`: обязательные секции `transitions`, `forms`, `queueFilters`, `navActions`, `session`, `limits`, `reasonCatalogs`. `heartbeat` и `updatePreferences` — как `app.js`. `merge` и `bulk` дописывают `idempotencyKey: nanoid()`. Пути и методы — контракт: `PUT /operator/session/agent-state`, `POST /operator/session/heartbeat`, `PATCH /operator/session/preferences`, `POST /operator/incidents/selection`, `POST /operator/incidents/filter`, `POST /operator/incidents/merge`, `POST /operator/incidents/transitions/{id}/bulk`, `POST …/scenario/answer`, `PUT …/scenario/cursor`, `DELETE …/linked`, `DELETE …/linked/{linkedGuid}`.
+Типы — дословно имена полей контракта. `OperatorSession` расширяется в `operatorApi.ts` вместе со схемой zod этапа 8: новые поля необязательные и допускают `null` (`.nullish()`), старые тесты не трогать. `agentStateReasonId`, `lastTransferTargetId` и `usage.blockingIncidentGuid` приходят как `null`: простой `.optional()` отказал бы всей сессии. Отказ сессии из-за необязательного поля — ошибка. Проверка `workflow` схемой zod с `.passthrough()`: обязательные секции `transitions`, `forms`, `queueFilters`, `navActions`, `session`, `limits`, `reasonCatalogs`. `heartbeat` и `updatePreferences` — как `app.js`. `merge` и `bulk` дописывают `idempotencyKey: nanoid()`. Пути и методы — контракт: `PUT /operator/session/agent-state`, `POST /operator/session/heartbeat`, `PATCH /operator/session/preferences`, `POST /operator/incidents/selection`, `POST /operator/incidents/filter`, `POST /operator/incidents/merge`, `POST /operator/incidents/transitions/{id}/bulk`, `POST …/scenario/answer`, `PUT …/scenario/cursor`, `DELETE …/linked`, `DELETE …/linked/{linkedGuid}`.
 
 - [ ] **Step 4: Концовка**
 
@@ -436,7 +436,7 @@ Expected: FAIL.
 #### Task 2б: Встроенный сервер без коллег, первая строка на странице
 
 **Files:**
-- Modify: `src/operator/entry.ts`, `entry.test.ts`, `src/operator/api/embeddedServer.ts`, `embeddedServer.test.ts`, `src/operator/OperatorRoot.tsx`, `src/operator/OperatorPage.tsx`, `src/operator/OperatorPage.test.tsx`, `src/shared/i18n/locales/{ru,en}/operator.json`, `PROJECT.md`
+- Modify: `src/operator/entry.ts`, `entry.test.ts`, `src/operator/api/operatorApi.ts`, `src/operator/api/embeddedServer.ts`, `embeddedServer.test.ts`, `src/operator/OperatorRoot.tsx`, `src/operator/OperatorPage.tsx`, `src/operator/OperatorPage.test.tsx`, `src/shared/i18n/locales/{ru,en}/operator.json`, `PROJECT.md`
 - Modify (вне git): `~/Work/stand/sync-im-proto.sh`, копия `sync-im-proto.sh.before-9`
 
 **Interfaces:**
@@ -448,8 +448,10 @@ Expected: FAIL.
 // статический импорт оттуда втянул бы модуль с /im-proto/ в боевую сборку
 export function embeddedOptions(search: string): { colleagues: boolean };
 
-// embeddedServer.ts
+// operatorApi.ts: тип EmbeddedServer живёт здесь с этапа 8, второго с тем же именем нет, добавляется subscribe
 export type EmbeddedServer = { handle(...): ...; subscribe(fn: (m: unknown) => void, lastEventId?: string): () => void };
+
+// embeddedServer.ts
 export function loadEmbeddedServer(options?: { colleagues: boolean }): Promise<EmbeddedServer>;
 ```
 
