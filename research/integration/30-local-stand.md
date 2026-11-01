@@ -226,8 +226,9 @@ make test-local        # go test ./... с IM_TEST_DB_URL
 2. Снять дамп базы (`sg docker -c "docker exec \$(docker ps -qf name=ac_db) pg_dump -U im imdb" > ~/Work/stand/backup/imdb-before-rollback.sql`), проверить `test -s` на файл.
 3. Вернуть базу одним из двух способов. Оба относятся только к базе `imdb` и никогда не делаются в `ac_db` или другой базе облака.
    - **Залить дамп нужного этапа.** Простой `pg_dump` не заливается в живую базу: будет «already exists». Поэтому базу пересоздают и заливают дамп (команды той же формы, что дамп выше):
-     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im postgres -c 'DROP DATABASE imdb'"`,
-     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im postgres -c 'CREATE DATABASE imdb OWNER im'"`,
+     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U postgres postgres -c 'DROP DATABASE imdb'"`,
+     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U postgres postgres -c 'CREATE DATABASE imdb OWNER im'"`,
+     У роли `im` нет права создавать базы, поэтому первые две команды идут под `postgres`, а заливка — под `im`.
      `sg docker -c "docker exec -i \$(docker ps -qf name=ac_db) psql -U im imdb" < ~/Work/stand/backup/imdb-before-019.sql`.
      Всё, что записано после снятия этого дампа (инциденты, сессии, лента), теряется. Какой дамп к какой сборке: `imdb-before-019.sql` (до миграций 019–021) подходит сборкам до 5а; `imdb-before-022.sql` подходит сборке 5а (21 миграция). Второго файла сейчас нет: он появится, только когда будет применена миграция 022 (Task 19 этапа 5б), и снимать его надо до применения.
    - **Выполнить `Down` лишних миграций** в обратном порядке и убрать их записи из `im_db_migrations`: колонка с именем миграции называется `id` (`DELETE FROM im_db_migrations WHERE id = '<имя файла миграции>'`). `Down` у 019 удаляет таблицу `operator_sessions`, у 021 — таблицу `stream_events`: **данные этих таблиц пропадут** (сообщения ленты, состояния и настройки операторов).
