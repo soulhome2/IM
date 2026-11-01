@@ -2198,8 +2198,8 @@ Expected: случай 5 `OK`, `итого ошибок: 0`.
 
 - [ ] **Step 6: Полный прогон**
 
-Run: `npm run test:run && npm run lint && npm run build; echo chain=$?`, отдельно `npx tsc -p tsconfig.app.json; echo tsc=$?`, отдельно `grep -rl 'im-proto' dist; echo grep=$?`, отдельно `I=/mnt/hgfs/VmWareShared/soul2home/IM; cmp src/operator/theme/one-psim.css $I/theme/one-psim.css; cmp src/operator/testing/workflow_schema.v1.json $I/Specification/Workflow_machine/workflow_schema.v1.json; echo cmp=$?`
-Expected: `chain=0`; `tsc=2`, две ошибки базы; `grep=1`: встроенного сервера в боевой сборке нет; `cmp=0`. Машина ушла вперёд — обновить копию и снова прогнать `tests/operator-no-rule-names.test.ts`.
+Run: `npm run test:run && npm run lint && npm run build; echo chain=$?`, отдельно `npx tsc -p tsconfig.app.json; echo tsc=$?`, отдельно `grep -rl 'im-proto' dist; echo grep=$?`, отдельно `I=/mnt/hgfs/VmWareShared/soul2home/IM; cmp src/operator/theme/one-psim.css $I/theme/one-psim.css && cmp src/operator/testing/workflow_schema.v1.json $I/Specification/Workflow_machine/workflow_schema.v1.json && cmp <(tr -d '\r' < src/operator/testing/openapi.json) <(tr -d '\r' < $I/Specification/Workflow_machine/openapi.json); echo cmp=$?`
+Expected: `chain=0`; `tsc=2`, две ошибки базы; `grep=1`: встроенного сервера в боевой сборке нет; `cmp=0`. Машина ушла вперёд — обновить копию и снова прогнать `tests/operator-no-rule-names.test.ts`. Контракт ушёл вперёд — обновить копию `openapi.json`, её хэш и снова прогнать `tests/operator-fake-contract.test.ts`. Копия контракта хранится в LF, оригинал в CRLF, поэтому сравнение без `\r`.
 
 - [ ] **Step 7: Записать итог частей 1–3 в документы IM**
 
