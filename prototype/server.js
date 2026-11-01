@@ -2070,19 +2070,28 @@
         record(method, route.template, res.status, res.body, "http", res.headers);
         return JSON.parse(JSON.stringify(res));
       }
-      // Перед запросом оператора — всё, что уже наступило по времени (§14.3, ARCH-10): иначе действие между
-      // тактами планировщика стёрло бы нарушение (BUG-82). Окно после дедлайна по-прежнему ждёт человека
-      if (acting) runScheduler();
-      // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
-      if (acting) lastHeartbeat = now();
       let res;
       try {
+        // Перед запросом оператора — всё, что уже наступило по времени (§14.3, ARCH-10): иначе действие между
+        // тактами планировщика стёрло бы нарушение (BUG-82). Окно после дедлайна по-прежнему ждёт человека.
+        // Сбой догона — 500: ничего не сделано, ключ не тратится (решение 212)
+        if (acting) runScheduler();
+        // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
+        if (acting) lastHeartbeat = now();
         res = route.fn(params, q, body || {}, lowerKeys(headers));
-        // После — системные переходы, которые запрос сделал возможными (передали вышедшему — сразу его группе), в
-        // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10)
-        if (acting && res.status < 300 && runScheduler().length && res.again) res = res.again();
       } catch (err) {
         res = failedToCompute(err);
+      }
+      // После — системные переходы, которые запрос сделал возможными (передали вышедшему — сразу его группе), в
+      // том же запросе: их события уходят в поток, ответ показывает инциденты уже после них (ARCH-10). Действие
+      // уже зафиксировано: сбой здесь ответ не меняет — он остаётся тем, что зафиксировано, и запоминается по
+      // ключу, а несделанное доделает следующий такт (решение 212)
+      if (acting && res.status < 300) {
+        try {
+          if (runScheduler().length && res.again) res = res.again();
+        } catch (err) {
+          console.error("scheduler after request failed:", method, path, err);
+        }
       }
       record(method, route.template, res.status, res.body, "http", res.headers);
       const out = { status: res.status, body: res.body, headers: res.headers };
@@ -2098,13 +2107,16 @@
       // Чьи инциденты были мои — владельцем или адресатом, лично или группой (ownership машины): если после
       // переходов такой инцидент мне не виден, сервер сообщает об этом (§5)
       const wasMine = new Set(events.filter((e) => !isDone(e) && engine.ownership(e) !== "other").map((e) => e.id));
-      const fired = engine.tick();
       // Системные переходы каждого человека — по его состоянию, как на бэкенде, а не только в эмуляции
-      // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь
-      const others = OPERATORS.filter((op) => op.id !== ME).flatMap((op) => colleagueTick(op.id));
-      fired.forEach(({ id, transition, facts }) => {
+      // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь. Один такт в общем порядке
+      // по времени по всем людям (§14.3, решение 212), а не «сначала мои, потом каждого коллеги»
+      const peers = OPERATORS.filter((op) => op.id !== ME).map((op) => colleague(op.id));
+      const fired = engine.tick({ peers });
+      fired.forEach(({ id, transition, facts, operator }) => {
         const ev = byId(id);
         touch([ev]);
+        // Переход коллеги — от имени системы, как в colleagueTick
+        if (operator !== ME) return emitTransition(ev, transition, "system", facts);
         const tr = engine.transition(transition);
         if (wasMine.has(id) && !canSee(ev)) {
           wasMine.delete(id);
@@ -2112,7 +2124,7 @@
         }
         emitTransition(ev, transition, tr.actor || "dispatcher", facts);
       });
-      return fired.concat(others);
+      return fired;
     }
 
     /* ===== Эмуляция коллег (§17): через те же переходы машины, от имени коллеги ===== */

@@ -36,6 +36,15 @@
     if (Array.isArray(b) && !Array.isArray(a)) return !b.includes(a);
     return a != b;
   });
+  // Разрешённые операторы (спецификация, раздел 7): другой оператор — ошибка вычисления, условие ложно, как в
+  // проверке на Python (tools/check_scenarios.py, jl_apply) и на сервере (решение 196). Проверка — когда оператор
+  // вычисляется: внутренние вызовы json-logic-js (missing, missing_some) идут через тот же apply
+  const ALLOWED = new Set(["var", "==", "!=", ">", ">=", "<", "<=", "and", "or", "!", "if", "in", "none", "some", "all", "missing", "missing_some"]);
+  const applyAny = logic.apply;
+  logic.apply = function (rule, data) {
+    if (logic.is_logic(rule) && !ALLOWED.has(logic.get_operator(rule))) throw new Error(`оператор вне списка спецификации: ${logic.get_operator(rule)}`);
+    return applyAny.call(this, rule, data);
+  };
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const stepOf = (script, id) => script.steps.find((s) => s.id === id) || null;

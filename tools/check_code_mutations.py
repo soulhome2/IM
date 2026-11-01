@@ -151,12 +151,12 @@ MUTATIONS = [
     ("counters-ignore-access", "server.js", "const list = visible({ scenarioGuid: (q || {}).scenarioGuid });", "const list = events;", "api"),
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
-    ("tick-effects-at-now", "engine.js", "        at = runAt;\n        let facts = null;", "        at = null;\n        let facts = null;", "api"),
+    ("tick-effects-at-now", "engine.js", "      at = runAt;\n      let facts = null;", "      at = null;\n      let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
     ("alert-toast-silent", "app.js", 'toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));', "", "ui"),
     ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
     ("admin-values-raw", "app.js", "    if (values && typeof v === \"string\" && values[v]) return te(values[v]);\n", "", "ui"),
-    ("colleagues-not-ticked", "server.js", "const others = OPERATORS.filter((op) => op.id !== ME).flatMap((op) => colleagueTick(op.id));", "const others = [];", "api"),
+    ("colleagues-not-ticked", "server.js", "const peers = OPERATORS.filter((op) => op.id !== ME).map((op) => colleague(op.id));", "const peers = [];", "api"),
     ("colleague-always-ready", "server.js", "agentState: () => agentStateOf(id),", "agentState: () => \"ready\",", "api"),
     ("reset-ignores-workflow-patch", "server.js", "useWorkflow(body.workflowPatch ? mergePatch(BASE_W, body.workflowPatch) : BASE_W);", "useWorkflow(BASE_W);", "api"),
     ("reset-ignores-fixture-patch", "server.js", "load(body.fixturePatch ? mergePatch(FIXTURE, body.fixturePatch) : FIXTURE);", "load(FIXTURE);", "api"),
@@ -396,7 +396,7 @@ MUTATIONS = [
     ("ui-scenario-untitled-empty", "app.js", 't(ev.scenarioTitle || "Без названия")', 't(ev.scenarioTitle || "")', "ui"),
     # Автоматические переходы и запрос оператора (§14.3, ARCH-10): догон перед запросом (BUG-82), системные — сразу после
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
-    ("settle-after-request-off", "server.js", "if (acting && res.status < 300 && runScheduler().length && res.again)", "if (false && res.again)", "api"),
+    ("settle-after-request-off", "server.js", "if (runScheduler().length && res.again)", "if (false && res.again)", "api"),
     # Карточку увели — уведомление с причиной (BUG-86)
     # Выборка (BUG-106): снятые отметки забывают версии; после отказа «уже изменён» повтор — по нынешней версии
     ("ui-versions-kept-on-drop", "app.js", "    checkedVersions.clear();\n  }\n  // Новая выборка", "  }\n  // Новая выборка", "ui"),

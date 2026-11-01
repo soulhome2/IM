@@ -600,41 +600,64 @@
       return { ev, tr: next.tr, moment: next.moment, runAt: Math.max(runAt, s.lastRun || 0) };
     }
     // Такт планировщика — догон в общем порядке по времени (§14.3, ARCH-13): из готовых у всех инцидентов
-    // первым — переход с самым ранним моментом, при равенстве — инцидент раньше по списку; после каждого —
-    // выбор заново. Так переход одного инцидента, который открыл переход другого, наступает раньше, и после
-    // простоя исход тот же, что при проверке каждую секунду
+    // первым — переход с самым ранним моментом, при равенстве — меньший номер инцидента (решение 212: так у
+    // прототипа и сервера; правила порядок при равенстве не называют); после каждого — выбор заново. Так переход
+    // одного инцидента, который открыл переход другого, наступает раньше, и после простоя исход тот же, что при
+    // проверке каждую секунду
+    const numberOf = (ev) => Number(String(ev.number).replace(/\D/g, "")) || 0;
+    const sooner = (a, b) => a.runAt < b.runAt || (a.runAt === b.runAt && numberOf(a.ev) < numberOf(b.ev));
+    // Что этот исполнитель выполнил бы в такте следующим; s — состояние такта, общее для всех людей
+    function tickNext(s, agentOnly) {
+      let best = null;
+      ctx.events().forEach((ev) => {
+        if (isDone(ev) || (s.count.get(ev.id) || 0) >= 50) return;
+        const c = nextOf(ev, s, agentOnly);
+        if (c && (!best || sooner(c, best))) best = c;
+      });
+      return best;
+    }
+    // Выполнить выбранный переход; не выполнен — null
+    function tickFire(best, s) {
+      const { ev, tr, runAt } = best;
+      s.done.add(`${ev.id}|${tr.id}@${best.moment}`);
+      s.count.set(ev.id, (s.count.get(ev.id) || 0) + 1);
+      at = runAt;
+      let facts = null;
+      try {
+        const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
+        const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
+        if (timerGuard) markFired(ev, timerGuard.args[0]);
+        const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher", { deadline });
+        if (applied.ok) facts = applied.facts[0];
+      } finally {
+        at = null;
+      }
+      if (!facts) return null;
+      s.last.set(ev.id, runAt);
+      s.lastRun = runAt;
+      // operator — чей исполнитель выполнил: системные переходы коллег (peers) идут в том же такте
+      return { id: ev.id, transition: tr.id, facts, operator: ME };
+    }
+    // peers — исполнители других людей: их переходы (scope: incidents_owned_by_agent, agentOnly) — в том же
+    // такте и общем порядке по времени (§14.3), а не после всех переходов этого исполнителя. При равенстве и
+    // момента, и номера — по порядку: этот исполнитель, затем peers
     function tick(opts) {
       const changed = [];
       const agentOnly = Boolean(opts && opts.agentOnly);
+      const parts = [{ engine: { tickNext, tickFire }, agentOnly }].concat(((opts && opts.peers) || []).map((engine) => ({ engine, agentOnly: true })));
       // Один и тот же переход инцидента в один и тот же момент — не больше раза за такт, у инцидента — не больше
       // 50 переходов: ошибка в условии не зациклит планировщик
       const s = { done: new Set(), last: new Map(), count: new Map(), since: new Map(), lastRun: null };
       for (;;) {
         let best = null;
-        ctx.events().forEach((ev) => {
-          if (isDone(ev) || (s.count.get(ev.id) || 0) >= 50) return;
-          const c = nextOf(ev, s, agentOnly);
-          if (c && (!best || c.runAt < best.runAt)) best = c;
+        let who = null;
+        parts.forEach((p) => {
+          const c = p.engine.tickNext(s, p.agentOnly);
+          if (c && (!best || sooner(c, best))) [best, who] = [c, p];
         });
         if (!best) break;
-        const { ev, tr, runAt } = best;
-        s.done.add(`${ev.id}|${tr.id}@${best.moment}`);
-        s.count.set(ev.id, (s.count.get(ev.id) || 0) + 1);
-        at = runAt;
-        let facts = null;
-        try {
-          const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
-          const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
-          if (timerGuard) markFired(ev, timerGuard.args[0]);
-          const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher", { deadline });
-          if (applied.ok) facts = applied.facts[0];
-        } finally {
-          at = null;
-        }
-        if (!facts) continue;
-        s.last.set(ev.id, runAt);
-        s.lastRun = runAt;
-        changed.push({ id: ev.id, transition: tr.id, facts });
+        const fired = who.engine.tickFire(best, s);
+        if (fired) changed.push(fired);
       }
       return changed;
     }
@@ -888,6 +911,9 @@
       pauseTimer: (ev, id) => timerEffect("pauseTimer", ev, [id]),
       resumeTimer: (ev, id) => timerEffect("resumeTimer", ev, [id]),
       tick,
+      // Шаги такта — для общего такта по людям (tick с peers)
+      tickNext,
+      tickFire,
       canEditScenario,
       closeResultLabel,
       merge,

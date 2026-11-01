@@ -4395,6 +4395,156 @@
     assert.status(await taken.env.call("DELETE", `/operator/incidents/${enc(UNKNOWN)}/linked/${enc(taken.mall)}`), 404, "NOT_FOUND", "другой основной");
   });
 
+  /* ===== Этап 6: ключ повтора, ответ после системных переходов, сбой планировщика, порядок такта (решение 212) ===== */
+
+  test("ключ повтора помнит 4xx: второй запрос — тот же 409, переход не выполнен", async () => {
+    const env = await makeEnv();
+    // INC-1846 в работе у Петровой: «Взять» из этого состояния нельзя
+    const foreign = await env.guidOf("INC-1846");
+    const journal = async () => (await env.ok("GET", `/operator/incidents/${enc(foreign)}/journal`)).items.length;
+    const before = await journal();
+    const send = async () =>
+      env.call("POST", `/operator/incidents/${enc(foreign)}/transitions/claim`, { formValues: {}, surface: "queue", idempotencyKey: "claim-foreign-once" }, { "If-Match": await env.etag(foreign) });
+    const first = await send();
+    assert.status(first, 409, null, "первый раз");
+    const again = await send();
+    assert.status(again, 409, null, "второй раз с тем же ключом");
+    assert.eq(again.body, first.body, "повтор — тот же ответ");
+    assert.eq(await journal(), before, "журнал не вырос");
+    assert.eq((await env.card(foreign)).owner.id, "petrova", "инцидент у Петровой");
+  });
+
+  test("ответ после системного перехода — инцидент уже после него (ARCH-10)", async () => {
+    const env = await makeEnv();
+    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    // Кузнецов в наборе вышел: после передачи ему срабатывает addressee_signed_out_* — в том же запросе
+    const res = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue");
+    assert.status(res, 200, null, "передать вышедшему");
+    const r = res.body.incident;
+    assert.eq(r.owner, null, "в ответе адресата-человека уже нет");
+    const c = await env.card(mall.guid);
+    assert.ok(c.journal.some((j) => /^workflow\.journal\.addressee_signed_out_/.test(j.templateKey)), "сработал addressee_signed_out_*");
+    assert.eq([r.state, r.owner, r.assignmentGroup && r.assignmentGroup.id], [c.state, c.owner, c.assignmentGroup && c.assignmentGroup.id], "ответ — как карточка после системного перехода");
+  });
+
+  test("объединение уже связанных — 422", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires }), 200, null, "первое объединение");
+    const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires });
+    assert.status(res, 422, null, "второй раз — те же инциденты, без expectedVersions");
+    const b = res.body || {};
+    assert.ok(typeof b.code === "string" && typeof b.message === "string" && typeof b.messageKey === "string", `тело — Problem: ${JSON.stringify(b)}`);
+  });
+
+  // Встроенный сервер, у которого такт планировщика оператора стенда (engine.tick) подменён: бросает сбой вычисления,
+  // пока fails(события сервера) истинно. Подмена ставится на исполнитель, созданный при сбросе стенда
+  async function standWithBrokenTick(fails) {
+    const create = IMEngine.create;
+    IMEngine.create = (ctx) => {
+      const engine = create(ctx);
+      if (ctx.me === ME) {
+        const tick = engine.tick;
+        engine.tick = (o) => {
+          if (fails(ctx.events())) throw Object.assign(new Error("сбой такта (подмена в тесте)"), { name: "EvaluationError" });
+          return tick(o);
+        };
+      }
+      return engine;
+    };
+    try {
+      const server = IMServer.create({ workflow: W, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
+      const api = IMApi.create({ server });
+      assert.status(await api.raw("POST", "/test/reset", { fixture: "demo" }), 200, null, "сброс стенда");
+      return api;
+    } finally {
+      IMEngine.create = create;
+    }
+  }
+  const actWithKey = async (api, guid, transition, formValues, key) => {
+    const etag = (await api.raw("GET", `/operator/incidents/${enc(guid)}`)).headers.etag;
+    return api.raw("POST", `/operator/incidents/${enc(guid)}/transitions/${enc(transition)}`, { formValues, surface: "card", idempotencyKey: key }, { "If-Match": etag });
+  };
+  const freshFire = async (api) => (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.eventType.id === "fire");
+
+  test("сбой планировщика после фиксации — ответ остаётся 200 и запоминается", async () => {
+    if (IMTest.external) return "пропущено: подмена такта есть только во встроенном сервере";
+    let guid = null;
+    // Бросает, только когда инцидент уже отложен — то есть после маршрута «Отложить»
+    const api = await standWithBrokenTick((events) => events.some((e) => e.id === guid && e.state === "on_hold"));
+    guid = (await freshFire(api)).guid;
+    assert.status(await actWithKey(api, guid, "claim", {}, "claim-before-broken"), 200, null, "взять");
+    const form = { reasonId: "third_party", comment: "тест" };
+    const first = await actWithKey(api, guid, "hold", form, "hold-broken-after");
+    assert.status(first, 200, null, "действие зафиксировано — ответ не 500");
+    assert.eq(first.body.incident.state, "on_hold", "в ответе — отложен");
+    const version = (await api.get(`/operator/incidents/${enc(guid)}`)).version;
+    const again = await actWithKey(api, guid, "hold", form, "hold-broken-after");
+    assert.status(again, 200, null, "повтор с тем же ключом");
+    assert.eq(again.body, first.body, "повтор — прежний ответ");
+    const card = await api.get(`/operator/incidents/${enc(guid)}`);
+    assert.eq(card.version, version, "второй раз не выполнено");
+    assert.eq(card.journal.filter((j) => j.templateKey === "workflow.journal.hold").length, 1, "одна запись «Отложить»");
+  });
+
+  test("сбой догона до маршрута — 500, ключ не потрачен", async () => {
+    if (IMTest.external) return "пропущено: подмена такта есть только во встроенном сервере";
+    let broken = true;
+    const api = await standWithBrokenTick(() => broken);
+    const guid = (await freshFire(api)).guid;
+    internalError(await actWithKey(api, guid, "claim", {}, "claim-catchup-broken"), "догон до маршрута");
+    assert.eq((await api.get(`/operator/incidents/${enc(guid)}`)).state, "new", "ничего не сделано");
+    broken = false;
+    const retry = await actWithKey(api, guid, "claim", {}, "claim-catchup-broken");
+    assert.status(retry, 200, null, "подмена снята — тот же ключ выполняет действие");
+    assert.eq(retry.body.incident.state, "in_progress", "взят");
+  });
+
+  // Номер инцидента — число из INC-N
+  const numberOf = (card) => Number(String(card.number).replace(/\D/g, ""));
+  const dueOf = (card) => Date.parse(card.timer.dueAt);
+
+  test("равные дедлайны — первым меньший номер", async () => {
+    const env = await makeEnv();
+    // Два новых подряд: часы стоят — дедлайн реакции один; новый инцидент встаёт в начало списка
+    const a = (await env.ok("POST", "/test/incidents", fireAt(S5))).guid;
+    const b = (await env.ok("POST", "/test/incidents", fireAt(S5))).guid;
+    const [ca, cb] = [await env.card(a), await env.card(b)];
+    assert.eq(dueOf(ca), dueOf(cb), "один дедлайн реакции");
+    assert.ok(numberOf(ca) < numberOf(cb), `номера по порядку создания: ${ca.number}, ${cb.number}`);
+    const fired = (await env.advance(Math.ceil((dueOf(ca) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === a || f.incidentGuid === b);
+    assert.eq(fired.map((f) => [f.incidentGuid === a ? ca.number : cb.number, f.transitionId]), [[ca.number, "auto_escalate"], [cb.number, "auto_escalate"]], "по номеру по возрастанию");
+  });
+
+  test("такт в общем порядке по людям", async () => {
+    // Петрова — первый уровень эскалации — вышла: эскалированный ей инцидент сразу уходит дальше её системным
+    // переходом (addressee_signed_out_*, scope: incidents_owned_by_agent). Её переход у A наступает в момент
+    // эскалации A — раньше эскалации B, которую выполняет такт оператора стенда
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.find((o) => o.id === "petrova").agentState = "offline";
+    const env = await makeEnv({ fixturePatch: { people } });
+    assert.eq([W.escalation.levels[0].targetKind, W.escalation.levels[0].target], ["user", "petrova"], "первый уровень — Петрова");
+    const a = (await env.ok("POST", "/test/incidents", fireAt(S5))).guid;
+    await env.advance(10);
+    const b = (await env.ok("POST", "/test/incidents", fireAt(S5))).guid;
+    const [ca, cb] = [await env.card(a), await env.card(b)];
+    assert.ok(dueOf(ca) < dueOf(cb), "дедлайн A раньше");
+    // До дедлайна A — шагами, затем один такт через оба дедлайна (до второго уровня эскалации A не доходит)
+    await env.advance(Math.floor((dueOf(ca) - env.now) / 1000) - 1);
+    const jump = Math.ceil((dueOf(cb) - env.now) / 1000) + GRACE + 1;
+    assert.ok(jump < W.escalation.levels[0].reactionSec, "второй уровень эскалации A не наступает");
+    await env.heartbeat();
+    const res = await env.call("POST", "/test/clock", { advanceSec: jump });
+    assert.status(res, 200, null, "один такт");
+    const name = (f) => [f.incidentGuid === a ? "A" : "B", f.transitionId.replace(/^addressee_signed_out_.*/, "addressee_signed_out")];
+    const fired = res.body.fired.filter((f) => f.incidentGuid === a || f.incidentGuid === b).map(name);
+    assert.eq(
+      fired,
+      [["A", "auto_escalate"], ["A", "addressee_signed_out"], ["B", "auto_escalate"], ["B", "addressee_signed_out"]],
+      "по моменту: переход Петровой у A — до эскалации B"
+    );
+  });
+
   // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
   IMTest.loaded("api-scenarios.js");
 })();
