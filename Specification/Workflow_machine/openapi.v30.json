@@ -3375,7 +3375,9 @@
           },
           "args": {
             "type": "array",
-            "items": {}
+            "items": {
+              "nullable": true
+            }
           },
           "scopeRule": {
             "type": "object",
@@ -3405,7 +3407,9 @@
           },
           "args": {
             "type": "array",
-            "items": {},
+            "items": {
+              "nullable": true
+            },
             "description": "ARCH-07. Аргументы по порядку `args` эффекта в реестре, по его `argTypes`: литерал (строка, число, `true`/`false`) или выражение CEL строкой (`expr<T>`) — `actor`, `''`, `form.targetId`, `personOf(form.targetId)` ([CEL.md](CEL.md))."
           }
         }
@@ -5145,7 +5149,8 @@
         ],
         "properties": {
           "value": {
-            "description": "Значение по типу шага: RadioButton — id варианта; Checkbox — массив id; Select — объект `{<id списка>: [id вариантов]}`; Comment — текст; Image — id вложения; Datetime — момент в UTC, ISO-8601; Message и пропуск — `null`"
+            "description": "Значение по типу шага: RadioButton — id варианта; Checkbox — массив id; Select — объект `{<id списка>: [id вариантов]}`; Comment — текст; Image — id вложения; Datetime — момент в UTC, ISO-8601; Message и пропуск — `null`",
+            "nullable": true
           },
           "answeredAt": {
             "type": "string",
@@ -5188,7 +5193,8 @@
             ]
           },
           "value": {
-            "description": "`answer`: значение"
+            "description": "`answer`: значение",
+            "nullable": true
           },
           "by": {
             "type": "string",
@@ -5276,7 +5282,8 @@
             "type": "string"
           },
           "value": {
-            "description": "Ответ по типу шага (ScenarioStepEntry.value). У кнопки и при `skip` не нужен"
+            "description": "Ответ по типу шага (ScenarioStepEntry.value). У кнопки и при `skip` не нужен",
+            "nullable": true
           },
           "skip": {
             "type": "boolean",

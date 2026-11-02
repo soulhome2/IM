@@ -25,6 +25,15 @@ def one(schema):
 
 
 class Openapi30Test(unittest.TestCase):
+    def test_untyped_schema_is_nullable(self):
+        # Схема без type, $ref и составных частей в 3.1 принимает и null: ответ на шаг Message — value null
+        self.assertEqual(one({"description": "d"}), {"description": "d", "nullable": True})
+        self.assertEqual(one({"type": "object", "properties": {"v": {}}})["properties"]["v"], {"nullable": True})
+        self.assertNotIn("nullable", one({"type": "string"}))
+        self.assertNotIn("nullable", one({"$ref": "#/x"}))
+        self.assertNotIn("nullable", one({"oneOf": [{"type": "string"}, {"type": "integer"}]}))
+        self.assertNotIn("nullable", one({"enum": ["a", "b"]}))
+
     def test_type_array_to_nullable(self):
         self.assertEqual(one({"type": ["string", "null"]}), {"type": "string", "nullable": True})
 
