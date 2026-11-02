@@ -10,7 +10,8 @@
 //   --scenario=путь — копия prototype/scenario.js для проб порчи (только с --check): порченый исполнитель не должен
 //                     записать эталон, а --check на нём обязан отказать
 //
-// Формат 1: { format, scripts: { <sha16>: сценарий }, counts: { answer, share }, vectors: […] }.
+// timeZone: "UTC" — границы Datetime min и max без часового пояса (в 00-primitives) читаются как UTC; сервер читает так же.
+// Формат 1: { format, timeZone, scripts: { <sha16>: сценарий }, counts: { answer, share }, vectors: […] }.
 // Вектор answer: { id, op: "answer", script, result, call: { stepId, value, skip, attachments, at, by },
 //                  expect: { ok: { result, macros, warnings } } | { error }, views }.
 // Вектор share:  { id, op: "share", from, to, result (прохождение основного до переноса), call: { fromResult, at },
@@ -34,7 +35,7 @@ const FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/scenario-v
 const SCENARIO_JS = path.join(ROOT, "prototype/scenario.js");
 const LOGIC_JS = path.join(ROOT, "prototype/vendor/json-logic-js/logic.js");
 const SCRIPT_DIRS = ["Specification/Workflow_machine/fixtures/scenarios", "Specification/Scenario_machine/examples", "Specification/Scenario_machine/examples/showcase"];
-const MAX_BYTES = 6 * 1024 * 1024;
+const MAX_BYTES = 8 * 1024 * 1024; // файл 5,78 МБ: запас 38%
 const RUNS = 20; // прогонов по зерну на сценарий
 const RUN_CAP = 6; // вызовов в одном прогоне, не больше
 const SHARE_SELF = 4; // перенос между прохождениями одной версии
@@ -89,6 +90,17 @@ function loadScripts() {
       ],
     },
   });
+  // Пара версий для переноса ответов (guid f2): у шага s2 меняется тип, а значение "x" верно в обоих типах
+  // (Comment — строка, RadioButton — вариант "x"); у шага s1 во второй версии нет варианта "c". Без них перенос
+  // без сверки типа и без проверки значения в сценарии основного остался бы незамеченным
+  const shareScenario = (version, s1, s2) => ({
+    scenario: { id: "60000000-0000-4000-8000-0000000000f2", name: "Перенос", description: "", version, createdAt: "2026-09-01T09:00:00Z", updatedAt: "2026-09-01T09:00:00Z", initialStep: "s1" },
+    steps: [step("s1", "RadioButton", s1, { default: go("s2") }, false), step("s2", s2.type, s2.view, { default: go("s3") }, false), step("s3", "Message", { label: "Готово" }, { default: go(null) }, true)],
+  });
+  const opts = (...ids) => ids.map((id) => ({ id, label: id }));
+  const radio = (...ids) => ({ label: "Выбор", required: true, default: null, options: opts(...ids) });
+  out.push({ name: "synthetic.share-a", script: shareScenario(1, radio("a", "b", "c"), { type: "Comment", view: { label: "Текст", default: "", required: false, readonly: false, minLength: 0, maxLength: 100 } }) });
+  out.push({ name: "synthetic.share-b", script: shareScenario(2, radio("a", "b"), { type: "RadioButton", view: radio("x", "y") }) });
   return out;
 }
 
@@ -215,6 +227,8 @@ function makeGen(rng) {
         bad("2026-13-45T10:00:00Z");
         if (v.min) bad(new Date(Date.parse(v.min) - 1000).toISOString());
         if (v.max) bad(new Date(Date.parse(v.max) + 1000).toISOString());
+        if (v.min) bad(new Date(Date.parse(v.min) - 1).toISOString());
+        if (v.max) bad(new Date(Date.parse(v.max) + 1).toISOString());
         break;
       case "Image":
         bad(7);
@@ -334,12 +348,27 @@ function build(S, loaded) {
   function oneShare(fromName, toName, no) {
     const from = pool[keyOf.get(fromName)];
     const to = pool[keyOf.get(toName)];
-    const fromResult = advanced(from, gen.int(0, from.steps.length + 1));
-    const result = advanced(to, gen.int(0, 2));
+    pushShare(`${fromName}>${toName}/${no}`, fromName, toName, advanced(from, gen.int(0, from.steps.length + 1)), advanced(to, gen.int(0, 2)));
+  }
+
+  // Заданные ответы: прохождение сценария from верными ответами [шаг, значение] подряд (отказ — ошибка генератора)
+  function answered(script, pairs) {
+    let result = S.start(script);
+    for (const [id, value] of pairs) {
+      const r = S.answer(script, result, id, value, { at: nextAt(), by: BY });
+      if (!r.ok) throw new Error(`${script.scenario.id}: ответ ${id} отклонён (${r.error})`);
+      result = r.result;
+    }
+    return result;
+  }
+
+  function pushShare(id, fromName, toName, fromResult, result) {
+    const from = pool[keyOf.get(fromName)];
+    const to = pool[keyOf.get(toName)];
     const call = { fromResult, at: nextAt() };
     const r = S.share(from, clone(fromResult), to, clone(result), { at: call.at });
     vectors.push({
-      id: `share/${fromName}>${toName}/${no}`,
+      id: `share/${id}`,
       op: "share",
       from: keyOf.get(fromName),
       to: keyOf.get(toName),
@@ -360,6 +389,11 @@ function build(S, loaded) {
       const bads = gen.invalid(cur);
       bads.forEach((b, k) => answer(name, "probe", `${no}.${k}`, script, result, cur.id, b.value, false, b.attachments));
       if (cur.type === "Message" || !S.canSkip(cur)) answer(name, "probe", `${no}.skip`, script, result, cur.id, null, true, []);
+      // Границы диапазона Datetime: значение ровно на min и на max верно (результат не берём — идём дальше верным)
+      if (cur.type === "Datetime") {
+        if (cur.view.min) answer(name, "probe", `${no}.min`, script, result, cur.id, new Date(Date.parse(cur.view.min)).toISOString(), false, []);
+        if (cur.view.max) answer(name, "probe", `${no}.max`, script, result, cur.id, new Date(Date.parse(cur.view.max)).toISOString(), false, []);
+      }
       const a = gen.valid(cur);
       const next = answer(name, "probe", `${no}.ok`, script, result, cur.id, a.value, false, a.attachments);
       if (next === result) break;
@@ -381,6 +415,13 @@ function build(S, loaded) {
   for (const group of byGuid.values()) {
     for (const a of group) for (const b of group) for (let no = 0; no < (a === b ? SHARE_SELF : SHARE_PAIR); no++) oneShare(a.name, b.name, no);
   }
+  // Заданные случаи переноса на паре synthetic.share-*: значение верно в обоих типах шага, но тип другой — не
+  // переносится; значение верно в сценарии источника, но нет такого варианта у основного — не переносится
+  const sa = pool[keyOf.get("synthetic.share-a")];
+  const sb = pool[keyOf.get("synthetic.share-b")];
+  pushShare("synthetic/type-changed-a>b", "synthetic.share-a", "synthetic.share-b", answered(sa, [["s1", "a"], ["s2", "x"]]), S.start(sb));
+  pushShare("synthetic/type-changed-b>a", "synthetic.share-b", "synthetic.share-a", answered(sb, [["s1", "a"], ["s2", "x"]]), S.start(sa));
+  pushShare("synthetic/option-removed", "synthetic.share-a", "synthetic.share-b", answered(sa, [["s1", "c"], ["s2", "x"]]), S.start(sb));
   return { pool, counts, vectors };
 }
 
@@ -405,6 +446,7 @@ function serialize(data) {
   return [
     "{",
     `"format": 1,`,
+    `"timeZone": "UTC",`,
     `"scripts": {\n${scripts.join(",\n")}\n},`,
     `"counts": ${JSON.stringify(data.counts)},`,
     `"vectors": [\n${data.vectors.map((v) => JSON.stringify(v)).join(",\n")}\n]`,
