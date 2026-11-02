@@ -4545,6 +4545,26 @@
     );
   });
 
+  test("равный момент у одного инцидента — по порядку в машине, а не по тому, чей исполнитель (§14.3)", async () => {
+    // INC-1843 адресован Кузнецову, он вышел и без ролей: в один момент готовы его addressee_signed_out_to_queue
+    // (системный адресата, scope: incidents_owned_by_agent) и addressee_lost_access (общий). Первым — тот, что раньше в машине
+    const at = (id) => W.transitions.findIndex((t) => t.id === id);
+    assert.ok(at("addressee_signed_out_to_queue") < at("addressee_lost_access"), "в машине «адресат вышел» раньше «потерял доступ»");
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    Object.assign(people.operators.find((o) => o.id === "kuznetsov"), { agentState: "offline", roles: [] });
+    const incidents = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
+    const inc = incidents.find((e) => e.number === "INC-1843");
+    assert.eq(inc.state, "pending_acceptance", "INC-1843 ожидает принятия");
+    inc.owner = "kuznetsov";
+    const env = await makeEnv({ fixturePatch: { people, incidents } });
+    const res = await env.call("POST", "/test/clock", { advanceSec: 0 });
+    assert.status(res, 200, null, "такт");
+    const fired = res.body.fired.filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    assert.eq(fired[0], "addressee_signed_out_to_queue", `первым — по порядку в машине: ${fired.join(", ")}`);
+    const journal = (await env.ok("GET", `/operator/incidents/${enc(inc.guid)}/journal`)).items.map((j) => j.templateKey);
+    assert.ok(journal.includes("workflow.journal.addressee_signed_out_to_queue") && !journal.includes("workflow.journal.addressee_lost_access"), `журнал: ${journal.join(", ")}`);
+  });
+
   // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
   IMTest.loaded("api-scenarios.js");
 })();

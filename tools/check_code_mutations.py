@@ -397,6 +397,15 @@ MUTATIONS = [
     # Автоматические переходы и запрос оператора (§14.3, ARCH-10): догон перед запросом (BUG-82), системные — сразу после
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
     ("settle-after-request-off", "server.js", "if (runScheduler().length && res.again)", "if (false && res.again)", "api"),
+    # Решение 212 плана этапа 6: сбой догона до маршрута — 500 внутри try, а не исключение мимо ответа
+    ("catchup-outside-try", "server.js", "      let res;\n      try {\n", "      let res;\n      if (acting) runScheduler();\n      try {\n", "api"),
+    # Порядок такта (§14.3, решение 212): при равном моменте — меньший номер, у одного инцидента — порядок машины;
+    # один такт по всем людям, а не «сначала мои»
+    ("tick-tie-higher-number", "engine.js", "[c.runAt, numberOf(c.ev),", "[c.runAt, -numberOf(c.ev),", "api"),
+    ("tick-tie-no-machine-order", "engine.js", "numberOf(c.ev), W.transitions.indexOf(c.tr)];", "numberOf(c.ev)];", "api"),
+    ("tick-mine-first", "engine.js", "if (c && (!best || sooner(c, best))) [best, who] = [c, p];", "if (c && !best) [best, who] = [c, p];", "api"),
+    # Операторы JSONLogic — только из списка спецификации (раздел 7, решение 196)
+    ("jsonlogic-plus-allowed", "scenario.js", '"missing", "missing_some"]);', '"missing", "missing_some", "+"]);', "scenario"),
     # Карточку увели — уведомление с причиной (BUG-86)
     # Выборка (BUG-106): снятые отметки забывают версии; после отказа «уже изменён» повтор — по нынешней версии
     ("ui-versions-kept-on-drop", "app.js", "    checkedVersions.clear();\n  }\n  // Новая выборка", "  }\n  // Новая выборка", "ui"),

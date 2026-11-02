@@ -2090,7 +2090,10 @@
         try {
           if (runScheduler().length && res.again) res = res.again();
         } catch (err) {
-          console.error("scheduler after request failed:", method, path, err);
+          // Сбой вычисления и ошибка в коде (TypeError в res.again()) — оба в консоль, со стеком: ответ тот же,
+          // но ошибка в коде видна, а не теряется под сбоем такта
+          const kind = err && err.name === "EvaluationError" ? "evaluation error" : "code error";
+          console.error(`scheduler after request failed (${kind}):`, method, path, (err && err.stack) || err);
         }
       }
       record(method, route.template, res.status, res.body, "http", res.headers);
@@ -2115,7 +2118,7 @@
       fired.forEach(({ id, transition, facts, operator }) => {
         const ev = byId(id);
         touch([ev]);
-        // Переход коллеги — от имени системы, как в colleagueTick
+        // Системный переход коллеги (scope: incidents_owned_by_agent, его состояние) — от имени системы
         if (operator !== ME) return emitTransition(ev, transition, "system", facts);
         const tr = engine.transition(transition);
         if (wasMine.has(id) && !canSee(ev)) {
@@ -2229,18 +2232,8 @@
       const ev = foreignActive().pop();
       if (!ev) return;
       colleagueIdleSince[ev.owner] = now() - W.session.idleHoldSec * 1000;
-      colleagueTick(ev.owner);
-    }
-
-    // Системные переходы оператора-коллеги (scope: incidents_owned_by_agent) — по его состоянию
-    function colleagueTick(id) {
-      const fired = colleague(id).tick({ agentOnly: true });
-      fired.forEach(({ id: guid, transition, facts }) => {
-        const ev = byId(guid);
-        touch([ev]);
-        emitTransition(ev, transition, "system", facts);
-      });
-      return fired;
+      // Его системные переходы — общим тактом по всем людям (§14.3)
+      runScheduler();
     }
 
     function simulateColleagues() {
@@ -2269,8 +2262,8 @@
 
     // Секунда работы встроенного сервера: автоматические переходы, затем коллеги
     function second() {
+      // Системные переходы молчащих коллег — уже в runScheduler, в общем порядке такта (§14.3)
       const fired = runScheduler();
-      Object.keys(colleagueIdleSince).forEach(colleagueTick);
       if (!fired.length) simulateColleagues();
     }
 
