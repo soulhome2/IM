@@ -10,6 +10,7 @@
   examples: [..]                          -> example: первое значение
   const, if / then / else                 -> убираются (проверку делает машина и сервер, не схема)
   $ref рядом с другими полями             -> allOf: [{$ref}] плюс остальные поля
+  схема без type, $ref, enum и составных  -> nullable: true (в 3.1 она принимает и null)
 И вне схем: info.summary (его нет в 3.0)   -> убирается.
 
 Чего перевод не знает, leftovers показывает — например, отдельную схему {"type": "null", ...}: в 3.0 её не
@@ -35,6 +36,9 @@ def _schema(s, path, found):
         if key in s:
             found.append(f"{path}/{key}")
             del s[key]
+    # Схема без type, $ref, enum и составных частей в 3.1 принимает любое значение, и null тоже; в 3.0 — только с nullable
+    if not any(k in s for k in ("type", "$ref", "enum") + SCHEMA_LIST):
+        s["nullable"] = True
     t = s.get("type")
     if t == "null":
         found.append(f"{path}/type")              # в 3.0 нет; перевод не знает, что с ней делать
