@@ -9,6 +9,9 @@
      сценария и после фиксации — в ожидаемое; снимок «после» — тоже только celView;
    - снимки зовут только celView (cel.value, cel.plain): условия, правила и определения в снимке дали бы лишние
      векторы CEL;
+   - tick (решение 194 плана 60) — так же, вектор на вызов: снимок «до» всех инцидентов ядра и их changedAt, в ленту
+     ещё ctx.now и молчание ctx.idleSec как факт idleSec [me]; в ожидаемом — fired ({at, id, transition} по порядку),
+     facts и external по каждому сработавшему. Перед своим кадром tick закрывает открытый вектор merge;
    - merge (решение 39): кадр закрыт и «после» снято на возврате; вектор открыт, пока его не закроет меняющий вызов
      любого обёрнутого ядра — run, runAll, merge, create, tick, startTimer…resumeTimer — или take(); чтение (isDone,
      availability, badge…) идёт насквозь: server.js после merge зовёт isDone раньше, чем пишет merged_in. На закрытии
@@ -88,7 +91,7 @@
   });
 
   // Исход вектора для отбора (решение 28): отказ и его ключ; ошибка; у ok — набор ключей журнала, видов действий
-  // после фиксации и есть ли timer_overridden
+  // после фиксации и есть ли timer_overridden; у tick — ещё сработавшие переходы по порядку
   function outcomeOf(expect) {
     if (expect.refusal) return `refusal:${expect.refusal.why[0]}`;
     if ("error" in expect) return "error";
@@ -96,7 +99,9 @@
     const keys = new Set();
     Object.values(o.journal || {}).forEach((l) => l.forEach((e) => keys.add(e.templateKey)));
     const after = new Set((o.after || []).map((a) => a.action));
-    return `ok:${C().canonical({ after: [...after].sort(), journal: [...keys].sort(), overridden: keys.has("workflow.journal.timer_overridden") })}`;
+    const outcome = { after: [...after].sort(), journal: [...keys].sort(), overridden: keys.has("workflow.journal.timer_overridden") };
+    if (o.fired) outcome.fired = o.fired.map((f) => f.transition);
+    return `ok:${C().canonical(outcome)}`;
   }
   const nameOf = (v) => `${v.op}:${v.name}`;
 
@@ -170,7 +175,21 @@
       if (r.taken) facts[primary.id] = factsOf(r.taken.facts || {});
       return { external: Object.fromEntries(list.map((ev, i) => [ev.id, data((r.external || [])[i] || [])])), facts };
     },
+    // r.fired — что вернул engine.tick() (tickResult): fired по порядку выполнения, at — момент перехода (runAt);
+    // facts и external — списки на каждый сработавший, по тому же порядку (у одного инцидента их бывает несколько)
+    tick: (r) => ({
+      fired: r.fired.map((f) => ({ at: f.at, id: f.id, transition: f.transition })),
+      facts: r.fired.map((f) => factsOf(f.facts || {})),
+      external: r.fired.map((f) => data(f.external || [])),
+    }),
   };
+  // Итог tick — список сработавших, без ok: для expectOf — успех всегда (ошибка перехода в такте — не сработал)
+  const tickResult = (list) => ({ ok: true, fired: Array.from(list || []) });
+  // Имя вектора tick — первый сработавший переход, ничего — tick (отбор: не больше PER_NAME на op:name)
+  const tickName = (list) => (list && list.length ? list[0].transition : "tick");
+  // changedAt инцидентов (момент последнего перехода, BUG-76) — вход tick: celView его не несёт, а молчание по нему
+  // считает момент (momentOf). Только непустые
+  const changedOf = (list) => Object.fromEntries(list.filter((ev) => ev.changedAt).map((ev) => [ev.id, ev.changedAt]));
 
   // Снимок инцидента — только celView (cel.value и cel.plain): никаких условий, правил и определений
   function snapshot(engine, ev, now) {
@@ -285,6 +304,8 @@
       if (!eq(blankAll((a.facts || {})[id] || {}), blankAll((b.facts || {})[id] || {}))) diffs.push(`facts.${id}`);
     });
     if (vector.op === "run" && !eq(blankAll(a.canceled || {}), blankAll(b.canceled || {}))) diffs.push("canceled");
+    // fired — только у tick: те же переходы, у тех же инцидентов, в том же порядке и в те же моменты
+    if (vector.op === "tick" && !eq(a.fired || [], b.fired || [])) diffs.push("fired");
     return { diffs, closeResultLabel };
   }
 
@@ -339,7 +360,10 @@
       workflow: W,
       me,
       world,
-      now: () => state.now,
+      // Часы tick — с ленты (ctx.now, решение 194 плана 60), прочих вызовов — now вектора
+      now: () => (state.op === "tick" ? answer("ctx.now", []) : state.now),
+      // Молчание me — факт idleSec [me] ленты; факт cel.world idleSec ядро выводит из него на момент вычисления
+      idleSec: () => answer("idleSec", [blank(me)]),
       events: () => state.events,
       scenarioKey: (ev) => ev.scenarioGuid,
       log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
@@ -400,10 +424,18 @@
     } else if (v.op === "create") {
       on = { ev: make(t.incident) };
       call = () => engine.create(on.ev);
+    } else if (v.op === "tick") {
+      // Момент последнего перехода — из changedAt вектора: celView его не несёт
+      const changed = v.changedAt || {};
+      events.forEach((ev) => {
+        if (changed[ev.id] != null) ev.changedAt = changed[ev.id];
+      });
+      on = {};
+      call = () => tickResult(engine.tick({ agentOnly: Boolean(t.agentOnly) }));
     } else throw new Error(`transition-vectors: op ${v.op}`);
     const extra = [on.primary, on.ev].concat(on.list || []).filter(Boolean);
     const tracked = events.concat(extra.filter((e) => !events.includes(e)));
-    Object.assign(state, { events, now: v.now, after: [], scenario: [] });
+    Object.assign(state, { op: v.op, events, now: v.now, after: [], scenario: [] });
     const before = tracked.map((ev) => snapshot(engine, ev, v.now));
     const r = call();
     const after = tracked.map((ev) => snapshot(engine, ev, v.now));
@@ -467,6 +499,8 @@
     // закрытия); tapeRepeat — на один вызов мир ответил по-разному; worldError — функция сервера или факт мира
     // бросили исключение
     const skipped = { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 };
+    // Тактов, где сработал переход исполнителя коллеги: вектора у них нет (record, tick)
+    let withPeers = 0;
     // Идёт записываемый вызов ядра: в него пишут функции ctx любого обёрнутого ядра
     let cur = null;
     // Открытый вектор, который закрывает следующий меняющий вызов любого обёрнутого ядра (CLOSERS) или take()
@@ -550,11 +584,19 @@
       const on = (k, fn) => {
         if (typeof ctx[k] === "function") out[k] = fn(g[k]);
       };
-      // Часы: за вызов не меняются, иначе вектора нет (nowChanged)
+      // Часы: за вызов не меняются, иначе вектора нет (nowChanged). У tick — ещё и в ленту (ctx.now, решение 194)
       on("now", (f) => () => {
         const t = f();
         if (cur && t !== cur.now) cur.nowChanged = true;
+        if (cur && cur.op === "tick") note("ctx.now", [], t);
         return t;
+      });
+      // Молчание человека этого ядра — в ленту фактом idleSec [me], как его даёт сервер: факт cel.world idleSec ядро
+      // выводит из него на момент вычисления (у такта — момент перехода), его записи кадра в ленту не идут (record)
+      on("idleSec", (f) => () => {
+        const r = f();
+        note("idleSec", [blank(ctx.me)], r);
+        return r;
       });
       // Функции сервера мимо cel.world — в ленту с приставкой ctx. (решение 26); null в аргументах — ""
       on("actorName", (f) => (id) => {
@@ -605,8 +647,9 @@
 
     /* --- вызов ядра --- */
 
-    // spec: op, name, surface, form, target, extra (инциденты вызова вне списка), result(r) — external, facts,
-    // canceled итога ok (resultOf). fn — сам вызов ядра
+    // spec: op, name (у tick — функция итога: имя известно после вызова), surface, form, target, extra (инциденты
+    // вызова вне списка), result(r) — external, facts, canceled итога ok (resultOf), outcome(r) — итог ядра в виде
+    // для expectOf (у tick — tickResult). fn — сам вызов ядра
     function record(engine, ctx, spec, fn) {
       settle();
       if (cur) {
@@ -624,7 +667,7 @@
       const vector = {
         kind: "transition",
         op: spec.op,
-        name: spec.name,
+        name: typeof spec.name === "function" ? "" : spec.name,
         me: blank(ctx.me),
         now,
         surface: blank(spec.surface),
@@ -633,13 +676,16 @@
         incidents: list.map((ev) => put(at.get(ev))),
         journalAtNow: Object.fromEntries(before.filter((s) => s.atNow.length).map((s) => [s.ev.id, s.atNow])),
       };
-      const call = { now, tape: [], first: new Map(), repeat: 0, scenario: [], after: [], nowChanged: false, worldError: false, nested: false };
+      if (spec.op === "tick") vector.changedAt = changedOf(tracked);
+      const call = { op: spec.op, now, tape: [], first: new Map(), repeat: 0, scenario: [], after: [], nowChanged: false, worldError: false, nested: false };
       let f = null;
       let r;
       let closed;
       try {
         cur = call;
-        f = frame();
+        // Факта idleSec кадра в ленте нет: ядро выводит его из молчания ctx.idleSec (idleSec [me] функций сервера) на
+        // момент вычисления, и у такта он в каждый момент свой
+        f = frame({ omit: ["idleSec"] });
         r = fn();
       } catch (e) {
         if (call.worldError) skipped.worldError++;
@@ -661,6 +707,13 @@
         skipped.outsideEngine++;
         return r;
       }
+      // Такт, где сработал переход исполнителя коллеги (peers, operator ≠ me), — не вектор: вектор tick — один
+      // исполнитель (решение 194 плана 60), повтор коллег не знает. Это не пропуск записи (skipped), а граница формата:
+      // счёт — withPeers в take()
+      if (spec.op === "tick" && Array.from(r || []).some((x) => x.operator !== ctx.me)) {
+        withPeers++;
+        return r;
+      }
       // Лента: факты cel.world кадра, затем функции сервера; на один вызов — одна запись
       const world = [];
       const first = new Map();
@@ -679,8 +732,9 @@
         return r;
       }
       vector.world = world;
+      if (typeof spec.name === "function") vector.name = spec.name(r);
       const after = tracked.map((ev) => snapshot(engine, ev, now));
-      const { expect, writes } = expectOf(r, tracked, before, after, now, put, call, spec.result);
+      const { expect, writes } = expectOf(spec.outcome ? spec.outcome(r) : r, tracked, before, after, now, put, call, spec.result);
       // Отказ и ошибка, которые что-то изменили, — не ядро
       if (writes) {
         skipped.outsideEngine++;
@@ -791,6 +845,24 @@
           },
           () => engine.create(ev)
         );
+      // Такт планировщика (решение 194 плана 60): вход — весь список, target — agentOnly; имя — первый сработавший
+      // переход (tickName). Меняющий вызов: record сначала закрывает открытый вектор merge, потом открывает свой кадр
+      out.tick = (opts) =>
+        record(
+          engine,
+          ctx,
+          {
+            op: "tick",
+            name: tickName,
+            surface: "",
+            form: {},
+            extra: [],
+            target: () => ({ agentOnly: Boolean(opts && opts.agentOnly) }),
+            outcome: tickResult,
+            result: resultOf.tick,
+          },
+          () => engine.tick(opts)
+        );
       // Объединение: присоединяемые в порядке вызова, основной — target.primaryId; итог ok — resultOf.merge. Успех
       // закрывается позже (mergeClose), отказ — на возврате
       const mergeTr = (engine.workflow.transitions || []).find((t) => t.bulk && t.bulk.mode === "merge");
@@ -829,7 +901,7 @@
         const chosen = new Set(select(kept.map((k) => k.vector)));
         const incidents = {};
         kept.filter((k) => chosen.has(k.vector)).forEach((k) => Object.assign(incidents, k.pool));
-        return { incidents, vectors: kept.filter((k) => chosen.has(k.vector)).map((k) => k.vector), skipped: Object.assign({}, skipped) };
+        return { incidents, vectors: kept.filter((k) => chosen.has(k.vector)).map((k) => k.vector), skipped: Object.assign({}, skipped), withPeers };
       },
     };
   }
@@ -847,6 +919,6 @@
   window.IMTransitionVectors = {
     lib,
     recording,
-    take: () => (rec ? rec.take() : { incidents: {}, vectors: [], skipped: { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 } }),
+    take: () => (rec ? rec.take() : { incidents: {}, vectors: [], skipped: { nowChanged: 0, outsideEngine: 0, tapeRepeat: 0, worldError: 0 }, withPeers: 0 }),
   };
 })();

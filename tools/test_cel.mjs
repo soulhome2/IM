@@ -757,9 +757,9 @@ test("запись: машина не исходная — как есть; ош
   engine.run("claim", events[0], {}, {});
   ok(rec.take().skipped.tapeRepeat === 1, "tapeRepeat не посчитан");
   ok(opened === closed && opened === 3, `кадры: открыто ${opened}, закрыто ${closed}`);
-  // Прочие методы ядра — насквозь, без записи и без кадра
+  // Прочие методы ядра — насквозь, без записи и без кадра (tick пишется — тесты «запись tick» ниже)
   ok(engine.availability("claim", events[0]).hidden === true, "availability");
-  ok(Array.isArray(engine.tick()) && engine.workflow && engine.session && typeof engine.merge === "function" && typeof engine.resumeTimer === "function", "методы ядра");
+  ok(engine.workflow && engine.session && typeof engine.merge === "function" && typeof engine.resumeTimer === "function", "методы ядра");
   ok(rec.take().vectors.length === 1 && opened === 3, "прочие методы записали вектор или открыли кадр");
 });
 
@@ -1007,7 +1007,8 @@ test("закрытие merge вызовом ядра коллеги и tick", ()
   engine.tick(); // runScheduler сервера
   q.log.push({ at: 1000, whoId: "me", k: "workflow.journal.comment", v: null });
   const { vectors: vs, skipped } = rec.take();
-  ok(vs.map((v) => `${v.op}:${v.me}`).join() === "merge:me,run:colleague,merge:me", `векторы: ${vs.map((v) => `${v.op}:${v.me}`)}`);
+  // tick сначала закрыл открытый merge, потом записал свой вектор
+  ok(vs.map((v) => `${v.op}:${v.me}`).join() === "merge:me,run:colleague,merge:me,tick:me", `векторы: ${vs.map((v) => `${v.op}:${v.me}`)}`);
   ok(C.canonical(skipped) === ZERO_SKIPPED, `skipped: ${C.canonical(skipped)}`);
   const tail = (v, id) => v.expect.ok.journal[id][v.expect.ok.journal[id].length - 1];
   ok(tail(vs[0], "p").templateKey === "workflow.journal.merged_in_more" && tail(vs[0], "p").server === true && C.canonical(tail(vs[0], "p").vars) === '{"ids":"INC-0002","more":3}', `merged_in_more: ${C.canonical(tail(vs[0], "p"))}`);
@@ -1352,6 +1353,135 @@ test("lib.select: не больше 20 на op:name, 4 на исход, по к�
   ok(lib.outcomeOf(okv(0, ["a"]).expect) !== lib.outcomeOf(okv(1, ["a"], ["notify"]).expect), "after не меняет исход");
   ok(lib.outcomeOf({ refusal: { why: ["a", { x: 1 }] } }) === lib.outcomeOf({ refusal: { why: ["a", { x: 2 }] } }), "подстановки отказа меняют исход");
   ok(lib.outcomeOf({ error: "a" }) === lib.outcomeOf({ error: "b" }), "текст ошибки меняет исход");
+});
+
+/* ===== Векторы tick (решение 194 плана 60): такт планировщика на ядре прототипа ===== */
+
+const TICK_NOW = 10000000;
+// Ядро под записью переходов и записью CEL (её кадр видит факты мира), часы — TICK_NOW
+function tickEngine(ctx = {}) {
+  const C = vectors();
+  const w = structuredClone(W);
+  const celRec = C.recorder(IMCel.create, w);
+  // deliver, onEvict, onBreachShared — как у сервера: действия после фиксации — в after вектора
+  const t = trEngine({ machineW: w, cel: celRec, frame: celRec.frame, ctx: Object.assign({ now: () => TICK_NOW, deliver() {}, onEvict() {}, onBreachShared() {} }, ctx) });
+  return Object.assign(t, { C, lib: tvectors(), engineFor: tvectors().engines(g.IMEngine.create, w) });
+}
+const firedOf = (list) => list.map((f) => ({ at: f.at, id: f.id, transition: f.transition }));
+
+test("tick: у каждого сработавшего — at, момент перехода (runAt), а не now; external — его внешние эффекты", () => {
+  const { engine, events, mk } = tickEngine();
+  events.push(mk("x", { number: "INC-0001", timers: { reaction: { due: TICK_NOW - 60000 } } }));
+  const fired = engine.tick();
+  ok(fired.length >= 1, `не сработало ничего: ${JSON.stringify(fired)}`);
+  // Переход по таймеру без готового системного — через graceSec (3 с) после дедлайна
+  ok(fired[0].at === TICK_NOW - 60000 + 3000, `at: ${fired[0].at}`);
+  ok(Array.isArray(fired[0].external) && fired.every((f) => typeof f.at === "number"), `external: ${JSON.stringify(fired[0].external)}`);
+});
+
+test("запись tick: вход — весь список до вызова; ожидаемое — fired по порядку с at, facts и external по каждому; повтор по ленте — тот же итог", () => {
+  const { C, lib, engineFor, rec, engine, events, mk } = tickEngine();
+  // Порядок по моменту, а не по списку: y просрочен раньше
+  const x = mk("x", { number: "INC-0002", timers: { reaction: { due: TICK_NOW - 60000 } } });
+  const y = mk("y", { number: "INC-0001", timers: { reaction: { due: TICK_NOW - 90000 } } });
+  const z = mk("z", { number: "INC-0003", timers: {} });
+  events.push(x, y, z);
+  const fired = engine.tick();
+  const { incidents, vectors: vs, skipped } = rec.take();
+  ok(C.canonical(skipped) === ZERO_SKIPPED, `skipped: ${C.canonical(skipped)}`);
+  ok(vs.length === 1, `векторов ${vs.length}`);
+  const [v] = vs;
+  ok(v.kind === "transition" && v.op === "tick" && v.name === fired[0].transition && v.me === "me" && v.now === TICK_NOW && v.surface === "" && C.canonical(v.form) === "{}", `вектор: ${C.canonical(Object.assign({}, v, { world: [], expect: {}, incidents: [] }))}`);
+  ok(C.canonical(v.target) === '{"agentOnly":false}' && C.canonical(v.changedAt) === "{}" && C.canonical(v.journalAtNow) === "{}", `target ${C.canonical(v.target)}, changedAt ${C.canonical(v.changedAt)}`);
+  const first = incidents[v.incidents[0].$ref];
+  ok(v.incidents.map((d) => incidents[d.$ref].id).join() === "x,y,z" && first.state === "new" && first.timers.reaction.due === TICK_NOW - 60000 && !first.breaches.length, `список до вызова: ${C.canonical(first).slice(0, 300)}`);
+  const { id, case: _c, expect, ...input } = v;
+  ok(id === `transition:tick:${v.name}:${sha256(C.canonical(input)).slice(0, 10)}`, `id ${id}`);
+  const o = expect.ok;
+  ok(o && C.canonical(o.fired) === C.canonical(firedOf(fired)), `fired: ${C.canonical(o && o.fired)} ≠ ${C.canonical(firedOf(fired))}`);
+  ok(o.fired.map((f) => f.id).join() === "y,x" && o.fired[0].at === TICK_NOW - 87000 && o.fired[1].at === TICK_NOW - 57000, `порядок и at: ${C.canonical(o.fired)}`);
+  ok(o.facts.length === 2 && o.facts[0].to.breaches === 1 && o.facts[0].breach === "reaction" && o.external.length === 2 && Array.isArray(o.external[0]), `facts / external: ${C.canonical(o.facts)} ${C.canonical(o.external)}`);
+  ok(Object.keys(o.incidents).sort().join() === "x,y" && o.journal.y.length > 0 && o.journal.y.every((e) => e.at === TICK_NOW - 87000 && e.actor === "dispatcher"), `журнал y: ${C.canonical(o.journal)}`);
+  const nows = v.world.filter((e) => e.fn === "ctx.now");
+  ok(nows.length === 1 && nows[0].out === TICK_NOW && C.canonical(nows[0].args) === "[]", `ctx.now на ленте: ${C.canonical(nows)}`);
+  ok(v.world.some((e) => e.fn === "can"), `факты мира: ${C.canonical(v.world)}`);
+  const r = lib.replay(engineFor, v, incidents);
+  ok(r.ok && r.unused === 0, `повтор: ${JSON.stringify({ misses: r.misses, diffs: r.diffs, unused: r.unused, got: r.got }).slice(0, 600)}`);
+  // Неверный момент, порядок или facts в ожидаемом — расхождение
+  const bad = (f) => {
+    const u = structuredClone(v);
+    f(u.expect.ok);
+    return lib.replay(engineFor, u, incidents).diffs;
+  };
+  ok(bad((e) => (e.fired[0].at = TICK_NOW)).includes("fired"), "at не сравнивается");
+  ok(bad((e) => e.fired.reverse()).includes("fired"), "порядок fired не сравнивается");
+  ok(bad((e) => (e.facts[1].breach = "")).includes("facts.1"), "facts второго не сравниваются");
+  ok(bad((e) => (e.external[0] = [{ fn: "notify", target: "x" }])).includes("external.0"), "external не сравнивается");
+  // Без ctx.now на ленте — промах
+  const noNow = lib.replay(engineFor, Object.assign({}, v, { world: v.world.filter((e) => e.fn !== "ctx.now") }), incidents);
+  ok(!noNow.ok && noNow.misses.includes("ctx.now"), `без ctx.now: ${JSON.stringify(noNow.misses)}`);
+});
+
+test("запись tick: молчание — на ленте idleSec [me] как его даёт сервер, момент не раньше changedAt; без changedAt повтор расходится", () => {
+  const { C, lib, engineFor, rec, engine, events, mk } = tickEngine({ idleSec: () => 500 });
+  const x = mk("x", { number: "INC-0001", state: "in_progress", owner: "me", timers: {} });
+  x.changedAt = TICK_NOW - 100000;
+  events.push(x);
+  const fired = engine.tick();
+  // idleHoldSec 300: молчание с now − 500 с даёт now − 200 с, но инцидент изменился в now − 100 с (BUG-76)
+  ok(fired.length >= 1 && fired[0].transition === "system_hold_idle" && fired[0].at === TICK_NOW - 100000, `fired: ${JSON.stringify(firedOf(fired))}`);
+  const { incidents, vectors: vs, skipped } = rec.take();
+  ok(vs.length === 1 && C.canonical(skipped) === ZERO_SKIPPED, `векторов ${vs.length}, skipped ${C.canonical(skipped)}`);
+  const [v] = vs;
+  ok(C.canonical(v.changedAt) === `{"x":${TICK_NOW - 100000}}`, `changedAt: ${C.canonical(v.changedAt)}`);
+  // Сырое молчание, а не факт cel.world на момент перехода (тот выводится из него)
+  const idle = v.world.filter((e) => e.fn === "idleSec");
+  ok(idle.length === 1 && C.canonical(idle[0]) === '{"args":["me"],"fn":"idleSec","out":500}', `idleSec на ленте: ${C.canonical(idle)}`);
+  const r = lib.replay(engineFor, v, incidents);
+  ok(r.ok, `повтор: ${JSON.stringify({ misses: r.misses, diffs: r.diffs, got: r.got }).slice(0, 600)}`);
+  const lost = lib.replay(engineFor, Object.assign({}, v, { changedAt: {} }), incidents);
+  ok(!lost.ok && lost.diffs.includes("fired"), `без changedAt: ${JSON.stringify(lost.diffs)}`);
+  const quiet = lib.replay(engineFor, Object.assign({}, v, { world: v.world.map((e) => (e.fn === "idleSec" ? Object.assign({}, e, { out: 100 }) : e)) }), incidents);
+  ok(!quiet.ok && quiet.misses.length === 0 && quiet.diffs.includes("fired"), `idleSec 100: ${JSON.stringify({ diffs: quiet.diffs, misses: quiet.misses })}`);
+});
+
+test("tick с исполнителями коллег: сработал переход коллеги — вектора нет, счёт withPeers; сработали только мои — вектор, повтор без коллег тот же", () => {
+  const { C, lib, engineFor, rec, engine, events, mk, ctx } = tickEngine({ agentStateOf: (who) => (who === "colleague" ? "offline" : "available") });
+  const peer = rec.create(Object.assign({}, ctx, { me: "colleague", agentState: () => "offline" }));
+  events.push(mk("c", { number: "INC-0002", state: "in_progress", owner: "colleague", timers: {} }));
+  const a = engine.tick({ peers: [peer] });
+  ok(a.length >= 1 && a[0].operator === "colleague" && a[0].transition === "owner_signed_out", `такт с коллегой: ${JSON.stringify(a.map((f) => [f.operator, f.transition]))}`);
+  let taken = rec.take();
+  ok(taken.vectors.length === 0 && taken.withPeers === 1 && C.canonical(taken.skipped) === ZERO_SKIPPED, `векторов ${taken.vectors.length}, withPeers ${taken.withPeers}, skipped ${C.canonical(taken.skipped)}`);
+  events.length = 0;
+  events.push(mk("x", { number: "INC-0001", timers: { reaction: { due: TICK_NOW - 60000 } } }));
+  const b = engine.tick({ peers: [peer] });
+  ok(b.length >= 1 && b.every((f) => f.operator === "me"), `только мои: ${JSON.stringify(b.map((f) => [f.operator, f.transition]))}`);
+  taken = rec.take();
+  ok(taken.vectors.length === 1 && taken.withPeers === 1, `векторов ${taken.vectors.length}, withPeers ${taken.withPeers}`);
+  const r = lib.replay(engineFor, taken.vectors[0], taken.incidents);
+  ok(r.ok, `повтор без коллег: ${JSON.stringify({ misses: r.misses, diffs: r.diffs })}`);
+});
+
+test("tick: часы сдвинулись за вызов — вектора нет, skipped.nowChanged 1", () => {
+  let t = TICK_NOW;
+  const { rec, engine, events, mk } = trEngine({ ctx: { now: () => t++ } });
+  events.push(mk("x", { timers: { reaction: { due: TICK_NOW - 60000 } } }));
+  engine.tick();
+  const { vectors: vs, skipped } = rec.take();
+  ok(vs.length === 0 && skipped.nowChanged === 1, `векторов ${vs.length}, skipped ${JSON.stringify(skipped)}`);
+});
+
+test("tick без сработавших — вектор tick:tick с пустым fired; исход отбора различает сработавшие переходы", () => {
+  const { C, lib, engineFor, rec, engine, events, mk } = tickEngine();
+  // В окне после дедлайна (graceSec 3 с) переход по таймеру ещё не выполняется
+  events.push(mk("x", { number: "INC-0001", timers: { reaction: { due: TICK_NOW - 2000 } } }));
+  ok(engine.tick().length === 0, "в окне сработало");
+  const { incidents, vectors: vs } = rec.take();
+  ok(vs.length === 1 && vs[0].name === "tick" && C.canonical(vs[0].expect.ok.fired) === "[]" && !("incidents" in vs[0].expect.ok), `вектор: ${C.canonical(vs.map((v) => v.expect))}`);
+  ok(lib.replay(engineFor, vs[0], incidents).ok, "повтор пустого такта");
+  const e = (ids) => ({ ok: { fired: ids.map((t) => ({ at: 1, id: "x", transition: t })), journal: {}, after: [] } });
+  ok(lib.outcomeOf(e(["a", "b"])) !== lib.outcomeOf(e(["a"])) && lib.outcomeOf(e(["a"])) !== lib.outcomeOf(e([])), "исход не различает сработавшие");
 });
 
 results.forEach(([name, e]) => console.log(e ? `FAIL ${name}\n    ${String(e.message || e)}` : `ok   ${name}`));

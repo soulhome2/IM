@@ -72,9 +72,13 @@
         ev
       );
     // Факты мира (cel.world машины) — из данных сервера; «я» — оператор этого исполнителя
+    // Молчание «я» в момент вычисления: ctx.idleSec — сколько секунд сейчас (ctx.now), автоматический переход
+    // смотрит на момент at (RULE-41)
+    const idleOf = (who) => (who === ME && ctx.idleSec ? Math.floor(ctx.idleSec() - (ctx.now() - now()) / 1000) : 0);
     // ctx.world — факты мира, заданные напрямую (запись и повтор векторов переходов, tests/transition-vectors.js):
-    // функции cel.world с теми же именами и аргументами. Не задан — факты из данных сервера, как раньше
-    const celWorld = ctx.world || {
+    // функции cel.world с теми же именами и аргументами; с ctx.idleSec факт idleSec выводится из него, как у сервера.
+    // Не задан — факты из данных сервера, как раньше
+    const celWorld = ctx.world ? (ctx.idleSec ? Object.assign({}, ctx.world, { idleSec: idleOf }) : ctx.world) : {
       can: (who, p) => (who === ME ? ctx.can(p) : Boolean(ctx.permsOf && ctx.permsOf(who).includes(p))),
       access: (who, x) => Boolean(ctx.hasAccess && ctx.hasAccess(who, cel.source(x))),
       isOperator: (id) => Boolean(ctx.isOperator && ctx.isOperator(id)),
@@ -88,7 +92,7 @@
       deviceInGroup: (d, g) => Boolean(ctx.deviceInGroup && ctx.deviceInGroup(d, g)),
       groupDepth: (g) => (ctx.groupDepth ? ctx.groupDepth(g) : 0),
       agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
-      idleSec: (who) => (who === ME && ctx.idleSec ? Math.floor(ctx.idleSec() - (ctx.now() - now()) / 1000) : 0),
+      idleSec: idleOf,
       stepsFilled: (x, setId) => ctx.stepsFilled(cel.source(x), setId),
       lastTransferTarget: (who) => (who === ME && ctx.defaultTransferTarget ? ctx.defaultTransferTarget() || "" : ""),
     };
@@ -628,20 +632,23 @@
       s.count.set(ev.id, (s.count.get(ev.id) || 0) + 1);
       at = runAt;
       let facts = null;
+      let external = null;
       try {
         const timerGuard = (tr.guards || []).find((g) => g.fn === "timerExpired");
         const deadline = timerGuard ? dueOf(ev, timerGuard.args[0]) : null;
         if (timerGuard) markFired(ev, timerGuard.args[0]);
         const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher", { deadline });
-        if (applied.ok) facts = applied.facts[0];
+        if (applied.ok) [facts, external] = [applied.facts[0], applied.external[0]];
       } finally {
         at = null;
       }
       if (!facts) return null;
       s.last.set(ev.id, runAt);
       s.lastRun = runAt;
-      // operator — чей исполнитель выполнил: системные переходы коллег (peers) идут в том же такте
-      return { id: ev.id, transition: tr.id, facts, operator: ME };
+      // at — момент перехода (runAt): его эффекты и журнал считают время от него (векторы tick, решение 194 плана 60);
+      // external — внешние эффекты перехода. operator — чей исполнитель выполнил: системные переходы коллег (peers)
+      // идут в том же такте
+      return { id: ev.id, transition: tr.id, facts, at: runAt, external, operator: ME };
     }
     // peers — исполнители других людей: их переходы (scope: incidents_owned_by_agent, agentOnly) — в том же
     // такте и общем порядке по времени (§14.3), а не после всех переходов этого исполнителя. Чей исполнитель —

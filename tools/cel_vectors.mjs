@@ -36,12 +36,21 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const TRANSITIONS_FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/transition-vectors.json");
 const TRANSITIONS_MAX_BYTES = 4 * 1024 * 1024;
 const TRANSITIONS_COMMENT = "Собрано tools/cel_vectors.mjs --update из записи tests/api.html?celVectors=1 и синтетики. Руками не править. Формат — CEL.md, «Векторы переходов»";
-const OPS = ["create", "merge", "run", "runAll"];
+const OPS = ["create", "merge", "run", "runAll", "tick"];
 // Требования покрытия векторов переходов без вектора — с причиной словами (ключ → причина); не больше 3, больше —
 // синтетика (syntheticTransitions). Ключ — как у требования в transitionCoverage: имя перехода («reopen», «create») —
 // нет вектора ok с этим именем; «op:refusal» («run:refusal», «runAll:refusal», «merge:refusal») — нет отказа у op;
-// «run:canceled» — нет вектора run с canceled. Пишется в поле uncovered файла переходов
-const UNCOVERED_TRANSITIONS_OK = {};
+// «run:canceled» — нет вектора run с canceled; «tick:<переход>» — нет вектора tick, где он сработал. Пишется в поле
+// uncovered файла переходов
+// Три перехода по таймеру включает настройка, а у исходной машины она другая: векторы собраны от одной машины
+// (machineSha256), и на ней эти переходы не наступают. Их проверяют тесты API на машине с другой настройкой
+// (tests/api-fsm.js, tests/api-scenarios.js)
+const OTHER_SETTING = (setting, value, want) => `на исходной машине ${setting} = ${value}, а переход — только при ${want}: на машине векторов он не наступает`;
+const UNCOVERED_TRANSITIONS_OK = {
+  "tick:reaction_overdue": OTHER_SETTING("escalation.enabled", "true", "false"),
+  "tick:resolution_escalate": OTHER_SETTING("escalation.onResolutionOverdue", "alert", "escalate"),
+  "tick:resolution_ceiling": OTHER_SETTING("escalation.onResolutionOverdue", "alert", "escalate"),
+};
 const UNCOVERED_TRANSITIONS_MAX = 3;
 // Запись: виртуальное время страницы (таймеры тестов) и настоящее — запись идёт около 6 минут, почти всё — JS
 // кодирования входов, а он виртуального времени не тратит
@@ -210,11 +219,23 @@ function check(text, env, where) {
   return good;
 }
 
+// Случаи синтетики tick (решение 194а плана 60): название — поле case вектора и ключ покрытия tick:case:<название>
+const TICK_CASES = {
+  catchUp: "догон после простоя: три просроченных дедлайна у трёх инцидентов — по моменту, а не по номеру",
+  equalDue: "два инцидента с одним due — первым меньший номер",
+  timerWithSystem: "таймер и системный переход на один момент — первым таймер",
+  idleBeforeChange: "молчание началось раньше последнего перехода — system_hold_idle не раньше changedAt",
+  closeLinked: "close_linked после закрытия основного",
+  lostAfterEscalate: "linked_lost_access после auto_escalate основного — в момент эскалации",
+};
+
 // Покрытие векторов переходов: требование (ключ, как в UNCOVERED_TRANSITIONS_OK) → есть ли вектор. У каждого ручного
 // перехода машины (trigger: manual) и у create — вектор ok с этим именем, любой op (detach — run и runAll, merge —
 // merge); у run, runAll и merge — хотя бы один отказ; хотя бы один вектор run с canceled; хотя бы один вектор ok, где
-// journalAtNow ответа не равен входному (journal:once — once заменил подстановки записи). Синтетика считается.
-// Требование без вектора и не в UNCOVERED_TRANSITIONS_OK — провал. Возвращает число без векторов и строки «что не так»
+// journalAtNow ответа не равен входному (journal:once — once заменил подстановки записи); у каждого перехода по таймеру
+// и системного (trigger: timer|system) — вектор tick, где он сработал (tick:<id>); у каждого случая синтетики tick
+// (TICK_CASES) — его вектор (tick:case:<название>). Синтетика считается. Требование без вектора и не в
+// UNCOVERED_TRANSITIONS_OK — провал. Возвращает число без векторов и строки «что не так»
 function transitionCoverage(lib, W, data) {
   const has = (test) => data.vectors.some((v) => v.expect && test(v));
   const need = {};
@@ -226,6 +247,10 @@ function transitionCoverage(lib, W, data) {
   ["run", "runAll", "merge"].forEach((o) => (need[`${o}:refusal`] = has((v) => v.op === o && v.expect.refusal)));
   need["run:canceled"] = has((v) => v.op === "run" && v.expect.ok && Object.keys(v.expect.ok.canceled || {}).length > 0);
   need["journal:once"] = has((v) => v.expect.ok && lib.canonical(v.expect.ok.journalAtNow || {}) !== lib.canonical(v.journalAtNow || {}));
+  W.transitions
+    .filter((t) => t.trigger === "timer" || t.trigger === "system")
+    .forEach((t) => (need[`tick:${t.id}`] = has((v) => v.op === "tick" && v.expect.ok && (v.expect.ok.fired || []).some((f) => f.transition === t.id))));
+  Object.values(TICK_CASES).forEach((c) => (need[`tick:case:${c}`] = has((v) => v.op === "tick" && v.case === c)));
   const ok = UNCOVERED_TRANSITIONS_OK;
   const missing = Object.keys(need).filter((k) => !need[k] && !ok[k]);
   const stale = Object.keys(ok).filter((k) => !(k in need) || need[k] || !String(ok[k]).trim());
@@ -284,7 +309,7 @@ function checkTransitions(text, env, where) {
     else if (!r.ok) mismatch.push(`${v.id}: ${r.diffs.join(", ")}${r.got.thrown != null ? ` — ${r.got.thrown}` : ""}`);
   });
   const by = (o) => data.vectors.filter((v) => v.op === o).length;
-  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}, без векторов: ${cover.missing}`);
+  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}, tick ${by("tick")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}, без векторов: ${cover.missing}`);
   console.log(`  синтетика переходов: ${data.vectors.filter((v) => v.case != null).length}`);
   console.log(`  неиспользованных записей ленты: ${unused}; closeResultLabel [""] как "": ${closeResultLabel}`);
   const list = (title, xs) => xs.length && console.log(`${title}:\n  ${xs.slice(0, 30).join("\n  ")}${xs.length > 30 ? `\n  … ещё ${xs.length - 30}` : ""}`);
@@ -538,8 +563,9 @@ function syntheticTransitions(env) {
       timers: Object.fromEntries(W.timers.map((t) => [t.id, Object.assign({}, (over.timers || {})[t.id])])),
     });
 
-  // Один случай: своя запись, вызов call(engine, events, mk), один вектор; shows(v, pool) — что не так ([] — всё так)
-  function add(label, call, shows) {
+  // Один случай: своя запись, вызов call(engine, events, mk), один вектор; shows(v, pool) — что не так ([] — всё так).
+  // opts.idle — молчание op1 в секундах (ctx.idleSec, по умолчанию 0), opts.world — свои факты мира поверх общих
+  function add(label, call, shows, opts = {}) {
     const rec = tlib.recorder(env.IMEngine.create, W, celRec.frame);
     const events = [];
     const engine = rec.create({
@@ -548,7 +574,8 @@ function syntheticTransitions(env) {
       now: () => NOW,
       events: () => events,
       scenarioKey: (ev) => ev.scenarioGuid,
-      world,
+      world: Object.assign({}, world, opts.world),
+      idleSec: () => opts.idle || 0,
       log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
       actorName: (id) => (id ? `name:${id}` : ["workflow.label.unassigned"]),
       progress: () => ({ filled: 0, total: 2 }),
@@ -680,6 +707,86 @@ function syntheticTransitions(env) {
       x && x.timers.resolution.due === NOW + 600000 ? [] : [`ждали resolution.due основного ${NOW + 600000}, а ${x && x.timers.resolution.due}`]
     );
   });
+
+  // Такт планировщика (решение 194а плана 60): want — начало fired, [номер, переход, момент]; после него такт может
+  // выполнить и другое — что именно, записано на ядре
+  const firedStarts = (v, want) => {
+    const got = ((v.expect.ok || {}).fired || []).slice(0, want.length).map((f) => [f.id, f.transition, f.at]);
+    const exp = want.map(([n, t, at]) => [ID(n), t, at]);
+    return lib.canonical(got) === lib.canonical(exp) ? [] : [`ждали в начале fired ${lib.canonical(exp)}, а ${lib.canonical(((v.expect.ok || {}).fired || []))}`];
+  };
+  const GRACE = 3000;
+  add(TICK_CASES.catchUp, (engine, events, mk) => {
+    events.push(
+      mk(9001, { timers: { reaction: { due: NOW - 120000 } } }),
+      mk(9002, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW - 300000 } } }),
+      mk(9003, { state: "on_hold", owner: "op1", holdReasonId: "third_party", timers: { hold: { due: NOW - 200000, since: NOW - 900000 } } })
+    );
+    engine.tick();
+  }, (v) =>
+    ok(v).concat(firedStarts(v, [
+      [9002, "resolution_overdue", NOW - 300000 + GRACE],
+      [9003, "hold_overdue", NOW - 200000 + GRACE],
+      [9001, "escalation_ceiling", NOW - 120000 + GRACE],
+    ]), v.expect.ok && v.expect.ok.fired.length === 3 ? [] : ["ждали ровно три сработавших"])
+  );
+  add(TICK_CASES.equalDue, (engine, events, mk) => {
+    // Больший номер — раньше по списку, как у сервера прототипа (новые — в начало)
+    events.push(mk(9002, { timers: { reaction: { due: NOW - 60000 } } }), mk(9001, { timers: { reaction: { due: NOW - 60000 } } }));
+    engine.tick();
+  }, (v) => ok(v).concat(firedStarts(v, [
+    [9001, "escalation_ceiling", NOW - 60000 + GRACE],
+    [9002, "escalation_ceiling", NOW - 60000 + GRACE],
+  ])));
+  // Молчание 360 с при idleHoldSec 300: system_hold_idle возможен с now − 60 с — в дедлайн решения
+  add(TICK_CASES.timerWithSystem, (engine, events, mk) => {
+    events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW - 60000 } } }), mk(9002));
+    engine.tick();
+  }, (v) => ok(v).concat(firedStarts(v, [
+    [9001, "resolution_overdue", NOW - 60000],
+    [9001, "system_hold_idle", NOW - 60000],
+  ])), { idle: 360 });
+  // Молчание 500 с — с now − 500 с, порог 300 с — now − 200 с; но инцидент изменился в now − 100 с (BUG-76)
+  add(TICK_CASES.idleBeforeChange, (engine, events, mk) => {
+    const x = mk(9001, { state: "in_progress", owner: "op1" });
+    x.changedAt = NOW - 100000;
+    events.push(x, mk(9002));
+    engine.tick();
+  }, (v) =>
+    ok(v).concat(firedStarts(v, [[9001, "system_hold_idle", NOW - 100000]]), lib.canonical(v.changedAt) === lib.canonical({ [id1]: NOW - 100000 }) ? [] : [`ждали changedAt на входе, а ${lib.canonical(v.changedAt)}`])
+  , { idle: 500 });
+  // Основной 9003 закрыт человеком; привязанные 9002 и 9001 закрываются с ним в такте — по номеру, в момент такта
+  add(TICK_CASES.closeLinked, (engine, events, mk) => {
+    const linked = { state: "linked", linkedTo: ID(9003), linkedAt: NOW - 600000 };
+    events.push(mk(9002, linked), mk(9001, linked), mk(9003, { state: "closed", owner: "op1", closeResultId: "processed", closedBy: "op1", closedAt: NOW - 30000 }));
+    engine.tick();
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(
+      firedStarts(v, [
+        [9001, "close_linked", NOW],
+        [9002, "close_linked", NOW],
+      ]),
+      x && x.state === "closed" && x.closeResultId === "processed" ? [] : [`ждали 9001 закрыт с результатом основного, а ${x && x.state} ${x && x.closeResultId}`]
+    );
+  });
+  // Эскалация основного 9003 к petrova (может принять, доступа к объекту привязанного 9001 нет): привязанный теряет
+  // доступ в момент эскалации, а не в момент такта (ARCH-13)
+  add(TICK_CASES.lostAfterEscalate, (engine, events, mk) => {
+    events.push(mk(9001, { state: "linked", linkedTo: ID(9003), linkedAt: NOW - 600000 }), mk(9003, { timers: { reaction: { due: NOW - 60000 } } }));
+    engine.tick();
+  }, (v) => ok(v).concat(firedStarts(v, [
+    [9003, "auto_escalate", NOW - 60000 + GRACE],
+    [9001, "linked_lost_access", NOW - 60000 + GRACE],
+  ])), { world: { can: (who) => who !== "noc", access: (who, x) => !(who === "petrova" && x.id === id1) } });
+  // Переход, которого нет в записи тестов API на исходной машине: удержание «нет связи» по сроку причины
+  add("Такт: no_link_hold_release — удержание no_link, hold.due = now − 60000, op1 на связи — в очередь через graceSec", (engine, events, mk) => {
+    events.push(mk(9001, { state: "on_hold", owner: "op1", holdReasonId: "no_link", timers: { hold: { due: NOW - 60000, since: NOW - 600000 } } }), mk(9002));
+    engine.tick();
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(firedStarts(v, [[9001, "no_link_hold_release", NOW - 60000 + GRACE]]), x && x.state === "new" && x.owner === "" ? [] : [`ждали 9001 в очереди, а ${x && x.state} ${x && x.owner}`]);
+  });
   return out;
 }
 
@@ -746,8 +853,9 @@ if (opt("engine") && argv.includes("--update")) {
     const trSynth = syntheticTransitions(load(machinePath));
     console.log(`синтетика переходов: ${trSynth.vectors.length} векторов`);
     console.log(`запись: Chrome на tests/api.html?celVectors=1 (около 6 мин, предел ${WALL_TIMEOUT_MS / 60000} мин)…`);
-    const rec = record(opt("tmp") && path.resolve(opt("tmp")));
-    console.log(`  тесты API — ${rec.summary}; записано векторов ${rec.data.vectors.length}, ${((Date.now() - t0) / 1000).toFixed(0)} с`);
+    const rec = record(opt("tmp") && path.resolve(opt("tmp")));    console.log(`  тесты API — ${rec.summary}; записано векторов ${rec.data.vectors.length}, ${((Date.now() - t0) / 1000).toFixed(0)} с`);
+    // Такты, где сработал переход исполнителя коллеги, — без вектора: вектор tick — один исполнитель (решение 194)
+    console.log(`  тактов с переходами коллег (без вектора): ${rec.transitions.withPeers}`);
     const ids = new Set(synth.vectors.map((v) => v.id));
     // Отбор — только записанного; вход синтетики, совпавший с записанным, остаётся синтетикой (с названием случая)
     const chosen = env.lib.select(rec.data.vectors).filter((v) => !ids.has(v.id));

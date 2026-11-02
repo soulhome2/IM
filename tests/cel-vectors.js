@@ -616,14 +616,16 @@
 
     // Открыть кадр. close() снимает его и возвращает {tape, tapeRepeat}: лента — на один вызов (fn и аргументы) одна
     // запись, первая; тот же вызов с другим ответом не добавляется, а считается в tapeRepeat. Повторный close() —
-    // тот же итог
-    function frame() {
+    // тот же итог. opts.omit — факты, которых в этом кадре нет вовсе (векторы переходов: idleSec выводит ядро)
+    function frame(opts) {
+      const omit = new Set((opts && opts.omit) || []);
       const tape = [];
       const first = new Map();
       let tapeRepeat = 0;
       let closed = false;
       const f = {
         note(e) {
+          if (omit.has(e.fn)) return;
           const k = `${e.fn}|${canonical(e.args)}`;
           const out = canonical(e.out);
           if (!first.has(k)) {
@@ -691,7 +693,7 @@
     lib,
     recording,
     // Кадр активной записи; без записи (Node, vm) — пустой кадр, чтобы вызывающему не ветвиться
-    frame: () => (rec ? rec.frame() : { close: () => ({ tape: [], tapeRepeat: 0 }) }),
+    frame: (opts) => (rec ? rec.frame(opts) : { close: () => ({ tape: [], tapeRepeat: 0 }) }),
     take: () => (rec ? rec.take() : { incidents: {}, vectors: [] }),
     stats: () => (rec ? rec.stats() : null),
   };
