@@ -289,7 +289,7 @@
   - `TestPersonID`: `{ID: 7}` → `"7"`; `{ID: 7, Alias: "me"}` → `"me"`.
   - `TestDirectoryNumber`: `"7"` → 7, true; `"07"`, `"+7"`, `" 7"`, `"7 "`, `"me"`, `""`, `"-0"` → false.
   - `TestNoFormatIntOfPersons` (без базы, по исходникам): в `appservice/`, `appservice/operator`, `handler/operator`, `service/transition`, `service/storing` нет `strconv.FormatInt`, `strconv.Itoa`, `fmt.Sprint*` от id людей и `ParseInt` людей, кроме `PersonID` и `Number`. Разрешённые строки — в самом тесте: версии, номера, `Last-Event-ID`, id кадров.
-  - `TestAliasPersonIsSelf` (с базой, директория с псевдонимом в тесте): `me` с `Alias` → `operator.guid` `"me"`, «свои в работе» считаются, передача себе — `422 TRANSFER_TO_SELF_FORBIDDEN`, строка `operator_sessions` пишется под `ID`.
+  - `TestAliasPersonIsSelf` (с базой, директория с псевдонимом в тесте): `me` с `Alias` → `operator.guid` `"me"`, «свои в работе» считаются, передача себе — `403 TRANSFER_TO_SELF_FORBIDDEN` (охрана `targetIsNotSelf`, как в `TestFlowTransferToSelf`), строка `operator_sessions` пишется под `ID`.
   - `TestMachineSource`: `Vendored().Source()` равен `operatorapi.Machine` побайтно (`require.Equal`).
   - `TestMergePatch`: объект сливается, `null` удаляет, массив заменяется целиком, не-объект заменяет, исходник не меняется, битый JSON — ошибка. `TestMergePatchKeepsKeyOrder`: порядок ключей `target` тот же, новые — в конце; `machine.Load(MergePatch(raw, {"escalation":{"enabled":false}}))` собирается.
 - [ ] **Step 4:** FAIL.

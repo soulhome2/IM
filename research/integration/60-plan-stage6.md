@@ -46,7 +46,7 @@
 | Уровень | Что доказывает | Где | От чего зависит |
 |---|---|---|---|
 | **А** | планировщик, сценарии и журнал на настоящей базе, пять случаев Review Focus | `handler/test`, Task 6–14 | предварительный шаг |
-| **Б** | Go повторяет прототип: 1008 случаев JSONLogic, векторы сценариев, векторы `tick` в памяти и на PostgreSQL | Task 4, 5, 9 | Task 1–3 |
+| **Б** | Go повторяет прототип: 1019 случаев JSONLogic, векторы сценариев, векторы `tick` в памяти и на PostgreSQL | Task 4, 5, 9 | Task 1–3 |
 | **В** | каждый ответ трёх маршрутов сценария и `/test/clock` проходит `checkContract`, кадры потока — схему | Task 8, 11, 13 | ни от чего |
 | **Г** | стенд: эскалация второму оператору по нормативу, молчание, прохождение сценария из конфигуратора, догон 30 просроченных при первом старте | `check-operator-scheduler.sh`, `check-operator-scenario.sh`, Task 18 | два оператора на стенде (`second-operator.pass` есть), замок стенда |
 
@@ -159,7 +159,7 @@
 | Откуда | Что | Где |
 |---|---|---|
 | 40-plan, этап 6 | планировщик: нормативы, автоэскалация, молчание | Task 9–13 |
-| 40-plan, этап 6 | JSONLogic на Go, сверка с 1008 случаями | Task 1, 4 |
+| 40-plan, этап 6 | JSONLogic на Go, сверка с 1019 случаями | Task 1, 4 |
 | 40-plan, этап 6 | путь, прогресс «N из M», ответы, обязательные шаги | Task 5–8 |
 | 40-plan, этап 6 | журнал действий оператора (§12.4) | Task 14 |
 | ранняя проверка 59, S2 | прогресс `0/0` у всех строк | Task 6 |
@@ -208,7 +208,7 @@
 
 | Файл | Отвечает за |
 |---|---|
-| `scenariomachine/jsonlogic.go`, `jsonlogic_test.go` | `Eval`, `Apply`; сверка с 1008 случаями |
+| `scenariomachine/jsonlogic.go`, `jsonlogic_test.go` | `Eval`, `Apply`; сверка с 1019 случаями |
 | `scenariomachine/script.go`, `run.go`, `check.go`, `run_test.go` | разбор сценария, `Start`, `Answer`, `Path`, `Ahead`, `Cursor`, `Progress`, `StepsFilled`, `Share`; векторы сценариев |
 | `appservice/operator/scenario.go`, `scripts.go` | прохождение инцидента, память сценариев, ответ и курсор под блокировкой |
 | `handler/operator/scenario.go` | три маршрута сценария |
@@ -306,13 +306,13 @@
 
 - [ ] **Step 1: вендорить два файла.** Цель `make vendor-operator-contract` целиком **не запускать**: она скопирует и `transition-vectors.json` с векторами `tick`, которых Go до Task 9 не понимает (I-1 ревью). Два файла — тем же `install -m 644` вручную из IM; `SOURCE` не меняется до Task 9. В `api/im/operator/` появились `jsonlogic-cases.js` и `scenario-vectors.json`.
 - [ ] **Step 2: написать падающие тесты.**
-  - `TestJSONLogicCases`: файл режется как в `check_scenarios.py` (`text[text.index("= ")+2:]`, без `;`), 1008 случаев, `Apply(c.when, c.data) == c.fires` у каждого; расхождения печатаются списком, `require.Len(cases, 1008)`.
+  - `TestJSONLogicCases`: файл режется как в `check_scenarios.py` (`text[text.index("= ")+2:]`, без `;`), 1019 случаев (11 из них — ленивое вычисление, добавлены в Task 1 по ревью), `Apply(c.when, c.data) == c.fires` у каждого; расхождения печатаются списком, `require.Len(cases, 1008)`.
   - `TestJSONLogicEditorOperators`: примеры спецификации раздела 7: `["a","b"]` — `{"==": [{"var": "selected"}, "a"]}` истина, `!=` ложь, `in` с `["a"]` истина, пустой выбор — `!=` истина.
   - `TestJSONLogicUnknownOperator`: `{"+": [1, 2]}` — `Eval` даёт ошибку, `Apply` — ложь.
 - [ ] **Step 3: запустить.** FAIL: пакета нет.
 - [ ] **Step 4: реализовать по решению 196.** Перенос `jl_apply`, `js_loose_eq`, `same_value_zero`, `js_str`, `js_num`, `js_bool`, `jl_truthy`, `js_compare`, `jl_var` из `check_scenarios.py:242-415`.
-- [ ] **Step 5: запустить.** PASS, 1008 из 1008. Мутанты (вручную, в scratchpad через `-overlay`): `jl_truthy` без правила пустого массива; `same_value_zero` с приведением; `js_compare` без `ToPrimitive` массива — каждый ловится `TestJSONLogicCases`.
-- [ ] **Step 6: коммит.** `Этап 6: JSONLogic на Go совпадает с исполнителем на 1008 случаях`.
+- [ ] **Step 5: запустить.** PASS, 1019 из 1019. Мутанты (вручную, в scratchpad через `-overlay`): `jl_truthy` без правила пустого массива; `same_value_zero` с приведением; `js_compare` без `ToPrimitive` массива — каждый ловится `TestJSONLogicCases`.
+- [ ] **Step 6: коммит.** `Этап 6: JSONLogic на Go совпадает с исполнителем на 1019 случаях`.
 
 ### Task 5: исполнитель сценариев на Go
 
