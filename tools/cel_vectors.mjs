@@ -6,17 +6,20 @@
 //                                           (lib.select), синтетика на границах; затем всё, что делает --check,
 //                                           и только потом запись файла. Тесты API не pass — стоп без записи.
 //                                           Тем же прогоном — fixtures/transition-vectors.json (блок
-//                                           transitionvectors-out и синтетика переходов в Node): любой счётчик
-//                                           skipped не 0, файл больше 4 МБ или случай синтетики не показал своё —
-//                                           стоп, не пишется ни один из двух файлов
+//                                           transitionvectors-out и синтетика переходов в Node) и
+//                                           fixtures/transition-vectors-patched.json (синтетика на машине с патчем
+//                                           MACHINE_PATCH): любой счётчик skipped не 0, файл больше 4 МБ или случай
+//                                           синтетики не показал своё — стоп, не пишется ни один из трёх файлов
 //   node tools/cel_vectors.mjs --check    — быстро, без Chrome: файл есть, собран от этой машины (sha256 байтов),
 //                                           равен своей канонической записи, каждый вектор повторяется по ленте
 //                                           на нынешнем исполнителе, у каждого имени машины есть вектор, размер;
-//                                           затем векторы переходов: покрытие (transitionCoverage), каждый
-//                                           повторяется по ленте на ядре прототипа (prototype/engine.js, по ядру
-//                                           на me), сравнение — решение 41. --update
-//                                           делает то же до записи; расхождение или промах — не пишется ни один файл
-//   --file=путь — другой файл векторов; --transitions=путь — другой файл векторов переходов; --machine=путь —
+//                                           затем оба файла векторов переходов: каждый повторяется по ленте на ядре
+//                                           прототипа (prototype/engine.js, по ядру на me), сравнение — решение 41;
+//                                           синтетика собирается заново и по названию случая равна файлу; покрытие
+//                                           (transitionCoverage) — по обоим. --update делает то же до записи;
+//                                           расхождение или промах — не пишется ни один файл
+//   --file=путь — другой файл векторов; --transitions=путь — другой файл векторов переходов; --patched=путь —
+//   другой файл набора на машине с патчем; --machine=путь —
 //   другая машина (проверка хэша); --engine=путь — копия prototype/engine.js для повтора переходов (пробы порчи; только с --check); --tmp=папка — где
 //   --update держит профиль Chrome (иначе — системная временная папка); CHROME — другой исполняемый файл Chrome
 //
@@ -42,16 +45,17 @@ const OPS = ["create", "merge", "run", "runAll", "tick"];
 // нет вектора ok с этим именем; «op:refusal» («run:refusal», «runAll:refusal», «merge:refusal») — нет отказа у op;
 // «run:canceled» — нет вектора run с canceled; «tick:<переход>» — нет вектора tick, где он сработал. Пишется в поле
 // uncovered файла переходов
-// Три перехода по таймеру включает настройка, а у исходной машины она другая: векторы собраны от одной машины
-// (machineSha256), и на ней эти переходы не наступают. Их проверяют тесты API на машине с другой настройкой
-// (tests/api-fsm.js, tests/api-scenarios.js)
-const OTHER_SETTING = (setting, value, want) => `на исходной машине ${setting} = ${value}, а переход — только при ${want}: на машине векторов он не наступает`;
-const UNCOVERED_TRANSITIONS_OK = {
-  "tick:reaction_overdue": OTHER_SETTING("escalation.enabled", "true", "false"),
-  "tick:resolution_escalate": OTHER_SETTING("escalation.onResolutionOverdue", "alert", "escalate"),
-  "tick:resolution_ceiling": OTHER_SETTING("escalation.onResolutionOverdue", "alert", "escalate"),
-};
+// Переходы по таймеру, которые на исходной машине не наступают (их включает другая настройка), покрыты набором на
+// машине с патчем (PATCHED_FILE, MACHINE_PATCH)
+const UNCOVERED_TRANSITIONS_OK = {};
 const UNCOVERED_TRANSITIONS_MAX = 3;
+// Набор векторов переходов на машине с патчем (CEL.md, «Набор на машине с патчем»): исходная машина плюс JSON Merge
+// Patch (RFC 7396) только по разделам настроек администратора (adminSettings.sections). Здесь — переходы, которые
+// включает другая настройка: reaction_overdue (escalation.enabled = false), resolution_escalate и resolution_ceiling
+// (escalation.onResolutionOverdue = escalate). Только синтетика, записанная на ядре прототипа с машиной с патчем
+const PATCHED_FILE = path.join(ROOT, "Specification/Workflow_machine/fixtures/transition-vectors-patched.json");
+const PATCHED_COMMENT = "Собрано tools/cel_vectors.mjs --update: синтетика переходов на машине с патчем machinePatch. Руками не править. Формат — CEL.md, «Набор на машине с патчем»";
+const MACHINE_PATCH = { escalation: { enabled: false, onResolutionOverdue: "escalate" } };
 // Запись: виртуальное время страницы (таймеры тестов) и настоящее — запись идёт около 6 минут, почти всё — JS
 // кодирования входов, а он виртуального времени не тратит
 const VIRTUAL_BUDGET_MS = 180000;
@@ -65,9 +69,11 @@ const UNCOVERED_OK = {};
 
 /* ===== Исполнитель прототипа в Node ===== */
 
-function load(machinePath, enginePath) {
+// patch — набор на машине с патчем: ядро получает исходную машину с наложенным MACHINE_PATCH (patchMachine), bytes —
+// байты исходной машины
+function load(machinePath, enginePath, patch) {
   const bytes = fs.readFileSync(machinePath);
-  const W = JSON.parse(bytes.toString("utf8"));
+  const W = patch ? patchMachine(JSON.parse(bytes.toString("utf8")), patch) : JSON.parse(bytes.toString("utf8"));
   const g = { console, TextEncoder, TextDecoder };
   g.window = g;
   vm.createContext(g);
@@ -77,9 +83,59 @@ function load(machinePath, enginePath) {
     const src = f === "prototype/engine.js" && enginePath ? enginePath : path.join(ROOT, f);
     vm.runInContext(fs.readFileSync(src, "utf8"), g, { filename: f });
   }
-  return { W, bytes, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
+  return { W, bytes, patch: patch || null, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
 }
 const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
+
+/* ===== Машина с патчем ===== */
+
+// JSON Merge Patch (RFC 7396): объект патча сливается с объектом цели по ключам, null удаляет ключ, всё прочее
+// (строка, число, список) заменяет значение целиком. Цель не меняется
+function mergePatch(target, patch) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return patch;
+  const out = target && typeof target === "object" && !Array.isArray(target) ? Object.assign({}, target) : {};
+  Object.entries(patch).forEach(([k, v]) => {
+    if (v === null) delete out[k];
+    else out[k] = mergePatch(out[k], v);
+  });
+  return out;
+}
+// Патч — только по разделам настроек администратора: каждый ключ верхнего уровня — из adminSettings.sections и есть в
+// машине; иначе исключение
+function patchMachine(W, patch) {
+  const sections = ((W.adminSettings || {}).sections || []).filter((s) => typeof s === "string");
+  if (!patch || typeof patch !== "object" || Array.isArray(patch) || !Object.keys(patch).length) throw new Error("machinePatch — не объект или пустой");
+  const bad = Object.keys(patch).filter((k) => !sections.includes(k) || !(k in W));
+  if (bad.length) throw new Error(`machinePatch: ${bad.join(", ")} — не раздел adminSettings.sections машины (${sections.join(", ")})`);
+  return mergePatch(W, patch);
+}
+// sha256 машины с патчем — от её канона (CEL.md, «Набор на машине с патчем»): ключи объектов по возрастанию (у машины
+// они ASCII), без пробелов, строки — как JSON.stringify, числа — целые. Чтобы канон был одним и тем же у JS и Go,
+// в машине нет символов, которые кодировщики пишут по-разному: управляющих (меньше U+0020, U+007F–U+009F), U+2028,
+// U+2029, суррогатов и символов вне BMP; ключи — только ASCII; числа — безопасные целые (lib.canonical). Иначе —
+// исключение: правило канона в CEL.md надо расширить
+function machineCanonSha(lib, W) {
+  const bad = [];
+  const odd = (s) => {
+    for (const ch of s) {
+      const c = ch.codePointAt(0);
+      if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029 || (c >= 0xd800 && c <= 0xdfff) || c > 0xffff) return true;
+    }
+    return false;
+  };
+  const walk = (v, at) => {
+    if (typeof v === "string" && odd(v)) bad.push(at);
+    else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${at}[${i}]`));
+    else if (v && typeof v === "object")
+      Object.entries(v).forEach(([k, x]) => {
+        if (!/^[\x20-\x7e]*$/.test(k)) bad.push(`${at}.${k} (ключ)`);
+        walk(x, `${at}.${k}`);
+      });
+  };
+  walk(W, "");
+  if (bad.length) throw new Error(`канон машины с патчем: символы вне правила CEL.md — ${bad.slice(0, 5).join(", ")}`);
+  return sha256(lib.canonical(W));
+}
 
 /* ===== Канонический файл: шапка, по строке на инцидент пула, по строке на вектор ===== */
 
@@ -109,16 +165,34 @@ function serialize(lib, { incidents, vectors, machineSha256, skipped }) {
   );
 }
 
-// Файл переходов: векторы — по id, пул — как записан (в нём только инциденты оставленных векторов), counts — по op
-function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped, uncovered }) {
+// Файл переходов: векторы — по id, пул — как записан (в нём только инциденты оставленных векторов), counts — по op.
+// Набор на машине с патчем (есть machinePatch): в шапке ещё baseMachineSha256 и machinePatch, поля uncovered нет
+function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped, uncovered, baseMachineSha256, machinePatch }) {
   const vs = [...vectors].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const counts = Object.fromEntries(OPS.map((o) => [o, vs.filter((v) => v.op === o).length]));
+  const patched = machinePatch !== undefined;
+  const head = patched
+    ? `{"$comment":${JSON.stringify(PATCHED_COMMENT)},"baseMachineSha256":${JSON.stringify(baseMachineSha256)},"counts":${lib.canonical(counts)},"format":1,\n`
+    : `{"$comment":${JSON.stringify(TRANSITIONS_COMMENT)},"counts":${lib.canonical(counts)},"format":1,\n`;
   return (
-    `{"$comment":${JSON.stringify(TRANSITIONS_COMMENT)},"counts":${lib.canonical(counts)},"format":1,\n` +
+    head +
     `"incidents":{\n${Object.keys(incidents).sort().map((k) => `${JSON.stringify(k)}:${lib.canonical(incidents[k])}`).join(",\n")}},\n` +
-    `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)},"uncovered":${lib.canonical(uncovered)},\n` +
+    (patched ? `"machinePatch":${lib.canonical(machinePatch)},\n` : "") +
+    `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)}${patched ? "" : `,"uncovered":${lib.canonical(uncovered)}`},\n` +
     `"vectors":[\n${vs.map((v) => lib.canonical(v)).join(",\n")}]}\n`
   );
+}
+// Текст набора на машине с патчем: только синтетика (synth — syntheticTransitions на load(…, MACHINE_PATCH)), skipped —
+// нули записи синтетики
+function patchedText(env, synth) {
+  return serializeTransitions(env.lib, {
+    incidents: synth.incidents,
+    vectors: synth.vectors,
+    machineSha256: machineCanonSha(env.lib, env.W),
+    skipped: Object.fromEntries(env.tlib.SKIPPED.map((k) => [k, 0])),
+    baseMachineSha256: sha256(env.bytes),
+    machinePatch: env.patch,
+  });
 }
 
 // Стоп до записи: запись переходов неполна (нет skipped или его счётчика, счётчик не 0, векторов нет —
@@ -227,6 +301,7 @@ const TICK_CASES = {
   idleBeforeChange: "молчание началось раньше последнего перехода — system_hold_idle не раньше changedAt",
   closeLinked: "close_linked после закрытия основного",
   lostAfterEscalate: "linked_lost_access после auto_escalate основного — в момент эскалации",
+  agentOnly: "проверка оператора (agentOnly): system_hold_break у его инцидента, общий таймер реакции не идёт",
 };
 
 // Покрытие векторов переходов: требование (ключ, как в UNCOVERED_TRANSITIONS_OK) → есть ли вектор. У каждого ручного
@@ -235,9 +310,12 @@ const TICK_CASES = {
 // journalAtNow ответа не равен входному (journal:once — once заменил подстановки записи); у каждого перехода по таймеру
 // и системного (trigger: timer|system) — вектор tick, где он сработал (tick:<id>); у каждого случая синтетики tick
 // (TICK_CASES) — его вектор (tick:case:<название>). Синтетика считается. Требование без вектора и не в
-// UNCOVERED_TRANSITIONS_OK — провал. Возвращает число без векторов и строки «что не так»
-function transitionCoverage(lib, W, data) {
+// UNCOVERED_TRANSITIONS_OK — провал. tick:<id> засчитывает и вектор набора на машине с патчем (patched — его данные
+// или null). Возвращает число без векторов и строки «что не так»
+function transitionCoverage(lib, W, data, patched) {
   const has = (test) => data.vectors.some((v) => v.expect && test(v));
+  const ticks = data.vectors.concat((patched && patched.vectors) || []);
+  const hasTick = (id) => ticks.some((v) => v.op === "tick" && v.expect && v.expect.ok && (v.expect.ok.fired || []).some((f) => f.transition === id));
   const need = {};
   W.transitions
     .filter((t) => t.trigger === "manual")
@@ -249,7 +327,7 @@ function transitionCoverage(lib, W, data) {
   need["journal:once"] = has((v) => v.expect.ok && lib.canonical(v.expect.ok.journalAtNow || {}) !== lib.canonical(v.journalAtNow || {}));
   W.transitions
     .filter((t) => t.trigger === "timer" || t.trigger === "system")
-    .forEach((t) => (need[`tick:${t.id}`] = has((v) => v.op === "tick" && v.expect.ok && (v.expect.ok.fired || []).some((f) => f.transition === t.id))));
+    .forEach((t) => (need[`tick:${t.id}`] = hasTick(t.id)));
   Object.values(TICK_CASES).forEach((c) => (need[`tick:case:${c}`] = has((v) => v.op === "tick" && v.case === c)));
   const ok = UNCOVERED_TRANSITIONS_OK;
   const missing = Object.keys(need).filter((k) => !need[k] && !ok[k]);
@@ -262,39 +340,44 @@ function transitionCoverage(lib, W, data) {
   return { missing: missing.length, problems };
 }
 
-// Векторы переходов: text — содержимое файла, env — ядро прототипа на машине, с которой сверяем. Файл собран от этой
-// машины, запись цела (lib.recordedProblem), покрытие (transitionCoverage), файл равен своей канонической записи;
-// каждый вектор повторяется по ленте на ядре прототипа — по ядру на me (lib.engines), сравнение — lib.compare
-// (решение 41). Неиспользованные записи ленты и closeResultLabel [""] — только счёт. Печатает итог, возвращает
-// true/false
-function checkTransitions(text, env, where) {
+// Один файл векторов переходов: text — содержимое, env — ядро прототипа на машине файла (у набора с патчем —
+// load(…, MACHINE_PATCH)), synthEnv — свежий load() той же машины для синтетики. Файл собран от этой машины (у набора с
+// патчем — от этой исходной машины, с этим патчем, sha256 канона машины с патчем), запись цела (lib.recordedProblem),
+// файл равен своей канонической записи; каждый вектор повторяется по ленте на ядре прототипа — по ядру на me
+// (lib.engines), сравнение — lib.compare (решение 41); синтетика собирается заново (syntheticTransitions, без Chrome)
+// и по названию случая (case) равна файлу — вход, ожидаемое и инциденты пула. Неиспользованные записи ленты и
+// closeResultLabel [""] — только счёт. Печатает итог, возвращает {ok, data}: data — разобранный файл (и у
+// правленого руками — для покрытия), null — не JSON
+function checkTransitionFile(text, env, synthEnv, where) {
   const { lib, tlib, W } = env;
-  const fail = (msg) => (console.log(msg), false);
-  let data;
+  let data = null;
+  const fail = (msg) => (console.log(msg), { ok: false, data });
   try {
     data = JSON.parse(text);
   } catch (e) {
     return fail(`${where}: правлен руками — не JSON (${e.message}): node tools/cel_vectors.mjs --update`);
   }
-  if (data.machineSha256 !== sha256(env.bytes)) return fail(`${where}: машина изменилась после сборки векторов переходов: node tools/cel_vectors.mjs --update`);
+  const again = "node tools/cel_vectors.mjs --update";
+  if (env.patch) {
+    if (data.baseMachineSha256 !== sha256(env.bytes)) return fail(`${where}: исходная машина изменилась после сборки набора с патчем: ${again}`);
+    if (lib.canonical(data.machinePatch ?? null) !== lib.canonical(env.patch)) return fail(`${where}: machinePatch файла не равен MACHINE_PATCH tools/cel_vectors.mjs: ${again}`);
+    if (data.machineSha256 !== machineCanonSha(lib, W)) return fail(`${where}: machineSha256 — не sha256 канона машины с патчем: ${again}`);
+  } else if (data.machineSha256 !== sha256(env.bytes)) return fail(`${where}: машина изменилась после сборки векторов переходов: ${again}`);
   if (data.format !== 1) return fail(`${where}: формат ${data.format}, а этот инструмент знает 1`);
   const problem = tlib.recordedProblem(data);
-  if (problem) return fail(`${where}: правлен руками — ${problem}: node tools/cel_vectors.mjs --update`);
-  // Покрытие — до сверки с канонической записью: его видно и у файла, правленого руками
-  const cover = transitionCoverage(lib, W, data);
-  cover.problems.forEach((p) => console.log(p));
+  if (problem) return fail(`${where}: правлен руками — ${problem}: ${again}`);
   let canon;
   try {
     canon = serializeTransitions(lib, data);
   } catch (e) {
-    return fail(`${where}: правлен руками — ${e.message}: node tools/cel_vectors.mjs --update`);
+    return fail(`${where}: правлен руками — ${e.message}: ${again}`);
   }
   if (canon !== text) {
     const a = text.split("\n");
     const b = canon.split("\n");
     let i = 0;
     while (i < a.length && a[i] === b[i]) i++;
-    return fail(`${where}: правлен руками — файл не равен своей канонической записи (первое отличие — строка ${i + 1}): node tools/cel_vectors.mjs --update`);
+    return fail(`${where}: правлен руками — файл не равен своей канонической записи (первое отличие — строка ${i + 1}): ${again}`);
   }
   const engineFor = tlib.engines(env.IMEngine.create, W);
   const mismatch = [];
@@ -308,14 +391,51 @@ function checkTransitions(text, env, where) {
     if (r.misses.length) missed.push(`${v.id} (${[...new Set(r.misses)].join(", ")})`);
     else if (!r.ok) mismatch.push(`${v.id}: ${r.diffs.join(", ")}${r.got.thrown != null ? ` — ${r.got.thrown}` : ""}`);
   });
+  // Синтетика заново: правка случая в tools/cel_vectors.mjs без --update — расхождение по названию случая
+  const synthDiff = [];
+  let synth = null;
+  try {
+    synth = syntheticTransitions(synthEnv);
+  } catch (e) {
+    synthDiff.push(`не собирается: ${e.message}`);
+  }
+  if (synth) {
+    const byCase = new Map(data.vectors.filter((v) => v.case != null).map((v) => [v.case, v]));
+    synth.vectors.forEach((s) => {
+      const f = byCase.get(s.case);
+      byCase.delete(s.case);
+      if (!f) synthDiff.push(`«${s.case}» — нет в файле`);
+      else if (lib.canonical(f) !== lib.canonical(s)) synthDiff.push(`«${s.case}» — вход или ожидаемое не те, что у синтетики (в файле ${f.id}, заново ${s.id})`);
+      else {
+        const pool = [...refs(s, new Set())].filter((k) => lib.canonical(data.incidents[k] ?? null) !== lib.canonical(synth.incidents[k] ?? null));
+        if (pool.length) synthDiff.push(`«${s.case}» — инциденты пула не те: ${pool.join(", ")}`);
+      }
+    });
+    byCase.forEach((v, c) => synthDiff.push(`«${c}» — в файле, а синтетики с таким названием нет (${v.id})`));
+  }
   const by = (o) => data.vectors.filter((v) => v.op === o).length;
-  console.log(`векторов переходов: ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}, tick ${by("tick")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}, без векторов: ${cover.missing}`);
-  console.log(`  синтетика переходов: ${data.vectors.filter((v) => v.case != null).length}`);
+  console.log(`${where}: векторов переходов ${data.vectors.length} (run ${by("run")}, runAll ${by("runAll")}, merge ${by("merge")}, create ${by("create")}, tick ${by("tick")}), расхождений: ${mismatch.length}, промахов ленты: ${missed.length}`);
+  console.log(`  синтетика переходов: ${data.vectors.filter((v) => v.case != null).length}, заново собрана${synth ? ` (${synth.vectors.length})` : " — нет"}, не равна файлу: ${synthDiff.length}`);
   console.log(`  неиспользованных записей ленты: ${unused}; closeResultLabel [""] как "": ${closeResultLabel}`);
   const list = (title, xs) => xs.length && console.log(`${title}:\n  ${xs.slice(0, 30).join("\n  ")}${xs.length > 30 ? `\n  … ещё ${xs.length - 30}` : ""}`);
   list("расхождения переходов", mismatch);
   list("промахи ленты переходов", missed);
-  return !mismatch.length && !missed.length && !cover.problems.length;
+  list(`синтетика переходов не равна файлу (${again})`, synthDiff);
+  return { ok: !mismatch.length && !missed.length && !synthDiff.length, data };
+}
+
+// Векторы переходов: оба файла (checkTransitionFile) и покрытие (transitionCoverage) по обоим. base и patched —
+// {text, env, synthEnv, where}; text null — файла нет. Возвращает true/false
+function checkTransitions(base, patched) {
+  const none = (f) => (console.log(`нет файла ${f.where}, соберите: node tools/cel_vectors.mjs --update`), { ok: false, data: null });
+  const b = base.text == null ? none(base) : checkTransitionFile(base.text, base.env, base.synthEnv, base.where);
+  const p = patched.text == null ? none(patched) : checkTransitionFile(patched.text, patched.env, patched.synthEnv, patched.where);
+  if (!b.data) return false;
+  // Покрытие — и у файла, правленого руками
+  const cover = transitionCoverage(base.env.lib, base.env.W, b.data, p.data);
+  cover.problems.forEach((x) => console.log(x));
+  console.log(`покрытие переходов (с набором на машине с патчем): без векторов ${cover.missing}`);
+  return b.ok && p.ok && !cover.problems.length;
 }
 
 /* ===== Синтетика на границах ===== */
@@ -622,6 +742,44 @@ function syntheticTransitions(env) {
   };
   const OVERRIDDEN = "workflow.journal.timer_overridden";
   const id1 = ID(9001);
+  // Такт планировщика (решение 194а плана 60): want — начало fired, [номер, переход, момент]; после него такт может
+  // выполнить и другое — что именно, записано на ядре
+  const firedStarts = (v, want) => {
+    const got = ((v.expect.ok || {}).fired || []).slice(0, want.length).map((f) => [f.id, f.transition, f.at]);
+    const exp = want.map(([n, t, at]) => [ID(n), t, at]);
+    return lib.canonical(got) === lib.canonical(exp) ? [] : [`ждали в начале fired ${lib.canonical(exp)}, а ${lib.canonical(((v.expect.ok || {}).fired || []))}`];
+  };
+  const firedCount = (v, n) => (((v.expect.ok || {}).fired || []).length === n ? [] : [`ждали сработавших ${n}`]);
+  const GRACE = 3000;
+
+  // Набор на машине с патчем (MACHINE_PATCH): только переходы, которые включает другая настройка. Мир тот же:
+  // petrova и noc ничего не могут — эскалировать некому; resolution_escalate — petrova может (свой мир случая)
+  if (env.patch) {
+    const set = { enabled: W.escalation.enabled, onResolutionOverdue: W.escalation.onResolutionOverdue };
+    if (lib.canonical(set) !== lib.canonical({ enabled: false, onResolutionOverdue: "escalate" })) throw new Error(`синтетика на машине с патчем написана под escalation {enabled: false, onResolutionOverdue: escalate}, а в машине ${lib.canonical(set)}`);
+    add("Машина с патчем: reaction_overdue — escalation.enabled = false, reaction.due = now − 60000 у new — через graceSec, без эскалации", (engine, events, mk) => {
+      events.push(mk(9001, { timers: { reaction: { due: NOW - 60000 } } }), mk(9002));
+      engine.tick();
+    }, (v, pool) => {
+      const x = after(v, pool, id1);
+      return ok(v).concat(firedStarts(v, [[9001, "reaction_overdue", NOW - 60000 + GRACE]]), firedCount(v, 1), x && x.state === "new" && x.owner === "" ? [] : [`ждали 9001 в new без владельца, а ${x && x.state} ${x && x.owner}`]);
+    });
+    add("Машина с патчем: resolution_escalate — onResolutionOverdue = escalate, resolution.due = now − 60000 у in_progress, petrova может принять — к ней через graceSec", (engine, events, mk) => {
+      events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW - 60000 } } }), mk(9002));
+      engine.tick();
+    }, (v, pool) => {
+      const x = after(v, pool, id1);
+      return ok(v).concat(firedStarts(v, [[9001, "resolution_escalate", NOW - 60000 + GRACE]]), x && x.state === "pending_acceptance" && x.owner === "petrova" ? [] : [`ждали 9001 у petrova в pending_acceptance, а ${x && x.state} ${x && x.owner}`]);
+    }, { world: { can: (who) => who !== "noc" } });
+    add("Машина с патчем: resolution_ceiling — onResolutionOverdue = escalate, resolution.due = now − 60000 у in_progress, эскалировать некому — через graceSec, остаётся у op1", (engine, events, mk) => {
+      events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW - 60000 } } }), mk(9002));
+      engine.tick();
+    }, (v, pool) => {
+      const x = after(v, pool, id1);
+      return ok(v).concat(firedStarts(v, [[9001, "resolution_ceiling", NOW - 60000 + GRACE]]), firedCount(v, 1), x && x.state === "in_progress" && x.owner === "op1" ? [] : [`ждали 9001 в работе у op1, а ${x && x.state} ${x && x.owner}`]);
+    });
+    return out;
+  }
 
   // Окно после дедлайна (graceSec 3 с): дедлайн реакции в new, переход по таймеру — escalation_ceiling (эскалировать некому)
   add("«Взять» в окне после дедлайна: reaction.due = now − 2999 — срабатывание escalation_ceiling отменено, нарушение reaction на момент дедлайна, журнал [timer_overridden, claim]", (engine, events, mk) => {
@@ -708,14 +866,6 @@ function syntheticTransitions(env) {
     );
   });
 
-  // Такт планировщика (решение 194а плана 60): want — начало fired, [номер, переход, момент]; после него такт может
-  // выполнить и другое — что именно, записано на ядре
-  const firedStarts = (v, want) => {
-    const got = ((v.expect.ok || {}).fired || []).slice(0, want.length).map((f) => [f.id, f.transition, f.at]);
-    const exp = want.map(([n, t, at]) => [ID(n), t, at]);
-    return lib.canonical(got) === lib.canonical(exp) ? [] : [`ждали в начале fired ${lib.canonical(exp)}, а ${lib.canonical(((v.expect.ok || {}).fired || []))}`];
-  };
-  const GRACE = 3000;
   add(TICK_CASES.catchUp, (engine, events, mk) => {
     events.push(
       mk(9001, { timers: { reaction: { due: NOW - 120000 } } }),
@@ -734,10 +884,29 @@ function syntheticTransitions(env) {
     // Больший номер — раньше по списку, как у сервера прототипа (новые — в начало)
     events.push(mk(9002, { timers: { reaction: { due: NOW - 60000 } } }), mk(9001, { timers: { reaction: { due: NOW - 60000 } } }));
     engine.tick();
-  }, (v) => ok(v).concat(firedStarts(v, [
-    [9001, "escalation_ceiling", NOW - 60000 + GRACE],
-    [9002, "escalation_ceiling", NOW - 60000 + GRACE],
-  ])));
+  }, (v, pool) => {
+    // Вход должен различать порядок по номеру и порядок по списку: первым в списке — больший номер
+    const numbers = v.incidents.map((d) => (pool[d.$ref] || {}).number);
+    return ok(v).concat(
+      lib.canonical(numbers) === lib.canonical(["INC-9002", "INC-9001"]) ? [] : [`ждали на входе [INC-9002, INC-9001], а ${lib.canonical(numbers)}`],
+      firedStarts(v, [
+        [9001, "escalation_ceiling", NOW - 60000 + GRACE],
+        [9002, "escalation_ceiling", NOW - 60000 + GRACE],
+      ])
+    );
+  });
+  // Проверка оператора (agentOnly): только переходы, привязанные к нему (scope: incidents_owned_by_agent); общий таймер
+  // реакции 9002 без системного не идёт
+  add(TICK_CASES.agentOnly, (engine, events, mk) => {
+    events.push(mk(9001, { state: "in_progress", owner: "op1" }), mk(9002, { timers: { reaction: { due: NOW - 60000 } } }));
+    engine.tick({ agentOnly: true });
+  }, (v) =>
+    ok(v).concat(
+      v.target && v.target.agentOnly === true ? [] : [`ждали target.agentOnly true, а ${lib.canonical(v.target)}`],
+      firedStarts(v, [[9001, "system_hold_break", NOW]]),
+      firedCount(v, 1)
+    )
+  , { world: { agentState: () => "not_ready" } });
   // Молчание 360 с при idleHoldSec 300: system_hold_idle возможен с now − 60 с — в дедлайн решения
   add(TICK_CASES.timerWithSystem, (engine, events, mk) => {
     events.push(mk(9001, { state: "in_progress", owner: "op1", timers: { resolution: { due: NOW - 60000 } } }), mk(9002));
@@ -831,6 +1000,7 @@ const opt = (name) => (argv.find((a) => a.startsWith(`--${name}=`)) || "").slice
 const file = path.resolve(opt("file") || FILE);
 const machinePath = path.resolve(opt("machine") || MACHINE);
 const transitionsFile = path.resolve(opt("transitions") || TRANSITIONS_FILE);
+const patchedFile = path.resolve(opt("patched") || PATCHED_FILE);
 const enginePath = opt("engine") && path.resolve(opt("engine"));
 const rel = (p) => (path.relative(ROOT, p).startsWith("..") ? p : path.relative(ROOT, p));
 
@@ -852,10 +1022,15 @@ if (opt("engine") && argv.includes("--update")) {
     // Синтетика переходов — на своём исполнителе (подменяет IMCel.create)
     const trSynth = syntheticTransitions(load(machinePath));
     console.log(`синтетика переходов: ${trSynth.vectors.length} векторов`);
+    // Набор на машине с патчем — тоже до записи в Chrome: только синтетика
+    const patchedEnv = load(machinePath, null, MACHINE_PATCH);
+    const ptText = patchedText(patchedEnv, syntheticTransitions(load(machinePath, null, MACHINE_PATCH)));
+    console.log(`синтетика на машине с патчем: ${JSON.parse(ptText).vectors.length} векторов`);
     console.log(`запись: Chrome на tests/api.html?celVectors=1 (около 6 мин, предел ${WALL_TIMEOUT_MS / 60000} мин)…`);
-    const rec = record(opt("tmp") && path.resolve(opt("tmp")));    console.log(`  тесты API — ${rec.summary}; записано векторов ${rec.data.vectors.length}, ${((Date.now() - t0) / 1000).toFixed(0)} с`);
-    // Такты, где сработал переход исполнителя коллеги, — без вектора: вектор tick — один исполнитель (решение 194)
-    console.log(`  тактов с переходами коллег (без вектора): ${rec.transitions.withPeers}`);
+    const rec = record(opt("tmp") && path.resolve(opt("tmp")));
+    console.log(`  тесты API — ${rec.summary}; записано векторов ${rec.data.vectors.length}, ${((Date.now() - t0) / 1000).toFixed(0)} с`);
+    // Такты с исполнителем, которого запись не знает (не обёрнутое ядро), — без вектора: повтор его не создаст
+    console.log(`  тактов с незнакомым исполнителем коллеги (без вектора): ${rec.transitions.unknownPeers}`);
     const ids = new Set(synth.vectors.map((v) => v.id));
     // Отбор — только записанного; вход синтетики, совпавший с записанным, остаётся синтетикой (с названием случая)
     const chosen = env.lib.select(rec.data.vectors).filter((v) => !ids.has(v.id));
@@ -865,17 +1040,21 @@ if (opt("engine") && argv.includes("--update")) {
       machineSha256: sha256(env.bytes),
       skipped: { tapeRepeat: rec.stats.tapeRepeat, worldError: rec.stats.skipped },
     });
-    // Переходы — тоже до записи: стоп любого из двух файлов не оставляет записанным ни один
+    // Переходы — тоже до записи: стоп любого из трёх файлов не оставляет записанным ни один
     const trText = transitionsText(env, rec.transitions, trSynth, sha256(env.bytes));
     // Всё, что делает --check, — на свежем исполнителе и ядре, до записи: расхождение или промах в любом — стоп
     const okCel = check(text, load(machinePath), rel(file));
-    const okTransitions = checkTransitions(trText, load(machinePath), rel(transitionsFile));
+    const okTransitions = checkTransitions(
+      { text: trText, env: load(machinePath), synthEnv: load(machinePath), where: rel(transitionsFile) },
+      { text: ptText, env: load(machinePath, null, MACHINE_PATCH), synthEnv: load(machinePath, null, MACHINE_PATCH), where: rel(patchedFile) }
+    );
     ok = okCel && okTransitions;
     if (ok) {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.mkdirSync(path.dirname(transitionsFile), { recursive: true });
+      [file, transitionsFile, patchedFile].forEach((f) => fs.mkdirSync(path.dirname(f), { recursive: true }));
       fs.writeFileSync(file, text);
       fs.writeFileSync(transitionsFile, trText);
+      fs.writeFileSync(patchedFile, ptText);
+      console.log(`записано ${rel(patchedFile)}: синтетика ${JSON.parse(ptText).vectors.length}`);
       console.log(`записано ${rel(transitionsFile)}: из записи ${rec.transitions.vectors.length}, синтетика ${trSynth.vectors.length}, ${(Buffer.byteLength(trText, "utf8") / 1048576).toFixed(2)} МБ`);
       console.log(`записано ${rel(file)}: отобрано из записи ${chosen.length}, синтетика ${synth.vectors.length}; всего ${((Date.now() - t0) / 1000).toFixed(0)} с`);
     } else console.log("файлы не записаны");
@@ -888,10 +1067,13 @@ if (opt("engine") && argv.includes("--update")) {
   let okTransitions = false;
   if (!fs.existsSync(file)) console.log("нет файла, соберите: node tools/cel_vectors.mjs --update");
   else okCel = check(fs.readFileSync(file, "utf8"), load(machinePath), rel(file));
-  if (!fs.existsSync(transitionsFile)) console.log("нет файла векторов переходов, соберите: node tools/cel_vectors.mjs --update");
-  else okTransitions = checkTransitions(fs.readFileSync(transitionsFile, "utf8"), load(machinePath, enginePath), rel(transitionsFile));
+  const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null);
+  okTransitions = checkTransitions(
+    { text: read(transitionsFile), env: load(machinePath, enginePath), synthEnv: load(machinePath, enginePath), where: rel(transitionsFile) },
+    { text: read(patchedFile), env: load(machinePath, enginePath, MACHINE_PATCH), synthEnv: load(machinePath, enginePath, MACHINE_PATCH), where: rel(patchedFile) }
+  );
   process.exitCode = okCel && okTransitions ? 0 : 1;
 } else {
-  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--transitions=путь] [--machine=путь] [--engine=путь] [--tmp=папка]");
+  console.log("node tools/cel_vectors.mjs --update | --check [--file=путь] [--transitions=путь] [--patched=путь] [--machine=путь] [--engine=путь] [--tmp=папка]");
   process.exitCode = 1;
 }

@@ -13,5 +13,6 @@ Specification/Workflow_machine/openapi.v30.json
 Specification/Workflow_machine/quint/im.qnt
 Specification/Workflow_machine/fixtures/cel-vectors.json
 Specification/Workflow_machine/fixtures/transition-vectors.json
+Specification/Workflow_machine/fixtures/transition-vectors-patched.json
 Specification/State_rules/archive/
 tools/mutations/MACHINE.md
