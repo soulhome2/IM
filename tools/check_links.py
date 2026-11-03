@@ -67,7 +67,7 @@ def section_refs():
         for name in sorted(files):
             path = os.path.join(base, name)
             rel = os.path.relpath(path, ROOT)
-            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or rel in SKIP_FILES or source_copy(rel):
+            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or rel in SKIP_FILES or rel.lower() == "user-prompts.md" or source_copy(rel):
                 continue
             with open(path, encoding="utf-8") as f:
                 text = f.read()
