@@ -384,7 +384,7 @@ location /im/operator/ {
 **Патч снят.** Сервер остановлен, `rm ~/Work/stand/im-machine-patch.json`, запуск `IM_TEST_SUPPORT= IM_MACHINE_PATCH= run-im-binary.sh ~/Work/stand/bin/im`. `readlink /proc/<pid>/exe` — `bin/im`. Переменных в окружении процесса нет, `Warn` патча в логе нет. Этапы 7–9 работают без патча.
 
 **Следы на стенде.**
-- INC-0100 (`01a1a123-…`) из первого запуска проверки остался в `pending_acceptance` с адресатом `user@gmail.com`, уровень 1.
+- INC-0100 (`01a1a123-…`) из первого запуска проверки остался в `pending_acceptance` с адресатом `user@gmail.com`, уровень 1. Закрыт через API оператора 2026-11-03 (переход `close`, результат «Массовый сбой»), дамп `imdb-before-p62t1.sql`.
 - Инцидент повторного запуска вернулся в `new`.
 - Инцидент сценария закрыт.
 - 31 строка с нарушениями и записями `escalation_ceiling`.
