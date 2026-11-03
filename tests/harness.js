@@ -224,6 +224,11 @@
     eq(actual, expected, msg) {
       if (fmt(actual) !== fmt(expected)) throw new Failure(`${msg || "значение"}: ${fmt(actual)} вместо ${fmt(expected)}`);
     },
+    // Как eq, но порядок ключей объекта не важен (в JSON он смысла не несёт); порядок массивов важен
+    same(actual, expected, msg) {
+      const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+      if (fmt(canon(actual)) !== fmt(canon(expected))) throw new Failure(`${msg || "значение"}: ${fmt(actual)} вместо ${fmt(expected)}`);
+    },
     near(actual, expected, tolerance, msg) {
       if (Math.abs(actual - expected) > tolerance) throw new Failure(`${msg || "значение"}: ${actual} вместо ≈${expected}`);
     },

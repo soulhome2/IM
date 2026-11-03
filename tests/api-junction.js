@@ -202,7 +202,7 @@
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [v1.guid, v2.guid] });
     const primary = await scenarioOf(env, res.incident.guid);
     assert.eq(primary.scenarioVersion, 1, "основной — на своей версии");
-    assert.eq(values(primary), { visual: ["confirmed"], verdict: "dispatch", kind: { kind: ["smoke"] } }, "перенесены классификация и тип; эвакуации в версии 1 нет");
+    assert.same(values(primary), { visual: ["confirmed"], verdict: "dispatch", kind: { kind: ["smoke"] } }, "перенесены классификация и тип; эвакуации в версии 1 нет");
     assert.eq(primary.result.currentStepId, "note", "прохождение основного — до первого неотвеченного");
     const entry = (await env.card(v1.guid)).journal.filter((e) => e.templateKey === "workflow.journal.answers_moved").pop();
     assert.ok(entry && entry.vars.n === 2, `в журнале основного перенесено 2: ${entry && entry.text}`);

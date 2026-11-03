@@ -1018,10 +1018,11 @@
     const env = await makeEnv();
     const fx = window.IM_FIXTURE;
     const access = await env.ok("GET", "/operator/admin/access-groups");
+    // Оба чтения — до проверок: строка покрытия контракта не зависит от того, прошла ли проверка групп доступа
+    const duty = await env.ok("GET", "/operator/admin/duty-groups");
     assert.eq(access.map((a) => [a.name, a.roles]), fx.accessGroups.map((a) => [a.name, a.roles]), "группы доступа и их роли — из набора");
     const mall = access.find((a) => a.roles.includes("Оператор ТЦ"));
     assert.eq(mall.sourceGroups.map((g) => g.name), ["Торговый центр"], "группы устройств — с именами");
-    const duty = await env.ok("GET", "/operator/admin/duty-groups");
     assert.eq(duty.map((g) => g.id), fx.people.dutyGroups.map((g) => g.id), "дежурные группы — в порядке набора");
     const leads = duty.find((g) => g.id === "grp-leads");
     assert.ok(leads.memberIds.includes(ME) && leads.memberIds.includes("petrova"), `состав: я — отдельно, Петрова — по роли: ${leads.memberIds}`);
@@ -1697,7 +1698,7 @@
     const es = await env.ok("GET", "/operator/strings");
     assert.eq([es.locale, es.strings["workflow.transition.claim"]], ["en", S.en["workflow.transition.claim"]], "без locale — язык из настроек");
     const xx = await env.ok("GET", "/operator/strings?locale=xx");
-    assert.eq(xx.strings, S.ru, "неизвестный язык — русские строки");
+    assert.same(xx.strings, S.ru, "неизвестный язык — русские строки");
   });
 
   test("Появление инцидента: новый, ничей, уровень 0, норматив реакции от появления, запись журнала, событие потока (§6.2, RULE-61)", async () => {
@@ -2464,6 +2465,8 @@
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.priorities = levels;
     fixture.incidents.forEach((inc) => (inc.priority = remap[inc.priority]));
+    // У правил тоже: приоритет правила — ссылка на справочник, прежних чисел в нём уже нет
+    fixture.rules.forEach((r) => (r.priority = remap[r.priority]));
     const workflow = JSON.parse(JSON.stringify(W));
     const reaction = workflow.timers.find((t) => t.id === "reaction");
     reaction.overrides = [{ priority: 95, sec: 120 }, { priority: 60, sec: 600 }];
