@@ -32,6 +32,7 @@ SKIP_FILES = {
     os.path.join("prototype", "openapi.js"),
     os.path.join("prototype", "fixture.js"),
     os.path.join("prototype", "strings.js"),
+    "user-prompts.md",  # локальный журнал промптов, в git не идёт (.git/info/exclude)
 }
 # Машина сценариев: примеры — копии исходника (ORIGIN.md), ссылки в них ведут на документы исходного репозитория.
 # Спецификация и схема приведены к формату редактора продукта (CHANGELOG) — проверяются как свои
