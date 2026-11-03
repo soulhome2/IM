@@ -346,6 +346,59 @@ location /im/operator/ {
 
 **Что удалить по окончании:** `check-operator-flows.mjs`, `check-operator-screens.mjs`, копии `check-operator-screens.mjs.before-9` и `check-operator-entry.mjs.before-9`, снимки `shots/op/`.
 
+## Шаг 11: планировщик и сценарий (этап 6)
+
+Прогон 2026-11-03, задача 18 плана [60](60-plan-stage6.md). Сервер МИ собран из `9a17562` и запускается через `~/Work/stand/run-im-binary.sh ~/Work/stand/bin/im`. Прежний бинарник — `~/Work/stand/bin/im.before-6`. Перед первым стартом снят дамп `~/Work/stand/backup/imdb-before-024.sql`, 345 624 байт, сервер при этом был остановлен. В `im_db_migrations` теперь 24 записи: добавились 024, 025 и 026.
+
+**Новые скрипты** (`~/Work/stand`, вне git). Пишут строки `OK`/`FAIL`/`SKIP` и в конце `итого ошибок: N`.
+- `snapshot-operator-queue.sh [файл]` — снимок очереди через шлюз, только чтение.
+- `im-machine-patch.sh` — пишет `im-machine-patch.json` по решению 210. Уровень 1 эскалации — второй оператор с `reactionSec` 60, потолок 1, алерты — первому, `idleHoldSec` 60, `idleReleaseSec` 120. id обоих берутся из `GET /operator/session`.
+- `check-operator-scheduler.sh` — эскалация и молчание.
+- `check-operator-scenario.sh` — сценарий из конфигуратора.
+
+**Первый старт без патча.** Снимок до старта: 98 строк, из них 63 открытых.
+- 31 открытая строка с просроченным таймером и `breaches: []`. После старта у всех 31 есть нарушение реакции, его `at` совпадает с прежним дедлайном. В журнале у каждой две записи `escalation_ceiling`, ключи `escalation_ceiling` и `alert_no_recipient`: уровни машины (`petrova`, `noc`) — не люди стенда. `escalationLevel` остался 0.
+- 32 строки без таймера не изменились.
+- `scenarioProgress.total` был 0 у всех открытых, стал больше 0 у всех. Например, INC-0012 — 2, INC-0017 — 5.
+- Инцидентов `in_progress` и `on_hold` до старта не было, поэтому уход в `on_hold` после `Restart` ничего не задел.
+- В логе нет отдельных строк о каждой миграции, только `all migrations applied without error`.
+
+**С патчем.** Запуск: `IM_TEST_SUPPORT=true IM_MACHINE_PATCH=~/Work/stand/im-machine-patch.json run-im-binary.sh ~/Work/stand/bin/im`. В логе `Warn` «the machine is patched by IM_MACHINE_PATCH» с путём и sha256 итоговой машины.
+
+| Проверка | `OK` | `FAIL` | `SKIP` |
+|---|---|---|---|
+| `check-operator-scheduler.sh`, первый запуск, ожидание 260 с | 5 | 1 | 0 |
+| `check-operator-scheduler.sh`, ожидание 480 с | 9 | 0 | 0 |
+| `check-operator-scenario.sh` | 15 | 0 | 0 |
+
+**Эскалация ждёт до 480 с.** Уровень 1 наступает по нарушению реакции. У события эмулятора приоритет 75, норматив реакции у него 7 мин. Окна в 260 с не хватило. Повторный запуск: эскалация через 431 с, адресат — второй, уровень 1. Второй сделал `accept` и замолчал: через 70 с `on_hold` с причиной `no_link`, ещё через 60 с `new`.
+
+**Сценарий.** Взят «Демо: Медпомощь при пожаре», шаги `RadioButton`, `Message`, `Comment`, без `Image`. Шаги:
+- `claim`;
+- три ответа, `filled` 0 → 1 → 2 → 3. `total` по пути вырос с 2 до 3: ответ «да» добавил шаг `ambulance`;
+- `completedAt`, `requiredStepsFilled.closing` — истина;
+- `close` с `processed` — 200;
+- строка очереди: 3 из 3;
+- второй открывает сценарий — 200, отвечает — 403 `PERMISSION_DENIED`.
+
+**Патч снят.** Сервер остановлен, `rm ~/Work/stand/im-machine-patch.json`, запуск `IM_TEST_SUPPORT= IM_MACHINE_PATCH= run-im-binary.sh ~/Work/stand/bin/im`. `readlink /proc/<pid>/exe` — `bin/im`. Переменных в окружении процесса нет, `Warn` патча в логе нет. Этапы 7–9 работают без патча.
+
+**Следы на стенде.**
+- INC-0100 (`01a1a123-…`) из первого запуска проверки остался в `pending_acceptance` с адресатом `user@gmail.com`, уровень 1.
+- Инцидент повторного запуска вернулся в `new`.
+- Инцидент сценария закрыт.
+- 31 строка с нарушениями и записями `escalation_ceiling`.
+
+**Откат** — командами раздела «Откат сборки», по порядку:
+1. Остановить сервер.
+2. `DROP DATABASE imdb`, затем `CREATE DATABASE imdb OWNER im`.
+3. Залить `~/Work/stand/backup/imdb-before-024.sql`.
+4. `cp ~/Work/stand/bin/im.before-6 ~/Work/stand/bin/im`.
+5. Запустить `run-im-binary.sh ~/Work/stand/bin/im`.
+6. `rm -f ~/Work/stand/im-machine-patch.json`.
+
+`Down` миграций 026–024 вернёт схему, но не данные планировщика: нарушения, записи `escalation_ceiling` и строки журнала у 31 строки. Их вернёт только дамп.
+
 ## Откат сборки
 
 Старая сборка на базе с новыми миграциями не стартует. Откат делается так:
