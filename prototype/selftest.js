@@ -968,6 +968,24 @@
       }
     });
 
+    await step("Правила инцидента нет в наборе — ruleGuid и ruleName null, как у сервера (контракт IncidentCard.ruleGuid)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const rule = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
+      const card = (number) => stand.get(`/operator/incidents/${window.IM_FIXTURE.incidents.find((i) => i.number === number).guid}`);
+      try {
+        await standReset({ fixture: "demo", fixturePatch: { rules: window.IM_FIXTURE.rules.filter((r) => r.guid !== rule(7)) } });
+        const gone = await card("INC-1850");
+        expect(gone.ruleGuid === null && gone.ruleName === null, `INC-1850 без правила: ${gone.ruleGuid}, ${gone.ruleName}`);
+        const kept = await card("INC-1847");
+        expect(kept.ruleGuid === rule(1) && kept.ruleName, `INC-1847 с правилом: ${kept.ruleGuid}, ${kept.ruleName}`);
+        return "удалённое правило — null, остальные на месте";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Тревога в очереди и карточке: номер тревоги, «событие: ещё 1», блок «По этому событию» (§7, ARCH-15)", async () => {
       // Тревога INC-1847 набора: пожар INC-1847 и сосед — медпункт INC-1853
       const fire = guidOf("INC-1847");

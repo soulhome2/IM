@@ -417,7 +417,8 @@
         // Событие, номер его тревоги и правило-победитель (§14.5). Инцидент набора без события — сам себе событие
         eventGuid: inc.eventGuid || uuid("e", ++serial.event),
         alarmNumber: inc.alarmNumber || inc.number,
-        ruleGuid: inc.ruleGuid || null,
+        // Правила уже нет в наборе — null, как у сервера при удалённом правиле (контракт IncidentCard.ruleGuid)
+        ruleGuid: inc.ruleGuid && RULES.some((r) => r.guid === inc.ruleGuid) ? inc.ruleGuid : null,
         typeId: inc.eventType.id,
         typeGuid: inc.eventType.guid,
         type: inc.eventType.name,
