@@ -49,6 +49,11 @@ def source_copy(rel):
     return rel.startswith(SCENARIO_MACHINE + os.sep) and os.path.basename(rel) not in SCENARIO_OWN
 
 
+def skipped(rel):
+    """Собранные копии и локальный журнал промптов (на общей папке VMware имя бывает в любом регистре)."""
+    return rel in SKIP_FILES or rel.lower() == "user-prompts.md" or source_copy(rel)
+
+
 def markdown_files():
     for base, dirs, files in os.walk(ROOT):
         walk_dirs(base, dirs)
@@ -67,7 +72,7 @@ def section_refs():
         for name in sorted(files):
             path = os.path.join(base, name)
             rel = os.path.relpath(path, ROOT)
-            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or rel in SKIP_FILES or rel.lower() == "user-prompts.md" or source_copy(rel):
+            if not name.endswith((".md", ".json", ".js", ".py", ".html")) or skipped(rel):
                 continue
             with open(path, encoding="utf-8") as f:
                 text = f.read()
@@ -123,7 +128,8 @@ def skill_problems():
 def main():
     broken = []
     for path in sorted(markdown_files()):
-        if source_copy(os.path.relpath(path, ROOT)):
+        rel = os.path.relpath(path, ROOT)
+        if source_copy(rel) or rel.lower() == "user-prompts.md":
             continue
         with open(path, encoding="utf-8") as f:
             text = CODE.sub("", f.read())
