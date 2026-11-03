@@ -455,6 +455,27 @@ location /im/operator/ {
 
 **Что удалить по окончании:** `check-operator-server.mjs` с копией `.before-9`, `check-operator-guide.mjs`, снимки `shots/op/server-*.png` и `shots/op/guide-*.png`, дампы `imdb-before-s9t2*.sql`.
 
+## Шаг: миграция 040 и передача двумя операторами (план 62, задача 8)
+
+Прогон 2026-11-03. Сервер МИ собран из `6514b7d` и запускается через `~/Work/stand/run-im-binary.sh ~/Work/stand/bin/im` без `IM_MACHINE_PATCH`. Прежний бинарник — `~/Work/stand/bin/im.before-62`.
+
+1. **Миграция 040.** Сначала копия базы: `~/Work/stand/backup/imdb-before-p62t8.sql` (711 460 байт), проверка `test -s`. Затем остановка старого процесса (порт 5000) и запуск новой сборки, сервер применяет миграцию сам. В `im_db_migrations` последняя запись — `040_operator_identity.sql`. У `operator_sessions` появились колонки `identity_ms` и `seen_ms`. В журнале ошибок `NewStore` нет.
+2. **Откат миграции 040.** Остановить сервер. Вернуть `bin/im.before-62` на место `bin/im`. Затем одно из двух:
+   - снять колонки и запись миграции (только база `imdb`):
+     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im imdb -c 'ALTER TABLE operator_sessions DROP COLUMN IF EXISTS seen_ms, DROP COLUMN IF EXISTS identity_ms'"`,
+     `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U im imdb -c \"DELETE FROM im_db_migrations WHERE id = '040_operator_identity.sql'\""`;
+   - или залить дамп `imdb-before-p62t8.sql` по разделу «Откат сборки» ниже. Всё, что записано после дампа, теряется.
+
+   Запустить старую сборку.
+3. **Новый скрипт** `~/Work/stand/check-operator-transfer.sh` (вне git). Что делает: вход обоих, один инцидент от `agent-emulator replay --limit 1`, первый берёт его (claim), второй принимает передачу (transfer, затем accept). После каждого шага — `GET` карточки. Адресатов передачи первый смотрит до входа второго. `trap` на `EXIT` закрывает созданный инцидент без обработки и отдельной строкой проверяет `closed`. `IM_STAND_FAIL_AFTER=claim` — выход сразу после claim. Нет файла второго — `SKIP` и код 2.
+4. **Итоги.** После перезапуска сервера второй оператор ещё не входил, а первый уже видел его в `GET /operator/transfer-targets?incidentGuid=…`. Адресаты теперь берутся из `operator_sessions` (задача 6). В `check-operator-filter.sh` строка `SKIP` о пустом списке адресатов заменена на `check` (FAIL). Результаты прогонов:
+   - `check-operator-transfer.sh` — OK 15, FAIL 0, SKIP 0, код 0;
+   - с `IM_STAND_FAIL_AFTER=claim` — выход после claim, уборка `closed`, код 0;
+   - `check-operator-filter.sh` — 57/0/0;
+   - `check-operator-api.sh` — 19/0/0;
+   - `check-operator-transitions.sh` — 33/0/0;
+   - `check-operator-scheduler.sh` — 5 OK, 1 FAIL: эскалации нет. Скрипту нужен сервер с патчем машины (`im-machine-patch.json`), а сервер запущен без патча. Инцидент этого прогона INC-0145 закрыт через API руками.
+
 ## Откат сборки
 
 Старая сборка на базе с новыми миграциями не стартует. Откат делается так:
