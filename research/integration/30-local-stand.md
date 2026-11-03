@@ -399,6 +399,24 @@ location /im/operator/ {
 
 `Down` миграций 026–024 вернёт схему, но не данные планировщика: нарушения, записи `escalation_ceiling` и строки журнала у 31 строки. Их вернёт только дамп.
 
+## Шаг 12: справочники, этап 7
+
+Прогон 2026-11-03, задача 24 плана [61](61-plan-stage7.md). Сервер МИ собран из ветки `feature/im_operator_s7` (`daf3317`, в ней весь этап 6 до `9a17562`) обычной сборкой, без тега `imtest`. Запуск: `IM_TEST_SUPPORT= IM_MACHINE_PATCH= run-im-binary.sh ~/Work/stand/bin/im`. Прежний бинарник (сборка шага 11) — `~/Work/stand/bin/im.before-7`, sha256 `af1257c6…7237`. Перед первым стартом снят дамп `~/Work/stand/backup/imdb-before-030.sql`, 402 304 байт, сервер при этом был остановлен.
+
+- `readlink /proc/<pid>/exe` — `bin/im`. `IM_MACHINE_PATCH` в окружении процесса нет.
+- В `im_db_migrations` 27 записей: добавились `030_duty_groups`, `031_help_and_camera_links`, `032_priority_labels`. В логе, как и раньше, только `all migrations applied without error`.
+- `check-operator-api.sh` — ошибок 0. В обычной сборке `POST /test/reset` теперь отвечает `404 NOT_FOUND` (решение 186), а не `501`. Ожидание в скрипте поправлено, прежний скрипт — `check-operator-api.sh.before-7`.
+- `ui-check/check-queue-real.mjs raw` — FAIL 0. Справочники очереди (`priorities`, `device-types`, `event-types`, `scenarios`, `help-links`, `source-groups`, `transfer-targets`) — `200`.
+
+**Откат** — командами раздела «Откат сборки», по порядку:
+1. Остановить сервер (по pid с порта 5000).
+2. `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U postgres postgres -c 'DROP DATABASE imdb'"`, затем `sg docker -c "docker exec \$(docker ps -qf name=ac_db) psql -U postgres postgres -c 'CREATE DATABASE imdb OWNER im'"`.
+3. `sg docker -c "docker exec -i \$(docker ps -qf name=ac_db) psql -U im imdb" < ~/Work/stand/backup/imdb-before-030.sql`.
+4. `cp ~/Work/stand/bin/im.before-7 ~/Work/stand/bin/im`, `cp ~/Work/stand/check-operator-api.sh.before-7 ~/Work/stand/check-operator-api.sh`.
+5. `IM_TEST_SUPPORT= IM_MACHINE_PATCH= run-im-binary.sh ~/Work/stand/bin/im`.
+
+Сборка шага 11 на базе с 030–032 не стартует (решение 192), поэтому без шагов 2–3 откат не работает.
+
 ## Откат сборки
 
 Старая сборка на базе с новыми миграциями не стартует. Откат делается так:
