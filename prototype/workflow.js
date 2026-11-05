@@ -4074,6 +4074,15 @@ window.IM_WORKFLOW = {
     "workflow.error.catalog_not_found": {
       "vars": []
     },
+    "workflow.error.schema_not_found": {
+      "vars": []
+    },
+    "workflow.error.schema_published": {
+      "vars": []
+    },
+    "workflow.error.schema_invalid": {
+      "vars": []
+    },
     "workflow.error.no_route": {
       "vars": [
         "method",
