@@ -908,6 +908,7 @@ def check_doc_numbers(w, o, err):
     skipped = [op for op in skipped if not_covered.search(op)]
     skipped_schemas = sum(1 for op in skipped if "/workflow/schemas" in op)
     skipped_priorities = sum(1 for op in skipped if "/admin/priorities" in op)
+    skipped_help_links = sum(1 for op in skipped if "/admin/help-links" in op)
 
     def text(*parts):
         with open(os.path.join(ROOT, *parts), encoding="utf-8") as f:
@@ -930,7 +931,7 @@ def check_doc_numbers(w, o, err):
         ("BACKEND.md", r"(\d+) операц\w*, плюс (\d+) служебн", [("операций", len(ops) - test_ops), ("служебных", test_ops)]),
         ("BACKEND.md", r"(\d+) состояни\w*, (\d+) переход\w*, (\d+) услови\w*, (\d+) эффект", [("состояний", len(w["states"])), ("переходов", len(w["transitions"])), ("условий", len(w["registries"]["guards"])), ("эффектов", len(w["registries"]["effects"]))]),
         ("BACKEND.md", r"нужны (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
-        ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\) и правку справочника приоритетов \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities)]),
+        ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\), правку справочника приоритетов \(`[^`]+`, (\d+)\) и правку справочных ссылок \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities), ("правки справочных ссылок", skipped_help_links)]),
         ("корневой README", r"сейчас версия (\d+)", [("версия правил", version)]),
         ("корневой README", r"Приведена к правилам v(\d+)", [("версия правил", version)]),
         ("машина ($comment)", r"версия v(\d+)", [("версия правил", version)]),
