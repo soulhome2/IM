@@ -3994,6 +3994,15 @@ window.IM_WORKFLOW = {
     "workflow.error.schema_invalid": {
       "vars": []
     },
+    "workflow.error.schema_replaced": {
+      "vars": []
+    },
+    "workflow.error.schema_changed": {
+      "vars": []
+    },
+    "workflow.error.body_too_large": {
+      "vars": []
+    },
     "workflow.error.no_route": {
       "vars": [
         "method",

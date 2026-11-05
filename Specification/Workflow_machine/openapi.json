@@ -192,10 +192,22 @@
                   "$ref": "#/components/schemas/WorkflowDefinition"
                 }
               }
+            },
+            "headers": {
+              "ETag": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Версия черновика для `If-Match` при изменении: строка в кавычках, меняется с каждым сохранением. Есть у любой версии."
+              }
             }
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
@@ -223,6 +235,15 @@
                 "schema": {
                   "$ref": "#/components/schemas/WorkflowDefinition"
                 }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Версия черновика для `If-Match` при изменении: строка в кавычках, меняется с каждым сохранением. Есть у любой версии."
               }
             }
           },
@@ -260,13 +281,22 @@
                   "$ref": "#/components/schemas/WorkflowDefinition"
                 }
               }
+            },
+            "headers": {
+              "ETag": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Версия черновика для `If-Match` при изменении: строка в кавычках, меняется с каждым сохранением. Есть у любой версии."
+              }
             }
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/SchemaNotFound"
           },
           "409": {
             "description": "Схема опубликована и не может быть изменена",
@@ -278,10 +308,34 @@
               }
             }
           },
+          "412": {
+            "description": "`If-Match` не совпал с `ETag` черновика: `412 VERSION_CONFLICT`, ключ `workflow.error.schema_changed`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "description": "`ETag` черновика, который видел клиент. Не совпал — `412 VERSION_CONFLICT` (ключ `workflow.error.schema_changed`), ничего не записано: черновик уже изменил кто-то другой. Нет заголовка — сохраняется без проверки.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/operator/workflow/schemas/{schemaGuid}/validate": {
@@ -315,7 +369,10 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/SchemaNotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           }
         }
       }
@@ -358,7 +415,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/SchemaNotFound"
           },
           "409": {
             "description": "Версия не черновик: опубликована или уже в архиве. Код `VERSION_CONFLICT`",
@@ -369,6 +426,9 @@
                 }
               }
             }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
@@ -2609,6 +2669,26 @@
             }
           }
         }
+      },
+      "PayloadTooLarge": {
+        "description": "Тело запроса больше 1 МиБ: `413 LIMIT_EXCEEDED`, ключ `workflow.error.body_too_large`. Ничего не записано.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "SchemaNotFound": {
+        "description": "Версии нет или она другой организации — `404 NOT_FOUND`, ключ `workflow.error.schema_not_found`. Черновик заменён новым (в организации один черновик, создание нового удаляет старый) — тоже `404 NOT_FOUND`, но ключ `workflow.error.schema_replaced`, а в `details.replacedBy` — guid черновика, который его заменил: клиенту надо открыть настройки заново.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
       }
     },
     "schemas": {
@@ -3018,6 +3098,37 @@
           "nameKey": {
             "type": "string",
             "description": "§14.9. Ключ названия схемы в каталоге строк (`workflow.schema.name`)."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning"
+                  ]
+                },
+                "rule": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "stateId": {
+                  "type": "string"
+                },
+                "transitionId": {
+                  "type": "string"
+                },
+                "permissionSetId": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Предупреждения версии, как у проверки (`validate`) с `severity: warning`: например `settings.dropped` — общая машина больше не содержит элемент, изменённый в настройках, и это изменение не применяется. Приходит в ответах с целой схемой (получить, создать, изменить, опубликовать); в списке версий не приходит."
           }
         }
       },
