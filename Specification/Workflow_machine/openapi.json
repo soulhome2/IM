@@ -2841,6 +2841,7 @@
               "NOT_FOUND",
               "PRIORITY_EXISTS",
               "PRIORITY_IN_USE",
+              "DUTY_GROUP_IN_USE",
               "UNAUTHENTICATED",
               "BAD_REQUEST",
               "INTERNAL_ERROR",
