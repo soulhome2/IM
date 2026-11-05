@@ -2658,7 +2658,8 @@
               "SCHEMA_VALIDATION_FAILED",
               "NOT_FOUND",
               "PRIORITY_EXISTS",
-              "PRIORITY_IN_USE"
+              "PRIORITY_IN_USE",
+              "DUTY_GROUP_IN_USE"
             ]
           },
           "message": {
