@@ -1917,6 +1917,135 @@
         }
       }
     },
+    "/operator/admin/help-links": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "createHelpLink",
+        "summary": "Добавить справочную ссылку",
+        "description": "§7. Новая ссылка встаёт последней в меню; `id` выдаёт сервер. Нарушение полей — `422 FORM_FIELD_INVALID` с `details.field`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelpLinkChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Добавлена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelpLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/operator/admin/help-links/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "updateHelpLink",
+        "summary": "Изменить справочную ссылку",
+        "description": "§7. Название, вид, адрес, площадка, значок — меняются сразу. Место в меню не меняется. Нарушение полей — `422 FORM_FIELD_INVALID` с `details.field`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Идентификатор ссылки"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelpLinkChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Изменена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelpLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "deleteHelpLink",
+        "summary": "Удалить справочную ссылку",
+        "description": "§7. Ссылка пропадает из меню у всех. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Идентификатор ссылки"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалена"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/operator/incidents/merge": {
       "post": {
         "tags": [
@@ -6251,6 +6380,48 @@
           },
           "color": {
             "$ref": "#/components/schemas/PriorityColor"
+          }
+        }
+      },
+      "HelpLinkChange": {
+        "type": "object",
+        "required": [
+          "title",
+          "kind",
+          "url"
+        ],
+        "description": "§7. Тело создания и правки справочной ссылки. Нарушение — `422 FORM_FIELD_INVALID` с `details.field`.",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Название — непустая строка, не переводится (§14.9)"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "web"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Адрес файла или страницы, непустая строка; у `web` — с `http://` или `https://`"
+          },
+          "site": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Площадка — как поле `site` инцидента; null — общая ссылка"
+          },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Значок в меню — имя из Material Symbols"
           }
         }
       },

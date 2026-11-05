@@ -242,7 +242,7 @@
 
   // Операции контракта, которые тесты не обязаны вызывать: редактор схемы — вне прототипа
   // Редактор схемы и правка справочника приоритетов — вне прототипа (§14.8, §2.5)
-  const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/priorities/;
+  const NOT_COVERED = /^(GET|POST|PUT) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/(priorities|help-links)/;
 
   // Отчёт: строки в <pre id="apitest-log"> и в консоль, итог — атрибут data-apitest.
   // С ?report=/адрес — ещё и POST туда: так его забирает tools/check_loopback.py
