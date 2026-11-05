@@ -2941,10 +2941,31 @@
             "format": "date-time"
           },
           "publishedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Кто опубликовал версию: человек с именем (`id`, `name`, `kind: operator`). Раньше было строкой с идентификатором — теперь объект. null — не опубликована."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда версия создана (черновик начат)."
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/ActorRef",
+            "description": "Кто создал версию: человек с именем (`id`, `name`, `kind: operator`). Неизвестный человек — имя совпадает с идентификатором."
+          },
+          "comment": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Комментарий при публикации. null — не задан."
           },
           "appliesTo": {
             "type": "object",
