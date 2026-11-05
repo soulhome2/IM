@@ -498,3 +498,11 @@ location /im/operator/ {
 ## Что дальше
 
 Шаг 2 — сервер МИ и конфигуратор на стенде: план — [15, п. 6](15-deploy-configurator.md); сервер регистрирует каталог прав (`PUT /ac/v1/global-permissions/catalog` есть на ветке прав), после чего роли `incident_manager.*` назначаются группе. Для разработки — nginx стека проксирует `/im/` на Vite на машине, `/api/v1/im-backend/` — на сервер МИ из IDE.
+
+## После перезагрузки машины (2026-11-05)
+
+Стенд сам не поднимается целиком:
+
+1. `ac_db` и `ac_monitoring-db` при выключении завершаются штатно, а политика перезапуска у них «при сбое» — они остаются `0/1`. Поднять: `sg docker -c 'docker service update --force ac_db'`, то же для `ac_monitoring-db`. Данные в томах сохраняются.
+2. У контейнера `ac_arpserver` пропадает имя `arpserver` в сети `ac_ac` (в `docker inspect` пустые `Aliases`), из-за этого `ac_nginx` и `ac_haproxy` падают по кругу: `host not found in upstream "arpserver"`. Лечится тем же `docker service update --force ac_arpserver`; через полминуты `https://axxonnet.test/` отвечает 200.
+3. Сервер МИ и Vite: `nohup ~/Work/stand/run-im-server.sh > ~/Work/stand/im-server.log 2>&1 &` и `nohup ~/Work/stand/run-vite.sh > ~/Work/stand/vite.log 2>&1 &`. Проверка — `check-operator-api.sh` с `CA` и `CLOUD`, итого ошибок 0.
