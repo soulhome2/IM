@@ -735,6 +735,7 @@ def check_doc_numbers(w, o, err):
     skipped_schemas = sum(1 for op in skipped if "/workflow/schemas" in op)
     skipped_priorities = sum(1 for op in skipped if "/admin/priorities" in op)
     skipped_help_links = sum(1 for op in skipped if "/admin/help-links" in op)
+    skipped_duty_groups = sum(1 for op in skipped if "/admin/duty-groups" in op)
 
     def text(*parts):
         with open(os.path.join(ROOT, *parts), encoding="utf-8") as f:
@@ -757,7 +758,7 @@ def check_doc_numbers(w, o, err):
         ("BACKEND.md", r"(\d+) операц\w*, плюс (\d+) служебн", [("операций", len(ops) - test_ops), ("служебных", test_ops)]),
         ("BACKEND.md", r"(\d+) состояни\w*, (\d+) переход\w*, (\d+) услови\w*, (\d+) эффект", [("состояний", len(w["states"])), ("переходов", len(w["transitions"])), ("условий", len(w["registries"]["guards"])), ("эффектов", len(w["registries"]["effects"]))]),
         ("BACKEND.md", r"нужны (\w+) служебные операции", [("служебных операций", test_ops)]),
-        ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\), правку справочника приоритетов \(`[^`]+`, (\d+)\) и правку справочных ссылок \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities), ("правки справочных ссылок", skipped_help_links)]),
+        ("BACKEND.md", r"Тесты не проверяют (\d+) операц\w*: редактор схемы \(`[^`]+`, (\d+)\), правку справочника приоритетов \(`[^`]+`, (\d+)\), правку справочных ссылок \(`[^`]+`, (\d+)\) и правку дежурных групп \(`[^`]+`, (\d+)\)", [("непроверяемых операций", len(skipped)), ("редактора схемы", skipped_schemas), ("правки приоритетов", skipped_priorities), ("правки справочных ссылок", skipped_help_links), ("правки дежурных групп", skipped_duty_groups)]),
         ("корневой README", r"сейчас версия (\d+)", [("версия правил", version)]),
         ("корневой README", r"Приведена к правилам v(\d+)", [("версия правил", version)]),
         ("машина ($comment)", r"версия v(\d+)", [("версия правил", version)]),
