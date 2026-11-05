@@ -1742,7 +1742,7 @@
         "/operator/admin/duty-groups",
         () => {
           if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
-          return { status: 200, body: GROUPS.map((g) => ({ id: g.id, name: g.name, roles: (g.roles || []).slice(), members: (g.members || []).slice(), memberIds: membersOf(g) })) };
+          return { status: 200, body: GROUPS.map((g) => ({ id: g.id, name: g.name, roles: (g.roles || []).slice(), userGroupIds: [], members: (g.members || []).slice(), memberIds: membersOf(g) })) };
         },
       ],
       [

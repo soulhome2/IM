@@ -1557,6 +1557,185 @@
             "$ref": "#/components/responses/Forbidden"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "createDutyGroup",
+        "summary": "Добавить дежурную группу",
+        "description": "§8.1. Новая группа встаёт последней в порядке приоритета; `id` выдаёт сервер: не из одних цифр, не `dispatcher` и не `system`. Нарушение полей — `422 FORM_FIELD_INVALID` с `details.field`; в группе должна быть хотя бы одна роль или один человек, иначе `details.field: \"userGroupIds\"`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DutyGroupChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Добавлена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DutyGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "orderDutyGroups",
+        "summary": "Переставить дежурные группы",
+        "description": "§8.1. Новый порядок приоритета: в `ids` — все группы клиента ровно по разу. Это `PUT` на самом списке: путь `…/order` совпал бы с `…/{id}`. Не все группы, повтор или чужой id — `422 FORM_FIELD_INVALID` с `details.field: \"ids\"`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DutyGroupOrder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Группы в новом порядке",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DutyGroup"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/operator/admin/duty-groups/{id}": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "updateDutyGroup",
+        "summary": "Изменить дежурную группу",
+        "description": "§8.1. Название, роли, отдельные люди — меняются сразу. Место в порядке не меняется. Нарушение полей — `422 FORM_FIELD_INVALID` с `details.field`; в группе должна быть хотя бы одна роль или один человек, иначе `details.field: \"userGroupIds\"`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Идентификатор дежурной группы"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DutyGroupChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Изменена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DutyGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "deleteDutyGroup",
+        "summary": "Удалить дежурную группу",
+        "description": "§8.1. Группа пропадает из списка, остальные сохраняют порядок. Пока на группу ссылается действующая машина (`escalation.levels[].target`, `alerts.target`) — `409 DUTY_GROUP_IN_USE`. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Встроенный сервер прототипа не выполняет: правка справочника — в экране настроек продукта.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Идентификатор дежурной группы"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалена"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`DUTY_GROUP_IN_USE` — на группу ссылается действующая машина: уровень эскалации или адресат оповещения",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/operator/admin/camera-links": {
@@ -5654,6 +5833,7 @@
           "id",
           "name",
           "roles",
+          "userGroupIds",
           "members",
           "memberIds"
         ],
@@ -5670,6 +5850,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "userGroupIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Идентификаторы групп пользователей облака — те же, что `roles` по именам, в том же порядке"
           },
           "members": {
             "type": "array",
@@ -6728,6 +6915,54 @@
           },
           "color": {
             "$ref": "#/components/schemas/PriorityColor"
+          }
+        }
+      },
+      "DutyGroupChange": {
+        "type": "object",
+        "required": [
+          "name",
+          "userGroupIds",
+          "memberIds"
+        ],
+        "description": "§8.1. Тело создания и правки дежурной группы. Нарушение — `422 FORM_FIELD_INVALID` с `details.field`; пустая группа (ни роли, ни человека) — `details.field: \"userGroupIds\"`.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Название — непустая строка, не переводится (§14.9)"
+          },
+          "userGroupIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "integer"
+            },
+            "description": "Группы пользователей облака («роли»), без повторов"
+          },
+          "memberIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "Отдельные люди сверх ролей — id, как `TransferTarget.id`, без повторов"
+          }
+        }
+      },
+      "DutyGroupOrder": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "description": "§8.1. Новый порядок дежурных групп: все id клиента ровно по разу, первая — самая приоритетная.",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
