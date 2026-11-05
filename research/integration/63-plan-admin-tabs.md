@@ -144,7 +144,7 @@
 - `POST /operator/admin/duty-groups` — `createDutyGroup`, тело `DutyGroupChange` → `201 DutyGroup`; `id` выдаёт сервер (не из одних цифр, не `dispatcher`/`system`); новая группа — последней; `422`.
 - `PUT /operator/admin/duty-groups/{id}` — `updateDutyGroup`, тело `DutyGroupChange` → `200 DutyGroup`; место не меняется; `404`, `422`.
 - `DELETE /operator/admin/duty-groups/{id}` — `deleteDutyGroup` → `204`; `404`; `409 DUTY_GROUP_IN_USE` — на группу ссылается действующая машина (`escalation.levels[].target`, `alerts.target`).
-- `PUT /operator/admin/duty-groups/order` — `orderDutyGroups`, тело `{ids: string[]}` — все id групп клиента ровно по разу → `200 DutyGroup[]` в новом порядке; иначе `422` с `details.field: "ids"`.
+- `PUT /operator/admin/duty-groups` — `orderDutyGroups` (на самом списке: путь `…/order` совпал бы с `…/{id}`), тело `{ids: string[]}` — все id групп клиента ровно по разу → `200 DutyGroup[]` в новом порядке; иначе `422` с `details.field: "ids"`.
 - `DutyGroupChange` — `required: [name, userGroupIds, memberIds]`: `name` — непустая строка, не переводится; `userGroupIds` — целые, без повторов; `memberIds` — id людей (как `TransferTarget.id`), без повторов; в группе хотя бы одна роль или один человек, иначе `422` с `details.field: "userGroupIds"`.
 
 - [ ] **Step 1:** правка `openapi.json` (`main`), `build_workflow.py`; `NOT_COVERED` — плюс `^(POST|PUT|DELETE) \/operator\/admin\/duty-groups`. Прототип отдаёт `userGroupIds` в `GET` (встроенный сервер и эталонный набор), если для этого хватает данных набора; если нет — пустой список и строка в отчёте.
