@@ -3124,7 +3124,30 @@
             "nullable": true
           },
           "publishedBy": {
+            "description": "Кто опубликовал версию: человек с именем (`id`, `name`, `kind: operator`). Раньше было строкой с идентификатором — теперь объект. null — не опубликована.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ]
+          },
+          "createdAt": {
             "type": "string",
+            "format": "date-time",
+            "description": "Когда версия создана (черновик начат)."
+          },
+          "createdBy": {
+            "description": "Кто создал версию: человек с именем (`id`, `name`, `kind: operator`). Неизвестный человек — имя совпадает с идентификатором.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "Комментарий при публикации. null — не задан.",
             "nullable": true
           },
           "appliesTo": {
