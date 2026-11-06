@@ -3820,7 +3820,7 @@ window.IM_WORKFLOW = {
         "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"
       ]
     },
-    "operatorMayChange": false
+    "operatorMayChange": true
   },
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",

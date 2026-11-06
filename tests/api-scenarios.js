@@ -2761,7 +2761,8 @@
   const sortedBy = (list, id) => list.slice().sort((a, b) => ORDER[id](a, b) || num(a) - num(b)).map((i) => i.number);
 
   test("Порядок очереди по умолчанию — приоритет, внутри старые выше; свой порядок оператору без разрешения не дан (§7, RULE-62)", async () => {
-    const env = await makeEnv();
+    assert.eq(W.queueSort.operatorMayChange, true, "по умолчанию оператор может менять порядок");
+    const env = await makeEnv({ workflowPatch: { queueSort: { operatorMayChange: false } } });
     const list = await queueOf(env);
     assert.eq(list.map((i) => i.number), sortedBy(list, "priority_then_oldest"), "по умолчанию");
     assert.eq((await queueOf(env, "&sort=oldest_first")).map((i) => i.number), sortedBy(list, "priority_then_oldest"), "sort без разрешения не учитывается");
@@ -4121,11 +4122,11 @@
       await new Promise((r) => setTimeout(r, 300));
       return got.splice(0).filter((m) => m.type === "workflow.schema_published");
     };
-    await makeEnv({ workflowPatch: { queueSort: { operatorMayChange: true } } });
+    await makeEnv({ workflowPatch: { queueSort: { operatorMayChange: false } } });
     const first = await published();
     assert.eq(first.length, 1, "схему подменили — одно событие");
     assert.eq([first[0].incidentGuid, first[0].payload.schemaVersion], [null, W.schema.version], "не об инциденте, версия схемы");
-    assert.eq((await env.api.get("/operator/workflow/active")).queueSort.operatorMayChange, true, "схема — уже новая");
+    assert.eq((await env.api.get("/operator/workflow/active")).queueSort.operatorMayChange, false, "схема — уже новая");
     await makeEnv();
     assert.eq((await published()).length, 1, "вернули исходную — снова событие");
     await makeEnv();

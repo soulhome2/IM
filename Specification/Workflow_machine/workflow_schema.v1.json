@@ -1297,7 +1297,7 @@
       "oldest_first": ["incident.occurredAt"],
       "reaction_deadline": ["timerRuns(incident, 'reaction') ? 0 : 1", "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"]
     },
-    "operatorMayChange": false
+    "operatorMayChange": true
   },
 
   "messages": {

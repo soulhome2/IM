@@ -2566,14 +2566,17 @@
       return why;
     });
 
-    await step("Порядок очереди: список — только если администратор разрешил, выбор сохраняется (§7, BUG-34)", async () => {
+    await step("Порядок очереди: список — по умолчанию есть, администратор может запретить, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");
-      expect(select.hidden, "список порядков виден без разрешения администратора");
-      // Администратор разрешил: стенд подменяет схему, клиент перечитывает её по workflow.schema_published
-      await standReset({ fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: true } } });
-      await wait(300);
+      expect(!select.hidden, "по умолчанию оператор может менять порядок — списка нет");
       try {
+        // Администратор запретил: стенд подменяет схему, клиент перечитывает её по workflow.schema_published
+        await standReset({ fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: false } } });
+        await wait(300);
+        expect(select.hidden, "администратор запретил менять порядок — список остался");
+        await standReset({ fixture: "demo" });
+        await wait(300);
         expect(!select.hidden, "разрешили менять порядок — список не появился: схема не перечитана");
         const options = [...select.options].map((o) => o.value);
         expect(JSON.stringify(options) === JSON.stringify(window.IM_WORKFLOW.queueSort.options), `варианты не из схемы: ${options.join(", ")}`);
@@ -2595,7 +2598,7 @@
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
-        expect(select.hidden, "разрешение сняли — список не скрылся");
+        expect(!select.hidden, "вернули исходную схему — список пропал");
       }
     });
 
