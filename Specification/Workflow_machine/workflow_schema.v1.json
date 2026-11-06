@@ -1300,6 +1300,11 @@
     "operatorMayChange": true
   },
 
+  "retention": {
+    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента, записи действий операторов и потока событий — через столько же дней от своего времени. Открытые инциденты и всё, на что они ссылаются, не удаляются. null — без срока; иначе целое от 1, и не меньше окна переоткрытия limits.reopenWindowMin.",
+    "closedIncidentsDays": 90
+  },
+
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
     "workflow.journal.source": { "vars": ["text"], "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)" },
@@ -1615,7 +1620,7 @@
 
   "adminSettings": {
     "$comment": "RULE-44. Что настраивает администратор (право incident:schema:admin) — вкладки будущей админки. Настройка — значение, которое подстраивают под площадку, не меняя логику переходов; переходы, состояния, формы и бейджи — модель, а не настройки. path — где значение в этой машине (у списка — по id элемента); source — запрос, которым читаются данные МИ, которых в схеме нет. Из раздела собирается SETTINGS.md (tools/build_workflow.py), по нему рисуется экран настроек прототипа; check_machine.py проверяет, что пути существуют и что каждый ключ разделов-настроек либо в перечне, либо в notSettings с причиной.",
-    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "limits", "session", "queueSort"],
+    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "limits", "session", "queueSort", "retention"],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
       "priority": "workflow.settings.word.priority",
@@ -1693,6 +1698,14 @@
         "items": [
           { "path": "queueSort.default", "labelKey": "workflow.settings.queueSort.default", "whatKey": "workflow.settings.queueSort.default.what", "values": { "priority_then_oldest": "workflow.settings.queueSort.default.value.priority_then_oldest", "priority_then_newest": "workflow.settings.queueSort.default.value.priority_then_newest", "oldest_first": "workflow.settings.queueSort.default.value.oldest_first", "reaction_deadline": "workflow.settings.queueSort.default.value.reaction_deadline" } },
           { "path": "queueSort.operatorMayChange", "labelKey": "workflow.settings.queueSort.operatorMayChange", "whatKey": "workflow.settings.queueSort.operatorMayChange.what" }
+        ]
+      },
+      {
+        "id": "retention",
+        "labelKey": "workflow.settings.tab.retention",
+        "rules": "§14.11",
+        "items": [
+          { "path": "retention.closedIncidentsDays", "labelKey": "workflow.settings.retention.closedIncidentsDays", "whatKey": "workflow.settings.retention.closedIncidentsDays.what" }
         ]
       },
       {

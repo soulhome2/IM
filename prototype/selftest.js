@@ -1790,6 +1790,11 @@
       // Срок «Нет связи» — из порогов молчания, а не «без срока» (deadlineFromIdle, BUG-119)
       await click($("adminTabs").querySelector('[data-admin-tab="reasons"]'));
       expect(/Нет связи с оператором \(порог «в очередь» минус «отложить»\)/.test($("adminTable").textContent), "срок «Нет связи» на экране — не из порогов молчания");
+      // Срок хранения закрытых — своя вкладка «Хранение», значение из машины (§14.11)
+      await click($("adminTabs").querySelector('[data-admin-tab="retention"]'));
+      const kept = [...$("adminTable").querySelectorAll("tr")].find((r) => /Хранить закрытые инциденты/.test(r.textContent));
+      const days = window.IM_WORKFLOW.retention.closedIncidentsDays;
+      expect(kept && kept.cells[1].textContent.includes(String(days)), `срок хранения не показан или не ${days}: «${kept && kept.cells[1].textContent.trim()}»`);
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
       expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
       // Связи камер многие-ко-многим (§19.1, RULE-70): название, устройства, камеры — как в наборе

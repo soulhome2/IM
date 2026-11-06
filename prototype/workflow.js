@@ -3822,6 +3822,10 @@ window.IM_WORKFLOW = {
     },
     "operatorMayChange": true
   },
+  "retention": {
+    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента, записи действий операторов и потока событий — через столько же дней от своего времени. Открытые инциденты и всё, на что они ссылаются, не удаляются. null — без срока; иначе целое от 1, и не меньше окна переоткрытия limits.reopenWindowMin.",
+    "closedIncidentsDays": 90
+  },
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
     "workflow.journal.source": {
@@ -6543,7 +6547,8 @@ window.IM_WORKFLOW = {
       "alerts",
       "limits",
       "session",
-      "queueSort"
+      "queueSort",
+      "retention"
     ],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
@@ -6738,6 +6743,18 @@ window.IM_WORKFLOW = {
             "path": "queueSort.operatorMayChange",
             "labelKey": "workflow.settings.queueSort.operatorMayChange",
             "whatKey": "workflow.settings.queueSort.operatorMayChange.what"
+          }
+        ]
+      },
+      {
+        "id": "retention",
+        "labelKey": "workflow.settings.tab.retention",
+        "rules": "§14.11",
+        "items": [
+          {
+            "path": "retention.closedIncidentsDays",
+            "labelKey": "workflow.settings.retention.closedIncidentsDays",
+            "whatKey": "workflow.settings.retention.closedIncidentsDays.what"
           }
         ]
       },

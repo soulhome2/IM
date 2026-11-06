@@ -3148,6 +3148,18 @@
             "description": "§7, RULE-62. Порядок очереди: default — по умолчанию, options — из чего можно выбрать, operatorMayChange — может ли оператор выбрать другой, keys — что значит каждый порядок: ключи сортировки выражениями CEL над incident (меньше — выше; CEL.md, «Правила интерфейса»).",
             "additionalProperties": true
           },
+          "retention": {
+            "type": "object",
+            "description": "§14.11. Срок хранения: closedIncidentsDays — сколько дней хранить закрытый инцидент после закрытия вместе с его журналом и событием; событие без инцидента, записи действий операторов и потока событий — столько же дней от своего времени. null — хранить без срока.",
+            "properties": {
+              "closedIncidentsDays": {
+                "type": "integer",
+                "minimum": 1,
+                "nullable": true
+              }
+            },
+            "additionalProperties": true
+          },
           "registries": {
             "type": "object",
             "description": "§14.8. Реестры guard'ов и эффектов — из них редактор схемы собирает выпадающие списки.",
