@@ -336,6 +336,56 @@
             }
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "workflow-schema"
+        ],
+        "operationId": "deleteWorkflowSchemaDraft",
+        "summary": "Отбросить черновик схемы",
+        "description": "Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`. Удаляет черновик целиком; действующая схема и опубликованные версии не меняются. Опубликованная версия не удаляется — `409`. Отброшенный черновик больше не находится — `404`. Конфигуратор отбрасывает черновик, когда администратор нажал «Изменить», ничего не сохранил и нажал «Отмена», и по кнопке «Отбросить черновик».",
+        "responses": {
+          "204": {
+            "description": "Черновик отброшен"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/SchemaNotFound"
+          },
+          "409": {
+            "description": "Это опубликованная версия, а не черновик: не удаляется",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "`If-Match` не совпал с `ETag` черновика: `412 VERSION_CONFLICT`, ключ `workflow.error.schema_changed`. Черновик успел изменить кто-то другой, он не удалён.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "description": "`ETag` черновика, который видел клиент. Не совпал — `412 VERSION_CONFLICT`, ничего не удалено. Нет заголовка — удаляется без проверки.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/operator/workflow/schemas/{schemaGuid}/validate": {
