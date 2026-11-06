@@ -406,7 +406,7 @@
   "workflow.settings.queueSort.operatorMayChange.what": "Choose a different order from the list",
   "workflow.settings.tab.retention": "Retention",
   "workflow.settings.retention.closedIncidentsDays": "Keep closed incidents, days",
-  "workflow.settings.retention.closedIncidentsDays.what": "How many days after closing to delete an incident with its journal and event. An event without an incident and operator action records are kept as long. Empty — keep with no limit",
+  "workflow.settings.retention.closedIncidentsDays.what": "How many days after closing to delete an incident with its journal and event. An event without an incident is kept as long",
   "workflow.settings.tab.priorities": "Priorities",
   "workflow.settings.tab.priorities.what": "Urgency levels: a number from 0 to 100 (higher is more urgent), name, description and queue stripe color. An IM reference shared by all schemas",
   "workflow.settings.tab.access_groups": "Access groups",
