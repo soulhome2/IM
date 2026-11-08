@@ -19,12 +19,15 @@
           body: body === undefined ? undefined : JSON.stringify(body),
           credentials: "include",
         }).then(async (res) => {
-          const text = await res.text();
+          // Байты — без снятия BOM: res.text() его убирает, а выгрузка аудита начинается с BOM (§12.4)
+          const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer());
           // Имена заголовков — строчными, как их отдаёт fetch. ETag виден странице, только если
           // бэкенд перечислил его в Access-Control-Expose-Headers
           const got = {};
           res.headers.forEach((value, name) => (got[name] = value));
-          return { status: res.status, body: text ? JSON.parse(text) : null, headers: got };
+          // Выгрузка аудита приходит текстом CSV, остальное — JSON
+          const json = !/^text\/csv/.test(got["content-type"] || "");
+          return { status: res.status, body: text ? (json ? JSON.parse(text) : text) : null, headers: got };
         });
       // onReconnect — поток переподключился после обрыва: пока он стоял, могло пропасть и то, что сервер не дошлёт
       // по Last-Event-ID, — клиент перечитывает очередь и карточку (BUG-102)

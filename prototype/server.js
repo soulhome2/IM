@@ -104,6 +104,194 @@
     const PAGE_SIZE = 8;
     const MERGED_IN_SHOWN = 5;
 
+    /* ===== Аудит (§12.4): журнал действий в памяти, только дополняется ===== */
+
+    // Журнал настроек прототипа пуст: редактора настроек в прототипе нет (§17)
+    let auditActions = [];
+    const settingsAudit = [];
+    const DAY_MS = 86400000;
+    const EXPORT_MAX_DAYS = 92;
+    const EXPORT_MAX_ROWS = 1000000;
+    // Вид записи по переходу машины: передача, перенаправление, объединение, эскалация; прочие переходы
+    // системы и диспетчера — auto, человека — transition
+    const AUDIT_KIND_OF = Object.assign(
+      {},
+      ...[
+        [["transfer", "takeover", "release"], "handover"],
+        [["reject", "addressee_signed_out_to_group", "addressee_signed_out_to_queue", "addressee_lost_access", "addressee_cannot_accept"], "redirect"],
+        [["merge", "detach", "close_linked"], "merge"],
+        [["auto_escalate", "resolution_escalate", "escalation_ceiling", "resolution_ceiling"], "escalation"],
+      ].map(([ids, kind]) => Object.fromEntries(ids.map((id) => [id, kind])))
+    );
+    function audit(actorId, kind, fields) {
+      const ref = actorRef(actorId);
+      const person = ref && (ref.kind === "operator" || ref.kind === "duty_group");
+      const entry = Object.assign(
+        {
+          id: String(auditActions.length + 1).padStart(8, "0"),
+          at: iso(now()),
+          personId: person ? ref.id : null,
+          personName: ref ? String(ref.name) : render("workflow.label.role.system"),
+          actorKind: person ? "person" : "system",
+          kind,
+        },
+        fields
+      );
+      Object.keys(entry).forEach((k) => entry[k] === undefined && delete entry[k]);
+      auditActions.push(entry);
+      return entry;
+    }
+    function auditTransition(ev, transitionId, actorId, facts) {
+      const f = facts || { from: {}, to: {} };
+      const ref = actorRef(actorId);
+      const byPerson = ref && ref.kind === "operator";
+      const kind = AUDIT_KIND_OF[transitionId] || (byPerson ? "transition" : "auto");
+      const target = actorRef(engine.addressee(ev));
+      const related = ev.linkedTo || (f.from && f.from.linkedTo);
+      audit(actorId, kind, {
+        incidentGuid: ev.id,
+        incidentNumber: ev.number,
+        transition: transitionId,
+        fromState: f.from.state || undefined,
+        toState: ev.state,
+        reasonId: ev.holdReason || undefined,
+        targetPersonId: kind === "handover" || kind === "redirect" ? (target && target.kind === "operator" ? target.id : undefined) : undefined,
+        targetGroupId: kind === "handover" || kind === "redirect" ? (target && target.kind === "duty_group" ? target.id : undefined) : undefined,
+        relatedIncidentGuid: kind === "merge" && related && related !== ev.id ? related : undefined,
+        relatedIncidentNumber: kind === "merge" && related && related !== ev.id ? (byId(related) || {}).number : undefined,
+      });
+    }
+    // Ответ сценария: шаг и выбранный вариант; пропуск — skipped; свободный текст — только признак и длина (§12.4)
+    function auditAnswer(ev, actorId, step, body) {
+      const value = body.value;
+      const answer = { skipped: Boolean(body.skip), hasText: false, textLength: 0 };
+      // Вариант — только у шагов выбора; у любого другого шага строка — признак и длина, без самого значения
+      const type = step && step.type;
+      if (answer.skipped);
+      else if (type === "RadioButton" && typeof value === "string") answer.option = value;
+      else if (type === "Checkbox" && Array.isArray(value)) answer.option = value.join(",");
+      else if (type === "Select" && value && typeof value === "object") answer.option = Object.values(value).flat().join(",");
+      else if (typeof value === "string") Object.assign(answer, { hasText: value.length > 0, textLength: value.length });
+      audit(actorId, "scenario_answer", { incidentGuid: ev.id, incidentNumber: ev.number, scenarioStep: body.stepId, answer });
+    }
+    // Параметры запроса аудита: фильтры обоих журналов, период, страница
+    function auditQuery(q) {
+      return { person: q.person, incident: q.incident, kind: q.kind, objectType: q.objectType, objectId: q.objectId, objectName: q.objectName, actor: q.actor, from: q.from, to: q.to, tz: q.tz, cursor: q.cursor, limit: q.limit };
+    }
+    // Инцидент фильтра: guid или номер, как его видит оператор (INC-0100 или 100); не то и не другое — null (400)
+    const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    function auditIncident(value) {
+      if (value == null) return undefined;
+      if (GUID_RE.test(value)) return { guid: value.toLowerCase() };
+      const m = /^(?:INC-)?0*([1-9][0-9]*)$/i.exec(String(value));
+      return m ? { number: Number(m[1]) } : null;
+    }
+    const numberOf = (n) => Number(String(n || "").replace(/^INC-/i, ""));
+    // Фильтры и период: без from и to — последние 7 суток; from позже to — null (400)
+    function auditPeriod(q) {
+      const to = q.to ? Date.parse(q.to) : now();
+      const from = q.from ? Date.parse(q.from) : to - 7 * DAY_MS;
+      if (Number.isNaN(from) || Number.isNaN(to) || from > to) return null;
+      return { from, to };
+    }
+    const AUDIT_FILTERS = {
+      actions: { person: "personId", incident: "incidentGuid", kind: "kind" },
+      settings: { objectType: "objectType", objectId: "objectId", objectName: "objectName", actor: "actorId" },
+    };
+    function auditRows(journal, q, period) {
+      const rows = journal === "actions" ? auditActions : settingsAudit;
+      const by = AUDIT_FILTERS[journal];
+      // Сначала новые; при одном времени — по id: курсор (время и id последней) не теряет и не повторяет строк
+      const inc = auditIncident(q.incident);
+      const name = q.objectName == null ? null : String(q.objectName).toLowerCase();
+      return rows
+        .filter((r) => Object.entries(by).every(([param, field]) => param === "incident" || param === "objectName" || q[param] == null || r[field] === q[param]))
+        .filter((r) => !inc || (inc.guid ? String(r.incidentGuid).toLowerCase() === inc.guid : r.incidentNumber != null && numberOf(r.incidentNumber) === inc.number))
+        .filter((r) => name == null || String(r.objectName || "").toLowerCase().includes(name))
+        .filter((r) => Date.parse(r.at) >= period.from && Date.parse(r.at) <= period.to)
+        .sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1));
+    }
+    const badRequest = () => problem(400, "BAD_REQUEST", ["workflow.error.bad_request"]);
+    const noAudit = () => problem(403, "PERMISSION_DENIED", ["workflow.error.no_audit_access"]);
+    function auditPage(journal, q) {
+      if (!can("incident:schema:admin")) return noAudit();
+      const period = auditPeriod(q);
+      const limit = q.limit == null ? 100 : Number(q.limit);
+      if (!period || auditIncident(q.incident) === null || !Number.isInteger(limit) || limit < 1 || limit > 500) return badRequest();
+      let rows = auditRows(journal, q, period);
+      if (q.cursor) {
+        const [at, id] = String(q.cursor).split("|");
+        rows = rows.filter((r) => r.at < at || (r.at === at && r.id < id));
+      }
+      const items = rows.slice(0, limit);
+      const last = items[items.length - 1];
+      return { status: 200, body: Object.assign({ items }, rows.length > limit ? { next: `${last.at}|${last.id}` } : {}) };
+    }
+    // Подсказка фильтра (§12.4): по одной на инцидент или объект — из самой новой записи, сначала новые; q — часть текста без учёта регистра
+    function auditSuggest(q, rows) {
+      if (!can("incident:schema:admin")) return noAudit();
+      const limit = q.limit == null ? 20 : Number(q.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) return badRequest();
+      const part = String(q.q || "").toLowerCase();
+      const seen = new Map();
+      rows
+        .slice()
+        .reverse()
+        .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+        .forEach((r) => seen.has(r.key) || seen.set(r.key, r));
+      const items = [...seen.values()].filter((r) => String(r.text || "").toLowerCase().includes(part)).slice(0, limit).map((r) => r.item);
+      return { status: 200, body: { items } };
+    }
+    // Защита от формул: ячейка, которая в Excel начнётся формулой (= + - @ после пробелов, или табуляция и перевод строки), — с апострофом
+    const csvCell = (v) => {
+      let s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+      if (/^[\s]*[=+\-@]/.test(s) || /^[\t\r\n]/.test(s)) s = "'" + s;
+      return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const CSV_COLUMNS = {
+      actions: ["id", "at", "personId", "personName", "actorKind", "kind", "incidentGuid", "incidentNumber", "transition", "fromState", "toState", "reasonId", "targetPersonId", "targetGroupId", "relatedIncidentGuid", "relatedIncidentNumber", "scenarioStep", "answer", "details"],
+      settings: ["id", "at", "actorId", "actorName", "objectType", "objectId", "objectName", "action", "fromVersion", "toVersion"],
+    };
+    // Выгрузка: CSV в UTF-8 с BOM, разделитель «;»; период — не больше 92 дней, строк — не больше 1 000 000.
+    // Каждая выгрузка — запись audit_export в журнале действий
+    // Время в CSV — в поясе tz браузера (имя IANA), «ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ»; без tz — UTC (§14.9)
+    function csvTime(value, tz) {
+      const ms = Date.parse(value);
+      if (Number.isNaN(ms)) return value;
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+          .formatToParts(new Date(ms))
+          .map((p) => [p.type, p.value])
+      );
+      const local = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+      const off = Math.round((local - Math.floor(ms / 1000) * 1000) / 60000);
+      const abs = Math.abs(off);
+      const hm = `${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} ${off < 0 ? "-" : "+"}${hm}`;
+    }
+    const validZone = (tz) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: tz });
+        return /\//.test(tz) || tz === "UTC";
+      } catch (e) {
+        return false;
+      }
+    };
+    function auditExport(journal, q) {
+      if (!can("incident:schema:admin")) return noAudit();
+      const period = auditPeriod(q);
+      if (!period || auditIncident(q.incident) === null || (q.tz != null && !validZone(q.tz))) return badRequest();
+      const tz = q.tz == null ? "UTC" : q.tz;
+      const rows = auditRows(journal, q, period);
+      if (period.to - period.from > EXPORT_MAX_DAYS * DAY_MS || rows.length > EXPORT_MAX_ROWS)
+        return problem(422, "AUDIT_EXPORT_TOO_LARGE", ["workflow.error.audit_export_too_large"]);
+      const cols = CSV_COLUMNS[journal];
+      const text = "﻿" + [cols.join(";")].concat(rows.map((r) => cols.map((c) => csvCell(c === "at" ? csvTime(r[c], tz) : r[c])).join(";"))).join("\r\n") + "\r\n";
+      const filters = Object.fromEntries(Object.keys(AUDIT_FILTERS[journal]).filter((k) => q[k] != null).map((k) => [k, q[k]]));
+      audit(ME, "audit_export", { details: { journal, filters, from: iso(period.from), to: iso(period.to), rows: rows.length } });
+      return { status: 200, body: text, headers: { "Content-Type": "text/csv; charset=utf-8" } };
+    }
+
     /* ===== Люди и права ===== */
 
     const findActor = (id) => ACTORS.find((a) => a.id === id) || null;
@@ -257,6 +445,7 @@
       });
       if (!res.ok) return res;
       ev.run = res.result;
+      auditAnswer(ev, actor, scriptOf(ev).steps.find((x) => x.id === body.stepId), body);
       const path = pathOf(ev);
       ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];
       res.effects.filter((e) => e.type === "macro").forEach((e) => launchMacro(ev, actor, actorEngine, e.name));
@@ -331,7 +520,7 @@
       dutyGroups: () => GROUPS.map((g) => g.id),
       // Подставляется в форму «Передать»: кому этот оператор передавал в прошлый раз (§8.2)
       defaultTransferTarget: () => session.lastTransferTargetId,
-      // Доставка уведомления (§9): получателей вычисляет машина (recipients). Алерт оператору стенда — событие
+      // Доставка уведомления (§9): получателей вычисляет машина (recipients). Оповещение оператору стенда — событие
       // потока; уведомление о закрытом «Ложной тревогой» соседе (about, notifySiblings, ARCH-15) — тоже; остальные
       // уведомления интерфейс выводит из событий о переходах
       deliver: (ev, recipients, { alert, transitionId, about, actor }) => {
@@ -376,6 +565,7 @@
       serial.incident = 0;
       serial.macro = 0;
       serial.event = 0;
+      auditActions = [];
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
       const abs = (time) => (time == null ? null : Date.parse(time) + delta);
@@ -388,7 +578,10 @@
       );
       PLANS = data.plans || [];
       ACCESS_GROUPS = data.accessGroups || [];
-      PRIORITIES = (data.priorities || []).slice().sort((a, b) => b.value - a.value);
+      // У уровня — guid, как у уровня в базе сервера: по нему журнал настроек (priority:<guid>); в наборе его нет — постоянный по значению
+      PRIORITIES = (data.priorities || [])
+        .map((p) => Object.assign({ guid: `00000000-0000-4000-8000-${String(p.value).padStart(12, "0")}` }, p))
+        .sort((a, b) => b.value - a.value);
       HELP_LINKS = data.helpLinks || [];
       CAMERA_LINKS = data.cameraLinks || [];
       ROLE_RIGHTS = Object.fromEntries((data.roles || []).map((r) => [r.name, r.permissions]));
@@ -1227,6 +1420,8 @@
     function emitTransition(ev, transitionId, actorId, facts) {
       const tr = engine.transition(transitionId);
       const f = facts || { from: {}, to: {} };
+      // В аудит — до потока: поток не говорит об инцидентах вне групп доступа, аудит пишет всё (§12.4)
+      auditTransition(ev, transitionId, actorId, f);
       emit("incident.transitioned", ev, actorId, {
         transitionId,
         trigger: tr ? tr.trigger : null,
@@ -1457,6 +1652,8 @@
           if (!move || !target) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
           if (target.permission && !can(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
           if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
+          // Вход, выход, перерыв и возврат — в журнал действий (§12.4)
+          audit(ME, to === "not_ready" ? "break" : to === "offline" ? "sign_out" : from === "offline" ? "sign_in" : "back", to === "not_ready" ? { reasonId: body.reasonId || undefined } : {});
           if (to === "not_ready") {
             session.agentState = "not_ready";
             session.reasonId = body.reasonId || session.reasonId || null;
@@ -1752,6 +1949,42 @@
           if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
           const named = (id) => ({ guid: id, name: deviceSpec(id).name });
           return { status: 200, body: CAMERA_LINKS.map((l) => ({ guid: l.id, name: l.name, devices: l.devices.map(named), cameras: l.cameras.map(named) })) };
+        },
+      ],
+      // Аудит (§12.4): журнал действий и журнал настроек, по праву администратора (§5)
+      ["GET", "/operator/admin/audit/actions", (p, q) => auditPage("actions", auditQuery(q))],
+      ["GET", "/operator/admin/audit/actions/export", (p, q) => auditExport("actions", auditQuery(q))],
+      ["GET", "/operator/admin/audit/settings", (p, q) => auditPage("settings", auditQuery(q))],
+      ["GET", "/operator/admin/audit/settings/export", (p, q) => auditExport("settings", auditQuery(q))],
+      ["GET", "/operator/admin/audit/incidents", (p, q) => auditSuggest({ q: q.q, limit: q.limit }, auditActions.filter((r) => r.incidentGuid && r.incidentNumber).map((r) => ({ key: r.incidentGuid, at: r.at, text: r.incidentNumber, item: { guid: r.incidentGuid, number: r.incidentNumber } })))],
+      [
+        "GET",
+        "/operator/admin/audit/people",
+        (p, q) => {
+          if (q.log != null && q.log !== "actions" && q.log !== "settings") return badRequest();
+          const rows = q.log === "settings" ? settingsAudit.map((r) => ({ id: r.actorId, name: r.actorName, at: r.at })) : auditActions.filter((r) => r.personId).map((r) => ({ id: r.personId, name: r.personName, at: r.at }));
+          return auditSuggest({ q: q.q, limit: q.limit }, rows.map((r) => ({ key: r.id, at: r.at, text: r.name, item: { personId: r.id, personName: r.name } })));
+        },
+      ],
+      ["GET", "/operator/admin/audit/objects", (p, q) => auditSuggest({ q: q.q, limit: q.limit }, settingsAudit.filter((r) => q.objectType == null || r.objectType === q.objectType).map((r) => ({ key: `${r.objectType}|${r.objectId}`, at: r.at, text: r.objectName, item: { objectType: r.objectType, objectId: r.objectId, objectName: r.objectName } })))],
+      [
+        "GET",
+        "/operator/admin/audit/settings/{id}",
+        (p) => {
+          if (!can("incident:schema:admin")) return noAudit();
+          const entry = settingsAudit.find((e) => e.id === p.id);
+          return entry ? { status: 200, body: entry } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+        },
+      ],
+      [
+        "GET",
+        "/operator/admin/audit/usage",
+        () => {
+          if (!can("incident:schema:admin")) return noAudit();
+          // Место в прототипе не кончается: уровень всегда ok
+          const bytes = JSON.stringify(auditActions).length + JSON.stringify(settingsAudit).length;
+          const day = auditActions.filter((r) => Date.parse(r.at) > now() - DAY_MS).length;
+          return { status: 200, body: { bytes, rowsPerDay: day, level: "ok" } };
         },
       ],
       [

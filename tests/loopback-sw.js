@@ -61,6 +61,8 @@ async function answer(request, path) {
   const res = server.handle(request.method, path, text ? JSON.parse(text) : undefined, headers);
   const out = new Headers(res.headers || {});
   if (res.status === 204 || res.body === null || res.body === undefined) return new Response(null, { status: res.status, headers: out });
+  // Выгрузка аудита — текст CSV со своим Content-Type, как есть
+  if (typeof res.body === "string" && /^text\/csv/.test(out.get("Content-Type") || "")) return new Response(res.body, { status: res.status, headers: out });
   out.set("Content-Type", res.status >= 400 ? "application/problem+json" : "application/json");
   return new Response(JSON.stringify(res.body), { status: res.status, headers: out });
 }

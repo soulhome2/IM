@@ -1910,6 +1910,707 @@
         }
       }
     },
+    "/operator/admin/audit/actions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAuditActions",
+        "summary": "Журнал действий оператора",
+        "description": "§12.4. Кто, когда и что сделал: переходы, передачи, перенаправления, объединения, эскалации, действия системы, ответы сценария, вход и выход, перерывы, потеря связи, выгрузки аудита, пропуски записей. Сначала новые. Журнал только дополняется; удаляется только по сроку хранения `retention.auditDays` (§14.11). Свободный текст ответа сценария не отдаётся — только `answer.hasText` и `answer.textLength`. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто сделал — id человека."
+          },
+          {
+            "name": "incident",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер, как его видит оператор: `INC-0100` или `100`. Номер хранится в записи аудита, поэтому записи инцидента, уже удалённого по сроку, находятся и по номеру. Номера нет ни у кого — пустой ответ; значение не guid и не номер — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sign_in",
+                "sign_out",
+                "break",
+                "back",
+                "link_lost",
+                "link_restored",
+                "transition",
+                "handover",
+                "redirect",
+                "merge",
+                "escalation",
+                "scenario_answer",
+                "auto",
+                "audit_export",
+                "audit_gap"
+              ]
+            },
+            "description": "Вид записи."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Курсор следующей страницы — `next` из прошлого ответа. Страницы идут без пропусков и повторов, даже когда у записей одно время."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "description": "Записей на странице: по умолчанию 100, не больше 500."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница журнала действий",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditActionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/actions/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportAuditActions",
+        "summary": "Выгрузка журнала действий",
+        "description": "§12.4. Те же фильтры, что у `listAuditActions`, все строки периода одним файлом CSV. Период — не больше 92 дней, строк — не больше 1 000 000, иначе `422 AUDIT_EXPORT_TOO_LARGE`. Каждая выгрузка пишется в журнал действий записью `audit_export`: кто, когда, с какими фильтрами, сколько строк. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто сделал — id человека."
+          },
+          {
+            "name": "incident",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер, как его видит оператор: `INC-0100` или `100`. Номер хранится в записи аудита, поэтому записи инцидента, уже удалённого по сроку, находятся и по номеру. Номера нет ни у кого — пустой ответ; значение не guid и не номер — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sign_in",
+                "sign_out",
+                "break",
+                "back",
+                "link_lost",
+                "link_restored",
+                "transition",
+                "handover",
+                "redirect",
+                "merge",
+                "escalation",
+                "scenario_answer",
+                "auto",
+                "audit_export",
+                "audit_gap"
+              ]
+            },
+            "description": "Вид записи."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Almaty"
+            },
+            "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк. Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listSettingsAudit",
+        "summary": "Журнал изменений настроек",
+        "description": "§12.4. Кто, когда, какой объект и какое действие. У объектов с версиями — пара версий «было → стало». Сначала новые. Журнал только дополняется; удаляется только по сроку хранения (§14.11). Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incident_rule",
+                "scenario",
+                "dictionary",
+                "access_group",
+                "schema",
+                "post_settings"
+              ]
+            },
+            "description": "Вид объекта."
+          },
+          {
+            "name": "objectId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Объект — id."
+          },
+          {
+            "name": "objectName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Название объекта — часть названия без учёта регистра; вместе с прочими фильтрами."
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто изменил — id человека."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Курсор следующей страницы — `next` из прошлого ответа. Страницы идут без пропусков и повторов, даже когда у записей одно время."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "description": "Записей на странице: по умолчанию 100, не больше 500."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница журнала настроек",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsAuditPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/settings/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportSettingsAudit",
+        "summary": "Выгрузка журнала изменений настроек",
+        "description": "§12.4. Те же фильтры, что у `listSettingsAudit`, одним файлом CSV; пределы — как у выгрузки журнала действий (`422 AUDIT_EXPORT_TOO_LARGE`). Выгрузка пишется в журнал действий записью `audit_export`. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "objectType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incident_rule",
+                "scenario",
+                "dictionary",
+                "access_group",
+                "schema",
+                "post_settings"
+              ]
+            },
+            "description": "Вид объекта."
+          },
+          {
+            "name": "objectId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Объект — id."
+          },
+          {
+            "name": "objectName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Название объекта — часть названия без учёта регистра; вместе с прочими фильтрами."
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто изменил — id человека."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Almaty"
+            },
+            "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк. Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/settings/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getSettingsAudit",
+        "summary": "Запись журнала настроек",
+        "description": "§12.4. Запись с содержимым: у объекта без версий — значение до и после целиком (`before`, `after`); у объекта с версиями разницу экран строит по паре версий. Нет записи — `404`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "id записи журнала настроек"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Запись журнала настроек",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsAuditDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/usage": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getAuditUsage",
+        "summary": "Место под аудит",
+        "description": "§14.11. Сколько места занимает аудит и сколько строк в сутки пишется: `level` — `ok`, `warn` (места мало) или `alarm` (записывать скоро будет некуда). Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Место под аудит",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditUsage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/incidents": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAuditIncidents",
+        "summary": "Подсказка инцидентов журнала действий",
+        "description": "§12.4. Инциденты, которые есть в журнале действий организации, — для поля «Инцидент» фильтра: и удалённые по сроку (номер хранится в записи). Сначала те, по которым запись новее. `q` — часть номера без учёта регистра (`28`, `inc-0028`); пусто — последние. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Часть номера инцидента."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Сколько подсказок: по умолчанию 20, не больше 50."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Инциденты журнала",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditIncidentSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/objects": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAuditObjects",
+        "summary": "Подсказка объектов журнала настроек",
+        "description": "§12.4. Объекты, которые есть в журнале изменений настроек организации, с последним названием, — для поля «Объект» фильтра. Сначала изменённые позже. `q` — часть названия без учёта регистра; `objectType` — только этого вида. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Часть названия объекта."
+          },
+          {
+            "name": "objectType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incident_rule",
+                "scenario",
+                "dictionary",
+                "access_group",
+                "schema",
+                "post_settings"
+              ]
+            },
+            "description": "Вид объекта."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Сколько подсказок: по умолчанию 20, не больше 50."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Объекты журнала",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditObjectSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/people": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAuditPeople",
+        "summary": "Подсказка людей журнала",
+        "description": "§12.4. Люди, которые есть в журнале действий (`log=actions`, кто сделал) или в журнале изменений настроек (`log=settings`, кто изменил) организации, — для поля «Кто» фильтра. Имя — как в записях журнала. Действия системы не в счёт. Сначала те, чья запись новее. `q` — часть имени без учёта регистра. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Часть имени."
+          },
+          {
+            "name": "log",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "actions",
+                "settings"
+              ],
+              "default": "actions"
+            },
+            "description": "Какой журнал: действий или изменений настроек."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Сколько подсказок: по умолчанию 20, не больше 50."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Люди журнала",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPersonSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/stream": {
       "get": {
         "tags": [
@@ -2992,6 +3693,7 @@
               "PRIORITY_EXISTS",
               "PRIORITY_IN_USE",
               "DUTY_GROUP_IN_USE",
+              "AUDIT_EXPORT_TOO_LARGE",
               "UNAUTHENTICATED",
               "BAD_REQUEST",
               "INTERNAL_ERROR",
@@ -3200,11 +3902,28 @@
           },
           "retention": {
             "type": "object",
-            "description": "§14.11. Срок хранения: closedIncidentsDays — сколько дней хранить закрытый инцидент после закрытия вместе с его журналом и событием; событие без инцидента и записи потока событий — столько же дней от своего времени; журнал действий операторов не удаляется. Срок обязателен: без срока хранить нельзя.",
+            "description": "§14.11. Срок хранения: closedIncidentsDays — сколько дней хранить закрытый инцидент после закрытия вместе с его журналом и событием; событие без инцидента и записи потока событий — столько же дней от своего времени; аудит — журнал действий операторов и журнал изменений настроек — хранится `auditDays` дней: по умолчанию 1095, `0` — бессрочно, иначе не меньше 365; один срок для обоих журналов. Срок обязателен: без срока хранить нельзя.",
             "properties": {
               "closedIncidentsDays": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "auditDays": {
+                "type": "integer",
+                "anyOf": [
+                  {
+                    "enum": [
+                      0
+                    ]
+                  },
+                  {
+                    "minimum": 365,
+                    "maximum": 36500,
+                    "nullable": true
+                  }
+                ],
+                "default": 1095,
+                "description": "§14.11. Срок хранения аудита, дней: `0` — бессрочно, иначе от 365 до 36500 (100 лет)"
               }
             },
             "additionalProperties": true
@@ -3720,7 +4439,7 @@
           },
           "labelKey": {
             "type": "string",
-            "description": "§14.9. Ключ подписи перехода в каталоге строк, например `workflow.transition.claim`. У всех переходов: подпись автоматического видна в журнале и алерте."
+            "description": "§14.9. Ключ подписи перехода в каталоге строк, например `workflow.transition.claim`. У всех переходов: подпись автоматического видна в журнале и оповещении."
           },
           "hint": {
             "type": "string",
@@ -3733,7 +4452,7 @@
             }
           },
           "to": {
-            "description": "null — состояние не меняется (алерт по таймеру)",
+            "description": "null — состояние не меняется (оповещение по таймеру)",
             "nullable": true,
             "allOf": [
               {
@@ -4069,7 +4788,7 @@
       },
       "AlertsPolicy": {
         "type": "object",
-        "description": "§9 (RULE-43). Получатель алертов: нарушения нормативов, потолок эскалации, потеря связи, потеря доступа. Настраивается под правом `incident:schema:admin`. Алерт не передаёт инцидент и не меняет владельца.",
+        "description": "§9 (RULE-43). Получатель оповещений: нарушения нормативов, потолок эскалации, потеря связи, потеря доступа. Настраивается под правом `incident:schema:admin`. Оповещение не передаёт инцидент и не меняет владельца.",
         "required": [
           "targetKind",
           "target"
@@ -4099,7 +4818,7 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "§9. Выключена — истёкшая реакция только нарушение и алерт (§4, правило 3). Обязательно (RULE-45)."
+            "description": "§9. Выключена — истёкшая реакция только нарушение и оповещение (§4, правило 3). Обязательно (RULE-45)."
           },
           "levels": {
             "type": "array",
@@ -4129,7 +4848,7 @@
           },
           "maxLevel": {
             "type": "integer",
-            "description": "§8.3. Потолок: дальше не передаётся, ставится sla_breached и уходит алерт."
+            "description": "§8.3. Потолок: дальше не передаётся, ставится sla_breached и уходит оповещение."
           },
           "onResolutionOverdue": {
             "type": "string",
@@ -4137,7 +4856,7 @@
               "alert",
               "escalate"
             ],
-            "description": "§9. alert — нарушение и алерт; escalate — ещё и передача на следующий уровень. Обязательно: без него истёкший норматив закрытия не оставит следа (RULE-45)."
+            "description": "§9. alert — нарушение и оповещение; escalate — ещё и передача на следующий уровень. Обязательно: без него истёкший норматив закрытия не оставит следа (RULE-45)."
           },
           "reason": {
             "type": "string"
@@ -6433,6 +7152,11 @@
         ],
         "description": "§2.5. Уровень справочника приоритетов.",
         "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "id уровня. По нему журнал изменений настроек отбирает историю уровня: `objectType=dictionary`, `objectId=priority:<guid>`"
+          },
           "value": {
             "$ref": "#/components/schemas/Priority"
           },
@@ -6536,7 +7260,7 @@
             ]
           }
         },
-        "description": "§9, RULE-60. Событие потока: что случилось помимо действий этого клиента. `incident` — инцидент глазами получателя (бейдж, кнопки); `actor` — кто сделал. Об инцидентах вне групп доступа получателя событий нет (§5), кроме `incident.access_lost`.\n\n| Тип | Когда | Кому | `payload` |\n|---|---|---|---|\n| `incident.created` | появился инцидент (переход `create`, RULE-61) | всем, кому он виден | пусто |\n| `incident.transitioned` | выполнен любой переход, ручной или автоматический | всем, кому инцидент виден | `StreamTransitionedPayload`: `transitionId`, `trigger`, `state` и `owner` (было → стало), `addressee`, `breach`. Что показать наблюдателям — `ui.observerNotice` перехода в машине |\n| `incident.updated` | изменились ответы сценария или состав привязанных инцидентов объединённого (§11) | всем, кому инцидент виден | `StreamUpdatedPayload`: `stepIds` |\n| `journal.appended` | запись в журнале не от перехода: шаг сценария; инцидент изменился не своим переходом (действие мира `touch`) — запись о закрытом «Ложной тревогой» соседе (§6.1, ARCH-15), нарушение основного, записанное привязанному (§11.4). У инцидента новая версия: клиент перечитывает карточку и строку, чтобы следующее действие не получило неожиданный `412`. `actor` — кто выполнил переход | всем, кому инцидент виден | пусто |\n| `incident.card_evicted` | карточку увели (§9, порядок срабатывания, пункт 3): автоэскалация, перехват, передача чужого, перерыв дольше срока, нет связи, эскалация по нормативу закрытия, потеря доступа; свой перерыв и выход карточку не уводят — события нет (у них нет `evictOpenCard`, BUG-105). `actor` — кто выполнил переход. Клиент показывает уведомление с причиной — подписью перехода `transitionId` из машины, если увёл не сам получатель (BUG-86) и о переходе не сообщает уже `ui.observerNotice` для всех, кто видит инцидент (BUG-105) | тому, у кого она открыта | `StreamTransitionIdPayload` |\n| `incident.alert` | алерт (§9, RULE-43): нарушение, потолок эскалации, потеря связи или доступа | получателям алертов на месте с доступом к объекту | `StreamTransitionIdPayload` |\n| `incident.sibling_closed` | соседний инцидент того же события закрыт «Ложной тревогой» (§6.1, ARCH-15) — вручную или вместе со своим основным (`close_linked`, §11.4): в журнале инцидента получателя — запись об этом (она даёт ему новую версию: выборка с ним устаревает, массовое действие по ней — 412, §11.1), сам он не закрывается. `incident` — инцидент получателя, `actor` — кто закрыл соседа (у закрытого вместе с основным — `system`). Закрывшему — никогда: ни когда адресат — он сам, ни когда он в дежурной группе-адресате — тогда получают остальные её участники (решение 2026-10-29). Клиент показывает уведомление «INC-1847 того же события закрыт: Ложная тревога» | тому, кто ведёт открытого соседа: его адресату — владельцу, адресату передачи или участникам дежурной группы на месте с доступом к объекту (`recipients` машины); у привязанного к другому основному своего адресата нет — адресату основного, `incident` — сам привязанный (§11.4, RULE-138); у нового соседа адресата нет — события нет | `StreamSiblingClosedPayload`: `siblingGuid`, `siblingNumber`, `closeResultId` |\n| `incident.access_lost` | изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, больше не виден (§5); `incident` — `null` | прежнему владельцу или адресату | `StreamAccessLostPayload`: `number` |\n| `macro.completed` | известен результат макроса | всем, кому инцидент виден | `StreamMacroPayload` |\n| `session.agent_state_changed` | сменилось состояние оператора | самому оператору (другим его вкладкам) | `StreamAgentStatePayload` |\n| `workflow.schema_published` | опубликована новая схема; клиент перечитывает `GET /operator/workflow/active` и перерисовывает экран. Встроенный сервер шлёт, когда тестовый стенд сменил схему (`POST /test/reset`): редактора схемы в прототипе нет | всем | `StreamSchemaPublishedPayload` |\n| `reference.priorities_changed` | изменился справочник приоритетов (§2.5); клиент перечитывает `GET /operator/reference/priorities` и перерисовывает очередь. Встроенный сервер шлёт, когда тестовый стенд сменил справочник (`POST /test/reset`): правки справочника в прототипе нет | всем | пусто |\n| `stream.reset` | клиент переподключился с `Last-Event-ID`, которого в истории потока уже нет: пропущено больше, чем хранит сервер, или он перезапускался. `id` — номер последнего события на сервере, с него поток и продолжается. Клиент перечитывает очередь, открытую карточку и сессию (BUG-102) | тому, кто переподключился | пусто |"
+        "description": "§9, RULE-60. Событие потока: что случилось помимо действий этого клиента. `incident` — инцидент глазами получателя (бейдж, кнопки); `actor` — кто сделал. Об инцидентах вне групп доступа получателя событий нет (§5), кроме `incident.access_lost`.\n\n| Тип | Когда | Кому | `payload` |\n|---|---|---|---|\n| `incident.created` | появился инцидент (переход `create`, RULE-61) | всем, кому он виден | пусто |\n| `incident.transitioned` | выполнен любой переход, ручной или автоматический | всем, кому инцидент виден | `StreamTransitionedPayload`: `transitionId`, `trigger`, `state` и `owner` (было → стало), `addressee`, `breach`. Что показать наблюдателям — `ui.observerNotice` перехода в машине |\n| `incident.updated` | изменились ответы сценария или состав привязанных инцидентов объединённого (§11) | всем, кому инцидент виден | `StreamUpdatedPayload`: `stepIds` |\n| `journal.appended` | запись в журнале не от перехода: шаг сценария; инцидент изменился не своим переходом (действие мира `touch`) — запись о закрытом «Ложной тревогой» соседе (§6.1, ARCH-15), нарушение основного, записанное привязанному (§11.4). У инцидента новая версия: клиент перечитывает карточку и строку, чтобы следующее действие не получило неожиданный `412`. `actor` — кто выполнил переход | всем, кому инцидент виден | пусто |\n| `incident.card_evicted` | карточку увели (§9, порядок срабатывания, пункт 3): автоэскалация, перехват, передача чужого, перерыв дольше срока, нет связи, эскалация по нормативу закрытия, потеря доступа; свой перерыв и выход карточку не уводят — события нет (у них нет `evictOpenCard`, BUG-105). `actor` — кто выполнил переход. Клиент показывает уведомление с причиной — подписью перехода `transitionId` из машины, если увёл не сам получатель (BUG-86) и о переходе не сообщает уже `ui.observerNotice` для всех, кто видит инцидент (BUG-105) | тому, у кого она открыта | `StreamTransitionIdPayload` |\n| `incident.alert` | оповещение (§9, RULE-43): нарушение, потолок эскалации, потеря связи или доступа | получателям оповещений на месте с доступом к объекту | `StreamTransitionIdPayload` |\n| `incident.sibling_closed` | соседний инцидент того же события закрыт «Ложной тревогой» (§6.1, ARCH-15) — вручную или вместе со своим основным (`close_linked`, §11.4): в журнале инцидента получателя — запись об этом (она даёт ему новую версию: выборка с ним устаревает, массовое действие по ней — 412, §11.1), сам он не закрывается. `incident` — инцидент получателя, `actor` — кто закрыл соседа (у закрытого вместе с основным — `system`). Закрывшему — никогда: ни когда адресат — он сам, ни когда он в дежурной группе-адресате — тогда получают остальные её участники (решение 2026-10-29). Клиент показывает уведомление «INC-1847 того же события закрыт: Ложная тревога» | тому, кто ведёт открытого соседа: его адресату — владельцу, адресату передачи или участникам дежурной группы на месте с доступом к объекту (`recipients` машины); у привязанного к другому основному своего адресата нет — адресату основного, `incident` — сам привязанный (§11.4, RULE-138); у нового соседа адресата нет — события нет | `StreamSiblingClosedPayload`: `siblingGuid`, `siblingNumber`, `closeResultId` |\n| `incident.access_lost` | изменились роли или группы доступа, и инцидент, который оператор вёл или который был адресован ему или его группе, больше не виден (§5); `incident` — `null` | прежнему владельцу или адресату | `StreamAccessLostPayload`: `number` |\n| `macro.completed` | известен результат макроса | всем, кому инцидент виден | `StreamMacroPayload` |\n| `session.agent_state_changed` | сменилось состояние оператора | самому оператору (другим его вкладкам) | `StreamAgentStatePayload` |\n| `workflow.schema_published` | опубликована новая схема; клиент перечитывает `GET /operator/workflow/active` и перерисовывает экран. Встроенный сервер шлёт, когда тестовый стенд сменил схему (`POST /test/reset`): редактора схемы в прототипе нет | всем | `StreamSchemaPublishedPayload` |\n| `reference.priorities_changed` | изменился справочник приоритетов (§2.5); клиент перечитывает `GET /operator/reference/priorities` и перерисовывает очередь. Встроенный сервер шлёт, когда тестовый стенд сменил справочник (`POST /test/reset`): правки справочника в прототипе нет | всем | пусто |\n| `stream.reset` | клиент переподключился с `Last-Event-ID`, которого в истории потока уже нет: пропущено больше, чем хранит сервер, или он перезапускался. `id` — номер последнего события на сервере, с него поток и продолжается. Клиент перечитывает очередь, открытую карточку и сессию (BUG-102) | тому, кто переподключился | пусто |"
       },
       "FieldOption": {
         "type": "object",
@@ -7493,6 +8217,401 @@
             }
           }
         }
+      },
+      "AuditAction": {
+        "type": "object",
+        "description": "§12.4. Запись журнала действий. Поля инцидента — у записей по инциденту; `answer` — у `scenario_answer`: выбранный вариант и только признак и длина свободного текста, без самого текста.",
+        "required": [
+          "id",
+          "at",
+          "personId",
+          "personName",
+          "actorKind",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "personId": {
+            "type": "string",
+            "description": "Кто сделал; у системы — null",
+            "nullable": true
+          },
+          "personName": {
+            "type": "string"
+          },
+          "actorKind": {
+            "type": "string",
+            "enum": [
+              "person",
+              "system"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "sign_in",
+              "sign_out",
+              "break",
+              "back",
+              "link_lost",
+              "link_restored",
+              "transition",
+              "handover",
+              "redirect",
+              "merge",
+              "escalation",
+              "scenario_answer",
+              "auto",
+              "audit_export",
+              "audit_gap"
+            ]
+          },
+          "incidentGuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "incidentNumber": {
+            "type": "string"
+          },
+          "transition": {
+            "type": "string",
+            "description": "id перехода машины"
+          },
+          "fromState": {
+            "type": "string"
+          },
+          "toState": {
+            "type": "string"
+          },
+          "reasonId": {
+            "type": "string",
+            "description": "Причина — перерыва или перехода"
+          },
+          "targetPersonId": {
+            "type": "string",
+            "description": "Кому передано — человек"
+          },
+          "targetGroupId": {
+            "type": "string",
+            "description": "Кому передано — дежурная группа"
+          },
+          "relatedIncidentGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Второй инцидент объединения или отвязки"
+          },
+          "relatedIncidentNumber": {
+            "type": "string",
+            "description": "Номер второго инцидента, как его видит оператор (`INC-0100`); хранится в записи и остаётся, когда инцидент удалён по сроку"
+          },
+          "scenarioStep": {
+            "type": "string",
+            "description": "id шага сценария"
+          },
+          "answer": {
+            "type": "object",
+            "required": [
+              "skipped",
+              "hasText",
+              "textLength"
+            ],
+            "properties": {
+              "skipped": {
+                "type": "boolean",
+                "description": "Шаг пропущен: `true` — ответа не было; у настоящего ответа, даже пустого текста, — `false`"
+              },
+              "option": {
+                "type": "string",
+                "description": "Выбранный вариант (id; несколько — через запятую)"
+              },
+              "hasText": {
+                "type": "boolean"
+              },
+              "textLength": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Прочее: фильтры и число строк выгрузки, границы пропуска записей"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditActionPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditAction"
+            }
+          },
+          "next": {
+            "type": "string",
+            "description": "Курсор следующей страницы; нет — страница последняя"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsAuditEntry": {
+        "type": "object",
+        "description": "§12.4. Запись журнала изменений настроек.",
+        "required": [
+          "id",
+          "at",
+          "actorId",
+          "actorName",
+          "objectType",
+          "objectId",
+          "objectName",
+          "action"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "actorName": {
+            "type": "string"
+          },
+          "objectType": {
+            "type": "string",
+            "enum": [
+              "incident_rule",
+              "scenario",
+              "dictionary",
+              "access_group",
+              "schema",
+              "post_settings"
+            ]
+          },
+          "objectId": {
+            "type": "string",
+            "description": "id объекта. У `post_settings` — id организации (guid клиента): настройки поста у организации одни, история их изменений отбирается по `objectType`."
+          },
+          "objectName": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "delete",
+              "publish",
+              "rollback",
+              "archive"
+            ]
+          },
+          "fromVersion": {
+            "type": "integer"
+          },
+          "toVersion": {
+            "type": "integer"
+          }
+        }
+      },
+      "SettingsAuditPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingsAuditEntry"
+            }
+          },
+          "next": {
+            "type": "string",
+            "description": "Курсор следующей страницы; нет — страница последняя"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettingsAuditDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SettingsAuditEntry"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "before": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Значение до — у объекта без версий"
+              },
+              "after": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Значение после — у объекта без версий"
+              }
+            }
+          }
+        ]
+      },
+      "AuditUsage": {
+        "type": "object",
+        "required": [
+          "bytes",
+          "rowsPerDay",
+          "level"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rowsPerDay": {
+            "type": "number",
+            "minimum": 0
+          },
+          "capacityBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Сколько места есть всего; не известно — нет поля"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "alarm"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditIncidentSuggestion": {
+        "type": "object",
+        "required": [
+          "guid",
+          "number"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string",
+            "description": "Номер, как его видит оператор (`INC-0100`)"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditIncidentSuggestions": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditIncidentSuggestion"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditObjectSuggestion": {
+        "type": "object",
+        "required": [
+          "objectType",
+          "objectId",
+          "objectName"
+        ],
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "enum": [
+              "incident_rule",
+              "scenario",
+              "dictionary",
+              "access_group",
+              "schema",
+              "post_settings"
+            ]
+          },
+          "objectId": {
+            "type": "string"
+          },
+          "objectName": {
+            "type": "string",
+            "description": "Название из последней записи объекта"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditObjectSuggestions": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditObjectSuggestion"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditPersonSuggestion": {
+        "type": "object",
+        "required": [
+          "personId",
+          "personName"
+        ],
+        "properties": {
+          "personId": {
+            "type": "string",
+            "description": "id человека — значение фильтра `person` или `actor`"
+          },
+          "personName": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditPersonSuggestions": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditPersonSuggestion"
+            }
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

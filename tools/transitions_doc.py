@@ -28,7 +28,7 @@ WHO = {
     "owner": "владельца",
     "newTarget": "новому адресату",
     "addressee(incident)": "новому адресату",
-    "alerts.target": "получателю алертов (`alerts.target`; если на месте с доступом к объекту никого — запись в журнал)",
+    "alerts.target": "получателю оповещений (`alerts.target`; если на месте с доступом к объекту никого — запись в журнал)",
 }
 BULK = {
     "each_allowed": "если доступно каждому отмеченному",
@@ -218,7 +218,7 @@ class Doc:
             "copyCloseFromPrimary": lambda: "результат, причина, комментарий и закрывший — от основного",
             "tightenPrimaryDeadline": lambda: f"срок основного по {self.tm(a[0])} — самый ранний из своего и остатка привязываемого",
             "copyPrimaryDeadline": lambda: f"{self.tm(a[0])} — остаток срока основного, на паузе",
-            "notify": lambda: f"{'алерт' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
+            "notify": lambda: f"{'оповещение' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
             "logSiblings": lambda: "результат "
             + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0])

@@ -1172,6 +1172,9 @@
       await setFilter("all");
       const row = await rowOnPages(foreignTransferred);
       expect(row && row.textContent.includes("Ожидает принятия"), `${foreignTransferred} не ожидает принятия после передачи`);
+      // Передача — в журнале действий аудита: handover с адресатом (§12.4, план 71)
+      const audit = await window.IM_SELFTEST_API.get("/operator/admin/audit/actions", { incident: foreignTransferred, kind: "handover" });
+      expect(audit.items.some((r) => r.transition === "transfer" && r.targetPersonId === "sidorov"), `в аудите нет передачи Сидорову: ${JSON.stringify(audit.items)}`);
       return foreignTransferred;
     });
 
@@ -1795,6 +1798,11 @@
       const kept = [...$("adminTable").querySelectorAll("tr")].find((r) => /Хранить закрытые инциденты/.test(r.textContent));
       const days = window.IM_WORKFLOW.retention.closedIncidentsDays;
       expect(kept && kept.cells[1].textContent.includes(String(days)), `срок хранения не показан или не ${days}: «${kept && kept.cells[1].textContent.trim()}»`);
+      // Срок хранения аудита — 1095 дней по умолчанию, в той же вкладке (§14.11, план 71)
+      const auditDays = window.IM_WORKFLOW.retention.auditDays;
+      expect(auditDays === 1095, `срок хранения аудита в машине ${auditDays}, а не 1095`);
+      const auditKept = [...$("adminTable").querySelectorAll("tr")].find((r) => /Хранить аудит/.test(r.textContent));
+      expect(auditKept && auditKept.cells[1].textContent.includes("1095"), `срок хранения аудита не показан: «${auditKept && auditKept.cells[1].textContent.trim()}»`);
       await click($("adminTabs").querySelector('[data-admin-tab="duty_groups"]'));
       expect(/Старшие операторы/.test($("adminTable").textContent), "дежурных групп из запроса нет");
       // Связи камер многие-ко-многим (§19.1, RULE-70): название, устройства, камеры — как в наборе
@@ -2130,7 +2138,7 @@
       return toast.textContent;
     });
 
-    await step("Алерт получателю: уведомление о нарушении норматива закрытия (§9, RULE-43)", async () => {
+    await step("Оповещение получателю: уведомление о нарушении норматива закрытия (§9, RULE-43)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const number = await claimFromQueue(() => true);
       let toast = null;
@@ -2139,9 +2147,9 @@
         await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
         await stand.raw("POST", "/test/clock", { advanceSec: 240 });
         await wait(150);
-        toast = toastWith(new RegExp(`Алерт: ${number} — Норматив закрытия нарушен`));
+        toast = toastWith(new RegExp(`Оповещение: ${number} — Норматив закрытия нарушен`));
       }
-      expect(toast, `нет уведомления об алерте по ${number}`);
+      expect(toast, `нет уведомления об оповещении по ${number}`);
       return toast.textContent;
     });
 
@@ -2553,7 +2561,7 @@
         why = b.title;
         expect(/Передать некому/.test(why), `причина: «${why}»`);
         // Причина — среди уведомлений после нажатия, не обязательно последней: такт стенда раз в секунду может
-        // следом вернуть в очередь чужие инциденты без доступа, и их алерты придут позже причины
+        // следом вернуть в очередь чужие инциденты без доступа, и их оповещения придут позже причины
         const before = new Set($("toasts").children);
         const attached = b.isConnected;
         await click(b);

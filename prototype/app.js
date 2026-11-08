@@ -605,7 +605,7 @@
   // от скорости машины. Эмуляцию коллег проверяют тесты API, где время идёт по /test/clock
   const selftestRun = new URLSearchParams(location.search).has("selftest");
   // В самопроверке у встроенного сервера есть служебные операции стенда (часы, роли): без них не
-  // дойти до алерта и потери доступа. Самопроверке — тот же клиент API (PROC-12)
+  // дойти до оповещения и потери доступа. Самопроверке — тот же клиент API (PROC-12)
   const embedded = apiBase
     ? null
     : IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: selftestRun ? false : window.IM_COLLEAGUES, testSupport: selftestRun });
@@ -4377,9 +4377,9 @@
       const notice = tr && tr.ui && tr.ui.observerNotice;
       if (!notice || notice.audience !== "observers") toast(t("{id}: карточка только для просмотра — {what}", { id, what: tr ? lbl(tr) : tid }));
     } else if (msg.type === "incident.alert") {
-      // Алерт получателю алертов (§9): что случилось — подпись перехода из машины
+      // Оповещение получателю оповещений (§9): что случилось — подпись перехода из машины
       const tr = transitionDef(tid);
-      toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
+      toast(t("Оповещение: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
     } else if (msg.type === "incident.sibling_closed") {
       // Сосед того же события закрыт «Ложной тревогой» (§6.1, ARCH-15): адресату моего инцидента — какой и чем
       const p = msg.payload;

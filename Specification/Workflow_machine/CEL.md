@@ -98,7 +98,7 @@
 
 **`Form`** — поля формы перехода: `targetId`, `primaryId`, `resultId`, `holdReasonId`, `closeCauseId`, `comment` — все `string`, незаполненное — `''`.
 
-**Настройки** — разделы машины как константы с их полями, по `cel.settings`: имя — раздел машины и его тип, или `{type, from}` — значение по пути (`closeResults` — `reasonCatalogs.close_result.items`). Сейчас `limits`, `session`, `escalation`, `alerts`, `states`, `closeResults`, `timerDefs` (`timers`), `holdReasons` (`reasonCatalogs.hold.items`). Адресат — двумя полями (ARCH-07 в7): у уровня эскалации и получателя алертов `targetKind` (`user` или `group`) и `target` (id) вместо строки `user:petrova`. `null` у лимита — `0`.
+**Настройки** — разделы машины как константы с их полями, по `cel.settings`: имя — раздел машины и его тип, или `{type, from}` — значение по пути (`closeResults` — `reasonCatalogs.close_result.items`). Сейчас `limits`, `session`, `escalation`, `alerts`, `states`, `closeResults`, `timerDefs` (`timers`), `holdReasons` (`reasonCatalogs.hold.items`). Адресат — двумя полями (ARCH-07 в7): у уровня эскалации и получателя оповещений `targetKind` (`user` или `group`) и `target` (id) вместо строки `user:petrova`. `null` у лимита — `0`.
 
 ## Имена в выражениях
 
@@ -204,7 +204,7 @@
 | Действие | Аргументы | Что делает | В Quint |
 |---|---|---|---|
 | `log` | `incident`, `key`; `vars` — подстановки, нет — их считает сервер по инциденту (подстановки `appendLog`, README машины); `actor` — от чьего имени, нет — выполняющий переход; `once` — одна запись на ключ и момент: следующая заменяет подстановки | запись в журнал инцидента | — |
-| `notify` | `incident`, `to` — кому (человек или дежурная группа), `recipients` — кто получит, `alert` — это алерт, `emptyLog` — ключ записи, если получить некому; `about` — уведомление о другом инциденте: закрытом «Ложной тревогой» соседе (`notifySiblings`, ARCH-15) | доставка уведомления; некому — запись `emptyLog` в журнал | — |
+| `notify` | `incident`, `to` — кому (человек или дежурная группа), `recipients` — кто получит, `alert` — это оповещение, `emptyLog` — ключ записи, если получить некому; `about` — уведомление о другом инциденте: закрытом «Ложной тревогой» соседе (`notifySiblings`, ARCH-15) | доставка уведомления; некому — запись `emptyLog` в журнал | — |
 | `command` | `incident`, `command` | внешняя команда (§14.2, `external`) | — |
 | `evict` | `incident`, `who` | открытая у человека карточка — на просмотр | — |
 | `setCursor` | `incident` | курсор сценария — на первый незаполненный шаг; считает машина сценариев | — |

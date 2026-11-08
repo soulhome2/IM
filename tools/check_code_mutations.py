@@ -153,7 +153,7 @@ MUTATIONS = [
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "      at = runAt;\n      let facts = null;", "      at = null;\n      let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
-    ("alert-toast-silent", "app.js", 'toast(t("Алерт: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));', "", "ui"),
+    ("alert-toast-silent", "app.js", 'toast(t("Оповещение: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));', "", "ui"),
     ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
     ("admin-values-raw", "app.js", "    if (values && typeof v === \"string\" && values[v]) return te(values[v]);\n", "", "ui"),
     ("colleagues-not-ticked", "server.js", "const peers = OPERATORS.filter((op) => op.id !== ME).map((op) => colleague(op.id));", "const peers = [];", "api"),

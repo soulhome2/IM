@@ -90,7 +90,7 @@ function permsActing(ps, holdLimited) {
   return ps.filter((p) => !(off && EXIT.disables.includes(p)));
 }
 
-// Машина с настройками истории: переключатели, лимиты, уровни эскалации и потолок, люди модели в алертах
+// Машина с настройками истории: переключатели, лимиты, уровни эскалации и потолок, люди модели в оповещениях
 const machines = new Map();
 function machineFor(s) {
   const key = JSON.stringify([s.escalation.enabled, s.escalation.onResolutionOverdue, s.escalation.levels, s.escalation.maxLevel, s.limits.maxActive, s.limits.maxOnHold]);

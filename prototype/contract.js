@@ -97,7 +97,8 @@
         }
         if (r.status === 204) return;
         // Ошибки описаны как application/problem+json — их тела тоже сверяются
-        const content = res.content && (res.content["application/json"] || res.content["application/problem+json"]);
+        // Выгрузка аудита — text/csv: тело — строка (§12.4)
+        const content = res.content && (res.content["application/json"] || res.content["application/problem+json"] || res.content["text/csv"]);
         schema = content && content.schema;
         if (!schema) {
           if (r.status < 400) out.push(`${r.method} ${r.template} ${r.status}: у ответа нет схемы`);

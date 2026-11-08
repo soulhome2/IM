@@ -244,6 +244,8 @@
     const merged = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [mine.guid, other.guid] });
     assert.status(merged, 200, null, "взять в работу как одно за 10 с до срока второго");
     assert.eq(merged.body.incident.guid, mine.guid, "основной — свой в работе");
+    const joined = (await env.ok("GET", `/operator/admin/audit/actions?incident=${enc(other.guid)}&kind=merge`)).items;
+    assert.ok(joined.length > 0 && joined.every((r) => r.relatedIncidentGuid === mine.guid && r.relatedIncidentNumber === mine.number), "аудит объединения — с номером основного");
     await env.advance(30);
     assert.status(await env.call("DELETE", `/operator/incidents/${enc(mine.guid)}/linked/${enc(other.guid)}`), 200, null, "отсоединить");
     const c = await env.card(other.guid);
@@ -1032,6 +1034,163 @@
     assert.status(await noAdmin.call("GET", "/operator/admin/duty-groups"), 403, "PERMISSION_DENIED", "дежурные группы без права");
   });
 
+  // Аудит (§12.4, план 71): журнал действий во встроенном сервере, журнал настроек пуст (§17)
+  const AUDIT = "/operator/admin/audit";
+  test("Аудит (§12.4): страницы журнала действий по курсору — без пропусков и повторов при одном времени; settings — пуст, запись — 404; usage — ok", async () => {
+    const env = await makeEnv();
+    const put = (body) => env.ok("PUT", "/operator/session/agent-state", body);
+    const reason = W.session.breakReasons[0].id;
+    // Часы стенда стоят: все записи — с одним временем
+    for (let i = 0; i < 3; i++) {
+      await put({ agentState: "not_ready", reasonId: reason });
+      await put({ agentState: "ready" });
+    }
+    const all = (await env.ok("GET", `${AUDIT}/actions?limit=500`)).items;
+    assert.eq(all.map((r) => r.kind), ["back", "break", "back", "break", "back", "break"], "сначала новые: перерывы и возвраты");
+    assert.ok(new Set(all.map((r) => r.at)).size === 1, "у всех записей одно время");
+    assert.eq(all.find((r) => r.kind === "break").reasonId, reason, "у перерыва — причина");
+    const paged = [];
+    let next = null;
+    do {
+      const page = await env.ok("GET", `${AUDIT}/actions?limit=2${next ? `&cursor=${enc(next)}` : ""}`);
+      assert.ok(page.items.length <= 2, "не больше limit");
+      paged.push(...page.items.map((r) => r.id));
+      next = page.next;
+    } while (next);
+    assert.eq(paged, all.map((r) => r.id), "по страницам — те же записи в том же порядке");
+    assert.eq((await env.ok("GET", `${AUDIT}/actions?kind=break`)).items.length, 3, "фильтр по виду");
+    assert.eq((await env.ok("GET", `${AUDIT}/settings`)).items, [], "журнал настроек прототипа пуст");
+    assert.status(await env.call("GET", `${AUDIT}/settings/1`), 404, "NOT_FOUND", "записи журнала настроек нет");
+    const usage = await env.ok("GET", `${AUDIT}/usage`);
+    assert.eq([usage.level, usage.rowsPerDay], ["ok", 6], "место: ok, строк за сутки — 6");
+    const levels = await env.ok("GET", "/operator/reference/priorities");
+    assert.ok(levels.length > 0 && levels.every((p) => /^[0-9a-f-]{36}$/.test(p.guid)), "у уровня приоритета — guid для истории настроек");
+  });
+
+  test("Аудит (§12.4): без права incident:schema:admin — 403; from позже to — 400; limit больше 500 — 400", async () => {
+    const env = await makeEnv();
+    const from = new Date(env.now).toISOString();
+    const to = new Date(env.now - 86400000).toISOString();
+    assert.status(await env.call("GET", `${AUDIT}/actions?from=${enc(from)}&to=${enc(to)}`), 400, "BAD_REQUEST", "from позже to");
+    assert.status(await env.call("GET", `${AUDIT}/settings?from=${enc(from)}&to=${enc(to)}`), 400, "BAD_REQUEST", "from позже to — журнал настроек");
+    assert.status(await env.call("GET", `${AUDIT}/actions/export?from=${enc(from)}&to=${enc(to)}`), 400, "BAD_REQUEST", "from позже to — выгрузка");
+    assert.status(await env.call("GET", `${AUDIT}/actions?limit=501`), 400, "BAD_REQUEST", "limit больше 500");
+    assert.status(await env.call("GET", `${AUDIT}/actions?from=${enc("вчера")}`), 400, "BAD_REQUEST", "from не разбирается");
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    const noAdmin = await makeEnv({ permissions: all });
+    for (const path of ["actions", "actions/export", "settings", "settings/export", "settings/1", "usage", "incidents", "objects", "people"])
+      assert.status(await noAdmin.call("GET", `${AUDIT}/${path}`), 403, "PERMISSION_DENIED", `${path} без права`);
+  });
+
+  test("Аудит (§12.4): выгрузка — CSV с BOM и «;»; 93 дня — 422 AUDIT_EXPORT_TOO_LARGE; выгрузка — запись audit_export с числом строк", async () => {
+    const env = await makeEnv();
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id });
+    const day = 86400000;
+    const span = (days) => `from=${enc(new Date(env.now - days * day).toISOString())}&to=${enc(new Date(env.now).toISOString())}`;
+    assert.status(await env.call("GET", `${AUDIT}/actions/export?${span(93)}`), 422, "AUDIT_EXPORT_TOO_LARGE", "93 дня");
+    assert.status(await env.call("GET", `${AUDIT}/settings/export?${span(93)}`), 422, "AUDIT_EXPORT_TOO_LARGE", "93 дня — журнал настроек");
+    const res = await env.call("GET", `${AUDIT}/actions/export?${span(92)}`);
+    assert.status(res, 200, null, "92 дня");
+    assert.ok(/^text\/csv/.test(res.headers["content-type"]), `Content-Type: ${res.headers["content-type"]}`);
+    assert.ok(res.body.charCodeAt(0) === 0xfeff, "начинается с BOM");
+    const lines = res.body.slice(1).trim().split("\r\n");
+    assert.ok(lines[0].startsWith("id;at;personId;"), `заголовок через «;»: ${lines[0]}`);
+    assert.eq(lines.length, 2, "заголовок и одна запись — перерыв");
+    assert.status(await env.call("GET", `${AUDIT}/settings/export`), 200, null, "выгрузка журнала настроек");
+    const exports = (await env.ok("GET", `${AUDIT}/actions?kind=audit_export`)).items;
+    assert.eq(exports.map((r) => [r.personId, r.details.journal, r.details.rows]), [[ME, "settings", 0], [ME, "actions", 1]], "две выгрузки — кто, какой журнал, сколько строк");
+  });
+
+  test("Аудит (§12.4): переход и передача — с автором и адресатом; ответ сценария — шаг и вариант, свободного текста нет — только признак и длина", async () => {
+    const env = await makeEnv();
+    const inc = newFire(await env.all("open"));
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const secret = "Секретный текст оператора";
+    let step = null;
+    for (let i = 0; i < 12; i++) {
+      const sc = (await env.card(inc.guid)).scenario;
+      step = sc.script.steps.find((x) => x.id === sc.result.currentStepId);
+      if (!step || (step.type === "Comment" && !step.view.readonly)) break;
+      assert.status(await env.answerCurrent(inc.guid), 200, null, `ответ на шаг ${step.id}`);
+    }
+    assert.ok(step && step.type === "Comment", "дошли до шага со свободным текстом");
+    assert.status(await env.answer(inc.guid, { stepId: step.id, value: secret }), 200, null, "ответ текстом");
+    const rows = (await env.ok("GET", `${AUDIT}/actions?incident=${enc(inc.guid)}&limit=500`)).items;
+    const claim = rows.find((r) => r.transition === "claim");
+    assert.eq(claim && [claim.kind, claim.personId, claim.actorKind, claim.toState, claim.incidentNumber], ["transition", ME, "person", "in_progress", inc.number], "взятие — переход оператора");
+    const text = rows.find((r) => r.kind === "scenario_answer" && r.scenarioStep === step.id);
+    assert.eq(text && text.answer, { skipped: false, hasText: true, textLength: secret.length }, "текст — только признак и длина");
+    assert.ok(!JSON.stringify(rows).includes(secret), "самого текста в журнале нет");
+    const radio = rows.find((r) => r.kind === "scenario_answer" && r.answer.option);
+    assert.ok(radio && radio.answer.hasText === false, "у выбранного варианта — вариант, без текста");
+    const res = await env.act(inc.guid, "transfer", { targetId: "sidorov", comment: "тест" }, "card");
+    assert.status(res, 200, null, "передать Сидорову");
+    const handover = (await env.ok("GET", `${AUDIT}/actions?incident=${enc(inc.guid)}&kind=handover`)).items;
+    assert.eq(handover.map((r) => [r.transition, r.targetPersonId]), [["transfer", "sidorov"]], "передача — handover с адресатом");
+    const hints = (await env.ok("GET", `${AUDIT}/incidents?q=${enc(String(inc.number).slice(-2))}`)).items;
+    assert.ok(hints.some((x) => x.guid === inc.guid && x.number === inc.number), "подсказка инцидентов — по части номера");
+    assert.eq((await env.ok("GET", `${AUDIT}/objects`)).items, [], "подсказка объектов — журнал настроек прототипа пуст");
+    const people = (await env.ok("GET", `${AUDIT}/people?log=actions`)).items;
+    assert.ok(people.some((x) => x.personId === ME && x.personName), "подсказка людей журнала действий — с именем");
+    assert.status(await env.call("GET", `${AUDIT}/people?log=other`), 400, "BAD_REQUEST", "журнала other нет");
+    assert.status(await env.call("GET", `${AUDIT}/incidents?limit=51`), 400, "BAD_REQUEST", "limit больше 50");
+    const byNumber = (await env.ok("GET", `${AUDIT}/actions?incident=${enc(inc.number)}&kind=handover`)).items;
+    assert.eq(byNumber.map((r) => r.id), handover.map((r) => r.id), "фильтр по номеру, как его видит оператор, — те же записи");
+    const digits = String(inc.number).replace(/^INC-0*/i, "");
+    assert.eq((await env.ok("GET", `${AUDIT}/actions?incident=${digits}&kind=handover`)).items.length, 1, "номер без INC-");
+    assert.eq((await env.ok("GET", `${AUDIT}/actions?incident=99999999`)).items, [], "номера нет — пусто");
+    assert.status(await env.call("GET", `${AUDIT}/actions?incident=${enc("вчера")}`), 400, "BAD_REQUEST", "не guid и не номер — 400");
+  });
+
+  test("Аудит (§12.4): у шага не выбора (дата) строка ответа — только признак и длина, без варианта", async () => {
+    const fx = window.IM_FIXTURE;
+    const fire = fx.scenarios.keys.fire;
+    const rows = fx.scenarios.rows.map((r) =>
+      r.guid !== fire ? r : Object.assign({}, r, { script: Object.assign({}, r.script, { steps: r.script.steps.map((st) => (st.id !== "note" ? st : Object.assign({}, st, { type: "Datetime", view: { label: "Когда", required: false } }))) }) })
+    );
+    const env = await makeEnv({ fixturePatch: { scenarios: { rows } } });
+    const inc = newFire(await env.all("open"));
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    for (const id of ["visual", "verdict", "kind"]) assert.status(await env.answerCurrent(inc.guid), 200, null, `ответ на шаг ${id}`);
+    const when = "2026-10-19T14:30:00Z";
+    assert.status(await env.answer(inc.guid, { stepId: "note", value: when }), 200, null, "ответ датой");
+    const row = (await env.ok("GET", `${AUDIT}/actions?incident=${enc(inc.guid)}&kind=scenario_answer`)).items.find((r) => r.scenarioStep === "note");
+    assert.eq(row && row.answer, { skipped: false, hasText: true, textLength: when.length }, "дата — признак и длина, без варианта");
+  });
+
+  test("Аудит (§12.4): пропущенный шаг — answer.skipped = true; пустой текст — skipped = false", async () => {
+    const env = await makeEnv();
+    const inc = newFire(await env.all("open"));
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    for (const id of ["visual", "verdict", "kind"]) assert.status(await env.answerCurrent(inc.guid), 200, null, `ответ на шаг ${id}`);
+    assert.status(await env.answer(inc.guid, { stepId: "note", skip: true }), 200, null, "пропустить шаг");
+    const rows = (await env.ok("GET", `${AUDIT}/actions?incident=${enc(inc.guid)}&kind=scenario_answer`)).items;
+    const row = rows.find((r) => r.scenarioStep === "note");
+    assert.eq(row && row.answer, { skipped: true, hasText: false, textLength: 0 }, "пропуск — skipped, без текста");
+    assert.ok(rows.filter((r) => r.scenarioStep !== "note").every((r) => r.answer.skipped === false), "ответы — skipped = false");
+  });
+
+  test("Аудит (§12.4, §14.9): выгрузка — время в поясе tz «ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ», без tz — UTC; неверный tz — 400; формулы — с апострофом", async () => {
+    const fx = window.IM_FIXTURE;
+    const operators = fx.people.operators.map((o) => (o.id !== ME ? o : Object.assign({}, o, { name: "=1+2" })));
+    const env = await makeEnv({ fixturePatch: { people: { operators } } });
+    await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id });
+    const row = (await env.ok("GET", `${AUDIT}/actions?kind=break`)).items[0];
+    const at = new Date(row.at);
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmt = (d, off) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} ${off}`;
+    const cells = (res) => res.body.slice(1).trim().split("\r\n")[1].split(";");
+    const utc = await env.call("GET", `${AUDIT}/actions/export?kind=break`);
+    assert.status(utc, 200, null, "без tz");
+    assert.eq(cells(utc)[1], fmt(at, "+00:00"), "без tz — UTC");
+    assert.eq(cells(utc)[3], "'=1+2", "имя-формула — с апострофом");
+    const alm = await env.call("GET", `${AUDIT}/actions/export?kind=break&tz=${enc("Asia/Almaty")}`);
+    assert.status(alm, 200, null, "tz=Asia/Almaty");
+    assert.eq(cells(alm)[1], fmt(new Date(at.getTime() + 5 * 3600000), "+05:00"), "Asia/Almaty — +05:00");
+    assert.status(await env.call("GET", `${AUDIT}/actions/export?tz=${enc("Nope/Zone")}`), 400, "BAD_REQUEST", "неверный tz");
+    assert.status(await env.call("GET", `${AUDIT}/settings/export?tz=${enc("Nope/Zone")}`), 400, "BAD_REQUEST", "неверный tz — журнал настроек");
+  });
+
   test("Стенд: изменения схемы и набора на один прогон (PROC-13) — JSON Merge Patch в POST /test/reset", async () => {
     const env = await makeEnv({ workflowPatch: { escalation: { enabled: false } }, fixturePatch: { people: { dutyGroups: [] } } });
     const patched = await env.ok("GET", "/operator/workflow/active");
@@ -1042,7 +1201,7 @@
     assert.ok((await plain.ok("GET", "/operator/transfer-targets")).some((t) => t.kind === "duty_group"), "и исходный набор");
   });
 
-  test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и алерт без передачи; потолка нет", async () => {
+  test("Автоэскалация выключена (§4, §9, RULE-40): истёкшая реакция — нарушение и оповещение без передачи; потолка нет", async () => {
     for (const [why, levels] of [
       ["уровни настроены", null],
       ["уровней нет", []],
@@ -1070,7 +1229,7 @@
       assert.eq([c.state, c.escalationLevel, c.owner], ["new", 0, null], `${why}: никому не передан`);
       assert.eq(c.breaches.filter((b) => b.kind === "reaction").length, 1, `${why}: нарушение реакции записано`);
       assert.ok(c.journal.some((j) => /Норматив реакции нарушен/.test(jt(j))), `${why}: запись в журнале`);
-      assert.ok(got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid && m.payload.transitionId === "reaction_overdue"), `${why}: алерт получателю — мне, я в группе старших операторов`);
+      assert.ok(got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid && m.payload.transitionId === "reaction_overdue"), `${why}: оповещение получателю — мне, я в группе старших операторов`);
     }
   });
 
@@ -1080,7 +1239,7 @@
     return Math.max(r.defaultSec, ...Object.values(r.byPriority), ...r.overrides.map((o) => o.sec));
   };
 
-  test("Алерт получателю алертов (§9, RULE-43): я в группе старших операторов, на месте и с доступом — приходит событие incident.alert", async () => {
+  test("Оповещение получателю оповещений (§9, RULE-43): я в группе старших операторов, на месте и с доступом — приходит событие incident.alert", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
@@ -1092,13 +1251,13 @@
     stop();
     assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "resolution_overdue"), "норматив закрытия нарушен");
     const alert = got.find((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid);
-    assert.ok(alert, "в поток пришёл алерт");
-    assert.eq(alert.payload.transitionId, "resolution_overdue", "алерт — о нарушении закрытия");
+    assert.ok(alert, "в поток пришло оповещение");
+    assert.eq(alert.payload.transitionId, "resolution_overdue", "оповещение — о нарушении закрытия");
     const c = await env.card(inc.guid);
-    assert.ok(!c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «алерт не отправлен» нет");
+    assert.ok(!c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «оповещение не отправлено» нет");
   });
 
-  test("Алерт без получателя (§9, RULE-43): в группе старших операторов никого на месте с доступом — запись в журнале, события нет", async () => {
+  test("Оповещение без получателя (§9, RULE-43): в группе старших операторов никого на месте с доступом — запись в журнале, события нет", async () => {
     for (const [why, patch] of [
       ["у Петровой нет доступа к объекту", (p) => (p.roles = ["Старший оператор"])],
       ["Петровой нет на месте", (p) => (p.agentState = "offline")],
@@ -1122,14 +1281,14 @@
       stop();
       const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
       assert.ok(c.journal.some((j) => /Норматив закрытия нарушен/.test(jt(j))), `${why}: нарушение записано`);
-      assert.ok(c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), `${why}: в журнале «алерт не отправлен»`);
-      assert.ok(!got.some((m) => m.type === "incident.alert"), `${why}: алерта в потоке нет`);
+      assert.ok(c.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), `${why}: в журнале «оповещение не отправлено»`);
+      assert.ok(!got.some((m) => m.type === "incident.alert"), `${why}: оповещения в потоке нет`);
     }
   });
 
-  test("Уведомление получателю алертов (§9) — не алерт: алерт задаёт переход, а не совпадение получателя с alerts.target", async () => {
-    assert.eq(W.alerts.target, "grp-leads", "получатель алертов — группа старших операторов");
-    // Автоэскалация на группу старших операторов, я в ней: уведомление новому адресату доставляется мне, но не алертом
+  test("Уведомление получателю оповещений (§9) — не оповещение: оповещение задаёт переход, а не совпадение получателя с alerts.target", async () => {
+    assert.eq(W.alerts.target, "grp-leads", "получатель оповещений — группа старших операторов");
+    // Автоэскалация на группу старших операторов, я в ней: уведомление новому адресату доставляется мне, но не оповещением
     const w = JSON.parse(JSON.stringify(W));
     w.escalation.levels[0] = Object.assign({}, w.escalation.levels[0], { targetKind: "group", target: "grp-leads" });
     const api = (await standWith({ workflow: w })).api;
@@ -1148,10 +1307,10 @@
     assert.ok(fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "auto_escalate"), "сработала автоэскалация");
     const c = await api.get(`/operator/incidents/${enc(inc.guid)}`);
     assert.eq([c.state, c.assignmentGroup && c.assignmentGroup.id], ["pending_acceptance", "grp-leads"], "адресован группе старших операторов");
-    assert.ok(!got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid), "алерта в потоке нет");
+    assert.ok(!got.some((m) => m.type === "incident.alert" && m.incidentGuid === inc.guid), "оповещения в потоке нет");
 
     // Передача группе старших операторов, в ней только Петрова, она на перерыве: получить некому,
-    // но записи «алерт не отправлен» нет — это не алерт
+    // но записи «оповещение не отправлено» нет — это не оповещение
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.forEach((g) => (g.members = g.members.filter((m) => m !== ME)));
     fixture.people.operators.find((o) => o.id === "petrova").agentState = "not_ready";
@@ -1160,7 +1319,7 @@
     const res = await api2.raw("POST", `/operator/incidents/${enc(inc2.guid)}/transitions/transfer`, { expectedState: "new", surface: "queue", formValues: { targetId: "grp-leads", comment: "тест" } }, { "If-Match": `"${inc2.version}"` });
     assert.status(res, 200, null, "передать группе старших операторов");
     const c2 = await api2.get(`/operator/incidents/${enc(inc2.guid)}`);
-    assert.ok(!c2.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «алерт не отправлен» нет");
+    assert.ok(!c2.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «оповещение не отправлено» нет");
   });
 
   test("Адресат больше не может принять (§8.1, RULE-39): отняли право «Принимать» — не принятый инцидент в очереди; в работе — не трогается", async () => {
@@ -1280,7 +1439,7 @@
     assert.eq([c.state, c.owner && c.owner.id, c.escalationLevel], ["pending_acceptance", "orlova", 1], "адресату уровня 1 на перерыве, уровень 1");
   });
 
-  test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и алерт", async () => {
+  test("Эскалация по нормативу закрытия (§9, RULE-27): при escalate — передача адресату уровня, на потолке — нарушение и оповещение", async () => {
     // Своя копия машины с другой настройкой — так правило проверяется из машины, а не из кода
     async function overdue(patch) {
       const w = JSON.parse(JSON.stringify(W));
@@ -1306,17 +1465,17 @@
       return { fired, card: await api.get(`/operator/incidents/${enc(fire.guid)}`), w };
     }
     const up = await overdue(() => {});
-    assert.eq(up.fired, ["resolution_escalate"], "сработала эскалация, а не алерт");
+    assert.eq(up.fired, ["resolution_escalate"], "сработала эскалация, а не оповещение");
     const level1 = up.w.escalation.levels[0].target;
     assert.eq([up.card.state, up.card.owner && up.card.owner.id, up.card.escalationLevel], ["pending_acceptance", level1, 1], "передан адресату первого уровня");
     assert.eq(up.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
     const top = await overdue((w) => (w.escalation.maxLevel = 0));
-    assert.eq(top.fired, ["resolution_ceiling"], "на потолке — алерт, без передачи");
+    assert.eq(top.fired, ["resolution_ceiling"], "на потолке — оповещение, без передачи");
     assert.eq([top.card.state, top.card.owner && top.card.owner.id], ["in_progress", ME], "остался в работе у меня");
     assert.eq(top.card.breaches.filter((b) => b.kind === "resolution").length, 1, "нарушение закрытия записано");
   });
 
-  test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — никому не передаётся, нарушение и алерт", async () => {
+  test("Автоэскалация пропускает уровни, у адресата которых нет доступа к объекту (§8.3); нет никого — никому не передаётся, нарушение и оповещение", async () => {
     // Своя копия машины: адресаты уровней — из targets. Ждём ровно до истечения реакции инцидента
     async function escalate(targets, pick) {
       const w = JSON.parse(JSON.stringify(W));
@@ -1345,7 +1504,7 @@
     const group = await escalate(["group:grp-tc", "user:noc"], inMall);
     assert.eq([group.fired, group.card.owner && group.card.owner.id, group.card.escalationLevel], [["auto_escalate"], "noc", 2], "в ТЦ: уровень 1 — группа, где все вышли, — пропущен");
     const none = await escalate(["user:kuznetsov", "user:kuznetsov"], (e) => !inMall(e));
-    assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и алерт");
+    assert.eq(none.fired, ["escalation_ceiling"], "вне ТЦ и некому — сработал потолок эскалации: нарушение и оповещение");
     assert.eq([none.card.state, none.card.owner, none.card.escalationLevel], ["new", null, 0], "никому не передан");
     assert.ok(none.card.breaches.some((b) => b.kind === "reaction"), "нарушение реакции записано");
   });
@@ -1382,7 +1541,7 @@
   });
 
   test("Истёкший норматив закрытия срабатывает один раз: возврат в работу не даёт нового срока (§4, RULE-50)", async () => {
-    // «Отложить → Возобновить» после истечения — без второго нарушения и алерта
+    // «Отложить → Возобновить» после истечения — без второго нарушения и оповещения
     const env = await makeEnv();
     const inc = await newFire(env);
     const res = await env.act(inc.guid, "claim", {}, "queue");

@@ -210,6 +210,15 @@ def check_workflow(w, err):
         if not b.get("labelKey") or "label" in b:
             err.append(f"бейдж {i + 1} ({b.get('expr')}): подпись — не ключом каталога labelKey (BUG-51)")
 
+    # Сроки хранения (§14.11): закрытые — целое от 1; аудит — 0 (бессрочно) или от 365 до 36500 дней, по умолчанию 1095
+    retention = w.get("retention", {})
+    closed = retention.get("closedIncidentsDays")
+    if not isinstance(closed, int) or isinstance(closed, bool) or closed < 1:
+        err.append(f"retention.closedIncidentsDays = {closed!r}: нужно целое от 1 (§14.11)")
+    audit = retention.get("auditDays")
+    if not isinstance(audit, int) or isinstance(audit, bool) or not (audit == 0 or 365 <= audit <= 36500):
+        err.append(f"retention.auditDays = {audit!r}: нужно 0 (бессрочно) или целое от 365 до 36500 (§14.11)")
+
 
 def check_engine(w, err):
     """Смысл каждого слова реестров — в машине (CEL.md, ARCH-07): у условия expr, у эффекта do. Исполнитель
@@ -633,7 +642,7 @@ def check_layers(err):
             err.append(f"app.js:{n}: интерфейс обращается к данным или исполнителю в обход API: {line.strip()[:80]}")
 
 
-def check_literals(w, err):
+def check_literals(w, o, err):
     """Значения справочников машины (причины, результаты закрытия, причины перерыва) — данные:
     код прототипа их по имени не знает, иначе правило продублировано в коде и разойдётся с
     машиной при переименовании (BUG-22). Нужное свойство берётся из машины."""
@@ -641,10 +650,13 @@ def check_literals(w, err):
     for catalog in w["reasonCatalogs"].values():
         ids.update(item["id"] for item in catalog.get("items", []))
     ids.update(r["id"] for r in w["session"].get("breakReasons", []))
+    # Вид записи аудита (AuditAction.kind контракта, §12.4) — не значение справочника, хоть и совпадает по имени
+    # («break» — и причина перерыва, и вид записи); исключение — только в строке записи аудита audit(…)
+    audit_kinds = set(o["components"]["schemas"]["AuditAction"]["properties"]["kind"]["enum"])
     for name in ("app.js", "server.js", "engine.js"):
         with open(os.path.join(ROOT, "prototype", name), encoding="utf-8") as f:
             for n, line in enumerate(f, 1):
-                for found in sorted(i for i in ids if f'"{i}"' in line):
+                for found in sorted(i for i in ids if f'"{i}"' in line and not (i in audit_kinds and re.search(r"\baudit\(", line))):
                     err.append(f"{name}:{n}: значение справочника машины «{found}» в коде — нужное свойство берётся из машины")
 
 
@@ -1541,11 +1553,11 @@ def check_rights_and_defaults(w, err):
             got = m.group(1) if (m := re.fullmatch(r"`([^`]+)`", cell)) else cell
             if got != cloud[key.group(1)]:
                 err.append(f"правила, §5: {key.group(1)} — в облаке «{got}», в машине «{cloud[key.group(1)]}»")
-    words = {"включена": True, "выключена": False, "алерт": "alert", "эскалация": "escalate", "без ограничения": None}
+    words = {"включена": True, "выключена": False, "оповещение": "alert", "эскалация": "escalate", "без ограничения": None}
     checks = [
         (r"\| `enabled` \|[^\n]*\| (включена|выключена) \| `escalation\.enabled` \|", w["escalation"]["enabled"], "§9, enabled"),
         (r"\| `max_level` \|[^|]*\| (\d+) \| `escalation\.maxLevel` \|", w["escalation"]["maxLevel"], "§9, max_level"),
-        (r"\| `on_resolution_overdue` \|[^\n]*\| (алерт|эскалация) \| `escalation\.onResolutionOverdue`", w["escalation"]["onResolutionOverdue"], "§9, on_resolution_overdue"),
+        (r"\| `on_resolution_overdue` \|[^\n]*\| (оповещение|эскалация) \| `escalation\.onResolutionOverdue`", w["escalation"]["onResolutionOverdue"], "§9, on_resolution_overdue"),
         (r"\| `max_active` \| (\d+|без ограничения) \|", w["limits"]["maxActive"], "§10.2, max_active"),
         (r"\| `max_on_hold` \| (\d+|без ограничения) \|", w["limits"]["maxOnHold"], "§10.2, max_on_hold"),
         (r"\| `idle_hold` \(по умолчанию (\d+) минут\) \|", w["session"]["idleHoldSec"] / 60, "§12.3, idle_hold"),
@@ -1984,7 +1996,7 @@ def check_escalation_settings(w, o, err):
         err.append(f"эскалация: escalation.onResolutionOverdue — одно из {allowed}; иначе истёкший норматив закрытия пропадёт молча (RULE-45)")
     alerts = w.get("alerts") or {}
     if alerts.get("targetKind") not in ("user", "group") or not isinstance(alerts.get("target"), str) or not alerts["target"]:
-        err.append("алерты: alerts.targetKind — user или group, alerts.target — id; иначе алерты некому отправить (RULE-43, RULE-45, ARCH-07 в7)")
+        err.append("оповещения: alerts.targetKind — user или group, alerts.target — id; иначе оповещения некому отправить (RULE-43, RULE-45, ARCH-07 в7)")
     for lvl in esc.get("levels") or []:
         if lvl.get("targetKind") not in ("user", "group") or not lvl.get("target"):
             err.append(f"эскалация: уровень {lvl.get('level')} — targetKind user или group и target — id (§8.3, ARCH-07 в7)")
@@ -2047,7 +2059,7 @@ def collect():
     check_workflow(w, err)
     check_engine(w, err)
     check_layers(err)
-    check_literals(w, err)
+    check_literals(w, o, err)
     check_rules_tables(w, err)
     check_rules_diagram(w, err)
     check_rules_example(w, err)
@@ -2146,7 +2158,7 @@ MUTATIONS = [
      "| `incident:release` | Вернуть свой инцидент в очередь; отклонить адресованную передачу | `incident_manager.incidents.release` |",
      "в облаке «incident_manager.incidents.release»"),
     ("default-max-level", "машина: потолок эскалации 3, в правилах 2", MACHINE, '"maxLevel": 2', '"maxLevel": 3', "§9, max_level"),
-    ("default-overdue", "машина: по нормативу закрытия — эскалация, в правилах алерт", MACHINE,
+    ("default-overdue", "машина: по нормативу закрытия — эскалация, в правилах оповещение", MACHINE,
      '"onResolutionOverdue": "alert"', '"onResolutionOverdue": "escalate"', "§9, on_resolution_overdue"),
     ("default-max-on-hold", "§10.2: лимит отложенных 3, в машине 5", RULES, "| `max_on_hold` | 5 |", "| `max_on_hold` | 3 |", "§10.2, max_on_hold"),
     ("default-idle-hold", "§12.3: порог «нет связи» 7 минут, в машине 5", RULES, "`idle_hold` (по умолчанию 5 минут)", "`idle_hold` (по умолчанию 7 минут)", "§12.3, idle_hold"),
@@ -2194,9 +2206,13 @@ MUTATIONS = [
      '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "external", "fn": "notifySiblings"',
      '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "transactional", "fn": "notifySiblings"', "в реестре external"),
     ("contract-401-code", "контракт: в Problem.code нет UNAUTHENTICATED (решение 2026-10-29)", OPENAPI,
-     '"PRIORITY_IN_USE",\n              "UNAUTHENTICATED",', '"PRIORITY_IN_USE",', "UNAUTHENTICATED"),
+     '"AUDIT_EXPORT_TOO_LARGE",\n              "UNAUTHENTICATED",', '"AUDIT_EXPORT_TOO_LARGE",', "UNAUTHENTICATED"),
     ("contract-400-no-code", "контракт: ответ BadRequest не называет код (решение 2026-10-29)", OPENAPI,
      "Код `BAD_REQUEST`, ключ текста", "Ключ текста", "BAD_REQUEST"),
+    ("retention-audit-short", "машина: срок хранения аудита 100 дней — меньше года (§14.11, план 71)", MACHINE,
+     '"auditDays": 1095', '"auditDays": 100', "auditDays"),
+    ("retention-audit-missing", "машина: срока хранения аудита нет (§14.11, план 71)", MACHINE,
+     ',\n    "auditDays": 1095', "", "auditDays"),
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]

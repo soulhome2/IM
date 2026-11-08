@@ -181,6 +181,8 @@
   "workflow.error.no_route": "No route {method} {path}",
   "workflow.error.unauthenticated": "Not signed in: sign in again",
   "workflow.error.bad_request": "Request not understood: invalid parameters or headers",
+  "workflow.error.audit_export_too_large": "Export too large: the period must be at most 92 days and at most 1,000,000 rows",
+  "workflow.error.no_audit_access": "No permission to view the audit",
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
   "workflow.error.test.clock_backwards": "Time does not go backwards",
@@ -353,9 +355,9 @@
   "workflow.settings.timers.resolution.overrides": "Resolution: refinements",
   "workflow.settings.timers.resolution.overrides.what": "Resolution deadline by event type, priority, device group and scenario",
   "workflow.settings.limits.reopenWindowMin": "Reopen window",
-  "workflow.settings.limits.reopenWindowMin.what": "How long after closing an incident can be reopened (§6.1)",
+  "workflow.settings.limits.reopenWindowMin.what": "How long after closing an incident can be reopened",
   "workflow.settings.limits.reopenResolutionSec": "Resolution after reopening",
-  "workflow.settings.limits.reopenResolutionSec.what": "Resolution deadline of a reopened incident; empty — the usual one (§4, rule 6)",
+  "workflow.settings.limits.reopenResolutionSec.what": "Resolution deadline of a reopened incident; empty — the usual one",
   "workflow.settings.tab.reasons": "Reasons",
   "workflow.settings.reasonCatalogs.hold.items": "Hold reasons",
   "workflow.settings.reasonCatalogs.hold.items.what": "What the operator chooses on “Put on hold” and the time limit of each reason; system ones are break and no connection",
@@ -407,6 +409,8 @@
   "workflow.settings.tab.retention": "Retention",
   "workflow.settings.retention.closedIncidentsDays": "Keep closed incidents, days",
   "workflow.settings.retention.closedIncidentsDays.what": "How many days after closing to delete an incident with its journal and event. An event without an incident is kept as long",
+  "workflow.settings.retention.auditDays": "Keep audit, days",
+  "workflow.settings.retention.auditDays.what": "How many days to keep the action log and the settings change log. 0 means forever, otherwise from 365 to 36500",
   "workflow.settings.tab.priorities": "Priorities",
   "workflow.settings.tab.priorities.what": "Urgency levels: a number from 0 to 100 (higher is more urgent), name, description and queue stripe color. An IM reference shared by all schemas",
   "workflow.settings.tab.access_groups": "Access groups",
@@ -436,5 +440,5 @@
   "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold",
   "workflow.journal.timer_overridden": "Target «{timer}» expired — the operator acted before «{transition}»",
   "workflow.settings.invariants.manualWinsOverTimer.graceSec": "Window after the deadline",
-  "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "How long after a deadline to wait for the operator before the timer transition fires; an action in this window wins (§10.1)"
+  "workflow.settings.invariants.manualWinsOverTimer.graceSec.what": "How long after a deadline to wait for the operator before the timer transition fires; an action in this window wins"
 }
