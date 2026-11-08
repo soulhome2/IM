@@ -13,8 +13,8 @@
 
 ## Что уже есть
 
-- Изучен протокол `embedded.html`: `init/reInit/setTime/play/stop/getSnapshot`, видео по WebSocket (MSE или MJPEG) — [13](13-cloud-ui-menu-video.md) п. 3, [20](20-decisions.md) §3.10.
-- Изучены ключ mapbox и слои `map-layers` (планов в них нет) — 13 п. 4, 20 §3.9.
+- Изучен протокол `embedded.html`: `init/reInit/setTime/play/stop/getSnapshot`, видео по WebSocket (MSE или MJPEG) — [13](13-cloud-ui-menu-video.md) п. 3, [20](20-decisions.md) п. 3.10.
+- Изучены ключ mapbox и слои `map-layers` (планов в них нет) — 13 п. 4, 20 п. 3.9.
 - Сервер уже отдаёт `mediaKinds` в строке очереди и `media` в карточке; экран их пока не показывает.
 
 Хвосты этапа 9: в раскладке карточки нет мест для видео и карты; шаг Image с источником `camera`/`map` показывается пустым; предел размера вложения не проверен.
