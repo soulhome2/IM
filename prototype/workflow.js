@@ -3765,12 +3765,14 @@ window.IM_WORKFLOW = {
     {
       "id": "done",
       "labelKey": "workflow.filter.done",
-      "expr": "inCategory(incident, ['done'])"
+      "expr": "inCategory(incident, ['done'])",
+      "counted": false
     },
     {
       "id": "all",
       "labelKey": "workflow.filter.all",
-      "expr": "inCategory(incident, ['pending', 'active', 'done'])"
+      "expr": "inCategory(incident, ['pending', 'active', 'done'])",
+      "counted": false
     }
   ],
   "queueGrouping": {

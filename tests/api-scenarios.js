@@ -3810,7 +3810,9 @@
     const counters = await env.ok("GET", "/operator/incidents/counters");
     for (const f of W.queueFilters) {
       const page = await env.ok("GET", `/operator/incidents?filter=${f.id}&pageSize=1000`);
-      assert.eq(page.total, counters[f.id], `фильтр «${f.id}»`);
+      // У фильтров с завершёнными счётчика нет (counted: false, §7): их число — только total списка
+      if (f.counted === false) assert.ok(!(f.id in counters) && page.total > 0, `у фильтра «${f.id}» нет счётчика`);
+      else assert.eq(page.total, counters[f.id], `фильтр «${f.id}»`);
     }
     const inbox = (await env.all("inbox")).map((e) => e.number).sort();
     assert.eq(inbox, ["INC-1836", "INC-1843"], "мне на принятие");
@@ -4031,7 +4033,10 @@
     const got = [];
     const stop = env.api.subscribe((m) => got.push(m));
     assert.eq((await env.all("all")).map((e) => e.guid).sort(), seen.map((i) => i.guid).sort(), "в очереди — только доступные");
-    assert.eq((await env.ok("GET", "/operator/incidents/counters")).all, seen.length, "счётчик «Все»");
+    // У «Всех» счётчика нет (§7): права проверяет счётчик «Открытые» — только доступные открытые
+    const open = await env.all("open");
+    assert.ok(open.length && open.every((e) => seen.some((i) => i.guid === e.guid)), "в «Открытых» — только доступные");
+    assert.eq((await env.ok("GET", "/operator/incidents/counters")).open, open.length, "счётчик «Открытые»");
     const other = hidden[0];
     assert.status(await env.call("GET", `/operator/incidents/${enc(other.guid)}`), 404, "NOT_FOUND", "карточка недоступного");
     assert.status(await env.call("GET", `/operator/incidents/${enc(other.guid)}/actions`), 404, "NOT_FOUND", "действия недоступного");

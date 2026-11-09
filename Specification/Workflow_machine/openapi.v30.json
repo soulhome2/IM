@@ -6004,14 +6004,12 @@
         "additionalProperties": {
           "type": "integer"
         },
-        "description": "Ключ — идентификатор фильтра из `queueFilters`.",
+        "description": "Ключ — идентификатор фильтра из `queueFilters`. Только фильтры без `counted: false`: у «Завершённых» и «Всех» счётчика нет (§7), их число — `total` страницы списка.",
         "example": {
           "open": 14,
           "inbox": 1,
           "mine": 2,
-          "foreign": 5,
-          "done": 37,
-          "all": 51
+          "foreign": 5
         }
       },
       "IncidentSummary": {

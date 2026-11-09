@@ -267,7 +267,7 @@
       });
       if (step % 20 === 0) {
         const counters = await env.ok("GET", "/operator/incidents/counters");
-        for (const f of W.queueFilters) {
+        for (const f of W.queueFilters.filter((q) => q.counted !== false)) {
           const total = (await env.ok("GET", `/operator/incidents?filter=${f.id}&pageSize=1000`)).total;
           if (total !== counters[f.id]) bad.push(`счётчик «${f.id}» ${counters[f.id]}, а в очереди ${total}`);
         }

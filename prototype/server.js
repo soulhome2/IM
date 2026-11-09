@@ -1270,7 +1270,8 @@
       // Только сценарий сужает счётчики: остальные фильтры очереди — сами счётчики (§19.2)
       const list = visible({ scenarioGuid: (q || {}).scenarioGuid });
       const passed = list.map((e) => engine.queueFilters(e));
-      W.queueFilters.forEach((f) => (out[f.id] = passed.filter((ids) => ids.includes(f.id)).length));
+      // У фильтров с завершёнными (counted: false) счётчика нет: их число — total страницы списка (§7)
+      W.queueFilters.filter((f) => f.counted !== false).forEach((f) => (out[f.id] = passed.filter((ids) => ids.includes(f.id)).length));
       return out;
     }
 

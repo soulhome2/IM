@@ -1273,8 +1273,8 @@
     { "id": "inbox", "labelKey": "workflow.filter.inbox", "expr": "incident.state == 'pending_acceptance' && ownership(me, incident) == 'target'" },
     { "id": "mine", "labelKey": "workflow.filter.mine", "expr": "incident.state in ['in_progress', 'on_hold'] && ownership(me, incident) == 'owner'" },
     { "id": "foreign", "labelKey": "workflow.filter.foreign", "expr": "incident.state in ['pending_acceptance', 'in_progress', 'on_hold'] && ownership(me, incident) == 'other'" },
-    { "id": "done", "labelKey": "workflow.filter.done", "expr": "inCategory(incident, ['done'])" },
-    { "id": "all", "labelKey": "workflow.filter.all", "expr": "inCategory(incident, ['pending', 'active', 'done'])" }
+    { "id": "done", "labelKey": "workflow.filter.done", "expr": "inCategory(incident, ['done'])", "counted": false },
+    { "id": "all", "labelKey": "workflow.filter.all", "expr": "inCategory(incident, ['pending', 'active', 'done'])", "counted": false }
   ],
 
   "queueGrouping": {
