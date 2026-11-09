@@ -1855,6 +1855,8 @@ def check_observer_notice(w, err):
 UNREAD_PARAMS = {
     ("/operator/admin/audit/actions/export", "format"): "PDF делает сервер МИ; прототип отдаёт только CSV (§12.4)",
     ("/operator/admin/audit/settings/export", "format"): "PDF делает сервер МИ; прототип отдаёт только CSV (§12.4)",
+    ("/operator/admin/audit/actions/export", "lang"): "язык надписей PDF; прототип отдаёт только CSV, в нём надписей нет (§12.4)",
+    ("/operator/admin/audit/settings/export", "lang"): "язык надписей PDF; прототип отдаёт только CSV, в нём надписей нет (§12.4)",
     ("/operator/workflow/active", "eventTypeGuid"): "у прототипа одна схема (§14.4)",
     ("/operator/workflow/active", "sourceGroupGuid"): "у прототипа одна схема (§14.4)",
     ("/operator/workflow/active", "priority"): "у прототипа одна схема (§14.4)",

@@ -2110,6 +2110,15 @@
               "default": "csv"
             },
             "description": "Вид файла: `csv` (по умолчанию) или `pdf`. PDF — для чтения и печати: A4 альбомом, таблица с главными столбцами журнала, шапка таблицы на каждой странице, номера страниц; в начале — заголовок (название журнала), время создания отчёта (в поясе `tz`) и кто его сделал (имя и id), затем период, пояс и фильтры. PDF — не больше 10 000 строк, иначе `422 AUDIT_EXPORT_TOO_LARGE`; полная выгрузка — CSV."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "ru"
+            },
+            "description": "Язык надписей файла PDF — язык интерфейса, который его просит (`ru`, `en`, `ru-RU`…). Нет — язык из настроек оператора. Язык без своих надписей — английский."
           }
         ],
         "responses": {
@@ -2349,6 +2358,15 @@
               "default": "csv"
             },
             "description": "Вид файла: `csv` (по умолчанию) или `pdf`. PDF — для чтения и печати: A4 альбомом, таблица с главными столбцами журнала, шапка таблицы на каждой странице, номера страниц; в начале — заголовок (название журнала), время создания отчёта (в поясе `tz`) и кто его сделал (имя и id), затем период, пояс и фильтры. PDF — не больше 10 000 строк, иначе `422 AUDIT_EXPORT_TOO_LARGE`; полная выгрузка — CSV."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "ru"
+            },
+            "description": "Язык надписей файла PDF — язык интерфейса, который его просит (`ru`, `en`, `ru-RU`…). Нет — язык из настроек оператора. Язык без своих надписей — английский."
           }
         ],
         "responses": {
@@ -3507,6 +3525,395 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/incident-groups": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listAuditIncidentGroups",
+        "summary": "Журнал действий по инцидентам",
+        "description": "§12.4. Записи журнала действий за период с теми же фильтрами, что у `listAuditActions`, собранные по инцидентам: одна строка на инцидент — первая и последняя запись в периоде, сколько записей, кто действовал, последнее состояние. Состояния берутся из переходов действующей машины: запись хранит только id перехода; запись основного инцидента объединения (`merged_in`) его состояние не меняет. Сначала инциденты с самой свежей записью. Записи без инцидента (вход, перерыв, выгрузка) сюда не входят. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто сделал — id человека."
+          },
+          {
+            "name": "incident",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер, как его видит оператор: `INC-0100` или `100`. Номер хранится в записи аудита, поэтому записи инцидента, уже удалённого по сроку, находятся и по номеру. Номера нет ни у кого — пустой ответ; значение не guid и не номер — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sign_in",
+                "sign_out",
+                "break",
+                "back",
+                "link_lost",
+                "link_restored",
+                "transition",
+                "handover",
+                "redirect",
+                "merge",
+                "escalation",
+                "scenario_answer",
+                "auto",
+                "audit_export",
+                "audit_gap"
+              ]
+            },
+            "description": "Вид записи."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Курсор следующей страницы — `next` из прошлого ответа. Страницы идут без пропусков и повторов, даже когда у записей одно время."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Инцидентов на странице: по умолчанию 50, не больше 200."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница инцидентов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditIncidentGroupPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/incident-groups/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportAuditIncidentGroups",
+        "summary": "Печать журнала по инцидентам",
+        "description": "§12.4. Те же фильтры, что у `listAuditIncidentGroups`, одним файлом PDF или CSV для чтения и печати: A4 альбомом, в начале — заголовок, время создания отчёта (в поясе `tz`), кто его сделал, период, пояс и фильтры; затем по разделу на инцидент — итог (первая и последняя запись, число записей, кто действовал) и его записи периода по времени. Не больше 200 инцидентов и 10 000 записей, иначе `422 AUDIT_EXPORT_TOO_LARGE`. Выгрузка пишется в журнал записью `audit_export` (`journal` = `incidents`). Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Кто сделал — id человека."
+          },
+          {
+            "name": "incident",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер, как его видит оператор: `INC-0100` или `100`. Номер хранится в записи аудита, поэтому записи инцидента, уже удалённого по сроку, находятся и по номеру. Номера нет ни у кого — пустой ответ; значение не guid и не номер — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sign_in",
+                "sign_out",
+                "break",
+                "back",
+                "link_lost",
+                "link_restored",
+                "transition",
+                "handover",
+                "redirect",
+                "merge",
+                "escalation",
+                "scenario_answer",
+                "auto",
+                "audit_export",
+                "audit_gap"
+              ]
+            },
+            "description": "Вид записи."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Almaty"
+            },
+            "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "csv"
+              ],
+              "default": "pdf"
+            },
+            "description": "Вид файла: `pdf` (по умолчанию) — файл для печати, разделы по инцидентам; `csv` — сводка: одна строка на инцидент (guid, номер, последнее состояние, первая и последняя запись периода, число записей, участники), UTF-8 с BOM, разделитель `;`, время в поясе `tz`."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "ru"
+            },
+            "description": "Язык надписей файла PDF — язык интерфейса, который его просит (`ru`, `en`, `ru-RU`…). Нет — язык из настроек оператора. Язык без своих надписей — английский."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл PDF или CSV (`format`)",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк (PDF — больше 10 000). Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/incident-timeline": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getAuditIncidentTimeline",
+        "summary": "Лента инцидента",
+        "description": "§12.4. Вся история инцидента по журналу действий, без периода: записи от первой к последней (не больше 5000; больше — `truncated`) и итог по всей истории (до 50 000 записей; CSV ленты — тоже до 50 000) — когда появилась первая и последняя запись, сколько длилась история, сколько времени инцидент был в каждом состоянии (от перехода в него до следующего перехода; последнее состояние — до последней записи), число переходов, передач, перенаправлений, эскалаций и объединений, кто действовал, последнее состояние. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "incident",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер (`INC-0100` или `100`). Значение не guid и не номер — `400 BAD_REQUEST`; записей нет — пустая лента."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Лента инцидента",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditIncidentTimeline"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/audit/incident-timeline/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportAuditIncidentTimeline",
+        "summary": "Печать ленты инцидента",
+        "description": "§12.4. Лента инцидента (`getAuditIncidentTimeline`) файлом PDF или CSV (`format`); PDF: A4 альбомом, заголовок, время создания отчёта (в поясе `tz`), кто его сделал, итог по инциденту, время в состояниях и все записи по времени. Выгрузка пишется в журнал записью `audit_export` (`journal` = `timeline`). Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [
+          {
+            "name": "incident",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Инцидент — guid или номер (`INC-0100` или `100`). Значение не guid и не номер — `400 BAD_REQUEST`; записей нет — пустая лента."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Период, который смотрел администратор (RFC 3339): записи вне его в файле — серым. Нет — все записи обычным цветом."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец этого периода, включительно (RFC 3339)."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Almaty"
+            },
+            "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "csv"
+              ],
+              "default": "pdf"
+            },
+            "description": "Вид файла: `pdf` (по умолчанию) — файл для печати; `csv` — все записи инцидента по времени со столбцами журнала действий и состояниями «из» и «в», вычисленными по машине, плюс столбец `outsidePeriod` (`true` — запись вне периода `from`–`to`, иначе пусто), UTF-8 с BOM, разделитель `;`, время в поясе `tz`."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "ru"
+            },
+            "description": "Язык надписей файла PDF — язык интерфейса, который его просит (`ru`, `en`, `ru-RU`…). Нет — язык из настроек оператора. Язык без своих надписей — английский."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл PDF или CSV (`format`)",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         }
       }
@@ -8651,6 +9058,213 @@
           }
         },
         "additionalProperties": false
+      },
+      "AuditPerson": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Человек журнала: id и имя (у системы id `system`)."
+      },
+      "AuditIncidentGroup": {
+        "type": "object",
+        "description": "§12.4. Инцидент журнала действий за период.",
+        "required": [
+          "incidentGuid",
+          "incidentNumber",
+          "firstAt",
+          "lastAt",
+          "actions",
+          "people"
+        ],
+        "properties": {
+          "incidentGuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "incidentNumber": {
+            "type": "string",
+            "description": "Номер, как его видит оператор (`INC-0100`)"
+          },
+          "firstAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Первая запись в периоде"
+          },
+          "lastAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Последняя запись в периоде"
+          },
+          "actions": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Записей в периоде"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditPerson"
+            },
+            "description": "Кто действовал в периоде"
+          },
+          "state": {
+            "type": "string",
+            "description": "Последнее состояние по переходам периода; переходов не было — нет"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditIncidentGroupPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditIncidentGroup"
+            }
+          },
+          "next": {
+            "type": "string",
+            "description": "Курсор следующей страницы; нет — страница последняя"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditIncidentTimeline": {
+        "type": "object",
+        "description": "§12.4. Вся история инцидента по журналу действий.",
+        "required": [
+          "items",
+          "truncated",
+          "summary"
+        ],
+        "properties": {
+          "incidentGuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "incidentNumber": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditAction"
+            },
+            "description": "Записи от первой к последней"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Записей больше 5000, отданы первые"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuditIncidentSummary"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditStateTime": {
+        "type": "object",
+        "required": [
+          "state",
+          "seconds"
+        ],
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "description": "Сколько секунд инцидент был в состоянии"
+      },
+      "AuditIncidentSummary": {
+        "type": "object",
+        "required": [
+          "actions",
+          "transitions",
+          "handovers",
+          "redirects",
+          "escalations",
+          "merges",
+          "people",
+          "states"
+        ],
+        "properties": {
+          "firstAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "От первой записи до последней"
+          },
+          "actions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transitions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "handovers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "redirects": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "escalations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "merges": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditPerson"
+            }
+          },
+          "state": {
+            "type": "string",
+            "description": "Последнее состояние"
+          },
+          "states": {
+            "type": "array",
+            "description": "Время в состояниях, по порядку первого входа",
+            "items": {
+              "$ref": "#/components/schemas/AuditStateTime"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "description": "Итог по инциденту"
       }
     }
   }
