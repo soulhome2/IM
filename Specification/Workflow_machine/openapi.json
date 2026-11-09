@@ -3928,6 +3928,336 @@
           }
         }
       }
+    },
+    "/operator/admin/events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listEvents",
+        "summary": "Журнал событий",
+        "description": "§12.5. События организации и инциденты, созданные по ним. Сначала новые. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Ничего не меняет. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Только события своей организации; удалённые не показываются.",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Объект — guid устройства-источника."
+          },
+          {
+            "name": "eventType",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 100
+            },
+            "description": "Типы события — guid, можно несколько (`eventType=…&eventType=…`): событие любого из них. Нет — все.",
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "withIncident",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "`true` — только события, по которым создан инцидент; `false` — только без инцидента; нет — все."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Курсор следующей страницы — `next` из прошлого ответа. Страницы идут без пропусков и повторов, даже когда у записей одно время."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "description": "Записей на странице: по умолчанию 100, не больше 500."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница журнала событий",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventJournalPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/events/sources": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listEventSources",
+        "summary": "Подсказка объектов журнала событий",
+        "description": "§12.5. Объекты, от которых в организацию приходили события, — для поля «Объект» фильтра. `q` — часть названия без учёта регистра; пусто — по алфавиту. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Только события своей организации; удалённые не показываются.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Часть названия объекта."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Сколько подсказок: по умолчанию 20, не больше 50."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Объекты журнала событий",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventSourceSuggestions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/events/{eventGuid}/explanation": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "explainEvent",
+        "summary": "Почему у события такой итог",
+        "description": "§14.5, «Объяснение отбора»; §12.5. Что сделали бы с событием правила организации, действующие сейчас: тот же отбор машины, что у приёма событий (`intake`), — и итог при приёме для сравнения. Ничего не пишет. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Событие другой организации, удалённое или неизвестное — `404 NOT_FOUND`.",
+        "parameters": [
+          {
+            "name": "eventGuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Событие."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Объяснение",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventExplanation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/operator/admin/events/export": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportEvents",
+        "summary": "Выгрузка журнала событий",
+        "description": "§12.5. Те же фильтры, что у `listEvents`, все события периода одним файлом CSV или PDF (`format`). Пределы — как у выгрузки аудита (§12.4): период не больше 92 дней, строк не больше 1 000 000 (PDF — 10 000), иначе `422 AUDIT_EXPORT_TOO_LARGE`. Каждая выгрузка пишется в журнал действий записью `audit_export` с журналом `events`: кто, когда, с какими фильтрами, сколько строк. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`; только события своей организации.",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Объект — guid устройства-источника."
+          },
+          {
+            "name": "eventType",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 100
+            },
+            "description": "Типы события — guid, можно несколько (`eventType=…&eventType=…`): событие любого из них. Нет — все.",
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "withIncident",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "`true` — только события, по которым создан инцидент; `false` — только без инцидента; нет — все."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Начало периода, включительно (RFC 3339). Нет — за 7 суток до `to`."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Конец периода, включительно (RFC 3339). Нет — сейчас."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Asia/Almaty"
+            },
+            "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "default": "csv"
+            },
+            "description": "Вид файла: `csv` (по умолчанию) или `pdf`. PDF — для чтения и печати: A4 альбомом, столбцы «Время», «Объект», «Тип устройства», «Событие», «Инцидент», шапка таблицы на каждой странице, номера страниц; в начале — заголовок «Журнал событий», время создания отчёта (в поясе `tz`) и кто его сделал, затем период, пояс и фильтры. PDF — не больше 10 000 строк, иначе `422 AUDIT_EXPORT_TOO_LARGE`; полная выгрузка — CSV."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "ru"
+            },
+            "description": "Язык надписей файла PDF — язык интерфейса, который его просит (`ru`, `en`, `ru-RU`…). Нет — язык из настроек оператора. Язык без своих надписей — английский."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов: `guid`, `at`, `sourceGuid`, `source`, `sourceType`, `eventTypeGuid`, `eventType`, `processed`, `incidents` (номера через запятую); время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди. С `format=pdf` — файл PDF (`application/pdf`), столбцы и пределы — в описании `format`",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк (PDF — больше 10 000). Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9557,6 +9887,254 @@
         },
         "additionalProperties": false,
         "description": "Итог по инциденту"
+      },
+      "EventRef": {
+        "type": "object",
+        "required": [
+          "guid",
+          "name"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Название сейчас; объект удалён — пусто"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Объект или тип события строки журнала событий: guid и название"
+      },
+      "EventIncidentRef": {
+        "type": "object",
+        "required": [
+          "guid",
+          "number"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string",
+            "description": "Номер, как его видит оператор: `INC-0145`"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventJournalItem": {
+        "type": "object",
+        "description": "§12.5. Строка журнала событий — одно событие",
+        "required": [
+          "guid",
+          "at",
+          "source",
+          "eventType",
+          "processed",
+          "incidents"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда событие пришло"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "processed": {
+            "type": "boolean",
+            "description": "Событие обработано (§14.5); `false` — ещё нет, инцидентов нет"
+          },
+          "incidents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventIncidentRef"
+            },
+            "description": "Инциденты, созданные по событию, в порядке создания; пусто — ни одного"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventJournalPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventJournalItem"
+            }
+          },
+          "next": {
+            "type": "string",
+            "description": "Курсор следующей страницы; нет — страница последняя"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Сколько всего событий у фильтра; считается до 100 000. Только на первой странице (без `cursor`); на следующих — нет."
+          },
+          "totalMore": {
+            "type": "boolean",
+            "description": "Строк больше, чем в `total` (100 000): точное число не считается. Только вместе с `total`."
+          }
+        },
+        "additionalProperties": false,
+        "description": "§12.5. Страница журнала событий"
+      },
+      "EventSourceSuggestions": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventRef"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventExplanationIncident": {
+        "type": "object",
+        "description": "Инцидент, который создали бы действующие правила: правило-победитель и сценарий",
+        "required": [
+          "rule",
+          "scenario"
+        ],
+        "properties": {
+          "rule": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/EventRef"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventExplanationReason": {
+        "type": "object",
+        "description": "Почему правило не сработало. `field`: `noScenario` — у правила нет сценария; `noConditions` — нет условий; иначе первое несовпавшее поле самого близкого условия — `eventType`, `device`, `deviceType`, `group`, и в `expectedName` — что нужно этому полю",
+        "required": [
+          "field"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "noScenario",
+              "noConditions",
+              "eventType",
+              "device",
+              "deviceType",
+              "group"
+            ]
+          },
+          "expectedName": {
+            "type": "string",
+            "description": "Что нужно полю условия — название типа события, устройства, типа устройства или группы; не нашлось — код типа события или пусто"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventExplanationRule": {
+        "type": "object",
+        "description": "Правило организации и что оно сделало с событием: `fired` — сработало (победитель инцидента), `overridden` — подошло, но перекрыто правилом `overriddenBy`, `missed` — не подошло, причина в `reason`",
+        "required": [
+          "rule",
+          "verdict"
+        ],
+        "properties": {
+          "rule": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "fired",
+              "overridden",
+              "missed"
+            ]
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventRef"
+            },
+            "description": "У `fired` — сценарии, по которым правило победило"
+          },
+          "overriddenBy": {
+            "$ref": "#/components/schemas/EventRef"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/EventExplanationReason"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventExplanation": {
+        "type": "object",
+        "description": "§14.5. Объяснение отбора для события",
+        "required": [
+          "event",
+          "atIntake",
+          "now",
+          "changed",
+          "rules"
+        ],
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/EventJournalItem"
+          },
+          "atIntake": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventIncidentRef"
+            },
+            "description": "Инциденты, созданные по событию при приёме; пусто — не создано"
+          },
+          "now": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventExplanationIncident"
+            },
+            "description": "Инциденты, которые создали бы действующие правила, в порядке создания; пусто — ни одного"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/EventExplanationIncident",
+            "description": "Сейчас событие не было бы принято: у сценария этого правила нет версии (RULE-137)"
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "Итог по действующим правилам расходится с итогом при приёме: другие правила-победители или другое число инцидентов"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventExplanationRule"
+            },
+            "description": "Все правила организации: сработавшие — в порядке создания инцидентов, потом перекрытые, потом не сработавшие — по названию"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

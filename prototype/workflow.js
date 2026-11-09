@@ -4899,14 +4899,50 @@ window.IM_WORKFLOW = {
         "expr": "(e.linkedTo == p.id && !isDone(e) && e.linkedAt <= at) || (e.leftGroup.primaryId == p.id && e.leftGroup.linkedAt <= at && e.leftGroup.at >= at)",
         "$comment": "§11.4, BUG-73, BUG-75. Был в группе основного p в момент at: открытый привязанный, присоединённый не позже, или вышедший не раньше"
       },
+      "conditionEventTypeFits": {
+        "params": {
+          "c": "Condition",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "size(c.eventType) == 0 || c.eventType[0] == e.eventType",
+        "$comment": "§14.5. Поле «тип события» условия подошло событию: не задано или совпало. Одно из четырёх полей conditionMatches; по ним же объяснение отбора называет поле, на котором условие отпало (§12.5)"
+      },
+      "conditionDeviceFits": {
+        "params": {
+          "c": "Condition",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "size(c.device) == 0 || c.device[0] == e.device",
+        "$comment": "§14.5. Поле «устройство» условия подошло событию: не задано или совпало"
+      },
+      "conditionDeviceTypeFits": {
+        "params": {
+          "c": "Condition",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "size(c.deviceType) == 0 || c.deviceType[0] == e.deviceType",
+        "$comment": "§14.5. Поле «тип устройства» условия подошло событию: не задано или совпало"
+      },
+      "conditionGroupFits": {
+        "params": {
+          "c": "Condition",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "size(c.group) == 0 || deviceInGroup(e.device, c.group[0])",
+        "$comment": "§14.5. Поле «группа» условия подошло событию: не задано или устройство-источник в группе или во вложенной"
+      },
       "conditionMatches": {
         "params": {
           "c": "Condition",
           "e": "Event"
         },
         "returns": "bool",
-        "expr": "(size(c.eventType) == 0 || c.eventType[0] == e.eventType) && (size(c.device) == 0 || c.device[0] == e.device) && (size(c.deviceType) == 0 || c.deviceType[0] == e.deviceType) && (size(c.group) == 0 || deviceInGroup(e.device, c.group[0]))",
-        "$comment": "§14.5, ARCH-15. Условие правила подошло событию: каждое заданное поле совпало (поля условия соединены «и»); группа — устройство-источник в ней или во вложенной"
+        "expr": "conditionEventTypeFits(c, e) && conditionDeviceFits(c, e) && conditionDeviceTypeFits(c, e) && conditionGroupFits(c, e)",
+        "$comment": "§14.5, ARCH-15. Условие правила подошло событию: каждое заданное поле совпало (поля условия соединены «и»); группа — устройство-источник в ней или во вложенной. Поля — определения conditionEventTypeFits, conditionDeviceFits, conditionDeviceTypeFits, conditionGroupFits"
       },
       "conditionRank": {
         "params": {

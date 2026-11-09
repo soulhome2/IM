@@ -354,10 +354,30 @@ module im {
   def inGroupAt(e: Incident, p: Incident, at: int): bool =
     ((((e.linkedTo == p.id) and not(isDone(e))) and (e.linkedAt <= at)) or (((e.leftGroup.primaryId == p.id) and (e.leftGroup.linkedAt <= at)) and (e.leftGroup.at >= at)))
 
-  // §14.5, ARCH-15. Условие правила подошло событию: каждое заданное поле совпало (поля условия соединены «и»); группа — устройство-источник в ней или во вложенной
+  // §14.5. Поле «тип события» условия подошло событию: не задано или совпало. Одно из четырёх полей conditionMatches; по ним же объяснение отбора называет поле, на котором условие отпало (§12.5)
+
+  def conditionEventTypeFits(c: Condition, e: Event): bool =
+    ((c.eventType.length() == 0) or (c.eventType[0] == e.eventType))
+
+  // §14.5. Поле «устройство» условия подошло событию: не задано или совпало
+
+  def conditionDeviceFits(c: Condition, e: Event): bool =
+    ((c.device.length() == 0) or (c.device[0] == e.device))
+
+  // §14.5. Поле «тип устройства» условия подошло событию: не задано или совпало
+
+  def conditionDeviceTypeFits(c: Condition, e: Event): bool =
+    ((c.deviceType.length() == 0) or (c.deviceType[0] == e.deviceType))
+
+  // §14.5. Поле «группа» условия подошло событию: не задано или устройство-источник в группе или во вложенной
+
+  def conditionGroupFits(c: Condition, e: Event): bool =
+    ((c.group.length() == 0) or deviceInGroup(e.device, c.group[0]))
+
+  // §14.5, ARCH-15. Условие правила подошло событию: каждое заданное поле совпало (поля условия соединены «и»); группа — устройство-источник в ней или во вложенной. Поля — определения conditionEventTypeFits, conditionDeviceFits, conditionDeviceTypeFits, conditionGroupFits
 
   def conditionMatches(c: Condition, e: Event): bool =
-    (((((c.eventType.length() == 0) or (c.eventType[0] == e.eventType)) and ((c.device.length() == 0) or (c.device[0] == e.device))) and ((c.deviceType.length() == 0) or (c.deviceType[0] == e.deviceType))) and ((c.group.length() == 0) or deviceInGroup(e.device, c.group[0])))
+    (((conditionEventTypeFits(c, e) and conditionDeviceFits(c, e)) and conditionDeviceTypeFits(c, e)) and conditionGroupFits(c, e))
 
   // §14.5, ARCH-15. Точность условия — по самому точному его полю: устройство 3000, тип устройства 2000, группа 1000 плюс глубина группы в дереве; только тип события — 0 (тип ранга не добавляет)
 
