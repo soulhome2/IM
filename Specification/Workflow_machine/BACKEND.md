@@ -85,7 +85,7 @@
 - Векторы `fixtures/cel-vectors.json` проходят у исполнителя бэкенда (CEL.md, «Векторы»).
 - Векторы `fixtures/transition-vectors.json` проходят у ядра бэкенда (CEL.md, «Векторы переходов»), векторы `fixtures/transition-vectors-patched.json` — у ядра бэкенда на машине с патчем из их шапки (CEL.md, «Набор на машине с патчем»).
 
-Тесты не проверяют 18 операций: редактор схемы (`/operator/workflow/schemas…`, 8), правку справочника приоритетов (`/operator/admin/priorities…`, 3), правку справочных ссылок (`/operator/admin/help-links…`, 3) и правку дежурных групп (`/operator/admin/duty-groups…`, 4) — экранов для них в прототипе нет. Их проверка — отдельно.
+Тесты не проверяют 22 операции: редактор схемы (`/operator/workflow/schemas…`, 8), правку справочника приоритетов (`/operator/admin/priorities…`, 3), правку справочных ссылок (`/operator/admin/help-links…`, 3) и правку дежурных групп (`/operator/admin/duty-groups…`, 4) — экранов для них в прототипе нет; аудит по инцидентам (`/operator/admin/audit/incident-groups…` и `/incident-timeline…`, 4) — его делает сервер МИ, во встроенном сервере прототипа его нет. Их проверка — отдельно.
 
 ## Что ещё не решено
 
