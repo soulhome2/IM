@@ -2039,7 +2039,7 @@
         ],
         "operationId": "exportAuditActions",
         "summary": "Выгрузка журнала действий",
-        "description": "§12.4. Те же фильтры, что у `listAuditActions`, все строки периода одним файлом CSV. Период — не больше 92 дней, строк — не больше 1 000 000, иначе `422 AUDIT_EXPORT_TOO_LARGE`. Каждая выгрузка пишется в журнал действий записью `audit_export`: кто, когда, с какими фильтрами, сколько строк. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "description": "§12.4. Те же фильтры, что у `listAuditActions`, все строки периода одним файлом CSV или PDF (`format`). Период — не больше 92 дней, строк — не больше 1 000 000, иначе `422 AUDIT_EXPORT_TOO_LARGE`. Каждая выгрузка пишется в журнал действий записью `audit_export`: кто, когда, с какими фильтрами, сколько строк. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
         "parameters": [
           {
             "name": "person",
@@ -2108,21 +2108,40 @@
               "example": "Asia/Almaty"
             },
             "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "default": "csv"
+            },
+            "description": "Вид файла: `csv` (по умолчанию) или `pdf`. PDF — для чтения и печати: A4 альбомом, таблица с главными столбцами журнала, шапка таблицы на каждой странице, номера страниц; в начале — заголовок (название журнала), время создания отчёта (в поясе `tz`) и кто его сделал (имя и id), затем период, пояс и фильтры. PDF — не больше 10 000 строк, иначе `422 AUDIT_EXPORT_TOO_LARGE`; полная выгрузка — CSV."
           }
         ],
         "responses": {
           "200": {
-            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу",
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу. С `format=pdf` — файл PDF (`application/pdf`), столбцы и пределы — в описании `format`",
             "content": {
               "text/csv": {
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "422": {
-            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк. Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк (PDF — больше 10 000). Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2260,7 +2279,7 @@
         ],
         "operationId": "exportSettingsAudit",
         "summary": "Выгрузка журнала изменений настроек",
-        "description": "§12.4. Те же фильтры, что у `listSettingsAudit`, одним файлом CSV; пределы — как у выгрузки журнала действий (`422 AUDIT_EXPORT_TOO_LARGE`). Выгрузка пишется в журнал действий записью `audit_export`. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
+        "description": "§12.4. Те же фильтры, что у `listSettingsAudit`, одним файлом CSV или PDF (`format`); пределы — как у выгрузки журнала действий (`422 AUDIT_EXPORT_TOO_LARGE`). Выгрузка пишется в журнал действий записью `audit_export`. Без `from` и `to` — последние 7 суток; `from` позже `to` — `400 BAD_REQUEST`. Право `incident:schema:admin` (в облаке `incident_manager.manage`; права аудита `im.audit.*` в первой версии сводятся к нему, §5), без него — `403 PERMISSION_DENIED`.",
         "parameters": [
           {
             "name": "objectType",
@@ -2328,21 +2347,40 @@
               "example": "Asia/Almaty"
             },
             "description": "§14.9. Пояс компьютера (браузера) — имя IANA, например `Asia/Almaty`. Время в файле — в этом поясе, вид `ГГГГ-ММ-ДД ЧЧ:ММ:СС ±ЧЧ:ММ` (`2026-11-08 15:00:00 +05:00`). Нет — UTC (`+00:00`). Неизвестный пояс — `400 BAD_REQUEST`."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "default": "csv"
+            },
+            "description": "Вид файла: `csv` (по умолчанию) или `pdf`. PDF — для чтения и печати: A4 альбомом, таблица с главными столбцами журнала, шапка таблицы на каждой странице, номера страниц; в начале — заголовок (название журнала), время создания отчёта (в поясе `tz`) и кто его сделал (имя и id), затем период, пояс и фильтры. PDF — не больше 10 000 строк, иначе `422 AUDIT_EXPORT_TOO_LARGE`; полная выгрузка — CSV."
           }
         ],
         "responses": {
           "200": {
-            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу",
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, первая строка — названия столбцов; время — в поясе `tz`; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу. С `format=pdf` — файл PDF (`application/pdf`), столбцы и пределы — в описании `format`",
             "content": {
               "text/csv": {
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
           "422": {
-            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк. Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
+            "description": "Выгрузка слишком большая: период больше 92 дней или больше 1 000 000 строк (PDF — больше 10 000). Код `AUDIT_EXPORT_TOO_LARGE`, ключ текста `workflow.error.audit_export_too_large`.",
             "content": {
               "application/problem+json": {
                 "schema": {

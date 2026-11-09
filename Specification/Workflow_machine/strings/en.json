@@ -181,7 +181,7 @@
   "workflow.error.no_route": "No route {method} {path}",
   "workflow.error.unauthenticated": "Not signed in: sign in again",
   "workflow.error.bad_request": "Request not understood: invalid parameters or headers",
-  "workflow.error.audit_export_too_large": "Export too large: the period must be at most 92 days and at most 1,000,000 rows",
+  "workflow.error.audit_export_too_large": "Export too large: the period must be at most 92 days and at most 1,000,000 rows (10,000 for PDF)",
   "workflow.error.no_audit_access": "No permission to view the audit",
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
