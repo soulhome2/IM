@@ -1779,22 +1779,42 @@
       expect(!$("modalAdmin").hidden, "экран настроек не открылся");
       const tabs = [...$("adminTabs").querySelectorAll("[data-admin-tab]")];
       expect(tabs.length === window.IM_WORKFLOW.adminSettings.tabs.length, `вкладок ${tabs.length}, в машине ${window.IM_WORKFLOW.adminSettings.tabs.length}`);
-      await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
+      // План 77: вкладок с настройками четыре — сроки и эскалация, работа оператора, причины, хранение; прежние
+      // вкладки — разделами внутри, в том же порядке, и ни одна настройка не потерялась
+      const settingTabs = window.IM_WORKFLOW.adminSettings.tabs.filter((x) => x.items).map((x) => x.id);
+      expect(settingTabs.join() === "timing,operator,reasons,storage", `вкладки с настройками: ${settingTabs.join(", ")}`);
+      const groupsOf = { timing: "norms,escalation", operator: "queue,limits,session,links", storage: "retention" };
+      for (const [id, want] of Object.entries(groupsOf)) {
+        await click($("adminTabs").querySelector(`[data-admin-tab="${id}"]`));
+        await wait(200);
+        const shownGroups = [...$("adminTable").querySelectorAll("[data-admin-group]")].map((r) => r.dataset.adminGroup).join();
+        expect(shownGroups === want, `вкладка «${id}»: разделы ${shownGroups}, а не ${want}`);
+        const tab = window.IM_WORKFLOW.adminSettings.tabs.find((x) => x.id === id);
+        const rows = [...$("adminTable").tBodies[0].rows].filter((r) => !r.classList.contains("admin-group") && !r.querySelector("table"));
+        expect(rows.length === tab.items.length, `вкладка «${id}»: строк настроек ${rows.length}, в машине ${tab.items.length}`);
+      }
+      // Справочные ссылки — раздел «Работы оператора» с данными из запроса
+      await click($("adminTabs").querySelector('[data-admin-tab="operator"]'));
+      await wait(200);
+      expect($("adminTable").querySelector('[data-admin-group="links"] + tr table tbody tr'), "в разделе «Справочные ссылки» нет ссылок из запроса");
+      expect(!$("adminTabs").querySelector('[data-admin-tab="links"], [data-admin-tab="limits"], [data-admin-tab="retention"]'), "прежние вкладки остались наверху");
+      const allPaths = window.IM_WORKFLOW.adminSettings.tabs.flatMap((x) => (x.items || []).map((i) => i.path));
+      expect(new Set(allPaths).size === allPaths.length, "настройка повторяется в двух вкладках");
       const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
       // Стенд самопроверки задал лимит 1 (standReset): экран показывает действующую схему
       expect(row && row.cells[1].textContent.trim() === "1", "лимит активных не показан или не совпадает со схемой");
       // Значения перечня — подписями из машины, а не машинным словом (BUG-26)
-      await click($("adminTabs").querySelector('[data-admin-tab="escalation"]'));
+      await click($("adminTabs").querySelector('[data-admin-tab="timing"]'));
       const overdue = [...$("adminTable").querySelectorAll("tr")].find((r) => /Просрочка закрытия/.test(r.textContent));
       // Значение перечня в машине — ключ каталога строк (§14.9): ждём его русскую строку
-      const key = window.IM_WORKFLOW.adminSettings.tabs.find((x) => x.id === "escalation").items.find((i) => i.path === "escalation.onResolutionOverdue").values[window.IM_WORKFLOW.escalation.onResolutionOverdue];
+      const key = window.IM_WORKFLOW.adminSettings.tabs.find((x) => x.id === "timing").items.find((i) => i.path === "escalation.onResolutionOverdue").values[window.IM_WORKFLOW.escalation.onResolutionOverdue];
       const expected = window.IM_STRINGS.ru[key];
       expect(overdue && overdue.cells[1].textContent.trim() === expected, `«Просрочка закрытия»: «${overdue && overdue.cells[1].textContent.trim()}» вместо «${expected}»`);
       // Срок «Нет связи» — из порогов молчания, а не «без срока» (deadlineFromIdle, BUG-119)
       await click($("adminTabs").querySelector('[data-admin-tab="reasons"]'));
       expect(/Нет связи с оператором \(порог «в очередь» минус «отложить»\)/.test($("adminTable").textContent), "срок «Нет связи» на экране — не из порогов молчания");
-      // Срок хранения закрытых — своя вкладка «Хранение», значение из машины (§14.11)
-      await click($("adminTabs").querySelector('[data-admin-tab="retention"]'));
+      // Срок хранения закрытых — вкладка «Хранение и резервная копия», значение из машины (§14.11)
+      await click($("adminTabs").querySelector('[data-admin-tab="storage"]'));
       const kept = [...$("adminTable").querySelectorAll("tr")].find((r) => /Хранить закрытые инциденты/.test(r.textContent));
       const days = window.IM_WORKFLOW.retention.closedIncidentsDays;
       expect(kept && kept.cells[1].textContent.includes(String(days)), `срок хранения не показан или не ${days}: «${kept && kept.cells[1].textContent.trim()}»`);
@@ -2690,8 +2710,11 @@
         const status = $("statusQueue").textContent;
         expect(/у меня: \d+,/.test(status), `в строке состояния осталось «из N»: ${status}`);
         await click($("adminBtn"));
-        await click($("adminTabs").querySelector('[data-admin-tab="limits"]'));
-        const shown = [...$("adminTable").querySelectorAll("tbody tr")].map((r) => r.cells[1].textContent.trim());
+        await click($("adminTabs").querySelector('[data-admin-tab="operator"]'));
+        await wait(200);
+        // Строки раздела «Лимиты» — от его заголовка до следующего (план 77)
+        const shown = [];
+        for (let r = $("adminTable").querySelector('[data-admin-group="limits"]').nextElementSibling; r && !r.classList.contains("admin-group"); r = r.nextElementSibling) shown.push(r.cells[1].textContent.trim());
         await click(document.querySelector('[data-close="modalAdmin"]'));
         expect(shown.length === 3 && shown.every((v) => v === "без ограничения"), `в настройках: ${shown.join(", ")}`);
         await click($("selectAllBtn"));

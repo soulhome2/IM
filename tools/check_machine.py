@@ -2006,6 +2006,47 @@ def check_escalation_settings(w, o, err):
             err.append(f"эскалация: уровень {lvl.get('level')} — targetKind user или group и target — id (§8.3, ARCH-07 в7)")
 
 
+def check_admin_groups(tab, o, err):
+    """Разделы объединённой вкладки (план 77): у каждой настройки вкладки — раздел из groups, настройки раздела идут
+    подряд и в порядке разделов; раздел без настроек — с запросом (source) из контракта; без groups у настроек
+    вкладки нет поля group."""
+    where = f"настройки, вкладка «{tab['id']}»"
+    groups = tab.get("groups")
+    items = tab.get("items", [])
+    if groups is None:
+        for item in items:
+            if "group" in item:
+                err.append(f"{where}: у {item['path']} раздел {item['group']}, а разделов у вкладки нет")
+        return
+    ids = [g.get("id") for g in groups]
+    if len(set(ids)) != len(ids):
+        err.append(f"{where}: разделы повторяются: {ids}")
+    for g in groups:
+        if not g.get("id") or not g.get("labelKey"):
+            err.append(f"{where}: у раздела нет id или labelKey: {g}")
+    order = []
+    for item in items:
+        gid = item.get("group")
+        if gid not in ids:
+            err.append(f"{where}: у {item['path']} раздел {gid!r} — не из groups {ids}")
+            continue
+        if not order or order[-1] != gid:
+            order.append(gid)
+    if len(set(order)) != len(order) or order != [g for g in ids if g in order]:
+        err.append(f"{where}: настройки разделов не подряд или не в порядке разделов: {order}, а разделы {ids}")
+    for g in groups:
+        if g.get("id") in order:
+            if g.get("source"):
+                err.append(f"{where}, раздел «{g['id']}»: и настройки, и запрос {g['source']}")
+            continue
+        if not g.get("source"):
+            err.append(f"{where}, раздел «{g.get('id')}»: ни настроек, ни запроса (source)")
+            continue
+        method, url = g["source"].split(" ", 1)
+        if method.lower() not in o["paths"].get(url, {}):
+            err.append(f"{where}, раздел «{g['id']}»: запроса {g['source']} нет в контракте")
+
+
 def check_admin_settings(w, o, err):
     """Перечень настроек администратора (RULE-44): пути существуют, запросы есть в контракте,
     каждый ключ разделов-настроек — в перечне или в notSettings с причиной."""
@@ -2033,6 +2074,7 @@ def check_admin_settings(w, o, err):
             method, url = tab["source"].split(" ", 1)
             if method.lower() not in o["paths"].get(url, {}):
                 err.append(f"настройки, вкладка «{tab['id']}»: запроса {tab['source']} нет в контракте")
+        check_admin_groups(tab, o, err)
     skipped = [n["path"] for n in a.get("notSettings", [])]
     for n in a.get("notSettings", []):
         if setting_at(w, n["path"]) is _MISSING:

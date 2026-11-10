@@ -5696,6 +5696,38 @@
                   "type": "string",
                   "description": "Разделы правил"
                 },
+                "groups": {
+                  "type": "array",
+                  "description": "План 77. Разделы объединённой вкладки по порядку: клиент показывает их заголовками внутри вкладки. Раздел с настройками — те из items, у которых group равно его id; раздел без настроек читает данные МИ запросом source.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "labelKey"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string",
+                        "description": "§14.9. Ключ заголовка раздела"
+                      },
+                      "rules": {
+                        "type": "string",
+                        "description": "Разделы правил"
+                      },
+                      "source": {
+                        "type": "string",
+                        "description": "Запрос, которым читаются данные МИ раздела, например `GET /operator/reference/help-links`"
+                      },
+                      "whatKey": {
+                        "type": "string",
+                        "description": "§14.9. Ключ пояснения раздела с запросом"
+                      }
+                    }
+                  }
+                },
                 "items": {
                   "type": "array",
                   "items": {
@@ -5733,6 +5765,10 @@
                       "nullKey": {
                         "type": "string",
                         "description": "§20, RULE-69. Ключ подписи пустого значения (`null`) — например `workflow.settings.unlimited`, «без ограничения». У строки с `nullKey` редактор настроек предлагает этот выбор рядом с числом; без `nullKey` пустое значение показывается «—»."
+                      },
+                      "group": {
+                        "type": "string",
+                        "description": "План 77. id раздела вкладки (groups), к которому относится настройка; есть, только когда у вкладки есть разделы"
                       }
                     }
                   }

@@ -4270,23 +4270,35 @@
     const table = $("adminTable");
     table.className = tab.items ? "doc-table settings" : "doc-table";
     if (tab.items) {
-      table.innerHTML =
-        `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>` +
-        tab.items
-          .map((item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`)
-          .join("") +
-        "</tbody>";
+      // Разделы объединённой вкладки (план 77): заголовок раздела строкой, настройки раздела — под ним; раздел без
+      // настроек, с запросом (source), — вложенной таблицей своих данных
+      const groups = tab.groups || [];
+      const itemRow = (item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`;
+      const groupHead = (g) => `<tr class="admin-group" data-admin-group="${g.id}"><th colspan="2">${escapeHtml(lbl(g))}<span class="what">${escapeHtml(`${t("Правила")}: ${g.rules}`)}</span></th></tr>`;
+      const body = groups.length
+        ? (
+            await Promise.all(
+              groups.map(async (g) => {
+                if (g.source) return `${groupHead(g)}<tr><td colspan="2"><table class="doc-table">${await sourceTable(g)}</table></td></tr>`;
+                return groupHead(g) + tab.items.filter((i) => i.group === g.id).map(itemRow).join("");
+              })
+            )
+          ).join("")
+        : tab.items.map(itemRow).join("");
+      if ((tabs.find((x) => x.id === adminState.tab) || tabs[0]) !== tab) return; // пока ждали запрос раздела, открыли другую вкладку
+      table.innerHTML = `<thead><tr><th>${te("Настройка")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>${body}</tbody>`;
       return;
     }
     if (!tab.source) {
       table.innerHTML = `<tbody><tr><td>${te("В прототипе запроса нет: эти данные МИ ещё не вынесены в контракт")}</td></tr></tbody>`;
       return;
     }
+    table.innerHTML = await sourceTable(tab);
+  }
+  // Данные МИ вкладки или раздела с запросом (source): шапка и строки таблицы, ошибка — строкой
+  async function sourceTable(tab) {
     const data = await api.get(sourcePath(tab)).catch((err) => ({ error: problemText(err) }));
-    if (data.error) {
-      table.innerHTML = `<tbody><tr><td>${escapeHtml(data.error)}</td></tr></tbody>`;
-      return;
-    }
+    if (data.error) return `<tbody><tr><td>${escapeHtml(data.error)}</td></tr></tbody>`;
     const names = (list) => asData(list.map((x) => x.name).join(", ") || "—");
     const rows = {
       "/operator/admin/access-groups": () => [
@@ -4323,7 +4335,7 @@
       },
     }[sourcePath(tab)];
     const [head, body] = rows();
-    table.innerHTML = `<thead><tr>${head.map((h) => `<th>${te(h)}</th>`).join("")}</tr></thead><tbody>${body.join("")}</tbody>`;
+    return `<thead><tr>${head.map((h) => `<th>${te(h)}</th>`).join("")}</tr></thead><tbody>${body.join("")}</tbody>`;
   }
 
   // Часы и обратный отсчёт — на клиенте по меткам времени (§4). Дедлайны ведёт сервер:

@@ -105,8 +105,16 @@ def render(w):
     for tab in a["tabs"]:
         out += [f"## {RU.get(tab.get('labelKey'), tab.get('label'))}", "", f"Правила: {tab['rules']}.", ""]
         if "items" in tab:
-            out += ["| Настройка | Что задаёт | Сейчас | В машине |", "|---|---|---|---|"]
+            groups = {g["id"]: g for g in tab.get("groups", [])}
+            shown_group = None
+            if not groups:
+                out += ["| Настройка | Что задаёт | Сейчас | В машине |", "|---|---|---|---|"]
             for item in tab["items"]:
+                # Разделы объединённой вкладки (план 77) — подзаголовками, в порядке настроек
+                if groups and item.get("group") != shown_group:
+                    shown_group = item.get("group")
+                    g = groups[shown_group]
+                    out += ([""] if out[-1] else []) + [f"### {RU.get(g['labelKey'], g['labelKey'])}", "", f"Правила: {g['rules']}.", "", "| Настройка | Что задаёт | Сейчас | В машине |", "|---|---|---|---|"]
                 key = item["path"].split(".")[-1]
                 seconds = item["path"].startswith("timers.")
                 current = at(w, item["path"])
@@ -114,6 +122,9 @@ def render(w):
                 # nullKey — подпись пустого значения, например «без ограничения» (RULE-69)
                 shown = RU.get(item["nullKey"], item["nullKey"]) if current is None and item.get("nullKey") else RU.get(values[current], values[current]) if isinstance(current, str) and current in values else value(current, key, seconds)
                 out.append(f"| {RU.get(item.get('labelKey'), item.get('label'))} | {RU.get(item.get('whatKey'), item.get('what'))} | {shown} | `{item['path']}` |")
+            for g in tab.get("groups", []):
+                if g.get("source"):
+                    out += ["", f"### {RU.get(g['labelKey'], g['labelKey'])}", "", f"Правила: {g['rules']}.", "", f"{RU.get(g.get('whatKey'), g.get('whatKey'))}. Данные МИ, не схема: читается запросом `{g['source']}`."]
         else:
             src = f"читается запросом `{tab['source']}`" if tab.get("source") else "запроса в контракте пока нет"
             out += [f"{RU.get(tab.get('whatKey'), tab.get('what'))}. Данные МИ, не схема: {src}."]

@@ -6601,49 +6601,203 @@ window.IM_WORKFLOW = {
     },
     "tabs": [
       {
-        "id": "norms",
-        "labelKey": "workflow.settings.tab.norms",
-        "rules": "§4",
+        "id": "timing",
+        "labelKey": "workflow.settings.tab.timing",
+        "rules": "§4, §8.3, §9",
+        "groups": [
+          {
+            "id": "norms",
+            "labelKey": "workflow.settings.tab.norms",
+            "rules": "§4"
+          },
+          {
+            "id": "escalation",
+            "labelKey": "workflow.settings.tab.escalation",
+            "rules": "§8.3, §9"
+          }
+        ],
         "items": [
           {
             "path": "invariants.manualWinsOverTimer.graceSec",
             "labelKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec",
-            "whatKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec.what"
+            "whatKey": "workflow.settings.invariants.manualWinsOverTimer.graceSec.what",
+            "group": "norms"
           },
           {
             "path": "timers.reaction.defaultSec",
             "labelKey": "workflow.settings.timers.reaction.defaultSec",
-            "whatKey": "workflow.settings.timers.reaction.defaultSec.what"
+            "whatKey": "workflow.settings.timers.reaction.defaultSec.what",
+            "group": "norms"
           },
           {
             "path": "timers.reaction.overrides",
             "labelKey": "workflow.settings.timers.reaction.overrides",
-            "whatKey": "workflow.settings.timers.reaction.overrides.what"
+            "whatKey": "workflow.settings.timers.reaction.overrides.what",
+            "group": "norms"
           },
           {
             "path": "timers.resolution.defaultSec",
             "labelKey": "workflow.settings.timers.resolution.defaultSec",
-            "whatKey": "workflow.settings.timers.resolution.defaultSec.what"
+            "whatKey": "workflow.settings.timers.resolution.defaultSec.what",
+            "group": "norms"
           },
           {
             "path": "timers.resolution.byPriority",
             "labelKey": "workflow.settings.timers.resolution.byPriority",
-            "whatKey": "workflow.settings.timers.resolution.byPriority.what"
+            "whatKey": "workflow.settings.timers.resolution.byPriority.what",
+            "group": "norms"
           },
           {
             "path": "timers.resolution.overrides",
             "labelKey": "workflow.settings.timers.resolution.overrides",
-            "whatKey": "workflow.settings.timers.resolution.overrides.what"
+            "whatKey": "workflow.settings.timers.resolution.overrides.what",
+            "group": "norms"
           },
           {
             "path": "limits.reopenWindowMin",
             "labelKey": "workflow.settings.limits.reopenWindowMin",
-            "whatKey": "workflow.settings.limits.reopenWindowMin.what"
+            "whatKey": "workflow.settings.limits.reopenWindowMin.what",
+            "group": "norms"
           },
           {
             "path": "limits.reopenResolutionSec",
             "labelKey": "workflow.settings.limits.reopenResolutionSec",
-            "whatKey": "workflow.settings.limits.reopenResolutionSec.what"
+            "whatKey": "workflow.settings.limits.reopenResolutionSec.what",
+            "group": "norms"
+          },
+          {
+            "path": "escalation.enabled",
+            "labelKey": "workflow.settings.escalation.enabled",
+            "whatKey": "workflow.settings.escalation.enabled.what",
+            "group": "escalation"
+          },
+          {
+            "path": "escalation.levels",
+            "labelKey": "workflow.settings.escalation.levels",
+            "whatKey": "workflow.settings.escalation.levels.what",
+            "group": "escalation"
+          },
+          {
+            "path": "escalation.maxLevel",
+            "labelKey": "workflow.settings.escalation.maxLevel",
+            "whatKey": "workflow.settings.escalation.maxLevel.what",
+            "group": "escalation"
+          },
+          {
+            "path": "escalation.onResolutionOverdue",
+            "labelKey": "workflow.settings.escalation.onResolutionOverdue",
+            "whatKey": "workflow.settings.escalation.onResolutionOverdue.what",
+            "values": {
+              "alert": "workflow.settings.escalation.onResolutionOverdue.value.alert",
+              "escalate": "workflow.settings.escalation.onResolutionOverdue.value.escalate"
+            },
+            "group": "escalation"
+          },
+          {
+            "path": "escalation.reasonKey",
+            "labelKey": "workflow.settings.escalation.reasonKey",
+            "whatKey": "workflow.settings.escalation.reasonKey.what",
+            "group": "escalation"
+          },
+          {
+            "path": "alerts.target",
+            "labelKey": "workflow.settings.alerts.target",
+            "whatKey": "workflow.settings.alerts.target.what",
+            "group": "escalation"
+          },
+          {
+            "path": "alerts.noRecipientLog",
+            "labelKey": "workflow.settings.alerts.noRecipientLog",
+            "whatKey": "workflow.settings.alerts.noRecipientLog.what",
+            "group": "escalation"
+          }
+        ]
+      },
+      {
+        "id": "operator",
+        "labelKey": "workflow.settings.tab.operator",
+        "rules": "§7, §10.2, §11, §12.3",
+        "groups": [
+          {
+            "id": "queue",
+            "labelKey": "workflow.settings.tab.queue",
+            "rules": "§7"
+          },
+          {
+            "id": "limits",
+            "labelKey": "workflow.settings.tab.limits",
+            "rules": "§10.2, §11"
+          },
+          {
+            "id": "session",
+            "labelKey": "workflow.settings.tab.session",
+            "rules": "§12.3"
+          },
+          {
+            "id": "links",
+            "labelKey": "workflow.settings.tab.links",
+            "rules": "§7",
+            "source": "GET /operator/reference/help-links",
+            "whatKey": "workflow.settings.tab.links.what"
+          }
+        ],
+        "items": [
+          {
+            "path": "queueSort.default",
+            "labelKey": "workflow.settings.queueSort.default",
+            "whatKey": "workflow.settings.queueSort.default.what",
+            "values": {
+              "priority_then_oldest": "workflow.settings.queueSort.default.value.priority_then_oldest",
+              "priority_then_newest": "workflow.settings.queueSort.default.value.priority_then_newest",
+              "oldest_first": "workflow.settings.queueSort.default.value.oldest_first",
+              "reaction_deadline": "workflow.settings.queueSort.default.value.reaction_deadline"
+            },
+            "group": "queue"
+          },
+          {
+            "path": "queueSort.operatorMayChange",
+            "labelKey": "workflow.settings.queueSort.operatorMayChange",
+            "whatKey": "workflow.settings.queueSort.operatorMayChange.what",
+            "group": "queue"
+          },
+          {
+            "path": "limits.maxActive",
+            "labelKey": "workflow.settings.limits.maxActive",
+            "whatKey": "workflow.settings.limits.maxActive.what",
+            "nullKey": "workflow.settings.unlimited",
+            "group": "limits"
+          },
+          {
+            "path": "limits.maxOnHold",
+            "labelKey": "workflow.settings.limits.maxOnHold",
+            "whatKey": "workflow.settings.limits.maxOnHold.what",
+            "nullKey": "workflow.settings.unlimited",
+            "group": "limits"
+          },
+          {
+            "path": "limits.maxBulk",
+            "labelKey": "workflow.settings.limits.maxBulk",
+            "whatKey": "workflow.settings.limits.maxBulk.what",
+            "nullKey": "workflow.settings.unlimited",
+            "group": "limits"
+          },
+          {
+            "path": "session.heartbeatSec",
+            "labelKey": "workflow.settings.session.heartbeatSec",
+            "whatKey": "workflow.settings.session.heartbeatSec.what",
+            "group": "session"
+          },
+          {
+            "path": "session.idleHoldSec",
+            "labelKey": "workflow.settings.session.idleHoldSec",
+            "whatKey": "workflow.settings.session.idleHoldSec.what",
+            "group": "session"
+          },
+          {
+            "path": "session.idleReleaseSec",
+            "labelKey": "workflow.settings.session.idleReleaseSec",
+            "whatKey": "workflow.settings.session.idleReleaseSec.what",
+            "group": "session"
           }
         ]
       },
@@ -6670,135 +6824,28 @@ window.IM_WORKFLOW = {
         ]
       },
       {
-        "id": "escalation",
-        "labelKey": "workflow.settings.tab.escalation",
-        "rules": "§8.3, §9",
-        "items": [
-          {
-            "path": "escalation.enabled",
-            "labelKey": "workflow.settings.escalation.enabled",
-            "whatKey": "workflow.settings.escalation.enabled.what"
-          },
-          {
-            "path": "escalation.levels",
-            "labelKey": "workflow.settings.escalation.levels",
-            "whatKey": "workflow.settings.escalation.levels.what"
-          },
-          {
-            "path": "escalation.maxLevel",
-            "labelKey": "workflow.settings.escalation.maxLevel",
-            "whatKey": "workflow.settings.escalation.maxLevel.what"
-          },
-          {
-            "path": "escalation.onResolutionOverdue",
-            "labelKey": "workflow.settings.escalation.onResolutionOverdue",
-            "whatKey": "workflow.settings.escalation.onResolutionOverdue.what",
-            "values": {
-              "alert": "workflow.settings.escalation.onResolutionOverdue.value.alert",
-              "escalate": "workflow.settings.escalation.onResolutionOverdue.value.escalate"
-            }
-          },
-          {
-            "path": "escalation.reasonKey",
-            "labelKey": "workflow.settings.escalation.reasonKey",
-            "whatKey": "workflow.settings.escalation.reasonKey.what"
-          },
-          {
-            "path": "alerts.target",
-            "labelKey": "workflow.settings.alerts.target",
-            "whatKey": "workflow.settings.alerts.target.what"
-          },
-          {
-            "path": "alerts.noRecipientLog",
-            "labelKey": "workflow.settings.alerts.noRecipientLog",
-            "whatKey": "workflow.settings.alerts.noRecipientLog.what"
-          }
-        ]
-      },
-      {
-        "id": "limits",
-        "labelKey": "workflow.settings.tab.limits",
-        "rules": "§10.2, §11",
-        "items": [
-          {
-            "path": "limits.maxActive",
-            "labelKey": "workflow.settings.limits.maxActive",
-            "whatKey": "workflow.settings.limits.maxActive.what",
-            "nullKey": "workflow.settings.unlimited"
-          },
-          {
-            "path": "limits.maxOnHold",
-            "labelKey": "workflow.settings.limits.maxOnHold",
-            "whatKey": "workflow.settings.limits.maxOnHold.what",
-            "nullKey": "workflow.settings.unlimited"
-          },
-          {
-            "path": "limits.maxBulk",
-            "labelKey": "workflow.settings.limits.maxBulk",
-            "whatKey": "workflow.settings.limits.maxBulk.what",
-            "nullKey": "workflow.settings.unlimited"
-          }
-        ]
-      },
-      {
-        "id": "session",
-        "labelKey": "workflow.settings.tab.session",
-        "rules": "§12.3",
-        "items": [
-          {
-            "path": "session.heartbeatSec",
-            "labelKey": "workflow.settings.session.heartbeatSec",
-            "whatKey": "workflow.settings.session.heartbeatSec.what"
-          },
-          {
-            "path": "session.idleHoldSec",
-            "labelKey": "workflow.settings.session.idleHoldSec",
-            "whatKey": "workflow.settings.session.idleHoldSec.what"
-          },
-          {
-            "path": "session.idleReleaseSec",
-            "labelKey": "workflow.settings.session.idleReleaseSec",
-            "whatKey": "workflow.settings.session.idleReleaseSec.what"
-          }
-        ]
-      },
-      {
-        "id": "queue",
-        "labelKey": "workflow.settings.tab.queue",
-        "rules": "§7",
-        "items": [
-          {
-            "path": "queueSort.default",
-            "labelKey": "workflow.settings.queueSort.default",
-            "whatKey": "workflow.settings.queueSort.default.what",
-            "values": {
-              "priority_then_oldest": "workflow.settings.queueSort.default.value.priority_then_oldest",
-              "priority_then_newest": "workflow.settings.queueSort.default.value.priority_then_newest",
-              "oldest_first": "workflow.settings.queueSort.default.value.oldest_first",
-              "reaction_deadline": "workflow.settings.queueSort.default.value.reaction_deadline"
-            }
-          },
-          {
-            "path": "queueSort.operatorMayChange",
-            "labelKey": "workflow.settings.queueSort.operatorMayChange",
-            "whatKey": "workflow.settings.queueSort.operatorMayChange.what"
-          }
-        ]
-      },
-      {
-        "id": "retention",
-        "labelKey": "workflow.settings.tab.retention",
+        "id": "storage",
+        "labelKey": "workflow.settings.tab.storage",
         "rules": "§14.11",
+        "groups": [
+          {
+            "id": "retention",
+            "labelKey": "workflow.settings.tab.retention",
+            "rules": "§14.11"
+          }
+        ],
         "items": [
           {
             "path": "retention.closedIncidentsDays",
             "labelKey": "workflow.settings.retention.closedIncidentsDays",
-            "whatKey": "workflow.settings.retention.closedIncidentsDays.what"
+            "whatKey": "workflow.settings.retention.closedIncidentsDays.what",
+            "group": "retention"
           },
           {
             "path": "retention.auditDays",
             "labelKey": "workflow.settings.retention.auditDays",
-            "whatKey": "workflow.settings.retention.auditDays.what"
+            "whatKey": "workflow.settings.retention.auditDays.what",
+            "group": "retention"
           }
         ]
       },
@@ -6829,13 +6876,6 @@ window.IM_WORKFLOW = {
         "rules": "§19",
         "source": "GET /operator/reference/source-groups",
         "whatKey": "workflow.settings.tab.source_groups.what"
-      },
-      {
-        "id": "links",
-        "labelKey": "workflow.settings.tab.links",
-        "rules": "§7",
-        "source": "GET /operator/reference/help-links",
-        "whatKey": "workflow.settings.tab.links.what"
       },
       {
         "id": "camera_links",

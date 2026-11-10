@@ -1863,7 +1863,11 @@ select.search-input { padding-right: 36px; }
 .admin-note { margin: 12px 0 0; }
 /* Колонки не прыгают от вкладки к вкладке */
 .admin-body .doc-table { table-layout: fixed; }
-.admin-body .doc-table.settings th:first-child { width: 58%; }
+.admin-body .doc-table.settings thead th:first-child { width: 58%; }
+/* Раздел объединённой вкладки настроек (план 77): заголовок строкой, данные раздела-запроса — вложенной таблицей */
+.doc-table tr.admin-group th { padding-top: 16px; color: var(--text); font-size: 13px; font-weight: 600; }
+.doc-table tr.admin-group:hover { background: none; }
+.doc-table td > .doc-table { margin: 0; }
 .doc-table .what { display: block; margin-top: 2px; color: var(--faint); font-size: 12px; }
 
 .doc-table {
