@@ -2191,7 +2191,8 @@
                 "dictionary",
                 "access_group",
                 "schema",
-                "post_settings"
+                "post_settings",
+                "backup"
               ]
             },
             "description": "Вид объекта."
@@ -2301,7 +2302,8 @@
                 "dictionary",
                 "access_group",
                 "schema",
-                "post_settings"
+                "post_settings",
+                "backup"
               ]
             },
             "description": "Вид объекта."
@@ -2602,7 +2604,8 @@
                 "dictionary",
                 "access_group",
                 "schema",
-                "post_settings"
+                "post_settings",
+                "backup"
               ]
             },
             "description": "Вид объекта."
@@ -4287,6 +4290,159 @@
           }
         }
       }
+    },
+    "/operator/admin/backup": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "exportBackup",
+        "summary": "Резервная копия настроек в файл",
+        "description": "Проект 75. Все объекты и настройки МИ заказчика по GUID — файл JSON. Ничего не меняет. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Файл резервной копии",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`attachment; filename=im-backup-<дата>.json`"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupFile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/backup/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "previewRestore",
+        "summary": "Предпросмотр восстановления",
+        "description": "Проект 75. Сравнивает файл с базой по GUID: что восстановится, изменится, удалится и что оставлено из-за истории. Ничего не меняет. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupFile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "План восстановления",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Чужой `format`, `version` новее известной, чужой `customerGuid` или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/operator/admin/backup/apply": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "applyRestore",
+        "summary": "Восстановить из файла",
+        "description": "Проект 75. Одной транзакцией: замена объектов и настроек на файл и запись аудита (`objectType: backup`, `action: restore`). Копии перед загрузкой сервер не держит: её сохраняют экспортом заранее. Ошибка — не меняется ничего. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRestoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Что сделано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Чужой `format`, `version` новее известной, чужой `customerGuid` или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`BACKUP_STALE` — настройки изменились после предпросмотра, повторите предпросмотр",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`BACKUP_APPLY_FAILED` — файл не применился (например, настройки машины не прошли проверку); ничего не изменено; причина — в `message`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4509,6 +4665,9 @@
               "PRIORITY_IN_USE",
               "DUTY_GROUP_IN_USE",
               "AUDIT_EXPORT_TOO_LARGE",
+              "BACKUP_INVALID",
+              "BACKUP_STALE",
+              "BACKUP_APPLY_FAILED",
               "UNAUTHENTICATED",
               "BAD_REQUEST",
               "INTERNAL_ERROR",
@@ -9475,7 +9634,8 @@
               "dictionary",
               "access_group",
               "schema",
-              "post_settings"
+              "post_settings",
+              "backup"
             ]
           },
           "objectId": {
@@ -9493,7 +9653,8 @@
               "delete",
               "publish",
               "rollback",
-              "archive"
+              "archive",
+              "restore"
             ]
           },
           "fromVersion": {
@@ -9813,7 +9974,8 @@
               "dictionary",
               "access_group",
               "schema",
-              "post_settings"
+              "post_settings",
+              "backup"
             ]
           },
           "objectId": {
@@ -10328,6 +10490,282 @@
           }
         },
         "additionalProperties": false
+      },
+      "BackupFile": {
+        "type": "object",
+        "required": [
+          "format",
+          "version",
+          "customerGuid"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "im-backup"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Версия формата. Сервер знает 1; новее — 400"
+          },
+          "customerGuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Заказчик. Чужой — 400"
+          },
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exportedBy": {
+            "type": "string"
+          },
+          "serverVersion": {
+            "type": "string"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Агенты (`agents`), без ключей"
+          },
+          "sourceTypes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Типы устройств (`source_types`)"
+          },
+          "sourceEventTypes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Типы событий (`source_actions`)"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Устройства (`sources`)"
+          },
+          "sourceGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Группы устройств (`source_groups`) с составом `members` (`source_group_memberships`)"
+          },
+          "priorities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Приоритеты (`priorities`)"
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Статусы (`statuses`)"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Сценарии (`scenario_definitions`) со всеми версиями `versions` (`scenarios`) и связью с заказчиком"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Правила (`incident_rules`) со сценариями, условиями и действующими назначениями групп"
+          },
+          "accessRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Правила доступа (`access_rules`) с группами `groups` (`access_rule_groups`)"
+          },
+          "dutyGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Дежурные группы (`duty_groups`)"
+          },
+          "helpLinks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Ссылки помощи (`help_links`)"
+          },
+          "cameraLinks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Строка таблицы: столбцы в camelCase, `guid` — идентификатор"
+            },
+            "description": "Связи с камерами (`camera_links`) с элементами `items` (`camera_link_items`)"
+          },
+          "workflowSettings": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Опубликованная версия настроек машины инцидента (заплатка, без внутренней схемы). Нет раздела — восстановление настройки машины не трогает"
+          }
+        },
+        "description": "Резервная копия объектов и настроек МИ заказчика (проект 75). Строки разделов отсортированы по `guid`. Событий, инцидентов, журнала и ключей агентов нет"
+      },
+      "RestorePlanItem": {
+        "type": "object",
+        "required": [
+          "guid"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RestorePlanSection": {
+        "type": "object",
+        "required": [
+          "section",
+          "restore",
+          "update",
+          "delete",
+          "kept"
+        ],
+        "properties": {
+          "section": {
+            "type": "string",
+            "description": "Имя раздела файла (`rules`, `sources`…)"
+          },
+          "restore": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestorePlanItem"
+            },
+            "description": "Есть в файле, нет в базе (или удалён) — вернётся с тем же GUID"
+          },
+          "update": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestorePlanItem"
+            },
+            "description": "Есть в обоих, различается — станет как в файле"
+          },
+          "delete": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestorePlanItem"
+            },
+            "description": "Есть только в базе — удалится (устройства, типы, агенты — пометкой удаления)"
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestorePlanItem"
+            },
+            "description": "Есть только в базе, но на него ссылается история — оставлен"
+          }
+        }
+      },
+      "RestorePlan": {
+        "type": "object",
+        "required": [
+          "hash",
+          "sections"
+        ],
+        "properties": {
+          "hash": {
+            "type": "string",
+            "description": "sha256 текущего состояния и файла; `applyRestore` сверяет его"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestorePlanSection"
+            }
+          },
+          "workflow": {
+            "type": "object",
+            "required": [
+              "changes",
+              "openIncidents"
+            ],
+            "description": "Только если в файле есть `workflowSettings`",
+            "properties": {
+              "changes": {
+                "type": "boolean",
+                "description": "Настройки машины инцидента изменятся (новая опубликованная версия)"
+              },
+              "openIncidents": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0,
+                "description": "Открытые инциденты: продолжат по новым настройкам"
+              }
+            }
+          }
+        }
+      },
+      "ApplyRestoreRequest": {
+        "type": "object",
+        "required": [
+          "file",
+          "planHash"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/BackupFile"
+          },
+          "planHash": {
+            "type": "string",
+            "description": "`hash` из предпросмотра"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Имя файла — для аудита"
+          }
+        }
       }
     }
   }

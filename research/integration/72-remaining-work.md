@@ -73,6 +73,10 @@
 
 ### 2.2. Интерфейс агента: передача событий
 
+**Эмулятор агента для тестов — сделан 2026-11-10** ([73](73-agent-emulator.md), [74](74-plan-agent-emulator.md)): команда `run` в `tools/agent-emulator` сервера, топология и события по таймеру, прямой вход `IM_AGENT_DEV_AUTH` без токенов. API агента v1 он не заменяет.
+
+**Резервная копия настроек МИ — сделана 2026-11-10** ([75](75-config-export-import.md), [76](76-plan-config-export-import.md)): в конфигураторе (вкладка «Хранение») «Сохранить в файл» и «Загрузить из файла» с предпросмотром, только администратор; на сервере `exportBackup`, `previewRestore`, `applyRestore`; в эмуляторе `backup export` и `backup restore`. Тестовые наборы стенда — `tools/agent-emulator/testdata/backup/`.
+
 **Что есть в контракте сервера:**
 - `POST /sync/sources`, `/sync/sources/types`, `/sync/sources/event-types` — справочники устройств и типов;
 - `POST /events` — `guid`, `sourceUid`, `eventTypeUid`, произвольный `payload`.
