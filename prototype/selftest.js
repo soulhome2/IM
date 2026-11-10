@@ -1800,6 +1800,13 @@
       expect(!$("adminTabs").querySelector('[data-admin-tab="links"], [data-admin-tab="limits"], [data-admin-tab="retention"]'), "прежние вкладки остались наверху");
       const allPaths = window.IM_WORKFLOW.adminSettings.tabs.flatMap((x) => (x.items || []).map((i) => i.path));
       expect(new Set(allPaths).size === allPaths.length, "настройка повторяется в двух вкладках");
+      // Быстрое переключение: поздний ответ вкладки-запроса не затирает уже открытую вкладку с разделами (ревью плана 77)
+      $("adminTabs").querySelector('[data-admin-tab="priorities"]').click();
+      $("adminTabs").querySelector('[data-admin-tab="reasons"]').click();
+      await wait(400);
+      expect(/Нет связи с оператором/.test($("adminTable").textContent), "ответ «Приоритетов» перерисовал открытые «Причины»");
+      await click($("adminTabs").querySelector('[data-admin-tab="operator"]'));
+      await wait(200);
       const row = [...$("adminTable").querySelectorAll("tr")].find((r) => /В работе одновременно/.test(r.textContent));
       // Стенд самопроверки задал лимит 1 (standReset): экран показывает действующую схему
       expect(row && row.cells[1].textContent.trim() === "1", "лимит активных не показан или не совпадает со схемой");

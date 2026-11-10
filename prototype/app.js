@@ -4293,7 +4293,9 @@
       table.innerHTML = `<tbody><tr><td>${te("В прототипе запроса нет: эти данные МИ ещё не вынесены в контракт")}</td></tr></tbody>`;
       return;
     }
-    table.innerHTML = await sourceTable(tab);
+    const html = await sourceTable(tab);
+    if ((tabs.find((x) => x.id === adminState.tab) || tabs[0]) !== tab) return; // пока ждали запрос, открыли другую вкладку
+    table.innerHTML = html;
   }
   // Данные МИ вкладки или раздела с запросом (source): шапка и строки таблицы, ошибка — строкой
   async function sourceTable(tab) {
