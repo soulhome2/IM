@@ -2493,6 +2493,35 @@
         }
       }
     },
+    "/operator/admin/database-stats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getDatabaseStats",
+        "summary": "Статистика базы",
+        "description": "§14.11. Для вкладки «Хранение» настроек поста. Своя организация: число устройств, правил, дежурных групп, операторов (заходивших за 30 дней); у сценариев (без архивных), событий, всех, открытых и закрытых инцидентов — число, самое раннее и самое позднее время (у сценариев — создания, у событий — приёма, у инцидентов — события); последняя очистка по сроку (`lastPurge`). Вся база (все организации): место крупных таблиц (`tables`) и всей базы (`databaseBytes`, `pg_database_size`). Только чтение, отдельный запрос — считается до пары секунд. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Статистика базы",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/admin/audit/incidents": {
       "get": {
         "tags": [
@@ -9552,6 +9581,188 @@
           }
         },
         "additionalProperties": false
+      },
+      "DatabaseStat": {
+        "type": "object",
+        "required": [
+          "count",
+          "first",
+          "last"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "first": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Самое раннее время: у событий — время приёма, у инцидентов — время события; нет ни одного — null"
+          },
+          "last": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Самое позднее время: у событий — время приёма, у инцидентов — время события; нет ни одного — null"
+          }
+        }
+      },
+      "DatabaseStats": {
+        "type": "object",
+        "required": [
+          "devices",
+          "scenarios",
+          "rules",
+          "dutyGroups",
+          "operators",
+          "events",
+          "incidents",
+          "openIncidents",
+          "closedIncidents",
+          "lastPurge",
+          "tables",
+          "databaseBytes"
+        ],
+        "properties": {
+          "devices": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Устройства организации (не удалённые)"
+          },
+          "scenarios": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DatabaseStat"
+              }
+            ],
+            "description": "Сценарии библиотеки организации, как в списке сценариев: без архивных; время — создания сценария (первой версии)"
+          },
+          "rules": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Правила создания инцидентов организации, как в списке правил"
+          },
+          "dutyGroups": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Дежурные группы организации"
+          },
+          "operators": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Операторы организации, которых знает МИ: заходившие за последние 30 дней, как в списках выбора людей. Полного списка пользователей у МИ нет — он в облаке"
+          },
+          "events": {
+            "$ref": "#/components/schemas/DatabaseStat"
+          },
+          "incidents": {
+            "$ref": "#/components/schemas/DatabaseStat"
+          },
+          "openIncidents": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DatabaseStat"
+              }
+            ],
+            "description": "Открытые инциденты: не закрытые и не удалённые"
+          },
+          "closedIncidents": {
+            "$ref": "#/components/schemas/DatabaseStat"
+          },
+          "lastPurge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetentionRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последняя очистка по сроку хранения для организации; до первой — null"
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TableSize"
+            },
+            "description": "Место крупных таблиц всей базы (все организации): таблица, её индексы и TOAST; по убыванию. Последняя — `other`: вся база за вычетом перечисленных"
+          },
+          "databaseBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Размер всей базы, всех организаций"
+          }
+        }
+      },
+      "RetentionRun": {
+        "type": "object",
+        "required": [
+          "at",
+          "incidents",
+          "events",
+          "streamEvents"
+        ],
+        "description": "§14.11. Прогон очистки по сроку хранения для одной организации: когда и сколько удалено",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "incidents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "events": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "streamEvents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Записи потока событий (§14.10)"
+          }
+        }
+      },
+      "TableSize": {
+        "type": "object",
+        "required": [
+          "name",
+          "bytes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "events",
+              "incidents",
+              "incident_journal",
+              "operator_actions",
+              "settings_audit",
+              "stream_events",
+              "other"
+            ],
+            "description": "Ключ таблицы; `other` — остальное"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
       },
       "AuditIncidentSuggestion": {
         "type": "object",
