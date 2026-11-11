@@ -4575,7 +4575,7 @@
             }
           },
           "400": {
-            "description": "Чужой `format`, `version` новее известной, чужой `customerGuid` или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
+            "description": "Чужой `format`, `version` новее известной, GUID объекта файла занят другим заказчиком или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4623,7 +4623,7 @@
             }
           },
           "400": {
-            "description": "Чужой `format`, `version` новее известной, чужой `customerGuid` или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
+            "description": "Чужой `format`, `version` новее известной, GUID объекта файла занят другим заказчиком или файл не разобран (`BACKUP_INVALID`); причина — в `message`",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10510,7 +10510,7 @@
           "customerGuid": {
             "type": "string",
             "format": "uuid",
-            "description": "Заказчик. Чужой — 400"
+            "description": "Заказчик, с которого снята копия. Другой — не ошибка: план помечает `otherCustomer`"
           },
           "exportedAt": {
             "type": "string",
@@ -10709,7 +10709,8 @@
         "type": "object",
         "required": [
           "hash",
-          "sections"
+          "sections",
+          "otherCustomer"
         ],
         "properties": {
           "hash": {
@@ -10721,6 +10722,10 @@
             "items": {
               "$ref": "#/components/schemas/RestorePlanSection"
             }
+          },
+          "otherCustomer": {
+            "type": "boolean",
+            "description": "Файл другого заказчика (`customerGuid` файла не совпадает): другой организации или прежней установки до переустановки. Восстановлению не мешает — объекты, занятые другим заказчиком, отклоняются (`BACKUP_INVALID`); интерфейс предупреждает"
           },
           "workflow": {
             "type": "object",
