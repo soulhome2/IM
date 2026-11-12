@@ -796,5 +796,40 @@
   "what": "ключ уникальности — только событие: на событие один инцидент, второй службе тревога не приходит (§14.5, PROC-93)",
   "find": "\"uniqueKey\": [\"eventGuid\", \"scenario\"]",
   "replace": "\"uniqueKey\": [\"eventGuid\"]"
+ },
+ {
+  "name": "system-guard-reads-others",
+  "what": "у автоматической эскалации условие читает чужие инциденты (лимит «В работе» через countMine) — пересчёт планировщика по семье становится неверным (план 79)",
+  "find": "{ \"fn\": \"escalationTargetAvailable\", \"args\": [true] }\n      ],\n      \"effects\": [\n        { \"kind\": \"transactional\", \"fn\": \"setOwner\", \"args\": [\"personOf(levelUpTarget(before))\"] }",
+  "replace": "{ \"fn\": \"escalationTargetAvailable\", \"args\": [true] },\n        { \"fn\": \"withinActiveLimit\" }\n      ],\n      \"effects\": [\n        { \"kind\": \"transactional\", \"fn\": \"setOwner\", \"args\": [\"personOf(levelUpTarget(before))\"] }",
+  "model": "вне модели: что читает условие, ловит статическая проверка tools/check_machine.py (план 79)"
+ },
+ {
+  "name": "system-guard-reads-others-via-family",
+  "what": "доступ к объекту (hasAccess) смотрит на привязанные инциденты (linkedOf) — условие системного перехода addresseeHasAccess читает чужие инциденты через опору условий семьи (план 79)",
+  "find": "isOperator(who) && access(who, x)\"",
+  "replace": "isOperator(who) && access(who, x) && size(linkedOf(x.id)) >= 0\"",
+  "model": "вне модели: что читает условие, ловит статическая проверка tools/check_machine.py (план 79)"
+ },
+ {
+  "name": "system-effect-agent-world",
+  "what": "«Закрыть карточку у человека» (evictOpenCard) меняет мир агента — операция мира не над инцидентом; её несут системные переходы, пересчёт планировщика по семье неверен (план 79)",
+  "find": "\"do\": [{\"world\": \"evict\", ",
+  "replace": "\"do\": [{\"world\": \"agentState\", ",
+  "model": "вне модели: что меняют эффекты, ловит статическая проверка tools/check_machine.py (план 79)"
+ },
+ {
+  "name": "system-unlink-no-primary",
+  "what": "«Привязанный: адресат основного без доступа» отвязывает инцидент без записи в журнал основного — планировщик теряет бывшую семью (план 79)",
+  "find": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\", \"workflow.journal.linked_lost_access_primary\"]",
+  "replace": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\"]",
+  "model": "вне модели: что меняют эффекты, ловит статическая проверка tools/check_machine.py (план 79)"
+ },
+ {
+  "name": "system-relink-others",
+  "what": "«Привязанный: адресат основного без доступа» перепривязывает чужие инциденты (relinkToPrimary пишет c.linkedTo) — системный переход меняет чужую семью (план 79)",
+  "find": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\", \"workflow.journal.linked_lost_access_primary\"] },",
+  "replace": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\", \"workflow.journal.linked_lost_access_primary\"] },\n        { \"kind\": \"transactional\", \"fn\": \"relinkToPrimary\", \"args\": [\"workflow.journal.merge\"] },",
+  "model": "вне модели: что меняют эффекты, ловит статическая проверка tools/check_machine.py (план 79)"
  }
 ]

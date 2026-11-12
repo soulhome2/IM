@@ -992,6 +992,114 @@ def check_automatic_fields(w, err):
                     err.append(f"переход {t['id']}: поле {key} у автоматического перехода не нужно — кнопок и форм у него нет, права не участвуют (DOC-19)")
 
 
+FOREIGN_READS = ("incidents", "countMine", "mineOf", "mineIn")
+FAMILY_GUARDS = ("primaryClosed", "primaryAddresseeHasAccess")
+
+
+def check_system_guards_local(machine):
+    """План 79, ADR 78 §3: условия переходов по таймеру и системных читают только свой инцидент и его семью.
+    Планировщик пересчитывает после перехода лишь семью; условие, которое (выражением или аргументами) через
+    определения доходит до incidents, countMine, mineOf или mineIn, сделало бы такой пересчёт неверным.
+    Условия семьи из реестра — primaryClosed и primaryAddresseeHasAccess — пропускаются целиком, не разбираясь: они
+    читают основного по incident.linkedTo. Их опоры (incidentById, hasAccess…) в любом другом условии
+    проверяются как обычно.
+
+    Ещё два основания пересчёта по семье (решение пользователя 2026-11-12):
+    - эффекты таких переходов — только transactional и external и не меняют мир агента (сессию, состояние, молчание,
+      доступ): операции мира — только из INCIDENT_WORLD_OPS, set — только в incident и в переменные forEach
+      (инциденты), но не их связь: запись <переменная>.linkedTo/linkedAt (как в relinkToPrimary) — ошибка.
+      log/notify и запись в другие инциденты верны, только пока сервер считает эти строки записанными
+      (r.Incidents → Around) и пересчитывает их семьи. recordBreach пишет в groupMembersAt(incident, deadline) — это группа основного: привязанные по
+      linkedTo и вышедшие из неё по leftGroup.primaryId (§11.4); запись в их строки планировщик видит сам;
+    - переход, который отвязывает инцидент (set incident.linkedTo), обязан писать и в бывший основной — тогда
+      основной среди записанных строк и бывшая семья пересчитывается. Статически это видно у clearLink с непустым
+      primaryLogKey (второй аргумент): её do пишет журнал каждого основного из incidentById(incident.linkedTo).
+    Возвращает список ошибок."""
+    cel = machine["cel"]
+    defs = {n: v for sec in ("world", "definitions") for n, v in cel[sec].items() if isinstance(v, dict)}
+    registry = {g["fn"]: g for g in machine["registries"]["guards"]}
+    effects = {e["fn"]: e for e in machine["registries"]["effects"]}
+
+    def names(text):
+        return set(re.findall(r"\b[A-Za-z_]\w*\b", text if isinstance(text, str) else ""))
+
+    def body(name):
+        d = defs.get(name, {})
+        return (d.get("ref") or "") + " " + (d.get("expr") or "")
+
+    memo = {}
+
+    def foreign(name, stack=()):
+        """Ведёт ли имя к чтению чужих инцидентов"""
+        if name in FOREIGN_READS:
+            return True
+        if name not in defs or name in stack:
+            return False
+        if name not in memo:
+            memo[name] = any(foreign(n, stack + (name,)) for n in names(body(name)))
+        return memo[name]
+
+    errors = []
+    for t in machine["transitions"]:
+        if t.get("trigger") not in ("timer", "system"):
+            continue
+        for g in t.get("guards", []):
+            if g["fn"] in FAMILY_GUARDS:
+                continue
+            used = names(registry.get(g["fn"], {}).get("expr")).union(*(names(a) for a in g.get("args", [])))
+            for via in sorted(n for n in used if foreign(n)):
+                errors.append(f"переход {t['id']}: условие {g['fn']} читает чужие инциденты через {via} — "
+                              f"пересчёт планировщика по семье (план 79) станет неверным")
+        for e in t.get("effects", []):
+            bad, unlinks = effect_scan(effects.get(e["fn"], {}).get("do", []), effects)
+            if e.get("kind") not in ("transactional", "external"):
+                bad.add(f"вид {e.get('kind')}")
+            for b in sorted(x for x in bad if x.startswith("link ")):
+                errors.append(f"переход {t['id']}: эффект {e['fn']} меняет связь другого инцидента ({b[5:]}) — "
+                              f"системный переход не перепривязывает чужие инциденты, пересчёт планировщика "
+                              f"по семье (план 79) станет неверным")
+            for b in sorted(x for x in bad if not x.startswith("link ")):
+                errors.append(f"переход {t['id']}: эффект {e['fn']} меняет мир агента ({b}) — "
+                              f"пересчёт планировщика по семье (план 79) станет неверным")
+            writes_primary = e["fn"] == "clearLink" and len(e.get("args", [])) > 1 and e["args"][1] != ""
+            if unlinks and not writes_primary:
+                errors.append(f"переход {t['id']}: отвязывает инцидент и не пишет в бывший основной — "
+                              f"пересчёт планировщика по семье (план 79) потеряет бывшую семью")
+    return errors
+
+
+INCIDENT_WORLD_OPS = ("log", "notify", "command", "touch", "evict")
+
+
+def effect_scan(do, effects, roots=("incident",), seen=()):
+    """Обход do эффекта с вызовами (call): (что пишет мимо инцидентов или в связь другого — «link …», отвязывает ли — set incident.linkedTo)"""
+    bad, unlinks = set(), False
+    for st in do if isinstance(do, list) else [do]:
+        if not isinstance(st, dict):
+            continue
+        if "world" in st and st["world"] not in INCIDENT_WORLD_OPS:
+            bad.add(f"world {st['world']}")
+        if "set" in st or "append" in st:
+            target = st.get("set") or st.get("append")
+            root = re.split(r"[.\[]", target)[0]
+            if root not in roots:
+                bad.add(f"set {target}")
+            unlinks |= target == "incident.linkedTo"
+            if root != "incident" and re.search(r"\.linked(To|At)\b", target):
+                bad.add(f"link {target}")
+        if st.get("call") and st["call"] not in seen:
+            b, u = effect_scan(effects.get(st["call"], {}).get("do", []), effects, ("incident",), seen + (st["call"],))
+            bad |= b
+            unlinks |= u
+        inner = roots + ((st["forEach"],) if "forEach" in st else ())
+        for k in ("then", "else", "do"):
+            if isinstance(st.get(k), list):
+                b, u = effect_scan(st[k], effects, inner, seen)
+                bad |= b
+                unlinks |= u
+    return bad, unlinks
+
+
 def check_registry_used(w, err):
     """Каждая запись реестра где-то используется (DOC-17): иначе бэкенд реализует мёртвый код.
     Ищем по всей машине, кроме самого реестра; requiredStepsFilled вызывает поле requiredStepSet."""
@@ -2123,6 +2231,7 @@ def collect():
     check_rules_example(w, err)
     check_doc_numbers(w, o, err)
     check_served(o, err)
+    err.extend(check_system_guards_local(w))
     check_fixture_journal(w, err)
     check_fixture_history(w, err)
     check_fixture_media(err)
@@ -2274,6 +2383,20 @@ MUTATIONS = [
     ("catalog-set-by", "§2.2: «Перерыв оператора» ставит оператор", RULES,
      "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | система |", "| Перерыв оператора | Оператор ушёл на перерыв с открытой карточкой | оператор |", "§2.2"),
 ]
+
+
+def machine_json_mutation(name, expect):
+    """Порча из общего списка tools/mutations/machine.json — тем же местом и заменой, без копии текста"""
+    with open(os.path.join(ROOT, "tools", "mutations", "machine.json"), encoding="utf-8") as f:
+        m = next(e for e in json.load(f) if e["name"] == name)
+    return (name, "машина: " + m["what"], MACHINE, m["find"], m["replace"], expect)
+
+
+MUTATIONS.append(machine_json_mutation("system-guard-reads-others", "читает чужие инциденты"))
+MUTATIONS.append(machine_json_mutation("system-guard-reads-others-via-family", "читает чужие инциденты через hasAccess"))
+MUTATIONS.append(machine_json_mutation("system-effect-agent-world", "меняет мир агента"))
+MUTATIONS.append(machine_json_mutation("system-unlink-no-primary", "не пишет в бывший основной"))
+MUTATIONS.append(machine_json_mutation("system-relink-others", "меняет связь другого инцидента"))
 
 
 def self_test():
