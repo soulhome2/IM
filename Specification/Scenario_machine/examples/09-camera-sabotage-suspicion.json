@@ -147,7 +147,8 @@
             },
             "goto": "sabotage_path",
             "macro": {
-              "name": "MACRO_LOCK_VIDEO_FRAGMENT",
+              "name": "Начать запись по тревоге",
+              "uid": "record-start",
               "args": {}
             }
           },
@@ -162,7 +163,8 @@
             },
             "goto": "vandalism_path",
             "macro": {
-              "name": "MACRO_DISPATCH_GUARD",
+              "name": "Включить освещение периметра",
+              "uid": "light-on",
               "args": {}
             }
           },
@@ -189,7 +191,8 @@
             },
             "goto": "tech_fault_path",
             "macro": {
-              "name": "MACRO_CREATE_SUPPORT_TICKET",
+              "name": "Вывести камеру на монитор",
+              "uid": "camera-to-monitor",
               "args": {}
             }
           }

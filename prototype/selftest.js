@@ -847,6 +847,9 @@
         expect(card.scenario.result.completedAt, "сценарий не пройден до конца");
         const macros = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.launched").map((j) => j.vars.name);
         expect(macros.join() === "Сирена и PTZ на зону", `макросы в журнале: «${macros.join(", ")}», а не один «Сирена и PTZ на зону»`);
+        // Макрос с uid — команда агенту объекта; агента в прототипе нет — итог «выполнено» сразу (план 82, D9)
+        const done = card.journal.filter((j) => j.templateKey === "workflow.journal.macro.done").map((j) => j.vars.name);
+        expect(done.join() === "Сирена и PTZ на зону", `итог макроса в журнале: «${done.join(", ")}», а не «выполнен» у «Сирена и PTZ на зону»`);
         const finish = root().querySelector("[data-finish]");
         expect($("modalDialog").hidden && finish && !finish.disabled, "после «Доложил» карточка не на «Итоге» с «Завершить инцидент»");
         await click(finish);

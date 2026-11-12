@@ -83,6 +83,7 @@
             "goto": "kind",
             "macro": {
               "name": "Оповещение и эвакуационные выходы",
+              "uid": "doors-unlock",
               "args": {}
             }
           }

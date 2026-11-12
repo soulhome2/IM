@@ -154,7 +154,8 @@
             },
             "goto": "high_risk_photo",
             "macro": {
-              "name": "MACRO_AREA_LOCKDOWN",
+              "name": "Заблокировать двери",
+              "uid": "doors-lock",
               "args": {}
             }
           },

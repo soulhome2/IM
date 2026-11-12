@@ -52,7 +52,8 @@
         "default": {
           "goto": "checkpoints",
           "macro": {
-            "name": "MACRO_PA_EVACUATION_START",
+            "name": "Включить сирену",
+            "uid": "siren-on",
             "args": {}
           }
         }
@@ -149,7 +150,8 @@
         "default": {
           "goto": "btn_close",
           "macro": {
-            "name": "MACRO_PA_DRILL_END",
+            "name": "Выключить сирену",
+            "uid": "siren-off",
             "args": {}
           }
         }

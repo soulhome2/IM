@@ -159,7 +159,8 @@
         "default": {
           "goto": "compare_with_normal",
           "macro": {
-            "name": "MACRO_FULL_LOCKDOWN + MACRO_DISPATCH_GUARD_TEAM",
+            "name": "Закрыть ворота",
+            "uid": "gate-close",
             "args": {}
           }
         },
@@ -187,7 +188,8 @@
             },
             "goto": "compare_with_normal",
             "macro": {
-              "name": "MACRO_FULL_LOCKDOWN + MACRO_CALL_POLICE_URGENT",
+              "name": "Закрыть шлагбаум",
+              "uid": "barrier-close",
               "args": {}
             }
           },
@@ -202,7 +204,8 @@
             },
             "goto": "compare_with_normal",
             "macro": {
-              "name": "MACRO_DISPATCH_GUARD",
+              "name": "Включить освещение периметра",
+              "uid": "light-on",
               "args": {}
             }
           }
@@ -272,7 +275,8 @@
         "default": {
           "goto": "btn_close",
           "macro": {
-            "name": "MACRO_LOCK_ALL_VIDEO_FRAGMENTS",
+            "name": "Начать запись по тревоге",
+            "uid": "record-start",
             "args": {}
           }
         }

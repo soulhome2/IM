@@ -83,6 +83,7 @@
             "goto": "notify",
             "macro": {
               "name": "Сирена и PTZ на зону",
+              "uid": "siren-on",
               "args": {}
             }
           },

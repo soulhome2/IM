@@ -297,14 +297,14 @@
     let r = answerOk(script, S.start(script), "facility_type", validAnswer(stepOf(script, "facility_type"), 0).value).result;
     r = answerOk(script, r, "intruder_count", "one").result;
     const res = answerOk(script, r, "behavior", ["armed"]);
-    assert.eq(res.effects.map((e) => [e.type, e.name, e.stepId]), [["macro", "MACRO_FULL_LOCKDOWN + MACRO_CALL_POLICE_URGENT", "behavior"]]);
-    assert.eq(res.result.history.filter((e) => e.action === "macro").map((e) => e.name), ["MACRO_FULL_LOCKDOWN + MACRO_CALL_POLICE_URGENT"]);
+    assert.eq(res.effects.map((e) => [e.type, e.name, e.stepId, e.uid]), [["macro", "Закрыть шлагбаум", "behavior", "barrier-close"]]);
+    assert.eq(res.result.history.filter((e) => e.action === "macro").map((e) => e.name), ["Закрыть шлагбаум"]);
     assert.eq(res.warnings, []);
     assert.eq(res.result.currentStepId, "compare_with_normal");
 
     const obj = ex("04-suspicious-object.json");
     const o = answerOk(obj, S.start(obj), "object_visible", "yes").result;
-    assert.eq(answerOk(obj, o, "risk_factors", ["wires_visible"]).effects.map((e) => e.name), ["MACRO_AREA_LOCKDOWN"]);
+    assert.eq(answerOk(obj, o, "risk_factors", ["wires_visible"]).effects.map((e) => e.name), ["Заблокировать двери"]);
     // Ни одно правило не сработало — путь по default: «Признаков риска нет» делает его достижимым
     assert.eq(answerOk(obj, o, "risk_factors", ["none_found"]).result.currentStepId, "low_risk_action");
   });

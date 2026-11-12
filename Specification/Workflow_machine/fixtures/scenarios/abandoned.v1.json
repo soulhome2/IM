@@ -120,6 +120,7 @@
             "goto": "note",
             "macro": {
               "name": "Объявить эвакуацию зоны",
+              "uid": "siren-on",
               "args": {}
             }
           }

@@ -3843,6 +3843,49 @@ window.IM_WORKFLOW = {
       ],
       "$comment": "§14.5. Запущен макрос сценария"
     },
+    "workflow.journal.macro.unbound": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). макрос не привязан к макрокоманде агента — не исполняется"
+    },
+    "workflow.journal.macro.not_delivered": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). у агента объекта нет живой макрокоманды с этим uid или нет возможности macros — команда не поставлена, признак «команда не доставлена»"
+    },
+    "workflow.journal.macro.done": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). итог команды: выполнено"
+    },
+    "workflow.journal.macro.failed": {
+      "vars": [
+        "name",
+        "reason"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). итог команды: отказ агента с причиной; признак «команда не доставлена»"
+    },
+    "workflow.journal.macro.expired": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). итог команды: агент не взял команду за 120 с; признак «команда не доставлена»"
+    },
+    "workflow.journal.macro.interrupted": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). итог команды: агент прервал выполнение; признак «команда не доставлена»"
+    },
+    "workflow.journal.macro.unknown_macro": {
+      "vars": [
+        "name"
+      ],
+      "$comment": "§14.5, план 82 (D8–D9). итог команды: агент не знает такой макрокоманды; признак «команда не доставлена»"
+    },
     "workflow.journal.scenario.step": {
       "vars": [
         "i",

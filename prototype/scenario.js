@@ -185,7 +185,8 @@
       const m = outcome.macro;
       const args = m.args && Object.keys(m.args).length ? { args: m.args } : {};
       out.events.push(Object.assign({ ts: at, stepId: step.id, action: "macro", name: m.name }, args));
-      out.effects.push({ type: "macro", name: m.name, args: m.args || {}, stepId: step.id });
+      // uid — макрокоманда агента (D8 плана 82): её ставят агенту объекта; без uid макрос не исполняется
+      out.effects.push(Object.assign({ type: "macro", name: m.name, args: m.args || {}, stepId: step.id }, m.uid ? { uid: m.uid } : {}));
     }
     const goto = outcome.goto;
     if (goto == null || goto === step.id) {

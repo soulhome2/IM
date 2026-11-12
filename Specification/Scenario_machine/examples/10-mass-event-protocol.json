@@ -323,7 +323,8 @@
         "default": {
           "goto": "event_end_time",
           "macro": {
-            "name": "MACRO_ENABLE_HIGH_DENSITY_ANALYTICS",
+            "name": "Вывести камеру на монитор",
+            "uid": "camera-to-monitor",
             "args": {}
           }
         }
@@ -387,7 +388,8 @@
         "default": {
           "goto": "btn_close_event",
           "macro": {
-            "name": "MACRO_DISABLE_HIGH_DENSITY_ANALYTICS",
+            "name": "Открыть ворота",
+            "uid": "gate-open",
             "args": {}
           }
         },
@@ -449,7 +451,8 @@
         "default": {
           "goto": "btn_close_event",
           "macro": {
-            "name": "MACRO_DISABLE_HIGH_DENSITY_ANALYTICS",
+            "name": "Открыть ворота",
+            "uid": "gate-open",
             "args": {}
           }
         }

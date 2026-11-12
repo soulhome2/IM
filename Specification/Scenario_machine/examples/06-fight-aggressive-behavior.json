@@ -62,7 +62,8 @@
             },
             "goto": "supervisor_briefing",
             "macro": {
-              "name": "MACRO_DISPATCH_GUARD_TEAM + MACRO_CALL_POLICE",
+              "name": "Включить сирену",
+              "uid": "siren-on",
               "args": {}
             }
           },
@@ -89,7 +90,8 @@
             },
             "goto": "supervisor_briefing",
             "macro": {
-              "name": "MACRO_DISPATCH_GUARD_TEAM",
+              "name": "Вывести камеру на монитор",
+              "uid": "camera-to-monitor",
               "args": {}
             }
           },

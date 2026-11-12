@@ -86,6 +86,7 @@
             "goto": "note",
             "macro": {
               "name": "Создать заявку на ремонт",
+              "uid": "camera-to-monitor",
               "args": {}
             }
           }

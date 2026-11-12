@@ -107,7 +107,8 @@
             },
             "goto": "btn_close_resolved",
             "macro": {
-              "name": "MACRO_LOG_REMOTE_RESTART",
+              "name": "Вывести камеру на монитор",
+              "uid": "camera-to-monitor",
               "args": {}
             }
           }

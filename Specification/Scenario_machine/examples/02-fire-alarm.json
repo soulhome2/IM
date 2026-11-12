@@ -70,7 +70,8 @@
             },
             "goto": "fire_photo",
             "macro": {
-              "name": "MACRO_CALL_FIRE_DEPT + MACRO_LOCK_ELEVATORS",
+              "name": "Включить сирену",
+              "uid": "siren-on",
               "args": {}
             }
           },
@@ -85,7 +86,8 @@
             },
             "goto": "fire_photo",
             "macro": {
-              "name": "MACRO_LOCAL_ALERT",
+              "name": "Включить освещение периметра",
+              "uid": "light-on",
               "args": {}
             }
           }
@@ -156,7 +158,8 @@
         "default": {
           "goto": "btn_finish_real",
           "macro": {
-            "name": "MACRO_CALL_FIRE_DEPT",
+            "name": "Разблокировать двери",
+            "uid": "doors-unlock",
             "args": {}
           }
         }

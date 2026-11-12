@@ -448,14 +448,21 @@
       auditAnswer(ev, actor, scriptOf(ev).steps.find((x) => x.id === body.stepId), body);
       const path = pathOf(ev);
       ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];
-      res.effects.filter((e) => e.type === "macro").forEach((e) => launchMacro(ev, actor, actorEngine, e.name));
+      res.effects.filter((e) => e.type === "macro").forEach((e) => launchMacro(ev, actor, actorEngine, e));
       return res;
     }
-    function launchMacro(ev, actor, actorEngine, name) {
+    // Макрос — команда агенту объекта инцидента по uid макрокоманды (§14.5, D8–D9 плана 82).
+    // Агента в прототипе нет: команда сразу «выполнена». Макрос без uid не исполняется — запись в журнал
+    function launchMacro(ev, actor, actorEngine, effect) {
       if (!actorEngine.availability("run_macro", ev).ok) return;
+      const name = effect.name;
+      if (!effect.uid) {
+        log(ev, actor, "workflow.journal.macro.unbound", { name });
+        return;
+      }
       log(ev, actor, "workflow.journal.macro.launched", { name });
-      // Результат макроса — событием потока (§9, RULE-60); в прототипе исполнения нет — сразу «доставлен».
-      // macroId события — имя макроса из сценария
+      log(ev, actor, "workflow.journal.macro.done", { name });
+      // Результат макроса — событием потока (§9, RULE-60); macroId — имя макроса из сценария
       emit("macro.completed", ev, actor, { macroId: name, executionGuid: uuid(9, ++serial.macro), status: "delivered" });
     }
     // Ответ не принят — код ошибки по контракту
