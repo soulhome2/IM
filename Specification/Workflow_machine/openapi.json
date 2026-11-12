@@ -2248,7 +2248,8 @@
                 "access_group",
                 "schema",
                 "post_settings",
-                "backup"
+                "backup",
+                "customer"
               ]
             },
             "description": "Вид объекта."
@@ -2388,7 +2389,8 @@
                 "access_group",
                 "schema",
                 "post_settings",
-                "backup"
+                "backup",
+                "customer"
               ]
             },
             "description": "Вид объекта."
@@ -2719,7 +2721,8 @@
                 "access_group",
                 "schema",
                 "post_settings",
-                "backup"
+                "backup",
+                "customer"
               ]
             },
             "description": "Вид объекта."
@@ -4671,6 +4674,91 @@
           }
         }
       }
+    },
+    "/operator/admin/reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "resetCustomer",
+        "summary": "Сбросить МИ организации",
+        "description": "План 83. Одной транзакцией удаляет инциденты и настройки МИ клиента: всё, что входит в резервную копию, кроме агентов, плюс инциденты, события, сессии операторов, поток и счётчики очереди. Остаются журнал настроек, журнал действий операторов, агенты и их ключи, статусы; настройки машины заменяются опубликованной пустой версией. Запись аудита — `objectType: customer`, `action: reset`, в `before` — удалено строк по таблицам. Порядок проверок: право `incident:schema:admin` (в облаке `incident_manager.manage`, без него — `403 PERMISSION_DENIED`, записи нет), слово `confirm`, число неверных паролей человека за 15 минут (не больше 5), пароль учётной записи облака (неверный — `403 WRONG_PASSWORD` и запись `reset_denied`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetCustomerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Сброс выполнен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetCustomerResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`RESET_NOT_CONFIRMED` — `confirm` не `RESET` или тело не разобрано",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`PERMISSION_DENIED` — нет права администратора; `WRONG_PASSWORD` — облако не приняло пароль, в журнале запись `reset_denied`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`RESET_BUSY` — идёт сброс или восстановление из файла этого клиента",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`TOO_MANY_ATTEMPTS` — больше 5 неверных паролей за 15 минут; облако не спрашивается",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`PASSWORD_CHECK_UNAVAILABLE` — облако не ответило или не умеет проверять пароль (облако тестового стенда)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4896,6 +4984,11 @@
               "BACKUP_INVALID",
               "BACKUP_STALE",
               "BACKUP_APPLY_FAILED",
+              "RESET_NOT_CONFIRMED",
+              "WRONG_PASSWORD",
+              "TOO_MANY_ATTEMPTS",
+              "RESET_BUSY",
+              "PASSWORD_CHECK_UNAVAILABLE",
               "UNAUTHENTICATED",
               "BAD_REQUEST",
               "INTERNAL_ERROR",
@@ -9899,7 +9992,8 @@
               "access_group",
               "schema",
               "post_settings",
-              "backup"
+              "backup",
+              "customer"
             ]
           },
           "objectId": {
@@ -9918,7 +10012,9 @@
               "publish",
               "rollback",
               "archive",
-              "restore"
+              "restore",
+              "reset",
+              "reset_denied"
             ]
           },
           "fromVersion": {
@@ -10239,7 +10335,8 @@
               "access_group",
               "schema",
               "post_settings",
-              "backup"
+              "backup",
+              "customer"
             ]
           },
           "objectId": {
@@ -11033,6 +11130,43 @@
           "fileName": {
             "type": "string",
             "description": "Имя файла — для аудита"
+          }
+        }
+      },
+      "ResetCustomerRequest": {
+        "type": "object",
+        "required": [
+          "password",
+          "confirm"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Пароль учётной записи облака текущего пользователя"
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "RESET"
+            ],
+            "description": "Подтверждение сброса; человек вводит слово своего языка, конфигуратор шлёт `RESET`"
+          }
+        }
+      },
+      "ResetCustomerResult": {
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "properties": {
+          "removed": {
+            "type": "object",
+            "description": "Удалено строк по таблицам; `workflow_settings: 1` — опубликована пустая версия настроек машины",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         }
       }

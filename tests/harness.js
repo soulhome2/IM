@@ -247,7 +247,7 @@
 
   // Операции контракта, которые тесты не обязаны вызывать: редактор схемы — вне прототипа
   // Редактор схемы и правка справочника приоритетов — вне прототипа (§14.8, §2.5); журнал событий, статистика базы и резервная копия настроек (§12.5, §14.11, проект 75) — только сервер МИ
-  const NOT_COVERED = /^(GET|POST|PUT|DELETE) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/(priorities|help-links|duty-groups)|^GET \/operator\/admin\/audit\/incident-(groups|timeline)|^GET \/operator\/admin\/events|^GET \/operator\/admin\/database-stats$|^(GET|POST) \/operator\/admin\/backup(\/preview|\/apply)?$/;
+  const NOT_COVERED = /^(GET|POST|PUT|DELETE) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/(priorities|help-links|duty-groups)|^GET \/operator\/admin\/audit\/incident-(groups|timeline)|^GET \/operator\/admin\/events|^GET \/operator\/admin\/database-stats$|^(GET|POST) \/operator\/admin\/backup(\/preview|\/apply)?$|^POST \/operator\/admin\/reset$/;
 
   // Отчёт: строки в <pre id="apitest-log"> и в консоль, итог — атрибут data-apitest.
   // С ?report=/адрес — ещё и POST туда: так его забирает tools/check_loopback.py

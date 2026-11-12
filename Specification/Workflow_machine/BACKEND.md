@@ -6,7 +6,7 @@
 
 | Что | Где описано |
 |---|---|
-| REST API операторского места — 74 операции, плюс 6 служебных для тестового стенда | [`openapi.json`](openapi.json) — контракт, OpenAPI 3.1; для генератора кода — копия в OpenAPI 3.0 [`openapi.v30.json`](openapi.v30.json) (ниже) |
+| REST API операторского места — 75 операций, плюс 6 служебных для тестового стенда | [`openapi.json`](openapi.json) — контракт, OpenAPI 3.1; для генератора кода — копия в OpenAPI 3.0 [`openapi.v30.json`](openapi.v30.json) (ниже) |
 | Исполнение модели workflow: 6 состояний, 32 перехода, 35 условий, 27 эффектов, таймеры, лимиты, права | [`workflow_schema.v1.json`](workflow_schema.v1.json) — модель как данные; смысл — в [README машины](README.md), «Модель workflow» |
 | Смысл условий и эффектов, бейджей, фильтров очереди и правил форм — выражения CEL в машине (ARCH-07) | [`CEL.md`](CEL.md) — язык выражений, факты мира, которые даёт сервер, операции эффектов |
 | Правила, из которых всё это следует | [`States rules IM.md`](../State_rules/States%20rules%20IM.md) — действующие правила, ссылки «§N» ведут туда |
@@ -85,7 +85,7 @@
 - Векторы `fixtures/cel-vectors.json` проходят у исполнителя бэкенда (CEL.md, «Векторы»).
 - Векторы `fixtures/transition-vectors.json` проходят у ядра бэкенда (CEL.md, «Векторы переходов»), векторы `fixtures/transition-vectors-patched.json` — у ядра бэкенда на машине с патчем из их шапки (CEL.md, «Набор на машине с патчем»).
 
-Тесты не проверяют 27 операций: редактор схемы (`/operator/workflow/schemas…`, 8), правку справочника приоритетов (`/operator/admin/priorities…`, 3), правку справочных ссылок (`/operator/admin/help-links…`, 3) и правку дежурных групп (`/operator/admin/duty-groups…`, 4) — экранов для них в прототипе нет; аудит по инцидентам (`/operator/admin/audit/incident-groups…` и `/incident-timeline…`, 4) — его делает сервер МИ, во встроенном сервере прототипа его нет; журнал событий и объяснение отбора (`/operator/admin/events…`, 4, §12.5, §14.5) и статистика базы (`/operator/admin/database-stats`, 1, §14.11) — тоже только сервер МИ. Их проверка — отдельно.
+Тесты не проверяют 31 операцию: редактор схемы (`/operator/workflow/schemas…`, 8), правку справочника приоритетов (`/operator/admin/priorities…`, 3), правку справочных ссылок (`/operator/admin/help-links…`, 3) и правку дежурных групп (`/operator/admin/duty-groups…`, 4) — экранов для них в прототипе нет; аудит по инцидентам (`/operator/admin/audit/incident-groups…` и `/incident-timeline…`, 4) — его делает сервер МИ, во встроенном сервере прототипа его нет; журнал событий и объяснение отбора (`/operator/admin/events…`, 4, §12.5, §14.5) статистика базы (`/operator/admin/database-stats`, 1, §14.11), резервная копия (`/operator/admin/backup…`, 3, проект 75) и сброс МИ организации (`/operator/admin/reset`, 1, план 83) — тоже только сервер МИ. Их проверка — отдельно.
 
 ## Что ещё не решено
 

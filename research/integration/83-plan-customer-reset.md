@@ -80,8 +80,10 @@
 
 Ошибки: 429 `TOO_MANY_ATTEMPTS` — больше 5 неудачных попыток за 15 минут; 400 — `confirm` не совпал; 403 `PERMISSION_DENIED` — нет права; 403 `WRONG_PASSWORD` — неверный пароль; 409 — сброс этого клиента уже идёт.
 
-- [ ] Метод и схемы в `openapi.json`.
-- [ ] Сборка, `python3 tools/build_workflow.py --check`, `python3 -m unittest tools/test_openapi30.py`.
+- [x] Метод и схемы в `openapi.json`.
+- [x] Сборка, `python3 tools/build_workflow.py --check`, `python3 -m unittest tools/test_openapi30.py`.
+
+**Итог (2026-11-13).** Путь — `POST /operator/admin/reset` (рядом с резервной копией, как у остальных методов `admin`). В контракт добавлены коды `RESET_NOT_CONFIRMED`, `WRONG_PASSWORD`, `TOO_MANY_ATTEMPTS`, `RESET_BUSY`, `PASSWORD_CHECK_UNAVAILABLE`, в журнал — `customer`, `reset`, `reset_denied`. Сервер — на сгенерированных типах. Метод в `NOT_COVERED` (`tests/harness.js`): во встроенном сервере прототипа сброса нет. Заодно пересняты векторы машины: после `2a5cd58` (правка комментария машины) в них оставался старый хэш, и тесты сервера падали после перевыпуска контракта. В `BACKEND.md` поправлен счётчик непроверяемых операций — в нём не были учтены и 3 метода резервной копии.
 
 ### Задача 2: сервер — журнал
 
