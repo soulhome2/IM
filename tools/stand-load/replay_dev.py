@@ -27,7 +27,7 @@ for at, guid, inc in evs:
     body = {"guid": guid, "sourceUid": dev, "eventTypeUid": inc["eventType"]["id"],
             "payload": {"occurredAt": now, "deviceName": names.get(dev, ""), "text": inc.get("location", ""),
                         "site": inc.get("site", ""), "emulator": True}}
-    c.request("POST", "/api/v1/im-backend/events", json.dumps(body), {"Content-Type": "application/json", "X-Dev-Agent": AGENT})
+    c.request("POST", "/api/v1/im-agent/events", json.dumps(body), {"Content-Type": "application/json", "X-Dev-Agent": AGENT})
     r = c.getresponse(); raw = r.read()
     if r.status != 200:
         print("ошибка: событие %s: %d %s\nотправлено %d, пропущено 0" % (guid, r.status, raw[:200], sent)); sys.exit(1)

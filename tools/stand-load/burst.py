@@ -40,7 +40,7 @@ def worker(p, start, q):
                             "site": inc.get("site", ""), "emulator": True}}
         t0 = time.time()
         try:
-            c.request("POST", "/api/v1/im-backend/events", json.dumps(body),
+            c.request("POST", "/api/v1/im-agent/events", json.dumps(body),
                       {"Content-Type": "application/json", "X-Dev-Agent": AGENT})
             r = c.getresponse(); r.read(); code = r.status
         except Exception as e:
@@ -65,9 +65,9 @@ if __name__ == "__main__":
     recs.sort(key=lambda r: r["i"])
     with open(os.path.join(OUT, f"burst-{TAG}.jsonl"), "w") as f:
         for r in recs: f.write(json.dumps(r) + "\n")
-    with open(os.path.join(OUT, "labels.txt"), "a") as f:
+    with open(os.path.join(OUT, "labels-burst.txt"), "a") as f:
         for lb in labels: f.write(lb + "\n")
-    with open(os.path.join(OUT, "emit.jsonl"), "a") as f:
+    with open(os.path.join(OUT, "emit-burst.jsonl"), "a") as f:
         for lb in labels:
             ts = [r["t"] for r in recs if r["label"] == lb]
             f.write(json.dumps({"label": lb, "t0": min(ts), "ms": round((max(ts) - min(ts)) * 1000), "rc": 0, "burst": TAG}) + "\n")
