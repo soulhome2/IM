@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Снимок раз в <сек> в <каталог>/samples.jsonl, пока есть <каталог>/.running:
 сервер МИ (RSS, потоки, дескрипторы, CPU за интервал из /proc), база imdb (соединения, активные, ждущие блокировку,
-pg_locks не выданные, живые инциденты, просроченные реакции, всего инцидентов/событий), активные запросы (первые 80 знаков).
+pg_locks не выданные, живые инциденты, просроченные реакции, всего инцидентов/событий), активные запросы (первые 80 знаков),
+кто держит блокировку у ждущих (pg_blocking_pids: ждущий>держатель~запрос~запрос держателя~состояние).
 python3 -I sampler.py <каталог> [сек=5] [имя бинарника=im-cond-type]"""
 import json, os, subprocess, sys, time
 OUT = sys.argv[1]; EVERY = float(sys.argv[2]) if len(sys.argv) > 2 else 5; BIN = sys.argv[3] if len(sys.argv) > 3 else "im-cond-type"
@@ -15,7 +16,10 @@ Q = """select (select count(*) from pg_stat_activity where datname='imdb')||'|'|
 (select count(*) from incidents where deleted_at is null and im_next_due(timers) <= (extract(epoch from now())*1000)::bigint)||'|'||
 (select count(*) from incidents)||'|'||(select count(*) from events)||'|'||
 coalesce((select string_agg(left(regexp_replace(query,'\\s+',' ','g'),80)||'~'||round(extract(epoch from now()-query_start)*1000),'^^')
- from pg_stat_activity where datname='imdb' and state='active' and pid<>pg_backend_pid()),'')"""
+ from pg_stat_activity where datname='imdb' and state='active' and pid<>pg_backend_pid()),'')||'|'||
+coalesce((select string_agg(w.pid||'>'||b.pid||'~'||left(regexp_replace(w.query,'\\s+',' ','g'),60)||'~'||left(regexp_replace(b.query,'\\s+',' ','g'),60)||'~'||coalesce(b.state,''),'^^')
+ from pg_stat_activity w cross join lateral unnest(pg_blocking_pids(w.pid)) bp(pid) join pg_stat_activity b on b.pid=bp.pid
+ where w.datname='imdb' and w.wait_event_type='Lock'),'')"""
 
 
 def srv():
@@ -34,7 +38,7 @@ with open(os.path.join(OUT, "samples.jsonl"), "a") as fo:
         t = time.time()
         pid, s = srv()
         r = subprocess.run(["docker", "exec", C, "psql", "-U", "im", "imdb", "-Atc", Q], capture_output=True, text=True).stdout.strip()
-        parts = r.split("|", 8)
+        parts = r.rsplit("|", 1)[0].split("|", 8) if r.count("|") >= 9 else r.split("|", 8)
         rec = {"t": round(t, 2), "pid": pid, **s}
         if prev and s and prev[1].get("cpu_ticks") is not None:
             rec["cpu_cores"] = round((s["cpu_ticks"] - prev[1]["cpu_ticks"]) / TCK / (t - prev[0]), 2)
@@ -42,6 +46,9 @@ with open(os.path.join(OUT, "samples.jsonl"), "a") as fo:
             k = ["conns", "active", "lockwait", "locks_ungranted", "live", "overdue", "incidents", "events"]
             rec.update({a: int(b) for a, b in zip(k, parts[:8])})
             rec["queries"] = [x for x in parts[8].split("^^") if x]
+            if r.count("|") >= 9:
+                # ждущий>держатель~запрос ждущего~запрос держателя~состояние держателя (pg_blocking_pids)
+                rec["blockers"] = [x for x in r.rsplit("|", 1)[1].split("^^") if x]
         fo.write(json.dumps(rec, ensure_ascii=False) + "\n"); fo.flush()
         prev = (t, s)
         time.sleep(max(0, EVERY - (time.time() - t)))

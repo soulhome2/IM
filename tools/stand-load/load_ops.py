@@ -31,11 +31,12 @@ STOP = threading.Event()
 LOCK = threading.Lock()
 LOG = open(os.path.join(OUT, "log.jsonl"), "w")
 SLOG = open(os.path.join(OUT, "stream.jsonl"), "w")
+CHK = open(os.path.join(OUT, "check.jsonl"), "w")  # RELOAD=stream: сверка своей страницы с ответом сервера
 HOLD_REASONS = ["third_party", "patrol", "no_data"]
 FILTERS = ["open", "open", "open", "inbox", "mine", "foreign", "done", "all"]
 SORTS = ["priority_then_oldest", "priority_then_newest", "oldest_first", "reaction_deadline"]
-RELOAD = os.environ.get("RELOAD", "none")  # none | every (старый клиент) | throttle (Р-4, bff3e88)
-assert RELOAD in ("none", "every", "throttle"), RELOAD
+RELOAD = os.environ.get("RELOAD", "none")  # none | every (старый клиент) | throttle (Р-4, bff3e88) | stream (план 84)
+assert RELOAD in ("none", "every", "throttle", "stream"), RELOAD
 WORDS = ["стекл", "дым", "вход", "Гардероб", "пожар", "предмет", "СИЗ", "камера"]
 
 
@@ -48,7 +49,7 @@ def log(rec, f=None):
 def flusher():
     while not STOP.wait(2):
         with LOCK:
-            LOG.flush(); SLOG.flush()
+            LOG.flush(); SLOG.flush(); CHK.flush()
 
 
 class Op:
@@ -64,6 +65,7 @@ class Op:
         self.rnd = random.Random(i * 7919 + int(time.time()))
         self.qs = {}  # состояние очереди: filter, sort, page, фильтры
         self.rows = []
+        self.page = []  # RELOAD=stream: своя страница очереди, как кэш клиента
         self.total = 0
         self.open = None  # открытая карточка: её и связанные перечитывает поток
         self.reloads = 0
@@ -168,6 +170,8 @@ def queue(op, kind):
     code, js = op.call("GET", "/operator/incidents?" + urllib.parse.urlencode(q), op="queue:" + kind)
     if code == 200 and isinstance(js, dict):
         op.rows = js.get("items", []); op.total = js.get("total", 0)
+        with LOCK:
+            op.page = list(op.rows)
     op.call("GET", "/operator/incidents/counters", op="counters")
     return op.rows
 
@@ -308,7 +312,10 @@ def reload_keys(op, keys):
         if STOP.is_set():
             return
         if k == "queue":
-            op.call("GET", "/operator/incidents?" + urllib.parse.urlencode(q), op="reload:queue")
+            code, js = op.call("GET", "/operator/incidents?" + urllib.parse.urlencode(q), op="reload:queue")
+            if code == 200 and isinstance(js, dict):
+                with LOCK:
+                    op.page = list(js.get("items", []))
         elif k == "counters":
             op.call("GET", "/operator/incidents/counters", op="reload:counters")
         elif k == "tree":
@@ -357,7 +364,79 @@ class Reloader:
             reload_keys(self.op, self.keys)
 
 
+def place_of(row):
+    """Что читают фильтры и порядки очереди (streamPatch.ts клиента): смена — строка может сместиться или уйти."""
+    t = row.get("timer") or {}
+    return json.dumps([row.get("state"), row.get("ownership"), (row.get("owner") or {}).get("id"),
+                       (row.get("assignmentGroup") or {}).get("id"), row.get("priority"),
+                       [t.get("id"), t.get("dueAt"), t.get("running")] if row.get("timer") else None,
+                       row.get("linkedTo"), row.get("occurredAt")])
+
+
+def patch_page(op, ev):
+    """patchQueue клиента: same — строка была на странице и место не изменилось; moved; absent."""
+    lost = ev.get("incidentGuid") if ev.get("type") == "incident.access_lost" else None
+    row = ev.get("incident")
+    guid = lost or (row or {}).get("guid")
+    if not guid:
+        return "absent"
+    with LOCK:
+        page = op.page
+        for i, item in enumerate(page):
+            if item.get("guid") != guid:
+                continue
+            if lost:
+                op.page = page[:i] + page[i + 1:]
+                return "moved"
+            try:
+                if int(row.get("version")) < int(item.get("version")):
+                    return "same"
+            except (TypeError, ValueError):
+                pass
+            op.page = page[:i] + [row] + page[i + 1:]
+            return "same" if place_of(row) == place_of(item) else "moved"
+    return "absent"
+
+
+def reconcile(op):
+    """Сверка страницы раз в 12 с (план 84) и выборочная проверка: совпала ли своя страница с ответом сервера."""
+    while not STOP.wait(12):
+        # Запрос — тот, что сейчас на экране у оператора: он листает и меняет фильтры.
+        q = {k: v for k, v in op.qs.items() if v is not None}
+        q.setdefault("filter", "open"); q.setdefault("pageSize", 50)
+        with LOCK:
+            mine = [(r.get("guid"), r.get("version"), r.get("state")) for r in op.page]
+        code, js = op.call("GET", "/operator/incidents?" + urllib.parse.urlencode(q), op="reload:check")
+        if code != 200 or not isinstance(js, dict):
+            continue
+        items = js.get("items", [])
+        theirs = [(r.get("guid"), r.get("version"), r.get("state")) for r in items]
+        a, b = {g: (v, st) for g, v, st in mine}, {g: (v, st) for g, v, st in theirs}
+        rec = {"who": op.who, "op": "check:page", "code": 0, "ms": 0, "bytes": 0, "same": mine == theirs,
+               "rows": len(theirs), "missing": len(set(b) - set(a)), "extra": len(set(a) - set(b)),
+               "stale": sum(1 for g in set(a) & set(b) if a[g] != b[g]),
+               "order": [g for g, _, _ in mine if g in b] != [g for g, _, _ in theirs if g in a]}
+        log(rec, CHK)
+        with LOCK:
+            op.page = list(items)
+
+
 def make_reload(op):
+    if RELOAD == "stream":
+        page = Reloader(op, ["queue"], 3000)
+        fast, slow = Reloader(op, ["card", "linked"], 1000), Reloader(op, SLOW_KEYS, 3000)
+        threading.Thread(target=reconcile, args=(op,), daemon=True).start()
+
+        def go(reset=False, ev=None):
+            if reset:
+                page.fire(True); fast.fire(True); slow.fire(True)
+                return
+            if ev is None or patch_page(op, ev) != "same":
+                page.fire()
+            if op.open:
+                fast.fire()
+            slow.fire()
+        return go
     if RELOAD == "every":
         r = Reloader(op, ALL_KEYS, 0)
         return lambda reset=False: r.fire()
@@ -413,7 +492,7 @@ def stream(op):
                         if ty == "stream.reset":
                             on_event(True)
                         elif not mine or ty == "incident.card_evicted":
-                            on_event()
+                            on_event(ev=ev) if RELOAD == "stream" else on_event()
                     if ty == "incident.created":
                         log({"who": op.who, "inc": ev.get("incidentGuid"), "type": ty, "id": ev.get("id")}, SLOG)
                     elif ty == "stream.reset":
@@ -541,7 +620,7 @@ if __name__ == "__main__":
         t.join(timeout=60)
     time.sleep(2)
     with LOCK:
-        LOG.flush(); SLOG.flush()
+        LOG.flush(); SLOG.flush(); CHK.flush()
     s = summary()
     print(json.dumps({k: v for k, v in s.items() if k != "ops"}, ensure_ascii=False))
     for op, v in s["ops"].items():
