@@ -73,7 +73,7 @@
 | Группа | Операции | Вход | Права |
 |---|---|---|---|
 | События | `POST /events` (событие от агента), `GET /events` | A / U | чтение — `manage` |
-| Инциденты | `GET /incidents`, `GET /incidents/{guid}`, `DELETE /incidents/{guid}` | U | список — `incidents.take.any`; один и удаление — `manage` |
+| Инциденты | `GET /incidents`, `GET /incidents/{guid}` | U | список — `incidents.take.any`; один — `manage`. `DELETE /incidents/{guid}` убран планом 85 (2026-11-13): удалял открытые мимо машины |
 | Правила | `/incidents/rules` — CRUD (5) | U | `manage` |
 | Условия правил | `/incidents/conditions` — CRUD (5) | U | `manage` |
 | Агенты | `POST /agents` (регистрация по одноразовому токену, без входа), `GET/PATCH/DELETE /agents…`, `/agents/tokens` — создать, список, удалить | — / U | `manage` |
