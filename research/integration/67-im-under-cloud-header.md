@@ -10,5 +10,6 @@
 
 ## Не забыть потом
 
-- [ ] **Временную подмену пункта меню убрать** (пункт в [TECH-DEBT.md](TECH-DEBT.md)). Адрес пункта «Менеджер инцидентов» (`/im/`, внешний) задан в закрытом пакете облака `@axxon-web/cloud-menu`. Пока пакет не поправлен, `axxoncloud-ui` подменяет переход в `app/components/AppMenu` (пункт `incidentManager` убран из `EXTERNAL_ROUTES` и ведёт на `/incident-manager`). Когда команда облака обновит пакет — у `incidentManager` адрес страницы облака, `/im/` отдельным адресом для встроенного окна, как пара `multidomainPage` / `multidomainClient` — подмену из `AppMenu` убрать и поднять версию пакета.
+- [x] **Временная подмена пункта меню убрана — 2026-11-12** (пункт в [TECH-DEBT.md](TECH-DEBT.md)). Пакет `@axxon-web/cloud-menu` поправлен в ветке `axxon-web` `feature/im_operator` (`48f9d93`): у `incidentManager` адрес `/incident-manager`, пункт — после «Конфигуратора». Облако `axxoncloud-ui` `feature/im_operator` (`3e9c64cec`) берёт пакет 1.6.2, собранный из этой ветки, из `vendor/axxon-web-cloud-menu-1.6.2.tgz`; подмена в `AppMenu` и перенаправление `/im/*` убраны.
+- [ ] После влития ветки `axxon-web` и выпуска версии пакета — вписать её в `package.json` облака и удалить `vendor/`.
 - [ ] Передать команде облака: правку пакета `@axxon-web/cloud-menu` (выше) и новую страницу `/incident-manager/*` в `axxoncloud-ui`.
