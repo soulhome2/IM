@@ -1791,7 +1791,7 @@
         "/operator/incidents/{incidentGuid}",
         (p) => {
           const ev = find(p.incidentGuid);
-          return ev ? { status: 200, body: card(ev), headers: { ETag: etag(ev) } } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+          return ev ? { status: 200, body: card(ev), headers: { ETag: etag(ev), "Cache-Control": "no-store" } } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
       ],
       [

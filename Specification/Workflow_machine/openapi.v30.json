@@ -903,7 +903,17 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Версия записи для оптимистичной блокировки (§14.1): поле `version` в кавычках, например `\"7\"`. Её клиент посылает в `If-Match`"
+                "description": "Версия записи для оптимистичной блокировки (§14.1): поле `version` в кавычках, например `\"7\"`. Её клиент посылает в `If-Match`. Только для `If-Match`: условных `GET` (`If-None-Match`) карточка не поддерживает, `304` не отдаёт"
+              },
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "description": "`no-store`: карточка со своими правами и состоянием не кэшируется ни браузером, ни промежуточными серверами"
               }
             },
             "content": {
@@ -913,6 +923,80 @@
                 }
               }
             }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/operator/incidents/{incidentGuid}/attachments/{attachmentId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/IncidentGuid"
+        },
+        {
+          "name": "attachmentId",
+          "in": "path",
+          "required": true,
+          "description": "Идентификатор файла комментария (`CommentFile.id`)",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "incident"
+        ],
+        "operationId": "downloadCommentAttachment",
+        "summary": "Скачать вложение комментария",
+        "description": "ТЗ-18, 19. Файл комментария из журнала инцидента: на него указывает `JournalEntry.attachments[].storage` вида `{kind: \"url\", url}`. Отдельного права нет: право на файл — видимость инцидента (§5); инцидент вне доступа оператора — как несуществующий. Нет файла, нет инцидента или инцидент не виден — `404`; `403` не отдаётся. Тип в `Content-Type` — сохранённый `mime` файла, `Content-Disposition: attachment` (браузер скачивает, а не открывает), `X-Content-Type-Options: nosniff`. Файл неизменяем: правки и удаления нет, удаляется вместе с инцидентом.",
+        "responses": {
+          "200": {
+            "description": "Содержимое файла",
+            "headers": {
+              "Content-Disposition": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`attachment; filename=...` — имя из `CommentFile.fileName`"
+              },
+              "X-Content-Type-Options": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "nosniff"
+                  ]
+                },
+                "description": "Тип не угадывается по содержимому"
+              }
+            },
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -986,7 +1070,7 @@
         ],
         "operationId": "executeTransition",
         "summary": "Выполнить переход",
-        "description": "Единственный способ изменить состояние инцидента. Сервер проверяет guard'ы из схемы, применяет транзакционные эффекты в одной транзакции и ставит внешние эффекты в очередь исходящих сообщений (§14.2).\n\n**Оптимистичная блокировка (§14.1).** Клиент обязан прислать `If-Match` с версией из `GET`. При рассинхроне — `412` с актуальным состоянием инцидента в теле: клиент показывает, что изменилось, и не ретраит молча.\n\n**Ручное действие выигрывает у таймера (§10.1).** Если в этот момент сработала автоэскалация, применяется действие оператора, срабатывание таймера отменяется и фиксируется в журнале.\n\nПоля формы (`form.*` в схеме) передаются в `formValues`. Какие поля обязательны — описано в `forms` активной схемы; сервер валидирует их повторно.\n\n**Комментарий (`comment`, ТЗ-18, 19, §6.3).** Переход без смены состояния: запись `workflow.journal.comment` с текстом (`formValues.comment`) и файлами (`formValues.files`, `CommentFile`) в журнале, файлы — в `JournalEntry.attachments`. Право `incident:comment`, любое состояние, владельцем быть не нужно. Отказы: пусто — `422 COMMENT_EMPTY`; текст длиннее `limits.commentMaxLength` — `403 COMMENT_TOO_LONG`; файлов больше `limits.commentMaxFiles` — `403 ATTACHMENT_LIMIT`; файл больше `limits.attachmentMaxBytes` — `403 ATTACHMENT_TOO_LARGE`; тип не из `limits.attachmentTypes` — `403 ATTACHMENT_TYPE`. Длина текста — в символах (кодовые точки, как `size()` CEL), не в байтах. Комментарий — только запись в журнал (`concurrency.bumpsVersion: false`): версия не растёт, `If-Match` не нужен, ответ несёт прежний ETag; в окне после дедлайна срабатывание таймера не отменяет (`comment` в `continuesOn`). Правки и удаления комментария нет.",
+        "description": "Единственный способ изменить состояние инцидента. Сервер проверяет guard'ы из схемы, применяет транзакционные эффекты в одной транзакции и ставит внешние эффекты в очередь исходящих сообщений (§14.2).\n\n**Оптимистичная блокировка (§14.1).** Клиент обязан прислать `If-Match` с версией из `GET` — у всех переходов, кроме `comment`: тот версию не повышает, и заголовок у него необязателен (если прислан — не проверяется; нет заголовка — не `428`). При рассинхроне — `412` с актуальным состоянием инцидента в теле: клиент показывает, что изменилось, и не ретраит молча.\n\n**Ручное действие выигрывает у таймера (§10.1).** Если в этот момент сработала автоэскалация, применяется действие оператора, срабатывание таймера отменяется и фиксируется в журнале.\n\nПоля формы (`form.*` в схеме) передаются в `formValues`. Какие поля обязательны — описано в `forms` активной схемы; сервер валидирует их повторно.\n\n**Комментарий (`comment`, ТЗ-18, 19, §6.3).** Переход без смены состояния: запись `workflow.journal.comment` с текстом (`formValues.comment`) и файлами (`formValues.files`, `CommentFile`) в журнале, файлы — в `JournalEntry.attachments`. Право `incident:comment`, любое состояние, владельцем быть не нужно. Отказы: пусто — `422 COMMENT_EMPTY`; текст длиннее `limits.commentMaxLength` — `403 COMMENT_TOO_LONG`; файлов больше `limits.commentMaxFiles` — `403 ATTACHMENT_LIMIT`; файл больше `limits.attachmentMaxBytes` — `403 ATTACHMENT_TOO_LARGE`; тип не из `limits.attachmentTypes` — `403 ATTACHMENT_TYPE`. Длина текста — в символах (кодовые точки, как `size()` CEL), не в байтах. Комментарий — только запись в журнал (`concurrency.bumpsVersion: false`): версия не растёт, `If-Match` не нужен, ответ несёт прежний ETag; в окне после дедлайна срабатывание таймера не отменяет (`comment` в `continuesOn`). Правки и удаления комментария нет.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -1044,6 +1128,9 @@
           },
           "412": {
             "$ref": "#/components/responses/VersionConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "428": {
             "$ref": "#/components/responses/PreconditionRequired"
@@ -4792,7 +4879,7 @@
         "name": "If-Match",
         "in": "header",
         "required": true,
-        "description": "Версия записи, которую видел клиент (§14.1): `ETag` карточки или поле `version` из очереди и карточки в кавычках, например `\"7\"`. Нет заголовка — `428`, версия не совпала — `412` с актуальной карточкой.",
+        "description": "Версия записи, которую видел клиент (§14.1): `ETag` карточки или поле `version` из очереди и карточки в кавычках, например `\"7\"`. Нет заголовка — `428`, версия не совпала — `412` с актуальной карточкой. Исключение — переход `comment` (`POST …/transitions/comment`, ТЗ-18): он не повышает версию, заголовок у него необязателен и не проверяется; так отмечено и в `concurrency.expectedVersion: false` машины. Для остальных переходов заголовок обязателен.",
         "schema": {
           "type": "string"
         }
@@ -11108,7 +11195,7 @@
           "storage": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Где хранится вместо `dataBase64`: `{kind: s3, bucket, key}` или `{kind: url, url}`"
+            "description": "Где хранится вместо `dataBase64`: `{kind: s3, bucket, key}` или `{kind: url, url}`. В `JournalEntry.attachments` у файла из хранилища сервера — `{kind: \"url\", url}`, адрес — маршрут `GET /operator/incidents/{incidentGuid}/attachments/{attachmentId}` (`downloadCommentAttachment`)"
           }
         }
       }
