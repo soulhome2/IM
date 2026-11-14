@@ -2832,12 +2832,12 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const W = window.IM_WORKFLOW;
       expect(W.maintenance && W.maintenance.mode === "suppress", "в машине нет maintenance.mode = suppress по умолчанию");
-      expect(W.intake && W.intake.windows === "windowsFor" && W.cel.definitions.windowsFor, "в intake машины нет отбора окон windowsFor");
+      expect(W.intake && W.intake.windows === "windowsAfterWinners" && W.cel.definitions.windowsFor, "в intake машины нет отбора окон windowsAfterWinners");
       const sc = window.IM_OPENAPI.components.schemas;
       expect(sc.MaintenanceWindow && sc.EventExplanationRule.properties.verdict.enum.includes("maintenance"), "в контракте нет MaintenanceWindow или вердикта maintenance");
       try {
         const now = await mwSetup();
-        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         expect(w.status === 201 && w.body.id && w.body.status === "active", `окно не создано: ${w.status} ${JSON.stringify(w.body)}`);
         const r = await mwFire(1);
         expect(r.body.created === 0 && r.body.alarmNumber == null, `событие в окне создало ${r.body.created} инц.`);
@@ -2855,7 +2855,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ workflowPatch: { maintenance: { mode: "mark" } } });
-        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         const r = await mwFire(3);
         expect(r.body.created >= 1, `при mark инцидент не создан: ${JSON.stringify(r.body)}`);
         const inc = r.body.incidents[0];
@@ -2872,7 +2872,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         let now = await mwSetup();
-        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now) });
+        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now) });
         const atEnd = await mwFire(4);
         expect(atEnd.body.created >= 1 && !atEnd.body.maintenance, `событие в конец окна подавлено: ${JSON.stringify(atEnd.body.maintenance)}`);
         now = await mwSetup();
@@ -2890,7 +2890,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup();
-        const w = await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        const w = await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         expect(w.status === 201, `окно на группу: ${w.status} ${JSON.stringify(w.body)}`);
         const r = await mwFire(6, mwCam);
         expect(r.body.created === 0 && r.body.maintenance && r.body.maintenance.windowId === w.body.id, `камера во вложенной группе: создано ${r.body.created}`);
@@ -2909,7 +2909,7 @@
         const iso = d.getUTCDay() || 7; // ISO: понедельник 1 … воскресенье 7
         const hm = (ms) => new Date(ms).toISOString().slice(11, 16);
         const rec = (days) => ({ days, startTime: hm(now - 30 * 60000), endTime: hm(now + 30 * 60000) });
-        const series = { startsAt: mwIso(now - 30 * 24 * mwHour), endsAt: mwIso(now + 30 * 24 * mwHour) };
+        const series = { startsAt: mwIso(now), endsAt: mwIso(now + 30 * 24 * mwHour) };
         const other = await mwCreate(Object.assign({ deviceGuid: mwSmoke, recurrence: rec([1, 2, 3, 4, 5, 6, 7].filter((x) => x !== iso)) }, series));
         expect(other.status === 201, `повтор не создан: ${other.status} ${JSON.stringify(other.body)}`);
         const miss = await mwFire(7);
@@ -2928,7 +2928,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ fixturePatch: { rules: [] } });
-        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         const r = await mwFire(9);
         expect(r.body.created === 0 && !r.body.maintenance, `без правил итог: ${JSON.stringify(r.body.maintenance)}`);
         return "окно не названо";
@@ -2942,7 +2942,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup();
-        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         const id = encodeURIComponent(w.body.id);
         const move = await stand.raw("PUT", `/operator/maintenance-windows/${id}`, Object.assign({}, w.body, { deviceGuid: "20000000-0002-4000-8000-000000000001" }));
         expect(move.status === 409 && move.body.code === "MAINTENANCE_WINDOW_ACTIVE", `смена устройства идущего окна: ${move.status} ${move.body && move.body.code}`);
@@ -2967,8 +2967,8 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ workflowPatch: { maintenance: { mode: "mark" }, limits: { maxActive: null } } });
-        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
-        const far = await mwCreate({ deviceGuid: "20000000-0002-4000-8000-000000000001", startsAt: mwIso(now - mwHour), endsAt: mwIso(now + mwHour) });
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
+        const far = await mwCreate({ deviceGuid: "20000000-0002-4000-8000-000000000001", startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         const inc = (await mwFire(11)).body.incidents[0];
         const card = await prCard(inc.guid);
         expect((card.maintenanceWindows || []).map((x) => x.id).join() === w.body.id, `окна карточки: ${JSON.stringify(card.maintenanceWindows)}`);
@@ -2995,6 +2995,94 @@
         const list = await stand.raw("GET", "/operator/maintenance-windows");
         expect(list.status === 200 && Array.isArray(list.body) && list.body.length >= 2, `список окон: ${list.status}`);
         return `окон в наборе: ${list.body.length}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Окно работ: правило «окно только при победителе» и режим — определения машины (ТЗ-21, ревью I-1)", async () => {
+      const W = window.IM_WORKFLOW;
+      const d = W.cel.definitions;
+      expect(W.intake.windows === "windowsAfterWinners" && d.windowsAfterWinners && /windowsFor/.test(d.windowsAfterWinners.expr), "нет windowsAfterWinners в intake.windows");
+      expect(W.intake.outcome === "maintenanceOutcome" && d.maintenanceOutcome && /maintenance\.mode/.test(d.maintenanceOutcome.expr), "режим окна — не определение машины");
+      return "windowsAfterWinners, maintenanceOutcome";
+    });
+
+    await step("Окно работ: начало в прошлом — отказ STARTS_IN_PAST; у будущего начало переносится только в будущее (ТЗ-21, ревью I-2)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup();
+        const past = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - 10 * 60000), endsAt: mwIso(now + mwHour) });
+        expect(past.status === 422 && past.body.code === "MAINTENANCE_WINDOW_STARTS_IN_PAST", `начало 10 мин назад: ${past.status} ${past.body && past.body.code}`);
+        const skew = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now - 2 * 60000), endsAt: mwIso(now + mwHour) });
+        expect(skew.status === 201, `начало 2 мин назад (допуск часов): ${skew.status}`);
+        const fut = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now + mwHour), endsAt: mwIso(now + 2 * mwHour) });
+        const back = await stand.raw("PUT", `/operator/maintenance-windows/${encodeURIComponent(fut.body.id)}`, Object.assign({}, fut.body, { startsAt: mwIso(now - 3 * mwHour) }));
+        expect(back.status === 422 && back.body.code === "MAINTENANCE_WINDOW_STARTS_IN_PAST", `перенос начала будущего в прошлое: ${back.status}`);
+        return "прошлое — отказ, допуск 5 мин";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Серия с повтором идёт с начала первого интервала до конца серии, и в промежутках: дни не меняются, удалить нельзя (ТЗ-21, ревью I-3)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup();
+        const hm = (ms) => new Date(ms).toISOString().slice(11, 16);
+        // Интервал — ближайшие 10 минут каждый день; создали за минуту до него: серия впереди
+        const rec = { days: [1, 2, 3, 4, 5, 6, 7], startTime: hm(now + 60000), endTime: hm(now + 11 * 60000) };
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + 10 * 24 * mwHour), recurrence: rec });
+        expect(w.status === 201 && w.body.status === "planned", `до первого интервала: ${w.status} ${w.body.status}`);
+        await stand.raw("POST", "/test/clock", { advanceSec: 3 * 3600 });
+        const id = encodeURIComponent(w.body.id);
+        const cur = (await stand.raw("GET", "/operator/maintenance-windows")).body.find((x) => x.id === w.body.id);
+        expect(cur.status === "active", `в промежутке между интервалами: ${cur.status}`);
+        const days = await stand.raw("PUT", `/operator/maintenance-windows/${id}`, Object.assign({}, cur, { recurrence: Object.assign({}, rec, { days: [1] }) }));
+        expect(days.status === 409 && days.body.code === "MAINTENANCE_WINDOW_ACTIVE", `смена дней идущей серии: ${days.status}`);
+        const del = await stand.raw("DELETE", `/operator/maintenance-windows/${id}`);
+        expect(del.status === 409, `удаление идущей серии: ${del.status}`);
+        return "серия идёт и между интервалами";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Пояс окна по умолчанию — пояс поста maintenance.defaultTimeZone (ТЗ-21, ревью I-4а)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup({ workflowPatch: { maintenance: { defaultTimeZone: "Asia/Yekaterinburg" } } });
+        const w = await stand.raw("POST", "/operator/maintenance-windows", { deviceGuid: mwSmoke, startsAt: mwIso(now + mwHour), endsAt: mwIso(now + 2 * mwHour), description: "без пояса" });
+        expect(w.status === 201 && w.body.timeZone === "Asia/Yekaterinburg", `пояс: ${w.status} ${w.body.timeZone}`);
+        return w.body.timeZone;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Форма закрытия: поле окна работ скрыто, если пересекающихся окон нет (ТЗ-21, ревью I-4б)", async () => {
+      const f = window.IM_WORKFLOW.forms.find((x) => x.id === "close").fields.find((x) => x.name === "maintenanceWindowId");
+      expect(f && /inMaintenance\(incident\)/.test(f.visibleExpr), `visibleExpr: ${f && f.visibleExpr}`);
+      return f.visibleExpr;
+    });
+
+    await step("Повтор события, уже давшего инцидент, при suppress идёт в прежний инцидент; итог приёма хранится с событием (ТЗ-21, ревью I-4в, I-4г)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup();
+        const guid = "e0000000-0000-4000-8000-000000002101";
+        const first = await stand.raw("POST", "/test/events", Object.assign(mwEvent(20), { eventGuid: guid }));
+        expect(first.body.created >= 1, "первая доставка не дала инцидент");
+        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
+        const again = await stand.raw("POST", "/test/events", Object.assign(mwEvent(20), { eventGuid: guid }));
+        expect(again.body.created === 0 && again.body.maintenance === null && again.body.incidents.map((x) => x.guid).join() === first.body.incidents.map((x) => x.guid).join(), `повтор: ${JSON.stringify(again.body.maintenance)} ${again.body.incidents.length}`);
+        const sc = window.IM_OPENAPI.components.schemas.EventExplanation.properties.maintenance;
+        expect(/при приёме/.test(sc.description), "контракт: итог окна в объяснении — не на момент приёма");
+        return "повтор — в прежний инцидент";
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);

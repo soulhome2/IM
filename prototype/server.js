@@ -523,6 +523,7 @@
       // Уровни справочника приоритетов (§2.5) — варианты формы смены приоритета (ТЗ-13), название — на языке сессии
       // Окна работ, пересекающиеся с инцидентом (§14.12): варианты поля «окно работ» формы закрытия
       maintenanceWindows: (ev) => windowsOfIncident(ev),
+      inMaintenance: (ev) => windowsOfIncident(ev).length > 0,
       priorities: () => PRIORITIES.map((p) => ({ value: p.value, label: (p.name && (p.name[(session && session.preferences.locale) || "ru"] || p.name.ru)) || String(p.value) })),
       hasAccess: (id, ev) => hasAccess(id, ev),
       // Факты мира для выражений машины (cel.world, CEL.md): права и состояние любого человека, состав групп
@@ -2146,7 +2147,20 @@
       if (!src || ev.occurredAt == null) return [];
       return engine.windowsCovering(maintenanceIntervals(ev.occurredAt), { guid: ev.eventGuid || "", eventType: ev.typeId, device: src, deviceType: deviceSpec(src).type, at: ev.occurredAt });
     }
-    const windowStatus = (w) => (now() < w.startsAt ? "planned" : now() < w.endsAt ? "active" : "ended");
+    // Начало первого интервала окна (§14.12): у разового — начало; у серии — первый интервал дней повтора в рамке
+    // (ищется по дням рамки, до недели вперёд); интервала нет — конец рамки
+    function firstStart(w) {
+      if (!w.recurrence) return w.startsAt;
+      const found = [];
+      for (let k = 0; k <= 8 && !found.length; k++) {
+        const at = w.startsAt + k * 864e5;
+        found.push(...windowIntervals(w, Math.min(at, w.endsAt - 1)).filter((x) => x.to > w.startsAt));
+      }
+      return found.length ? Math.min(...found.map((x) => x.from)) : w.endsAt;
+    }
+    // Состояние окна (§14.12): впереди — до начала первого интервала; идёт — от него до конца (у серии — и в
+    // промежутках между интервалами); закончилось — после конца
+    const windowStatus = (w) => (now() >= w.endsAt ? "ended" : now() < firstStart(w) ? "planned" : "active");
     function windowView(w) {
       return {
         id: w.id,
@@ -2170,7 +2184,8 @@
       const hasGroup = b.sourceGroupGuid != null && b.sourceGroupGuid !== "";
       const startsAt = Date.parse(b.startsAt);
       const endsAt = Date.parse(b.endsAt);
-      const tz = b.timeZone || "UTC";
+      // Пояс не задан — пояс поста (maintenance.defaultTimeZone), его нет — UTC
+      const tz = b.timeZone || (W.maintenance || {}).defaultTimeZone || "UTC";
       const r = b.recurrence || null;
       const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       const badRec = r && !(Array.isArray(r.days) && r.days.length && r.days.every((x) => Number.isInteger(x) && x >= 1 && x <= 7) && time.test(r.startTime || "") && time.test(r.endTime || ""));
@@ -2183,12 +2198,15 @@
         startsAt,
         endsAt,
         timeZone: tz,
-        recurrence: r ? { days: [...new Set(r.days)].sort(), startTime: r.startTime, endTime: r.endTime } : null,
+        recurrence: r ? { days: [...new Set(r.days)].sort((x, y) => x - y), startTime: r.startTime, endTime: r.endTime } : null,
         description: String(b.description || ""),
       };
     }
     const noMaintEdit = () => problem(403, "PERMISSION_DENIED", ["workflow.error.no_maintenance_edit"]);
     const badWindow = () => problem(422, "FORM_FIELD_INVALID", ["workflow.error.maintenance_invalid"]);
+    // Начало не раньше «сейчас» минус допуск часов (maintenance.startSkewSec): окно не объясняет прошлое задним числом
+    const startsInPast = (w) => w.startsAt < now() - ((W.maintenance || {}).startSkewSec || 0) * 1000;
+    const pastStart = () => problem(422, "MAINTENANCE_WINDOW_STARTS_IN_PAST", ["workflow.error.maintenance_starts_in_past"]);
     function MAINTENANCE_ROUTES() {
       const find = (id) => MAINT.find((w) => w.id === id) || null;
       return [
@@ -2200,6 +2218,7 @@
             if (!can("maintenance:edit")) return noMaintEdit();
             const w = windowOf(body);
             if (!w || w.endsAt <= now()) return badWindow();
+            if (startsInPast(w)) return pastStart();
             const row = Object.assign({ id: uuid("a", ++serial.window, "000000000021") }, w, { createdBy: ME, createdAt: now(), endedEarlyAt: null });
             MAINT.push(row);
             return { status: 201, body: windowView(row) };
@@ -2220,7 +2239,7 @@
               // Идущее окно: меняются только конец и описание — иначе задним числом меняется итог прошлых событий
               const same = ["deviceGuid", "sourceGroupGuid", "startsAt", "timeZone"].every((k) => w[k] === row[k]) && JSON.stringify(w.recurrence) === JSON.stringify(row.recurrence || null);
               if (!same) return problem(409, "MAINTENANCE_WINDOW_ACTIVE", ["workflow.error.maintenance_active"]);
-            }
+            } else if (w.startsAt !== row.startsAt && startsInPast(w)) return pastStart();
             Object.assign(row, w);
             return { status: 200, body: windowView(row) };
           },
@@ -2322,6 +2341,7 @@
       const event = eventOf(spec);
       if (!event) return null;
       const known = EVENTS.get(event.guid);
+      // Повтор события — прежние инциденты, до окон: окно касается только создания новых (§14.12)
       if (known) return { eventGuid: known.guid, alarmNumber: known.alarmNumber, created: [], incidents: known.incidentIds.map(byId).filter(Boolean), maintenance: known.maintenance };
       const source = event.devices[0];
       const fact = { guid: event.guid, eventType: event.type.id, device: source, deviceType: deviceSpec(source).type, at: event.occurredAt };

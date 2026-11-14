@@ -4881,7 +4881,7 @@
         ],
         "operationId": "createMaintenanceWindow",
         "summary": "Создать окно плановых работ",
-        "description": "§14.12, ТЗ-21. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `create`. Нет ни устройства, ни группы или заданы оба, конец не позже начала, неизвестный пояс, повтор без дней — `422 FORM_FIELD_INVALID`. Устройство или группа не из организации — `422`. Окно, которое уже началось, создать можно: со следующего события оно действует; прошлое (конец в прошлом) — `422`.",
+        "description": "§14.12, ТЗ-21. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `create`. Нет ни устройства, ни группы или заданы оба, конец не позже начала, неизвестный пояс, повтор без дней — `422 FORM_FIELD_INVALID`. Устройство или группа не из организации — `422`. Начало — не раньше «сейчас» минус 5 мин (`maintenance.startSkewSec`), иначе `422 MAINTENANCE_WINDOW_STARTS_IN_PAST`; конец в прошлом — `422 FORM_FIELD_INVALID`. Пояс не задан — пояс поста `maintenance.defaultTimeZone`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4910,7 +4910,14 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "422": {
-            "$ref": "#/components/responses/ValidationFailed"
+            "description": "`FORM_FIELD_INVALID` — окно задано неверно; `MAINTENANCE_WINDOW_STARTS_IN_PAST` — начало в прошлом",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -4922,7 +4929,7 @@
         ],
         "operationId": "updateMaintenanceWindow",
         "summary": "Изменить окно плановых работ",
-        "description": "§14.12, ТЗ-21. Будущее окно правится целиком. Идущее — только `endsAt` (не раньше сейчас) и `description`; другое поле изменилось — `409 MAINTENANCE_WINDOW_ACTIVE`. Закончившееся — только чтение: `409 MAINTENANCE_WINDOW_ENDED`. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `update`, значение до и после целиком.",
+        "description": "§14.12, ТЗ-21. Будущее окно (`status` `planned`) правится целиком; начало переносится только в будущее (не раньше «сейчас» минус `maintenance.startSkewSec`), иначе `422 MAINTENANCE_WINDOW_STARTS_IN_PAST`. Серия с повтором — идущая от начала первого интервала до конца серии, в том числе между интервалами. Идущее — только `endsAt` (не раньше сейчас) и `description`; другое поле изменилось — `409 MAINTENANCE_WINDOW_ACTIVE`. Закончившееся — только чтение: `409 MAINTENANCE_WINDOW_ENDED`. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `update`, значение до и после целиком.",
         "parameters": [
           {
             "name": "id",
@@ -4976,7 +4983,14 @@
             }
           },
           "422": {
-            "$ref": "#/components/responses/ValidationFailed"
+            "description": "`FORM_FIELD_INVALID` — окно задано неверно; `MAINTENANCE_WINDOW_STARTS_IN_PAST` — начало в прошлом",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       },
@@ -5323,7 +5337,8 @@
               "ATTACHMENT_TYPE",
               "PRIORITY_UNCHANGED",
               "MAINTENANCE_WINDOW_ACTIVE",
-              "MAINTENANCE_WINDOW_ENDED"
+              "MAINTENANCE_WINDOW_ENDED",
+              "MAINTENANCE_WINDOW_STARTS_IN_PAST"
             ]
           },
           "message": {
@@ -11364,7 +11379,12 @@
             "$ref": "#/components/schemas/EventExplanationReason"
           },
           "maintenanceWindow": {
-            "$ref": "#/components/schemas/EventRef"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventRef"
+              }
+            ],
+            "description": "Окно работ из итога при приёме события (`EventExplanation.maintenance`), а не по текущим окнам"
           }
         },
         "additionalProperties": false
@@ -11421,7 +11441,7 @@
                 "type": "null"
               }
             ],
-            "description": "§14.12, ТЗ-21. Итог окна работ при приёме события; null — не было"
+            "description": "§14.12, ТЗ-21. Итог окна работ при приёме события — сохранён с событием при приёме, не пересчитывается по текущим окнам (окно потом правили или завершили — итог тот же); null — окна не было. У правил-победителей при `suppress` — вердикт `maintenance` и `maintenanceWindow` из этого же сохранённого итога"
           }
         },
         "additionalProperties": false
@@ -11825,8 +11845,7 @@
         "description": "§14.12, ТЗ-21. Окно плановых работ: на устройстве или группе устройств (с вложенными) с начала по конец — полуинтервал [`startsAt`, `endsAt`): событие ровно в конец уже вне окна. Задано ровно одно из `deviceGuid` и `sourceGroupGuid`. Без повтора окно — один интервал; с повтором (`recurrence`) `startsAt` и `endsAt` — рамка серии, а интервалы — дни повтора внутри неё. Событие в окне, у которого есть правило-победитель, по `maintenance.mode` машины не создаёт инцидент (`suppress`) или создаёт его со ссылкой на окно и низшим приоритетом (`mark`). Окно видно только своей организации. Тело создания и правки",
         "required": [
           "startsAt",
-          "endsAt",
-          "timeZone"
+          "endsAt"
         ],
         "properties": {
           "deviceGuid": {
@@ -11847,7 +11866,8 @@
           },
           "startsAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "При создании и при переносе начала будущего окна — не раньше «сейчас» минус `maintenance.startSkewSec` (5 мин, допуск на часы), иначе `422 MAINTENANCE_WINDOW_STARTS_IN_PAST`: окно не объясняет прошлые события задним числом"
           },
           "endsAt": {
             "type": "string",
@@ -11859,7 +11879,7 @@
             "examples": [
               "Europe/Moscow"
             ],
-            "description": "Часовой пояс IANA — для повтора; не задан в форме — пояс поста. Неизвестный — 422 `FORM_FIELD_INVALID`"
+            "description": "Часовой пояс IANA — для повтора. Не задан — пояс поста `maintenance.defaultTimeZone` машины (по умолчанию UTC), окно сохраняется с ним. Неизвестный — 422 `FORM_FIELD_INVALID`"
           },
           "recurrence": {
             "oneOf": [
@@ -11953,7 +11973,8 @@
               "planned",
               "active",
               "ended"
-            ]
+            ],
+            "description": "`planned` — до начала первого интервала (у разового — до `startsAt`, у серии — до первого интервала дней повтора в рамке); `active` — от него до `endsAt`, у серии — и в промежутках между интервалами; `ended` — после `endsAt`. У `planned` правится всё и окно удаляется; у `active` — только `endsAt` и `description`, есть «завершить досрочно», удалить нельзя; `ended` — только чтение"
           },
           "endedEarlyAt": {
             "type": [

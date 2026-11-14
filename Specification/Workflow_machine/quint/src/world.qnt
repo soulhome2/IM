@@ -88,6 +88,8 @@
   def inSourceGroup(x: Incident, g: str): bool = false
   // Условия правил по группе (§14.5, ARCH-15): групп устройств в модели нет — устройство ни в одной, глубина 0
   def deviceInGroup(d: str, g: str): bool = false
+  // Окон работ в модели нет (ТЗ-21): поле «окно работ» формы закрытия скрыто
+  def inMaintenance(x: Incident): bool = false
   def groupDepth(g: str): int = 0
   def agentState(who: str): str = if (OPERATORS.contains(who)) agents.get(who) else "offline"
   def idleSec(who: str): int = if (OPERATORS.contains(who)) (clock - lastBeat.get(who)) / 1000 else 0

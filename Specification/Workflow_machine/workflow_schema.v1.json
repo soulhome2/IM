@@ -385,7 +385,7 @@
           "labelKey": "workflow.form.close.field.maintenanceWindowId",
           "requiredExpr": "false",
           "source": "maintenanceWindows",
-          "visibleExpr": "form.resultId == 'drill'",
+          "visibleExpr": "form.resultId == 'drill' && inMaintenance(incident)",
           "placeholderKey": "workflow.form.close.field.maintenanceWindowId.placeholder",
           "$comment": "§2.2, §14.12, ТЗ-21. Окно работ, из-за которого тревога, — только у «Плановой проверки», необязательно: работы бывают и без окна. Варианты (source maintenanceWindows) — окна, пересекающиеся с инцидентом (данные МИ, как уровни справочника приоритетов): устройство-источник в окне и время события в его интервале (windowCovers). Значение не из вариантов — 422 FORM_FIELD_INVALID. Хранится в инциденте (closeMaintenanceWindowId) и в записи журнала"
         },
@@ -1430,7 +1430,11 @@
     "$comment": "§14.12, ТЗ-21. Окна плановых работ: на время работ на устройстве или группе устройств события не дают поток ложных инцидентов. mode — что делает окно с событием, у которого есть правило-победитель (intake.windows, после отбора правил): suppress — инцидент не создаётся, событие записано обработанным, в объяснении отбора — вердикт maintenance со ссылкой на окно; mark — инцидент создаётся, в нём ссылка на окно (maintenanceWindowId) и приоритет — низший уровень справочника приоритетов (markPriority: lowest) вместо приоритета правила; это приоритет автоматики: priorityManual = false, старший смены может поднять (change_priority). Уже открытые инциденты окно не трогает. Сами окна — данные МИ (GET /operator/maintenance-windows), не машина.",
     "mode": "suppress",
     "modes": ["suppress", "mark"],
-    "markPriority": "lowest"
+    "markPriority": "lowest",
+    "defaultTimeZone": "UTC",
+    "$commentDefaultTimeZone": "Пояс поста (IANA) для окон без своего пояса: окно сохраняется с ним. По умолчанию UTC",
+    "startSkewSec": 300,
+    "$commentStartSkewSec": "Допуск на расхождение часов: начало окна при создании и при переносе будущего — не раньше «сейчас» минус столько секунд, иначе 422 MAINTENANCE_WINDOW_STARTS_IN_PAST: окно не объясняет задним числом прошлые события"
   },
 
   "messages": {
@@ -1517,6 +1521,7 @@
     "workflow.error.maintenance_active": { "vars": [] },
     "workflow.error.maintenance_ended": { "vars": [] },
     "workflow.error.maintenance_invalid": { "vars": [] },
+    "workflow.error.maintenance_starts_in_past": { "vars": [] },
     "workflow.error.catalog_not_found": { "vars": [] },
     "workflow.error.schema_not_found": { "vars": [] },
     "workflow.error.schema_published": { "vars": [] },
@@ -1570,6 +1575,7 @@
       "Override": { "eventType": "opt<string>", "priority": "opt<int>", "sourceGroup": "opt<string>", "scenario": "opt<string>", "sec": "int" },
       "HoldReason": { "id": "string", "maxMinutes": "opt<int>", "setBy": "string", "deadlineFromIdle": "bool" },
       "Event": { "guid": "string", "eventType": "string", "device": "string", "deviceType": "string", "at": "int" },
+      "Maintenance": { "mode": "string", "modes": "list<string>", "markPriority": "string", "defaultTimeZone": "string", "startSkewSec": "int" },
       "MaintenanceWindow": { "id": "string", "device": "opt<string>", "group": "opt<string>", "from": "int", "to": "int" },
       "Condition": { "eventType": "opt<string>", "device": "opt<string>", "deviceType": "opt<string>", "group": "opt<string>" },
       "Rule": { "guid": "string", "active": "bool", "priority": "int", "createdAt": "int", "scenarios": "list<string>", "conditions": "list<Condition>" }
@@ -1582,6 +1588,7 @@
       "members": { "params": { "g": "string" }, "returns": "list<string>", "$comment": "Состав дежурной группы сейчас: люди с её ролями и записанные в неё (§8.1)" },
       "dutyGroups": { "params": {}, "returns": "list<string>", "$comment": "Дежурные группы по порядку набора" },
       "inSourceGroup": { "params": { "x": "Incident", "g": "string" }, "returns": "bool", "$comment": "Устройство-источник инцидента — в группе устройств g" },
+      "inMaintenance": { "params": { "x": "Incident" }, "returns": "bool", "$comment": "§14.12, ТЗ-21. С инцидентом пересекается хоть одно окно работ: устройство-источник в окне и время события в его интервале. Нет — поле «окно работ» формы закрытия скрыто" },
       "deviceInGroup": { "params": { "d": "string", "g": "string" }, "returns": "bool", "$comment": "§14.5, ARCH-15. Устройство d — в группе устройств g или в одной из вложенных в неё: условие правила по группе" },
       "groupDepth": { "params": { "g": "string" }, "returns": "int", "$comment": "§14.5, ARCH-15. Глубина группы устройств в дереве — сколько над ней групп: верхняя — 0. Ранг условия по группе: вложенная точнее родителя" },
       "agentState": { "params": { "who": "string" }, "returns": "string", "$comment": "Состояние оператора — session.states[].id" },
@@ -1598,7 +1605,7 @@
       "groupMembersAt": { "params": { "p": "Incident", "at": "int" }, "returns": "list<Incident>", "ref": "incidents.filter(e, e.id != p.id && inGroupAt(e, p, at))", "$comment": "§11.4. Кто был в группе основного p в момент at (inGroupAt)" },
       "siblingsOf": { "params": { "x": "Incident" }, "returns": "list<Incident>", "ref": "incidents.filter(s, x.eventGuid != '' && s.eventGuid == x.eventGuid && s.id != x.id)", "$comment": "§14.5, ARCH-15. Соседи — инциденты того же события, кроме самого x: другие службы той же тревоги. Не привязка §11: у каждого свой владелец, сроки и закрытие" }
     },
-    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" }, "causeCatalogs": { "type": "map<string, CauseCatalog>", "from": "reasonCatalogs" } },
+    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" }, "causeCatalogs": { "type": "map<string, CauseCatalog>", "from": "reasonCatalogs" }, "maintenance": "Maintenance" },
     "definitions": {
       "addressee": { "params": { "x": "Incident" }, "returns": "string", "expr": "x.owner != '' ? x.owner : x.assignmentGroup", "$comment": "§8.1. Адресат: владелец-человек, а пока группа не приняла — сама группа" },
       "unowned": { "params": { "x": "Incident" }, "returns": "bool", "expr": "x.owner == '' && x.assignmentGroup == ''" },
@@ -1659,6 +1666,8 @@
       "ruleMatches": { "params": { "r": "Rule", "e": "Event" }, "returns": "bool", "expr": "r.active && size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))", "$comment": "§14.5, ARCH-15, ТЗ-2а. Правило подошло событию: оно включено (active), у него есть сценарий и подошло хоть одно условие. Выключенное правило и правило без сценария в выборе не участвуют: в ранжировании их нет, перекрыть включённое они не могут; в объяснении отбора выключенное — вердикт disabled (§12.5): disabled ⇔ !r.active. Rule.active — поле правила; у правила без поля (сохранено до ТЗ-2а) адаптер подставляет true" },
       "ruleBeats": { "params": { "a": "Rule", "b": "Rule", "e": "Event" }, "returns": "bool", "expr": "cel.bind(ra, ruleRank(a, e), cel.bind(rb, ruleRank(b, e), ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))))", "$comment": "§14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил, а он задан intake.ruleOrder (по guid), не порядком строк в базе" },
       "windowCovers": { "params": { "w": "MaintenanceWindow", "e": "Event" }, "returns": "bool", "expr": "w.from <= e.at && e.at < w.to && (size(w.device) > 0 ? w.device[0] == e.device : size(w.group) > 0 && deviceInGroup(e.device, w.group[0]))", "$comment": "§14.12, ТЗ-21. Интервал окна работ накрывает событие: время события в полуинтервале [from, to) — ровно в конец уже вне окна — и устройство-источник — устройство окна или в группе окна, в том числе во вложенной. w — один интервал: повтор окна сервер разворачивает в интервалы сам (правило — §14.12), машина получает уже развёрнутые" },
+      "windowsAfterWinners": { "params": { "winners": "int", "ws": "list<MaintenanceWindow>", "e": "Event" }, "returns": "list<MaintenanceWindow>", "expr": "winners > 0 ? windowsFor(ws, e) : []", "$comment": "§14.5 п. 6, §14.12, ТЗ-21. Окна проверяются только после выбора правил: winners — сколько инцидентов дали бы правила-победители (после ключа уникальности). Нет победителя — окна нет: событие остаётся «не сработало»" },
+      "maintenanceOutcome": { "params": { "winners": "int", "ws": "list<MaintenanceWindow>", "e": "Event" }, "returns": "string", "expr": "size(windowsAfterWinners(winners, ws, e)) > 0 ? maintenance.mode : ''", "$comment": "§14.12, ТЗ-21. Итог окна для события: режим maintenance.mode (suppress — инцидентов нет, mark — с окном и низшим приоритетом) или '' — окно не действует. Окно итога — первое из windowsAfterWinners. Итог и окно сервер сохраняет с событием при приёме: объяснение отбора отдаёт их, а не пересчитывает по текущим окнам" },
       "windowsFor": { "params": { "ws": "list<MaintenanceWindow>", "e": "Event" }, "returns": "list<MaintenanceWindow>", "expr": "ws.filter(w, windowCovers(w, e))", "$comment": "§14.12, ТЗ-21. Интервалы окон работ, накрывающие событие; первое по порядку списка (по началу, при равенстве — по id окна) — окно, на которое ссылается итог. Пусто — окна нет" },
       "ruleFor": { "params": { "rules": "list<Rule>", "e": "Event", "s": "string" }, "returns": "list<Rule>", "expr": "cel.bind(ms, rules.filter(r, ruleMatches(r, e) && s in r.scenarios), ms.filter(r, !ms.exists(o, ruleBeats(o, r, e))))", "$comment": "§14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка — rules упорядочены по intake.ruleOrder. От него приоритет и ruleGuid инцидента" }
     }
@@ -1668,8 +1677,9 @@
     "$comment": "§14.5, ARCH-15. Как событие становится инцидентами; исполняет сервер, смысл — определения машины, имена — отсюда. 1) Событие с тем же guid уже есть — ничего не создаётся, ответ — прежние инциденты. 2) Подошедшие правила — match (правило без сценария не подходит). 3) Для каждого сценария подошедших правил — один инцидент; правило-победитель — первое из winner, от него приоритет и ruleGuid; сценарий — последняя версия. Ключ уникальности — uniqueKey, поля Incident, которые известны до создания: eventGuid, eventType, scenario; сейчас — событие + сценарий. На ключ — один инцидент: из тех, у кого ключ совпал, создаётся первый по порядку создания (п. 4), так исполняют и сервер, и модель Quint (PROC-93). 4) Все инциденты события и запись события — одной транзакцией, каждый — переходом create; порядок создания и номеров: чей победитель старше (ruleBeats) — раньше, сценарии одного правила — по порядку его списка; номер тревоги события — номер первого созданного. 5) Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано как обработанное. ruleOrder — поле Rule, по которому упорядочен список правил перед выбором (по возрастанию, guid — строкой в нижнем регистре): им решается полное равенство в ruleBeats — и победитель, и порядок создания. Порядок строк в базе не задан, поэтому список упорядочивается явно; в CEL это не выражение — строки в Quint только сравниваются на равенство.",
     "uniqueKey": ["eventGuid", "scenario"],
     "ruleOrder": "guid",
-    "windows": "windowsFor",
-    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает.",
+    "windows": "windowsAfterWinners",
+    "outcome": "maintenanceOutcome",
+    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает. Определения: windows — windowsAfterWinners(winners, ws, e): winners — число инцидентов, которые дали бы победители; outcome — maintenanceOutcome(winners, ws, e): режим или пусто. Итог (режим и id окна) сохраняется с событием при приёме; повтор события идёт в прежние инциденты до окон (п. 1).",
     "match": "ruleMatches",
     "winner": "ruleFor",
     "create": "create"
@@ -1888,7 +1898,8 @@
           { "id": "maintenance_windows", "labelKey": "workflow.settings.tab.maintenance_windows", "rules": "§14.12", "source": "GET /operator/maintenance-windows" }
         ],
         "items": [
-          { "path": "maintenance.mode", "labelKey": "workflow.settings.maintenance.mode", "whatKey": "workflow.settings.maintenance.mode.what", "values": { "suppress": "workflow.settings.maintenance.mode.value.suppress", "mark": "workflow.settings.maintenance.mode.value.mark" }, "group": "maintenance_mode" }
+          { "path": "maintenance.mode", "labelKey": "workflow.settings.maintenance.mode", "whatKey": "workflow.settings.maintenance.mode.what", "values": { "suppress": "workflow.settings.maintenance.mode.value.suppress", "mark": "workflow.settings.maintenance.mode.value.mark" }, "group": "maintenance_mode" },
+          { "path": "maintenance.defaultTimeZone", "labelKey": "workflow.settings.maintenance.defaultTimeZone", "whatKey": "workflow.settings.maintenance.defaultTimeZone.what", "group": "maintenance_mode" }
         ]
       },
       {
@@ -1942,6 +1953,7 @@
       { "path": "reasonCatalogs.false_alarm_cause", "why": "кроме списка причин — поле и обязательность (модель)" },
       { "path": "session.states", "why": "состояния оператора — модель (§12.1)" },
       { "path": "maintenance.modes", "why": "список режимов окна работ — модель: каждый режим исполняет сервер, администратор выбирает режим (maintenance.mode)" },
+      { "path": "maintenance.startSkewSec", "why": "допуск на расхождение часов — устройство проверки начала окна (§14.12), а не правило поста" },
       { "path": "maintenance.markPriority", "why": "какой приоритет у помеченного инцидента — правило §14.12 (низший уровень справочника), а не настройка" }
     ]
   },

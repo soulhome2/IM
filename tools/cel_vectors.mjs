@@ -65,7 +65,10 @@ const KINDS = ["guard", "rule", "definition", "effect"];
 
 // Имена машины, у которых векторов нет и не будет, — с причиной словами («вид:имя» → причина). Больше 10 имён —
 // не расширять список, а добавить синтетику
-const UNCOVERED_OK = {};
+const UNCOVERED_OK = {
+  // ТЗ-21: поле окна работ необязательно — requiredExpr постоянный "false"; видно только при пересекающихся окнах (inMaintenance), а факт мира записи векторов окон не знает
+  "rule:forms.close.fields.maintenanceWindowId.requiredExpr": "постоянное false, поле видно только с окнами работ",
+};
 
 /* ===== Исполнитель прототипа в Node ===== */
 
@@ -670,6 +673,7 @@ function syntheticTransitions(env) {
     dutyGroups: () => [],
     inSourceGroup: () => false,
     deviceInGroup: () => false,
+    inMaintenance: () => false,
     groupDepth: () => 0,
     agentState: () => "ready",
     idleSec: () => 0,

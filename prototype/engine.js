@@ -91,6 +91,8 @@
       inSourceGroup: (x, g) => ctx.inGroup(cel.source(x), g),
       // Условия правил по группе (§14.5): устройство в группе или во вложенной, глубина группы в дереве
       deviceInGroup: (d, g) => Boolean(ctx.deviceInGroup && ctx.deviceInGroup(d, g)),
+      // С инцидентом пересекается окно работ (§14.12, ТЗ-21)
+      inMaintenance: (x) => Boolean(ctx.inMaintenance && ctx.inMaintenance(cel.source(x))),
       groupDepth: (g) => (ctx.groupDepth ? ctx.groupDepth(g) : 0),
       agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
       idleSec: idleOf,
@@ -574,21 +576,22 @@
       return unique.map((p) => ({ scenario: p.scenario, rule: cel.source(p.rule) }));
     }
 
-    // Окна плановых работ (§14.12, ТЗ-21, intake.windows машины): после выбора победителей. picks — ответ intake,
-    // windows — уже развёрнутые интервалы окон организации ({ id, device | group, from, to } в мс), event — с at.
-    // Победителя нет — null: событие «не сработало», окно о нём не говорит. Иначе первое накрывшее окно и режим
-    // maintenance.mode машины; suppress — инцидентов нет, mark — инциденты с окном и низшим приоритетом
+    // Окна плановых работ (§14.12, ТЗ-21): исполняет определения машины intake.windows (окна — только при
+    // победителе) и intake.outcome (режим). picks — ответ intake, windows — развёрнутые интервалы окон организации
+    // ({ id, device | group, from, to } в мс), event — с at. Окно не действует — null, иначе { windowId, mode }
+    const celWindows = (windows) => (windows || []).map((w) => cel.value("MaintenanceWindow", { id: w.id, device: w.device || null, group: w.group || null, from: w.from, to: w.to }, w));
     function intakeWindows(picks, windows, event) {
-      if (!picks.length) return null;
-      const hits = windowsCovering(windows, event);
-      return hits.length ? { windowId: hits[0].id, mode: (W.maintenance || {}).mode || "suppress" } : null;
+      const e = cel.value("Event", event);
+      const ws = celWindows(windows);
+      const n = BigInt(picks.length);
+      const mode = def(W.intake.outcome, n, ws, e);
+      if (!mode) return null;
+      return { windowId: cel.source(def(W.intake.windows, n, ws, e)[0]).id, mode };
     }
-    // Интервалы окон, накрывающие событие (windowsFor машины): те же, что видит отбор, — и для карточки инцидента
+    // Интервалы окон, накрывающие событие (windowsFor машины) — для карточки инцидента и формы закрытия
     function windowsCovering(windows, event) {
       if (!(windows || []).length) return [];
-      const e = cel.value("Event", event);
-      const ws = windows.map((w) => cel.value("MaintenanceWindow", { id: w.id, device: w.device || null, group: w.group || null, from: w.from, to: w.to }, w));
-      return def(W.intake.windows, ws, e).map((x) => cel.source(x));
+      return def("windowsFor", celWindows(windows), cel.value("Event", event)).map((x) => cel.source(x));
     }
 
     /* ===== Автоматические переходы (§6.2): планировщик ===== */

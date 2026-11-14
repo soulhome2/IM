@@ -891,7 +891,7 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.close.field.maintenanceWindowId",
           "requiredExpr": "false",
           "source": "maintenanceWindows",
-          "visibleExpr": "form.resultId == 'drill'",
+          "visibleExpr": "form.resultId == 'drill' && inMaintenance(incident)",
           "placeholderKey": "workflow.form.close.field.maintenanceWindowId.placeholder",
           "$comment": "§2.2, §14.12, ТЗ-21. Окно работ, из-за которого тревога, — только у «Плановой проверки», необязательно: работы бывают и без окна. Варианты (source maintenanceWindows) — окна, пересекающиеся с инцидентом (данные МИ, как уровни справочника приоритетов): устройство-источник в окне и время события в его интервале (windowCovers). Значение не из вариантов — 422 FORM_FIELD_INVALID. Хранится в инциденте (closeMaintenanceWindowId) и в записи журнала"
         },
@@ -4183,7 +4183,11 @@ window.IM_WORKFLOW = {
       "suppress",
       "mark"
     ],
-    "markPriority": "lowest"
+    "markPriority": "lowest",
+    "defaultTimeZone": "UTC",
+    "$commentDefaultTimeZone": "Пояс поста (IANA) для окон без своего пояса: окно сохраняется с ним. По умолчанию UTC",
+    "startSkewSec": 300,
+    "$commentStartSkewSec": "Допуск на расхождение часов: начало окна при создании и при переносе будущего — не раньше «сейчас» минус столько секунд, иначе 422 MAINTENANCE_WINDOW_STARTS_IN_PAST: окно не объясняет задним числом прошлые события"
   },
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
@@ -4529,6 +4533,9 @@ window.IM_WORKFLOW = {
     "workflow.error.maintenance_invalid": {
       "vars": []
     },
+    "workflow.error.maintenance_starts_in_past": {
+      "vars": []
+    },
     "workflow.error.catalog_not_found": {
       "vars": []
     },
@@ -4794,6 +4801,13 @@ window.IM_WORKFLOW = {
         "deviceType": "string",
         "at": "int"
       },
+      "Maintenance": {
+        "mode": "string",
+        "modes": "list<string>",
+        "markPriority": "string",
+        "defaultTimeZone": "string",
+        "startSkewSec": "int"
+      },
       "MaintenanceWindow": {
         "id": "string",
         "device": "opt<string>",
@@ -4865,6 +4879,13 @@ window.IM_WORKFLOW = {
         },
         "returns": "bool",
         "$comment": "Устройство-источник инцидента — в группе устройств g"
+      },
+      "inMaintenance": {
+        "params": {
+          "x": "Incident"
+        },
+        "returns": "bool",
+        "$comment": "§14.12, ТЗ-21. С инцидентом пересекается хоть одно окно работ: устройство-источник в окне и время события в его интервале. Нет — поле «окно работ» формы закрытия скрыто"
       },
       "deviceInGroup": {
         "params": {
@@ -4998,7 +5019,8 @@ window.IM_WORKFLOW = {
       "causeCatalogs": {
         "type": "map<string, CauseCatalog>",
         "from": "reasonCatalogs"
-      }
+      },
+      "maintenance": "Maintenance"
     },
     "definitions": {
       "addressee": {
@@ -5515,6 +5537,26 @@ window.IM_WORKFLOW = {
         "expr": "w.from <= e.at && e.at < w.to && (size(w.device) > 0 ? w.device[0] == e.device : size(w.group) > 0 && deviceInGroup(e.device, w.group[0]))",
         "$comment": "§14.12, ТЗ-21. Интервал окна работ накрывает событие: время события в полуинтервале [from, to) — ровно в конец уже вне окна — и устройство-источник — устройство окна или в группе окна, в том числе во вложенной. w — один интервал: повтор окна сервер разворачивает в интервалы сам (правило — §14.12), машина получает уже развёрнутые"
       },
+      "windowsAfterWinners": {
+        "params": {
+          "winners": "int",
+          "ws": "list<MaintenanceWindow>",
+          "e": "Event"
+        },
+        "returns": "list<MaintenanceWindow>",
+        "expr": "winners > 0 ? windowsFor(ws, e) : []",
+        "$comment": "§14.5 п. 6, §14.12, ТЗ-21. Окна проверяются только после выбора правил: winners — сколько инцидентов дали бы правила-победители (после ключа уникальности). Нет победителя — окна нет: событие остаётся «не сработало»"
+      },
+      "maintenanceOutcome": {
+        "params": {
+          "winners": "int",
+          "ws": "list<MaintenanceWindow>",
+          "e": "Event"
+        },
+        "returns": "string",
+        "expr": "size(windowsAfterWinners(winners, ws, e)) > 0 ? maintenance.mode : ''",
+        "$comment": "§14.12, ТЗ-21. Итог окна для события: режим maintenance.mode (suppress — инцидентов нет, mark — с окном и низшим приоритетом) или '' — окно не действует. Окно итога — первое из windowsAfterWinners. Итог и окно сервер сохраняет с событием при приёме: объяснение отбора отдаёт их, а не пересчитывает по текущим окнам"
+      },
       "windowsFor": {
         "params": {
           "ws": "list<MaintenanceWindow>",
@@ -5543,8 +5585,9 @@ window.IM_WORKFLOW = {
       "scenario"
     ],
     "ruleOrder": "guid",
-    "windows": "windowsFor",
-    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает.",
+    "windows": "windowsAfterWinners",
+    "outcome": "maintenanceOutcome",
+    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает. Определения: windows — windowsAfterWinners(winners, ws, e): winners — число инцидентов, которые дали бы победители; outcome — maintenanceOutcome(winners, ws, e): режим или пусто. Итог (режим и id окна) сохраняется с событием при приёме; повтор события идёт в прежние инциденты до окон (п. 1).",
     "match": "ruleMatches",
     "winner": "ruleFor",
     "create": "create"
@@ -7637,6 +7680,12 @@ window.IM_WORKFLOW = {
               "mark": "workflow.settings.maintenance.mode.value.mark"
             },
             "group": "maintenance_mode"
+          },
+          {
+            "path": "maintenance.defaultTimeZone",
+            "labelKey": "workflow.settings.maintenance.defaultTimeZone",
+            "whatKey": "workflow.settings.maintenance.defaultTimeZone.what",
+            "group": "maintenance_mode"
           }
         ]
       },
@@ -7732,6 +7781,10 @@ window.IM_WORKFLOW = {
       {
         "path": "maintenance.modes",
         "why": "список режимов окна работ — модель: каждый режим исполняет сервер, администратор выбирает режим (maintenance.mode)"
+      },
+      {
+        "path": "maintenance.startSkewSec",
+        "why": "допуск на расхождение часов — устройство проверки начала окна (§14.12), а не правило поста"
       },
       {
         "path": "maintenance.markPriority",
