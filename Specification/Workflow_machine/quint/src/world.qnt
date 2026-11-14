@@ -30,7 +30,9 @@
   pure val OWN_EVENT: str -> str = Map("i1" -> "ev1", "i2" -> "ev2", "i3" -> "ev3")
   pure val SHARED_EVENT = "ev0"
   pure def eventsFor(i: str): Set[str] = Set(OWN_EVENT.get(i), SHARED_EVENT)
-  pure val PRIORITIES: Set[int] = Set(100, 50)
+  // Уровни приоритета модели: значение варианта формы (число строкой) → число уровня; одно место для обоих (ТЗ-13)
+  pure val PRIORITY_IDS: str -> int = Map("100" -> 100, "50" -> 50)
+  pure val PRIORITIES: Set[int] = PRIORITY_IDS.keys().map(k => PRIORITY_IDS.get(k))
   // Часы с секунды: 0 у дедлайна и момента в машине — «нет»
   pure val START = 1000
 
@@ -80,8 +82,8 @@
   def dutyGroups: List[str] = GROUP_LIST
   // Кому вообще можно передавать: люди и дежурные группы (§8.1, BUG-85)
   def transferTargets: List[str] = OPERATOR_LIST.concat(GROUP_LIST)
-  // Число уровня приоритета по значению варианта формы (ТЗ-13): уровни модели — PRIORITIES; нет такого — -1
-  def priorityOf(id: str): int = if (id == "100") 100 else if (id == "50") 50 else -1
+  // Число уровня приоритета по значению варианта формы (ТЗ-13): уровни модели — PRIORITY_IDS; нет такого — -1
+  def priorityOf(id: str): int = if (PRIORITY_IDS.keys().contains(id)) PRIORITY_IDS.get(id) else -1
   // Групп устройств в модели нет: строк overrides по sourceGroup в машине тоже нет
   def inSourceGroup(x: Incident, g: str): bool = false
   // Условия правил по группе (§14.5, ARCH-15): групп устройств в модели нет — устройство ни в одной, глубина 0

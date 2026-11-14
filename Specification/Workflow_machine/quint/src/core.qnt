@@ -398,8 +398,8 @@
     nondet reason = HOLD_REASONS_BY_OPERATOR.oneOf()
     nondet result = results.oneOf()
     nondet surface = tr(tid).surfaces.oneOf()
-    // Уровень для «Сменить приоритет» (ТЗ-13) — из уровней модели
-    nondet prio = Set("100", "50").oneOf()
+    // Уровень для «Сменить приоритет» (ТЗ-13) — из уровней модели (PRIORITY_IDS)
+    nondet prio = PRIORITY_IDS.keys().oneOf()
     val form = { ...NO_FORM, targetId: target, reasonId: reason, resultId: result,
       causeId: if (CAUSE_FOR.keys().contains(result)) CAUSE_FOR.get(result) else "", comment: "c", priority: prio }
     manual(a, tid, i, form, surface)

@@ -2690,6 +2690,43 @@
       }
     });
 
+    // Пара новых пожаров самого срочного уровня одного сценария — объединение (§11.3)
+    const prMergeTop = async () => {
+      const all = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+      const top = all.find((e) => e.state === "new" && e.priority === prLevels()[0] && e.eventType.id === "fire");
+      const pair = all.filter((e) => e.state === "new" && e.priority === top.priority && e.eventType.id === "fire" && e.scenarioTitle === top.scenarioTitle);
+      expect(pair.length >= 2, "нет пары срочных пожаров одного сценария");
+      const res = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: pair.slice(0, 2).map((e) => e.guid) });
+      expect(res.status === 200, `объединение: ${res.status} ${res.body && res.body.code}`);
+      return { primary: res.body.incident, linked: pair.slice(0, 2).find((e) => e.guid !== res.body.incident.guid) };
+    };
+
+    await step("Смена приоритета у привязанного — отказ: приоритет группы у основного (ТЗ-13, §11.4)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const { linked } = await prMergeTop();
+        const res = await standAct(linked.guid, "change_priority", { priority: String(prLevels()[prLevels().length - 1]), comment: "lower" });
+        expect(res.status === 409 && res.body.code === "TRANSITION_NOT_ALLOWED_FROM_STATE", `у привязанного: ${res.status} ${res.body && res.body.code}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Понижение основного не делает срок группы позже срока строгого привязанного (ТЗ-13, §4 правило 8)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const { primary } = await prMergeTop();
+        const was = await prCard(primary.guid);
+        const res = await standAct(primary.guid, "change_priority", { priority: String(prLevels()[prLevels().length - 1]), comment: "lower" });
+        expect(res.status === 200, `понизить основного: ${res.status} ${res.body && res.body.code}`);
+        expect(res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident.timer.dueAt}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Кнопка «Сменить приоритет» в карточке: форма с уровнем и причиной, запись в журнале карточки (ТЗ-13)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {

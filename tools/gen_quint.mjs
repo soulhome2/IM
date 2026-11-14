@@ -154,6 +154,8 @@ function q(n, scope, want) {
     }
     case "call": {
       const [fn, args] = n.args;
+      // В Quint нет длины строки. Строки модели — метки ("", "c"): длина — 0 или 1; предел длины текста проверяют тесты API и самопроверка (ТЗ-18)
+      if (fn === "size" && typeOf(args[0], scope) === "string") return `(if (${q(args[0], scope)} == "") 0 else 1)`;
       if (fn === "size") return `${q(args[0], scope)}.length()`;
       // Без аргументов — значение мира модели
       if (!args.length) return fn;

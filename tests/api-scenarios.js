@@ -251,6 +251,25 @@
     assert.eq([res.body.incident.priority, res.body.incident.priorityManual], [LOW, true], "после переоткрытия");
   });
 
+  test("Смена приоритета у привязанного — нельзя: 409 TRANSITION_NOT_ALLOWED_FROM_STATE, приоритет группы — у основного (ТЗ-13, §11.4)", async () => {
+    const env = await makeEnv();
+    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE && e.priority === TOP);
+    assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: pair.map((e) => e.guid) }), 200, null, "объединить");
+    const linked = (await Promise.all(pair.map((e) => env.card(e.guid)))).find((c) => c.state === "linked");
+    assert.status(await env.act(linked.guid, "change_priority", { priority: String(LOW), comment: "ниже" }), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "у привязанного");
+  });
+
+  test("Смена приоритета основного: срок группы не позже срока самого строгого участника (ТЗ-13, §4 правило 8, §11.4)", async () => {
+    const env = await makeEnv();
+    const pair = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE && e.priority === TOP);
+    const primary = (await env.call("POST", "/operator/incidents/merge", { incidentGuids: pair.map((e) => e.guid) })).body.incident;
+    await env.advance(30);
+    const was = await env.card(primary.guid);
+    const res = await env.act(primary.guid, "change_priority", { priority: String(LOW), comment: "ниже" });
+    assert.status(res, 200, null, "понизить основного");
+    assert.eq(res.body.incident.timer.dueAt, was.timer.dueAt, "срок группы — по строгому привязанному, не позже");
+  });
+
   /* ===== Отложить и возобновить (§6.1, §4) ===== */
 
   test("Отложить: причина обязательна, норматив закрытия на паузе, срок удержания идёт", async () => {

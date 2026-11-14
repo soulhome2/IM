@@ -831,5 +831,19 @@
   "find": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\", \"workflow.journal.linked_lost_access_primary\"] },",
   "replace": "\"fn\": \"clearLink\", \"args\": [\"workflow.journal.linked_lost_access\", \"workflow.journal.linked_lost_access_primary\"] },\n        { \"kind\": \"transactional\", \"fn\": \"relinkToPrimary\", \"args\": [\"workflow.journal.merge\"] },",
   "model": "вне модели: что меняют эффекты, ловит статическая проверка tools/check_machine.py (план 79)"
+ },
+ {
+  "name": "priority-renorm-off",
+  "what": "«Сменить приоритет» не пересчитывает срок реакции по нормативу нового уровня (ТЗ-13, §4 правило 8)",
+  "find": "{ \"kind\": \"transactional\", \"fn\": \"renormTimer\", \"args\": [\"reaction\", \"byEscalationLevel\"] },\n",
+  "replace": "",
+  "model": "кандидат в инвариант: в модели нет сравнения срока с нормативом уровня и записи «было → стало»; ловят тесты API (ТЗ-13)"
+ },
+ {
+  "name": "priority-unchanged-allowed",
+  "what": "«Сменить приоритет» на тот же уровень проходит — запись «75 → 75» (ТЗ-13)",
+  "find": "{ \"fn\": \"priorityChanged\" }",
+  "replace": "{ \"fn\": \"agentReady\" }",
+  "model": "кандидат в инвариант: в модели нет сравнения срока с нормативом уровня и записи «было → стало»; ловят тесты API (ТЗ-13)"
  }
 ]

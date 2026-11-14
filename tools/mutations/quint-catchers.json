@@ -79,6 +79,8 @@
  "pause-loses-remaining": "инвариант dueNotPausedUnprocessed (профиль «широкий»)",
  "pause-not-paused": "инвариант timersByState (профиль «широкий»)",
  "pending-target-as-owner": "инвариант actionRights (профиль «смена»)",
+ "priority-renorm-off": null,
+ "priority-unchanged-allowed": null,
  "processed-without-steps": "инвариант processedOnlyFinished (профиль «широкий»)",
  "recipients-ignore-access": null,
  "recipients-ignore-duty": null,
