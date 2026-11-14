@@ -1524,7 +1524,8 @@
       expect(!field("resultId").querySelector('option[value="processed"]'), "в форме «Закрыть без обработки» есть «Обработан»");
       await setField("resultId", "false_alarm");
       await click($("dialogConfirm"));
-      expect(!$("modalDialog").hidden, "закрылось без обязательного комментария");
+      expect(!$("modalDialog").hidden, "закрылось без обязательной причины");
+      await setField("causeId", "animal");
       await confirmDialog(NOTE);
       expect(mode() === "queue", "после закрытия карточка не закрылась");
       await setFilter("done");
@@ -2270,6 +2271,7 @@
         expect(close, "в карточке INC-1847 нет «Закрыть без обработки»");
         await click(close);
         await setField("resultId", "false_alarm");
+        await setField("causeId", "animal");
         await confirmDialog(NOTE);
         await wait(300);
         expect(!toastWith(notice), `закрывшему — уведомление о своём закрытии: ${toasts()}`);
@@ -2280,7 +2282,7 @@
         await wait(300);
         expect((await asPetrova("claim")).status === 200, "Петрова не взяла INC-1847");
         await medToLeads(null);
-        const closed = await asPetrova("close", { resultId: "false_alarm", comment: "тест" });
+        const closed = await asPetrova("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" });
         expect(closed.status === 200, `Петрова не закрыла INC-1847: ${closed.status}`);
         await wait(300);
         toast = toastWith(notice);
@@ -2316,7 +2318,7 @@
         expect((await standAct(c, "claim", {}, "queue")).status === 200, "INC-1853 не взят");
         expect((await standAct(a, "transfer", { targetId: "petrova", comment: "тест" })).status === 200, "INC-1851 не передан Петровой");
         expect((await petrovaAct(a, "accept")).status === 200, "Петрова не приняла INC-1851");
-        const closed = await petrovaAct(a, "close", { resultId: "false_alarm", comment: "тест" });
+        const closed = await petrovaAct(a, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" });
         expect(closed.status === 200, `Петрова не закрыла INC-1851: ${closed.status}`);
         await wait(300);
         const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];

@@ -176,7 +176,9 @@
   function formFor(action, overrides) {
     const values = { comment: "тест" };
     Object.entries((action && action.fieldOptions) || {}).forEach(([name, field]) => {
-      const enabled = field.options.filter((o) => !o.disabled);
+      // Вариант, зависящий от другого поля (forValues), — только при его выбранном значении
+      const dep = (((action && action.fieldRules) || {})[name] || {}).dependsOn;
+      const enabled = field.options.filter((o) => !o.disabled && (!o.forValues || o.forValues.includes(values[dep])));
       const pick = enabled.some((o) => o.id === field.defaultValue) ? field.defaultValue : enabled[0] && enabled[0].id;
       if (pick) values[name] = pick;
     });

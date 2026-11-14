@@ -77,13 +77,13 @@
         return value(f.returns, world[name](...a));
       });
     });
-    // Настройка — раздел машины по имени или значение по пути from. Список — переменной, а не константой:
+    // Настройка — раздел машины по имени или значение по пути from. Список и словарь — переменной, а не константой:
     // у константы-списка cel-js теряет тип элементов; значение подставляется в каждое вычисление
     const lists = {};
     own(spec.settings).forEach(([name, s]) => {
       const type = typeof s === "string" ? s : s.type;
       const v = value(type, typeof s === "string" ? W[name] : byPath(W, s.from));
-      if (type.startsWith("list<")) {
+      if (type.startsWith("list<") || type.startsWith("map<")) {
         root.registerVariable(name, type);
         lists[name] = v;
       } else root.registerConstant(name, type, v);

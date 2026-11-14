@@ -45,6 +45,7 @@ REVIEWED = {
     "agentIdleFor": "c3b2c0de",
     "agentReady": "9250fadd",
     "agentStateIs": "242bada0",
+    "closeCauseAllowed": "f7c208bd",
     "closeResultAllowed": "86e0c4f1",
     "escalationTargetAvailable": "86b1f72c",
     "hasPermission": "acc40cba",
@@ -164,6 +165,7 @@ class Doc:
             "withinHoldLimit": lambda: f"лимит отложенных не исчерпан ({self.setting('limits.maxOnHold')})",
             "withinReopenWindow": lambda: f"не истёк срок переоткрытия ({self.setting('limits.reopenWindowMin')} мин)",
             "requiredStepsFilled": lambda: f"заполнены обязательные шаги набора `{a[0]}`",
+            "closeCauseAllowed": lambda: "у результата со справочником причин выбрана причина из его справочника; причине, которой нужен комментарий, — комментарий",
             "closeResultAllowed": lambda: "выбранный результат разрешён по справочнику результатов: право, состояние, владение, шаги",
             "timerExpired": lambda: f"истёк таймер {self.tm(a[0])}",
             "escalationTargetAvailable": lambda: ("есть следующий уровень" if a[0] else "нет следующего уровня")

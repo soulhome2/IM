@@ -212,7 +212,7 @@
       "requiredOnTransition": ["close"],
       "items": [
         { "id": "processed", "labelKey": "workflow.catalog.close_result.processed", "finish": true, "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "closing", "commentRequired": false , "surfaces": ["card"] },
-        { "id": "false_alarm", "labelKey": "workflow.catalog.close_result.false_alarm", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
+        { "id": "false_alarm", "labelKey": "workflow.catalog.close_result.false_alarm", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": false , "surfaces": ["card"], "causeCatalog": "false_alarm_cause", "$comment": "§2.2, ТЗ-4. Причина ложной тревоги — из справочника false_alarm_cause; комментарий нужен только у причины с commentRequired («Другое»)" },
         { "id": "duplicate", "labelKey": "workflow.catalog.close_result.duplicate", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
         { "id": "drill", "labelKey": "workflow.catalog.close_result.drill", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
         { "id": "impossible", "labelKey": "workflow.catalog.close_result.impossible", "permission": "incident:close", "fromStates": ["in_progress"], "ownerOnlyInStates": ["in_progress"], "requiredStepSet": "none", "commentRequired": true , "surfaces": ["card"] },
@@ -225,7 +225,9 @@
           "requiredStepSet": "none",
           "commentRequired": true,
           "surfaces": ["queue", "card"],
-          "causeCatalog": "mass_fault"
+          "causeCatalog": "mass_fault",
+          "labelByCause": true,
+          "$comment": "labelByCause — подпись закрытого (бейдж, журнал, соседи) — название причины, а не результата (§2.2). У «Ложной тревоги» подпись — результат, причина — отдельно (closeCauseLabel)"
         }
       ]
     },
@@ -238,6 +240,19 @@
         { "id": "link", "labelKey": "workflow.catalog.mass_fault.link", "setBy": "operator" },
         { "id": "mass_fault", "labelKey": "workflow.catalog.mass_fault.mass_fault", "setBy": "operator" },
         { "id": "known", "labelKey": "workflow.catalog.mass_fault.known", "setBy": "operator" }
+      ]
+    },
+    "false_alarm_cause": {
+      "$comment": "§2.2, ТЗ-4. Причина ложной тревоги — уточнение к результату «Ложная тревога». То же поле close_cause, что у причины сбоя: у закрытия одна причина, справочник выбирает результат (causeCatalog). commentRequired — без комментария не закрыть («Другое»)",
+      "field": "close_cause",
+      "requiredOnTransition": ["close"],
+      "items": [
+        { "id": "animal", "labelKey": "workflow.catalog.false_alarm_cause.animal", "setBy": "operator" },
+        { "id": "weather", "labelKey": "workflow.catalog.false_alarm_cause.weather", "setBy": "operator" },
+        { "id": "equipment", "labelKey": "workflow.catalog.false_alarm_cause.equipment", "setBy": "operator" },
+        { "id": "staff", "labelKey": "workflow.catalog.false_alarm_cause.staff", "setBy": "operator" },
+        { "id": "setup", "labelKey": "workflow.catalog.false_alarm_cause.setup", "setBy": "operator" },
+        { "id": "other", "labelKey": "workflow.catalog.false_alarm_cause.other", "setBy": "operator", "commentRequired": true }
       ]
     }
   },
@@ -349,17 +364,18 @@
           "kind": "select",
           "labelKey": "workflow.form.close.field.causeId",
           "requiredExpr": "true",
-          "source": "reasonCatalog:mass_fault",
-          "visibleExpr": "form.resultId == 'mass'",
+          "source": "causeCatalog:resultId",
+          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
-          "$comment": "RULE-110: причина сбоя уходит в отчёт — пусто, пока оператор не выберет сам"
+          "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
         },
         {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.close.field.comment",
           "requiredExpr": "closeResults.exists(i, i.id == form.resultId && i.commentRequired)",
-          "placeholderKey": "workflow.form.close.field.comment.placeholder"
+          "placeholderKey": "workflow.form.close.field.comment.placeholder",
+          "$comment": "§2.2, ТЗ-4. Комментарий обязателен, если его требует результат. Требует выбранная причина (commentRequired, у «Ложной тревоги» — «Другое») — проверяет условие closeCauseAllowed: правило поля читает не больше одного поля формы (CEL.md)"
         }
       ]
     },
@@ -651,7 +667,8 @@
       "requiredStepSet": "byCloseResult",
       "guards": [
         { "fn": "agentReady" },
-        { "fn": "closeResultAllowed" }
+        { "fn": "closeResultAllowed" },
+        { "fn": "closeCauseAllowed" }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["actor"] },
@@ -659,7 +676,8 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["closedBy", "actor"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "now"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeResultId", "form.resultId"] },
-        { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "form.causeId"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "causeOk(form.resultId, form.causeId) ? form.causeId : ''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseLabel", "causeLabel(form.resultId, form.causeId)"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["result", "form.comment"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction", true] },
@@ -706,6 +724,7 @@
         { "kind": "transactional", "fn": "clearLink", "args": ["workflow.journal.reopen_unlinked", "workflow.journal.linked_reopened"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeResultId", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseLabel", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["result", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "0"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedBy", "''"] },
@@ -1352,6 +1371,8 @@
     "workflow.guard.reopen_window": { "vars": ["n"] },
     "workflow.guard.required_steps": { "vars": [] },
     "workflow.guard.result_unavailable": { "vars": [] },
+    "workflow.guard.cause_required": { "vars": [] },
+    "workflow.guard.cause_comment_required": { "vars": [] },
     "workflow.guard.timer_not_expired": { "vars": [] },
     "workflow.guard.other_hold_reason": { "vars": [] },
     "workflow.guard.wrong_state": { "vars": [] },
@@ -1407,7 +1428,7 @@
   "cel": {
     "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
     "types": {
-      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string" },
+      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string" },
       "Timer": { "due": "int", "paused": "bool", "left": "int", "fired": "int", "since": "int" },
       "Breach": { "kind": "string", "at": "int", "owner": "string" },
       "LeftGroup": { "primaryId": "string", "linkedAt": "int", "at": "int" },
@@ -1419,7 +1440,9 @@
       "Level": { "level": "int", "targetKind": "string", "target": "string", "reactionSec": "int" },
       "Alerts": { "targetKind": "string", "target": "string", "noRecipientLog": "string" },
       "State": { "id": "string", "category": "string" },
-      "CloseResultItem": { "id": "string", "labelKey": "string", "permission": "string", "fromStates": "list<string>", "ownerOnlyInStates": "list<string>", "surfaces": "list<string>", "requiredStepSet": "string", "commentRequired": "bool", "finish": "bool" },
+      "CloseResultItem": { "id": "string", "labelKey": "string", "permission": "string", "fromStates": "list<string>", "ownerOnlyInStates": "list<string>", "surfaces": "list<string>", "requiredStepSet": "string", "commentRequired": "bool", "finish": "bool", "causeCatalog": "string" },
+      "CauseItem": { "id": "string", "labelKey": "string", "commentRequired": "bool" },
+      "CauseCatalog": { "items": "list<CauseItem>" },
       "ScopeRule": { "own": "ScopeOwn" },
       "ScopeOwn": { "anyOf": "list<ScopeCond>" },
       "ScopeCond": { "state": "string", "ownership": "string" },
@@ -1453,7 +1476,7 @@
       "groupMembersAt": { "params": { "p": "Incident", "at": "int" }, "returns": "list<Incident>", "ref": "incidents.filter(e, e.id != p.id && inGroupAt(e, p, at))", "$comment": "§11.4. Кто был в группе основного p в момент at (inGroupAt)" },
       "siblingsOf": { "params": { "x": "Incident" }, "returns": "list<Incident>", "ref": "incidents.filter(s, x.eventGuid != '' && s.eventGuid == x.eventGuid && s.id != x.id)", "$comment": "§14.5, ARCH-15. Соседи — инциденты того же события, кроме самого x: другие службы той же тревоги. Не привязка §11: у каждого свой владелец, сроки и закрытие" }
     },
-    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" } },
+    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" }, "causeCatalogs": { "type": "map<string, CauseCatalog>", "from": "reasonCatalogs" } },
     "definitions": {
       "addressee": { "params": { "x": "Incident" }, "returns": "string", "expr": "x.owner != '' ? x.owner : x.assignmentGroup", "$comment": "§8.1. Адресат: владелец-человек, а пока группа не приняла — сама группа" },
       "unowned": { "params": { "x": "Incident" }, "returns": "bool", "expr": "x.owner == '' && x.assignmentGroup == ''" },
@@ -1483,6 +1506,9 @@
       "canAcceptNow": { "params": { "who": "string", "x": "Incident", "except": "string" }, "returns": "bool", "expr": "isGroup(who) ? members(who).exists(m, m != except && signedIn(m) && canAcceptPerson(m, x)) : canAcceptPerson(who, x) && (signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))", "$comment": "§8.3, RULE-100. Адресат уровня эскалации может принять сейчас: как canAccept, и принимающий не вышел из МИ; вышедшему человеку инцидент уйдёт его дежурной группе (addressee_signed_out_to_group) — уровень доступен, если в ней кто-то, кроме except, не вышел и может принять. Перерыв не мешает (§12.1)" },
       "nextLevels": { "params": { "x": "Incident" }, "returns": "list<Level>", "expr": "escalation.levels.filter(l, l.level > x.escalationLevel && l.level <= escalation.maxLevel && l.target != addressee(x) && canAcceptNow(l.target, x, x.owner))", "$comment": "§8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять сейчас (canAcceptNow, RULE-100); уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)" },
       "closeOptions": { "params": { "who": "string", "x": "Incident", "surface": "string" }, "returns": "list<CloseResultItem>", "expr": "closeResults.filter(i, can(who, i.permission) && x.state in i.fromStates && !(x.state in i.ownerOnlyInStates && x.owner != who) && (surface == '' || size(i.surfaces) == 0 || surface in i.surfaces))", "$comment": "§2.2. Результаты закрытия, которые этот оператор может выбрать для инцидента" },
+      "causeOk": { "params": { "r": "string", "c": "string" }, "returns": "bool", "expr": "closeResults.exists(i, i.id == r && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && causeCatalogs[i.causeCatalog].items.exists(x, x.id == c))", "$comment": "§2.2, ТЗ-4. Причина c есть в справочнике причин (causeCatalog) результата r; у результата без справочника — нет" },
+      "causeCommentRequired": { "params": { "r": "string", "c": "string" }, "returns": "bool", "expr": "closeResults.exists(i, i.id == r && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && causeCatalogs[i.causeCatalog].items.exists(x, x.id == c && x.commentRequired))", "$comment": "§2.2, ТЗ-4. Выбранная причина требует комментария («Другое» у ложной тревоги)" },
+      "causeLabel": { "params": { "r": "string", "c": "string" }, "returns": "string", "expr": "cel.bind(rs, closeResults.filter(i, i.id == r && i.causeCatalog in causeCatalogs), size(rs) > 0 ? cel.bind(xs, causeCatalogs[rs[0].causeCatalog].items.filter(x, x.id == c), size(xs) > 0 ? xs[0].labelKey : '') : '')", "$comment": "§2.2, ТЗ-4. Снимок названия причины на момент закрытия — ключ подписи причины (closeCauseLabel). Сервер хранит текст названия; причину потом удалят из справочника — инцидент и журнал показывают снимок" },
       "stepsOk": { "params": { "i": "CloseResultItem", "x": "Incident" }, "returns": "bool", "expr": "i.requiredStepSet == 'none' || stepsFilled(x, i.requiredStepSet)" },
       "personOf": {"params": {"id": "string"}, "returns": "string", "expr": "id != '' && !isGroup(id) ? id : ''", "$comment": "Адресат, если это человек, иначе пусто: так в owner попадает только человек"},
       "groupOf": {"params": {"id": "string"}, "returns": "string", "expr": "id != '' && isGroup(id) ? id : ''", "$comment": "Адресат, если это дежурная группа, иначе пусто: так группа попадает в assignmentGroup"},
@@ -1543,6 +1569,7 @@
       { "fn": "ownerHasDutyGroup", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected", "onFail": "hide", "failKeys": ["workflow.guard.owner_duty_group"], "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — определение dutyGroupOf." },
       { "fn": "withinActiveLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxActive == 0 || countMine(me, 'in_progress', incident.id) < limits.maxActive", "failVars": { "n": "limits.maxActive", "id": "mineOf(me, 'in_progress', incident.id)[0].number" }, "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || countMine(me, 'on_hold', '') < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'", "onFail": "disable", "failKeys": ["workflow.guard.active_limit", "workflow.guard.active_limit_no_hold"], "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца. Подсказка — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна, есть право и лимит отложенных не исчерпан (BUG-104)." },
       { "fn": "withinHoldLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxOnHold == 0 || countMine(me, 'on_hold', incident.id) < limits.maxOnHold", "failVars": { "n": "limits.maxOnHold" }, "onFail": "disable", "failKeys": ["workflow.guard.hold_limit"], "extendsBaseRegistry": true, "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»." },
+      { "fn": "closeCauseAllowed", "errorCode": "CLOSE_CAUSE_INVALID", "args": [], "argTypes": {}, "expr": "form.resultId == '' || form.causeId == '' || !closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '') || (causeOk(form.resultId, form.causeId) && (!causeCommentRequired(form.resultId, form.causeId) || form.comment != ''))", "failKey": "causeOk(form.resultId, form.causeId) ? 'workflow.guard.cause_comment_required' : 'workflow.guard.cause_required'", "onFail": "disable", "failKeys": ["workflow.guard.cause_required", "workflow.guard.cause_comment_required"], "extendsBaseRegistry": true, "$comment": "§2.2, ТЗ-4. У результата со справочником причин (causeCatalog) причина — из его справочника: «Ложная тревога» без причины или с причиной сбоя не закрывается. Причина требует комментария (commentRequired, «Другое») — без комментария не закрыть. Без form.resultId — не проверяется: так решается, показывать ли кнопку. Пустая причина — тоже: её не даёт обязательное поле causeId (field_required)" },
       { "fn": "withinReopenWindow", "errorCode": "REOPEN_WINDOW_EXPIRED", "args": [], "argTypes": {}, "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000", "failVars": { "n": "limits.reopenWindowMin" }, "onFail": "hide", "failKeys": ["workflow.guard.reopen_window"], "extendsBaseRegistry": true, "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут." },
       { "fn": "requiredStepsFilled", "errorCode": "REQUIRED_STEPS_NOT_FILLED", "args": ["stepSetId"], "argTypes": { "stepSetId": "string" }, "expr": "stepsFilled(incident, stepSetId)", "onFail": "disable", "failKeys": ["workflow.guard.required_steps"] },
       { "fn": "closeResultAllowed", "errorCodes": { "workflow.guard.required_steps": "REQUIRED_STEPS_NOT_FILLED" }, "args": [], "argTypes": {}, "expr": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? os.exists(o, o.id == form.resultId && stepsOk(o, incident)) : os.exists(o, stepsOk(o, incident)))", "failKey": "cel.bind(os, closeOptions(me, incident, surface), form.resultId != '' ? (os.exists(o, o.id == form.resultId) ? 'workflow.guard.required_steps' : 'workflow.guard.result_unavailable') : (size(os) > 0 ? 'workflow.guard.required_steps' : 'workflow.guard.no_permission'))", "failVars": "form.resultId == '' && size(closeOptions(me, incident, surface)) == 0 ? {'p': 'incident:close'} : {}", "onFail": "hide", "failKeys": ["workflow.guard.result_unavailable", "workflow.guard.required_steps", "workflow.guard.no_permission"], "extendsBaseRegistry": true, "$comment": "§2.2. Есть ли у результата право, подходит ли состояние и владение, заполнены ли шаги его набора. Без form.resultId — доступен ли хоть один результат: так решается, показывать ли кнопку." },
@@ -1583,7 +1610,7 @@
       { "fn": "clearLink", "kind": "transactional", "args": ["ownLogKey", "primaryLogKey"], "argTypes": {"ownLogKey": "string", "primaryLogKey": "string"}, "defaults": {"ownLogKey": "", "primaryLogKey": ""}, "do": [{"if": "incident.linkedTo != ''", "then": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"set": "incident.leftGroup", "value": "{'primaryId': incident.linkedTo, 'linkedAt': incident.linkedAt, 'at': now}"}, {"set": "incident.linkedTo", "value": "''"}, {"set": "incident.linkedAt", "value": "0"}, {"if": "size(ps) > 0 && ownLogKey != ''", "then": [{"world": "log", "args": {"incident": "incident", "key": "ownLogKey", "vars": "{'primaryNumber': ps[0].number}"}}]}, {"if": "primaryLogKey != ''", "then": [{"forEach": "p", "in": "ps", "do": [{"world": "log", "args": {"incident": "p", "key": "primaryLogKey", "vars": "{'number': incident.number}"}}]}]}], "else": [{"set": "incident.linkedTo", "value": "''"}, {"set": "incident.linkedAt", "value": "0"}]}], "extendsBaseRegistry": true, "$comment": "§11. Связь с основным снимается; если была — запоминается left_group: основной, linked_at, момент выхода — нарушение по сроку, прошедшему до выхода, достаётся и ему (§11.4, BUG-73). С шаблонами [событию, основному] — если связь была, запись в журнал события и основного: переоткрытое событие, закрытое вместе с основным, работает само по себе (BUG-42)" },
       { "fn": "copyAnswersToPrimary", "kind": "transactional", "args": ["logKey"], "argTypes": {"logKey": "string"}, "do": [{"world": "shareAnswers", "args": {"from": "incident", "to": "form.primaryId", "logKey": "logKey"}}], "extendsBaseRegistry": true, "$comment": "§11. Заполненные шаги сценария привязанного — в незаполненные шаги основного (сценарий у них один, версии могут различаться); заполненное в основном не перезаписывается, у привязанного ответы остаются как история. Что переносится, решает машина сценариев (shareAnswers, профиль МИ). Перенесено — запись в журнале основного ключом из аргумента" },
       { "fn": "relinkToPrimary", "kind": "transactional", "args": ["logKey"], "argTypes": {"logKey": "string"}, "do": [{"let": "ps", "value": "incidentById(form.primaryId)"}, {"if": "size(ps) > 0", "then": [{"forEach": "c", "in": "linkedOf(incident.id).filter(e, !isDone(e))", "do": [{"set": "c.leftGroup", "value": "{'primaryId': c.linkedTo, 'linkedAt': c.linkedAt, 'at': now}"}, {"set": "c.linkedTo", "value": "ps[0].id"}, {"set": "c.linkedAt", "value": "now"}, {"world": "log", "args": {"incident": "c", "key": "logKey", "vars": "{'primaryNumber': ps[0].number}"}}]}]}], "extendsBaseRegistry": true, "$comment": "§11. Открытые привязанные объединяемого переходят к новому основному: привязанного у привязанного не бывает. У каждого — left_group прежнего основного и новый linked_at (BUG-73), запись в журнале ключом из аргумента ({primaryNumber}); закрытые вместе с прежним основным остаются при нём как история" },
-      { "fn": "copyCloseFromPrimary", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"if": "size(ps) > 0", "then": [{"set": "incident.closeResultId", "value": "ps[0].closeResultId"}, {"set": "incident.closeCauseId", "value": "ps[0].closeCauseId"}, {"set": "incident.result", "value": "ps[0].result"}, {"set": "incident.closedBy", "value": "ps[0].closedBy"}, {"set": "incident.owner", "value": "ps[0].closedBy"}]}], "extendsBaseRegistry": true, "$comment": "§11, §2.1. Результат, причина, комментарий и закрывший — от основного; владелец закрытого — тот, кто закрыл основной (BUG-89)" },
+      { "fn": "copyCloseFromPrimary", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"if": "size(ps) > 0", "then": [{"set": "incident.closeResultId", "value": "ps[0].closeResultId"}, {"set": "incident.closeCauseId", "value": "ps[0].closeCauseId"}, {"set": "incident.closeCauseLabel", "value": "ps[0].closeCauseLabel"}, {"set": "incident.result", "value": "ps[0].result"}, {"set": "incident.closedBy", "value": "ps[0].closedBy"}, {"set": "incident.owner", "value": "ps[0].closedBy"}]}], "extendsBaseRegistry": true, "$comment": "§11, §2.1. Результат, причина, комментарий и закрывший — от основного; владелец закрытого — тот, кто закрыл основной (BUG-89)" },
       { "fn": "tightenPrimaryDeadline", "kind": "transactional", "args": ["timerId", "logKey"], "argTypes": {"timerId": "string", "logKey": "string"}, "do": [{"let": "ps", "value": "incidentById(form.primaryId)"}, {"if": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)", "then": [{"let": "t", "value": "ps[0].timers[timerId]"}, {"let": "left", "value": "leftOf(incident, timerId, now)"}, {"let": "was", "value": "t.due != 0 ? t.due - now : (t.paused ? t.left : timerSec(ps[0], timerId, '') * 1000)"}, {"if": "left < was", "then": [{"forEach": "p", "in": "ps", "do": [{"if": "t.due != 0", "then": [{"set": "p.timers[timerId].due", "value": "now + left"}], "else": [{"set": "p.timers[timerId].left", "value": "left"}, {"set": "p.timers[timerId].paused", "value": "true"}]}, {"world": "log", "args": {"incident": "p", "key": "logKey", "vars": "{'number': incident.number}", "once": "true"}}]}]}]}], "extendsBaseRegistry": true, "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера" },
       { "fn": "copyPrimaryDeadline", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"if": "size(ps) > 0 && leftOf(ps[0], timerId, now) >= 0", "then": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].left", "value": "leftOf(ps[0], timerId, now)"}, {"set": "incident.timers[timerId].paused", "value": "true"}, {"if": "leftOf(ps[0], timerId, now) == 0", "then": [{"set": "incident.timers[timerId].fired", "value": "spent(ps[0], timerId, now) ? ps[0].timers[timerId].fired : ps[0].timers[timerId].due"}]}]}], "extendsBaseRegistry": true, "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Наступивший у основного — отработанным и у него (RULE-50): нарушение группы ему допишется по окончании окна или уже записано, своего не будет (BUG-75). Перед clearLink" },
       { "fn": "logSiblings", "kind": "transactional", "args": ["results", "key"], "argTypes": {"results": "list<string>", "key": "string"}, "do": [{"if": "incident.closeResultId in results", "then": [{"forEach": "s", "in": "siblingsOf(incident).filter(x, !isDone(x))", "do": [{"world": "log", "args": {"incident": "s", "key": "key", "vars": "{'number': incident.number, 'result': closeResults.filter(i, i.id == incident.closeResultId).map(i, i.labelKey)}"}}, {"world": "touch", "args": {"incident": "s"}}]}]}], "extendsBaseRegistry": true, "$comment": "§6.1, §11.4, ARCH-15 (В9), RULE-139. Закрыт одним из результатов results — каждому открытому соседу (siblingsOf: инциденты того же события, другие службы; привязанному к другому основному — тоже) запись key в журнал ({number} — номер закрытого, {result} — подпись результата) и новая версия, как у нарушения группы. Результат — уже записанный в инцидент (closeResultId): у «Закрыть» — из формы, у close_linked — от основного. Закрытым соседям — ничего; соседи не закрываются: ложное для одной службы не значит ложное для другой. В транзакции перехода; уведомление тем, кто ведёт соседей, — отдельный эффект notifySiblings, после неё" },
@@ -1698,6 +1725,7 @@
         "items": [
           { "path": "reasonCatalogs.hold.items", "labelKey": "workflow.settings.reasonCatalogs.hold.items", "whatKey": "workflow.settings.reasonCatalogs.hold.items.what" },
           { "path": "reasonCatalogs.mass_fault.items", "labelKey": "workflow.settings.reasonCatalogs.mass_fault.items", "whatKey": "workflow.settings.reasonCatalogs.mass_fault.items.what" },
+          { "path": "reasonCatalogs.false_alarm_cause.items", "labelKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items", "whatKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items.what" },
           { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what" }
         ]
       },
@@ -1761,6 +1789,7 @@
       { "path": "reasonCatalogs.close_result", "why": "результаты закрытия — модель: от них зависят права, состояния и отчёты (§2.2)" },
       { "path": "reasonCatalogs.hold", "why": "кроме списка причин — поле и обязательность (модель)" },
       { "path": "reasonCatalogs.mass_fault", "why": "кроме списка причин — поле и обязательность (модель)" },
+      { "path": "reasonCatalogs.false_alarm_cause", "why": "кроме списка причин — поле и обязательность (модель)" },
       { "path": "session.states", "why": "состояния оператора — модель (§12.1)" }
     ]
   },

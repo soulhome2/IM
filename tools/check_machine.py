@@ -441,8 +441,9 @@ def check_fixture(w, err):
             err.append(f"{where}: нет причины удержания {inc['holdReason']}")
         if inc["closeResult"] is not None and inc["closeResult"] not in catalog("close_result"):
             err.append(f"{where}: нет результата закрытия {inc['closeResult']}")
-        if inc["closeCause"] is not None and inc["closeCause"] not in catalog("mass_fault"):
-            err.append(f"{where}: нет причины сбоя {inc['closeCause']}")
+        cause_cat = next((r.get("causeCatalog") for r in w["reasonCatalogs"]["close_result"]["items"] if r["id"] == inc["closeResult"]), None)
+        if inc["closeCause"] is not None and (not cause_cat or inc["closeCause"] not in catalog(cause_cat)):
+            err.append(f"{where}: нет причины {inc['closeCause']} в справочнике результата {inc['closeResult']}")
         when(inc["occurredAt"], f"{gid}.occurredAt")
         when(inc["closedAt"], f"{gid}.closedAt")
         for b in inc.get("breaches", []):
@@ -1438,12 +1439,14 @@ def check_declared_fields(w, o, err):
             extra = sorted(k for k in row if not k.startswith("$") and k not in allowed)
             if extra:
                 err.append(f"таймер {t['id']}, overrides[{i}]: признаки {extra} не из overridesBy (ARCH-11, RULE-114)")
+    cause_cats = {r["causeCatalog"] for r in w["reasonCatalogs"]["close_result"]["items"] if r.get("causeCatalog")}
     for cid, cat in w["reasonCatalogs"].items():
         if cid.startswith("$"):
             continue
         need = sorted(
             t["id"] for t in trs if t.get("form") and any(
-                fl.get("source") == f"reasonCatalog:{cid}" and fl.get("requiredExpr", "false") != "false" for fl in forms[t["form"]]["fields"]))
+                (fl.get("source") == f"reasonCatalog:{cid}" or (str(fl.get("source", "")).startswith("causeCatalog:") and cid in cause_cats))
+                and fl.get("requiredExpr", "false") != "false" for fl in forms[t["form"]]["fields"]))
         got = sorted(cat.get("requiredOnTransition", []))
         if need != got:
             err.append(f"справочник {cid}: requiredOnTransition {got}, а обязательное поле из него — в форме {need} (ARCH-11)")

@@ -505,10 +505,12 @@ window.IM_WORKFLOW = {
             "in_progress"
           ],
           "requiredStepSet": "none",
-          "commentRequired": true,
+          "commentRequired": false,
           "surfaces": [
             "card"
-          ]
+          ],
+          "causeCatalog": "false_alarm_cause",
+          "$comment": "§2.2, ТЗ-4. Причина ложной тревоги — из справочника false_alarm_cause; комментарий нужен только у причины с commentRequired («Другое»)"
         },
         {
           "id": "duplicate",
@@ -578,7 +580,9 @@ window.IM_WORKFLOW = {
             "queue",
             "card"
           ],
-          "causeCatalog": "mass_fault"
+          "causeCatalog": "mass_fault",
+          "labelByCause": true,
+          "$comment": "labelByCause — подпись закрытого (бейдж, журнал, соседи) — название причины, а не результата (§2.2). У «Ложной тревоги» подпись — результат, причина — отдельно (closeCauseLabel)"
         }
       ]
     },
@@ -608,6 +612,46 @@ window.IM_WORKFLOW = {
           "id": "known",
           "labelKey": "workflow.catalog.mass_fault.known",
           "setBy": "operator"
+        }
+      ]
+    },
+    "false_alarm_cause": {
+      "$comment": "§2.2, ТЗ-4. Причина ложной тревоги — уточнение к результату «Ложная тревога». То же поле close_cause, что у причины сбоя: у закрытия одна причина, справочник выбирает результат (causeCatalog). commentRequired — без комментария не закрыть («Другое»)",
+      "field": "close_cause",
+      "requiredOnTransition": [
+        "close"
+      ],
+      "items": [
+        {
+          "id": "animal",
+          "labelKey": "workflow.catalog.false_alarm_cause.animal",
+          "setBy": "operator"
+        },
+        {
+          "id": "weather",
+          "labelKey": "workflow.catalog.false_alarm_cause.weather",
+          "setBy": "operator"
+        },
+        {
+          "id": "equipment",
+          "labelKey": "workflow.catalog.false_alarm_cause.equipment",
+          "setBy": "operator"
+        },
+        {
+          "id": "staff",
+          "labelKey": "workflow.catalog.false_alarm_cause.staff",
+          "setBy": "operator"
+        },
+        {
+          "id": "setup",
+          "labelKey": "workflow.catalog.false_alarm_cause.setup",
+          "setBy": "operator"
+        },
+        {
+          "id": "other",
+          "labelKey": "workflow.catalog.false_alarm_cause.other",
+          "setBy": "operator",
+          "commentRequired": true
         }
       ]
     }
@@ -804,17 +848,18 @@ window.IM_WORKFLOW = {
           "kind": "select",
           "labelKey": "workflow.form.close.field.causeId",
           "requiredExpr": "true",
-          "source": "reasonCatalog:mass_fault",
-          "visibleExpr": "form.resultId == 'mass'",
+          "source": "causeCatalog:resultId",
+          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
-          "$comment": "RULE-110: причина сбоя уходит в отчёт — пусто, пока оператор не выберет сам"
+          "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
         },
         {
           "name": "comment",
           "kind": "text",
           "labelKey": "workflow.form.close.field.comment",
           "requiredExpr": "closeResults.exists(i, i.id == form.resultId && i.commentRequired)",
-          "placeholderKey": "workflow.form.close.field.comment.placeholder"
+          "placeholderKey": "workflow.form.close.field.comment.placeholder",
+          "$comment": "§2.2, ТЗ-4. Комментарий обязателен, если его требует результат. Требует выбранная причина (commentRequired, у «Ложной тревоги» — «Другое») — проверяет условие closeCauseAllowed: правило поля читает не больше одного поля формы (CEL.md)"
         }
       ]
     },
@@ -1707,6 +1752,9 @@ window.IM_WORKFLOW = {
         },
         {
           "fn": "closeResultAllowed"
+        },
+        {
+          "fn": "closeCauseAllowed"
         }
       ],
       "effects": [
@@ -1753,7 +1801,15 @@ window.IM_WORKFLOW = {
           "fn": "setFlag",
           "args": [
             "closeCauseId",
-            "form.causeId"
+            "causeOk(form.resultId, form.causeId) ? form.causeId : ''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closeCauseLabel",
+            "causeLabel(form.resultId, form.causeId)"
           ]
         },
         {
@@ -1922,6 +1978,14 @@ window.IM_WORKFLOW = {
           "fn": "setFlag",
           "args": [
             "closeCauseId",
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closeCauseLabel",
             "''"
           ]
         },
@@ -4027,6 +4091,12 @@ window.IM_WORKFLOW = {
     "workflow.guard.result_unavailable": {
       "vars": []
     },
+    "workflow.guard.cause_required": {
+      "vars": []
+    },
+    "workflow.guard.cause_comment_required": {
+      "vars": []
+    },
     "workflow.guard.timer_not_expired": {
       "vars": []
     },
@@ -4231,6 +4301,7 @@ window.IM_WORKFLOW = {
         "transferCount": "int",
         "closeResultId": "string",
         "closeCauseId": "string",
+        "closeCauseLabel": "string",
         "result": "string",
         "closedBy": "string",
         "closedAt": "int",
@@ -4316,7 +4387,16 @@ window.IM_WORKFLOW = {
         "surfaces": "list<string>",
         "requiredStepSet": "string",
         "commentRequired": "bool",
-        "finish": "bool"
+        "finish": "bool",
+        "causeCatalog": "string"
+      },
+      "CauseItem": {
+        "id": "string",
+        "labelKey": "string",
+        "commentRequired": "bool"
+      },
+      "CauseCatalog": {
+        "items": "list<CauseItem>"
       },
       "ScopeRule": {
         "own": "ScopeOwn"
@@ -4544,6 +4624,10 @@ window.IM_WORKFLOW = {
       "holdReasons": {
         "type": "list<HoldReason>",
         "from": "reasonCatalogs.hold.items"
+      },
+      "causeCatalogs": {
+        "type": "map<string, CauseCatalog>",
+        "from": "reasonCatalogs"
       }
     },
     "definitions": {
@@ -4792,6 +4876,33 @@ window.IM_WORKFLOW = {
         "returns": "list<CloseResultItem>",
         "expr": "closeResults.filter(i, can(who, i.permission) && x.state in i.fromStates && !(x.state in i.ownerOnlyInStates && x.owner != who) && (surface == '' || size(i.surfaces) == 0 || surface in i.surfaces))",
         "$comment": "§2.2. Результаты закрытия, которые этот оператор может выбрать для инцидента"
+      },
+      "causeOk": {
+        "params": {
+          "r": "string",
+          "c": "string"
+        },
+        "returns": "bool",
+        "expr": "closeResults.exists(i, i.id == r && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && causeCatalogs[i.causeCatalog].items.exists(x, x.id == c))",
+        "$comment": "§2.2, ТЗ-4. Причина c есть в справочнике причин (causeCatalog) результата r; у результата без справочника — нет"
+      },
+      "causeCommentRequired": {
+        "params": {
+          "r": "string",
+          "c": "string"
+        },
+        "returns": "bool",
+        "expr": "closeResults.exists(i, i.id == r && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && causeCatalogs[i.causeCatalog].items.exists(x, x.id == c && x.commentRequired))",
+        "$comment": "§2.2, ТЗ-4. Выбранная причина требует комментария («Другое» у ложной тревоги)"
+      },
+      "causeLabel": {
+        "params": {
+          "r": "string",
+          "c": "string"
+        },
+        "returns": "string",
+        "expr": "cel.bind(rs, closeResults.filter(i, i.id == r && i.causeCatalog in causeCatalogs), size(rs) > 0 ? cel.bind(xs, causeCatalogs[rs[0].causeCatalog].items.filter(x, x.id == c), size(xs) > 0 ? xs[0].labelKey : '') : '')",
+        "$comment": "§2.2, ТЗ-4. Снимок названия причины на момент закрытия — ключ подписи причины (closeCauseLabel). Сервер хранит текст названия; причину потом удалят из справочника — инцидент и журнал показывают снимок"
       },
       "stepsOk": {
         "params": {
@@ -5304,6 +5415,21 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»."
+      },
+      {
+        "fn": "closeCauseAllowed",
+        "errorCode": "CLOSE_CAUSE_INVALID",
+        "args": [],
+        "argTypes": {},
+        "expr": "form.resultId == '' || form.causeId == '' || !closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '') || (causeOk(form.resultId, form.causeId) && (!causeCommentRequired(form.resultId, form.causeId) || form.comment != ''))",
+        "failKey": "causeOk(form.resultId, form.causeId) ? 'workflow.guard.cause_comment_required' : 'workflow.guard.cause_required'",
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.cause_required",
+          "workflow.guard.cause_comment_required"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§2.2, ТЗ-4. У результата со справочником причин (causeCatalog) причина — из его справочника: «Ложная тревога» без причины или с причиной сбоя не закрывается. Причина требует комментария (commentRequired, «Другое») — без комментария не закрыть. Без form.resultId — не проверяется: так решается, показывать ли кнопку. Пустая причина — тоже: её не даёт обязательное поле causeId (field_required)"
       },
       {
         "fn": "withinReopenWindow",
@@ -6271,6 +6397,10 @@ window.IM_WORKFLOW = {
                 "value": "ps[0].closeCauseId"
               },
               {
+                "set": "incident.closeCauseLabel",
+                "value": "ps[0].closeCauseLabel"
+              },
+              {
                 "set": "incident.result",
                 "value": "ps[0].result"
               },
@@ -6860,6 +6990,11 @@ window.IM_WORKFLOW = {
             "whatKey": "workflow.settings.reasonCatalogs.mass_fault.items.what"
           },
           {
+            "path": "reasonCatalogs.false_alarm_cause.items",
+            "labelKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items",
+            "whatKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items.what"
+          },
+          {
             "path": "session.breakReasons",
             "labelKey": "workflow.settings.session.breakReasons",
             "whatKey": "workflow.settings.session.breakReasons.what"
@@ -6971,6 +7106,10 @@ window.IM_WORKFLOW = {
       },
       {
         "path": "reasonCatalogs.mass_fault",
+        "why": "кроме списка причин — поле и обязательность (модель)"
+      },
+      {
+        "path": "reasonCatalogs.false_alarm_cause",
         "why": "кроме списка причин — поле и обязательность (модель)"
       },
       {

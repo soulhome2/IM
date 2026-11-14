@@ -63,7 +63,7 @@
         {
           id: ev.id, number: ev.number, eventType: ev.typeId, priority: ev.priority, occurredAt: ev.occurredAt, state: ev.state, owner: ev.owner,
           assignmentGroup: ev.assignmentGroup, holdReasonId: ev.holdReason, escalationLevel: ev.escalationLevel,
-          transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, result: ev.closeComment,
+          transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, closeCauseLabel: ev.closeCauseLabel, result: ev.closeComment,
           closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches,
           timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
@@ -213,11 +213,11 @@
       return { visible, required: visible && ruleOf(fieldAt(f, field, "requiredExpr"), scope) };
     }
 
-    // Ключ подписи результата; если у результата есть справочник причин и причина выбрана — подписи причины
+    // Ключ подписи результата; у результата с labelByCause и выбранной причиной — подписи причины
     function closeResultLabel(ev) {
       const item = catalogItem("close_result", ev.closeResult);
       if (!item) return "";
-      const cause = item.causeCatalog && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
+      const cause = item.causeCatalog && item.labelByCause && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
       return cause ? cause.labelKey : item.labelKey;
     }
 
@@ -266,7 +266,7 @@
       Object.assign(ev, {
         state: x.state, owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
         escalationLevel: o(x.escalationLevel), transferCount: o(x.transferCount), closeResult: x.closeResultId || null,
-        massCause: x.closeCauseId || null, closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
+        massCause: x.closeCauseId || null, closeCauseLabel: x.closeCauseLabel || null, closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
         slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
         linkedTo: x.linkedTo || null, linkedAt: o(x.linkedAt) || null,
         leftGroup: x.leftGroup.primaryId ? { primaryId: x.leftGroup.primaryId, linkedAt: o(x.leftGroup.linkedAt), at: o(x.leftGroup.at) } : null,
@@ -706,6 +706,13 @@
     // Варианты поля-списка до отбора: адресаты передачи — от сервера, иначе — позиции справочника
     function candidates(field, ev) {
       if (field.source === "transferTargets") return ctx.transferTargets(ev);
+      // Причины справочников causeCatalog результатов (causeCatalog:<поле результата>): у варианта — forValues,
+      // при каких результатах он предлагается
+      if (String(field.source).startsWith("causeCatalog:")) {
+        const results = catalogs.close_result.items.filter((r) => r.causeCatalog && catalogs[r.causeCatalog]);
+        const ids = [...new Set(results.map((r) => r.causeCatalog))];
+        return ids.flatMap((c) => catalogs[c].items.map((i) => ({ id: i.id, label: i.labelKey, forValues: results.filter((r) => r.causeCatalog === c).map((r) => r.id) })));
+      }
       const catalog = catalogs[String(field.source).replace("reasonCatalog:", "")];
       return catalog ? catalog.items.map((i) => ({ id: i.id, label: i.labelKey })) : [];
     }

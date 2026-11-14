@@ -374,7 +374,7 @@
     assert.eq(foreign.note.key.endsWith("_takeover"), Boolean(takeover && takeover.enabled), "«перехватите» — только если «Перехватить» доступна");
     await env.act(fresh.guid, "claim", {}, "queue");
     assert.eq((await env.card(fresh.guid)).note, null, "свой в работе — без пояснения");
-    await env.act(fresh.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
+    await env.act(fresh.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card");
     const closed = await env.card(fresh.guid);
     assert.ok(closed.note && closed.note.key.startsWith("workflow.card.note.closed_why_") && closed.note.style === "ok", `закрыт не обработкой: ${closed.note && closed.note.key}`);
     // «Перехватить» видна, но недоступна (лимит активных занят) — «перехватите» не предлагается
@@ -804,7 +804,7 @@
     assert.eq(actionOf(row, "close").fieldOptions.resultId.options.map((o) => o.id), ["mass"], "в очереди");
     const inCard = actionOf(await env.card(inc.guid), "close").fieldOptions.resultId.options.map((o) => o.id);
     assert.ok(inCard.includes("false_alarm") && inCard.includes("processed") && inCard.includes("mass"), `в карточке: ${inCard.join(", ")}`);
-    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "x" }, "queue"), 403, null, "«Ложная тревога» из очереди");
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "x" }, "queue"), 403, null, "«Ложная тревога» из очереди");
   });
 
   test("Чужой инцидент в работе «Массовым сбоем» не закрыть: только свой (ownerOnlyInStates, §2.2)", async () => {
@@ -841,15 +841,17 @@
     assert.eq(res.body.incident.closeResultId, "mass", "закрыт «Массовым сбоем»");
   });
 
-  test("«Ложная тревога» требует комментарий; комментарий сохраняется как result", async () => {
+  test("«Ложная тревога» требует причину; комментарий — только у причины «Другое»; комментарий сохраняется как result (ТЗ-4)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     await env.act(inc.guid, "claim", {}, "queue");
-    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "" }), 422, "FORM_FIELD_REQUIRED");
-    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "уборщик" });
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "x" }), 422, "FORM_FIELD_REQUIRED", "без причины");
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "other", comment: "" }), 403, "CLOSE_CAUSE_INVALID", "«Другое» без комментария");
+    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "other", comment: "уборщик" });
     assert.status(res, 200);
-    assert.eq(res.body.incident.closeResultId, "false_alarm", "результат");
+    assert.eq([res.body.incident.closeResultId, res.body.incident.closeCauseId], ["false_alarm", "other"], "результат и причина");
     assert.eq(res.body.incident.result, "уборщик", "комментарий");
+    assert.ok(res.body.incident.closeCauseLabel, "снимок названия причины");
   });
 
   test("Значение поля-списка проверяет сервер, а не только форма: вне вариантов или в невидимом поле — 422 FORM_FIELD_INVALID (ARCH-09)", async () => {
@@ -862,9 +864,9 @@
       assert.status(res, 422, "FORM_FIELD_INVALID", `«Отложить» с причиной ${reasonId}`);
       assert.eq((await env.card(inc.guid)).state, "in_progress", `${reasonId}: не отложен`);
     }
-    // Причина сбоя — только у «Массового сбоя»: у ложной тревоги поля нет
-    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "тест", causeId: "power" });
-    assert.status(res, 422, "FORM_FIELD_INVALID", "«Ложная тревога» с причиной сбоя");
+    // Причина — из справочника выбранного результата: причина сбоя у ложной тревоги — отказ (closeCauseAllowed, ТЗ-4)
+    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест", causeId: "power" });
+    assert.status(res, 403, "CLOSE_CAUSE_INVALID", "«Ложная тревога» с причиной сбоя");
     // Передать тому, у кого инцидент уже есть (§8.1, «исключение владельца»), — и одиночно, и выборкой
     const foreign = await env.guidOf("INC-1848");
     const before = await env.card(foreign);
@@ -887,7 +889,7 @@
     await env.act(inc.guid, "claim", {}, "queue");
     const card = actionOf(await env.card(inc.guid), "close").fieldRules;
     assert.eq(card.comment.dependsOn, "resultId", "комментарий зависит от результата");
-    assert.eq([card.comment.byValue.false_alarm.required, card.comment.byValue.processed.required], [true, false], "по commentRequired результата");
+    assert.eq([card.comment.byValue.drill.required, card.comment.byValue.false_alarm.required, card.comment.byValue.processed.required], [true, false, false], "по commentRequired результата");
   });
 
   test("Из очереди закрывают только «Массовый сбой»: причина сбоя обязательна, подпись — причина", async () => {
@@ -896,12 +898,12 @@
     const close = actionOf(inc, "close");
     assert.eq(close.fieldOptions.resultId.options.map((o) => o.id), ["mass"], "результаты в очереди");
     assert.status(await env.act(inc.guid, "close", { resultId: "mass", comment: "свет" }, "queue"), 422, null, "без причины сбоя");
-    const cause = close.fieldOptions.causeId.options[0];
+    const cause = close.fieldOptions.causeId.options.find((o) => (o.forValues || []).includes("mass"));
     const res = await env.act(inc.guid, "close", { resultId: "mass", causeId: cause.id, comment: "свет" }, "queue");
     assert.status(res, 200);
     assert.eq(res.body.incident.closeCauseId, cause.id, "причина");
     assert.eq(res.body.incident.closeResultLabel, cause.label, "подпись — причина сбоя");
-    assert.status(await env.act((await env.find((e) => e.state === "new")).guid, "close", { resultId: "false_alarm", comment: "x" }, "queue"), 403, null, "другой результат из очереди");
+    assert.status(await env.act((await env.find((e) => e.state === "new")).guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "x" }, "queue"), 403, null, "другой результат из очереди");
   });
 
   test("Права пути в работу (§5, RULE-36, RULE-38): «Принять» — по праву «Принимать», «Перехватить» и «Переоткрыть» — ещё и по праву взятия", async () => {
@@ -1369,7 +1371,7 @@
     assert.eq(c.slaBreached, done.slaBreached, "отметка нарушения не сбрасывается");
     const other = (await env.all("done"))[0];
     await env.advance(W.limits.reopenWindowMin * 60 + 60);
-    await env.act(c.guid, "close", { resultId: "false_alarm", comment: "x" });
+    await env.act(c.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "x" });
     assert.status(await env.act(other.guid, "reopen", { comment: "x" }), 403, "REOPEN_WINDOW_EXPIRED", "после срока переоткрытия");
   });
 
@@ -1823,7 +1825,7 @@
     const taken = await env.act(a.guid, "takeover", { comment: "беру" }, "card");
     assert.status(taken, 200, null, "перехватить у Петровой");
     assert.eq(effects(taken), [["notify", "petrova", "queued"]], "«Перехватить»: прежнему владельцу");
-    const closed = await env.act(a.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
+    const closed = await env.act(a.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card");
     assert.status(closed, 200, null, "закрыть");
     assert.eq(effects(closed), [["externalCommand", "axxondata.export_incident", "queued"]], "«Закрыть»: выгрузка в AxxonData");
     assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять второй");
@@ -1834,7 +1836,7 @@
   test("Переоткрыть на границе срока: ровно срок — можно, на 20 секунд больше — нельзя (§6.1, BUG-31)", async () => {
     const env = await makeEnv();
     const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2);
-    const form = { resultId: "false_alarm", comment: "тест" };
+    const form = { resultId: "false_alarm", causeId: "animal", comment: "тест" };
     for (const inc of [a, b]) {
       assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, `взять ${inc.number}`);
       assert.status(await env.act(inc.guid, "close", form, "card"), 200, null, `закрыть ${inc.number}`);
@@ -2151,7 +2153,7 @@
     assert.eq((await env.find((e) => e.guid === fire, "open")).siblingCount, 1, "в строке очереди — тоже");
     // Сосед закрыт «Ложной тревогой» — в «ещё N» не считается, в карточке остаётся
     assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
-    assert.status(await env.act(med, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1853");
+    assert.status(await env.act(med, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть INC-1853");
     card = await env.card(fire);
     assert.eq(card.siblingCount, 0, "закрытый сосед не считается");
     assert.eq(siblingsOfCard(card), [["INC-1853", "closed"]], "закрытый сосед в карточке остаётся");
@@ -2159,7 +2161,7 @@
     assert.eq(card.alarm.status, "open", "сам открыт — тревога открыта");
     // Закрыты все «Ложной тревогой» — тревога закрыта и ложная
     assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
-    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847");
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть INC-1847");
     card = await env.card(fire);
     assert.eq([card.alarm.status, card.alarm.allFalseAlarm], ["closed", true], "тревога закрыта, вся ложная");
     const other = await env.card(med);
@@ -2181,7 +2183,7 @@
     assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять INC-1853");
     assert.status(await env.act(med, "close", { resultId: "duplicate", comment: "тест" }), 200, null, "закрыть INC-1853 «Дубликатом»");
     assert.status(await env.act(fire, "claim", {}, "queue"), 200, null, "взять INC-1847");
-    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847");
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть INC-1847");
     const all = await env.card(fire);
     assert.eq([all.alarm.status, all.alarm.allFalseAlarm], ["closed", false], "сосед закрыт другим результатом — тревога не ложная");
     assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "только ТЦ");
@@ -2321,7 +2323,7 @@
   }
   // Закрыть — мне или коллеге — и собрать события потока за это время
   const closeWatching = (env, guid, resultId, who) =>
-    watching(env, () => (who && who !== ME ? asColleague(env, who, guid, "close", { resultId, comment: "тест" }) : env.act(guid, "close", { resultId, comment: "тест" })));
+    watching(env, () => (who && who !== ME ? asColleague(env, who, guid, "close", { resultId, causeId: resultId === "false_alarm" ? "animal" : "", comment: "тест" }) : env.act(guid, "close", { resultId, causeId: resultId === "false_alarm" ? "animal" : "", comment: "тест" })));
 
   test("Ложная тревога у соседа: запись в журнал открытых соседей и уведомление их адресату; себе, закрытым и при другом результате — нет (§6.1, ARCH-15)", async () => {
     // Петрова закрыла «Ложной тревогой» — у соседа запись, его адресату (группа, я в ней) — событие потока
@@ -2486,7 +2488,7 @@
     const got = [];
     const stop = env.api.subscribe((m) => got.push(m));
     await pause(300);
-    assert.status(await env.act(fire, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть INC-1847 «Ложной тревогой»");
+    assert.status(await env.act(fire, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть INC-1847 «Ложной тревогой»");
     await pause(300);
     stop();
     const about = got.filter((m) => m.incidentGuid === med);
@@ -2750,7 +2752,7 @@
     assert.status(claimed, 200, null, "взять");
     const due = Date.parse(claimed.body.incident.timer.dueAt);
     await past(env, due);
-    res = await actAfter(env, fire.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card", "resolution");
+    res = await actAfter(env, fire.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card", "resolution");
     assert.status(res, 200, null, "«Закрыть» после окна");
     c = res.body.incident;
     assert.eq([c.state, c.breaches.map((b) => b.kind)], ["closed", ["resolution"]], "закрыт, нарушение закрытия записано");
@@ -3164,7 +3166,7 @@
     const denied = await env.act(mall, "transfer", { targetId: "kuznetsov", comment: "тест" }, "card");
     assert.status(denied, 403, "TARGET_NO_ACCESS", "у Кузнецова нет доступа к объекту привязанного");
     assert.eq(denied.body.messageKey, "workflow.guard.target_no_access_linked", `причина: ${denied.body.message}`);
-    assert.status(await env.act(mall, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    assert.status(await env.act(mall, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card"), 200, null, "закрыть основной");
     const closed = await env.card(office);
     assert.eq([closed.state, closed.closeResultId, closed.linkedTo], ["closed", "false_alarm", mall], "привязанный закрыт результатом основного, связь — история");
     assert.eq([closed.owner && closed.owner.id, closed.ownership], [ME, "owner"], "владелец закрытого — тот, кто закрыл основной (§2.1, BUG-89)");
@@ -3240,7 +3242,7 @@
     const env2 = await makeEnv({ fixturePatch: { incidents: fx.incidents.concat([e, f]) } });
     const lead = (await env2.all("open")).find((x) => x.number === "INC-1838");
     await (await mergeInto(env2, e.guid, [f.guid])).body;
-    assert.status(await env2.act(e.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть E");
+    assert.status(await env2.act(e.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card"), 200, null, "закрыть E");
     assert.status(await env2.act(e.guid, "reopen", { comment: "ещё" }, "card"), 200, null, "переоткрыть E");
     await (await mergeInto(env2, lead.guid, [e.guid])).body;
     const closed = await env2.card(f.guid);
@@ -3326,7 +3328,7 @@
     const env3 = await makeEnv();
     for (const e of [urgent, calm]) await env3.act(e.guid, "claim", {}, "queue");
     await (await mergeInto(env3, calm.guid, [urgent.guid])).body;
-    assert.status(await env3.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    assert.status(await env3.act(calm.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card"), 200, null, "закрыть основной");
     await env3.advance(900);
     const closed = await env3.card(urgent.guid);
     assert.eq([closed.state, closed.breaches.length], ["closed", 0], "закрыт вместе с основным, нарушения нет");
@@ -3382,7 +3384,7 @@
     await (await mergeInto(env2, calm.guid, [urgent.guid])).body;
     const due = (await env2.card(calm.guid)).timer.dueAt;
     await env2.advance(Math.ceil((Date.parse(due) - env2.now) / 1000) + 1);
-    const closing = await env2.act(calm.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card");
+    const closing = await env2.act(calm.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card");
     assert.status(closing, 200, null, "закрыть основной в окне");
     assert.ok(closing.body.canceledTimerTrigger, "срабатывание по таймеру отменено");
     const linked = await env2.card(urgent.guid);
@@ -3514,7 +3516,7 @@
     const [a, b, c] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
     for (const e of [a, b]) assert.status(await env.act(e.guid, "claim", {}, "queue"), 200, null, `взять ${e.number}`);
     await (await mergeInto(env, a.guid, [b.guid])).body;
-    assert.status(await env.act(a.guid, "close", { resultId: "false_alarm", comment: "тест" }, "card"), 200, null, "закрыть основной");
+    assert.status(await env.act(a.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card"), 200, null, "закрыть основной");
     assert.eq((await env.card(b.guid)).linkedTo, a.guid, "закрытый вместе с основным — при нём как история");
     assert.status(await env.act(b.guid, "reopen", { comment: "тест" }, "queue"), 200, null, "переоткрыть привязанный");
     const reopened = await env.card(b.guid);

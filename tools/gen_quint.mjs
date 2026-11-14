@@ -408,6 +408,10 @@ function transitions() {
   // (visibleExpr), значение — из источника и проходит optionExpr и enabledExpr; пустое не проверяется
   const sourceQ = (source, v) => {
     if (source === "transferTargets") return `TARGETS.contains(${v})`;
+    if (String(source).startsWith("causeCatalog:")) {
+      const ids = W.reasonCatalogs.close_result.items.filter((r) => r.causeCatalog).flatMap((r) => W.reasonCatalogs[r.causeCatalog].items.map((x) => x.id));
+      return `Set(${[...new Set(ids)].map((x) => JSON.stringify(x)).join(", ")}).contains(${v})`;
+    }
     const cat = W.reasonCatalogs[String(source).replace("reasonCatalog:", "")];
     if (!cat) fail(`источник поля ${source}: нет справочника`);
     return `Set(${cat.items.map((x) => JSON.stringify(x.id)).join(", ")}).contains(${v})`;
@@ -559,8 +563,10 @@ function header() {
   emit(`  pure val NO_TIMER: Timer = ${lit("Timer", {})}`);
   emit(`  pure val NO_INCIDENT: Incident = { ...${lit("Incident", {})}, timers: Map(${W.timers.map((t) => `${JSON.stringify(t.id)} -> NO_TIMER`).join(", ")}) }`);
   emit(`  pure val NO_FORM: Form = ${lit("Form", {})}`);
-  const mass = W.reasonCatalogs.close_result.items.find((i) => i.causeCatalog);
-  emit(`  pure val CAUSE_FOR: str -> str = Map(${mass ? `${JSON.stringify(mass.id)} -> ${JSON.stringify(W.reasonCatalogs[mass.causeCatalog].items[0].id)}` : ""})`);
+  // Причина по умолчанию у результата со справочником причин — первая позиция без обязательного комментария
+  const withCause = W.reasonCatalogs.close_result.items.filter((i) => i.causeCatalog);
+  const firstCause = (i) => (W.reasonCatalogs[i.causeCatalog].items.find((x) => !x.commentRequired) || W.reasonCatalogs[i.causeCatalog].items[0]).id;
+  emit(`  pure val CAUSE_FOR: str -> str = Map(${withCause.map((i) => `${JSON.stringify(i.id)} -> ${JSON.stringify(firstCause(i))}`).join(", ")})`);
 }
 
 header();

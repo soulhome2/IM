@@ -102,7 +102,7 @@
     assert.eq((await scenarioOf(env, inc.guid)).cursorStepId, "visual", "после «Взять»");
     await answerOk(env, inc.guid, "visual", ["confirmed"]);
     assert.status(await env.call("PUT", `/operator/incidents/${enc(inc.guid)}/scenario/cursor`, { stepId: "visual" }), 200, null, "курсор назад");
-    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть");
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть");
     const closed = await env.card(inc.guid);
     assert.ok(closed.readOnly, "закрытый — на просмотр");
     assert.status(await answer(env, inc.guid, "verdict", "real"), 403, "PERMISSION_DENIED", "ответ в закрытом");
@@ -224,7 +224,7 @@
     const before = values(await scenarioOf(env, a.guid));
     await env.act(b.guid, "claim", {}, "queue");
     await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [a.guid, b.guid] });
-    assert.status(await env.act(b.guid, "close", { resultId: "false_alarm", comment: "тест" }), 200, null, "закрыть основной");
+    assert.status(await env.act(b.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть основной");
     const linked = await env.card(a.guid);
     assert.eq([linked.state, values(linked.scenario), linked.readOnly], ["closed", before, true], "привязанный закрыт, прохождение то же, на просмотр");
   });

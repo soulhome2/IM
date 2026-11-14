@@ -793,6 +793,7 @@
             const warning = say(o.warning);
             return Object.assign(
               { id: o.id, label: render(o.label), disabled: Boolean(o.disabled), reason: reason ? reason.text : null, warning },
+              o.forValues ? { forValues: o.forValues } : {},
               o.role != null ? { role: o.role, available: o.available !== false, availabilityLabel: o.availabilityLabel || null } : {}
             );
           }),
@@ -867,6 +868,7 @@
         holdReasonId: ev.holdReason,
         closeResultId: ev.closeResult,
         closeCauseId: ev.massCause,
+        closeCauseLabel: ev.closeCauseLabel ? render(ev.closeCauseLabel) : null,
         closeResultLabel: ev.closeResult ? render(engine.closeResultLabel(ev)) : null,
         closedAt: iso(ev.closedAt),
         timer: timerState(ev),
@@ -2351,7 +2353,7 @@
     function runScheduler() {
       // Чьи инциденты были мои — владельцем или адресатом, лично или группой (ownership машины): если после
       // переходов такой инцидент мне не виден, сервер сообщает об этом (§5)
-      const wasMine = new Set(events.filter((e) => !isDone(e) && engine.ownership(e) !== "other").map((e) => e.id));
+      const wasMine = new Set(events.filter((e) => !isDone(e) && ["owner", "target"].includes(engine.ownership(e))).map((e) => e.id));
       // Системные переходы каждого человека — по его состоянию, как на бэкенде, а не только в эмуляции
       // коллег (RULE-47): переданное вышедшему сразу уходит его группе или в очередь. Один такт в общем порядке
       // по времени по всем людям (§14.3, решение 212), а не «сначала мои, потом каждого коллеги»
