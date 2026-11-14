@@ -37,6 +37,8 @@ FILTERS = ["open", "open", "open", "inbox", "mine", "foreign", "done", "all"]
 SORTS = ["priority_then_oldest", "priority_then_newest", "oldest_first", "reaction_deadline"]
 RELOAD = os.environ.get("RELOAD", "none")  # none | every (старый клиент) | throttle (Р-4, bff3e88) | stream (план 84)
 assert RELOAD in ("none", "every", "throttle", "stream"), RELOAD
+OPBASE = int(os.environ.get("OPBASE", "0"))  # план 86: процесс берёт операторов OPBASE+1 … OPBASE+N
+NOEMIT = os.environ.get("NOEMIT") == "1"  # план 86: без своего потока событий и гонок — их даёт один процесс
 WORDS = ["стекл", "дым", "вход", "Гардероб", "пожар", "предмет", "СИЗ", "камера"]
 
 
@@ -590,7 +592,7 @@ def summary():
 
 if __name__ == "__main__":
     print("прогон", RUN, "→", OUT, flush=True)
-    for i in range(1, N + 1):
+    for i in range(OPBASE + 1, OPBASE + N + 1):
         o = Op(i)
         if o.login() != 200:
             raise SystemExit("вход не удался: " + o.email)
@@ -606,7 +608,7 @@ if __name__ == "__main__":
     for t in ths:
         t.start()
     time.sleep(3)  # потоки SSE открыты до первой пачки
-    more = [threading.Thread(target=emitter, daemon=True), threading.Thread(target=race, daemon=True)]
+    more = [] if NOEMIT else [threading.Thread(target=emitter, daemon=True), threading.Thread(target=race, daemon=True)]
     for o in OPS:
         more += [threading.Thread(target=operator, args=(o,), daemon=True), threading.Thread(target=heartbeat, args=(o,), daemon=True)]
     for t in more:

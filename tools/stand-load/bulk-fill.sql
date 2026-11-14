@@ -1,7 +1,7 @@
 -- Нагрузочное наполнение imdb стенда: до 100 сценариев, 1 200 000 событий, 1 000 000 инцидентов (по одному на событие).
 -- События — за последние 180 дней, по образцам уже принятых событий (источник, тип, raw_data).
 -- Инциденты: 500 самых свежих — «new», остальные «closed» (ложная тревога), с записями журнала create и close.
--- Перед запуском — дамп в ~/Work/stand/backup/. Откат — восстановить дамп.
+-- status_guid нет (миграция 053, правка плана 86). Перед запуском — дамп в ~/Work/stand/backup/. Откат — восстановить дамп.
 \set ON_ERROR_STOP on
 \timing on
 
@@ -50,10 +50,9 @@ CREATE TEMP TABLE inc AS
   FROM bulk b JOIN tmpl t ON t.k = b.r % (SELECT count(*) FROM tmpl)
   WHERE b.has_inc;
 
-INSERT INTO incidents (guid, name, customer_guid, created_at, updated_at, status_guid, priority_guid, escalated, event_guid,
+INSERT INTO incidents (guid, name, customer_guid, created_at, updated_at, priority_guid, escalated, event_guid,
                        scenario_guid, scenario_version, number, version, state, owner, close_result_id, closed_by, closed_at, changed_at)
   SELECT i.guid, s.name, i.customer_guid, i.at, i.at + interval '1 minute',
-         CASE WHEN i.fresh THEN '63683921-d91a-4935-a15a-58ab93c4885e'::uuid ELSE '716a0559-46cd-41df-b361-ace491bc50da'::uuid END,
          (ARRAY['01a18211-ddc3-7948-9e4c-807036f5446d','01a18211-ddb3-7948-9a98-33ca709c5022',
                 '01a18211-ddcb-7948-b431-d4543b91a44e','01a18211-ddbc-7948-80b8-7be09f1427c9']::uuid[])[1 + i.r % 4],
          false, i.event_guid, p.guid, p.version, i.number,
