@@ -139,6 +139,17 @@ def check_workflow(w, err):
             src = field.get("source", "")
             if src.startswith("reasonCatalog:") and src.split(":", 1)[1] not in catalogs:
                 err.append(f"форма {f['id']}: нет справочника {src}")
+        # Хотя бы одно из полей (requireAnyOf, ТЗ-18): имя не из полей формы — требование тихо невыполнимо
+        any_of = f.get("requireAnyOf")
+        if any_of is not None:
+            names = {x["name"] for x in f["fields"]}
+            for n in any_of.get("fields") or []:
+                if n not in names:
+                    err.append(f"форма {f['id']}: requireAnyOf ссылается на поле {n}, которого в форме нет")
+            if not any_of.get("fields") or not any_of.get("errorCode"):
+                err.append(f"форма {f['id']}: у requireAnyOf нужны fields и errorCode")
+            if any_of.get("messageKey") and any_of["messageKey"] not in ru_keys:
+                err.append(f"форма {f['id']}: requireAnyOf.messageKey {any_of['messageKey']} нет в каталоге строк")
 
     # Срок из порогов молчания (deadlineFromIdle) — вместо срока справочника: оба сразу — значение справочника
     # молча не учитывалось бы (BUG-119)
@@ -1457,13 +1468,18 @@ def check_declared_fields(w, o, err):
     window = bool((w.get("invariants", {}).get("manualWinsOverTimer") or {}).get("graceSec") is not None)
     # Ручные переходы со своими маршрутами — объединение (POST …/merge) и «Отсоединить» (DELETE …/linked/…): версию
     # записи они пока не принимают (BUG-84), так и записано у них в concurrency
-    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or (t["trigger"] == "manual" and t.get("to") and "linked" in t.get("from", []))}
+    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or t["id"] == "detach"}
     for t in trs:
         c = t.get("concurrency")
         if c is None:
             continue
         manual = t["trigger"] == "manual"
-        if c.get("expectedVersion") != (manual and t["id"] not in own_route):
+        # Запись только в журнал (bumpsVersion: false, ТЗ-18): версия не растёт — и If-Match не нужен; так можно
+        # только переходу без смены состояния
+        journal_only = c.get("bumpsVersion") is False
+        if journal_only and t.get("to"):
+            err.append(f"переход {t['id']}: concurrency.bumpsVersion false у перехода со сменой состояния — версия записи обязана расти (ТЗ-18)")
+        if c.get("expectedVersion") != (manual and t["id"] not in own_route and not journal_only):
             err.append(f"переход {t['id']}: concurrency.expectedVersion {c.get('expectedVersion')} — версия записи обязательна у ручного перехода через POST …/transitions, у автоматического её нет (ARCH-11)")
         if manual and c.get("expectedVersion") and not if_match:
             err.append(f"переход {t['id']}: версия записи обязательна, а в контракте у перехода нет обязательного If-Match (ARCH-11)")
@@ -2289,6 +2305,10 @@ RULES = "Specification/State_rules/States rules IM.md"
 FIXTURE = "Specification/Workflow_machine/fixtures/demo.json"
 OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
+    ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
+     '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
+    ("comment-bumps-version", "машина: комментарий требует версию записи — чужой комментарий даёт владельцу конфликт (ТЗ-18)", MACHINE,
+     '"concurrency": { "expectedVersion": false, "bumpsVersion": false,', '"concurrency": { "expectedVersion": false,', "concurrency.expectedVersion False"),
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,

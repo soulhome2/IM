@@ -368,6 +368,15 @@
   // Ручные переходы из continuesOn таймера (check_machine.py --fsm): срабатывание в окне они не отменяют.
   // Действие за секунду до дедлайна и через секунду после — дальше срабатывает одно и то же
   const CONTINUING = {
+    comment: {
+      name: "«Комментарий» к новому — не действие с инцидентом (ТЗ-18)",
+      workflow: W,
+      async setup(env) {
+        const inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+        return inc.guid;
+      },
+      act: (env, guid) => env.act(guid, "comment", { comment: "тест" }, "card"),
+    },
     transfer: {
       name: "«Передать» нового Сидорову",
       workflow: W,

@@ -484,9 +484,9 @@ window.IM_STRINGS = {
     "workflow.settings.limits.commentMaxFiles": "Files per comment",
     "workflow.settings.limits.commentMaxFiles.what": "How many files can be attached to one comment",
     "workflow.settings.limits.attachmentMaxBytes": "File size, bytes",
-    "workflow.settings.limits.attachmentMaxBytes.what": "The largest size of one file — for a comment and for the «Attachment» step",
+    "workflow.settings.limits.attachmentMaxBytes.what": "The largest size of one file in a comment",
     "workflow.settings.limits.attachmentTypes": "File types",
-    "workflow.settings.limits.attachmentTypes.what": "Which files are accepted — for a comment and for the «Attachment» step"
+    "workflow.settings.limits.attachmentTypes.what": "Which files are accepted in a comment"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -971,8 +971,8 @@ window.IM_STRINGS = {
     "workflow.settings.limits.commentMaxFiles": "Файлов в комментарии",
     "workflow.settings.limits.commentMaxFiles.what": "Сколько файлов можно приложить к одному комментарию",
     "workflow.settings.limits.attachmentMaxBytes": "Размер файла, байт",
-    "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла — у комментария и у шага «Вложение»",
+    "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла комментария",
     "workflow.settings.limits.attachmentTypes": "Типы файлов",
-    "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются — у комментария и у шага «Вложение»"
+    "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии"
   }
 };

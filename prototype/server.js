@@ -1415,6 +1415,13 @@
       return ev && canSee(ev) ? ev : null;
     };
     const touch = (list) => list.forEach((e) => (e.version += 1));
+    // Меняет ли переход версию записи (concurrency машины): нет — только запись в журнал
+    const bumps = (tr) => !tr || !tr.concurrency || tr.concurrency.bumpsVersion !== false;
+    // Нужна ли версия записи в запросе: expectedVersion: false — If-Match не проверяется
+    const needsVersion = (id) => {
+      const tr = engine.transition(id);
+      return !tr || !tr.concurrency || tr.concurrency.expectedVersion !== false;
+    };
     // Версии отобранных — их клиент пришлёт в expectedVersions (BUG-84)
     const versionsOf = (list) => Object.fromEntries(list.map((e) => [e.id, String(e.version)]));
 
@@ -1471,7 +1478,8 @@
       const before = ev.log.length;
       const r = engine.run(id, ev, formValues, { surface });
       if (!r.ok) return runFailure(r);
-      touch([ev]);
+      // Запись только в журнал (concurrency.bumpsVersion: false машины, ТЗ-18) — версия прежняя
+      if (bumps(tr)) touch([ev]);
       emitTransition(ev, id, ME, r.facts);
       // Последний адресат оператора — из поля адресата формы перехода, если оно есть (§8.2)
       const targetField = ((W.forms.find((f) => f.id === tr.form) || {}).fields || []).find((f) => f.source === "transferTargets");
@@ -1795,7 +1803,7 @@
         (p, q, body, headers) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          const stale = versionProblem(ev, headers);
+          const stale = needsVersion(p.transitionId) ? versionProblem(ev, headers) : null;
           if (stale) return stale;
           if (body && body.expectedState && body.expectedState !== ev.state) {
             return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
@@ -1815,7 +1823,7 @@
           const ev = find(p.linkedGuid);
           if (!ev || ev.linkedTo !== p.incidentGuid || ev.state !== "linked") return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // «Отсоединить» — ручной переход машины из linked
-          const detach = W.transitions.find((t) => t.trigger === "manual" && t.to && t.from.includes("linked"));
+          const detach = W.transitions.find((t) => t.id === "detach");
           const r = runTransition(detach.id, ev, {}, "card");
           if (r.status !== 200) return r;
           // Ответ — основной; не виден — карточка отсоединённого
@@ -1847,7 +1855,7 @@
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // «Отсоединить все» — тот же переход ко всем привязанным разом, атомарно: всё или ничего (ARCH-08 в6)
-          const detach = W.transitions.find((t) => t.trigger === "manual" && t.to && t.from.includes("linked"));
+          const detach = W.transitions.find((t) => t.id === "detach");
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
           const r = engine.runAll(detach.id, linked, {}, { surface: "card" });
           if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : runFailure(r);
@@ -2246,7 +2254,7 @@
             if (!check.ok) return guardProblem(check);
             const r = actor.run(p.transitionId, ev, formValues, { surface });
             if (!r.ok) return problem(422, r.code || "FORM_FIELD_REQUIRED", r.why);
-            touch([ev]);
+            if (bumps(tr)) touch([ev]);
             emitTransition(ev, p.transitionId, person.id, r.facts);
             // Системные переходы, которые действие сделало возможными (закрыт основной — привязанные), — сразу
             const fired = caught.concat(runScheduler());

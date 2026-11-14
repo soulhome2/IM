@@ -2417,6 +2417,54 @@
       }
     });
 
+    await step("Комментарий не меняет версию: владелец открыл форму закрытия, старший смены комментирует — закрытие владельца проходит без конфликта (ТЗ-18, решение 2026-11-14)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const fresh = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
+        await standClaim(stand, fresh.guid);
+        const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(fresh.guid)}`);
+        const etag = card.headers.etag || card.headers.ETag;
+        const note = await petrovaAct(fresh.guid, "comment", { comment: "senior note" });
+        expect(note.status === 200, `комментарий Петровой: ${note.status} ${JSON.stringify(note.body)}`);
+        const after = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(fresh.guid)}`);
+        expect((after.headers.etag || after.headers.ETag) === etag, `версия изменилась: ${etag} → ${after.headers.etag || after.headers.ETag}`);
+        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(fresh.guid)}/transitions/close`, { formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, { "If-Match": etag });
+        expect(close.status === 200, `закрытие владельца после чужого комментария: ${close.status} ${close.body && close.body.code}`);
+        return `версия ${etag}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Комментарий в окне после дедлайна реакции не отменяет автоэскалацию (ТЗ-18, §10.1, правило 5; RULE-83)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+        const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+        const top = Math.max(...window.IM_FIXTURE.priorities.map((p) => p.value));
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source], site: fire.site, location: "selftest" });
+        expect(created.status === 201, `инцидент не появился: ${created.status}`);
+        const guid = created.body.guid;
+        const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === top).sec;
+        const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
+        expect(grace > 1, "окно после дедлайна не больше секунды");
+        await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await stand.raw("POST", "/test/clock", { advanceSec: norm + 1 });
+        const res = await standAct(guid, "comment", { comment: "in window" });
+        expect(res.status === 200 && res.body.canceledTimerTrigger == null, `комментарий в окне отменил срабатывание: ${res.status} ${res.body.canceledTimerTrigger}`);
+        await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await stand.raw("POST", "/test/clock", { advanceSec: grace + 2 });
+        const card = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`)).body;
+        const keys = card.journal.map((j) => j.templateKey);
+        expect(keys.includes("workflow.journal.auto_escalate") && !keys.includes("workflow.journal.timer_overridden"), `журнал: ${keys.join(", ")}`);
+        return card.state;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Кнопка «Комментарий» в карточке закрытого: форма с текстом и файлами, запись с файлом в журнале (ТЗ-18, 19)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {

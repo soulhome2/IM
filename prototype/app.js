@@ -1475,7 +1475,7 @@
   };
   // Куда уходит отсоединённый — состояние после «Отсоединить» из машины (to перехода из linked)
   const detachedLabel = () => {
-    const tr = WORKFLOW.transitions.find((x) => x.trigger === "manual" && x.to && x.from.includes("linked"));
+    const tr = WORKFLOW.transitions.find((x) => x.id === "detach");
     return tr && STATES[tr.to] ? lbl(STATES[tr.to]) : "";
   };
   const breakForm = () => ({
@@ -3959,7 +3959,7 @@
     if (!list.length) return `<div class="empty">${te("Привязанных инцидентов нет")}</div>`;
     const total = page.total;
     // «Отсоединить все» — тот же переход ко всем разом; доступность и причина — как у первого привязанного
-    const first = list.map((m) => (m.actions || []).find((a) => (transitionDef(a.id) || {}).to && transitionDef(a.id).from.includes("linked"))).find(Boolean);
+    const first = list.map((m) => (m.actions || []).find((a) => a.id === "detach")).find(Boolean);
     const all =
       first && total > 1
         ? `<button type="button" class="btn outline small" data-detach-all ${first.enabled ? "" : `aria-disabled="true" title="${escapeHtml(actionWhy(first) || "")}"`}>${te(
@@ -3982,7 +3982,7 @@
       <div class="lnk-members">${list
         .map((m) => {
           const b = badgeView(m);
-          const d = (m.actions || []).find((a) => (transitionDef(a.id) || {}).to && transitionDef(a.id).from.includes("linked"));
+          const d = (m.actions || []).find((a) => a.id === "detach");
           const off = d && !d.enabled ? `aria-disabled="true" title="${escapeHtml(actionWhy(d) || "")}"` : `title="${escapeHtml(d ? lbl(transitionDef(d.id)) : "")}"`;
           const found = foundLinked(ev.guid).some((x) => x.guid === m.guid);
           return `<div class="lnk-member ${found ? "found" : ""}">

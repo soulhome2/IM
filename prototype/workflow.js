@@ -344,7 +344,8 @@ window.IM_WORKFLOW = {
         "addressee_signed_out_to_group",
         "addressee_signed_out_to_queue",
         "transfer",
-        "reject"
+        "reject",
+        "comment"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -389,6 +390,9 @@ window.IM_WORKFLOW = {
       "startsOnEnter": [
         "in_progress"
       ],
+      "continuesOn": [
+        "comment"
+      ],
       "startsOnce": true,
       "stopsOnEnter": [],
       "pausable": true,
@@ -421,6 +425,9 @@ window.IM_WORKFLOW = {
       "meaning": "Сколько инцидент можно держать в on_hold по выбранной причине",
       "startsOnEnter": [
         "on_hold"
+      ],
+      "continuesOn": [
+        "comment"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -928,7 +935,7 @@ window.IM_WORKFLOW = {
           "kind": "files",
           "labelKey": "workflow.form.comment.field.files",
           "requiredExpr": "false",
-          "$comment": "§14.11. Файлы — как вложение шага «Вложение»: id, fileName, mime, size и содержимое (dataBase64) или место хранения (storage). Пределы — limits.commentMaxFiles, attachmentMaxBytes, attachmentTypes"
+          "$comment": "§14.11. Файлы — как вложение шага «Вложение»: id, fileName, mime, size и содержимое (dataBase64) или место хранения (storage). Пределы — limits.commentMaxFiles, attachmentMaxBytes, attachmentTypes (только для комментария)"
         }
       ]
     },
@@ -2113,7 +2120,9 @@ window.IM_WORKFLOW = {
       "to": null,
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true
+        "expectedVersion": false,
+        "bumpsVersion": false,
+        "$comment": "ТЗ-18, решение 2026-11-14. Запись только в журнал: версия инцидента и момент последнего перехода (changedAt) не меняются, If-Match не нужен — чужой комментарий не даёт владельцу конфликта версии. Окно после дедлайна не отменяет: comment — в continuesOn таймеров reaction, resolution, hold"
       },
       "form": "comment",
       "requiredStepSet": "none",
@@ -3804,7 +3813,7 @@ window.IM_WORKFLOW = {
       "image/png",
       "application/pdf"
     ],
-    "$commentComment": "§6.3, §14.11, ТЗ-18, 19. Пределы комментария в карточке: длина текста (знаков), файлов на один комментарий, размер одного файла (байт) и допустимые типы (MIME). Размер и типы — общие для файлов комментария и вложений шага «Вложение»: одно хранилище, одни правила. Сверх предела — отказ с кодом, а не обрезка."
+    "$commentComment": "§6.3, §14.11, ТЗ-18, 19. Пределы комментария в карточке: длина текста (символов, как size() CEL, не байт UTF-8), файлов на один комментарий, размер одного файла (байт) и допустимые типы (MIME). Действуют только на файлы комментария: вложение шага «Вложение» сценария их пока не проверяет. Сверх предела — отказ с кодом, а не обрезка."
   },
   "scenarioEdit": {
     "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (POST .../scenario/answer, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
@@ -5416,7 +5425,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.comment_too_long"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.3, ТЗ-18, 19. Текст комментария не длиннее limits.commentMaxLength знаков. До заполнения формы условие выполнено."
+        "$comment": "§6.3, ТЗ-18, 19. Текст комментария не длиннее limits.commentMaxLength символов (size() CEL — кодовые точки, не байты). До заполнения формы условие выполнено."
       },
       {
         "fn": "commentFilesWithinLimit",
@@ -5445,7 +5454,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.attachment_too_large"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.3, §14.11. Каждый файл не больше limits.attachmentMaxBytes байт — предел общий с вложением шага."
+        "$comment": "§6.3, §14.11. Каждый файл не больше limits.attachmentMaxBytes байт."
       },
       {
         "fn": "commentFilesAllowedType",
@@ -5458,7 +5467,7 @@ window.IM_WORKFLOW = {
           "workflow.guard.attachment_type"
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§6.3, §14.11. Тип каждого файла — из limits.attachmentTypes, общих с вложением шага."
+        "$comment": "§6.3, §14.11. Тип каждого файла — из limits.attachmentTypes."
       },
       {
         "fn": "targetIsNotSelf",

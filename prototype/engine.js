@@ -405,7 +405,8 @@
         external,
         after,
         // Момент последнего перехода инцидента — ядру: переход по молчанию не раньше него (BUG-76)
-        commit: () => drafts.forEach((d, id) => Object.assign(real(id), d, { changedAt: now() })),
+        // Запись только в журнал (concurrency.bumpsVersion: false, ТЗ-18) — момент последнего перехода прежний
+        commit: () => drafts.forEach((d, id) => Object.assign(real(id), d, tr.concurrency && tr.concurrency.bumpsVersion === false ? {} : { changedAt: now() })),
       };
     }
 

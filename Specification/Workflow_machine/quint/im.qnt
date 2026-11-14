@@ -3595,7 +3595,7 @@ module im {
     else if (tid == "hold_overdue") e_hold_overdue_0(w, c, iid)
     else w
 
-  pure val CONTINUES_ON: str -> Set[str] = Map("reaction" -> Set("addressee_signed_out_to_group", "addressee_signed_out_to_queue", "transfer", "reject"), "resolution" -> Set(), "hold" -> Set())
+  pure val CONTINUES_ON: str -> Set[str] = Map("reaction" -> Set("addressee_signed_out_to_group", "addressee_signed_out_to_queue", "transfer", "reject", "comment"), "resolution" -> Set("comment"), "hold" -> Set("comment"))
 
   pure val GRACE_MS: int = 3000
 

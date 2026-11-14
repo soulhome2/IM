@@ -482,7 +482,7 @@
   "workflow.settings.limits.commentMaxFiles": "Файлов в комментарии",
   "workflow.settings.limits.commentMaxFiles.what": "Сколько файлов можно приложить к одному комментарию",
   "workflow.settings.limits.attachmentMaxBytes": "Размер файла, байт",
-  "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла — у комментария и у шага «Вложение»",
+  "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла комментария",
   "workflow.settings.limits.attachmentTypes": "Типы файлов",
-  "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются — у комментария и у шага «Вложение»"
+  "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии"
 }
