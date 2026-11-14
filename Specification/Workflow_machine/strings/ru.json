@@ -75,6 +75,7 @@
   "workflow.guard.reopen_window": "Срок переоткрытия истёк: {n} мин",
   "workflow.guard.required_steps": "Пройдите сценарий до конца — тогда доступен «Обработан»",
   "workflow.guard.result_unavailable": "Результат недоступен",
+  "workflow.label.result_with_cause": "{result}: {cause}",
   "workflow.guard.cause_required": "Выберите причину из списка для этого результата",
   "workflow.guard.cause_comment_required": "Для этой причины нужен комментарий",
   "workflow.guard.timer_not_expired": "Норматив не истёк",

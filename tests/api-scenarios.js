@@ -854,6 +854,23 @@
     assert.ok(res.body.incident.closeCauseLabel, "снимок названия причины");
   });
 
+  test("Снимок причины — текст названия на языке закрывшего, в инциденте и в записи журнала закрытия (ТЗ-4)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const res = await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "" });
+    assert.status(res, 200);
+    const animal = window.IM_STRINGS.ru["workflow.catalog.false_alarm_cause.animal"];
+    assert.eq(res.body.incident.closeCauseLabel, animal, "снимок в инциденте — текст");
+    const card = await env.card(inc.guid);
+    const close = card.journal.filter((j) => j.templateKey === "workflow.journal.close").pop();
+    assert.eq(close.vars.closeCauseLabel, animal, "снимок в записи журнала");
+    assert.ok(close.text.includes(animal), `текст записи: ${close.text}`);
+    const options = actionOf(inc, "close").fieldOptions;
+    const other = (options.causeId || { options: [] }).options.find((o) => o.id === "other");
+    assert.ok(other && other.commentRequired === true, "у «Другое» — commentRequired из машины");
+  });
+
   test("Значение поля-списка проверяет сервер, а не только форма: вне вариантов или в невидимом поле — 422 FORM_FIELD_INVALID (ARCH-09)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

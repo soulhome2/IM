@@ -194,7 +194,8 @@
           holdReasonLabel: hold ? [hold.labelKey] : "",
           targetName: ctx.actorName(addressee(ev)),
           escalationLevel: ev.escalationLevel,
-          closeResultLabel: closeResultLabel(ev) ? [closeResultLabel(ev)] : "",
+          closeResultLabel: journalResultLabel(ev),
+          closeCauseLabel: ev.closeCauseLabel || "",
           filledSteps: prog.filled,
           totalSteps: prog.total,
           escalationReason: [W.escalation.reasonKey],
@@ -213,12 +214,28 @@
       return { visible, required: visible && ruleOf(fieldAt(f, field, "requiredExpr"), scope) };
     }
 
+    // Подпись результата в журнале: с причиной без labelByCause — «результат: снимок причины» (ТЗ-4)
+    function journalResultLabel(ev) {
+      const key = closeResultLabel(ev);
+      if (!key) return "";
+      const item = catalogItem("close_result", ev.closeResult);
+      const cause = causeLabelOf(ev);
+      return cause && item && !item.labelByCause ? ["workflow.label.result_with_cause", { result: [key], cause: [cause] }] : [key];
+    }
+    // Подпись причины закрытого: позиция ещё в справочнике результата — её ключ (на языке читающего), удалена —
+    // снимок названия на момент закрытия (closeCauseLabel, §2.2)
+    function causeLabelOf(ev) {
+      const item = catalogItem("close_result", ev.closeResult);
+      const cause = item && item.causeCatalog && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
+      return cause ? cause.labelKey : ev.massCause ? ev.closeCauseLabel || "" : "";
+    }
     // Ключ подписи результата; у результата с labelByCause и выбранной причиной — подписи причины
     function closeResultLabel(ev) {
       const item = catalogItem("close_result", ev.closeResult);
       if (!item) return "";
-      const cause = item.causeCatalog && item.labelByCause && ev.massCause ? catalogItem(item.causeCatalog, ev.massCause) : null;
-      return cause ? cause.labelKey : item.labelKey;
+      if (!item.labelByCause) return item.labelKey;
+      const cause = causeLabelOf(ev);
+      return cause || item.labelKey;
     }
 
     // Переход атомарен (§14.1, §14.2): эффекты выполняются на черновиках инцидентов, и только если
@@ -260,13 +277,21 @@
 
     /* ===== Эффекты машины (do, CEL.md) ===== */
 
+    // Снимок названия (labelSnapshots машины): эффект пишет ключ подписи, исполнитель хранит текст на языке
+    // закрывшего на момент записи (ctx.labelText). Прежнее значение — уже текст, его не трогаем
+    const SNAPSHOTS = new Set(((W.labelSnapshots || {}).fields) || []);
+    function snapshot(name, value, before) {
+      if (!value) return null;
+      if (!SNAPSHOTS.has(name) || value === before || !ctx.labelText) return value;
+      return ctx.labelText(value);
+    }
     // Значение CEL инцидента → поля инцидента прототипа (обратный мост к celIncident)
     function writeBack(x, ev) {
       const o = cel.out;
       Object.assign(ev, {
         state: x.state, owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
         escalationLevel: o(x.escalationLevel), transferCount: o(x.transferCount), closeResult: x.closeResultId || null,
-        massCause: x.closeCauseId || null, closeCauseLabel: x.closeCauseLabel || null, closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
+        massCause: x.closeCauseId || null, closeCauseLabel: snapshot("closeCauseLabel", x.closeCauseLabel, ev.closeCauseLabel), closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
         slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
         linkedTo: x.linkedTo || null, linkedAt: o(x.linkedAt) || null,
         leftGroup: x.leftGroup.primaryId ? { primaryId: x.leftGroup.primaryId, linkedAt: o(x.leftGroup.linkedAt), at: o(x.leftGroup.at) } : null,
@@ -293,6 +318,8 @@
       const ev = Object.assign({}, base, {
         id: plain.id, number: plain.number, typeId: plain.eventType, priority: plain.priority, occurredAt: plain.occurredAt,
         eventGuid: plain.eventGuid, scenarioGuid: plain.scenario,
+        // Снимок в виде — уже текст: writeBack его не переводит
+        closeCauseLabel: plain.closeCauseLabel || null,
       });
       writeBack(cel.value("Incident", p), ev);
       return ev;
@@ -711,7 +738,9 @@
       if (String(field.source).startsWith("causeCatalog:")) {
         const results = catalogs.close_result.items.filter((r) => r.causeCatalog && catalogs[r.causeCatalog]);
         const ids = [...new Set(results.map((r) => r.causeCatalog))];
-        return ids.flatMap((c) => catalogs[c].items.map((i) => ({ id: i.id, label: i.labelKey, forValues: results.filter((r) => r.causeCatalog === c).map((r) => r.id) })));
+        return ids.flatMap((c) =>
+          catalogs[c].items.map((i) => Object.assign({ id: i.id, label: i.labelKey, forValues: results.filter((r) => r.causeCatalog === c).map((r) => r.id) }, i.commentRequired ? { commentRequired: true } : {}))
+        );
       }
       const catalog = catalogs[String(field.source).replace("reasonCatalog:", "")];
       return catalog ? catalog.items.map((i) => ({ id: i.id, label: i.labelKey })) : [];

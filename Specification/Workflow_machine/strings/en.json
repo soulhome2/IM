@@ -75,6 +75,7 @@
   "workflow.guard.reopen_window": "Reopen window expired: {n} min",
   "workflow.guard.required_steps": "Complete the scenario to the end to choose «Handled»",
   "workflow.guard.result_unavailable": "This result is not available",
+  "workflow.label.result_with_cause": "{result}: {cause}",
   "workflow.guard.cause_required": "Choose a cause from the list for this result",
   "workflow.guard.cause_comment_required": "This cause needs a comment",
   "workflow.guard.timer_not_expired": "The target has not expired",

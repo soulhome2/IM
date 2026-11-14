@@ -513,6 +513,8 @@
         return res.moved.length;
       },
       actorName: (id) => rawName(id),
+      // Снимок названия (labelSnapshots машины) — текст на языке того, кто выполняет переход
+      labelText: (key) => render(key),
       log,
       transferTargets: () => targets(),
       hasAccess: (id, ev) => hasAccess(id, ev),
@@ -638,6 +640,7 @@
         holdReason: inc.holdReason,
         closeResult: inc.closeResult,
         massCause: inc.closeCause,
+        closeCauseLabel: inc.closeCauseLabel || null,
         closeComment: inc.result,
         closedBy: inc.closedBy,
         closedAt: abs(inc.closedAt),
@@ -794,6 +797,7 @@
             return Object.assign(
               { id: o.id, label: render(o.label), disabled: Boolean(o.disabled), reason: reason ? reason.text : null, warning },
               o.forValues ? { forValues: o.forValues } : {},
+              o.commentRequired ? { commentRequired: true } : {},
               o.role != null ? { role: o.role, available: o.available !== false, availabilityLabel: o.availabilityLabel || null } : {}
             );
           }),
@@ -868,7 +872,7 @@
         holdReasonId: ev.holdReason,
         closeResultId: ev.closeResult,
         closeCauseId: ev.massCause,
-        closeCauseLabel: ev.closeCauseLabel ? render(ev.closeCauseLabel) : null,
+        closeCauseLabel: ev.closeCauseLabel || null,
         closeResultLabel: ev.closeResult ? render(engine.closeResultLabel(ev)) : null,
         closedAt: iso(ev.closedAt),
         timer: timerState(ev),

@@ -370,6 +370,7 @@
       log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
       // Функции сервера мимо cel.world — с ленты под приставкой ctx. (решение 26); null в аргументах — ""
       actorName: (id) => answer("ctx.actorName", [blank(id)]),
+      labelText: (key) => answer("ctx.labelText", [blank(key)]),
       progress: (ev) => answer("ctx.progress", [ref(ev.id)]),
       stepNumber: (ev) => answer("ctx.stepNumber", [ref(ev.id)]),
       // Варианты поля с source: transferTargets — факт transferTargets той же ленты
@@ -619,6 +620,12 @@
       on("actorName", (f) => (id) => {
         const r = f(id);
         note("ctx.actorName", [blank(id)], r);
+        return r;
+      });
+      // Текст снимка названия (labelSnapshots, ТЗ-4) — на языке сервера, с ленты
+      on("labelText", (f) => (key) => {
+        const r = f(key);
+        note("ctx.labelText", [blank(key)], r);
         return r;
       });
       on("progress", (f) => (ev) => {

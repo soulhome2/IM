@@ -1250,7 +1250,15 @@
     const item = WORKFLOW.reasonCatalogs.hold.items.find((r) => r.id === id);
     return item ? lbl(item) : t("Причина не указана");
   };
-  const resultLabel = (ev) => t(ev.closeResultLabel || "");
+  // Подпись закрытого; причина — снимок названия на момент закрытия (closeCauseLabel), если подпись не она сама
+  const resultLabel = (ev) => {
+    const r = t(ev.closeResultLabel || "");
+    const result = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === ev.closeResultId);
+    if (!result || !result.causeCatalog || result.labelByCause || !ev.closeCauseId) return r;
+    const item = ((WORKFLOW.reasonCatalogs[result.causeCatalog] || {}).items || []).find((i) => i.id === ev.closeCauseId);
+    const cause = item ? lbl(item) : ev.closeCauseLabel;
+    return cause ? `${r}: ${cause}` : r;
+  };
   // Результат полной обработки — с признаком finish в справочнике close_result машины (§2.2, ARCH-08 в7):
   // им закрывает «Итог», в форме «Закрыть» без обработки его нет
   const fullyProcessed = (resultId) => {
@@ -1492,8 +1500,10 @@
   // интерфейса (перерыв, выход) — по required
   function fieldRule(field, values) {
     const r = field.rules;
-    if (!r) return { visible: true, required: Boolean(field.required) };
-    return r.dependsOn ? r.byValue[values[r.dependsOn] || ""] || r.byValue[""] : r;
+    const base = !r ? { visible: true, required: Boolean(field.required) } : r.dependsOn ? r.byValue[values[r.dependsOn] || ""] || r.byValue[""] : r;
+    // Выбранный вариант другого поля требует комментария (FieldOption.commentRequired, ТЗ-4: причина «Другое»)
+    const byOption = field.kind === "text" && state.dialog && state.dialog.form.fields.some((f) => (f.options || []).some((o) => o.commentRequired && o.id === values[f.name] && fieldVisible(f, values)));
+    return byOption && base.visible ? Object.assign({}, base, { required: true }) : base;
   }
   const fieldVisible = (field, values) => fieldRule(field, values).visible;
   const fieldRequired = (field, values) => fieldRule(field, values).required;
@@ -1624,6 +1634,21 @@
     const open = state.dialog;
     if (!open) return;
     const values = dialogValues();
+    // Вариант, зависящий от другого поля (FieldOption.forValues), — только при его выбранном значении; выбранный
+    // вариант, которого больше нет, снимается (ТЗ-4: сменили результат — причина очищается)
+    open.form.fields.forEach((field) => {
+      const dep = field.rules && field.rules.dependsOn;
+      const el = $("dialogFields").querySelector(`select[data-field="${field.name}"]`);
+      if (!dep || !el) return;
+      [...el.options].forEach((o) => {
+        const opt = (field.options || []).find((x) => x.id === o.value);
+        o.hidden = Boolean(opt && opt.forValues && !opt.forValues.includes(values[dep]));
+      });
+      if (el.selectedOptions[0] && el.selectedOptions[0].hidden) {
+        el.value = "";
+        values[field.name] = "";
+      }
+    });
     open.form.fields.forEach((field) => {
       const visible = fieldVisible(field, values);
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);

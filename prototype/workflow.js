@@ -428,6 +428,12 @@ window.IM_WORKFLOW = {
       "secFrom": "reasonCatalogs.hold[].maxMinutes"
     }
   ],
+  "labelSnapshots": {
+    "$comment": "§2.2, ТЗ-4. Поля инцидента — снимки названия: эффект пишет ключ подписи (causeLabel), исполнитель (сервер) хранит текст этого ключа на языке того, кто выполняет переход, на момент записи. Переименовали или удалили позицию справочника — снимок не меняется. Пустое значение — пусто",
+    "fields": [
+      "closeCauseLabel"
+    ]
+  },
   "reasonCatalogs": {
     "hold": {
       "field": "hold_reason",

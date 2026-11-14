@@ -523,9 +523,10 @@ test("кадр не меняет запись CEL: те же векторы с �
 /* ===== Запись векторов переходов: обёртка IMEngine.create (tests/transition-vectors.js) ===== */
 
 let celPool = null;
+// Основа инцидентов тестов — новый, без владельца, нарушений и эскалации: какой он в пуле, зависит от записи векторов
 const newPlain = () => {
   if (!celPool) celPool = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/cel-vectors.json"), "utf8")).incidents;
-  return Object.values(celPool).find((i) => i.state === "new" && !i.owner && !i.linkedTo);
+  return Object.values(celPool).find((i) => i.state === "new" && !i.owner && !i.linkedTo && !i.breaches.length && !i.escalationLevel);
 };
 // Ядро прототипа под записью переходов. frame — кадр записи CEL (по умолчанию пустой кадр Node); cel — запись CEL,
 // через которую ядро получает исполнитель выражений (тогда кадр видит факты мира)

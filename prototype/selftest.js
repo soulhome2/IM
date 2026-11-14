@@ -1541,6 +1541,67 @@
       return acceptedId;
     }, "Норматив закрытия не обнуляется при возврате в очередь");
 
+    await step("Причина закрытия по результату (ТЗ-4): список — по forValues, смена результата очищает причину, «Другое» требует комментарий, карточка и журнал — снимок", async () => {
+      const W = window.IM_WORKFLOW;
+      const ids = (c) => W.reasonCatalogs[c].items.map((i) => i.id).join(",");
+      // Предлагаемые варианты причины — видимые и доступные, без подсказки
+      const offered = () => [...field("causeId").options].filter((o) => o.value && !o.hidden && !o.disabled).map((o) => o.value).join(",");
+      const starred = (name) => /\*\s*$/.test(($("dialogFields").querySelector(`[data-label-for="${name}"]`) || {}).textContent || "");
+      const stand = window.IM_SELFTEST_API;
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      const b = button($("eventsList"), "claim");
+      expect(b, "нет доступной кнопки «Взять»");
+      const id = b.dataset.ev;
+      try {
+        await click(b);
+        expect(mode() === "work", "карточка не открылась");
+        await click(button(root(), "close"));
+        await setField("resultId", "false_alarm");
+        expect(offered() === ids("false_alarm_cause"), `у «Ложной тревоги» причины: ${offered()}`);
+        await setField("causeId", "animal");
+        await setField("resultId", "mass");
+        expect(field("causeId").value === "", `смена результата не очистила причину: «${field("causeId").value}»`);
+        expect(offered() === ids("mass_fault"), `у «Массового сбоя» причины: ${offered()}`);
+        await setField("resultId", "false_alarm");
+        await setField("causeId", "animal");
+        expect(!starred("comment"), "у «Животные» комментарий помечен обязательным");
+        await setField("causeId", "other");
+        expect(starred("comment"), "у «Другое» комментарий не помечен обязательным");
+        field("comment").value = "";
+        await click($("dialogConfirm"));
+        expect(!$("modalDialog").hidden, "«Другое» закрылось без комментария");
+        await setField("causeId", "animal");
+        field("comment").value = "";
+        await click($("dialogConfirm"));
+        await wait(200);
+        const card = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(id)}`)).body;
+        const animal = window.IM_STRINGS.ru["workflow.catalog.false_alarm_cause.animal"];
+        expect(card.state === "closed" && card.closeCauseId === "animal", `не закрыт с причиной animal: ${card.state}, ${card.closeCauseId}`);
+        expect(card.closeCauseLabel === animal, `снимок — не текст названия: «${card.closeCauseLabel}»`);
+        const close = card.journal.filter((j) => j.templateKey === "workflow.journal.close").pop();
+        expect(close && close.text.includes(animal), `в журнале закрытия нет причины: «${close && close.text}»`);
+        // Причину удалили из справочника, а инцидент с ней закрыт: карточка показывает снимок, а не код
+        const fx = window.IM_FIXTURE;
+        const gone = Object.assign(JSON.parse(JSON.stringify(fx.incidents.find((i) => i.number === "INC-1837"))), { closeResult: "false_alarm", closeCause: "removed_cause", closeCauseLabel: "Сорока на датчике" });
+        await standReset({ fixture: "demo", fixturePatch: { incidents: fx.incidents.map((i) => (i.number === "INC-1837" ? gone : i)) } });
+        await wait(300);
+        const old = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(gone.guid)}`)).body;
+        expect(old.closeCauseLabel === "Сорока на датчике", `снимок удалённой причины: «${old.closeCauseLabel}»`);
+        await setFilter("done");
+        const view = await buttonOnPages("view", gone.guid);
+        expect(view, "у закрытого INC-1837 нет «Посмотреть»");
+        await click(view);
+        expect(root().textContent.includes("Сорока на датчике"), "карточка закрытого не показывает снимок причины");
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await setFilter("open");
+        await wait(300);
+      }
+    });
+
     await step("«Обработан» недоступен, пока сценарий не заполнен: в «Закрыть без обработки» его нет, «Итога» не открыть", async () => {
       await setFilter("open");
       const b = button($("eventsList"), "claim");
