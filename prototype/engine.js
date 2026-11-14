@@ -64,7 +64,7 @@
           id: ev.id, number: ev.number, eventType: ev.typeId, priority: ev.priority, occurredAt: ev.occurredAt, state: ev.state, owner: ev.owner,
           assignmentGroup: ev.assignmentGroup, holdReasonId: ev.holdReason, escalationLevel: ev.escalationLevel,
           transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, closeCauseLabel: ev.closeCauseLabel, result: ev.closeComment,
-          closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches,
+          closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches, priorityManual: Boolean(ev.priorityManual),
           timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
           eventGuid: ev.eventGuid,
@@ -94,6 +94,11 @@
       agentState: (who) => (who === ME ? ctx.agentState() : ctx.agentStateOf(who)),
       idleSec: idleOf,
       stepsFilled: (x, setId) => ctx.stepsFilled(cel.source(x), setId),
+      // Число уровня справочника приоритетов по значению варианта (§2.5, ТЗ-13); нет такого — -1
+      priorityOf: (id) => {
+        const p = (ctx.priorities ? ctx.priorities() : []).find((x) => String(x.value) === String(id));
+        return p ? p.value : -1;
+      },
       lastTransferTarget: (who) => (who === ME && ctx.defaultTransferTarget ? ctx.defaultTransferTarget() || "" : ""),
     };
     const celScope = (ev, opts) => ({
@@ -289,7 +294,7 @@
     function writeBack(x, ev) {
       const o = cel.out;
       Object.assign(ev, {
-        state: x.state, owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
+        state: x.state, priority: o(x.priority), priorityManual: Boolean(x.priorityManual), owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
         escalationLevel: o(x.escalationLevel), transferCount: o(x.transferCount), closeResult: x.closeResultId || null,
         massCause: x.closeCauseId || null, closeCauseLabel: snapshot("closeCauseLabel", x.closeCauseLabel, ev.closeCauseLabel), closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
         slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
@@ -740,6 +745,8 @@
     // Варианты поля-списка до отбора: адресаты передачи — от сервера, иначе — позиции справочника
     function candidates(field, ev) {
       if (field.source === "transferTargets") return ctx.transferTargets(ev);
+      // Уровни справочника приоритетов (§2.5, ТЗ-13): значение — число уровня строкой
+      if (field.source === "priorities") return (ctx.priorities ? ctx.priorities() : []).map((p) => ({ id: String(p.value), label: p.label || String(p.value) }));
       // Причины справочников causeCatalog результатов (causeCatalog:<поле результата>): у варианта — forValues,
       // при каких результатах он предлагается
       if (String(field.source).startsWith("causeCatalog:")) {

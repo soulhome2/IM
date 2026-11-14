@@ -76,6 +76,7 @@
 | `closedAt` | `int` | когда закрыт |
 | `slaBreached` | `bool` | есть хоть одно нарушение |
 | `breaches` | `list<Breach>` | нарушения |
+| `priorityManual` | `bool` | приоритет сменён вручную (`change_priority`, ТЗ-13): автоматика его не меняет |
 | `timers` | `map<string, Timer>` | таймеры по id (`reaction`, `resolution`, `hold`) |
 | `linkedTo` | `string` | основной инцидент привязанного |
 | `linkedAt` | `int` | с какого момента в группе |

@@ -419,7 +419,8 @@ function transitions() {
   const formOk = [];
   for (const t of W.transitions) {
     const f = t.form && W.forms.find((x) => x.id === t.form);
-    const fields = f ? f.fields.filter((x) => x.source) : [];
+    // Уровни справочника приоритетов (source: priorities, ТЗ-13) — данные МИ, не машины: в модели любое число
+    const fields = f ? f.fields.filter((x) => x.source && x.source !== "priorities") : [];
     if (!fields.length) continue;
     const parts = fields.map((x) => {
       const v = `c.form.${x.name}`;

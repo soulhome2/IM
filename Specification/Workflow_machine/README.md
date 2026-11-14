@@ -199,7 +199,7 @@ stateDiagram-v2
 
 «Себя» в `targetIsNotSelf` и в `optionExpr` поля «Кому передать» — определение `isSelf`: смотрящий и дежурные группы, в которые он входит (§10.1).
 
-**Поля инцидента** — первый аргумент `setFlag`, `increment`: имя поля типа `Incident` (`cel.types` машины, CEL.md) — `escalationLevel`, `transferCount`, `closeResultId`, `closeCauseId`, `result`, `closedBy`, `closedAt`. `escalationLevel` — ступень автоэскалации (§8.3), ручная передача его не меняет, `transferCount` — число ручных передач, на автоэскалацию не влияет (RULE-76). В прототипе `closeResultId` — `closeResult`, `closeCauseId` — `massCause`, `result` — `closeComment`.
+**Поля инцидента** — первый аргумент `setFlag`, `increment`: имя поля типа `Incident` (`cel.types` машины, CEL.md) — `escalationLevel`, `transferCount`, `closeResultId`, `closeCauseId`, `result`, `closedBy`, `closedAt`, `priority` и `priorityManual` (только `change_priority`, ТЗ-13: у сервера `priority` — изменяемое поле строки инцидента). `escalationLevel` — ступень автоэскалации (§8.3), ручная передача его не меняет, `transferCount` — число ручных передач, на автоэскалацию не влияет (RULE-76). В прототипе `closeResultId` — `closeResult`, `closeCauseId` — `massCause`, `result` — `closeComment`.
 
 **Настройки** — аргументы `settingEnabled`, `settingIs`, `agentIdleFor` (тип `setting`): путь от корня машины, например `escalation.enabled`, `session.idleHoldSec`. `settingIs(путь, значение)` — настройка равна значению: так три перехода по истечению норматива закрытия выбирают между `escalation.onResolutionOverdue` = `"alert"` и `"escalate"`. Вычисляемых путей нет. Второй аргумент `restartTimer` — выражение: `limits.reopenResolutionSec`.
 
@@ -523,4 +523,4 @@ npx @redocly/cli lint Specification/Workflow_machine/openapi.json
 
 Выражения CEL машины (CEL.md): `node tools/check_cel.mjs` — разбор, типы, разрешённая часть CEL, аргументы условий в переходах против `argTypes`.
 
-В модели workflow 6 состояний, 33 перехода (13 ручных + 19 автоматических + появление), 8 форм; перекрёстные ссылки переходов на состояния, формы, guard'ы, эффекты, права и таймеры проверены и сходятся.
+В модели workflow 6 состояний, 34 перехода (14 ручных + 19 автоматических + появление), 9 форм; перекрёстные ссылки переходов на состояния, формы, guard'ы, эффекты, права и таймеры проверены и сходятся.

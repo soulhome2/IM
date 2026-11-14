@@ -375,6 +375,8 @@
       stepNumber: (ev) => answer("ctx.stepNumber", [ref(ev.id)]),
       // Варианты поля с source: transferTargets — факт transferTargets той же ленты
       transferTargets: () => answer("transferTargets", []).map((id) => ({ id })),
+      // Уровни справочника приоритетов (source: priorities, ТЗ-13) — с ленты под приставкой ctx.
+      priorities: () => answer("ctx.priorities", []).map((value) => ({ value })),
       // Сценарий внутри транзакции и действия после фиксации — в итог повтора
       setCursor: (ev) => state.scenario.push({ action: "setCursor", incident: ref(ev.id) }),
       shareAnswers: (from, to, at) => {
@@ -642,6 +644,12 @@
       on("transferTargets", (f) => (...a) => {
         const r = f(...a);
         note("transferTargets", [], Array.from(r || [], (o) => o.id));
+        return r;
+      });
+      // Уровни справочника приоритетов (source: priorities и факт priorityOf, ТЗ-13) — в ленту под приставкой ctx.
+      on("priorities", (f) => (...a) => {
+        const r = f(...a);
+        note("ctx.priorities", [], Array.from(r || [], (o) => o.value));
         return r;
       });
       // Сценарий внутри транзакции — в ожидаемое по порядку; перенос ответов — ещё и в ленту

@@ -319,6 +319,11 @@ window.IM_WORKFLOW = {
       "cloud": "incident_manager.incidents.comment.use"
     },
     {
+      "key": "incident:priority",
+      "labelKey": "workflow.permission.incident.priority",
+      "cloud": "incident_manager.incidents.priority.use"
+    },
+    {
       "key": "incident:schema:admin",
       "labelKey": "workflow.permission.incident.schema.admin",
       "cloud": "incident_manager.manage"
@@ -345,7 +350,8 @@ window.IM_WORKFLOW = {
         "addressee_signed_out_to_queue",
         "transfer",
         "reject",
-        "comment"
+        "comment",
+        "change_priority"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -391,7 +397,8 @@ window.IM_WORKFLOW = {
         "in_progress"
       ],
       "continuesOn": [
-        "comment"
+        "comment",
+        "change_priority"
       ],
       "startsOnce": true,
       "stopsOnEnter": [],
@@ -427,7 +434,8 @@ window.IM_WORKFLOW = {
         "on_hold"
       ],
       "continuesOn": [
-        "comment"
+        "comment",
+        "change_priority"
       ],
       "stopsOnEnter": [
         "in_progress",
@@ -936,6 +944,38 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.comment.field.files",
           "requiredExpr": "false",
           "$comment": "§14.11. Файлы — как вложение шага «Вложение»: id, fileName, mime, size и содержимое (dataBase64) или место хранения (storage). Пределы — limits.commentMaxFiles, attachmentMaxBytes, attachmentTypes (только для комментария)"
+        }
+      ]
+    },
+    {
+      "id": "change_priority",
+      "titleKey": "workflow.form.change_priority.title",
+      "confirmKey": "workflow.form.change_priority.confirm",
+      "style": "primary",
+      "notes": [
+        {
+          "expr": "true",
+          "textKey": "workflow.form.change_priority.note.0"
+        }
+      ],
+      "fields": [
+        {
+          "name": "priority",
+          "kind": "select",
+          "labelKey": "workflow.form.change_priority.field.priority",
+          "requiredExpr": "true",
+          "source": "priorities",
+          "$comment": "§2.5, ТЗ-13. Уровень из справочника приоритетов (GET /operator/reference/priorities): значение — число уровня строкой, число — факт мира priorityOf. Не из справочника — 422 FORM_FIELD_INVALID. Текущий уровень недоступен (enabledExpr): выбрать его — отказ PRIORITY_UNCHANGED",
+          "enabledExpr": "priorityOf(option) != incident.priority",
+          "disabledKey": "workflow.guard.priority_unchanged",
+          "placeholderKey": "workflow.form.change_priority.field.priority.placeholder"
+        },
+        {
+          "name": "comment",
+          "kind": "text",
+          "labelKey": "workflow.form.change_priority.field.comment",
+          "requiredExpr": "true",
+          "placeholderKey": "workflow.form.change_priority.field.comment.placeholder"
         }
       ]
     },
@@ -2155,6 +2195,90 @@ window.IM_WORKFLOW = {
           "fn": "appendComment",
           "args": [
             "workflow.journal.comment"
+          ]
+        }
+      ],
+      "bulk": {
+        "allowed": false
+      },
+      "ui": {
+        "surface": [
+          "card"
+        ],
+        "style": "outline"
+      }
+    },
+    {
+      "id": "change_priority",
+      "labelKey": "workflow.transition.change_priority",
+      "hintKey": "workflow.transition.change_priority.hint",
+      "$comment": "§2.5, §4 (правило 8), §6.3, ТЗ-13. Ручная смена приоритета — переход без смены состояния (to: null). Любой видимый незакрытый инцидент; владельцем быть не нужно. Меняет поле priority, которое у сервера ставится при создании и иначе не меняется, — этот переход его меняет явно, и ставит «замок» priorityManual: автоматика приоритет больше не трогает, переоткрытие (reopen) приоритет не меняет и ручной сохраняет. Ненаступившие сроки реакции и закрытия сдвигаются на разницу нормативов уровней (renormTimer). Меняет данные, которые видит владелец, — версия растёт, If-Match нужен. В окне после дедлайна срабатывание не отменяет: change_priority — в continuesOn таймеров.",
+      "from": [
+        "new",
+        "pending_acceptance",
+        "in_progress",
+        "on_hold",
+        "linked"
+      ],
+      "to": null,
+      "trigger": "manual",
+      "concurrency": {
+        "expectedVersion": true
+      },
+      "form": "change_priority",
+      "requiredStepSet": "none",
+      "guards": [
+        {
+          "fn": "hasPermission",
+          "args": [
+            "incident:priority"
+          ]
+        },
+        {
+          "fn": "agentReady"
+        },
+        {
+          "fn": "priorityChanged"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "priority",
+            "priorityOf(form.priority)"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "priorityManual",
+            "true"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "renormTimer",
+          "args": [
+            "reaction",
+            "byEscalationLevel"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "renormTimer",
+          "args": [
+            "resolution",
+            ""
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "appendPriorityLog",
+          "args": [
+            "workflow.journal.priority_changed"
           ]
         }
       ],
@@ -4045,6 +4169,17 @@ window.IM_WORKFLOW = {
     "workflow.guard.attachment_type": {
       "vars": []
     },
+    "workflow.journal.priority_changed": {
+      "vars": [
+        "from",
+        "to",
+        "comment"
+      ],
+      "$comment": "§6.3, ТЗ-13. Смена приоритета: было и стало — числа уровней, причина — текст оператора; кто — автор записи"
+    },
+    "workflow.guard.priority_unchanged": {
+      "vars": []
+    },
     "workflow.journal.comment": {
       "vars": [
         "comment",
@@ -4458,6 +4593,7 @@ window.IM_WORKFLOW = {
         "closedAt": "int",
         "slaBreached": "bool",
         "breaches": "list<Breach>",
+        "priorityManual": "bool",
         "timers": "map<string, Timer>",
         "linkedTo": "string",
         "linkedAt": "int",
@@ -4489,7 +4625,8 @@ window.IM_WORKFLOW = {
         "reasonId": "string",
         "causeId": "string",
         "comment": "string",
-        "files": "list<FormFile>"
+        "files": "list<FormFile>",
+        "priority": "string"
       },
       "FormFile": {
         "id": "string",
@@ -4702,6 +4839,13 @@ window.IM_WORKFLOW = {
         },
         "returns": "bool",
         "$comment": "Набор шагов сценария выполнен — отвечает машина сценариев (§14.5)"
+      },
+      "priorityOf": {
+        "params": {
+          "id": "string"
+        },
+        "returns": "int",
+        "$comment": "§2.5, ТЗ-13. Число уровня справочника приоритетов по значению варианта формы (число строкой); нет такого уровня — -1. Справочник — данные МИ, а не машины"
       },
       "lastTransferTarget": {
         "params": {
@@ -5287,7 +5431,7 @@ window.IM_WORKFLOW = {
         },
         "returns": "bool",
         "expr": "r.active && size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))",
-        "$comment": "§14.5, ARCH-15, ТЗ-2а. Правило подошло событию: оно включено (active), у него есть сценарий и подошло хоть одно условие. Выключенное правило и правило без сценария в выборе не участвуют: в ранжировании их нет, перекрыть включённое они не могут; в объяснении отбора выключенное — вердикт disabled (§12.5)"
+        "$comment": "§14.5, ARCH-15, ТЗ-2а. Правило подошло событию: оно включено (active), у него есть сценарий и подошло хоть одно условие. Выключенное правило и правило без сценария в выборе не участвуют: в ранжировании их нет, перекрыть включённое они не могут; в объяснении отбора выключенное — вердикт disabled (§12.5): disabled ⇔ !r.active. Rule.active — поле правила; у правила без поля (сохранено до ТЗ-2а) адаптер подставляет true"
       },
       "ruleBeats": {
         "params": {
@@ -5411,6 +5555,19 @@ window.IM_WORKFLOW = {
         ],
         "extendsBaseRegistry": true,
         "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают."
+      },
+      {
+        "fn": "priorityChanged",
+        "errorCode": "PRIORITY_UNCHANGED",
+        "args": [],
+        "argTypes": {},
+        "expr": "form.priority == '' || priorityOf(form.priority) != incident.priority",
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.priority_unchanged"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, ТЗ-13. Новый уровень отличается от текущего: тот же — отказ без записи в журнал, а не «75 → 75». До заполнения формы условие выполнено."
       },
       {
         "fn": "commentWithinLength",
@@ -6374,6 +6531,72 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "fn": "renormTimer",
+        "kind": "transactional",
+        "args": [
+          "timerId",
+          "mode"
+        ],
+        "argTypes": {
+          "timerId": "string",
+          "mode": "string"
+        },
+        "do": [
+          {
+            "let": "t",
+            "value": "incident.timers[timerId]"
+          },
+          {
+            "let": "delta",
+            "value": "(timerSec(incident, timerId, mode) - timerSec(before, timerId, mode)) * 1000"
+          },
+          {
+            "if": "t.due != 0 && t.due > now && t.fired != t.due",
+            "then": [
+              {
+                "set": "incident.timers[timerId].due",
+                "value": "t.due + delta > now ? t.due + delta : now"
+              }
+            ],
+            "else": [
+              {
+                "if": "timerDef(timerId).pausable && t.due == 0 && t.paused && t.left > 0",
+                "then": [
+                  {
+                    "set": "incident.timers[timerId].left",
+                    "value": "t.left + delta > 0 ? t.left + delta : 0"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§4, правило 8, ТЗ-13. После смены приоритета (before — прежний уровень): ненаступивший срок сдвигается на разницу нормативов нового и прежнего уровня — то же, что срок от прежней точки отсчёта по новому нормативу. Идёт — сдвигается дедлайн (прошёл по новому нормативу — наступает сейчас); на паузе у приостанавливаемого (resolution) — остаток, не меньше 0. Наступивший, нарушенный и выполненный (остановленная реакция с остатком у взятого) не меняются. mode — как у timerSec: byEscalationLevel у реакции, у эскалированного норматив уровня от приоритета не зависит; у таймера со сроком из справочника (hold) разница 0"
+      },
+      {
+        "fn": "appendPriorityLog",
+        "kind": "transactional",
+        "args": [
+          "key"
+        ],
+        "argTypes": {
+          "key": "string"
+        },
+        "do": [
+          {
+            "world": "log",
+            "args": {
+              "incident": "incident",
+              "key": "key",
+              "vars": "{'from': before.priority, 'to': incident.priority, 'comment': form.comment}"
+            }
+          }
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, §12.4, ТЗ-13. Запись смены приоритета: было → стало (числа уровней), причина; кто — автор записи"
+      },
+      {
         "fn": "appendComment",
         "kind": "transactional",
         "args": [
@@ -6968,6 +7191,7 @@ window.IM_WORKFLOW = {
             "incident:bulk",
             "incident:run_action",
             "incident:comment",
+            "incident:priority",
             "agent:set_not_ready"
           ]
         }

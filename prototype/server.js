@@ -517,6 +517,8 @@
       labelText: (key) => render(key),
       log,
       transferTargets: () => targets(),
+      // Уровни справочника приоритетов (§2.5) — варианты формы смены приоритета (ТЗ-13), название — на языке сессии
+      priorities: () => PRIORITIES.map((p) => ({ value: p.value, label: (p.name && (p.name[(session && session.preferences.locale) || "ru"] || p.name.ru)) || String(p.value) })),
       hasAccess: (id, ev) => hasAccess(id, ev),
       // Факты мира для выражений машины (cel.world, CEL.md): права и состояние любого человека, состав групп
       permsOf: (id) => permsOf(id),
@@ -625,6 +627,7 @@
         typeGuid: inc.eventType.guid,
         type: inc.eventType.name,
         priority: inc.priority,
+        priorityManual: Boolean(inc.priorityManual),
         site: inc.site,
         siteType: inc.siteType,
         location: inc.location,
@@ -854,6 +857,8 @@
         createdAt: iso(ev.createdAt),
         eventType: { guid: ev.typeGuid, id: ev.typeId, name: ev.type },
         priority: ev.priority,
+        // Ручной приоритет (ТЗ-13): автоматика его не меняет, переоткрытие сохраняет
+        priorityManual: Boolean(ev.priorityManual),
         sourceGroup: sourceGroupOf(ev),
         sourceDeviceTypeId: src ? deviceRef(src).typeId : null,
         site: ev.site || null,

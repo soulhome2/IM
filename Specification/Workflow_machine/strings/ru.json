@@ -484,5 +484,17 @@
   "workflow.settings.limits.attachmentMaxBytes": "Размер файла, байт",
   "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла комментария",
   "workflow.settings.limits.attachmentTypes": "Типы файлов",
-  "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии"
+  "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии",
+  "workflow.permission.incident.priority": "Менять приоритет инцидента",
+  "workflow.transition.change_priority": "Сменить приоритет",
+  "workflow.transition.change_priority.hint": "Поднять или понизить приоритет — сроки пересчитаются по нормативу нового уровня",
+  "workflow.form.change_priority.title": "Смена приоритета",
+  "workflow.form.change_priority.confirm": "Сменить",
+  "workflow.form.change_priority.note.0": "Ещё не наступившие сроки пересчитаются по нормативу нового уровня от прежней точки отсчёта. Автоматика этот приоритет больше не меняет.",
+  "workflow.form.change_priority.field.priority": "Новый приоритет",
+  "workflow.form.change_priority.field.priority.placeholder": "Выберите уровень",
+  "workflow.form.change_priority.field.comment": "Причина",
+  "workflow.form.change_priority.field.comment.placeholder": "Почему меняется приоритет",
+  "workflow.guard.priority_unchanged": "Выбран тот же приоритет",
+  "workflow.journal.priority_changed": "Приоритет изменён: {from} → {to}. Причина: {comment}"
 }

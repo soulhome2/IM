@@ -676,6 +676,8 @@ function syntheticTransitions(env) {
     stepsFilled: () => true,
     lastTransferTarget: () => "",
     transferTargets: () => ["op2"],
+    // Уровни справочника приоритетов (ТЗ-13): поставка — 100, 75, 50, 25
+    priorityOf: (id) => ([100, 75, 50, 25].includes(Number(id)) ? Number(id) : -1),
   };
   // Инцидент n (9001…): своё событие, сценарий «Пожар», приоритет 50, все таймеры машины
   const plain = (n, over = {}) =>
@@ -702,6 +704,7 @@ function syntheticTransitions(env) {
       progress: () => ({ filled: 0, total: 2 }),
       stepNumber: () => 1,
       transferTargets: () => world.transferTargets().map((id) => ({ id })),
+      priorities: () => [100, 75, 50, 25].map((value) => ({ value })),
       setCursor() {},
       shareAnswers: () => 0,
       deliver() {},

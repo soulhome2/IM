@@ -149,6 +149,8 @@ function replay(states, name) {
       log: (ev, whoId, k, v, at) => ev.log.push({ at, whoId, k, v }),
       // Кандидаты в адресаты — все операторы и группы, как TARGETS модели: сервер проверяет значение поля (ARCH-09)
       transferTargets: () => OPS.concat(GROUPS).map((id) => ({ id, label: id })),
+      // Уровни приоритета — как PRIORITIES модели (ТЗ-13)
+      priorities: () => [{ value: 100 }, { value: 50 }],
       defaultTransferTarget: () => null,
       onEvict: () => {},
       onBreachShared: () => {},

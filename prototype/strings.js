@@ -486,7 +486,19 @@ window.IM_STRINGS = {
     "workflow.settings.limits.attachmentMaxBytes": "File size, bytes",
     "workflow.settings.limits.attachmentMaxBytes.what": "The largest size of one file in a comment",
     "workflow.settings.limits.attachmentTypes": "File types",
-    "workflow.settings.limits.attachmentTypes.what": "Which files are accepted in a comment"
+    "workflow.settings.limits.attachmentTypes.what": "Which files are accepted in a comment",
+    "workflow.permission.incident.priority": "Change the incident priority",
+    "workflow.transition.change_priority": "Change priority",
+    "workflow.transition.change_priority.hint": "Raise or lower the priority — deadlines are recalculated by the new level's norm",
+    "workflow.form.change_priority.title": "Change priority",
+    "workflow.form.change_priority.confirm": "Change",
+    "workflow.form.change_priority.note.0": "Deadlines that have not yet passed are recalculated by the new level's norm from the same starting point. Automation no longer changes this priority.",
+    "workflow.form.change_priority.field.priority": "New priority",
+    "workflow.form.change_priority.field.priority.placeholder": "Choose a level",
+    "workflow.form.change_priority.field.comment": "Reason",
+    "workflow.form.change_priority.field.comment.placeholder": "Why the priority changes",
+    "workflow.guard.priority_unchanged": "The same priority is selected",
+    "workflow.journal.priority_changed": "Priority changed: {from} → {to}. Reason: {comment}"
   },
   "ru": {
     "workflow.state.new": "Новое",
@@ -973,6 +985,18 @@ window.IM_STRINGS = {
     "workflow.settings.limits.attachmentMaxBytes": "Размер файла, байт",
     "workflow.settings.limits.attachmentMaxBytes.what": "Наибольший размер одного файла комментария",
     "workflow.settings.limits.attachmentTypes": "Типы файлов",
-    "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии"
+    "workflow.settings.limits.attachmentTypes.what": "Какие файлы принимаются в комментарии",
+    "workflow.permission.incident.priority": "Менять приоритет инцидента",
+    "workflow.transition.change_priority": "Сменить приоритет",
+    "workflow.transition.change_priority.hint": "Поднять или понизить приоритет — сроки пересчитаются по нормативу нового уровня",
+    "workflow.form.change_priority.title": "Смена приоритета",
+    "workflow.form.change_priority.confirm": "Сменить",
+    "workflow.form.change_priority.note.0": "Ещё не наступившие сроки пересчитаются по нормативу нового уровня от прежней точки отсчёта. Автоматика этот приоритет больше не меняет.",
+    "workflow.form.change_priority.field.priority": "Новый приоритет",
+    "workflow.form.change_priority.field.priority.placeholder": "Выберите уровень",
+    "workflow.form.change_priority.field.comment": "Причина",
+    "workflow.form.change_priority.field.comment.placeholder": "Почему меняется приоритет",
+    "workflow.guard.priority_unchanged": "Выбран тот же приоритет",
+    "workflow.journal.priority_changed": "Приоритет изменён: {from} → {to}. Причина: {comment}"
   }
 };

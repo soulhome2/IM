@@ -161,6 +161,96 @@
     assert.status(await bare.act(other.guid, "comment", { comment: "x" }), 403, "PERMISSION_DENIED", "без права");
   });
 
+  /* ===== Ручная смена приоритета (ТЗ-13, §2.5, §4, §6.3) ===== */
+
+  const LOW = LEVELS[LEVELS.length - 1];
+  // Норматив таймера для уровня: строка overrides только по приоритету, иначе byPriority, иначе defaultSec (§4, правило 2)
+  const normOf = (timerId, level) => {
+    const t = W.timers.find((x) => x.id === timerId);
+    const o = (t.overrides || []).find((x) => x.priority === level && Object.keys(x).length === 2);
+    return o ? o.sec : (t.byPriority || {})[String(level)] != null ? t.byPriority[String(level)] : t.defaultSec;
+  };
+
+  test("Смена приоритета: уровень новый, priorityManual, версия выросла, журнал «было → стало, кто, почему» (ТЗ-13)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const res = await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: "ошибка правила" });
+    assert.status(res, 200, null, "смена приоритета");
+    const c = res.body.incident;
+    assert.eq([c.priority, c.priorityManual, c.state], [LOW, true, inc.state], "инцидент");
+    assert.ok(Number(c.version) > Number(inc.version), `версия выросла: ${inc.version} → ${c.version}`);
+    const e = lastJournal(c);
+    assert.eq([e.templateKey, e.actor.id, e.vars.from, e.vars.to, e.vars.comment], ["workflow.journal.priority_changed", ME, TOP, LOW, "ошибка правила"], "запись журнала");
+  });
+
+  test("Смена приоритета: очередь сортируется по новому уровню (ТЗ-13, §7)", async () => {
+    const env = await makeEnv();
+    const low = (await env.all("open")).filter((e) => e.state === "new").sort((a, b) => a.priority - b.priority)[0];
+    assert.ok(low.priority < TOP, "есть новый ниже самого срочного");
+    assert.status(await env.act(low.guid, "change_priority", { priority: String(TOP), comment: "поднять" }), 200, null, "поднять");
+    const list = await env.all("open");
+    const at = list.findIndex((e) => e.guid === low.guid);
+    assert.ok(list.slice(0, at).every((e) => e.priority >= TOP) && list.slice(at).every((e) => e.priority <= TOP), `порядок: ${list.map((e) => e.priority).join(",")}`);
+  });
+
+  test("Смена приоритета без права incident:priority — 403 PERMISSION_DENIED (ТЗ-13, §5)", async () => {
+    const env = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "incident:priority") });
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: "x" }), 403, "PERMISSION_DENIED", "без права");
+  });
+
+  test("Смена приоритета без причины — 422, приоритет прежний (ТЗ-13)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.ok(W.transitions.some((t) => t.id === "change_priority"), "есть действие change_priority");
+    assert.eq((await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: " " })).status, 422, "без причины");
+    assert.eq((await env.card(inc.guid)).priority, TOP, "приоритет");
+  });
+
+  test("Смена приоритета на тот же уровень — 403 PRIORITY_UNCHANGED, записи в журнале нет (ТЗ-13)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const before = (await env.card(inc.guid)).journal.length;
+    assert.status(await env.act(inc.guid, "change_priority", { priority: String(TOP), comment: "тот же" }), 403, "PRIORITY_UNCHANGED", "тот же уровень");
+    assert.eq((await env.card(inc.guid)).journal.length, before, "журнал");
+  });
+
+  test("Смена приоритета: ненаступивший срок реакции — от прежней точки отсчёта по нормативу нового уровня (ТЗ-13, §4)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.advance(30);
+    const was = await env.card(inc.guid);
+    const res = await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: "ниже" });
+    assert.status(res, 200, null, "смена");
+    const t = res.body.incident.timer;
+    assert.eq([t.id, Date.parse(t.dueAt) - Date.parse(was.timer.dueAt)], ["reaction", (normOf("reaction", LOW) - normOf("reaction", TOP)) * 1000], "сдвиг срока реакции");
+  });
+
+  test("Смена приоритета: ненаступивший срок закрытия — по нормативу нового уровня; выполненная реакция не тронута (ТЗ-13, §4)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const was = await env.card(inc.guid);
+    const claimed = (await env.act(inc.guid, "claim", {}, "queue")).body.incident;
+    const left = Date.parse(was.timer.dueAt) - Date.parse(claimed.timer.serverTime);
+    const res = await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: "ниже" });
+    assert.status(res, 200, null, "смена");
+    assert.eq(Date.parse(res.body.incident.timer.dueAt) - Date.parse(claimed.timer.dueAt), (normOf("resolution", LOW) - normOf("resolution", TOP)) * 1000, "сдвиг срока закрытия");
+    const back = (await env.act(inc.guid, "release", { comment: "вернуть" })).body.incident;
+    assert.eq([back.timer.id, Date.parse(back.timer.dueAt) - Date.parse(back.timer.serverTime)], ["reaction", left], "реакция — с прежнего остатка");
+  });
+
+  test("Смена приоритета: ручной приоритет переживает переоткрытие (ТЗ-13, §2.5)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    assert.status(await env.act(inc.guid, "change_priority", { priority: String(LOW), comment: "ниже" }), 200, null, "смена");
+    assert.status(await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal" }), 200, null, "закрыть");
+    assert.status(await env.act(inc.guid, "change_priority", { priority: String(TOP), comment: "x" }), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "у закрытого нельзя");
+    const res = await env.act(inc.guid, "reopen", { comment: "вернули" });
+    assert.status(res, 200, null, "переоткрыть");
+    assert.eq([res.body.incident.priority, res.body.incident.priorityManual], [LOW, true], "после переоткрытия");
+  });
+
   /* ===== Отложить и возобновить (§6.1, §4) ===== */
 
   test("Отложить: причина обязательна, норматив закрытия на паузе, срок удержания идёт", async () => {

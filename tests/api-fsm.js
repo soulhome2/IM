@@ -377,6 +377,15 @@
       },
       act: (env, guid) => env.act(guid, "comment", { comment: "тест" }, "card"),
     },
+    change_priority: {
+      name: "«Сменить приоритет» нового — срок уже наступил, пересчёт его не трогает (ТЗ-13)",
+      workflow: W,
+      async setup(env) {
+        const inc = await env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP && e.escalationLevel === 0);
+        return inc.guid;
+      },
+      act: (env, guid) => env.act(guid, "change_priority", { priority: String(Math.min(...window.IM_FIXTURE.priorities.map((p) => p.value))), comment: "тест" }, "card"),
+    },
     transfer: {
       name: "«Передать» нового Сидорову",
       workflow: W,

@@ -2538,6 +2538,192 @@
       }
     });
 
+    /* ===== Ручная смена приоритета (ТЗ-13, §2.5, §4, §6.3) ===== */
+
+    // Уровни справочника по убыванию; инцидент — новый пожар самого срочного уровня
+    const prLevels = () => window.IM_FIXTURE.priorities.map((p) => p.value).sort((a, b) => b - a);
+    const prCard = async (guid) => (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`)).body;
+    const prNewTop = async () => (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.priority === prLevels()[0]);
+    const prNorm = (timerId, level) => {
+      const t = window.IM_WORKFLOW.timers.find((x) => x.id === timerId);
+      const o = (t.overrides || []).find((x) => x.priority === level && Object.keys(x).length === 2);
+      return o ? o.sec : (t.byPriority || {})[String(level)] != null ? t.byPriority[String(level)] : t.defaultSec;
+    };
+
+    await step("Смена приоритета с правом и причиной: приоритет новый, «замок» priorityManual, запись «было → стало, кто, почему» (ТЗ-13)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const W = window.IM_WORKFLOW;
+      expect(W.permissions.some((p) => p.key === "incident:priority"), "нет права incident:priority");
+      const tr = W.transitions.find((x) => x.id === "change_priority");
+      expect(tr && tr.to == null && !tr.from.includes("closed"), "нет действия change_priority без смены состояния из незакрытых");
+      try {
+        const inc = await prNewTop();
+        const low = prLevels()[prLevels().length - 1];
+        const res = await standAct(inc.guid, "change_priority", { priority: String(low), comment: "selftest reason" });
+        expect(res.status === 200, `смена приоритета: ${res.status} ${JSON.stringify(res.body)}`);
+        const c = res.body.incident;
+        expect(c.priority === low && c.priorityManual === true && c.state === inc.state, `инцидент: ${c.priority} ${c.priorityManual} ${c.state}`);
+        const e = c.journal.filter((j) => j.templateKey === "workflow.journal.priority_changed").pop();
+        expect(e && e.vars.from === inc.priority && e.vars.to === low && e.vars.comment === "selftest reason" && e.actor && e.actor.id === window.IM_FIXTURE.operator, `запись журнала: ${JSON.stringify(e)}`);
+        return e.text;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета пересортировывает очередь: поднятый встаёт выше всех уровнем ниже (ТЗ-13, §7)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const list = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+        const low = list.filter((e) => e.state === "new").sort((a, b) => a.priority - b.priority)[0];
+        const top = prLevels()[0];
+        expect(low && low.priority < top, "нет нового ниже самого срочного уровня");
+        const res = await standAct(low.guid, "change_priority", { priority: String(top), comment: "raise" });
+        expect(res.status === 200, `смена приоритета: ${res.status} ${res.body && res.body.code}`);
+        const after = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+        const at = after.findIndex((e) => e.guid === low.guid);
+        expect(after.slice(0, at).every((e) => e.priority >= top) && after.slice(at).every((e) => e.priority <= top), `порядок очереди: ${after.map((e) => e.priority).join(",")}`);
+        return `место ${list.findIndex((e) => e.guid === low.guid) + 1} → ${at + 1}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета без права incident:priority — отказ 403 PERMISSION_DENIED (ТЗ-13, §5)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        await standReset({ fixture: "demo", operatorPermissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "incident:priority") });
+        const inc = await prNewTop();
+        const res = await standAct(inc.guid, "change_priority", { priority: String(prLevels()[1]), comment: "x" });
+        expect(res.status === 403 && res.body.code === "PERMISSION_DENIED", `без права: ${res.status} ${res.body && res.body.code}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета без причины — отказ 422, приоритет прежний (ТЗ-13)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      expect((window.IM_WORKFLOW.transitions || []).some((x) => x.id === "change_priority"), "нет действия change_priority");
+      try {
+        const inc = await prNewTop();
+        const res = await standAct(inc.guid, "change_priority", { priority: String(prLevels()[1]), comment: "  " });
+        expect(res.status === 422, `без причины: ${res.status} ${res.body && res.body.code}`);
+        expect((await prCard(inc.guid)).priority === inc.priority, "приоритет изменился");
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета на тот же уровень — отказ PRIORITY_UNCHANGED без записи в журнал (ТЗ-13)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        const before = (await prCard(inc.guid)).journal.length;
+        const res = await standAct(inc.guid, "change_priority", { priority: String(inc.priority), comment: "same" });
+        expect(res.status === 403 && res.body.code === "PRIORITY_UNCHANGED", `тот же уровень: ${res.status} ${res.body && res.body.code}`);
+        expect((await prCard(inc.guid)).journal.length === before, "в журнале появилась запись");
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета: ненаступивший срок реакции пересчитан от прежней точки отсчёта по нормативу нового уровня (ТЗ-13, §4)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        const was = await prCard(inc.guid);
+        const low = prLevels()[prLevels().length - 1];
+        const res = await standAct(inc.guid, "change_priority", { priority: String(low), comment: "lower" });
+        expect(res.status === 200, `смена приоритета: ${res.status} ${res.body && res.body.code}`);
+        const shift = Date.parse(res.body.incident.timer.dueAt) - Date.parse(was.timer.dueAt);
+        const want = (prNorm("reaction", low) - prNorm("reaction", inc.priority)) * 1000;
+        expect(res.body.incident.timer.id === "reaction" && shift === want, `срок реакции сдвинут на ${shift} мс, а нужно ${want}`);
+        return `${was.timer.dueAt} → ${res.body.incident.timer.dueAt}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Смена приоритета: выполненный норматив реакции не тронут — после «Вернуть в очередь» реакция с прежнего остатка (ТЗ-13, §4)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        const was = await prCard(inc.guid);
+        await standClaim(stand, inc.guid);
+        const claimedAt = Date.parse((await prCard(inc.guid)).timer.serverTime || new Date().toISOString());
+        const left = Date.parse(was.timer.dueAt) - claimedAt;
+        const res = await standAct(inc.guid, "change_priority", { priority: String(prLevels()[prLevels().length - 1]), comment: "lower" });
+        expect(res.status === 200, `смена приоритета: ${res.status} ${res.body && res.body.code}`);
+        const back = await standAct(inc.guid, "release", { comment: "back" });
+        expect(back.status === 200, `вернуть в очередь: ${back.status}`);
+        const t = back.body.incident.timer;
+        const got = Date.parse(t.dueAt) - Date.parse(t.serverTime);
+        expect(t.id === "reaction" && Math.abs(got - left) < 2000, `остаток реакции ${got} мс, был ${left}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Ручной приоритет переживает переоткрытие: priorityManual и уровень сохранены (ТЗ-13, §2.5)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        const low = prLevels()[prLevels().length - 1];
+        await standClaim(stand, inc.guid);
+        const res = await standAct(inc.guid, "change_priority", { priority: String(low), comment: "lower" });
+        expect(res.status === 200, `смена приоритета: ${res.status} ${res.body && res.body.code}`);
+        const closed = await standAct(inc.guid, "close", { resultId: "false_alarm", causeId: "animal" });
+        expect(closed.status === 200, `закрыть: ${closed.status} ${closed.body && closed.body.code}`);
+        const again = await standAct(inc.guid, "reopen", { comment: "again" });
+        expect(again.status === 200, `переоткрыть: ${again.status} ${again.body && again.body.code}`);
+        expect(again.body.incident.priority === low && again.body.incident.priorityManual === true, `после переоткрытия: ${again.body.incident.priority} ${again.body.incident.priorityManual}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Кнопка «Сменить приоритет» в карточке: форма с уровнем и причиной, запись в журнале карточки (ТЗ-13)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        await setFilter("open");
+        const view = await buttonOnPages("view", inc.guid);
+        expect(view, "у нового нет «Посмотреть»");
+        await click(view);
+        const b = button(root(), "change_priority");
+        expect(b, "в карточке нет кнопки «Сменить приоритет»");
+        await click(b);
+        expect(!$("modalDialog").hidden, "форма смены приоритета не открылась");
+        const sel = field("priority");
+        const low = String(prLevels()[prLevels().length - 1]);
+        expect(sel && [...sel.options].some((o) => o.value === low), "в форме нет уровней справочника");
+        await setField("priority", low);
+        field("comment").value = NOTE;
+        await click($("dialogConfirm"));
+        await wait(300);
+        expect($("modalDialog").hidden, "форма не закрылась");
+        const card = await prCard(inc.guid);
+        expect(card.priority === Number(low), `приоритет ${card.priority}`);
+        const e = card.journal.filter((j) => j.templateKey === "workflow.journal.priority_changed").pop();
+        expect(e && root().textContent.includes(e.text), "журнал карточки не показывает смену приоритета");
+        return e.text;
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await setFilter("open");
+        await wait(300);
+      }
+    });
+
     await step("Ложная тревога у основного — уведомление адресату соседа привязанного (§6.1, §11.4, решение 2026-10-29)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Пожар INC-1847 привязан к INC-1851; его сосед медпункт INC-1853 — у меня в работе. INC-1851 закрывает Петрова «Ложной тревогой»

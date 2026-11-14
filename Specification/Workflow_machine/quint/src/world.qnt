@@ -80,6 +80,8 @@
   def dutyGroups: List[str] = GROUP_LIST
   // Кому вообще можно передавать: люди и дежурные группы (§8.1, BUG-85)
   def transferTargets: List[str] = OPERATOR_LIST.concat(GROUP_LIST)
+  // Число уровня приоритета по значению варианта формы (ТЗ-13): уровни модели — PRIORITIES; нет такого — -1
+  def priorityOf(id: str): int = if (id == "100") 100 else if (id == "50") 50 else -1
   // Групп устройств в модели нет: строк overrides по sourceGroup в машине тоже нет
   def inSourceGroup(x: Incident, g: str): bool = false
   // Условия правил по группе (§14.5, ARCH-15): групп устройств в модели нет — устройство ни в одной, глубина 0

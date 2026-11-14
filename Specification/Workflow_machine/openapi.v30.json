@@ -4989,7 +4989,8 @@
               "COMMENT_TOO_LONG",
               "ATTACHMENT_LIMIT",
               "ATTACHMENT_TOO_LARGE",
-              "ATTACHMENT_TYPE"
+              "ATTACHMENT_TYPE",
+              "PRIORITY_UNCHANGED"
             ]
           },
           "message": {
@@ -6682,6 +6683,10 @@
           "priority": {
             "$ref": "#/components/schemas/Priority"
           },
+          "priorityManual": {
+            "type": "boolean",
+            "description": "§2.5, ТЗ-13. Приоритет сменён вручную (`change_priority`): автоматика его больше не меняет, переоткрытие сохраняет. У созданного по правилу — false"
+          },
           "sourceGroup": {
             "type": "object",
             "properties": {
@@ -7494,6 +7499,11 @@
                   "$ref": "#/components/schemas/CommentFile"
                 },
                 "description": "ТЗ-18, 19. Файлы комментария (`comment`): не больше `limits.commentMaxFiles`, иначе `403 ATTACHMENT_LIMIT`"
+              },
+              "priority": {
+                "type": "string",
+                "pattern": "^[0-9]{1,3}$",
+                "description": "§2.5, ТЗ-13. Новый приоритет (`change_priority`) — число уровня справочника приоритетов строкой, как `id` варианта формы. Не из справочника — `422 FORM_FIELD_INVALID`; тот же, что у инцидента, — `403 PRIORITY_UNCHANGED` без записи в журнал"
               }
             },
             "additionalProperties": true
