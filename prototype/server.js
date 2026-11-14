@@ -476,8 +476,8 @@
     /* ===== Журнал ===== */
 
     // when — момент, «в который» выполнен автоматический переход, если планировщик догонял (RULE-41)
-    function log(ev, whoId, template, vars, when) {
-      ev.log.push({ at: when != null ? when : now(), whoId, k: template, v: vars || null });
+    function log(ev, whoId, template, vars, when, files) {
+      ev.log.push(Object.assign({ at: when != null ? when : now(), whoId, k: template, v: vars || null }, files ? { files } : {}));
     }
 
     // Сценарий инцидента — ключ машины сценариев; нужен исполнителю уже при загрузке набора (таймеры)
@@ -924,6 +924,7 @@
         templateKey: entry.k,
         vars: entry.v || {},
         text: render(entry.k, entry.v),
+        ...(entry.files ? { attachments: entry.files.map((f) => Object.assign({}, f)) } : {}),
       }));
     }
 
@@ -1814,7 +1815,7 @@
           const ev = find(p.linkedGuid);
           if (!ev || ev.linkedTo !== p.incidentGuid || ev.state !== "linked") return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // «Отсоединить» — ручной переход машины из linked
-          const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
+          const detach = W.transitions.find((t) => t.trigger === "manual" && t.to && t.from.includes("linked"));
           const r = runTransition(detach.id, ev, {}, "card");
           if (r.status !== 200) return r;
           // Ответ — основной; не виден — карточка отсоединённого
@@ -1846,7 +1847,7 @@
           const primary = find(p.incidentGuid);
           if (!primary) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // «Отсоединить все» — тот же переход ко всем привязанным разом, атомарно: всё или ничего (ARCH-08 в6)
-          const detach = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("linked"));
+          const detach = W.transitions.find((t) => t.trigger === "manual" && t.to && t.from.includes("linked"));
           const linked = events.filter((e) => e.linkedTo === primary.id && e.state === "linked" && canSee(e));
           const r = engine.runAll(detach.id, linked, {}, { surface: "card" });
           if (!r.ok) return r.guard || r.notFrom ? guardProblem(r) : runFailure(r);

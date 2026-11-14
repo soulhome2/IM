@@ -2366,6 +2366,95 @@
     const petrovaAct = (guid, transitionId, formValues) =>
       stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(guid)}/transitions/${transitionId}`, { formValues: formValues || {}, surface: "card" });
 
+    await step("Комментарий в карточке: не владелец с правом пишет в журнал, состояние то же; без права, пустой, 6-й файл — отказ; к закрытому — можно; правки и удаления нет (ТЗ-18, 19)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const W = window.IM_WORKFLOW;
+      const max = W.limits.commentMaxFiles;
+      expect(max === 5 && W.limits.commentMaxLength > 0 && W.limits.attachmentMaxBytes > 0 && (W.limits.attachmentTypes || []).includes("image/png"), `пределы комментария в машине: ${JSON.stringify(W.limits)}`);
+      expect(W.permissions.some((p) => p.key === "incident:comment"), "нет права incident:comment");
+      const tr = W.transitions.find((x) => x.id === "comment");
+      expect(tr && tr.to == null && W.states.every((s) => tr.from.includes(s.id)), "нет действия comment без смены состояния из всех состояний");
+      // Правки и удаления нет: ни действия машины, ни маршрута контракта
+      const editors = W.transitions.filter((x) => /comment/.test(x.id) && x.id !== "comment").map((x) => x.id);
+      const routes = Object.entries(window.IM_OPENAPI.paths).filter(([p, v]) => /journal|comment/.test(p) && (v.put || v.patch || v.delete)).map(([p]) => p);
+      expect(!editors.length && !routes.length, `правка или удаление комментария: ${editors.concat(routes).join(", ")}`);
+      const file = (i) => ({ id: `f${i}`, fileName: `n${i}.png`, mime: "image/png", size: 4, dataBase64: "AAAA" });
+      try {
+        const list = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+        const fresh = list.find((e) => e.state === "new");
+        expect(fresh, "нет нового инцидента");
+        const before = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(fresh.guid)}`)).body;
+        const ok = await standAct(fresh.guid, "comment", { comment: "note one", files: [file(1)] });
+        expect(ok.status === 200, `комментарий к чужому новому: ${ok.status} ${JSON.stringify(ok.body)}`);
+        const after = ok.body.incident;
+        expect(after.state === before.state && JSON.stringify(after.owner) === JSON.stringify(before.owner), `состояние или владелец изменились: ${after.state}`);
+        const entry = after.journal.filter((j) => j.templateKey === "workflow.journal.comment").pop();
+        expect(entry && entry.actor && entry.actor.id === window.IM_FIXTURE.operator && entry.at && entry.vars.comment === "note one", `запись журнала: ${JSON.stringify(entry)}`);
+        expect((entry.attachments || []).length === 1 && entry.attachments[0].fileName === "n1.png", `вложения записи: ${JSON.stringify(entry.attachments)}`);
+        const empty = await standAct(fresh.guid, "comment", { comment: "", files: [] });
+        expect(empty.status !== 200 && empty.body.code === "COMMENT_EMPTY", `пустой комментарий: ${empty.status} ${empty.body.code}`);
+        const many = await standAct(fresh.guid, "comment", { comment: "x", files: [1, 2, 3, 4, 5, 6].map(file) });
+        expect(many.status !== 200 && many.body.code === "ATTACHMENT_LIMIT", `${max + 1}-й файл: ${many.status} ${many.body.code}`);
+        const big = await standAct(fresh.guid, "comment", { comment: "x", files: [Object.assign(file(1), { size: W.limits.attachmentMaxBytes + 1 })] });
+        expect(big.status !== 200 && big.body.code === "ATTACHMENT_TOO_LARGE", `большой файл: ${big.status} ${big.body.code}`);
+        const exe = await standAct(fresh.guid, "comment", { comment: "x", files: [Object.assign(file(1), { mime: "application/x-msdownload" })] });
+        expect(exe.status !== 200 && exe.body.code === "ATTACHMENT_TYPE", `недопустимый тип: ${exe.status} ${exe.body.code}`);
+        // К закрытому — можно: результат и момент закрытия не меняются
+        const closed = (await stand.get("/operator/incidents", { filter: "done", pageSize: 1000 })).items.find((e) => e.state === "closed");
+        expect(closed, "нет закрытого инцидента");
+        const was = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(closed.guid)}`)).body;
+        const late = await standAct(closed.guid, "comment", { comment: "after review" });
+        expect(late.status === 200, `комментарий к закрытому: ${late.status} ${JSON.stringify(late.body)}`);
+        const now = late.body.incident;
+        expect(now.state === "closed" && now.closeResultId === was.closeResultId && now.closedAt === was.closedAt, `закрытый изменился: ${now.state} ${now.closeResultId} ${now.closedAt}`);
+        // Без права — отказ
+        await standReset({ fixture: "demo", operatorPermissions: W.permissions.map((p) => p.key).filter((k) => k !== "incident:comment") });
+        const denied = await standAct(fresh.guid, "comment", { comment: "x" });
+        expect(denied.status === 403 && denied.body.code === "PERMISSION_DENIED", `без права incident:comment: ${denied.status} ${denied.body.code}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Кнопка «Комментарий» в карточке закрытого: форма с текстом и файлами, запись с файлом в журнале (ТЗ-18, 19)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const closed = (await stand.get("/operator/incidents", { filter: "done", pageSize: 1000 })).items.find((e) => e.state === "closed");
+        await setFilter("done");
+        const view = await buttonOnPages("view", closed.guid);
+        expect(view, "у закрытого нет «Посмотреть»");
+        await click(view);
+        const b = button(root(), "comment");
+        expect(b, "в карточке нет кнопки «Комментарий»");
+        await click(b);
+        expect(!$("modalDialog").hidden, "форма комментария не открылась");
+        const input = $("dialogFields").querySelector('input[type="file"][data-files="files"]');
+        expect(input, "в форме нет выбора файлов");
+        const files = new DataTransfer();
+        files.items.add(new File(["png"], "shot.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        for (let k = 0; k < 25 && !/shot\.png/.test($("dialogFields").textContent); k++) await wait();
+        expect(/shot\.png/.test($("dialogFields").textContent), "файл не прикрепился в форме");
+        field("comment").value = NOTE;
+        await click($("dialogConfirm"));
+        await wait(300);
+        expect($("modalDialog").hidden, "форма не закрылась");
+        const card = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(closed.guid)}`)).body;
+        const entry = card.journal.filter((j) => j.templateKey === "workflow.journal.comment").pop();
+        expect(entry && entry.vars.comment === NOTE && (entry.attachments || []).some((a) => a.fileName === "shot.png"), `запись журнала: ${JSON.stringify(entry)}`);
+        expect(root().querySelector(".log-file") && /shot\.png/.test(root().textContent), "журнал карточки не показывает файл");
+        return entry.text;
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await setFilter("open");
+        await wait(300);
+      }
+    });
+
     await step("Ложная тревога у основного — уведомление адресату соседа привязанного (§6.1, §11.4, решение 2026-10-29)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Пожар INC-1847 привязан к INC-1851; его сосед медпункт INC-1853 — у меня в работе. INC-1851 закрывает Петрова «Ложной тревогой»

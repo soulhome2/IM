@@ -1475,7 +1475,7 @@
   };
   // Куда уходит отсоединённый — состояние после «Отсоединить» из машины (to перехода из linked)
   const detachedLabel = () => {
-    const tr = WORKFLOW.transitions.find((x) => x.trigger === "manual" && x.from.includes("linked"));
+    const tr = WORKFLOW.transitions.find((x) => x.trigger === "manual" && x.to && x.from.includes("linked"));
     return tr && STATES[tr.to] ? lbl(STATES[tr.to]) : "";
   };
   const breakForm = () => ({
@@ -1607,6 +1607,10 @@
     if (field.source === "transferTargets") {
       return `<div ${box}>${label}<div class="mselect target-combo" data-target-combo="${field.name}"><input type="hidden" data-field="${field.name}" value="" /></div></div>`;
     }
+    // Файлы (ТЗ-18, 19): выбранные — списком под кнопкой; содержимое читается в форму, на сервер — с остальными полями
+    if (field.kind === "files") {
+      return `<div ${box}>${label}<input type="file" multiple data-files="${field.name}" /><ul class="file-list" data-file-list="${field.name}"></ul></div>`;
+    }
     if (field.kind === "select") {
       const options = (field.options || [])
         .map((o) => `<option value="${escapeHtml(o.id)}" ${o.disabled ? "disabled" : ""}>${escapeHtml(optionLabel(o))}</option>`)
@@ -1626,6 +1630,7 @@
     $("dialogFields")
       .querySelectorAll("[data-field]")
       .forEach((el) => (values[el.dataset.field] = el.value.trim()));
+    if (state.dialog && state.dialog.files) Object.entries(state.dialog.files).forEach(([name, list]) => (values[name] = list));
     return values;
   }
 
@@ -1764,6 +1769,27 @@
     if (open.id === "__signout__") return setPresence("offline", "Вы вышли из МИ");
     if (bulkIds && bulkIds.length > 1) return runBulk(open.id, bulkIds, values, open.surface);
     return runTransition(open.id, open.ev, values, open.surface);
+  }
+
+  // Файлы формы — как вложение шага: содержимое в dataBase64; пределы проверяет сервер по машине (limits)
+  async function addDialogFiles(input) {
+    const open = state.dialog;
+    if (!open) return;
+    const name = input.dataset.files;
+    const read = (f) =>
+      new Promise((done) => {
+        const r = new FileReader();
+        r.onload = () => done(String(r.result).replace(/^data:[^,]*,/, ""));
+        r.readAsDataURL(f);
+      });
+    const added = await Promise.all(
+      [...input.files].map(async (f, n) => ({ id: `file-${Date.now()}-${n}`, fileName: f.name, mime: f.type || "application/octet-stream", size: f.size, dataBase64: await read(f) }))
+    );
+    if (state.dialog !== open) return;
+    open.files = Object.assign({}, open.files, { [name]: ((open.files || {})[name] || []).concat(added) });
+    input.value = "";
+    const list = $("dialogFields").querySelector(`[data-file-list="${name}"]`);
+    if (list) list.innerHTML = open.files[name].map((f) => `<li>${escapeHtml(f.fileName)}</li>`).join("");
   }
 
   function closeDialog() {
@@ -2522,7 +2548,9 @@
     const row = (l, i) => `
       <li class="log-row ${fresh(i)}">
         <time class="log-t">${escapeHtml(fmtTime(l.at))}</time>
-        <span class="log-x">${escapeHtml(journalText(l))} <span class="log-who">${escapeHtml(actorName(l.actor))}</span></span>
+        <span class="log-x">${escapeHtml(journalText(l))} <span class="log-who">${escapeHtml(actorName(l.actor))}</span>${(l.attachments || [])
+          .map((f) => ` <span class="log-file"><span class="material-symbols-outlined" aria-hidden="true">attach_file</span>${escapeHtml(f.fileName || "")}</span>`)
+          .join("")}</span>
       </li>`;
     const count = te("{n, plural, one {# запись} few {# записи} other {# записей}}", { n: items.length });
     const side = `
@@ -3754,7 +3782,11 @@
       if (b.getAttribute("aria-disabled") === "true") return toast(b.title);
       selectionDo(b.dataset.selDo);
     });
-    $("dialogFields").addEventListener("change", refreshDialogFields);
+    $("dialogFields").addEventListener("change", (e) => {
+      const input = e.target.closest && e.target.closest("[data-files]");
+      if (input) return addDialogFiles(input);
+      refreshDialogFields();
+    });
     // «Кому передать»: щелчок по полю открывает список, набор отбирает по подстроке, щелчок мимо — закрывает
     $("dialogFields").addEventListener("click", (e) => {
       const combo = e.target.closest("[data-target-combo]");
@@ -3927,7 +3959,7 @@
     if (!list.length) return `<div class="empty">${te("Привязанных инцидентов нет")}</div>`;
     const total = page.total;
     // «Отсоединить все» — тот же переход ко всем разом; доступность и причина — как у первого привязанного
-    const first = list.map((m) => (m.actions || []).find((a) => (transitionDef(a.id) || {}).from && transitionDef(a.id).from.includes("linked"))).find(Boolean);
+    const first = list.map((m) => (m.actions || []).find((a) => (transitionDef(a.id) || {}).to && transitionDef(a.id).from.includes("linked"))).find(Boolean);
     const all =
       first && total > 1
         ? `<button type="button" class="btn outline small" data-detach-all ${first.enabled ? "" : `aria-disabled="true" title="${escapeHtml(actionWhy(first) || "")}"`}>${te(
@@ -3950,7 +3982,7 @@
       <div class="lnk-members">${list
         .map((m) => {
           const b = badgeView(m);
-          const d = (m.actions || []).find((a) => (transitionDef(a.id) || {}).from && transitionDef(a.id).from.includes("linked"));
+          const d = (m.actions || []).find((a) => (transitionDef(a.id) || {}).to && transitionDef(a.id).from.includes("linked"));
           const off = d && !d.enabled ? `aria-disabled="true" title="${escapeHtml(actionWhy(d) || "")}"` : `title="${escapeHtml(d ? lbl(transitionDef(d.id)) : "")}"`;
           const found = foundLinked(ev.guid).some((x) => x.guid === m.guid);
           return `<div class="lnk-member ${found ? "found" : ""}">

@@ -986,7 +986,7 @@
         ],
         "operationId": "executeTransition",
         "summary": "Выполнить переход",
-        "description": "Единственный способ изменить состояние инцидента. Сервер проверяет guard'ы из схемы, применяет транзакционные эффекты в одной транзакции и ставит внешние эффекты в очередь исходящих сообщений (§14.2).\n\n**Оптимистичная блокировка (§14.1).** Клиент обязан прислать `If-Match` с версией из `GET`. При рассинхроне — `412` с актуальным состоянием инцидента в теле: клиент показывает, что изменилось, и не ретраит молча.\n\n**Ручное действие выигрывает у таймера (§10.1).** Если в этот момент сработала автоэскалация, применяется действие оператора, срабатывание таймера отменяется и фиксируется в журнале.\n\nПоля формы (`form.*` в схеме) передаются в `formValues`. Какие поля обязательны — описано в `forms` активной схемы; сервер валидирует их повторно.",
+        "description": "Единственный способ изменить состояние инцидента. Сервер проверяет guard'ы из схемы, применяет транзакционные эффекты в одной транзакции и ставит внешние эффекты в очередь исходящих сообщений (§14.2).\n\n**Оптимистичная блокировка (§14.1).** Клиент обязан прислать `If-Match` с версией из `GET`. При рассинхроне — `412` с актуальным состоянием инцидента в теле: клиент показывает, что изменилось, и не ретраит молча.\n\n**Ручное действие выигрывает у таймера (§10.1).** Если в этот момент сработала автоэскалация, применяется действие оператора, срабатывание таймера отменяется и фиксируется в журнале.\n\nПоля формы (`form.*` в схеме) передаются в `formValues`. Какие поля обязательны — описано в `forms` активной схемы; сервер валидирует их повторно.\n\n**Комментарий (`comment`, ТЗ-18, 19, §6.3).** Переход без смены состояния: запись `workflow.journal.comment` с текстом (`formValues.comment`) и файлами (`formValues.files`, `CommentFile`) в журнале, файлы — в `JournalEntry.attachments`. Право `incident:comment`, любое состояние, владельцем быть не нужно. Отказы: пусто — `422 COMMENT_EMPTY`; текст длиннее `limits.commentMaxLength` — `403 COMMENT_TOO_LONG`; файлов больше `limits.commentMaxFiles` — `403 ATTACHMENT_LIMIT`; файл больше `limits.attachmentMaxBytes` — `403 ATTACHMENT_TOO_LARGE`; тип не из `limits.attachmentTypes` — `403 ATTACHMENT_TYPE`. Правки и удаления комментария нет.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -4945,7 +4945,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "Машинный код. Клиент по нему выбирает текст и поведение. Коды ответов самого сервера, до операции: `UNAUTHENTICATED` — вход не прошёл (`401`), `BAD_REQUEST` — запрос не разобран: параметры пути и запроса, заголовки, тело запроса (`400`; может прийти у любой операции). `INTERNAL_ERROR` — внутренняя ошибка сервера (`500`; текст ошибки в тело не попадает), `NOT_IMPLEMENTED` — операция ещё не сделана (`501`, временный код). Оба могут прийти у любой операции (решение 2026-10-30) `AUTH_UNAVAILABLE` — вход проверить нельзя: облако, которое проверяет токен, не ответило или ответило ошибкой (`503`; может прийти у любой операции). Это не конец сессии: клиент повторяет запрос позже и не выводит человека (решение 2026-11-09).",
+            "description": "Машинный код. Клиент по нему выбирает текст и поведение. Коды ответов самого сервера, до операции: `UNAUTHENTICATED` — вход не прошёл (`401`), `BAD_REQUEST` — запрос не разобран: параметры пути и запроса, заголовки, тело запроса (`400`; может прийти у любой операции). `INTERNAL_ERROR` — внутренняя ошибка сервера (`500`; текст ошибки в тело не попадает), `NOT_IMPLEMENTED` — операция ещё не сделана (`501`, временный код). Оба могут прийти у любой операции (решение 2026-10-30) `AUTH_UNAVAILABLE` — вход проверить нельзя: облако, которое проверяет токен, не ответило или ответило ошибкой (`503`; может прийти у любой операции). Это не конец сессии: клиент повторяет запрос позже и не выводит человека (решение 2026-11-09). Комментарий (ТЗ-18, 19): `COMMENT_EMPTY` — ни текста, ни файла (`422`); `COMMENT_TOO_LONG`, `ATTACHMENT_LIMIT`, `ATTACHMENT_TOO_LARGE`, `ATTACHMENT_TYPE` — сверх пределов `limits` (`403`).",
             "enum": [
               "PERMISSION_DENIED",
               "GUARD_FAILED",
@@ -4984,7 +4984,12 @@
               "BAD_REQUEST",
               "INTERNAL_ERROR",
               "NOT_IMPLEMENTED",
-              "AUTH_UNAVAILABLE"
+              "AUTH_UNAVAILABLE",
+              "COMMENT_EMPTY",
+              "COMMENT_TOO_LONG",
+              "ATTACHMENT_LIMIT",
+              "ATTACHMENT_TOO_LARGE",
+              "ATTACHMENT_TYPE"
             ]
           },
           "message": {
@@ -5623,6 +5628,29 @@
           "bulkConfirmKey": {
             "type": "string",
             "description": "§11, §14.9. Ключ подписи кнопки формы на выборке с подстановкой {n}."
+          },
+          "requireAnyOf": {
+            "type": "object",
+            "required": [
+              "fields",
+              "errorCode"
+            ],
+            "description": "ТЗ-18, 19. Хотя бы одно из полей заполнено (текст не из одних пробелов, список не пуст); иначе — `422` с кодом `errorCode`. У формы `comment`: текст или файл, код `COMMENT_EMPTY`",
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "errorCode": {
+                "type": "string"
+              },
+              "messageKey": {
+                "type": "string",
+                "description": "§14.9. Ключ текста ошибки, например `workflow.error.comment_empty`"
+              }
+            }
           }
         }
       },
@@ -5642,8 +5670,10 @@
             "enum": [
               "select",
               "text",
-              "checkbox"
-            ]
+              "checkbox",
+              "files"
+            ],
+            "description": "`files` — файлы (ТЗ-18, 19): значение — массив `CommentFile`, пределы — `limits.commentMaxFiles`, `attachmentMaxBytes`, `attachmentTypes`"
           },
           "label": {
             "type": "string",
@@ -6240,6 +6270,36 @@
             "type": "integer",
             "description": "§4, правило 6. Норматив закрытия после переоткрытия, секунды. null — обычный норматив по §4",
             "nullable": true
+          },
+          "commentMaxLength": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 2000,
+            "description": "§6.3, ТЗ-18, 19. Длина текста комментария, знаков; больше — `403 COMMENT_TOO_LONG`"
+          },
+          "commentMaxFiles": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 5,
+            "description": "§6.3, ТЗ-18, 19. Файлов в одном комментарии; больше — `403 ATTACHMENT_LIMIT`"
+          },
+          "attachmentMaxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 10485760,
+            "description": "§6.3, §14.11. Размер одного файла, байт — у комментария и у шага «Вложение»; больше — `403 ATTACHMENT_TOO_LARGE`"
+          },
+          "attachmentTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "image/jpeg",
+              "image/png",
+              "application/pdf"
+            ],
+            "description": "§6.3, §14.11. Допустимые типы файлов (MIME) — у комментария и у шага «Вложение»; другой — `403 ATTACHMENT_TYPE`"
           }
         }
       },
@@ -7422,6 +7482,13 @@
               "causeId": {
                 "type": "string",
                 "description": "§2.2. Причина из справочника причин результата (`causeCatalog`): `mass_fault` у «Массового сбоя», `false_alarm_cause` у «Ложной тревоги» (ТЗ-4). У результата без справочника не передаётся"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CommentFile"
+                },
+                "description": "ТЗ-18, 19. Файлы комментария (`comment`): не больше `limits.commentMaxFiles`, иначе `403 ATTACHMENT_LIMIT`"
               }
             },
             "additionalProperties": true
@@ -7961,6 +8028,13 @@
           "text": {
             "type": "string",
             "description": "Отрендеренный текст на языке оператора (`preferences.locale`)."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentFile"
+            },
+            "description": "ТЗ-18, 19. Файлы записи `workflow.journal.comment` — в порядке, как их прислал автор. У остальных записей нет. Запись с файлами неизменяема: правки и удаления комментария нет"
           }
         }
       },
@@ -10932,6 +11006,45 @@
               "type": "integer",
               "format": "int64"
             }
+          }
+        }
+      },
+      "CommentFile": {
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "mime",
+          "size"
+        ],
+        "description": "ТЗ-18, 19, §14.11. Файл комментария — как вложение шага «Вложение» (`ScenarioAttachment`): то же хранилище, те же пределы размера и типа, срок хранения — как у инцидента",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Идентификатор файла, который дал клиент; уникален в комментарии"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string",
+            "description": "Тип из `limits.attachmentTypes`, иначе `403 ATTACHMENT_TYPE`"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Байт, не больше `limits.attachmentMaxBytes`, иначе `403 ATTACHMENT_TOO_LARGE`"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "dataBase64": {
+            "type": "string",
+            "description": "Содержимое; в прототипе файл хранится в самой записи журнала"
+          },
+          "storage": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Где хранится вместо `dataBase64`: `{kind: s3, bucket, key}` или `{kind: url, url}`"
           }
         }
       }

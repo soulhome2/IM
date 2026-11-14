@@ -132,6 +132,7 @@
         "incident:reassign",
         "incident:bulk",
         "incident:run_action",
+        "incident:comment",
         "agent:set_not_ready"
       ]
     },
@@ -150,6 +151,7 @@
         "incident:reassign",
         "incident:bulk",
         "incident:run_action",
+        "incident:comment",
         "agent:set_not_ready"
       ]
     },
@@ -168,6 +170,7 @@
         "incident:reassign",
         "incident:bulk",
         "incident:run_action",
+        "incident:comment",
         "agent:set_not_ready"
       ]
     },

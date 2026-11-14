@@ -314,6 +314,11 @@ window.IM_WORKFLOW = {
       "cloud": "incident_manager.incidents.actions.run"
     },
     {
+      "key": "incident:comment",
+      "labelKey": "workflow.permission.incident.comment",
+      "cloud": "incident_manager.incidents.comment.use"
+    },
+    {
       "key": "incident:schema:admin",
       "labelKey": "workflow.permission.incident.schema.admin",
       "cloud": "incident_manager.manage"
@@ -887,6 +892,43 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.reopen.field.comment",
           "requiredExpr": "true",
           "placeholderKey": "workflow.form.reopen.field.comment.placeholder"
+        }
+      ]
+    },
+    {
+      "id": "comment",
+      "titleKey": "workflow.form.comment.title",
+      "confirmKey": "workflow.form.comment.confirm",
+      "style": "primary",
+      "notes": [
+        {
+          "expr": "true",
+          "textKey": "workflow.form.comment.note.0"
+        }
+      ],
+      "requireAnyOf": {
+        "fields": [
+          "comment",
+          "files"
+        ],
+        "errorCode": "COMMENT_EMPTY",
+        "messageKey": "workflow.error.comment_empty",
+        "$comment": "ТЗ-18, 19. Нужен текст или хотя бы один файл: пустой комментарий — 422 COMMENT_EMPTY. Пустое поле — как у обязательных: пробелы не в счёт"
+      },
+      "fields": [
+        {
+          "name": "comment",
+          "kind": "text",
+          "labelKey": "workflow.form.comment.field.comment",
+          "requiredExpr": "false",
+          "placeholderKey": "workflow.form.comment.field.comment.placeholder"
+        },
+        {
+          "name": "files",
+          "kind": "files",
+          "labelKey": "workflow.form.comment.field.files",
+          "requiredExpr": "false",
+          "$comment": "§14.11. Файлы — как вложение шага «Вложение»: id, fileName, mime, size и содержимое (dataBase64) или место хранения (storage). Пределы — limits.commentMaxFiles, attachmentMaxBytes, attachmentTypes"
         }
       ]
     },
@@ -2053,6 +2095,68 @@ window.IM_WORKFLOW = {
         ],
         "style": "outline",
         "navigate": "card"
+      }
+    },
+    {
+      "id": "comment",
+      "labelKey": "workflow.transition.comment",
+      "hintKey": "workflow.transition.comment.hint",
+      "$comment": "§6.3, ТЗ-18, 19. Комментарий с файлами — запись в журнале инцидента. Ручной переход без смены состояния (to: null): нужны форма, условия и эффекты. Любой видимый инцидент в любом состоянии, в том числе закрытый; владельцем быть не нужно. Ничего, кроме журнала, не меняет: ни владельца, ни результата, ни нормативов, ни момента закрытия, от которого считается срок переоткрытия. Правки и удаления нет — ошибку поправляют новым комментарием.",
+      "from": [
+        "new",
+        "pending_acceptance",
+        "in_progress",
+        "on_hold",
+        "closed",
+        "linked"
+      ],
+      "to": null,
+      "trigger": "manual",
+      "concurrency": {
+        "expectedVersion": true
+      },
+      "form": "comment",
+      "requiredStepSet": "none",
+      "guards": [
+        {
+          "fn": "hasPermission",
+          "args": [
+            "incident:comment"
+          ]
+        },
+        {
+          "fn": "agentReady"
+        },
+        {
+          "fn": "commentWithinLength"
+        },
+        {
+          "fn": "commentFilesWithinLimit"
+        },
+        {
+          "fn": "commentFilesWithinSize"
+        },
+        {
+          "fn": "commentFilesAllowedType"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "transactional",
+          "fn": "appendComment",
+          "args": [
+            "workflow.journal.comment"
+          ]
+        }
+      ],
+      "bulk": {
+        "allowed": false
+      },
+      "ui": {
+        "surface": [
+          "card"
+        ],
+        "style": "outline"
       }
     },
     {
@@ -3691,7 +3795,16 @@ window.IM_WORKFLOW = {
     "maxOnHold": 5,
     "maxBulk": null,
     "reopenWindowMin": 1440,
-    "reopenResolutionSec": null
+    "reopenResolutionSec": null,
+    "commentMaxLength": 2000,
+    "commentMaxFiles": 5,
+    "attachmentMaxBytes": 10485760,
+    "attachmentTypes": [
+      "image/jpeg",
+      "image/png",
+      "application/pdf"
+    ],
+    "$commentComment": "§6.3, §14.11, ТЗ-18, 19. Пределы комментария в карточке: длина текста (знаков), файлов на один комментарий, размер одного файла (байт) и допустимые типы (MIME). Размер и типы — общие для файлов комментария и вложений шага «Вложение»: одно хранилище, одни правила. Сверх предела — отказ с кодом, а не обрезка."
   },
   "scenarioEdit": {
     "$comment": "§10.4. Кто может править шаги сценария и отвечать на них (POST .../scenario/answer, PUT .../scenario/cursor). Не выполнено — карточка открыта на просмотр (IncidentCard.readOnly). Макросы — по своим условиям: navActions.run_macro.",
@@ -3906,6 +4019,29 @@ window.IM_WORKFLOW = {
         "text"
       ],
       "$comment": "Текст от источника события — не переводится, как имена людей и названия устройств (§14.9)"
+    },
+    "workflow.guard.comment_too_long": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.guard.attachment_limit": {
+      "vars": [
+        "n"
+      ]
+    },
+    "workflow.guard.attachment_too_large": {
+      "vars": []
+    },
+    "workflow.guard.attachment_type": {
+      "vars": []
+    },
+    "workflow.journal.comment": {
+      "vars": [
+        "comment",
+        "files"
+      ],
+      "$comment": "§6.3, ТЗ-18, 19. Комментарий в карточке: текст оператора и число файлов; сами файлы — вложениями записи"
     },
     "workflow.journal.macro.launched": {
       "vars": [
@@ -4343,14 +4479,25 @@ window.IM_WORKFLOW = {
         "resultId": "string",
         "reasonId": "string",
         "causeId": "string",
-        "comment": "string"
+        "comment": "string",
+        "files": "list<FormFile>"
+      },
+      "FormFile": {
+        "id": "string",
+        "fileName": "string",
+        "mime": "string",
+        "size": "int"
       },
       "Limits": {
         "maxActive": "int",
         "maxOnHold": "int",
         "maxBulk": "int",
         "reopenWindowMin": "int",
-        "reopenResolutionSec": "int"
+        "reopenResolutionSec": "int",
+        "commentMaxLength": "int",
+        "commentMaxFiles": "int",
+        "attachmentMaxBytes": "int",
+        "attachmentTypes": "list<string>"
       },
       "SessionState": {
         "id": "string",
@@ -5256,6 +5403,64 @@ window.IM_WORKFLOW = {
         "$comment": "§6.1. Инцидент смотрящему не «мне адресован» (§2.4): переданное мне или моей группе принимают, а не перехватывают."
       },
       {
+        "fn": "commentWithinLength",
+        "errorCode": "COMMENT_TOO_LONG",
+        "args": [],
+        "argTypes": {},
+        "expr": "size(form.comment) <= limits.commentMaxLength",
+        "failVars": {
+          "n": "limits.commentMaxLength"
+        },
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.comment_too_long"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, ТЗ-18, 19. Текст комментария не длиннее limits.commentMaxLength знаков. До заполнения формы условие выполнено."
+      },
+      {
+        "fn": "commentFilesWithinLimit",
+        "errorCode": "ATTACHMENT_LIMIT",
+        "args": [],
+        "argTypes": {},
+        "expr": "size(form.files) <= limits.commentMaxFiles",
+        "failVars": {
+          "n": "limits.commentMaxFiles"
+        },
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.attachment_limit"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, ТЗ-18, 19. Файлов в одном комментарии не больше limits.commentMaxFiles."
+      },
+      {
+        "fn": "commentFilesWithinSize",
+        "errorCode": "ATTACHMENT_TOO_LARGE",
+        "args": [],
+        "argTypes": {},
+        "expr": "form.files.all(f, f.size <= limits.attachmentMaxBytes)",
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.attachment_too_large"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, §14.11. Каждый файл не больше limits.attachmentMaxBytes байт — предел общий с вложением шага."
+      },
+      {
+        "fn": "commentFilesAllowedType",
+        "errorCode": "ATTACHMENT_TYPE",
+        "args": [],
+        "argTypes": {},
+        "expr": "form.files.all(f, f.mime in limits.attachmentTypes)",
+        "onFail": "disable",
+        "failKeys": [
+          "workflow.guard.attachment_type"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, §14.11. Тип каждого файла — из limits.attachmentTypes, общих с вложением шага."
+      },
+      {
         "fn": "targetIsNotSelf",
         "errorCode": "TRANSFER_TO_SELF_FORBIDDEN",
         "args": [],
@@ -6159,6 +6364,29 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "fn": "appendComment",
+        "kind": "transactional",
+        "args": [
+          "key"
+        ],
+        "argTypes": {
+          "key": "string"
+        },
+        "do": [
+          {
+            "world": "log",
+            "args": {
+              "incident": "incident",
+              "key": "key",
+              "vars": "{'comment': form.comment, 'files': size(form.files)}",
+              "attachments": "form.files"
+            }
+          }
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§6.3, §12.4, ТЗ-18, 19. Запись комментария в журнал: подстановки — текст и число файлов, сами файлы — вложениями записи (JournalEntry.attachments). Запись неизменяема."
+      },
+      {
         "fn": "returnToQueue",
         "kind": "transactional",
         "args": [],
@@ -6709,6 +6937,7 @@ window.IM_WORKFLOW = {
             "incident:transfer:own",
             "incident:bulk",
             "incident:run_action",
+            "incident:comment",
             "agent:set_not_ready"
           ]
         },
@@ -6728,6 +6957,7 @@ window.IM_WORKFLOW = {
             "incident:reassign",
             "incident:bulk",
             "incident:run_action",
+            "incident:comment",
             "agent:set_not_ready"
           ]
         }
@@ -7029,6 +7259,30 @@ window.IM_WORKFLOW = {
             "path": "retention.auditDays",
             "labelKey": "workflow.settings.retention.auditDays",
             "whatKey": "workflow.settings.retention.auditDays.what",
+            "group": "retention"
+          },
+          {
+            "path": "limits.commentMaxLength",
+            "labelKey": "workflow.settings.limits.commentMaxLength",
+            "whatKey": "workflow.settings.limits.commentMaxLength.what",
+            "group": "retention"
+          },
+          {
+            "path": "limits.commentMaxFiles",
+            "labelKey": "workflow.settings.limits.commentMaxFiles",
+            "whatKey": "workflow.settings.limits.commentMaxFiles.what",
+            "group": "retention"
+          },
+          {
+            "path": "limits.attachmentMaxBytes",
+            "labelKey": "workflow.settings.limits.attachmentMaxBytes",
+            "whatKey": "workflow.settings.limits.attachmentMaxBytes.what",
+            "group": "retention"
+          },
+          {
+            "path": "limits.attachmentTypes",
+            "labelKey": "workflow.settings.limits.attachmentTypes",
+            "whatKey": "workflow.settings.limits.attachmentTypes.what",
             "group": "retention"
           }
         ]

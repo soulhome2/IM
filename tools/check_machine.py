@@ -691,10 +691,11 @@ def check_rules_tables(w, err):
         for row in rows(title):
             name = re.sub(r"\*", "", next(iter(row.values())))
             ids = re.findall(r"`([^`]+)`", row["В машине"])
-            known = transitions if kind == "transition" else nav
+            # §6.3: и ручной переход без смены состояния (комментарий, ТЗ-18, 19) — у него форма и эффекты, поэтому он переход
+            known = transitions if kind == "transition" else nav | {i for i, t in transitions.items() if t["trigger"] == "manual" and not t.get("to")}
             for i in ids:
                 if i in known:
-                    found[kind].add(i)
+                    found["transition" if i in transitions else kind].add(i)
                 elif i not in extra:
                     err.append(f"правила, «{name}»: в колонке «В машине» `{i}` — такого в машине нет")
             mine = [i for i in ids if i in transitions]
@@ -1456,7 +1457,7 @@ def check_declared_fields(w, o, err):
     window = bool((w.get("invariants", {}).get("manualWinsOverTimer") or {}).get("graceSec") is not None)
     # Ручные переходы со своими маршрутами — объединение (POST …/merge) и «Отсоединить» (DELETE …/linked/…): версию
     # записи они пока не принимают (BUG-84), так и записано у них в concurrency
-    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or (t["trigger"] == "manual" and "linked" in t.get("from", []))}
+    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or (t["trigger"] == "manual" and t.get("to") and "linked" in t.get("from", []))}
     for t in trs:
         c = t.get("concurrency")
         if c is None:
@@ -1752,7 +1753,7 @@ def check_invariant_flags(w, err):
         target = any(x.get("name") == "targetId" for x in forms.get(t.get("form") or "", {}).get("fields", []))
         if inv.get("transferToSelfForbidden") and target and "targetIsNotSelf" not in guards:
             err.append(f"переход {t['id']}: адресат в форме без targetIsNotSelf — себе не передают (transferToSelfForbidden, §10.1)")
-        if inv.get("terminalOnlyViaReopen") and set(t["from"]) & terminal and t["id"] != "reopen":
+        if inv.get("terminalOnlyViaReopen") and set(t["from"]) & terminal and t.get("to") and t["id"] != "reopen":
             err.append(f"переход {t['id']}: из терминального {sorted(set(t['from']) & terminal)} — только reopen (terminalOnlyViaReopen, §10.1)")
 
 

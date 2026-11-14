@@ -128,6 +128,39 @@
     assert.status(await env.act(inc.guid, "resume", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE");
   });
 
+  /* ===== Комментарий (ТЗ-18, 19, §6.3) ===== */
+
+  test("Комментарий: запись с автором и файлами, состояние и нормативы не меняются; пустой, сверх предела, без права — отказ; к закрытому — можно", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    await env.act(inc.guid, "claim", {}, "queue");
+    const before = await env.card(inc.guid);
+    const file = (i, extra) => Object.assign({ id: `f${i}`, fileName: `f${i}.png`, mime: "image/png", size: 10, dataBase64: "AAAA" }, extra);
+    const res = await env.act(inc.guid, "comment", { comment: "заметка", files: [file(1)] });
+    assert.status(res, 200, null, "комментарий");
+    const c = res.body.incident;
+    assert.eq(c.state, "in_progress", "состояние");
+    assert.eq(c.timer.dueAt, before.timer.dueAt, "норматив закрытия");
+    const e = lastJournal(c);
+    assert.eq([e.templateKey, e.actor.id, e.vars.comment], ["workflow.journal.comment", ME, "заметка"], "запись журнала");
+    assert.eq((e.attachments || []).map((a) => a.fileName), ["f1.png"], "вложения записи");
+    assert.status(await env.act(inc.guid, "comment", { comment: "  ", files: [] }), 422, "COMMENT_EMPTY", "пустой");
+    assert.status(await env.act(inc.guid, "comment", { comment: "x".repeat(W.limits.commentMaxLength + 1) }), 403, "COMMENT_TOO_LONG", "длинный");
+    const many = Array.from({ length: W.limits.commentMaxFiles + 1 }, (_, i) => file(i));
+    assert.status(await env.act(inc.guid, "comment", { comment: "x", files: many }), 403, "ATTACHMENT_LIMIT", "файлов больше предела");
+    assert.status(await env.act(inc.guid, "comment", { files: [file(1, { size: W.limits.attachmentMaxBytes + 1 })] }), 403, "ATTACHMENT_TOO_LARGE", "большой файл");
+    assert.status(await env.act(inc.guid, "comment", { files: [file(1, { mime: "text/html" })] }), 403, "ATTACHMENT_TYPE", "тип файла");
+    await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal" });
+    const closed = await env.card(inc.guid);
+    assert.eq(closed.state, "closed", "закрыт");
+    const late = await env.act(inc.guid, "comment", { comment: "разбор смены" });
+    assert.status(late, 200, null, "к закрытому");
+    assert.eq([late.body.incident.state, late.body.incident.closedAt, late.body.incident.closeResultId], [closed.state, closed.closedAt, closed.closeResultId], "закрытый не изменился");
+    const bare = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "incident:comment") });
+    const other = await newFire(bare);
+    assert.status(await bare.act(other.guid, "comment", { comment: "x" }), 403, "PERMISSION_DENIED", "без права");
+  });
+
   /* ===== Отложить и возобновить (§6.1, §4) ===== */
 
   test("Отложить: причина обязательна, норматив закрытия на паузе, срок удержания идёт", async () => {

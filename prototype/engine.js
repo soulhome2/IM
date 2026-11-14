@@ -342,10 +342,12 @@
         world: (action, a) => {
           const target = a.incident || a.from ? draft((a.incident || a.from).id) : null;
           if (action === "log") {
-            const v = a.vars != null ? cel.out(a.vars) : vars(target, cur.form, { previousOwnerName: cur.previousOwnerName });
+            const v = a.vars != null ? cel.plain(a.vars) : vars(target, cur.form, { previousOwnerName: cur.previousOwnerName });
             const same = a.once ? target.log.find((x) => x.k === a.key && x.at === now()) : null;
+            // Вложения записи (attachments) — файлы формы целиком: CEL видит только поля типа, содержимое — в исходном значении
+            const files = a.attachments != null ? cel.plain(a.attachments).map((x) => Object.assign({}, ((cur.form && cur.form.files) || []).find((f) => f && f.id === x.id), x)) : null;
             if (same) same.v = v;
-            else ctx.log(target, a.actor || cur.actor, a.key, v, now());
+            else ctx.log(target, a.actor || cur.actor, a.key, v, now(), files);
           } else if (action === "setCursor") {
             if (ctx.setCursor) ctx.setCursor(target);
           } else if (action === "shareAnswers") {
@@ -414,6 +416,10 @@
       const f = tr.form ? forms[tr.form] : null;
       if (!f) return null;
       const scope = celScope(ev, { form, surface });
+      // Хотя бы одно из полей заполнено (requireAnyOf формы): текст — не из одних пробелов, список — не пуст
+      const any = f.requireAnyOf;
+      const filled = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== "");
+      if (any && !any.fields.some((n) => filled(form[n]))) return { why: [any.messageKey || "workflow.error.field_required"], code: any.errorCode };
       for (const field of f.fields) {
         const v = form[field.name];
         const empty = v == null || String(v).trim() === "";

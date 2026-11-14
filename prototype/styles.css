@@ -1510,6 +1510,9 @@ select.search-input { padding-right: 36px; }
 .log-row + .log-row { border-top: 1px solid var(--stroke); }
 .log-row .log-t { margin: 0; font-size: 13px; padding-top: 1px; }
 .log-who { color: var(--muted); font-size: 12px; margin-left: 4px; white-space: nowrap; }
+.log-file { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.log-file .material-symbols-outlined { font-size: 14px; }
+.file-list { margin: 4px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
 /* Новая запись на миг подсвечивается — заметно краем глаза */
 .log-row.fresh,
 .log-last.fresh { animation: log-fresh 2.4s ease-out; }
