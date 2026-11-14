@@ -220,7 +220,6 @@ class Doc:
             "setFlag": lambda: f"`{a[0]}`: {self.value(a[1])}",
             "appendLog": lambda: f"журнал: «{RU.get(a[0], a[0])}»",
             "renormTimer": lambda: f"ненаступивший срок `{a[0]}` — по нормативу нового приоритета от прежней точки отсчёта",
-            "capGroupDeadline": lambda: f"у основного срок группы `{a[0]}` — не позже срока самого строгого привязанного",
             "appendPriorityLog": lambda: f"журнал: «{RU.get(a[0], a[0])}» — было, стало, причина",
             "appendComment": lambda: f"журнал: «{RU.get(a[0], a[0])}» — текст и файлы формы, запись неизменяема",
             "returnToQueue": lambda: "оператор возвращается к очереди",

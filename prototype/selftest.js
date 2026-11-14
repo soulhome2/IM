@@ -2727,6 +2727,55 @@
       }
     });
 
+    // Часы стенда вперёд шагами короче порога молчания, перед каждым — признак активности (§12.3)
+    const prAdvance = async (sec) => {
+      const stepSec = Math.max(1, window.IM_WORKFLOW.session.idleHoldSec - 1);
+      for (let left = sec; left > 0; left -= stepSec) {
+        await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+        await stand.raw("POST", "/test/clock", { advanceSec: Math.min(left, stepSec) });
+      }
+    };
+    const prMergeWith = async (second) => {
+      const fires = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.filter((e) => e.state === "new" && e.eventType.id === "fire").sort((a, b) => b.priority - a.priority);
+      const first = fires[0];
+      const other = fires.find((e) => e !== first && e.scenarioTitle === first.scenarioTitle && second(e));
+      expect(other, "нет второго пожара для группы");
+      const res = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: [first.guid, other.guid] });
+      expect(res.status === 200, `объединение: ${res.status}`);
+      return res.body.incident;
+    };
+
+    await step("Основной с привязанным: отложили, вернули, сменили приоритет — срок группы не сжался и не стал «сейчас» (ТЗ-13, §4 правило 8)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const primary = await prMergeWith(() => true);
+        const held = await standAct(primary.guid, "hold", { reasonId: "third_party", comment: "wait" });
+        expect(held.status === 200, `отложить: ${held.status}`);
+        await prAdvance(300);
+        const back = await standAct(primary.guid, "resume", {});
+        expect(back.status === 200, `возобновить: ${back.status}`);
+        const was = await prCard(primary.guid);
+        const res = await standAct(primary.guid, "change_priority", { priority: String(prLevels()[prLevels().length - 1]), comment: "lower" });
+        expect(res.status === 200 && res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident && res.body.incident.timer.dueAt}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Основной с менее строгим привязанным: понижение не продлевает срок группы (ТЗ-13, §4 правило 8)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const primary = await prMergeWith((e) => e.priority < prLevels()[0]);
+        const was = await prCard(primary.guid);
+        const res = await standAct(primary.guid, "change_priority", { priority: String(prLevels()[prLevels().length - 1]), comment: "lower" });
+        expect(res.status === 200 && res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident && res.body.incident.timer.dueAt}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Кнопка «Сменить приоритет» в карточке: форма с уровнем и причиной, запись в журнале карточки (ТЗ-13)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {

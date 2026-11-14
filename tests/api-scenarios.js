@@ -270,6 +270,50 @@
     assert.eq(res.body.incident.timer.dueAt, was.timer.dueAt, "срок группы — по строгому привязанному, не позже");
   });
 
+  // Группа: основной — самый срочный новый пожар сценария пожара; второй — `second` (по умолчанию тоже самый срочный)
+  const mergeFires = async (env, second) => {
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE).sort((a, b) => b.priority - a.priority);
+    const other = second ? fires.find((e) => e !== fires[0] && second(e)) : fires[1];
+    assert.ok(other, "есть второй пожар для группы");
+    return (await env.call("POST", "/operator/incidents/merge", { incidentGuids: [fires[0].guid, other.guid] })).body.incident;
+  };
+
+  test("Смена приоритета основного: отложили, вернули, сменили — срок группы не сжался и не стал «сейчас» (ТЗ-13, §4 правило 8, §11.4)", async () => {
+    const env = await makeEnv();
+    const primary = await mergeFires(env);
+    assert.status(await env.act(primary.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
+    await env.advance(300);
+    assert.status(await env.act(primary.guid, "resume", {}, "card"), 200, null, "возобновить");
+    const was = await env.card(primary.guid);
+    const res = await env.act(primary.guid, "change_priority", { priority: String(LOW), comment: "ниже" });
+    assert.status(res, 200, null, "понизить");
+    assert.eq(res.body.incident.timer.dueAt, was.timer.dueAt, "срок группы прежний");
+  });
+
+  test("Смена приоритета основного с привязанным: понижение не продлевает срок группы (ТЗ-13, §4 правило 8, §11.4)", async () => {
+    const env = await makeEnv();
+    const primary = await mergeFires(env, (e) => e.priority < TOP);
+    const was = await env.card(primary.guid);
+    const res = await env.act(primary.guid, "change_priority", { priority: String(LOW), comment: "ниже" });
+    assert.status(res, 200, null, "понизить");
+    assert.eq(res.body.incident.timer.dueAt, was.timer.dueAt, "срок группы не позже прежнего");
+  });
+
+  test("Смена приоритета основного: сработавший срок группы не срабатывает повторно (ТЗ-13, §4 правило 8)", async () => {
+    const env = await makeEnv();
+    const primary = await mergeFires(env);
+    assert.status(await env.act(primary.guid, "hold", { reasonId: "third_party", comment: "ждём" }), 200, null, "отложить");
+    await env.advance(300);
+    assert.status(await env.act(primary.guid, "resume", {}, "card"), 200, null, "возобновить");
+    const due = Date.parse((await env.card(primary.guid)).timer.dueAt);
+    await env.advance(Math.round((due - env.now) / 1000) + GRACE + 5);
+    const before = (await env.card(primary.guid)).breaches.length;
+    assert.ok(before > 0, "нарушение срока закрытия записано");
+    assert.status(await env.act(primary.guid, "change_priority", { priority: String(LOW), comment: "ниже" }), 200, null, "понизить");
+    await env.advance(GRACE + 60);
+    assert.eq((await env.card(primary.guid)).breaches.length, before, "повторного нарушения нет");
+  });
+
   /* ===== Отложить и возобновить (§6.1, §4) ===== */
 
   test("Отложить: причина обязательна, норматив закрытия на паузе, срок удержания идёт", async () => {
