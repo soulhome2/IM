@@ -421,8 +421,9 @@ function transitions() {
   const formOk = [];
   for (const t of W.transitions) {
     const f = t.form && W.forms.find((x) => x.id === t.form);
-    // Уровни справочника приоритетов (source: priorities, ТЗ-13) — данные МИ, не машины: в модели любое число
-    const fields = f ? f.fields.filter((x) => x.source && x.source !== "priorities") : [];
+    // Уровни справочника приоритетов (source: priorities, ТЗ-13) и окна работ (source: maintenanceWindows, ТЗ-21) —
+    // данные МИ, не машины: в модели любое значение
+    const fields = f ? f.fields.filter((x) => x.source && !["priorities", "maintenanceWindows"].includes(x.source)) : [];
     if (!fields.length) continue;
     const parts = fields.map((x) => {
       const v = `c.form.${x.name}`;

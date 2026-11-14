@@ -3211,7 +3211,7 @@
         ],
         "operationId": "testIntakeEvent",
         "summary": "Тестовый стенд: источник прислал событие",
-        "description": "§14.5, ARCH-15. Событие проходит через правила (раздел `intake` машины): событие с тем же `eventGuid` уже было — ничего не создаётся, ответ — прежние инциденты (200). Иначе для каждого сценария подошедших правил (правило без сценария не подходит) — один инцидент по правилу-победителю: самое точное условие, затем выше приоритет, затем раньше созданное; приоритет — правила. Все инциденты события — одной транзакцией, каждый — переходом `create`, событие потока `incident.created` на каждый. Порядок создания и номеров — чей победитель старше; номер тревоги — номер первого. Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано (200). Всё или ничего: если инцидент по одному из правил не создаётся (сценария правила нет в наборе), не создаётся ни один и событие не записывается — 422 с ключом `workflow.error.test.event_failed` (повтор того же `eventGuid` снова обрабатывается). Неверный запрос (неизвестный тип, нет устройств, `eventGuid` не UUID) — 422 `workflow.error.test.bad_event`.",
+        "description": "§14.5, ARCH-15. Событие проходит через правила (раздел `intake` машины): событие с тем же `eventGuid` уже было — ничего не создаётся, ответ — прежние инциденты (200). Иначе для каждого сценария подошедших правил (правило без сценария не подходит) — один инцидент по правилу-победителю: самое точное условие, затем выше приоритет, затем раньше созданное; приоритет — правила. Все инциденты события — одной транзакцией, каждый — переходом `create`, событие потока `incident.created` на каждый. Порядок создания и номеров — чей победитель старше; номер тревоги — номер первого. Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано (200). Всё или ничего: если инцидент по одному из правил не создаётся (сценария правила нет в наборе), не создаётся ни один и событие не записывается — 422 с ключом `workflow.error.test.event_failed` (повтор того же `eventGuid` снова обрабатывается). Неверный запрос (неизвестный тип, нет устройств, `eventGuid` не UUID) — 422 `workflow.error.test.bad_event`. Окна работ (§14.12, ТЗ-21): у события есть правило-победитель и оно в окне — при `maintenance.mode` = `suppress` инцидентов нет (200), при `mark` — созданы с `maintenanceWindowId` и низшим приоритетом справочника; итог — в `maintenance`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4847,6 +4847,239 @@
           }
         }
       }
+    },
+    "/operator/maintenance-windows": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "listMaintenanceWindows",
+        "summary": "Окна плановых работ",
+        "description": "§14.12, ТЗ-21. Окна организации: идущие и будущие, закончившиеся — пока не истёк `retention.auditDays` от конца; по началу. Видят все, кто видит настройки или карточку (право не нужно сверх входа). Окна другой организации не видны.",
+        "responses": {
+          "200": {
+            "description": "Окна",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MaintenanceWindow"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "createMaintenanceWindow",
+        "summary": "Создать окно плановых работ",
+        "description": "§14.12, ТЗ-21. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `create`. Нет ни устройства, ни группы или заданы оба, конец не позже начала, неизвестный пояс, повтор без дней — `422 FORM_FIELD_INVALID`. Устройство или группа не из организации — `422`. Окно, которое уже началось, создать можно: со следующего события оно действует; прошлое (конец в прошлом) — `422`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceWindowInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Создано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/operator/maintenance-windows/{id}": {
+      "put": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "updateMaintenanceWindow",
+        "summary": "Изменить окно плановых работ",
+        "description": "§14.12, ТЗ-21. Будущее окно правится целиком. Идущее — только `endsAt` (не раньше сейчас) и `description`; другое поле изменилось — `409 MAINTENANCE_WINDOW_ACTIVE`. Закончившееся — только чтение: `409 MAINTENANCE_WINDOW_ENDED`. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `update`, значение до и после целиком.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Окно"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceWindowInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Изменено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`MAINTENANCE_WINDOW_ACTIVE` — у идущего окна меняются только конец и описание; `MAINTENANCE_WINDOW_ENDED` — окно закончилось",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "deleteMaintenanceWindow",
+        "summary": "Удалить окно плановых работ",
+        "description": "§14.12, ТЗ-21. Только будущее окно: идущее — `409 MAINTENANCE_WINDOW_ACTIVE` (его завершают досрочно), закончившееся — `409 MAINTENANCE_WINDOW_ENDED`. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `delete`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Окно"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалено"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`MAINTENANCE_WINDOW_ACTIVE` или `MAINTENANCE_WINDOW_ENDED`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/maintenance-windows/{id}/end": {
+      "post": {
+        "tags": [
+          "reference"
+        ],
+        "operationId": "endMaintenanceWindow",
+        "summary": "Завершить окно досрочно",
+        "description": "§14.12, ТЗ-21. Конец окна — сейчас (`endsAt` = время сервера, `endedEarlyAt` — то же), статус `ended`; события после этого окно не трогает. У серии с повтором кончается вся серия. Будущее окно не завершают, а удаляют: `422 FORM_FIELD_INVALID`; закончившееся — `409 MAINTENANCE_WINDOW_ENDED`. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `update`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Окно"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Завершено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`MAINTENANCE_WINDOW_ENDED` — окно уже закончилось",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5088,7 +5321,9 @@
               "ATTACHMENT_LIMIT",
               "ATTACHMENT_TOO_LARGE",
               "ATTACHMENT_TYPE",
-              "PRIORITY_UNCHANGED"
+              "PRIORITY_UNCHANGED",
+              "MAINTENANCE_WINDOW_ACTIVE",
+              "MAINTENANCE_WINDOW_ENDED"
             ]
           },
           "message": {
@@ -5327,6 +5562,37 @@
                 ],
                 "default": 1095,
                 "description": "§14.11. Срок хранения аудита, дней: `0` — бессрочно, иначе от 365 до 36500 (100 лет)"
+              }
+            },
+            "additionalProperties": true
+          },
+          "maintenance": {
+            "type": "object",
+            "description": "§14.12, ТЗ-21. Окна плановых работ: `mode` — что делает окно с событием, у которого есть правило-победитель: `suppress` — инцидента нет, `mark` — инцидент с окном и низшим приоритетом справочника. Сами окна — `GET /operator/maintenance-windows`",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "suppress",
+                  "mark"
+                ],
+                "default": "suppress"
+              },
+              "modes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "suppress",
+                    "mark"
+                  ]
+                }
+              },
+              "markPriority": {
+                "type": "string",
+                "enum": [
+                  "lowest"
+                ]
               }
             },
             "additionalProperties": true
@@ -7110,6 +7376,22 @@
                 }
               }
             }
+          },
+          "maintenanceWindowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "§14.12, ТЗ-21. Инцидент создан в окне работ при `maintenance.mode` = `mark`: окно; приоритет у такого — низший уровень справочника, `priorityManual` = false. Иначе null"
+          },
+          "closeMaintenanceWindowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "§2.2, ТЗ-21. Закрыт «Плановой проверкой» (`drill`) со ссылкой на окно работ — окно; иначе null. «Переоткрыть» очищает"
           }
         }
       },
@@ -7526,6 +7808,13 @@
                     "type": "integer"
                   }
                 }
+              },
+              "maintenanceWindows": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MaintenanceWindowRef"
+                },
+                "description": "§14.12, ТЗ-21. Окна работ, пересекающиеся с устройством-источником и временем события инцидента, по началу; из них выбирают окно при закрытии «Плановой проверкой». Нет — пусто"
               }
             }
           }
@@ -9411,6 +9700,17 @@
               "$ref": "#/components/schemas/IncidentCard"
             },
             "description": "Инциденты события по порядку создания; у повтора — прежние"
+          },
+          "maintenance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MaintenanceOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§14.12, ТЗ-21. Окно работ, в которое пришло событие с правилом-победителем; null — не в окне или победителя нет"
           }
         }
       },
@@ -11031,7 +11331,7 @@
       },
       "EventExplanationRule": {
         "type": "object",
-        "description": "Правило организации и что оно сделало с событием: `fired` — сработало (победитель инцидента), `overridden` — подошло, но перекрыто правилом `overriddenBy`, `missed` — не подошло, причина в `reason`, `disabled` — правило выключено (`IncidentRule.active`), в отборе не участвовало: причины и перекрывшего нет (ТЗ-2а)",
+        "description": "Правило организации и что оно сделало с событием: `fired` — сработало (победитель инцидента), `overridden` — подошло, но перекрыто правилом `overriddenBy`, `missed` — не подошло, причина в `reason`, `disabled` — правило выключено (`IncidentRule.active`), в отборе не участвовало: причины и перекрывшего нет (ТЗ-2а). `maintenance` — правило победило бы, но событие пришло в окно работ при `maintenance.mode` = `suppress`: инцидента нет, окно — в `maintenanceWindow` (ТЗ-21). При `mark` правило — `fired`, и окно тоже в `maintenanceWindow`",
         "required": [
           "rule",
           "verdict"
@@ -11046,7 +11346,8 @@
               "fired",
               "overridden",
               "missed",
-              "disabled"
+              "disabled",
+              "maintenance"
             ]
           },
           "scenarios": {
@@ -11061,6 +11362,9 @@
           },
           "reason": {
             "$ref": "#/components/schemas/EventExplanationReason"
+          },
+          "maintenanceWindow": {
+            "$ref": "#/components/schemas/EventRef"
           }
         },
         "additionalProperties": false
@@ -11107,6 +11411,17 @@
               "$ref": "#/components/schemas/EventExplanationRule"
             },
             "description": "Все правила организации: сработавшие — в порядке создания инцидентов, потом перекрытые, потом не сработавшие — по названию"
+          },
+          "maintenance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MaintenanceOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§14.12, ТЗ-21. Итог окна работ при приёме события; null — не было"
           }
         },
         "additionalProperties": false
@@ -11467,6 +11782,248 @@
             "description": "Где хранится вместо `dataBase64`: `{kind: s3, bucket, key}` или `{kind: url, url}`. В `JournalEntry.attachments` у файла из хранилища сервера — `{kind: \"url\", url}`, адрес — маршрут `GET /operator/incidents/{incidentGuid}/attachments/{attachmentId}` (`downloadCommentAttachment`)"
           }
         }
+      },
+      "MaintenanceRecurrence": {
+        "type": "object",
+        "description": "§14.12, ТЗ-21. Еженедельный повтор окна: дни недели и время суток начала и конца в часовом поясе окна. Конец не позже начала (`endTime` <= `startTime`) — интервал идёт через полночь и кончается на следующий день. Ежедневно — все семь дней. Интервал дня повтора — [дата + startTime, дата (+1 день через полночь) + endTime) в поясе `timeZone`, обрезанный рамкой окна [`startsAt`, `endsAt`). Летнее время: несуществующее местное время (перевод вперёд) сдвигается вперёд на величину перевода, двузначное (перевод назад) — первое из двух; так считают `Temporal` (`disambiguation: compatible`) и Go `time.Date`",
+        "required": [
+          "days",
+          "startTime",
+          "endTime"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "description": "Дни недели ISO 8601: 1 — понедельник … 7 — воскресенье; день — день начала интервала"
+          },
+          "startTime": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "examples": [
+              "22:00"
+            ]
+          },
+          "endTime": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "examples": [
+              "02:00"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "MaintenanceWindowInput": {
+        "type": "object",
+        "description": "§14.12, ТЗ-21. Окно плановых работ: на устройстве или группе устройств (с вложенными) с начала по конец — полуинтервал [`startsAt`, `endsAt`): событие ровно в конец уже вне окна. Задано ровно одно из `deviceGuid` и `sourceGroupGuid`. Без повтора окно — один интервал; с повтором (`recurrence`) `startsAt` и `endsAt` — рамка серии, а интервалы — дни повтора внутри неё. Событие в окне, у которого есть правило-победитель, по `maintenance.mode` машины не создаёт инцидент (`suppress`) или создаёт его со ссылкой на окно и низшим приоритетом (`mark`). Окно видно только своей организации. Тело создания и правки",
+        "required": [
+          "startsAt",
+          "endsAt",
+          "timeZone"
+        ],
+        "properties": {
+          "deviceGuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Устройство окна; иначе — группа"
+          },
+          "sourceGroupGuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Группа устройств окна, вместе с вложенными"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Позже `startsAt`, иначе 422 `FORM_FIELD_INVALID`"
+          },
+          "timeZone": {
+            "type": "string",
+            "examples": [
+              "Europe/Moscow"
+            ],
+            "description": "Часовой пояс IANA — для повтора; не задан в форме — пояс поста. Неизвестный — 422 `FORM_FIELD_INVALID`"
+          },
+          "recurrence": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MaintenanceRecurrence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Повтор; null — разовое окно"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Что за работы, кто подрядчик"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MaintenanceWindow": {
+        "type": "object",
+        "description": "§14.12, ТЗ-21. Окно плановых работ: на устройстве или группе устройств (с вложенными) с начала по конец — полуинтервал [`startsAt`, `endsAt`): событие ровно в конец уже вне окна. Задано ровно одно из `deviceGuid` и `sourceGroupGuid`. Без повтора окно — один интервал; с повтором (`recurrence`) `startsAt` и `endsAt` — рамка серии, а интервалы — дни повтора внутри неё. Событие в окне, у которого есть правило-победитель, по `maintenance.mode` машины не создаёт инцидент (`suppress`) или создаёт его со ссылкой на окно и низшим приоритетом (`mark`). Окно видно только своей организации. `status` — по времени сервера: `planned` — ещё не началось, `active` — идёт, `ended` — кончилось (в том числе досрочно)",
+        "required": [
+          "id",
+          "startsAt",
+          "endsAt",
+          "timeZone",
+          "recurrence",
+          "description",
+          "status",
+          "createdBy",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deviceGuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Устройство окна; иначе — группа"
+          },
+          "sourceGroupGuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Группа устройств окна, вместе с вложенными"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Позже `startsAt`, иначе 422 `FORM_FIELD_INVALID`"
+          },
+          "timeZone": {
+            "type": "string",
+            "examples": [
+              "Europe/Moscow"
+            ],
+            "description": "Часовой пояс IANA — для повтора; не задан в форме — пояс поста. Неизвестный — 422 `FORM_FIELD_INVALID`"
+          },
+          "recurrence": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MaintenanceRecurrence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Повтор; null — разовое окно"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Что за работы, кто подрядчик"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "active",
+              "ended"
+            ]
+          },
+          "endedEarlyAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Когда завершено досрочно (тогда `endsAt` — этот момент); null — не завершалось"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/ActorRef"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MaintenanceWindowRef": {
+        "type": "object",
+        "description": "§14.12, ТЗ-21. Окно работ, пересекающееся с инцидентом: устройство-источник в окне и время события в одном из его интервалов",
+        "required": [
+          "id",
+          "description",
+          "startsAt",
+          "endsAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало интервала, накрывшего событие"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец этого интервала"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MaintenanceOutcome": {
+        "type": "object",
+        "description": "§14.12, ТЗ-21. Событие пришло в окно работ, и у него есть правило-победитель: что сделало окно (`maintenance.mode` машины в момент приёма) и какое окно — первое из накрывших",
+        "required": [
+          "windowId",
+          "mode"
+        ],
+        "properties": {
+          "windowId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "suppress",
+              "mark"
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

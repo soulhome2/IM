@@ -329,6 +329,12 @@ window.IM_WORKFLOW = {
       "cloud": "incident_manager.manage"
     },
     {
+      "key": "maintenance:edit",
+      "labelKey": "workflow.permission.maintenance.edit",
+      "cloud": "incident_manager.maintenance.edit",
+      "$comment": "§5, §14.12, ТЗ-21. Создавать, править, удалять и досрочно завершать окна плановых работ. У администратора и старшего смены; смотреть окна могут все, кто видит настройки или карточку. Не право перехода: его проверяют запросы /operator/maintenance-windows"
+    },
+    {
       "key": "agent:set_not_ready",
       "labelKey": "workflow.permission.agent.set_not_ready",
       "cloud": "incident_manager.agent.not_ready.use"
@@ -878,6 +884,16 @@ window.IM_WORKFLOW = {
           "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
           "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
+        },
+        {
+          "name": "maintenanceWindowId",
+          "kind": "select",
+          "labelKey": "workflow.form.close.field.maintenanceWindowId",
+          "requiredExpr": "false",
+          "source": "maintenanceWindows",
+          "visibleExpr": "form.resultId == 'drill'",
+          "placeholderKey": "workflow.form.close.field.maintenanceWindowId.placeholder",
+          "$comment": "§2.2, §14.12, ТЗ-21. Окно работ, из-за которого тревога, — только у «Плановой проверки», необязательно: работы бывают и без окна. Варианты (source maintenanceWindows) — окна, пересекающиеся с инцидентом (данные МИ, как уровни справочника приоритетов): устройство-источник в окне и время события в его интервале (windowCovers). Значение не из вариантов — 422 FORM_FIELD_INVALID. Хранится в инциденте (closeMaintenanceWindowId) и в записи журнала"
         },
         {
           "name": "comment",
@@ -1911,6 +1927,14 @@ window.IM_WORKFLOW = {
           "kind": "transactional",
           "fn": "setFlag",
           "args": [
+            "closeMaintenanceWindowId",
+            "form.resultId == 'drill' ? form.maintenanceWindowId : ''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
             "result",
             "form.comment"
           ]
@@ -2073,6 +2097,14 @@ window.IM_WORKFLOW = {
           "fn": "setFlag",
           "args": [
             "closeCauseId",
+            "''"
+          ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "setFlag",
+          "args": [
+            "closeMaintenanceWindowId",
             "''"
           ]
         },
@@ -4140,9 +4172,18 @@ window.IM_WORKFLOW = {
     "operatorMayChange": true
   },
   "retention": {
-    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента и записи потока событий — через столько же дней от своего времени; аудит (журнал действий и журнал изменений настроек) — через auditDays дней от времени записи: один срок для обоих журналов, по умолчанию 1095 (3 года), 0 — бессрочно, иначе от 365 до 36500; чистка раз в час пачками, версия настроек, на которую ссылается запись аудита, не удаляется. Открытые инциденты и всё, на что они ссылаются, не удаляются. Срок обязателен: целое от 1 и не меньше окна переоткрытия limits.reopenWindowMin; без срока хранить нельзя.",
+    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента и записи потока событий — через столько же дней от своего времени; аудит (журнал действий и журнал изменений настроек) — через auditDays дней от времени записи: один срок для обоих журналов, по умолчанию 1095 (3 года), 0 — бессрочно, иначе от 365 до 36500; чистка раз в час пачками, версия настроек, на которую ссылается запись аудита, не удаляется. Открытые инциденты и всё, на что они ссылаются, не удаляются. Срок обязателен: целое от 1 и не меньше окна переоткрытия limits.reopenWindowMin; без срока хранить нельзя. Окна плановых работ (§14.12, ТЗ-21) — по auditDays от их конца: окно объясняет события и инциденты в журнале; идущие и будущие не удаляются.",
     "closedIncidentsDays": 90,
     "auditDays": 1095
+  },
+  "maintenance": {
+    "$comment": "§14.12, ТЗ-21. Окна плановых работ: на время работ на устройстве или группе устройств события не дают поток ложных инцидентов. mode — что делает окно с событием, у которого есть правило-победитель (intake.windows, после отбора правил): suppress — инцидент не создаётся, событие записано обработанным, в объяснении отбора — вердикт maintenance со ссылкой на окно; mark — инцидент создаётся, в нём ссылка на окно (maintenanceWindowId) и приоритет — низший уровень справочника приоритетов (markPriority: lowest) вместо приоритета правила; это приоритет автоматики: priorityManual = false, старший смены может поднять (change_priority). Уже открытые инциденты окно не трогает. Сами окна — данные МИ (GET /operator/maintenance-windows), не машина.",
+    "mode": "suppress",
+    "modes": [
+      "suppress",
+      "mark"
+    ],
+    "markPriority": "lowest"
   },
   "messages": {
     "$comment": "§14.9 (RULE-66). Ключи текстов, которые пишет сервер вне переходов машины — записи журнала, причины недоступности (workflow.guard.*, у функций реестра — failKeys), ошибки (workflow.error.*), — и их подстановки; сами тексты — в каталоге strings/<язык>.json. Записи журнала переходов — ключами в appendLog.",
@@ -4476,6 +4517,18 @@ window.IM_WORKFLOW = {
     "workflow.error.no_schema_admin": {
       "vars": []
     },
+    "workflow.error.no_maintenance_edit": {
+      "vars": []
+    },
+    "workflow.error.maintenance_active": {
+      "vars": []
+    },
+    "workflow.error.maintenance_ended": {
+      "vars": []
+    },
+    "workflow.error.maintenance_invalid": {
+      "vars": []
+    },
     "workflow.error.catalog_not_found": {
       "vars": []
     },
@@ -4593,6 +4646,8 @@ window.IM_WORKFLOW = {
         "slaBreached": "bool",
         "breaches": "list<Breach>",
         "priorityManual": "bool",
+        "maintenanceWindowId": "string",
+        "closeMaintenanceWindowId": "string",
         "timers": "map<string, Timer>",
         "linkedTo": "string",
         "linkedAt": "int",
@@ -4625,7 +4680,8 @@ window.IM_WORKFLOW = {
         "causeId": "string",
         "comment": "string",
         "files": "list<FormFile>",
-        "priority": "string"
+        "priority": "string",
+        "maintenanceWindowId": "string"
       },
       "FormFile": {
         "id": "string",
@@ -4735,7 +4791,15 @@ window.IM_WORKFLOW = {
         "guid": "string",
         "eventType": "string",
         "device": "string",
-        "deviceType": "string"
+        "deviceType": "string",
+        "at": "int"
+      },
+      "MaintenanceWindow": {
+        "id": "string",
+        "device": "opt<string>",
+        "group": "opt<string>",
+        "from": "int",
+        "to": "int"
       },
       "Condition": {
         "eventType": "opt<string>",
@@ -5442,6 +5506,24 @@ window.IM_WORKFLOW = {
         "expr": "cel.bind(ra, ruleRank(a, e), cel.bind(rb, ruleRank(b, e), ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))))",
         "$comment": "§14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил, а он задан intake.ruleOrder (по guid), не порядком строк в базе"
       },
+      "windowCovers": {
+        "params": {
+          "w": "MaintenanceWindow",
+          "e": "Event"
+        },
+        "returns": "bool",
+        "expr": "w.from <= e.at && e.at < w.to && (size(w.device) > 0 ? w.device[0] == e.device : size(w.group) > 0 && deviceInGroup(e.device, w.group[0]))",
+        "$comment": "§14.12, ТЗ-21. Интервал окна работ накрывает событие: время события в полуинтервале [from, to) — ровно в конец уже вне окна — и устройство-источник — устройство окна или в группе окна, в том числе во вложенной. w — один интервал: повтор окна сервер разворачивает в интервалы сам (правило — §14.12), машина получает уже развёрнутые"
+      },
+      "windowsFor": {
+        "params": {
+          "ws": "list<MaintenanceWindow>",
+          "e": "Event"
+        },
+        "returns": "list<MaintenanceWindow>",
+        "expr": "ws.filter(w, windowCovers(w, e))",
+        "$comment": "§14.12, ТЗ-21. Интервалы окон работ, накрывающие событие; первое по порядку списка (по началу, при равенстве — по id окна) — окно, на которое ссылается итог. Пусто — окна нет"
+      },
       "ruleFor": {
         "params": {
           "rules": "list<Rule>",
@@ -5461,6 +5543,8 @@ window.IM_WORKFLOW = {
       "scenario"
     ],
     "ruleOrder": "guid",
+    "windows": "windowsFor",
+    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает.",
     "match": "ruleMatches",
     "winner": "ruleFor",
     "create": "create"
@@ -7195,7 +7279,8 @@ window.IM_WORKFLOW = {
             "incident:run_action",
             "incident:comment",
             "incident:priority",
-            "agent:set_not_ready"
+            "agent:set_not_ready",
+            "maintenance:edit"
           ]
         }
       ]
@@ -7233,7 +7318,8 @@ window.IM_WORKFLOW = {
       "limits",
       "session",
       "queueSort",
-      "retention"
+      "retention",
+      "maintenance"
     ],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
@@ -7525,6 +7611,36 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "id": "maintenance",
+        "labelKey": "workflow.settings.tab.maintenance",
+        "rules": "§14.12",
+        "groups": [
+          {
+            "id": "maintenance_mode",
+            "labelKey": "workflow.settings.tab.maintenance_mode",
+            "rules": "§14.12"
+          },
+          {
+            "id": "maintenance_windows",
+            "labelKey": "workflow.settings.tab.maintenance_windows",
+            "rules": "§14.12",
+            "source": "GET /operator/maintenance-windows"
+          }
+        ],
+        "items": [
+          {
+            "path": "maintenance.mode",
+            "labelKey": "workflow.settings.maintenance.mode",
+            "whatKey": "workflow.settings.maintenance.mode.what",
+            "values": {
+              "suppress": "workflow.settings.maintenance.mode.value.suppress",
+              "mark": "workflow.settings.maintenance.mode.value.mark"
+            },
+            "group": "maintenance_mode"
+          }
+        ]
+      },
+      {
         "id": "priorities",
         "labelKey": "workflow.settings.tab.priorities",
         "rules": "§2.5",
@@ -7612,6 +7728,14 @@ window.IM_WORKFLOW = {
       {
         "path": "session.states",
         "why": "состояния оператора — модель (§12.1)"
+      },
+      {
+        "path": "maintenance.modes",
+        "why": "список режимов окна работ — модель: каждый режим исполняет сервер, администратор выбирает режим (maintenance.mode)"
+      },
+      {
+        "path": "maintenance.markPriority",
+        "why": "какой приоритет у помеченного инцидента — правило §14.12 (низший уровень справочника), а не настройка"
       }
     ]
   },

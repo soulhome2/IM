@@ -2205,7 +2205,10 @@ def check_admin_settings(w, o, err):
                 # Подписи значений перечня (BUG-26): все значения из контракта, без лишних
                 if "values" in item:
                     prop = item["path"].split(".")[-1]
-                    enum = next((s["properties"][prop].get("enum") for s in o["components"]["schemas"].values() if prop in s.get("properties", {}) and s["properties"][prop].get("enum")), None)
+                    # Одноимённое поле бывает у нескольких схем (mode — у массовых действий и у окон работ, ТЗ-21):
+                    # годится любая схема, чей перечень совпал с подписями
+                    enums = [s["properties"][prop]["enum"] for s in o["components"]["schemas"].values() if prop in s.get("properties", {}) and s["properties"][prop].get("enum")]
+                    enum = next((e for e in enums if sorted(e) == sorted(item["values"])), enums[0] if enums else None)
                     if enum is not None and sorted(item["values"]) != sorted(enum):
                         err.append(f"настройки, {item['path']}: подписи значений {sorted(item['values'])}, а в контракте {sorted(enum)}")
                     elif current not in item["values"]:

@@ -143,6 +143,7 @@
     { "key": "incident:comment", "labelKey": "workflow.permission.incident.comment", "cloud": "incident_manager.incidents.comment.use" },
     { "key": "incident:priority", "labelKey": "workflow.permission.incident.priority", "cloud": "incident_manager.incidents.priority.use" },
     { "key": "incident:schema:admin", "labelKey": "workflow.permission.incident.schema.admin", "cloud": "incident_manager.manage" },
+    { "key": "maintenance:edit", "labelKey": "workflow.permission.maintenance.edit", "cloud": "incident_manager.maintenance.edit", "$comment": "§5, §14.12, ТЗ-21. Создавать, править, удалять и досрочно завершать окна плановых работ. У администратора и старшего смены; смотреть окна могут все, кто видит настройки или карточку. Не право перехода: его проверяют запросы /operator/maintenance-windows" },
     { "key": "agent:set_not_ready", "labelKey": "workflow.permission.agent.set_not_ready", "cloud": "incident_manager.agent.not_ready.use" }
   ],
 
@@ -377,6 +378,16 @@
           "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
           "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
+        },
+        {
+          "name": "maintenanceWindowId",
+          "kind": "select",
+          "labelKey": "workflow.form.close.field.maintenanceWindowId",
+          "requiredExpr": "false",
+          "source": "maintenanceWindows",
+          "visibleExpr": "form.resultId == 'drill'",
+          "placeholderKey": "workflow.form.close.field.maintenanceWindowId.placeholder",
+          "$comment": "§2.2, §14.12, ТЗ-21. Окно работ, из-за которого тревога, — только у «Плановой проверки», необязательно: работы бывают и без окна. Варианты (source maintenanceWindows) — окна, пересекающиеся с инцидентом (данные МИ, как уровни справочника приоритетов): устройство-источник в окне и время события в его интервале (windowCovers). Значение не из вариантов — 422 FORM_FIELD_INVALID. Хранится в инциденте (closeMaintenanceWindowId) и в записи журнала"
         },
         {
           "name": "comment",
@@ -710,6 +721,7 @@
         { "kind": "transactional", "fn": "setFlag", "args": ["closeResultId", "form.resultId"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "causeOk(form.resultId, form.causeId) ? form.causeId : ''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseLabel", "causeLabel(form.resultId, form.causeId)"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closeMaintenanceWindowId", "form.resultId == 'drill' ? form.maintenanceWindowId : ''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["result", "form.comment"] },
         { "kind": "transactional", "fn": "clearHoldReason" },
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction", true] },
@@ -756,6 +768,7 @@
         { "kind": "transactional", "fn": "clearLink", "args": ["workflow.journal.reopen_unlinked", "workflow.journal.linked_reopened"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeResultId", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseId", "''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["closeMaintenanceWindowId", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closeCauseLabel", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["result", "''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "0"] },
@@ -1408,9 +1421,16 @@
   },
 
   "retention": {
-    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента и записи потока событий — через столько же дней от своего времени; аудит (журнал действий и журнал изменений настроек) — через auditDays дней от времени записи: один срок для обоих журналов, по умолчанию 1095 (3 года), 0 — бессрочно, иначе от 365 до 36500; чистка раз в час пачками, версия настроек, на которую ссылается запись аудита, не удаляется. Открытые инциденты и всё, на что они ссылаются, не удаляются. Срок обязателен: целое от 1 и не меньше окна переоткрытия limits.reopenWindowMin; без срока хранить нельзя.",
+    "$comment": "§14.11. Срок хранения данных МИ. closedIncidentsDays — через сколько дней после закрытия сервер удаляет закрытый инцидент вместе с журналом, историей и его событием; событие без инцидента и записи потока событий — через столько же дней от своего времени; аудит (журнал действий и журнал изменений настроек) — через auditDays дней от времени записи: один срок для обоих журналов, по умолчанию 1095 (3 года), 0 — бессрочно, иначе от 365 до 36500; чистка раз в час пачками, версия настроек, на которую ссылается запись аудита, не удаляется. Открытые инциденты и всё, на что они ссылаются, не удаляются. Срок обязателен: целое от 1 и не меньше окна переоткрытия limits.reopenWindowMin; без срока хранить нельзя. Окна плановых работ (§14.12, ТЗ-21) — по auditDays от их конца: окно объясняет события и инциденты в журнале; идущие и будущие не удаляются.",
     "closedIncidentsDays": 90,
     "auditDays": 1095
+  },
+
+  "maintenance": {
+    "$comment": "§14.12, ТЗ-21. Окна плановых работ: на время работ на устройстве или группе устройств события не дают поток ложных инцидентов. mode — что делает окно с событием, у которого есть правило-победитель (intake.windows, после отбора правил): suppress — инцидент не создаётся, событие записано обработанным, в объяснении отбора — вердикт maintenance со ссылкой на окно; mark — инцидент создаётся, в нём ссылка на окно (maintenanceWindowId) и приоритет — низший уровень справочника приоритетов (markPriority: lowest) вместо приоритета правила; это приоритет автоматики: priorityManual = false, старший смены может поднять (change_priority). Уже открытые инциденты окно не трогает. Сами окна — данные МИ (GET /operator/maintenance-windows), не машина.",
+    "mode": "suppress",
+    "modes": ["suppress", "mark"],
+    "markPriority": "lowest"
   },
 
   "messages": {
@@ -1493,6 +1513,10 @@
     "workflow.error.scenario.not_editable": { "vars": [] },
     "workflow.error.scenario.invalid_answer": { "vars": ["step"] },
     "workflow.error.no_schema_admin": { "vars": [] },
+    "workflow.error.no_maintenance_edit": { "vars": [] },
+    "workflow.error.maintenance_active": { "vars": [] },
+    "workflow.error.maintenance_ended": { "vars": [] },
+    "workflow.error.maintenance_invalid": { "vars": [] },
     "workflow.error.catalog_not_found": { "vars": [] },
     "workflow.error.schema_not_found": { "vars": [] },
     "workflow.error.schema_published": { "vars": [] },
@@ -1523,11 +1547,11 @@
   "cel": {
     "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
     "types": {
-      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string" },
+      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "maintenanceWindowId": "string", "closeMaintenanceWindowId": "string", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string" },
       "Timer": { "due": "int", "paused": "bool", "left": "int", "fired": "int", "since": "int" },
       "Breach": { "kind": "string", "at": "int", "owner": "string" },
       "LeftGroup": { "primaryId": "string", "linkedAt": "int", "at": "int" },
-      "Form": { "targetId": "string", "primaryId": "string", "resultId": "string", "reasonId": "string", "causeId": "string", "comment": "string", "files": "list<FormFile>", "priority": "string" },
+      "Form": { "targetId": "string", "primaryId": "string", "resultId": "string", "reasonId": "string", "causeId": "string", "comment": "string", "files": "list<FormFile>", "priority": "string", "maintenanceWindowId": "string" },
       "FormFile": { "id": "string", "fileName": "string", "mime": "string", "size": "int" },
       "Limits": { "maxActive": "int", "maxOnHold": "int", "maxBulk": "int", "reopenWindowMin": "int", "reopenResolutionSec": "int", "commentMaxLength": "int", "commentMaxFiles": "int", "attachmentMaxBytes": "int", "attachmentTypes": "list<string>" },
       "SessionState": { "id": "string", "readOnly": "bool", "readOnlyReasonKey": "string" },
@@ -1545,7 +1569,8 @@
       "TimerDef": { "id": "string", "labelKey": "string", "defaultSec": "int", "byPriority": "map<int, int>", "overridesBy": "list<string>", "overrides": "list<Override>", "keepsLeft": "bool", "startsOnce": "bool", "pausable": "bool", "secFrom": "string" },
       "Override": { "eventType": "opt<string>", "priority": "opt<int>", "sourceGroup": "opt<string>", "scenario": "opt<string>", "sec": "int" },
       "HoldReason": { "id": "string", "maxMinutes": "opt<int>", "setBy": "string", "deadlineFromIdle": "bool" },
-      "Event": { "guid": "string", "eventType": "string", "device": "string", "deviceType": "string" },
+      "Event": { "guid": "string", "eventType": "string", "device": "string", "deviceType": "string", "at": "int" },
+      "MaintenanceWindow": { "id": "string", "device": "opt<string>", "group": "opt<string>", "from": "int", "to": "int" },
       "Condition": { "eventType": "opt<string>", "device": "opt<string>", "deviceType": "opt<string>", "group": "opt<string>" },
       "Rule": { "guid": "string", "active": "bool", "priority": "int", "createdAt": "int", "scenarios": "list<string>", "conditions": "list<Condition>" }
     },
@@ -1633,6 +1658,8 @@
       "ruleRank": { "params": { "r": "Rule", "e": "Event" }, "returns": "int", "expr": "cel.bind(ks, r.conditions.filter(c, conditionMatches(c, e)).map(c, conditionRank(c)), size(ks) == 0 ? -1 : ks.filter(k, ks.all(j, j <= k))[0])", "$comment": "§14.5, ARCH-15. Точность правила для события — наибольшая из подошедших условий (условия соединены «или»); не подошло ни одно — -1" },
       "ruleMatches": { "params": { "r": "Rule", "e": "Event" }, "returns": "bool", "expr": "r.active && size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))", "$comment": "§14.5, ARCH-15, ТЗ-2а. Правило подошло событию: оно включено (active), у него есть сценарий и подошло хоть одно условие. Выключенное правило и правило без сценария в выборе не участвуют: в ранжировании их нет, перекрыть включённое они не могут; в объяснении отбора выключенное — вердикт disabled (§12.5): disabled ⇔ !r.active. Rule.active — поле правила; у правила без поля (сохранено до ТЗ-2а) адаптер подставляет true" },
       "ruleBeats": { "params": { "a": "Rule", "b": "Rule", "e": "Event" }, "returns": "bool", "expr": "cel.bind(ra, ruleRank(a, e), cel.bind(rb, ruleRank(b, e), ra > rb || (ra == rb && (a.priority > b.priority || (a.priority == b.priority && a.createdAt < b.createdAt)))))", "$comment": "§14.5, ARCH-15 (решение пользователя 2026-10-28). Правило a старше b для события — строго: точнее условие; при равной точности — выше приоритет; при равном приоритете — раньше создано. Полное равенство — ни одно не старше: решает порядок списка правил, а он задан intake.ruleOrder (по guid), не порядком строк в базе" },
+      "windowCovers": { "params": { "w": "MaintenanceWindow", "e": "Event" }, "returns": "bool", "expr": "w.from <= e.at && e.at < w.to && (size(w.device) > 0 ? w.device[0] == e.device : size(w.group) > 0 && deviceInGroup(e.device, w.group[0]))", "$comment": "§14.12, ТЗ-21. Интервал окна работ накрывает событие: время события в полуинтервале [from, to) — ровно в конец уже вне окна — и устройство-источник — устройство окна или в группе окна, в том числе во вложенной. w — один интервал: повтор окна сервер разворачивает в интервалы сам (правило — §14.12), машина получает уже развёрнутые" },
+      "windowsFor": { "params": { "ws": "list<MaintenanceWindow>", "e": "Event" }, "returns": "list<MaintenanceWindow>", "expr": "ws.filter(w, windowCovers(w, e))", "$comment": "§14.12, ТЗ-21. Интервалы окон работ, накрывающие событие; первое по порядку списка (по началу, при равенстве — по id окна) — окно, на которое ссылается итог. Пусто — окна нет" },
       "ruleFor": { "params": { "rules": "list<Rule>", "e": "Event", "s": "string" }, "returns": "list<Rule>", "expr": "cel.bind(ms, rules.filter(r, ruleMatches(r, e) && s in r.scenarios), ms.filter(r, !ms.exists(o, ruleBeats(o, r, e))))", "$comment": "§14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка — rules упорядочены по intake.ruleOrder. От него приоритет и ruleGuid инцидента" }
     }
   },
@@ -1641,6 +1668,8 @@
     "$comment": "§14.5, ARCH-15. Как событие становится инцидентами; исполняет сервер, смысл — определения машины, имена — отсюда. 1) Событие с тем же guid уже есть — ничего не создаётся, ответ — прежние инциденты. 2) Подошедшие правила — match (правило без сценария не подходит). 3) Для каждого сценария подошедших правил — один инцидент; правило-победитель — первое из winner, от него приоритет и ruleGuid; сценарий — последняя версия. Ключ уникальности — uniqueKey, поля Incident, которые известны до создания: eventGuid, eventType, scenario; сейчас — событие + сценарий. На ключ — один инцидент: из тех, у кого ключ совпал, создаётся первый по порядку создания (п. 4), так исполняют и сервер, и модель Quint (PROC-93). 4) Все инциденты события и запись события — одной транзакцией, каждый — переходом create; порядок создания и номеров: чей победитель старше (ruleBeats) — раньше, сценарии одного правила — по порядку его списка; номер тревоги события — номер первого созданного. 5) Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано как обработанное. ruleOrder — поле Rule, по которому упорядочен список правил перед выбором (по возрастанию, guid — строкой в нижнем регистре): им решается полное равенство в ruleBeats — и победитель, и порядок создания. Порядок строк в базе не задан, поэтому список упорядочивается явно; в CEL это не выражение — строки в Quint только сравниваются на равенство.",
     "uniqueKey": ["eventGuid", "scenario"],
     "ruleOrder": "guid",
+    "windows": "windowsFor",
+    "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает.",
     "match": "ruleMatches",
     "winner": "ruleFor",
     "create": "create"
@@ -1747,7 +1776,7 @@
         {
           "id": "senior",
           "labelKey": "workflow.validation.set.senior",
-          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "incident:comment", "incident:priority", "agent:set_not_ready"]
+          "permissions": ["incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "incident:comment", "incident:priority", "agent:set_not_ready", "maintenance:edit"]
         }
       ]
     },
@@ -1764,7 +1793,7 @@
 
   "adminSettings": {
     "$comment": "RULE-44. Что настраивает администратор (право incident:schema:admin) — вкладки будущей админки. Настройка — значение, которое подстраивают под площадку, не меняя логику переходов; переходы, состояния, формы и бейджи — модель, а не настройки. path — где значение в этой машине (у списка — по id элемента); source — запрос, которым читаются данные МИ, которых в схеме нет. Из раздела собирается SETTINGS.md (tools/build_workflow.py), по нему рисуется экран настроек прототипа; check_machine.py проверяет, что пути существуют и что каждый ключ разделов-настроек либо в перечне, либо в notSettings с причиной.",
-    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "limits", "session", "queueSort", "retention"],
+    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "limits", "session", "queueSort", "retention", "maintenance"],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
       "priority": "workflow.settings.word.priority",
@@ -1851,6 +1880,18 @@
         ]
       },
       {
+        "id": "maintenance",
+        "labelKey": "workflow.settings.tab.maintenance",
+        "rules": "§14.12",
+        "groups": [
+          { "id": "maintenance_mode", "labelKey": "workflow.settings.tab.maintenance_mode", "rules": "§14.12" },
+          { "id": "maintenance_windows", "labelKey": "workflow.settings.tab.maintenance_windows", "rules": "§14.12", "source": "GET /operator/maintenance-windows" }
+        ],
+        "items": [
+          { "path": "maintenance.mode", "labelKey": "workflow.settings.maintenance.mode", "whatKey": "workflow.settings.maintenance.mode.what", "values": { "suppress": "workflow.settings.maintenance.mode.value.suppress", "mark": "workflow.settings.maintenance.mode.value.mark" }, "group": "maintenance_mode" }
+        ]
+      },
+      {
         "id": "priorities",
         "labelKey": "workflow.settings.tab.priorities",
         "rules": "§2.5",
@@ -1899,7 +1940,9 @@
       { "path": "reasonCatalogs.hold", "why": "кроме списка причин — поле и обязательность (модель)" },
       { "path": "reasonCatalogs.mass_fault", "why": "кроме списка причин — поле и обязательность (модель)" },
       { "path": "reasonCatalogs.false_alarm_cause", "why": "кроме списка причин — поле и обязательность (модель)" },
-      { "path": "session.states", "why": "состояния оператора — модель (§12.1)" }
+      { "path": "session.states", "why": "состояния оператора — модель (§12.1)" },
+      { "path": "maintenance.modes", "why": "список режимов окна работ — модель: каждый режим исполняет сервер, администратор выбирает режим (maintenance.mode)" },
+      { "path": "maintenance.markPriority", "why": "какой приоритет у помеченного инцидента — правило §14.12 (низший уровень справочника), а не настройка" }
     ]
   },
 

@@ -171,7 +171,7 @@
         "incident:bulk",
         "incident:run_action",
         "incident:comment",
-        "agent:set_not_ready"
+        "agent:set_not_ready", "maintenance:edit"
       ]
     },
     {
@@ -1650,6 +1650,34 @@
           "deviceGuid": "20000000-0002-4000-8000-000000000002"
         }
       ]
+    }
+  ],
+  "$commentMaintenanceWindows": "§14.12, ТЗ-21. Окна плановых работ — пара для примера: разовое, уже закончившееся (досрочно), и будущий еженедельный повтор через полночь. Времена — снимок на capturedAt, сдвигаются вместе с остальными; ни одно не действует на «сейчас» набора, чтобы не менять итог событий в тестах",
+  "maintenanceWindows": [
+    {
+      "id": "a0000000-0000-4000-8000-000000000001",
+      "deviceGuid": "20000000-0002-4000-8000-000000000002",
+      "sourceGroupGuid": null,
+      "startsAt": "2026-10-02T06:00:00Z",
+      "endsAt": "2026-10-02T08:30:00Z",
+      "timeZone": "Europe/Moscow",
+      "recurrence": null,
+      "description": "Замена датчика дыма 2, подрядчик «Пожсервис»",
+      "createdBy": "petrova",
+      "createdAt": "2026-10-01T15:00:00Z",
+      "endedEarlyAt": "2026-10-02T08:30:00Z"
+    },
+    {
+      "id": "a0000000-0000-4000-8000-000000000002",
+      "deviceGuid": null,
+      "sourceGroupGuid": "30000000-0000-4000-8000-000000000005",
+      "startsAt": "2026-10-10T00:00:00Z",
+      "endsAt": "2026-12-31T00:00:00Z",
+      "timeZone": "Europe/Moscow",
+      "recurrence": { "days": [1, 2, 3, 4, 5], "startTime": "22:00", "endTime": "02:00" },
+      "description": "Ночное обслуживание сети на 2-м этаже",
+      "createdBy": "petrova",
+      "createdAt": "2026-10-01T15:10:00Z"
     }
   ],
   "incidents": [

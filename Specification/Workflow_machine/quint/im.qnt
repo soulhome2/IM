@@ -29,7 +29,7 @@ module im {
   /* ===== Типы машины (cel.types) ===== */
 
 
-  type Incident = { id: str, number: str, eventType: str, priority: int, occurredAt: int, state: str, owner: str, assignmentGroup: str, holdReasonId: str, escalationLevel: int, transferCount: int, closeResultId: str, closeCauseId: str, closeCauseLabel: str, result: str, closedBy: str, closedAt: int, slaBreached: bool, breaches: List[Breach], priorityManual: bool, timers: str -> Timer, linkedTo: str, linkedAt: int, leftGroup: LeftGroup, scenario: str, eventGuid: str }
+  type Incident = { id: str, number: str, eventType: str, priority: int, occurredAt: int, state: str, owner: str, assignmentGroup: str, holdReasonId: str, escalationLevel: int, transferCount: int, closeResultId: str, closeCauseId: str, closeCauseLabel: str, result: str, closedBy: str, closedAt: int, slaBreached: bool, breaches: List[Breach], priorityManual: bool, maintenanceWindowId: str, closeMaintenanceWindowId: str, timers: str -> Timer, linkedTo: str, linkedAt: int, leftGroup: LeftGroup, scenario: str, eventGuid: str }
 
   type Timer = { due: int, paused: bool, left: int, fired: int, since: int }
 
@@ -37,7 +37,7 @@ module im {
 
   type LeftGroup = { primaryId: str, linkedAt: int, at: int }
 
-  type Form = { targetId: str, primaryId: str, resultId: str, reasonId: str, causeId: str, comment: str, files: List[FormFile], priority: str }
+  type Form = { targetId: str, primaryId: str, resultId: str, reasonId: str, causeId: str, comment: str, files: List[FormFile], priority: str, maintenanceWindowId: str }
 
   type FormFile = { id: str, fileName: str, mime: str, size: int }
 
@@ -73,7 +73,9 @@ module im {
 
   type HoldReason = { id: str, maxMinutes: List[int], setBy: str, deadlineFromIdle: bool }
 
-  type Event = { guid: str, eventType: str, device: str, deviceType: str }
+  type Event = { guid: str, eventType: str, device: str, deviceType: str, at: int }
+
+  type MaintenanceWindow = { id: str, device: List[str], group: List[str], from: int, to: int }
 
   type Condition = { eventType: List[str], device: List[str], deviceType: List[str], group: List[str] }
 
@@ -126,7 +128,7 @@ module im {
     x.scenario == y.scenario,
   }
 
-  pure val TYPICAL_PERMISSION_SETS: Set[Set[str]] = Set(Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:bulk", "incident:run_action", "incident:comment", "agent:set_not_ready"), Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "incident:comment", "incident:priority", "agent:set_not_ready"))
+  pure val TYPICAL_PERMISSION_SETS: Set[Set[str]] = Set(Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:transfer:own", "incident:bulk", "incident:run_action", "incident:comment", "agent:set_not_ready"), Set("incident:claim", "incident:accept", "incident:hold", "incident:release", "incident:close", "incident:close:unprocessed", "incident:reopen", "incident:transfer:own", "incident:transfer:any", "incident:reassign", "incident:bulk", "incident:run_action", "incident:comment", "incident:priority", "agent:set_not_ready", "maintenance:edit"))
 
   pure val STEP_RESULT_IDS: Set[str] = Set("processed")
 
@@ -140,9 +142,9 @@ module im {
 
   pure val NO_TIMER: Timer = { due: 0, paused: false, left: 0, fired: 0, since: 0 }
 
-  pure val NO_INCIDENT: Incident = { ...{ id: "", number: "", eventType: "", priority: 0, occurredAt: 0, state: "", owner: "", assignmentGroup: "", holdReasonId: "", escalationLevel: 0, transferCount: 0, closeResultId: "", closeCauseId: "", closeCauseLabel: "", result: "", closedBy: "", closedAt: 0, slaBreached: false, breaches: [], priorityManual: false, timers: Map(), linkedTo: "", linkedAt: 0, leftGroup: { primaryId: "", linkedAt: 0, at: 0 }, scenario: "", eventGuid: "" }, timers: Map("reaction" -> NO_TIMER, "resolution" -> NO_TIMER, "hold" -> NO_TIMER) }
+  pure val NO_INCIDENT: Incident = { ...{ id: "", number: "", eventType: "", priority: 0, occurredAt: 0, state: "", owner: "", assignmentGroup: "", holdReasonId: "", escalationLevel: 0, transferCount: 0, closeResultId: "", closeCauseId: "", closeCauseLabel: "", result: "", closedBy: "", closedAt: 0, slaBreached: false, breaches: [], priorityManual: false, maintenanceWindowId: "", closeMaintenanceWindowId: "", timers: Map(), linkedTo: "", linkedAt: 0, leftGroup: { primaryId: "", linkedAt: 0, at: 0 }, scenario: "", eventGuid: "" }, timers: Map("reaction" -> NO_TIMER, "resolution" -> NO_TIMER, "hold" -> NO_TIMER) }
 
-  pure val NO_FORM: Form = { targetId: "", primaryId: "", resultId: "", reasonId: "", causeId: "", comment: "", files: [], priority: "" }
+  pure val NO_FORM: Form = { targetId: "", primaryId: "", resultId: "", reasonId: "", causeId: "", comment: "", files: [], priority: "", maintenanceWindowId: "" }
 
   pure val CAUSE_FOR: str -> str = Map("false_alarm" -> "animal", "mass" -> "power")
 
@@ -421,10 +423,20 @@ module im {
   def ruleBeats(a: Rule, b: Rule, e: Event): bool =
     { val ra_76 = ruleRank(a, e)  { val rb_77 = ruleRank(b, e)  ((ra_76 > rb_77) or ((ra_76 == rb_77) and ((a.priority > b.priority) or ((a.priority == b.priority) and (a.createdAt < b.createdAt))))) } }
 
+  // §14.12, ТЗ-21. Интервал окна работ накрывает событие: время события в полуинтервале [from, to) — ровно в конец уже вне окна — и устройство-источник — устройство окна или в группе окна, в том числе во вложенной. w — один интервал: повтор окна сервер разворачивает в интервалы сам (правило — §14.12), машина получает уже развёрнутые
+
+  def windowCovers(w: MaintenanceWindow, e: Event): bool =
+    (((w.from <= e.at) and (e.at < w.to)) and (if ((w.device.length() > 0)) (w.device[0] == e.device) else ((w.group.length() > 0) and deviceInGroup(e.device, w.group[0]))))
+
+  // §14.12, ТЗ-21. Интервалы окон работ, накрывающие событие; первое по порядку списка (по началу, при равенстве — по id окна) — окно, на которое ссылается итог. Пусто — окна нет
+
+  def windowsFor(ws: List[MaintenanceWindow], e: Event): List[MaintenanceWindow] =
+    ws.select(w_78 => windowCovers(w_78, e))
+
   // §14.5, ARCH-15. Правило-победитель сценария s для события: из подошедших правил с этим сценарием — те, кого не старше ни одно; сервер берёт первое по порядку списка — rules упорядочены по intake.ruleOrder. От него приоритет и ruleGuid инцидента
 
   def ruleFor(rules: List[Rule], e: Event, s: str): List[Rule] =
-    { val ms_78 = rules.select(r_79 => (ruleMatches(r_79, e) and r_79.scenarios.foldl(false, (acc, y80) => acc or y80 == s)))  ms_78.select(r_81 => not(ms_78.foldl(false, (acc, o_82) => acc or ruleBeats(o_82, r_81, e)))) }
+    { val ms_79 = rules.select(r_80 => (ruleMatches(r_80, e) and r_80.scenarios.foldl(false, (acc, y81) => acc or y81 == s)))  ms_79.select(r_82 => not(ms_79.foldl(false, (acc, o_83) => acc or ruleBeats(o_83, r_82, e)))) }
 
   // Инцидент по id — списком из одного или пустым
 
@@ -434,7 +446,7 @@ module im {
   // §11. Привязанные к основному id — и открытые, и закрытые вместе с ним
 
   def linkedOf(incidents: List[Incident], id: str): List[Incident] =
-    incidents.select(e_83 => (e_83.linkedTo == id))
+    incidents.select(e_84 => (e_84.linkedTo == id))
 
   // §10.2. Сколько инцидентов человека в состоянии, кроме одного — для лимитов
 
@@ -449,50 +461,50 @@ module im {
   // §11.4. Кто был в группе основного p в момент at (inGroupAt)
 
   def groupMembersAt(incidents: List[Incident], p: Incident, at: int): List[Incident] =
-    incidents.select(e_84 => ((e_84.id != p.id) and inGroupAt(e_84, p, at)))
+    incidents.select(e_85 => ((e_85.id != p.id) and inGroupAt(e_85, p, at)))
 
   // §14.5, ARCH-15. Соседи — инциденты того же события, кроме самого x: другие службы той же тревоги. Не привязка §11: у каждого свой владелец, сроки и закрытие
 
   def siblingsOf(incidents: List[Incident], x: Incident): List[Incident] =
-    incidents.select(s_85 => (((x.eventGuid != "") and (s_85.eventGuid == x.eventGuid)) and (s_85.id != x.id)))
+    incidents.select(s_86 => (((x.eventGuid != "") and (s_86.eventGuid == x.eventGuid)) and (s_86.id != x.id)))
 
   /* ===== Переходы машины: условия (from и guards) и эффекты ===== */
 
 
   def ec_resumeTimer(w0: World, c: Ctx, iid: str, timerId: str): World = {
-    val w86 = if (not(timerDef(timerId).pausable)) {
-      val sec_87 = timerSec(w0.inc.get(iid), timerId, "")
-      val w88 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: (if ((sec_87 < 0)) 0 else (c.now + (sec_87 * 1000))) }) }) }
-      val w89 = { ...w88, inc: w88.inc.set(iid, { ...w88.inc.get(iid), timers: w88.inc.get(iid).timers.set(timerId, { ...w88.inc.get(iid).timers.get(timerId), since: c.now }) }) }
-      w89
-    } else {
-      val w90 = if ((w0.inc.get(iid).timers.get(timerId).due == 0)) {
-      val left_91 = (if (w0.inc.get(iid).timers.get(timerId).paused) w0.inc.get(iid).timers.get(timerId).left else (timerSec(w0.inc.get(iid), timerId, "") * 1000))
-      val w92 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: (if (((left_91 == 0) and (w0.inc.get(iid).timers.get(timerId).fired != 0))) w0.inc.get(iid).timers.get(timerId).fired else (c.now + left_91)) }) }) }
-      val w93 = { ...w92, inc: w92.inc.set(iid, { ...w92.inc.get(iid), timers: w92.inc.get(iid).timers.set(timerId, { ...w92.inc.get(iid).timers.get(timerId), paused: false }) }) }
-      val w94 = { ...w93, inc: w93.inc.set(iid, { ...w93.inc.get(iid), timers: w93.inc.get(iid).timers.set(timerId, { ...w93.inc.get(iid).timers.get(timerId), left: 0 }) }) }
-      w94
-    } else w0
+    val w87 = if (not(timerDef(timerId).pausable)) {
+      val sec_88 = timerSec(w0.inc.get(iid), timerId, "")
+      val w89 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: (if ((sec_88 < 0)) 0 else (c.now + (sec_88 * 1000))) }) }) }
+      val w90 = { ...w89, inc: w89.inc.set(iid, { ...w89.inc.get(iid), timers: w89.inc.get(iid).timers.set(timerId, { ...w89.inc.get(iid).timers.get(timerId), since: c.now }) }) }
       w90
+    } else {
+      val w91 = if ((w0.inc.get(iid).timers.get(timerId).due == 0)) {
+      val left_92 = (if (w0.inc.get(iid).timers.get(timerId).paused) w0.inc.get(iid).timers.get(timerId).left else (timerSec(w0.inc.get(iid), timerId, "") * 1000))
+      val w93 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: (if (((left_92 == 0) and (w0.inc.get(iid).timers.get(timerId).fired != 0))) w0.inc.get(iid).timers.get(timerId).fired else (c.now + left_92)) }) }) }
+      val w94 = { ...w93, inc: w93.inc.set(iid, { ...w93.inc.get(iid), timers: w93.inc.get(iid).timers.set(timerId, { ...w93.inc.get(iid).timers.get(timerId), paused: false }) }) }
+      val w95 = { ...w94, inc: w94.inc.set(iid, { ...w94.inc.get(iid), timers: w94.inc.get(iid).timers.set(timerId, { ...w94.inc.get(iid).timers.get(timerId), left: 0 }) }) }
+      w95
+    } else w0
+      w91
     }
-    w86
+    w87
   }
 
   def ec_pauseTimer(w0: World, c: Ctx, iid: str, timerId: str): World = {
-    val w95 = if (not(timerDef(timerId).pausable)) {
-      val w96 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: 0 }) }) }
-      val w97 = { ...w96, inc: w96.inc.set(iid, { ...w96.inc.get(iid), timers: w96.inc.get(iid).timers.set(timerId, { ...w96.inc.get(iid).timers.get(timerId), since: 0 }) }) }
-      w97
-    } else {
-      val w98 = if ((w0.inc.get(iid).timers.get(timerId).due != 0)) {
-      val w99 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), left: (if (((w0.inc.get(iid).timers.get(timerId).due - c.now) > 0)) (w0.inc.get(iid).timers.get(timerId).due - c.now) else 0) }) }) }
-      val w100 = { ...w99, inc: w99.inc.set(iid, { ...w99.inc.get(iid), timers: w99.inc.get(iid).timers.set(timerId, { ...w99.inc.get(iid).timers.get(timerId), paused: true }) }) }
-      val w101 = { ...w100, inc: w100.inc.set(iid, { ...w100.inc.get(iid), timers: w100.inc.get(iid).timers.set(timerId, { ...w100.inc.get(iid).timers.get(timerId), due: 0 }) }) }
-      w101
-    } else w0
+    val w96 = if (not(timerDef(timerId).pausable)) {
+      val w97 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), due: 0 }) }) }
+      val w98 = { ...w97, inc: w97.inc.set(iid, { ...w97.inc.get(iid), timers: w97.inc.get(iid).timers.set(timerId, { ...w97.inc.get(iid).timers.get(timerId), since: 0 }) }) }
       w98
+    } else {
+      val w99 = if ((w0.inc.get(iid).timers.get(timerId).due != 0)) {
+      val w100 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set(timerId, { ...w0.inc.get(iid).timers.get(timerId), left: (if (((w0.inc.get(iid).timers.get(timerId).due - c.now) > 0)) (w0.inc.get(iid).timers.get(timerId).due - c.now) else 0) }) }) }
+      val w101 = { ...w100, inc: w100.inc.set(iid, { ...w100.inc.get(iid), timers: w100.inc.get(iid).timers.set(timerId, { ...w100.inc.get(iid).timers.get(timerId), paused: true }) }) }
+      val w102 = { ...w101, inc: w101.inc.set(iid, { ...w101.inc.get(iid), timers: w101.inc.get(iid).timers.set(timerId, { ...w101.inc.get(iid).timers.get(timerId), due: 0 }) }) }
+      w102
+    } else w0
+      w99
     }
-    w95
+    w96
   }
 
   // create: event → new
@@ -502,47 +514,47 @@ module im {
   }
 
   def e_create_0(w0: World, c: Ctx, iid: str): World = {
-    val who_102 = ""
-    val w103 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_102 }) }
-    w103
+    val who_103 = ""
+    val w104 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_103 }) }
+    w104
   }
 
   def e_create_1(w0: World, c: Ctx, iid: str): World = {
-    val group_104 = ""
-    val w105 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_104 }) }
-    w105
+    val group_105 = ""
+    val w106 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_105 }) }
+    w106
   }
 
   def e_create_2(w0: World, c: Ctx, iid: str): World = {
-    val value_106 = 0
-    val w107 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_106 }) }
-    w107
+    val value_107 = 0
+    val w108 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_107 }) }
+    w108
   }
 
   def e_create_3(w0: World, c: Ctx, iid: str): World = {
-    val w108 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w109 = if (timerDef("reaction").startsOnce) {
-      val w110 = ec_resumeTimer(w0, c, iid, "reaction")
-      w110
-    } else {
-      val w111 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w112 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w113 = { ...w112, inc: w112.inc.set(iid, { ...w112.inc.get(iid), timers: w112.inc.get(iid).timers.set("reaction", { ...w112.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w114 = { ...w113, inc: w113.inc.set(iid, { ...w113.inc.get(iid), timers: w113.inc.get(iid).timers.set("reaction", { ...w113.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w114
-    } else {
-      val sec_115 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w116 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_115 < 0)) 0 else (c.now + (sec_115 * 1000))) }) }) }
-      val w117 = { ...w116, inc: w116.inc.set(iid, { ...w116.inc.get(iid), timers: w116.inc.get(iid).timers.set("reaction", { ...w116.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
-      val w118 = { ...w117, inc: w117.inc.set(iid, { ...w117.inc.get(iid), timers: w117.inc.get(iid).timers.set("reaction", { ...w117.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w119 = { ...w118, inc: w118.inc.set(iid, { ...w118.inc.get(iid), timers: w118.inc.get(iid).timers.set("reaction", { ...w118.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w119
-    }
+    val w109 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w110 = if (timerDef("reaction").startsOnce) {
+      val w111 = ec_resumeTimer(w0, c, iid, "reaction")
       w111
+    } else {
+      val w112 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w113 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
+      val w114 = { ...w113, inc: w113.inc.set(iid, { ...w113.inc.get(iid), timers: w113.inc.get(iid).timers.set("reaction", { ...w113.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w115 = { ...w114, inc: w114.inc.set(iid, { ...w114.inc.get(iid), timers: w114.inc.get(iid).timers.set("reaction", { ...w114.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w115
+    } else {
+      val sec_116 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w117 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_116 < 0)) 0 else (c.now + (sec_116 * 1000))) }) }) }
+      val w118 = { ...w117, inc: w117.inc.set(iid, { ...w117.inc.get(iid), timers: w117.inc.get(iid).timers.set("reaction", { ...w117.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w119 = { ...w118, inc: w118.inc.set(iid, { ...w118.inc.get(iid), timers: w118.inc.get(iid).timers.set("reaction", { ...w118.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w120 = { ...w119, inc: w119.inc.set(iid, { ...w119.inc.get(iid), timers: w119.inc.get(iid).timers.set("reaction", { ...w119.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w120
     }
-      w109
+      w112
     }
-    w108
+      w110
+    }
+    w109
   }
 
   def e_create_4(w0: World, c: Ctx, iid: str): World = {
@@ -566,60 +578,60 @@ module im {
   def ok_claim(c: Ctx, iid: str): bool = all {
     Set("new").contains(world.inc.get(iid).state),
     can(c.me, "incident:claim"),
-    not(settings.session.states.foldl(false, (acc, s_120) => acc or ((s_120.id == agentState(c.me)) and s_120.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_121) => acc or ((s_121.id == agentState(c.me)) and s_121.readOnly))),
     ((settings.limits.maxActive == 0) or (countMine(incs(world), c.me, "in_progress", world.inc.get(iid).id) < settings.limits.maxActive)),
   }
 
   def e_claim_0(w0: World, c: Ctx, iid: str): World = {
-    val who_121 = c.actor
-    val w122 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_121 }) }
-    w122
-  }
-
-  def e_claim_1(w0: World, c: Ctx, iid: str): World = {
-    val w123 = if (timerDef("reaction").startsOnce) {
-      val w124 = ec_pauseTimer(w0, c, iid, "reaction")
-      w124
-    } else {
-      val w125 = if (false) {
-      val w126 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w127 = { ...w126, inc: w126.inc.set(iid, { ...w126.inc.get(iid), timers: w126.inc.get(iid).timers.set("reaction", { ...w126.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w128 = { ...w127, inc: w127.inc.set(iid, { ...w127.inc.get(iid), timers: w127.inc.get(iid).timers.set("reaction", { ...w127.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w129 = { ...w128, inc: w128.inc.set(iid, { ...w128.inc.get(iid), timers: w128.inc.get(iid).timers.set("reaction", { ...w128.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w129
-    } else {
-      val w130 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_131 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w132 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_131) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w133 = { ...w132, inc: w132.inc.set(iid, { ...w132.inc.get(iid), timers: w132.inc.get(iid).timers.set("reaction", { ...w132.inc.get(iid).timers.get("reaction"), paused: keep_131 }) }) }
-      val w134 = { ...w133, inc: w133.inc.set(iid, { ...w133.inc.get(iid), timers: w133.inc.get(iid).timers.set("reaction", { ...w133.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w135 = { ...w134, inc: w134.inc.set(iid, { ...w134.inc.get(iid), timers: w134.inc.get(iid).timers.set("reaction", { ...w134.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w135
-    }
-      w130
-    }
-      w125
-    }
+    val who_122 = c.actor
+    val w123 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_122 }) }
     w123
   }
 
-  def e_claim_2(w0: World, c: Ctx, iid: str): World = {
-    val w136 = if (not(timerDef("resolution").pausable)) {
-      val sec_137 = timerSec(w0.inc.get(iid), "resolution", "")
-      val w138 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_137 < 0)) 0 else (c.now + (sec_137 * 1000))) }) }) }
-      val w139 = { ...w138, inc: w138.inc.set(iid, { ...w138.inc.get(iid), timers: w138.inc.get(iid).timers.set("resolution", { ...w138.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
-      w139
+  def e_claim_1(w0: World, c: Ctx, iid: str): World = {
+    val w124 = if (timerDef("reaction").startsOnce) {
+      val w125 = ec_pauseTimer(w0, c, iid, "reaction")
+      w125
     } else {
-      val w140 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
-      val left_141 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
-      val w142 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_141 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_141)) }) }) }
-      val w143 = { ...w142, inc: w142.inc.set(iid, { ...w142.inc.get(iid), timers: w142.inc.get(iid).timers.set("resolution", { ...w142.inc.get(iid).timers.get("resolution"), paused: false }) }) }
-      val w144 = { ...w143, inc: w143.inc.set(iid, { ...w143.inc.get(iid), timers: w143.inc.get(iid).timers.set("resolution", { ...w143.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
-      w144
-    } else w0
-      w140
+      val w126 = if (false) {
+      val w127 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w128 = { ...w127, inc: w127.inc.set(iid, { ...w127.inc.get(iid), timers: w127.inc.get(iid).timers.set("reaction", { ...w127.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w129 = { ...w128, inc: w128.inc.set(iid, { ...w128.inc.get(iid), timers: w128.inc.get(iid).timers.set("reaction", { ...w128.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w130 = { ...w129, inc: w129.inc.set(iid, { ...w129.inc.get(iid), timers: w129.inc.get(iid).timers.set("reaction", { ...w129.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w130
+    } else {
+      val w131 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_132 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w133 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_132) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w134 = { ...w133, inc: w133.inc.set(iid, { ...w133.inc.get(iid), timers: w133.inc.get(iid).timers.set("reaction", { ...w133.inc.get(iid).timers.get("reaction"), paused: keep_132 }) }) }
+      val w135 = { ...w134, inc: w134.inc.set(iid, { ...w134.inc.get(iid), timers: w134.inc.get(iid).timers.set("reaction", { ...w134.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w136 = { ...w135, inc: w135.inc.set(iid, { ...w135.inc.get(iid), timers: w135.inc.get(iid).timers.set("reaction", { ...w135.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w136
     }
-    w136
+      w131
+    }
+      w126
+    }
+    w124
+  }
+
+  def e_claim_2(w0: World, c: Ctx, iid: str): World = {
+    val w137 = if (not(timerDef("resolution").pausable)) {
+      val sec_138 = timerSec(w0.inc.get(iid), "resolution", "")
+      val w139 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_138 < 0)) 0 else (c.now + (sec_138 * 1000))) }) }) }
+      val w140 = { ...w139, inc: w139.inc.set(iid, { ...w139.inc.get(iid), timers: w139.inc.get(iid).timers.set("resolution", { ...w139.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
+      w140
+    } else {
+      val w141 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
+      val left_142 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
+      val w143 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_142 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_142)) }) }) }
+      val w144 = { ...w143, inc: w143.inc.set(iid, { ...w143.inc.get(iid), timers: w143.inc.get(iid).timers.set("resolution", { ...w143.inc.get(iid).timers.get("resolution"), paused: false }) }) }
+      val w145 = { ...w144, inc: w144.inc.set(iid, { ...w144.inc.get(iid), timers: w144.inc.get(iid).timers.set("resolution", { ...w144.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
+      w145
+    } else w0
+      w141
+    }
+    w137
   }
 
   def e_claim_3(w0: World, c: Ctx, iid: str): World = {
@@ -649,66 +661,66 @@ module im {
     Set("pending_acceptance").contains(world.inc.get(iid).state),
     can(c.me, "incident:accept"),
     isTarget(c.me, world.inc.get(iid)),
-    not(settings.session.states.foldl(false, (acc, s_145) => acc or ((s_145.id == agentState(c.me)) and s_145.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_146) => acc or ((s_146.id == agentState(c.me)) and s_146.readOnly))),
     ((settings.limits.maxActive == 0) or (countMine(incs(world), c.me, "in_progress", world.inc.get(iid).id) < settings.limits.maxActive)),
   }
 
   def e_accept_0(w0: World, c: Ctx, iid: str): World = {
-    val who_146 = c.actor
-    val w147 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_146 }) }
-    w147
+    val who_147 = c.actor
+    val w148 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_147 }) }
+    w148
   }
 
   def e_accept_1(w0: World, c: Ctx, iid: str): World = {
-    val group_148 = ""
-    val w149 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_148 }) }
-    w149
-  }
-
-  def e_accept_2(w0: World, c: Ctx, iid: str): World = {
-    val w150 = if (timerDef("reaction").startsOnce) {
-      val w151 = ec_pauseTimer(w0, c, iid, "reaction")
-      w151
-    } else {
-      val w152 = if (false) {
-      val w153 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w154 = { ...w153, inc: w153.inc.set(iid, { ...w153.inc.get(iid), timers: w153.inc.get(iid).timers.set("reaction", { ...w153.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w155 = { ...w154, inc: w154.inc.set(iid, { ...w154.inc.get(iid), timers: w154.inc.get(iid).timers.set("reaction", { ...w154.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w156 = { ...w155, inc: w155.inc.set(iid, { ...w155.inc.get(iid), timers: w155.inc.get(iid).timers.set("reaction", { ...w155.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w156
-    } else {
-      val w157 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_158 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w159 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_158) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w160 = { ...w159, inc: w159.inc.set(iid, { ...w159.inc.get(iid), timers: w159.inc.get(iid).timers.set("reaction", { ...w159.inc.get(iid).timers.get("reaction"), paused: keep_158 }) }) }
-      val w161 = { ...w160, inc: w160.inc.set(iid, { ...w160.inc.get(iid), timers: w160.inc.get(iid).timers.set("reaction", { ...w160.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w162 = { ...w161, inc: w161.inc.set(iid, { ...w161.inc.get(iid), timers: w161.inc.get(iid).timers.set("reaction", { ...w161.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w162
-    }
-      w157
-    }
-      w152
-    }
+    val group_149 = ""
+    val w150 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_149 }) }
     w150
   }
 
-  def e_accept_3(w0: World, c: Ctx, iid: str): World = {
-    val w163 = if (not(timerDef("resolution").pausable)) {
-      val sec_164 = timerSec(w0.inc.get(iid), "resolution", "")
-      val w165 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_164 < 0)) 0 else (c.now + (sec_164 * 1000))) }) }) }
-      val w166 = { ...w165, inc: w165.inc.set(iid, { ...w165.inc.get(iid), timers: w165.inc.get(iid).timers.set("resolution", { ...w165.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
-      w166
+  def e_accept_2(w0: World, c: Ctx, iid: str): World = {
+    val w151 = if (timerDef("reaction").startsOnce) {
+      val w152 = ec_pauseTimer(w0, c, iid, "reaction")
+      w152
     } else {
-      val w167 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
-      val left_168 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
-      val w169 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_168 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_168)) }) }) }
-      val w170 = { ...w169, inc: w169.inc.set(iid, { ...w169.inc.get(iid), timers: w169.inc.get(iid).timers.set("resolution", { ...w169.inc.get(iid).timers.get("resolution"), paused: false }) }) }
-      val w171 = { ...w170, inc: w170.inc.set(iid, { ...w170.inc.get(iid), timers: w170.inc.get(iid).timers.set("resolution", { ...w170.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
-      w171
-    } else w0
-      w167
+      val w153 = if (false) {
+      val w154 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w155 = { ...w154, inc: w154.inc.set(iid, { ...w154.inc.get(iid), timers: w154.inc.get(iid).timers.set("reaction", { ...w154.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w156 = { ...w155, inc: w155.inc.set(iid, { ...w155.inc.get(iid), timers: w155.inc.get(iid).timers.set("reaction", { ...w155.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w157 = { ...w156, inc: w156.inc.set(iid, { ...w156.inc.get(iid), timers: w156.inc.get(iid).timers.set("reaction", { ...w156.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w157
+    } else {
+      val w158 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_159 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w160 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_159) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w161 = { ...w160, inc: w160.inc.set(iid, { ...w160.inc.get(iid), timers: w160.inc.get(iid).timers.set("reaction", { ...w160.inc.get(iid).timers.get("reaction"), paused: keep_159 }) }) }
+      val w162 = { ...w161, inc: w161.inc.set(iid, { ...w161.inc.get(iid), timers: w161.inc.get(iid).timers.set("reaction", { ...w161.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w163 = { ...w162, inc: w162.inc.set(iid, { ...w162.inc.get(iid), timers: w162.inc.get(iid).timers.set("reaction", { ...w162.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w163
     }
-    w163
+      w158
+    }
+      w153
+    }
+    w151
+  }
+
+  def e_accept_3(w0: World, c: Ctx, iid: str): World = {
+    val w164 = if (not(timerDef("resolution").pausable)) {
+      val sec_165 = timerSec(w0.inc.get(iid), "resolution", "")
+      val w166 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_165 < 0)) 0 else (c.now + (sec_165 * 1000))) }) }) }
+      val w167 = { ...w166, inc: w166.inc.set(iid, { ...w166.inc.get(iid), timers: w166.inc.get(iid).timers.set("resolution", { ...w166.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
+      w167
+    } else {
+      val w168 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
+      val left_169 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
+      val w170 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_169 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_169)) }) }) }
+      val w171 = { ...w170, inc: w170.inc.set(iid, { ...w170.inc.get(iid), timers: w170.inc.get(iid).timers.set("resolution", { ...w170.inc.get(iid).timers.get("resolution"), paused: false }) }) }
+      val w172 = { ...w171, inc: w171.inc.set(iid, { ...w171.inc.get(iid), timers: w171.inc.get(iid).timers.set("resolution", { ...w171.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
+      w172
+    } else w0
+      w168
+    }
+    w164
   }
 
   def e_accept_4(w0: World, c: Ctx, iid: str): World = {
@@ -739,19 +751,19 @@ module im {
     Set("pending_acceptance").contains(world.inc.get(iid).state),
     can(c.me, "incident:release"),
     isTarget(c.me, world.inc.get(iid)),
-    not(settings.session.states.foldl(false, (acc, s_172) => acc or ((s_172.id == agentState(c.me)) and s_172.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_173) => acc or ((s_173.id == agentState(c.me)) and s_173.readOnly))),
   }
 
   def e_reject_0(w0: World, c: Ctx, iid: str): World = {
-    val who_173 = ""
-    val w174 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_173 }) }
-    w174
+    val who_174 = ""
+    val w175 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_174 }) }
+    w175
   }
 
   def e_reject_1(w0: World, c: Ctx, iid: str): World = {
-    val group_175 = ""
-    val w176 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_175 }) }
-    w176
+    val group_176 = ""
+    val w177 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_176 }) }
+    w177
   }
 
   def e_reject_2(w0: World, c: Ctx, iid: str): World = {
@@ -774,57 +786,57 @@ module im {
     Set("in_progress").contains(world.inc.get(iid).state),
     can(c.me, "incident:hold"),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_177) => acc or ((s_177.id == agentState(c.me)) and s_177.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_178) => acc or ((s_178.id == agentState(c.me)) and s_178.readOnly))),
     ((settings.limits.maxOnHold == 0) or (countMine(incs(world), c.me, "on_hold", world.inc.get(iid).id) < settings.limits.maxOnHold)),
   }
 
   def e_hold_0(w0: World, c: Ctx, iid: str): World = {
-    val reason_178 = c.form.reasonId
-    val w179 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_178 }) }
-    w179
-  }
-
-  def e_hold_1(w0: World, c: Ctx, iid: str): World = {
-    val w180 = if (not(timerDef("resolution").pausable)) {
-      val w181 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w182 = { ...w181, inc: w181.inc.set(iid, { ...w181.inc.get(iid), timers: w181.inc.get(iid).timers.set("resolution", { ...w181.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w182
-    } else {
-      val w183 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w184 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w185 = { ...w184, inc: w184.inc.set(iid, { ...w184.inc.get(iid), timers: w184.inc.get(iid).timers.set("resolution", { ...w184.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w186 = { ...w185, inc: w185.inc.set(iid, { ...w185.inc.get(iid), timers: w185.inc.get(iid).timers.set("resolution", { ...w185.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w186
-    } else w0
-      w183
-    }
+    val reason_179 = c.form.reasonId
+    val w180 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_179 }) }
     w180
   }
 
+  def e_hold_1(w0: World, c: Ctx, iid: str): World = {
+    val w181 = if (not(timerDef("resolution").pausable)) {
+      val w182 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w183 = { ...w182, inc: w182.inc.set(iid, { ...w182.inc.get(iid), timers: w182.inc.get(iid).timers.set("resolution", { ...w182.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w183
+    } else {
+      val w184 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w185 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w186 = { ...w185, inc: w185.inc.set(iid, { ...w185.inc.get(iid), timers: w185.inc.get(iid).timers.set("resolution", { ...w185.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w187 = { ...w186, inc: w186.inc.set(iid, { ...w186.inc.get(iid), timers: w186.inc.get(iid).timers.set("resolution", { ...w186.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w187
+    } else w0
+      w184
+    }
+    w181
+  }
+
   def e_hold_2(w0: World, c: Ctx, iid: str): World = {
-    val w187 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
-      val w188 = if (timerDef("hold").startsOnce) {
-      val w189 = ec_resumeTimer(w0, c, iid, "hold")
-      w189
-    } else {
-      val w190 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
-      val w191 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
-      val w192 = { ...w191, inc: w191.inc.set(iid, { ...w191.inc.get(iid), timers: w191.inc.get(iid).timers.set("hold", { ...w191.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w193 = { ...w192, inc: w192.inc.set(iid, { ...w192.inc.get(iid), timers: w192.inc.get(iid).timers.set("hold", { ...w192.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      w193
-    } else {
-      val sec_194 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
-      val w195 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_194 < 0)) 0 else (c.now + (sec_194 * 1000))) }) }) }
-      val w196 = { ...w195, inc: w195.inc.set(iid, { ...w195.inc.get(iid), timers: w195.inc.get(iid).timers.set("hold", { ...w195.inc.get(iid).timers.get("hold"), since: c.now }) }) }
-      val w197 = { ...w196, inc: w196.inc.set(iid, { ...w196.inc.get(iid), timers: w196.inc.get(iid).timers.set("hold", { ...w196.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w198 = { ...w197, inc: w197.inc.set(iid, { ...w197.inc.get(iid), timers: w197.inc.get(iid).timers.set("hold", { ...w197.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      w198
-    }
+    val w188 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
+      val w189 = if (timerDef("hold").startsOnce) {
+      val w190 = ec_resumeTimer(w0, c, iid, "hold")
       w190
+    } else {
+      val w191 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
+      val w192 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
+      val w193 = { ...w192, inc: w192.inc.set(iid, { ...w192.inc.get(iid), timers: w192.inc.get(iid).timers.set("hold", { ...w192.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w194 = { ...w193, inc: w193.inc.set(iid, { ...w193.inc.get(iid), timers: w193.inc.get(iid).timers.set("hold", { ...w193.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      w194
+    } else {
+      val sec_195 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
+      val w196 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_195 < 0)) 0 else (c.now + (sec_195 * 1000))) }) }) }
+      val w197 = { ...w196, inc: w196.inc.set(iid, { ...w196.inc.get(iid), timers: w196.inc.get(iid).timers.set("hold", { ...w196.inc.get(iid).timers.get("hold"), since: c.now }) }) }
+      val w198 = { ...w197, inc: w197.inc.set(iid, { ...w197.inc.get(iid), timers: w197.inc.get(iid).timers.set("hold", { ...w197.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w199 = { ...w198, inc: w198.inc.set(iid, { ...w198.inc.get(iid), timers: w198.inc.get(iid).timers.set("hold", { ...w198.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      w199
     }
-      w188
+      w191
     }
-    w187
+      w189
+    }
+    w188
   }
 
   def e_hold_3(w0: World, c: Ctx, iid: str): World = {
@@ -854,59 +866,59 @@ module im {
     Set("on_hold").contains(world.inc.get(iid).state),
     can(c.me, "incident:claim"),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_199) => acc or ((s_199.id == agentState(c.me)) and s_199.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_200) => acc or ((s_200.id == agentState(c.me)) and s_200.readOnly))),
     ((settings.limits.maxActive == 0) or (countMine(incs(world), c.me, "in_progress", world.inc.get(iid).id) < settings.limits.maxActive)),
   }
 
   def e_resume_0(w0: World, c: Ctx, iid: str): World = {
-    val w200 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w200
-  }
-
-  def e_resume_1(w0: World, c: Ctx, iid: str): World = {
-    val w201 = if (timerDef("hold").startsOnce) {
-      val w202 = ec_pauseTimer(w0, c, iid, "hold")
-      w202
-    } else {
-      val w203 = if (false) {
-      val w204 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w205 = { ...w204, inc: w204.inc.set(iid, { ...w204.inc.get(iid), timers: w204.inc.get(iid).timers.set("hold", { ...w204.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w206 = { ...w205, inc: w205.inc.set(iid, { ...w205.inc.get(iid), timers: w205.inc.get(iid).timers.set("hold", { ...w205.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w207 = { ...w206, inc: w206.inc.set(iid, { ...w206.inc.get(iid), timers: w206.inc.get(iid).timers.set("hold", { ...w206.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w207
-    } else {
-      val w208 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_209 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w210 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_209) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w211 = { ...w210, inc: w210.inc.set(iid, { ...w210.inc.get(iid), timers: w210.inc.get(iid).timers.set("hold", { ...w210.inc.get(iid).timers.get("hold"), paused: keep_209 }) }) }
-      val w212 = { ...w211, inc: w211.inc.set(iid, { ...w211.inc.get(iid), timers: w211.inc.get(iid).timers.set("hold", { ...w211.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w213 = { ...w212, inc: w212.inc.set(iid, { ...w212.inc.get(iid), timers: w212.inc.get(iid).timers.set("hold", { ...w212.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w213
-    }
-      w208
-    }
-      w203
-    }
+    val w201 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
     w201
   }
 
-  def e_resume_2(w0: World, c: Ctx, iid: str): World = {
-    val w214 = if (not(timerDef("resolution").pausable)) {
-      val sec_215 = timerSec(w0.inc.get(iid), "resolution", "")
-      val w216 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_215 < 0)) 0 else (c.now + (sec_215 * 1000))) }) }) }
-      val w217 = { ...w216, inc: w216.inc.set(iid, { ...w216.inc.get(iid), timers: w216.inc.get(iid).timers.set("resolution", { ...w216.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
-      w217
+  def e_resume_1(w0: World, c: Ctx, iid: str): World = {
+    val w202 = if (timerDef("hold").startsOnce) {
+      val w203 = ec_pauseTimer(w0, c, iid, "hold")
+      w203
     } else {
-      val w218 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
-      val left_219 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
-      val w220 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_219 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_219)) }) }) }
-      val w221 = { ...w220, inc: w220.inc.set(iid, { ...w220.inc.get(iid), timers: w220.inc.get(iid).timers.set("resolution", { ...w220.inc.get(iid).timers.get("resolution"), paused: false }) }) }
-      val w222 = { ...w221, inc: w221.inc.set(iid, { ...w221.inc.get(iid), timers: w221.inc.get(iid).timers.set("resolution", { ...w221.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
-      w222
-    } else w0
-      w218
+      val w204 = if (false) {
+      val w205 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w206 = { ...w205, inc: w205.inc.set(iid, { ...w205.inc.get(iid), timers: w205.inc.get(iid).timers.set("hold", { ...w205.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w207 = { ...w206, inc: w206.inc.set(iid, { ...w206.inc.get(iid), timers: w206.inc.get(iid).timers.set("hold", { ...w206.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w208 = { ...w207, inc: w207.inc.set(iid, { ...w207.inc.get(iid), timers: w207.inc.get(iid).timers.set("hold", { ...w207.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w208
+    } else {
+      val w209 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_210 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w211 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_210) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w212 = { ...w211, inc: w211.inc.set(iid, { ...w211.inc.get(iid), timers: w211.inc.get(iid).timers.set("hold", { ...w211.inc.get(iid).timers.get("hold"), paused: keep_210 }) }) }
+      val w213 = { ...w212, inc: w212.inc.set(iid, { ...w212.inc.get(iid), timers: w212.inc.get(iid).timers.set("hold", { ...w212.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w214 = { ...w213, inc: w213.inc.set(iid, { ...w213.inc.get(iid), timers: w213.inc.get(iid).timers.set("hold", { ...w213.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w214
     }
-    w214
+      w209
+    }
+      w204
+    }
+    w202
+  }
+
+  def e_resume_2(w0: World, c: Ctx, iid: str): World = {
+    val w215 = if (not(timerDef("resolution").pausable)) {
+      val sec_216 = timerSec(w0.inc.get(iid), "resolution", "")
+      val w217 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_216 < 0)) 0 else (c.now + (sec_216 * 1000))) }) }) }
+      val w218 = { ...w217, inc: w217.inc.set(iid, { ...w217.inc.get(iid), timers: w217.inc.get(iid).timers.set("resolution", { ...w217.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
+      w218
+    } else {
+      val w219 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
+      val left_220 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
+      val w221 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_220 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_220)) }) }) }
+      val w222 = { ...w221, inc: w221.inc.set(iid, { ...w221.inc.get(iid), timers: w221.inc.get(iid).timers.set("resolution", { ...w221.inc.get(iid).timers.get("resolution"), paused: false }) }) }
+      val w223 = { ...w222, inc: w222.inc.set(iid, { ...w222.inc.get(iid), timers: w222.inc.get(iid).timers.set("resolution", { ...w222.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
+      w223
+    } else w0
+      w219
+    }
+    w215
   }
 
   def e_resume_3(w0: World, c: Ctx, iid: str): World = {
@@ -936,88 +948,88 @@ module im {
     Set("in_progress", "on_hold").contains(world.inc.get(iid).state),
     can(c.me, "incident:release"),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_223) => acc or ((s_223.id == agentState(c.me)) and s_223.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_224) => acc or ((s_224.id == agentState(c.me)) and s_224.readOnly))),
   }
 
   def e_release_0(w0: World, c: Ctx, iid: str): World = {
-    val who_224 = ""
-    val w225 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_224 }) }
-    w225
-  }
-
-  def e_release_1(w0: World, c: Ctx, iid: str): World = {
-    val w226 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    val who_225 = ""
+    val w226 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_225 }) }
     w226
   }
 
-  def e_release_2(w0: World, c: Ctx, iid: str): World = {
-    val w227 = if (not(timerDef("resolution").pausable)) {
-      val w228 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w229 = { ...w228, inc: w228.inc.set(iid, { ...w228.inc.get(iid), timers: w228.inc.get(iid).timers.set("resolution", { ...w228.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w229
-    } else {
-      val w230 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w231 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w232 = { ...w231, inc: w231.inc.set(iid, { ...w231.inc.get(iid), timers: w231.inc.get(iid).timers.set("resolution", { ...w231.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w233 = { ...w232, inc: w232.inc.set(iid, { ...w232.inc.get(iid), timers: w232.inc.get(iid).timers.set("resolution", { ...w232.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w233
-    } else w0
-      w230
-    }
+  def e_release_1(w0: World, c: Ctx, iid: str): World = {
+    val w227 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
     w227
   }
 
+  def e_release_2(w0: World, c: Ctx, iid: str): World = {
+    val w228 = if (not(timerDef("resolution").pausable)) {
+      val w229 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w230 = { ...w229, inc: w229.inc.set(iid, { ...w229.inc.get(iid), timers: w229.inc.get(iid).timers.set("resolution", { ...w229.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w230
+    } else {
+      val w231 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w232 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w233 = { ...w232, inc: w232.inc.set(iid, { ...w232.inc.get(iid), timers: w232.inc.get(iid).timers.set("resolution", { ...w232.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w234 = { ...w233, inc: w233.inc.set(iid, { ...w233.inc.get(iid), timers: w233.inc.get(iid).timers.set("resolution", { ...w233.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w234
+    } else w0
+      w231
+    }
+    w228
+  }
+
   def e_release_3(w0: World, c: Ctx, iid: str): World = {
-    val w234 = if (timerDef("hold").startsOnce) {
-      val w235 = ec_pauseTimer(w0, c, iid, "hold")
-      w235
-    } else {
-      val w236 = if (false) {
-      val w237 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w238 = { ...w237, inc: w237.inc.set(iid, { ...w237.inc.get(iid), timers: w237.inc.get(iid).timers.set("hold", { ...w237.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w239 = { ...w238, inc: w238.inc.set(iid, { ...w238.inc.get(iid), timers: w238.inc.get(iid).timers.set("hold", { ...w238.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w240 = { ...w239, inc: w239.inc.set(iid, { ...w239.inc.get(iid), timers: w239.inc.get(iid).timers.set("hold", { ...w239.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w240
-    } else {
-      val w241 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_242 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w243 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_242) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w244 = { ...w243, inc: w243.inc.set(iid, { ...w243.inc.get(iid), timers: w243.inc.get(iid).timers.set("hold", { ...w243.inc.get(iid).timers.get("hold"), paused: keep_242 }) }) }
-      val w245 = { ...w244, inc: w244.inc.set(iid, { ...w244.inc.get(iid), timers: w244.inc.get(iid).timers.set("hold", { ...w244.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w246 = { ...w245, inc: w245.inc.set(iid, { ...w245.inc.get(iid), timers: w245.inc.get(iid).timers.set("hold", { ...w245.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w246
-    }
-      w241
-    }
+    val w235 = if (timerDef("hold").startsOnce) {
+      val w236 = ec_pauseTimer(w0, c, iid, "hold")
       w236
+    } else {
+      val w237 = if (false) {
+      val w238 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w239 = { ...w238, inc: w238.inc.set(iid, { ...w238.inc.get(iid), timers: w238.inc.get(iid).timers.set("hold", { ...w238.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w240 = { ...w239, inc: w239.inc.set(iid, { ...w239.inc.get(iid), timers: w239.inc.get(iid).timers.set("hold", { ...w239.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w241 = { ...w240, inc: w240.inc.set(iid, { ...w240.inc.get(iid), timers: w240.inc.get(iid).timers.set("hold", { ...w240.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w241
+    } else {
+      val w242 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_243 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w244 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_243) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w245 = { ...w244, inc: w244.inc.set(iid, { ...w244.inc.get(iid), timers: w244.inc.get(iid).timers.set("hold", { ...w244.inc.get(iid).timers.get("hold"), paused: keep_243 }) }) }
+      val w246 = { ...w245, inc: w245.inc.set(iid, { ...w245.inc.get(iid), timers: w245.inc.get(iid).timers.set("hold", { ...w245.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w247 = { ...w246, inc: w246.inc.set(iid, { ...w246.inc.get(iid), timers: w246.inc.get(iid).timers.set("hold", { ...w246.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w247
     }
-    w234
+      w242
+    }
+      w237
+    }
+    w235
   }
 
   def e_release_4(w0: World, c: Ctx, iid: str): World = {
-    val w247 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w248 = if (timerDef("reaction").startsOnce) {
-      val w249 = ec_resumeTimer(w0, c, iid, "reaction")
-      w249
-    } else {
-      val w250 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w251 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w252 = { ...w251, inc: w251.inc.set(iid, { ...w251.inc.get(iid), timers: w251.inc.get(iid).timers.set("reaction", { ...w251.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w253 = { ...w252, inc: w252.inc.set(iid, { ...w252.inc.get(iid), timers: w252.inc.get(iid).timers.set("reaction", { ...w252.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w253
-    } else {
-      val sec_254 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
-      val w255 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_254 < 0)) 0 else (c.now + (sec_254 * 1000))) }) }) }
-      val w256 = { ...w255, inc: w255.inc.set(iid, { ...w255.inc.get(iid), timers: w255.inc.get(iid).timers.set("reaction", { ...w255.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
-      val w257 = { ...w256, inc: w256.inc.set(iid, { ...w256.inc.get(iid), timers: w256.inc.get(iid).timers.set("reaction", { ...w256.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w258 = { ...w257, inc: w257.inc.set(iid, { ...w257.inc.get(iid), timers: w257.inc.get(iid).timers.set("reaction", { ...w257.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w258
-    }
+    val w248 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w249 = if (timerDef("reaction").startsOnce) {
+      val w250 = ec_resumeTimer(w0, c, iid, "reaction")
       w250
+    } else {
+      val w251 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w252 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
+      val w253 = { ...w252, inc: w252.inc.set(iid, { ...w252.inc.get(iid), timers: w252.inc.get(iid).timers.set("reaction", { ...w252.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w254 = { ...w253, inc: w253.inc.set(iid, { ...w253.inc.get(iid), timers: w253.inc.get(iid).timers.set("reaction", { ...w253.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w254
+    } else {
+      val sec_255 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
+      val w256 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_255 < 0)) 0 else (c.now + (sec_255 * 1000))) }) }) }
+      val w257 = { ...w256, inc: w256.inc.set(iid, { ...w256.inc.get(iid), timers: w256.inc.get(iid).timers.set("reaction", { ...w256.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w258 = { ...w257, inc: w257.inc.set(iid, { ...w257.inc.get(iid), timers: w257.inc.get(iid).timers.set("reaction", { ...w257.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w259 = { ...w258, inc: w258.inc.set(iid, { ...w258.inc.get(iid), timers: w258.inc.get(iid).timers.set("reaction", { ...w258.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w259
     }
-      w248
+      w251
     }
-    w247
+      w249
+    }
+    w248
   }
 
   def e_release_5(w0: World, c: Ctx, iid: str): World = {
@@ -1048,104 +1060,104 @@ module im {
   def ok_transfer(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance", "in_progress", "on_hold").contains(world.inc.get(iid).state),
     can(c.me, (if (scopeOwn(c.me, world.inc.get(iid), { own: { anyOf: [{ state: "new", ownership: "" }, { state: "", ownership: "owner" }, { state: "", ownership: "target" }] } })) "incident:transfer:own" else "incident:transfer:any")),
-    not(settings.session.states.foldl(false, (acc, s_259) => acc or ((s_259.id == agentState(c.me)) and s_259.readOnly))),
-    transferTargets.foldl(false, (acc, t_260) => acc or (offersTransferTo(c.me, t_260, world.inc.get(iid)) and linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_261) => acc and (isDone(e_261) or hasAccess(t_260, e_261))))),
+    not(settings.session.states.foldl(false, (acc, s_260) => acc or ((s_260.id == agentState(c.me)) and s_260.readOnly))),
+    transferTargets.foldl(false, (acc, t_261) => acc or (offersTransferTo(c.me, t_261, world.inc.get(iid)) and linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_262) => acc and (isDone(e_262) or hasAccess(t_261, e_262))))),
     not(isSelf(c.me, c.form.targetId)),
     ((c.form.targetId == "") or hasAccess(c.form.targetId, world.inc.get(iid))),
-    ((c.form.targetId == "") or linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_262) => acc and (isDone(e_262) or hasAccess(c.form.targetId, e_262)))),
+    ((c.form.targetId == "") or linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_263) => acc and (isDone(e_263) or hasAccess(c.form.targetId, e_263)))),
     ((c.form.targetId == "") or canAccept(c.form.targetId, world.inc.get(iid), "")),
   }
 
   def e_transfer_0(w0: World, c: Ctx, iid: str): World = {
-    val who_263 = personOf(c.form.targetId)
-    val w264 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_263 }) }
-    w264
+    val who_264 = personOf(c.form.targetId)
+    val w265 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_264 }) }
+    w265
   }
 
   def e_transfer_1(w0: World, c: Ctx, iid: str): World = {
-    val group_265 = groupOf(c.form.targetId)
-    val w266 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_265 }) }
-    w266
-  }
-
-  def e_transfer_2(w0: World, c: Ctx, iid: str): World = {
-    val w267 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), transferCount: (w0.inc.get(iid).transferCount + 1) }) }
+    val group_266 = groupOf(c.form.targetId)
+    val w267 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_266 }) }
     w267
   }
 
-  def e_transfer_3(w0: World, c: Ctx, iid: str): World = {
-    val w268 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+  def e_transfer_2(w0: World, c: Ctx, iid: str): World = {
+    val w268 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), transferCount: (w0.inc.get(iid).transferCount + 1) }) }
     w268
   }
 
-  def e_transfer_4(w0: World, c: Ctx, iid: str): World = {
-    val w269 = if (not(timerDef("resolution").pausable)) {
-      val w270 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w271 = { ...w270, inc: w270.inc.set(iid, { ...w270.inc.get(iid), timers: w270.inc.get(iid).timers.set("resolution", { ...w270.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w271
-    } else {
-      val w272 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w273 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w274 = { ...w273, inc: w273.inc.set(iid, { ...w273.inc.get(iid), timers: w273.inc.get(iid).timers.set("resolution", { ...w273.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w275 = { ...w274, inc: w274.inc.set(iid, { ...w274.inc.get(iid), timers: w274.inc.get(iid).timers.set("resolution", { ...w274.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w275
-    } else w0
-      w272
-    }
+  def e_transfer_3(w0: World, c: Ctx, iid: str): World = {
+    val w269 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
     w269
   }
 
+  def e_transfer_4(w0: World, c: Ctx, iid: str): World = {
+    val w270 = if (not(timerDef("resolution").pausable)) {
+      val w271 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w272 = { ...w271, inc: w271.inc.set(iid, { ...w271.inc.get(iid), timers: w271.inc.get(iid).timers.set("resolution", { ...w271.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w272
+    } else {
+      val w273 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w274 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w275 = { ...w274, inc: w274.inc.set(iid, { ...w274.inc.get(iid), timers: w274.inc.get(iid).timers.set("resolution", { ...w274.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w276 = { ...w275, inc: w275.inc.set(iid, { ...w275.inc.get(iid), timers: w275.inc.get(iid).timers.set("resolution", { ...w275.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w276
+    } else w0
+      w273
+    }
+    w270
+  }
+
   def e_transfer_5(w0: World, c: Ctx, iid: str): World = {
-    val w276 = if (timerDef("hold").startsOnce) {
-      val w277 = ec_pauseTimer(w0, c, iid, "hold")
-      w277
-    } else {
-      val w278 = if (false) {
-      val w279 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w280 = { ...w279, inc: w279.inc.set(iid, { ...w279.inc.get(iid), timers: w279.inc.get(iid).timers.set("hold", { ...w279.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w281 = { ...w280, inc: w280.inc.set(iid, { ...w280.inc.get(iid), timers: w280.inc.get(iid).timers.set("hold", { ...w280.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w282 = { ...w281, inc: w281.inc.set(iid, { ...w281.inc.get(iid), timers: w281.inc.get(iid).timers.set("hold", { ...w281.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w282
-    } else {
-      val w283 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_284 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w285 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_284) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w286 = { ...w285, inc: w285.inc.set(iid, { ...w285.inc.get(iid), timers: w285.inc.get(iid).timers.set("hold", { ...w285.inc.get(iid).timers.get("hold"), paused: keep_284 }) }) }
-      val w287 = { ...w286, inc: w286.inc.set(iid, { ...w286.inc.get(iid), timers: w286.inc.get(iid).timers.set("hold", { ...w286.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w288 = { ...w287, inc: w287.inc.set(iid, { ...w287.inc.get(iid), timers: w287.inc.get(iid).timers.set("hold", { ...w287.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w288
-    }
-      w283
-    }
+    val w277 = if (timerDef("hold").startsOnce) {
+      val w278 = ec_pauseTimer(w0, c, iid, "hold")
       w278
+    } else {
+      val w279 = if (false) {
+      val w280 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w281 = { ...w280, inc: w280.inc.set(iid, { ...w280.inc.get(iid), timers: w280.inc.get(iid).timers.set("hold", { ...w280.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w282 = { ...w281, inc: w281.inc.set(iid, { ...w281.inc.get(iid), timers: w281.inc.get(iid).timers.set("hold", { ...w281.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w283 = { ...w282, inc: w282.inc.set(iid, { ...w282.inc.get(iid), timers: w282.inc.get(iid).timers.set("hold", { ...w282.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w283
+    } else {
+      val w284 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_285 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w286 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_285) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w287 = { ...w286, inc: w286.inc.set(iid, { ...w286.inc.get(iid), timers: w286.inc.get(iid).timers.set("hold", { ...w286.inc.get(iid).timers.get("hold"), paused: keep_285 }) }) }
+      val w288 = { ...w287, inc: w287.inc.set(iid, { ...w287.inc.get(iid), timers: w287.inc.get(iid).timers.set("hold", { ...w287.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w289 = { ...w288, inc: w288.inc.set(iid, { ...w288.inc.get(iid), timers: w288.inc.get(iid).timers.set("hold", { ...w288.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w289
     }
-    w276
+      w284
+    }
+      w279
+    }
+    w277
   }
 
   def e_transfer_6(w0: World, c: Ctx, iid: str): World = {
-    val w289 = if ((true and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w290 = if (timerDef("reaction").startsOnce) {
-      val w291 = ec_resumeTimer(w0, c, iid, "reaction")
-      w291
-    } else {
-      val w292 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w293 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w294 = { ...w293, inc: w293.inc.set(iid, { ...w293.inc.get(iid), timers: w293.inc.get(iid).timers.set("reaction", { ...w293.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w295 = { ...w294, inc: w294.inc.set(iid, { ...w294.inc.get(iid), timers: w294.inc.get(iid).timers.set("reaction", { ...w294.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w295
-    } else {
-      val sec_296 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
-      val w297 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_296 < 0)) 0 else (c.now + (sec_296 * 1000))) }) }) }
-      val w298 = { ...w297, inc: w297.inc.set(iid, { ...w297.inc.get(iid), timers: w297.inc.get(iid).timers.set("reaction", { ...w297.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
-      val w299 = { ...w298, inc: w298.inc.set(iid, { ...w298.inc.get(iid), timers: w298.inc.get(iid).timers.set("reaction", { ...w298.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w300 = { ...w299, inc: w299.inc.set(iid, { ...w299.inc.get(iid), timers: w299.inc.get(iid).timers.set("reaction", { ...w299.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w300
-    }
+    val w290 = if ((true and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w291 = if (timerDef("reaction").startsOnce) {
+      val w292 = ec_resumeTimer(w0, c, iid, "reaction")
       w292
+    } else {
+      val w293 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w294 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
+      val w295 = { ...w294, inc: w294.inc.set(iid, { ...w294.inc.get(iid), timers: w294.inc.get(iid).timers.set("reaction", { ...w294.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w296 = { ...w295, inc: w295.inc.set(iid, { ...w295.inc.get(iid), timers: w295.inc.get(iid).timers.set("reaction", { ...w295.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w296
+    } else {
+      val sec_297 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
+      val w298 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_297 < 0)) 0 else (c.now + (sec_297 * 1000))) }) }) }
+      val w299 = { ...w298, inc: w298.inc.set(iid, { ...w298.inc.get(iid), timers: w298.inc.get(iid).timers.set("reaction", { ...w298.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w300 = { ...w299, inc: w299.inc.set(iid, { ...w299.inc.get(iid), timers: w299.inc.get(iid).timers.set("reaction", { ...w299.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w301 = { ...w300, inc: w300.inc.set(iid, { ...w300.inc.get(iid), timers: w300.inc.get(iid).timers.set("reaction", { ...w300.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w301
     }
-      w290
+      w293
     }
-    w289
+      w291
+    }
+    w290
   }
 
   def e_transfer_7(w0: World, c: Ctx, iid: str): World = {
@@ -1159,15 +1171,15 @@ module im {
   }
 
   def e_transfer_9(w0: World, c: Ctx, iid: str): World = {
-    val whom_301 = c.before.owner
-    val w302 = if (((whom_301 != "") and (whom_301 != c.actor))) w0 else w0
-    w302
+    val whom_302 = c.before.owner
+    val w303 = if (((whom_302 != "") and (whom_302 != c.actor))) w0 else w0
+    w303
   }
 
   def e_transfer_10(w0: World, c: Ctx, iid: str): World = {
-    val whom_303 = addressee(w0.inc.get(iid))
-    val w304 = if (((whom_303 != "") and (whom_303 != c.actor))) w0 else w0
-    w304
+    val whom_304 = addressee(w0.inc.get(iid))
+    val w305 = if (((whom_304 != "") and (whom_304 != c.actor))) w0 else w0
+    w305
   }
 
   def apply_transfer(c: Ctx, iid: str, w0: World): World = {
@@ -1195,98 +1207,98 @@ module im {
     can(c.me, "incident:claim"),
     (ownership(c.me, world.inc.get(iid)) != "owner"),
     (ownership(c.me, world.inc.get(iid)) != "target"),
-    not(settings.session.states.foldl(false, (acc, s_305) => acc or ((s_305.id == agentState(c.me)) and s_305.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_306) => acc or ((s_306.id == agentState(c.me)) and s_306.readOnly))),
     ((settings.limits.maxActive == 0) or (countMine(incs(world), c.me, "in_progress", world.inc.get(iid).id) < settings.limits.maxActive)),
   }
 
   def e_takeover_0(w0: World, c: Ctx, iid: str): World = {
-    val who_306 = c.actor
-    val w307 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_306 }) }
-    w307
+    val who_307 = c.actor
+    val w308 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_307 }) }
+    w308
   }
 
   def e_takeover_1(w0: World, c: Ctx, iid: str): World = {
-    val group_308 = ""
-    val w309 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_308 }) }
-    w309
-  }
-
-  def e_takeover_2(w0: World, c: Ctx, iid: str): World = {
-    val w310 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    val group_309 = ""
+    val w310 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_309 }) }
     w310
   }
 
-  def e_takeover_3(w0: World, c: Ctx, iid: str): World = {
-    val w311 = if (timerDef("reaction").startsOnce) {
-      val w312 = ec_pauseTimer(w0, c, iid, "reaction")
-      w312
-    } else {
-      val w313 = if (false) {
-      val w314 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w315 = { ...w314, inc: w314.inc.set(iid, { ...w314.inc.get(iid), timers: w314.inc.get(iid).timers.set("reaction", { ...w314.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w316 = { ...w315, inc: w315.inc.set(iid, { ...w315.inc.get(iid), timers: w315.inc.get(iid).timers.set("reaction", { ...w315.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w317 = { ...w316, inc: w316.inc.set(iid, { ...w316.inc.get(iid), timers: w316.inc.get(iid).timers.set("reaction", { ...w316.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w317
-    } else {
-      val w318 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_319 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w320 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_319) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w321 = { ...w320, inc: w320.inc.set(iid, { ...w320.inc.get(iid), timers: w320.inc.get(iid).timers.set("reaction", { ...w320.inc.get(iid).timers.get("reaction"), paused: keep_319 }) }) }
-      val w322 = { ...w321, inc: w321.inc.set(iid, { ...w321.inc.get(iid), timers: w321.inc.get(iid).timers.set("reaction", { ...w321.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w323 = { ...w322, inc: w322.inc.set(iid, { ...w322.inc.get(iid), timers: w322.inc.get(iid).timers.set("reaction", { ...w322.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w323
-    }
-      w318
-    }
-      w313
-    }
+  def e_takeover_2(w0: World, c: Ctx, iid: str): World = {
+    val w311 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
     w311
   }
 
+  def e_takeover_3(w0: World, c: Ctx, iid: str): World = {
+    val w312 = if (timerDef("reaction").startsOnce) {
+      val w313 = ec_pauseTimer(w0, c, iid, "reaction")
+      w313
+    } else {
+      val w314 = if (false) {
+      val w315 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w316 = { ...w315, inc: w315.inc.set(iid, { ...w315.inc.get(iid), timers: w315.inc.get(iid).timers.set("reaction", { ...w315.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w317 = { ...w316, inc: w316.inc.set(iid, { ...w316.inc.get(iid), timers: w316.inc.get(iid).timers.set("reaction", { ...w316.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w318 = { ...w317, inc: w317.inc.set(iid, { ...w317.inc.get(iid), timers: w317.inc.get(iid).timers.set("reaction", { ...w317.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w318
+    } else {
+      val w319 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_320 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w321 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_320) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w322 = { ...w321, inc: w321.inc.set(iid, { ...w321.inc.get(iid), timers: w321.inc.get(iid).timers.set("reaction", { ...w321.inc.get(iid).timers.get("reaction"), paused: keep_320 }) }) }
+      val w323 = { ...w322, inc: w322.inc.set(iid, { ...w322.inc.get(iid), timers: w322.inc.get(iid).timers.set("reaction", { ...w322.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w324 = { ...w323, inc: w323.inc.set(iid, { ...w323.inc.get(iid), timers: w323.inc.get(iid).timers.set("reaction", { ...w323.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w324
+    }
+      w319
+    }
+      w314
+    }
+    w312
+  }
+
   def e_takeover_4(w0: World, c: Ctx, iid: str): World = {
-    val w324 = if (timerDef("hold").startsOnce) {
-      val w325 = ec_pauseTimer(w0, c, iid, "hold")
-      w325
-    } else {
-      val w326 = if (false) {
-      val w327 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w328 = { ...w327, inc: w327.inc.set(iid, { ...w327.inc.get(iid), timers: w327.inc.get(iid).timers.set("hold", { ...w327.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w329 = { ...w328, inc: w328.inc.set(iid, { ...w328.inc.get(iid), timers: w328.inc.get(iid).timers.set("hold", { ...w328.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w330 = { ...w329, inc: w329.inc.set(iid, { ...w329.inc.get(iid), timers: w329.inc.get(iid).timers.set("hold", { ...w329.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w330
-    } else {
-      val w331 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_332 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w333 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_332) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w334 = { ...w333, inc: w333.inc.set(iid, { ...w333.inc.get(iid), timers: w333.inc.get(iid).timers.set("hold", { ...w333.inc.get(iid).timers.get("hold"), paused: keep_332 }) }) }
-      val w335 = { ...w334, inc: w334.inc.set(iid, { ...w334.inc.get(iid), timers: w334.inc.get(iid).timers.set("hold", { ...w334.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w336 = { ...w335, inc: w335.inc.set(iid, { ...w335.inc.get(iid), timers: w335.inc.get(iid).timers.set("hold", { ...w335.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w336
-    }
-      w331
-    }
+    val w325 = if (timerDef("hold").startsOnce) {
+      val w326 = ec_pauseTimer(w0, c, iid, "hold")
       w326
+    } else {
+      val w327 = if (false) {
+      val w328 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w329 = { ...w328, inc: w328.inc.set(iid, { ...w328.inc.get(iid), timers: w328.inc.get(iid).timers.set("hold", { ...w328.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w330 = { ...w329, inc: w329.inc.set(iid, { ...w329.inc.get(iid), timers: w329.inc.get(iid).timers.set("hold", { ...w329.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w331 = { ...w330, inc: w330.inc.set(iid, { ...w330.inc.get(iid), timers: w330.inc.get(iid).timers.set("hold", { ...w330.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w331
+    } else {
+      val w332 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_333 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w334 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_333) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w335 = { ...w334, inc: w334.inc.set(iid, { ...w334.inc.get(iid), timers: w334.inc.get(iid).timers.set("hold", { ...w334.inc.get(iid).timers.get("hold"), paused: keep_333 }) }) }
+      val w336 = { ...w335, inc: w335.inc.set(iid, { ...w335.inc.get(iid), timers: w335.inc.get(iid).timers.set("hold", { ...w335.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w337 = { ...w336, inc: w336.inc.set(iid, { ...w336.inc.get(iid), timers: w336.inc.get(iid).timers.set("hold", { ...w336.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w337
     }
-    w324
+      w332
+    }
+      w327
+    }
+    w325
   }
 
   def e_takeover_5(w0: World, c: Ctx, iid: str): World = {
-    val w337 = if (not(timerDef("resolution").pausable)) {
-      val sec_338 = timerSec(w0.inc.get(iid), "resolution", "")
-      val w339 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_338 < 0)) 0 else (c.now + (sec_338 * 1000))) }) }) }
-      val w340 = { ...w339, inc: w339.inc.set(iid, { ...w339.inc.get(iid), timers: w339.inc.get(iid).timers.set("resolution", { ...w339.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
-      w340
-    } else {
-      val w341 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
-      val left_342 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
-      val w343 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_342 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_342)) }) }) }
-      val w344 = { ...w343, inc: w343.inc.set(iid, { ...w343.inc.get(iid), timers: w343.inc.get(iid).timers.set("resolution", { ...w343.inc.get(iid).timers.get("resolution"), paused: false }) }) }
-      val w345 = { ...w344, inc: w344.inc.set(iid, { ...w344.inc.get(iid), timers: w344.inc.get(iid).timers.set("resolution", { ...w344.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
-      w345
-    } else w0
+    val w338 = if (not(timerDef("resolution").pausable)) {
+      val sec_339 = timerSec(w0.inc.get(iid), "resolution", "")
+      val w340 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if ((sec_339 < 0)) 0 else (c.now + (sec_339 * 1000))) }) }) }
+      val w341 = { ...w340, inc: w340.inc.set(iid, { ...w340.inc.get(iid), timers: w340.inc.get(iid).timers.set("resolution", { ...w340.inc.get(iid).timers.get("resolution"), since: c.now }) }) }
       w341
+    } else {
+      val w342 = if ((w0.inc.get(iid).timers.get("resolution").due == 0)) {
+      val left_343 = (if (w0.inc.get(iid).timers.get("resolution").paused) w0.inc.get(iid).timers.get("resolution").left else (timerSec(w0.inc.get(iid), "resolution", "") * 1000))
+      val w344 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((left_343 == 0) and (w0.inc.get(iid).timers.get("resolution").fired != 0))) w0.inc.get(iid).timers.get("resolution").fired else (c.now + left_343)) }) }) }
+      val w345 = { ...w344, inc: w344.inc.set(iid, { ...w344.inc.get(iid), timers: w344.inc.get(iid).timers.set("resolution", { ...w344.inc.get(iid).timers.get("resolution"), paused: false }) }) }
+      val w346 = { ...w345, inc: w345.inc.set(iid, { ...w345.inc.get(iid), timers: w345.inc.get(iid).timers.set("resolution", { ...w345.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
+      w346
+    } else w0
+      w342
     }
-    w337
+    w338
   }
 
   def e_takeover_6(w0: World, c: Ctx, iid: str): World = {
@@ -1305,9 +1317,9 @@ module im {
   }
 
   def e_takeover_9(w0: World, c: Ctx, iid: str): World = {
-    val whom_346 = c.before.owner
-    val w347 = if (((whom_346 != "") and (whom_346 != c.actor))) w0 else w0
-    w347
+    val whom_347 = c.before.owner
+    val w348 = if (((whom_347 != "") and (whom_347 != c.actor))) w0 else w0
+    w348
   }
 
   def apply_takeover(c: Ctx, iid: str, w0: World): World = {
@@ -1330,166 +1342,172 @@ module im {
 
   def ok_close(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance", "in_progress", "on_hold").contains(world.inc.get(iid).state),
-    not(settings.session.states.foldl(false, (acc, s_348) => acc or ((s_348.id == agentState(c.me)) and s_348.readOnly))),
-    { val os_349 = closeOptions(c.me, world.inc.get(iid), c.surface)  (if ((c.form.resultId != "")) os_349.foldl(false, (acc, o_350) => acc or ((o_350.id == c.form.resultId) and stepsOk(o_350, world.inc.get(iid)))) else os_349.foldl(false, (acc, o_351) => acc or stepsOk(o_351, world.inc.get(iid)))) },
-    ((((c.form.resultId == "") or (c.form.causeId == "")) or not(settings.closeResults.foldl(false, (acc, i_352) => acc or ((i_352.id == c.form.resultId) and (i_352.causeCatalog != ""))))) or (causeOk(c.form.resultId, c.form.causeId) and (not(causeCommentRequired(c.form.resultId, c.form.causeId)) or (c.form.comment != "")))),
+    not(settings.session.states.foldl(false, (acc, s_349) => acc or ((s_349.id == agentState(c.me)) and s_349.readOnly))),
+    { val os_350 = closeOptions(c.me, world.inc.get(iid), c.surface)  (if ((c.form.resultId != "")) os_350.foldl(false, (acc, o_351) => acc or ((o_351.id == c.form.resultId) and stepsOk(o_351, world.inc.get(iid)))) else os_350.foldl(false, (acc, o_352) => acc or stepsOk(o_352, world.inc.get(iid)))) },
+    ((((c.form.resultId == "") or (c.form.causeId == "")) or not(settings.closeResults.foldl(false, (acc, i_353) => acc or ((i_353.id == c.form.resultId) and (i_353.causeCatalog != ""))))) or (causeOk(c.form.resultId, c.form.causeId) and (not(causeCommentRequired(c.form.resultId, c.form.causeId)) or (c.form.comment != "")))),
   }
 
   def e_close_0(w0: World, c: Ctx, iid: str): World = {
-    val who_353 = c.actor
-    val w354 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_353 }) }
-    w354
+    val who_354 = c.actor
+    val w355 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_354 }) }
+    w355
   }
 
   def e_close_1(w0: World, c: Ctx, iid: str): World = {
-    val group_355 = ""
-    val w356 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_355 }) }
-    w356
+    val group_356 = ""
+    val w357 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_356 }) }
+    w357
   }
 
   def e_close_2(w0: World, c: Ctx, iid: str): World = {
-    val value_357 = c.actor
-    val w358 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedBy: value_357 }) }
-    w358
+    val value_358 = c.actor
+    val w359 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedBy: value_358 }) }
+    w359
   }
 
   def e_close_3(w0: World, c: Ctx, iid: str): World = {
-    val value_359 = c.now
-    val w360 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_359 }) }
-    w360
+    val value_360 = c.now
+    val w361 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_360 }) }
+    w361
   }
 
   def e_close_4(w0: World, c: Ctx, iid: str): World = {
-    val value_361 = c.form.resultId
-    val w362 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: value_361 }) }
-    w362
+    val value_362 = c.form.resultId
+    val w363 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: value_362 }) }
+    w363
   }
 
   def e_close_5(w0: World, c: Ctx, iid: str): World = {
-    val value_363 = (if (causeOk(c.form.resultId, c.form.causeId)) c.form.causeId else "")
-    val w364 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseId: value_363 }) }
-    w364
+    val value_364 = (if (causeOk(c.form.resultId, c.form.causeId)) c.form.causeId else "")
+    val w365 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseId: value_364 }) }
+    w365
   }
 
   def e_close_6(w0: World, c: Ctx, iid: str): World = {
-    val value_365 = causeLabel(c.form.resultId, c.form.causeId)
-    val w366 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseLabel: value_365 }) }
-    w366
+    val value_366 = causeLabel(c.form.resultId, c.form.causeId)
+    val w367 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseLabel: value_366 }) }
+    w367
   }
 
   def e_close_7(w0: World, c: Ctx, iid: str): World = {
-    val value_367 = c.form.comment
-    val w368 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), result: value_367 }) }
-    w368
-  }
-
-  def e_close_8(w0: World, c: Ctx, iid: str): World = {
-    val w369 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    val value_368 = (if ((c.form.resultId == "drill")) c.form.maintenanceWindowId else "")
+    val w369 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeMaintenanceWindowId: value_368 }) }
     w369
   }
 
+  def e_close_8(w0: World, c: Ctx, iid: str): World = {
+    val value_370 = c.form.comment
+    val w371 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), result: value_370 }) }
+    w371
+  }
+
   def e_close_9(w0: World, c: Ctx, iid: str): World = {
-    val w370 = if (timerDef("reaction").startsOnce) {
-      val w371 = ec_pauseTimer(w0, c, iid, "reaction")
-      w371
-    } else {
-      val w372 = if (true) {
-      val w373 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w374 = { ...w373, inc: w373.inc.set(iid, { ...w373.inc.get(iid), timers: w373.inc.get(iid).timers.set("reaction", { ...w373.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w375 = { ...w374, inc: w374.inc.set(iid, { ...w374.inc.get(iid), timers: w374.inc.get(iid).timers.set("reaction", { ...w374.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w376 = { ...w375, inc: w375.inc.set(iid, { ...w375.inc.get(iid), timers: w375.inc.get(iid).timers.set("reaction", { ...w375.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w376
-    } else {
-      val w377 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_378 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w379 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_378) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w380 = { ...w379, inc: w379.inc.set(iid, { ...w379.inc.get(iid), timers: w379.inc.get(iid).timers.set("reaction", { ...w379.inc.get(iid).timers.get("reaction"), paused: keep_378 }) }) }
-      val w381 = { ...w380, inc: w380.inc.set(iid, { ...w380.inc.get(iid), timers: w380.inc.get(iid).timers.set("reaction", { ...w380.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w382 = { ...w381, inc: w381.inc.set(iid, { ...w381.inc.get(iid), timers: w381.inc.get(iid).timers.set("reaction", { ...w381.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
-      w382
-    }
-      w377
-    }
-      w372
-    }
-    w370
+    val w372 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w372
   }
 
   def e_close_10(w0: World, c: Ctx, iid: str): World = {
-    val w383 = if (not(timerDef("resolution").pausable)) {
-      val w384 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w385 = { ...w384, inc: w384.inc.set(iid, { ...w384.inc.get(iid), timers: w384.inc.get(iid).timers.set("resolution", { ...w384.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w385
+    val w373 = if (timerDef("reaction").startsOnce) {
+      val w374 = ec_pauseTimer(w0, c, iid, "reaction")
+      w374
     } else {
-      val w386 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w387 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w388 = { ...w387, inc: w387.inc.set(iid, { ...w387.inc.get(iid), timers: w387.inc.get(iid).timers.set("resolution", { ...w387.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w389 = { ...w388, inc: w388.inc.set(iid, { ...w388.inc.get(iid), timers: w388.inc.get(iid).timers.set("resolution", { ...w388.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w389
-    } else w0
-      w386
+      val w375 = if (true) {
+      val w376 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w377 = { ...w376, inc: w376.inc.set(iid, { ...w376.inc.get(iid), timers: w376.inc.get(iid).timers.set("reaction", { ...w376.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w378 = { ...w377, inc: w377.inc.set(iid, { ...w377.inc.get(iid), timers: w377.inc.get(iid).timers.set("reaction", { ...w377.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w379 = { ...w378, inc: w378.inc.set(iid, { ...w378.inc.get(iid), timers: w378.inc.get(iid).timers.set("reaction", { ...w378.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w379
+    } else {
+      val w380 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_381 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w382 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_381) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w383 = { ...w382, inc: w382.inc.set(iid, { ...w382.inc.get(iid), timers: w382.inc.get(iid).timers.set("reaction", { ...w382.inc.get(iid).timers.get("reaction"), paused: keep_381 }) }) }
+      val w384 = { ...w383, inc: w383.inc.set(iid, { ...w383.inc.get(iid), timers: w383.inc.get(iid).timers.set("reaction", { ...w383.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w385 = { ...w384, inc: w384.inc.set(iid, { ...w384.inc.get(iid), timers: w384.inc.get(iid).timers.set("reaction", { ...w384.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w385
     }
-    w383
+      w380
+    }
+      w375
+    }
+    w373
   }
 
   def e_close_11(w0: World, c: Ctx, iid: str): World = {
-    val w390 = if (timerDef("hold").startsOnce) {
-      val w391 = ec_pauseTimer(w0, c, iid, "hold")
-      w391
+    val w386 = if (not(timerDef("resolution").pausable)) {
+      val w387 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w388 = { ...w387, inc: w387.inc.set(iid, { ...w387.inc.get(iid), timers: w387.inc.get(iid).timers.set("resolution", { ...w387.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w388
     } else {
-      val w392 = if (false) {
-      val w393 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w394 = { ...w393, inc: w393.inc.set(iid, { ...w393.inc.get(iid), timers: w393.inc.get(iid).timers.set("hold", { ...w393.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w395 = { ...w394, inc: w394.inc.set(iid, { ...w394.inc.get(iid), timers: w394.inc.get(iid).timers.set("hold", { ...w394.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w396 = { ...w395, inc: w395.inc.set(iid, { ...w395.inc.get(iid), timers: w395.inc.get(iid).timers.set("hold", { ...w395.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w396
-    } else {
-      val w397 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_398 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w399 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_398) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w400 = { ...w399, inc: w399.inc.set(iid, { ...w399.inc.get(iid), timers: w399.inc.get(iid).timers.set("hold", { ...w399.inc.get(iid).timers.get("hold"), paused: keep_398 }) }) }
-      val w401 = { ...w400, inc: w400.inc.set(iid, { ...w400.inc.get(iid), timers: w400.inc.get(iid).timers.set("hold", { ...w400.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w402 = { ...w401, inc: w401.inc.set(iid, { ...w401.inc.get(iid), timers: w401.inc.get(iid).timers.set("hold", { ...w401.inc.get(iid).timers.get("hold"), since: 0 }) }) }
-      w402
-    }
-      w397
-    }
+      val w389 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w390 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w391 = { ...w390, inc: w390.inc.set(iid, { ...w390.inc.get(iid), timers: w390.inc.get(iid).timers.set("resolution", { ...w390.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w392 = { ...w391, inc: w391.inc.set(iid, { ...w391.inc.get(iid), timers: w391.inc.get(iid).timers.set("resolution", { ...w391.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
       w392
+    } else w0
+      w389
     }
-    w390
+    w386
   }
 
   def e_close_12(w0: World, c: Ctx, iid: str): World = {
-
-    w0
+    val w393 = if (timerDef("hold").startsOnce) {
+      val w394 = ec_pauseTimer(w0, c, iid, "hold")
+      w394
+    } else {
+      val w395 = if (false) {
+      val w396 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w397 = { ...w396, inc: w396.inc.set(iid, { ...w396.inc.get(iid), timers: w396.inc.get(iid).timers.set("hold", { ...w396.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w398 = { ...w397, inc: w397.inc.set(iid, { ...w397.inc.get(iid), timers: w397.inc.get(iid).timers.set("hold", { ...w397.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w399 = { ...w398, inc: w398.inc.set(iid, { ...w398.inc.get(iid), timers: w398.inc.get(iid).timers.set("hold", { ...w398.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w399
+    } else {
+      val w400 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_401 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w402 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_401) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w403 = { ...w402, inc: w402.inc.set(iid, { ...w402.inc.get(iid), timers: w402.inc.get(iid).timers.set("hold", { ...w402.inc.get(iid).timers.get("hold"), paused: keep_401 }) }) }
+      val w404 = { ...w403, inc: w403.inc.set(iid, { ...w403.inc.get(iid), timers: w403.inc.get(iid).timers.set("hold", { ...w403.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w405 = { ...w404, inc: w404.inc.set(iid, { ...w404.inc.get(iid), timers: w404.inc.get(iid).timers.set("hold", { ...w404.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w405
+    }
+      w400
+    }
+      w395
+    }
+    w393
   }
 
   def e_close_13(w0: World, c: Ctx, iid: str): World = {
-    val w403 = if (["false_alarm"].foldl(false, (acc, y404) => acc or y404 == w0.inc.get(iid).closeResultId)) {
-      val w405 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_409 => not(isDone(x_409))).foldl([], (acc, x408) => acc.append(x408.id)).foldl(w0, (wf406, sId407) => wf406)
-      w405
-    } else w0
-    w403
-  }
-
-  def e_close_14(w0: World, c: Ctx, iid: str): World = {
 
     w0
   }
 
-  def e_close_15(w0: World, c: Ctx, iid: str): World = {
-    val w410 = if (["false_alarm"].foldl(false, (acc, y411) => acc or y411 == w0.inc.get(iid).closeResultId)) {
-      val w412 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_419 => not(isDone(x_419))).foldl([], (acc, x415) => acc.append(x415.id)).foldl(w0, (wf413, sId414) => {
-      val lead_416 = (if ((wf413.inc.get(sId414).linkedTo != "")) { val ps_417 = incidentById(incs(w0), wf413.inc.get(sId414).linkedTo)  (if (((ps_417.length() > 0) and not(isDone(ps_417[0])))) addressee(ps_417[0]) else "") } else addressee(wf413.inc.get(sId414)))
-      val w418 = if (((lead_416 != "") and (lead_416 != wf413.inc.get(iid).closedBy))) wf413 else wf413
-      w418
-    })
-      w412
+  def e_close_14(w0: World, c: Ctx, iid: str): World = {
+    val w406 = if (["false_alarm"].foldl(false, (acc, y407) => acc or y407 == w0.inc.get(iid).closeResultId)) {
+      val w408 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_412 => not(isDone(x_412))).foldl([], (acc, x411) => acc.append(x411.id)).foldl(w0, (wf409, sId410) => wf409)
+      w408
     } else w0
-    w410
+    w406
+  }
+
+  def e_close_15(w0: World, c: Ctx, iid: str): World = {
+
+    w0
   }
 
   def e_close_16(w0: World, c: Ctx, iid: str): World = {
+    val w413 = if (["false_alarm"].foldl(false, (acc, y414) => acc or y414 == w0.inc.get(iid).closeResultId)) {
+      val w415 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_422 => not(isDone(x_422))).foldl([], (acc, x418) => acc.append(x418.id)).foldl(w0, (wf416, sId417) => {
+      val lead_419 = (if ((wf416.inc.get(sId417).linkedTo != "")) { val ps_420 = incidentById(incs(w0), wf416.inc.get(sId417).linkedTo)  (if (((ps_420.length() > 0) and not(isDone(ps_420[0])))) addressee(ps_420[0]) else "") } else addressee(wf416.inc.get(sId417)))
+      val w421 = if (((lead_419 != "") and (lead_419 != wf416.inc.get(iid).closedBy))) wf416 else wf416
+      w421
+    })
+      w415
+    } else w0
+    w413
+  }
+
+  def e_close_17(w0: World, c: Ctx, iid: str): World = {
 
     w0
   }
@@ -1514,7 +1532,8 @@ module im {
     val w15 = e_close_14(w14, c1, iid)
     val w16 = e_close_15(w15, c1, iid)
     val w17 = e_close_16(w16, c1, iid)
-    w17
+    val w18 = e_close_17(w17, c1, iid)
+    w18
   }
 
   // reopen: manual → in_progress
@@ -1523,15 +1542,15 @@ module im {
     Set("closed").contains(world.inc.get(iid).state),
     can(c.me, "incident:reopen"),
     can(c.me, "incident:claim"),
-    not(settings.session.states.foldl(false, (acc, s_420) => acc or ((s_420.id == agentState(c.me)) and s_420.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_423) => acc or ((s_423.id == agentState(c.me)) and s_423.readOnly))),
     ((c.now - world.inc.get(iid).closedAt) <= (settings.limits.reopenWindowMin * 60000)),
     ((settings.limits.maxActive == 0) or (countMine(incs(world), c.me, "in_progress", world.inc.get(iid).id) < settings.limits.maxActive)),
   }
 
   def e_reopen_0(w0: World, c: Ctx, iid: str): World = {
-    val who_421 = c.actor
-    val w422 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_421 }) }
-    w422
+    val who_424 = c.actor
+    val w425 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_424 }) }
+    w425
   }
 
   def e_reopen_1(w0: World, c: Ctx, iid: str): World = {
@@ -1540,97 +1559,103 @@ module im {
   }
 
   def e_reopen_2(w0: World, c: Ctx, iid: str): World = {
-    val w423 = if ((w0.inc.get(iid).linkedTo != "")) {
-      val ps_424 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-      val w425 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
-      val w426 = { ...w425, inc: w425.inc.set(iid, { ...w425.inc.get(iid), linkedTo: "" }) }
-      val w427 = { ...w426, inc: w426.inc.set(iid, { ...w426.inc.get(iid), linkedAt: 0 }) }
-      val w428 = if (((ps_424.length() > 0) and ("workflow.journal.reopen_unlinked" != ""))) w427 else w427
-      val w429 = if (("workflow.journal.linked_reopened" != "")) {
-      val w430 = ps_424.foldl([], (acc, x433) => acc.append(x433.id)).foldl(w428, (wf431, pId432) => wf431)
-      w430
-    } else w428
-      w429
+    val w426 = if ((w0.inc.get(iid).linkedTo != "")) {
+      val ps_427 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+      val w428 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
+      val w429 = { ...w428, inc: w428.inc.set(iid, { ...w428.inc.get(iid), linkedTo: "" }) }
+      val w430 = { ...w429, inc: w429.inc.set(iid, { ...w429.inc.get(iid), linkedAt: 0 }) }
+      val w431 = if (((ps_427.length() > 0) and ("workflow.journal.reopen_unlinked" != ""))) w430 else w430
+      val w432 = if (("workflow.journal.linked_reopened" != "")) {
+      val w433 = ps_427.foldl([], (acc, x436) => acc.append(x436.id)).foldl(w431, (wf434, pId435) => wf434)
+      w433
+    } else w431
+      w432
     } else {
-      val w434 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
-      val w435 = { ...w434, inc: w434.inc.set(iid, { ...w434.inc.get(iid), linkedAt: 0 }) }
-      w435
+      val w437 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
+      val w438 = { ...w437, inc: w437.inc.set(iid, { ...w437.inc.get(iid), linkedAt: 0 }) }
+      w438
     }
-    w423
+    w426
   }
 
   def e_reopen_3(w0: World, c: Ctx, iid: str): World = {
-    val value_436 = ""
-    val w437 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: value_436 }) }
-    w437
+    val value_439 = ""
+    val w440 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: value_439 }) }
+    w440
   }
 
   def e_reopen_4(w0: World, c: Ctx, iid: str): World = {
-    val value_438 = ""
-    val w439 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseId: value_438 }) }
-    w439
+    val value_441 = ""
+    val w442 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseId: value_441 }) }
+    w442
   }
 
   def e_reopen_5(w0: World, c: Ctx, iid: str): World = {
-    val value_440 = ""
-    val w441 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseLabel: value_440 }) }
-    w441
+    val value_443 = ""
+    val w444 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeMaintenanceWindowId: value_443 }) }
+    w444
   }
 
   def e_reopen_6(w0: World, c: Ctx, iid: str): World = {
-    val value_442 = ""
-    val w443 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), result: value_442 }) }
-    w443
+    val value_445 = ""
+    val w446 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeCauseLabel: value_445 }) }
+    w446
   }
 
   def e_reopen_7(w0: World, c: Ctx, iid: str): World = {
-    val value_444 = 0
-    val w445 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_444 }) }
-    w445
+    val value_447 = ""
+    val w448 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), result: value_447 }) }
+    w448
   }
 
   def e_reopen_8(w0: World, c: Ctx, iid: str): World = {
-    val value_446 = ""
-    val w447 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedBy: value_446 }) }
-    w447
+    val value_449 = 0
+    val w450 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_449 }) }
+    w450
   }
 
   def e_reopen_9(w0: World, c: Ctx, iid: str): World = {
-    val sec_448 = settings.limits.reopenResolutionSec
-    val w449 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (c.now + ((if ((sec_448 > 0)) sec_448 else norm(w0.inc.get(iid), timerDef("resolution"))) * 1000)) }) }) }
-    val w450 = { ...w449, inc: w449.inc.set(iid, { ...w449.inc.get(iid), timers: w449.inc.get(iid).timers.set("resolution", { ...w449.inc.get(iid).timers.get("resolution"), paused: false }) }) }
-    val w451 = { ...w450, inc: w450.inc.set(iid, { ...w450.inc.get(iid), timers: w450.inc.get(iid).timers.set("resolution", { ...w450.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
-    w451
+    val value_451 = ""
+    val w452 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedBy: value_451 }) }
+    w452
   }
 
   def e_reopen_10(w0: World, c: Ctx, iid: str): World = {
-    val w452 = if (timerDef("reaction").startsOnce) {
-      val w453 = ec_pauseTimer(w0, c, iid, "reaction")
-      w453
-    } else {
-      val w454 = if (true) {
-      val w455 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w456 = { ...w455, inc: w455.inc.set(iid, { ...w455.inc.get(iid), timers: w455.inc.get(iid).timers.set("reaction", { ...w455.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w457 = { ...w456, inc: w456.inc.set(iid, { ...w456.inc.get(iid), timers: w456.inc.get(iid).timers.set("reaction", { ...w456.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w458 = { ...w457, inc: w457.inc.set(iid, { ...w457.inc.get(iid), timers: w457.inc.get(iid).timers.set("reaction", { ...w457.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+    val sec_453 = settings.limits.reopenResolutionSec
+    val w454 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (c.now + ((if ((sec_453 > 0)) sec_453 else norm(w0.inc.get(iid), timerDef("resolution"))) * 1000)) }) }) }
+    val w455 = { ...w454, inc: w454.inc.set(iid, { ...w454.inc.get(iid), timers: w454.inc.get(iid).timers.set("resolution", { ...w454.inc.get(iid).timers.get("resolution"), paused: false }) }) }
+    val w456 = { ...w455, inc: w455.inc.set(iid, { ...w455.inc.get(iid), timers: w455.inc.get(iid).timers.set("resolution", { ...w455.inc.get(iid).timers.get("resolution"), left: 0 }) }) }
+    w456
+  }
+
+  def e_reopen_11(w0: World, c: Ctx, iid: str): World = {
+    val w457 = if (timerDef("reaction").startsOnce) {
+      val w458 = ec_pauseTimer(w0, c, iid, "reaction")
       w458
     } else {
-      val w459 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_460 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w461 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_460) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w462 = { ...w461, inc: w461.inc.set(iid, { ...w461.inc.get(iid), timers: w461.inc.get(iid).timers.set("reaction", { ...w461.inc.get(iid).timers.get("reaction"), paused: keep_460 }) }) }
-      val w463 = { ...w462, inc: w462.inc.set(iid, { ...w462.inc.get(iid), timers: w462.inc.get(iid).timers.set("reaction", { ...w462.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w464 = { ...w463, inc: w463.inc.set(iid, { ...w463.inc.get(iid), timers: w463.inc.get(iid).timers.set("reaction", { ...w463.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      val w459 = if (true) {
+      val w460 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w461 = { ...w460, inc: w460.inc.set(iid, { ...w460.inc.get(iid), timers: w460.inc.get(iid).timers.set("reaction", { ...w460.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w462 = { ...w461, inc: w461.inc.set(iid, { ...w461.inc.get(iid), timers: w461.inc.get(iid).timers.set("reaction", { ...w461.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w463 = { ...w462, inc: w462.inc.set(iid, { ...w462.inc.get(iid), timers: w462.inc.get(iid).timers.set("reaction", { ...w462.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w463
+    } else {
+      val w464 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_465 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w466 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_465) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w467 = { ...w466, inc: w466.inc.set(iid, { ...w466.inc.get(iid), timers: w466.inc.get(iid).timers.set("reaction", { ...w466.inc.get(iid).timers.get("reaction"), paused: keep_465 }) }) }
+      val w468 = { ...w467, inc: w467.inc.set(iid, { ...w467.inc.get(iid), timers: w467.inc.get(iid).timers.set("reaction", { ...w467.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w469 = { ...w468, inc: w468.inc.set(iid, { ...w468.inc.get(iid), timers: w468.inc.get(iid).timers.set("reaction", { ...w468.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w469
+    }
       w464
     }
       w459
     }
-      w454
-    }
-    w452
+    w457
   }
 
-  def e_reopen_11(w0: World, c: Ctx, iid: str): World = {
+  def e_reopen_12(w0: World, c: Ctx, iid: str): World = {
 
     w0
   }
@@ -1650,7 +1675,8 @@ module im {
     val w10 = e_reopen_9(w9, c1, iid)
     val w11 = e_reopen_10(w10, c1, iid)
     val w12 = e_reopen_11(w11, c1, iid)
-    w12
+    val w13 = e_reopen_12(w12, c1, iid)
+    w13
   }
 
   // comment: manual
@@ -1658,11 +1684,11 @@ module im {
   def ok_comment(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance", "in_progress", "on_hold", "closed", "linked").contains(world.inc.get(iid).state),
     can(c.me, "incident:comment"),
-    not(settings.session.states.foldl(false, (acc, s_465) => acc or ((s_465.id == agentState(c.me)) and s_465.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_470) => acc or ((s_470.id == agentState(c.me)) and s_470.readOnly))),
     ((if (c.form.comment == "") 0 else 1) <= settings.limits.commentMaxLength),
     (c.form.files.length() <= settings.limits.commentMaxFiles),
-    c.form.files.foldl(true, (acc, f_466) => acc and (f_466.size <= settings.limits.attachmentMaxBytes)),
-    c.form.files.foldl(true, (acc, f_467) => acc and settings.limits.attachmentTypes.foldl(false, (acc, y468) => acc or y468 == f_467.mime)),
+    c.form.files.foldl(true, (acc, f_471) => acc and (f_471.size <= settings.limits.attachmentMaxBytes)),
+    c.form.files.foldl(true, (acc, f_472) => acc and settings.limits.attachmentTypes.foldl(false, (acc, y473) => acc or y473 == f_472.mime)),
   }
 
   def e_comment_0(w0: World, c: Ctx, iid: str): World = {
@@ -1681,54 +1707,54 @@ module im {
   def ok_change_priority(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance", "in_progress", "on_hold").contains(world.inc.get(iid).state),
     can(c.me, "incident:priority"),
-    not(settings.session.states.foldl(false, (acc, s_469) => acc or ((s_469.id == agentState(c.me)) and s_469.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_474) => acc or ((s_474.id == agentState(c.me)) and s_474.readOnly))),
     ((c.form.priority == "") or (priorityOf(c.form.priority) != world.inc.get(iid).priority)),
   }
 
   def e_change_priority_0(w0: World, c: Ctx, iid: str): World = {
-    val value_470 = priorityOf(c.form.priority)
-    val w471 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), priority: value_470 }) }
-    w471
+    val value_475 = priorityOf(c.form.priority)
+    val w476 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), priority: value_475 }) }
+    w476
   }
 
   def e_change_priority_1(w0: World, c: Ctx, iid: str): World = {
-    val value_472 = true
-    val w473 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), priorityManual: value_472 }) }
-    w473
-  }
-
-  def e_change_priority_2(w0: World, c: Ctx, iid: str): World = {
-    val t_474 = w0.inc.get(iid).timers.get("reaction")
-    val raw_475 = ((timerSec(w0.inc.get(iid), "reaction", "byEscalationLevel") - timerSec(c.before, "reaction", "byEscalationLevel")) * 1000)
-    val delta_476 = (if (((raw_475 > 0) and linkedOf(incs(w0), w0.inc.get(iid).id).foldl(false, (acc, m_477) => acc or (m_477.state == "linked")))) 0 else raw_475)
-    val w478 = if ((((t_474.due != 0) and (t_474.due > c.now)) and (t_474.fired != t_474.due))) {
-      val w479 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if (((t_474.due + delta_476) > c.now)) (t_474.due + delta_476) else c.now) }) }) }
-      w479
-    } else {
-      val w480 = if ((((timerDef("reaction").pausable and (t_474.due == 0)) and t_474.paused) and (t_474.left > 0))) {
-      val w481 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (((t_474.left + delta_476) > 0)) (t_474.left + delta_476) else 1) }) }) }
-      w481
-    } else w0
-      w480
-    }
+    val value_477 = true
+    val w478 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), priorityManual: value_477 }) }
     w478
   }
 
-  def e_change_priority_3(w0: World, c: Ctx, iid: str): World = {
-    val t_482 = w0.inc.get(iid).timers.get("resolution")
-    val raw_483 = ((timerSec(w0.inc.get(iid), "resolution", "") - timerSec(c.before, "resolution", "")) * 1000)
-    val delta_484 = (if (((raw_483 > 0) and linkedOf(incs(w0), w0.inc.get(iid).id).foldl(false, (acc, m_485) => acc or (m_485.state == "linked")))) 0 else raw_483)
-    val w486 = if ((((t_482.due != 0) and (t_482.due > c.now)) and (t_482.fired != t_482.due))) {
-      val w487 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((t_482.due + delta_484) > c.now)) (t_482.due + delta_484) else c.now) }) }) }
-      w487
+  def e_change_priority_2(w0: World, c: Ctx, iid: str): World = {
+    val t_479 = w0.inc.get(iid).timers.get("reaction")
+    val raw_480 = ((timerSec(w0.inc.get(iid), "reaction", "byEscalationLevel") - timerSec(c.before, "reaction", "byEscalationLevel")) * 1000)
+    val delta_481 = (if (((raw_480 > 0) and linkedOf(incs(w0), w0.inc.get(iid).id).foldl(false, (acc, m_482) => acc or (m_482.state == "linked")))) 0 else raw_480)
+    val w483 = if ((((t_479.due != 0) and (t_479.due > c.now)) and (t_479.fired != t_479.due))) {
+      val w484 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if (((t_479.due + delta_481) > c.now)) (t_479.due + delta_481) else c.now) }) }) }
+      w484
     } else {
-      val w488 = if ((((timerDef("resolution").pausable and (t_482.due == 0)) and t_482.paused) and (t_482.left > 0))) {
-      val w489 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((t_482.left + delta_484) > 0)) (t_482.left + delta_484) else 1) }) }) }
-      w489
+      val w485 = if ((((timerDef("reaction").pausable and (t_479.due == 0)) and t_479.paused) and (t_479.left > 0))) {
+      val w486 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (((t_479.left + delta_481) > 0)) (t_479.left + delta_481) else 1) }) }) }
+      w486
     } else w0
-      w488
+      w485
     }
-    w486
+    w483
+  }
+
+  def e_change_priority_3(w0: World, c: Ctx, iid: str): World = {
+    val t_487 = w0.inc.get(iid).timers.get("resolution")
+    val raw_488 = ((timerSec(w0.inc.get(iid), "resolution", "") - timerSec(c.before, "resolution", "")) * 1000)
+    val delta_489 = (if (((raw_488 > 0) and linkedOf(incs(w0), w0.inc.get(iid).id).foldl(false, (acc, m_490) => acc or (m_490.state == "linked")))) 0 else raw_488)
+    val w491 = if ((((t_487.due != 0) and (t_487.due > c.now)) and (t_487.fired != t_487.due))) {
+      val w492 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: (if (((t_487.due + delta_489) > c.now)) (t_487.due + delta_489) else c.now) }) }) }
+      w492
+    } else {
+      val w493 = if ((((timerDef("resolution").pausable and (t_487.due == 0)) and t_487.paused) and (t_487.left > 0))) {
+      val w494 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((t_487.left + delta_489) > 0)) (t_487.left + delta_489) else 1) }) }) }
+      w494
+    } else w0
+      w493
+    }
+    w491
   }
 
   def e_change_priority_4(w0: World, c: Ctx, iid: str): World = {
@@ -1751,74 +1777,74 @@ module im {
   def ok_auto_escalate(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance").contains(world.inc.get(iid).state),
     (settings.escalation.enabled == true),
-    { val t_490 = world.inc.get(iid).timers.get("reaction")  (((t_490.due != 0) and (t_490.due <= c.now)) and (t_490.fired != t_490.due)) },
+    { val t_495 = world.inc.get(iid).timers.get("reaction")  (((t_495.due != 0) and (t_495.due <= c.now)) and (t_495.fired != t_495.due)) },
     ((nextLevels(world.inc.get(iid)).length() > 0) == true),
   }
 
   def e_auto_escalate_0(w0: World, c: Ctx, iid: str): World = {
-    val who_491 = personOf(levelUpTarget(c.before))
-    val w492 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_491 }) }
-    w492
-  }
-
-  def e_auto_escalate_1(w0: World, c: Ctx, iid: str): World = {
-    val group_493 = groupOf(levelUpTarget(c.before))
-    val w494 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_493 }) }
-    w494
-  }
-
-  def e_auto_escalate_2(w0: World, c: Ctx, iid: str): World = {
-    val value_495 = levelUpNumber(c.before)
-    val w496 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_495 }) }
-    w496
-  }
-
-  def e_auto_escalate_3(w0: World, c: Ctx, iid: str): World = {
-    val w497 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    val who_496 = personOf(levelUpTarget(c.before))
+    val w497 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_496 }) }
     w497
   }
 
+  def e_auto_escalate_1(w0: World, c: Ctx, iid: str): World = {
+    val group_498 = groupOf(levelUpTarget(c.before))
+    val w499 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_498 }) }
+    w499
+  }
+
+  def e_auto_escalate_2(w0: World, c: Ctx, iid: str): World = {
+    val value_500 = levelUpNumber(c.before)
+    val w501 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_500 }) }
+    w501
+  }
+
+  def e_auto_escalate_3(w0: World, c: Ctx, iid: str): World = {
+    val w502 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w502
+  }
+
   def e_auto_escalate_4(w0: World, c: Ctx, iid: str): World = {
-    val w498 = if (not(timerDef("resolution").pausable)) {
-      val w499 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w500 = { ...w499, inc: w499.inc.set(iid, { ...w499.inc.get(iid), timers: w499.inc.get(iid).timers.set("resolution", { ...w499.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w500
+    val w503 = if (not(timerDef("resolution").pausable)) {
+      val w504 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w505 = { ...w504, inc: w504.inc.set(iid, { ...w504.inc.get(iid), timers: w504.inc.get(iid).timers.set("resolution", { ...w504.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w505
     } else {
-      val w501 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w502 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w503 = { ...w502, inc: w502.inc.set(iid, { ...w502.inc.get(iid), timers: w502.inc.get(iid).timers.set("resolution", { ...w502.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w504 = { ...w503, inc: w503.inc.set(iid, { ...w503.inc.get(iid), timers: w503.inc.get(iid).timers.set("resolution", { ...w503.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w504
+      val w506 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w507 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w508 = { ...w507, inc: w507.inc.set(iid, { ...w507.inc.get(iid), timers: w507.inc.get(iid).timers.set("resolution", { ...w507.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w509 = { ...w508, inc: w508.inc.set(iid, { ...w508.inc.get(iid), timers: w508.inc.get(iid).timers.set("resolution", { ...w508.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w509
     } else w0
-      w501
+      w506
     }
-    w498
+    w503
   }
 
   def e_auto_escalate_5(w0: World, c: Ctx, iid: str): World = {
-    val w505 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w506 = if (timerDef("reaction").startsOnce) {
-      val w507 = ec_resumeTimer(w0, c, iid, "reaction")
-      w507
+    val w510 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w511 = if (timerDef("reaction").startsOnce) {
+      val w512 = ec_resumeTimer(w0, c, iid, "reaction")
+      w512
     } else {
-      val w508 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w509 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w510 = { ...w509, inc: w509.inc.set(iid, { ...w509.inc.get(iid), timers: w509.inc.get(iid).timers.set("reaction", { ...w509.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w511 = { ...w510, inc: w510.inc.set(iid, { ...w510.inc.get(iid), timers: w510.inc.get(iid).timers.set("reaction", { ...w510.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w511
-    } else {
-      val sec_512 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
-      val w513 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_512 < 0)) 0 else (c.now + (sec_512 * 1000))) }) }) }
-      val w514 = { ...w513, inc: w513.inc.set(iid, { ...w513.inc.get(iid), timers: w513.inc.get(iid).timers.set("reaction", { ...w513.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w513 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w514 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w515 = { ...w514, inc: w514.inc.set(iid, { ...w514.inc.get(iid), timers: w514.inc.get(iid).timers.set("reaction", { ...w514.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w516 = { ...w515, inc: w515.inc.set(iid, { ...w515.inc.get(iid), timers: w515.inc.get(iid).timers.set("reaction", { ...w515.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w516
+    } else {
+      val sec_517 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
+      val w518 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_517 < 0)) 0 else (c.now + (sec_517 * 1000))) }) }) }
+      val w519 = { ...w518, inc: w518.inc.set(iid, { ...w518.inc.get(iid), timers: w518.inc.get(iid).timers.set("reaction", { ...w518.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w520 = { ...w519, inc: w519.inc.set(iid, { ...w519.inc.get(iid), timers: w519.inc.get(iid).timers.set("reaction", { ...w519.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w521 = { ...w520, inc: w520.inc.set(iid, { ...w520.inc.get(iid), timers: w520.inc.get(iid).timers.set("reaction", { ...w520.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w521
     }
-      w508
+      w513
     }
-      w506
+      w511
     }
-    w505
+    w510
   }
 
   def e_auto_escalate_6(w0: World, c: Ctx, iid: str): World = {
@@ -1832,9 +1858,9 @@ module im {
   }
 
   def e_auto_escalate_8(w0: World, c: Ctx, iid: str): World = {
-    val whom_517 = addressee(w0.inc.get(iid))
-    val w518 = if (((whom_517 != "") and (whom_517 != c.actor))) w0 else w0
-    w518
+    val whom_522 = addressee(w0.inc.get(iid))
+    val w523 = if (((whom_522 != "") and (whom_522 != c.actor))) w0 else w0
+    w523
   }
 
   def apply_auto_escalate(c: Ctx, iid: str, w0: World): World = {
@@ -1857,47 +1883,47 @@ module im {
   def ok_escalation_ceiling(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance").contains(world.inc.get(iid).state),
     (settings.escalation.enabled == true),
-    { val t_519 = world.inc.get(iid).timers.get("reaction")  (((t_519.due != 0) and (t_519.due <= c.now)) and (t_519.fired != t_519.due)) },
+    { val t_524 = world.inc.get(iid).timers.get("reaction")  (((t_524.due != 0) and (t_524.due <= c.now)) and (t_524.fired != t_524.due)) },
     ((nextLevels(world.inc.get(iid)).length() > 0) == false),
   }
 
   def e_escalation_ceiling_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_520 = { kind: "reaction", at: c.deadline, owner: addressee(c.before) }
-    val w521 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_520) }) }
-    val w522 = { ...w521, inc: w521.inc.set(iid, { ...w521.inc.get(iid), slaBreached: true }) }
-    val w523 = groupMembersAt(incs(w0), w522.inc.get(iid), c.deadline).foldl([], (acc, x526) => acc.append(x526.id)).foldl(w522, (wf524, eId525) => {
-      val w527 = { ...wf524, inc: wf524.inc.set(eId525, { ...wf524.inc.get(eId525), breaches: wf524.inc.get(eId525).breaches.append(breach_520) }) }
-      val w528 = { ...w527, inc: w527.inc.set(eId525, { ...w527.inc.get(eId525), slaBreached: true }) }
-      w528
+    val breach_525 = { kind: "reaction", at: c.deadline, owner: addressee(c.before) }
+    val w526 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_525) }) }
+    val w527 = { ...w526, inc: w526.inc.set(iid, { ...w526.inc.get(iid), slaBreached: true }) }
+    val w528 = groupMembersAt(incs(w0), w527.inc.get(iid), c.deadline).foldl([], (acc, x531) => acc.append(x531.id)).foldl(w527, (wf529, eId530) => {
+      val w532 = { ...wf529, inc: wf529.inc.set(eId530, { ...wf529.inc.get(eId530), breaches: wf529.inc.get(eId530).breaches.append(breach_525) }) }
+      val w533 = { ...w532, inc: w532.inc.set(eId530, { ...w532.inc.get(eId530), slaBreached: true }) }
+      w533
     })
-    w523
+    w528
   }
 
   def e_escalation_ceiling_1(w0: World, c: Ctx, iid: str): World = {
-    val w529 = if (timerDef("reaction").startsOnce) {
-      val w530 = ec_pauseTimer(w0, c, iid, "reaction")
-      w530
-    } else {
-      val w531 = if (false) {
-      val w532 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w533 = { ...w532, inc: w532.inc.set(iid, { ...w532.inc.get(iid), timers: w532.inc.get(iid).timers.set("reaction", { ...w532.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w534 = { ...w533, inc: w533.inc.set(iid, { ...w533.inc.get(iid), timers: w533.inc.get(iid).timers.set("reaction", { ...w533.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w535 = { ...w534, inc: w534.inc.set(iid, { ...w534.inc.get(iid), timers: w534.inc.get(iid).timers.set("reaction", { ...w534.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+    val w534 = if (timerDef("reaction").startsOnce) {
+      val w535 = ec_pauseTimer(w0, c, iid, "reaction")
       w535
     } else {
-      val w536 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_537 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w538 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_537) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w539 = { ...w538, inc: w538.inc.set(iid, { ...w538.inc.get(iid), timers: w538.inc.get(iid).timers.set("reaction", { ...w538.inc.get(iid).timers.get("reaction"), paused: keep_537 }) }) }
-      val w540 = { ...w539, inc: w539.inc.set(iid, { ...w539.inc.get(iid), timers: w539.inc.get(iid).timers.set("reaction", { ...w539.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w541 = { ...w540, inc: w540.inc.set(iid, { ...w540.inc.get(iid), timers: w540.inc.get(iid).timers.set("reaction", { ...w540.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      val w536 = if (false) {
+      val w537 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w538 = { ...w537, inc: w537.inc.set(iid, { ...w537.inc.get(iid), timers: w537.inc.get(iid).timers.set("reaction", { ...w537.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w539 = { ...w538, inc: w538.inc.set(iid, { ...w538.inc.get(iid), timers: w538.inc.get(iid).timers.set("reaction", { ...w538.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w540 = { ...w539, inc: w539.inc.set(iid, { ...w539.inc.get(iid), timers: w539.inc.get(iid).timers.set("reaction", { ...w539.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w540
+    } else {
+      val w541 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_542 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w543 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_542) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w544 = { ...w543, inc: w543.inc.set(iid, { ...w543.inc.get(iid), timers: w543.inc.get(iid).timers.set("reaction", { ...w543.inc.get(iid).timers.get("reaction"), paused: keep_542 }) }) }
+      val w545 = { ...w544, inc: w544.inc.set(iid, { ...w544.inc.get(iid), timers: w544.inc.get(iid).timers.set("reaction", { ...w544.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w546 = { ...w545, inc: w545.inc.set(iid, { ...w545.inc.get(iid), timers: w545.inc.get(iid).timers.set("reaction", { ...w545.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w546
+    }
       w541
     }
       w536
     }
-      w531
-    }
-    w529
+    w534
   }
 
   def e_escalation_ceiling_2(w0: World, c: Ctx, iid: str): World = {
@@ -1906,9 +1932,9 @@ module im {
   }
 
   def e_escalation_ceiling_3(w0: World, c: Ctx, iid: str): World = {
-    val whom_542 = settings.alerts.target
-    val w543 = if (((whom_542 != "") and (whom_542 != c.actor))) w0 else w0
-    w543
+    val whom_547 = settings.alerts.target
+    val w548 = if (((whom_547 != "") and (whom_547 != c.actor))) w0 else w0
+    w548
   }
 
   def apply_escalation_ceiling(c: Ctx, iid: str, w0: World): World = {
@@ -1925,46 +1951,46 @@ module im {
   def ok_reaction_overdue(c: Ctx, iid: str): bool = all {
     Set("new", "pending_acceptance").contains(world.inc.get(iid).state),
     (settings.escalation.enabled == false),
-    { val t_544 = world.inc.get(iid).timers.get("reaction")  (((t_544.due != 0) and (t_544.due <= c.now)) and (t_544.fired != t_544.due)) },
+    { val t_549 = world.inc.get(iid).timers.get("reaction")  (((t_549.due != 0) and (t_549.due <= c.now)) and (t_549.fired != t_549.due)) },
   }
 
   def e_reaction_overdue_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_545 = { kind: "reaction", at: c.deadline, owner: addressee(c.before) }
-    val w546 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_545) }) }
-    val w547 = { ...w546, inc: w546.inc.set(iid, { ...w546.inc.get(iid), slaBreached: true }) }
-    val w548 = groupMembersAt(incs(w0), w547.inc.get(iid), c.deadline).foldl([], (acc, x551) => acc.append(x551.id)).foldl(w547, (wf549, eId550) => {
-      val w552 = { ...wf549, inc: wf549.inc.set(eId550, { ...wf549.inc.get(eId550), breaches: wf549.inc.get(eId550).breaches.append(breach_545) }) }
-      val w553 = { ...w552, inc: w552.inc.set(eId550, { ...w552.inc.get(eId550), slaBreached: true }) }
-      w553
+    val breach_550 = { kind: "reaction", at: c.deadline, owner: addressee(c.before) }
+    val w551 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_550) }) }
+    val w552 = { ...w551, inc: w551.inc.set(iid, { ...w551.inc.get(iid), slaBreached: true }) }
+    val w553 = groupMembersAt(incs(w0), w552.inc.get(iid), c.deadline).foldl([], (acc, x556) => acc.append(x556.id)).foldl(w552, (wf554, eId555) => {
+      val w557 = { ...wf554, inc: wf554.inc.set(eId555, { ...wf554.inc.get(eId555), breaches: wf554.inc.get(eId555).breaches.append(breach_550) }) }
+      val w558 = { ...w557, inc: w557.inc.set(eId555, { ...w557.inc.get(eId555), slaBreached: true }) }
+      w558
     })
-    w548
+    w553
   }
 
   def e_reaction_overdue_1(w0: World, c: Ctx, iid: str): World = {
-    val w554 = if (timerDef("reaction").startsOnce) {
-      val w555 = ec_pauseTimer(w0, c, iid, "reaction")
-      w555
-    } else {
-      val w556 = if (false) {
-      val w557 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w558 = { ...w557, inc: w557.inc.set(iid, { ...w557.inc.get(iid), timers: w557.inc.get(iid).timers.set("reaction", { ...w557.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w559 = { ...w558, inc: w558.inc.set(iid, { ...w558.inc.get(iid), timers: w558.inc.get(iid).timers.set("reaction", { ...w558.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w560 = { ...w559, inc: w559.inc.set(iid, { ...w559.inc.get(iid), timers: w559.inc.get(iid).timers.set("reaction", { ...w559.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+    val w559 = if (timerDef("reaction").startsOnce) {
+      val w560 = ec_pauseTimer(w0, c, iid, "reaction")
       w560
     } else {
-      val w561 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_562 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w563 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_562) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w564 = { ...w563, inc: w563.inc.set(iid, { ...w563.inc.get(iid), timers: w563.inc.get(iid).timers.set("reaction", { ...w563.inc.get(iid).timers.get("reaction"), paused: keep_562 }) }) }
-      val w565 = { ...w564, inc: w564.inc.set(iid, { ...w564.inc.get(iid), timers: w564.inc.get(iid).timers.set("reaction", { ...w564.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w566 = { ...w565, inc: w565.inc.set(iid, { ...w565.inc.get(iid), timers: w565.inc.get(iid).timers.set("reaction", { ...w565.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      val w561 = if (false) {
+      val w562 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w563 = { ...w562, inc: w562.inc.set(iid, { ...w562.inc.get(iid), timers: w562.inc.get(iid).timers.set("reaction", { ...w562.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w564 = { ...w563, inc: w563.inc.set(iid, { ...w563.inc.get(iid), timers: w563.inc.get(iid).timers.set("reaction", { ...w563.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w565 = { ...w564, inc: w564.inc.set(iid, { ...w564.inc.get(iid), timers: w564.inc.get(iid).timers.set("reaction", { ...w564.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w565
+    } else {
+      val w566 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_567 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w568 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_567) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w569 = { ...w568, inc: w568.inc.set(iid, { ...w568.inc.get(iid), timers: w568.inc.get(iid).timers.set("reaction", { ...w568.inc.get(iid).timers.get("reaction"), paused: keep_567 }) }) }
+      val w570 = { ...w569, inc: w569.inc.set(iid, { ...w569.inc.get(iid), timers: w569.inc.get(iid).timers.set("reaction", { ...w569.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w571 = { ...w570, inc: w570.inc.set(iid, { ...w570.inc.get(iid), timers: w570.inc.get(iid).timers.set("reaction", { ...w570.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w571
+    }
       w566
     }
       w561
     }
-      w556
-    }
-    w554
+    w559
   }
 
   def e_reaction_overdue_2(w0: World, c: Ctx, iid: str): World = {
@@ -1973,9 +1999,9 @@ module im {
   }
 
   def e_reaction_overdue_3(w0: World, c: Ctx, iid: str): World = {
-    val whom_567 = settings.alerts.target
-    val w568 = if (((whom_567 != "") and (whom_567 != c.actor))) w0 else w0
-    w568
+    val whom_572 = settings.alerts.target
+    val w573 = if (((whom_572 != "") and (whom_572 != c.actor))) w0 else w0
+    w573
   }
 
   def apply_reaction_overdue(c: Ctx, iid: str, w0: World): World = {
@@ -1991,20 +2017,20 @@ module im {
 
   def ok_resolution_overdue(c: Ctx, iid: str): bool = all {
     Set("in_progress").contains(world.inc.get(iid).state),
-    { val t_569 = world.inc.get(iid).timers.get("resolution")  (((t_569.due != 0) and (t_569.due <= c.now)) and (t_569.fired != t_569.due)) },
+    { val t_574 = world.inc.get(iid).timers.get("resolution")  (((t_574.due != 0) and (t_574.due <= c.now)) and (t_574.fired != t_574.due)) },
     (settings.escalation.onResolutionOverdue == "alert"),
   }
 
   def e_resolution_overdue_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_570 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
-    val w571 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_570) }) }
-    val w572 = { ...w571, inc: w571.inc.set(iid, { ...w571.inc.get(iid), slaBreached: true }) }
-    val w573 = groupMembersAt(incs(w0), w572.inc.get(iid), c.deadline).foldl([], (acc, x576) => acc.append(x576.id)).foldl(w572, (wf574, eId575) => {
-      val w577 = { ...wf574, inc: wf574.inc.set(eId575, { ...wf574.inc.get(eId575), breaches: wf574.inc.get(eId575).breaches.append(breach_570) }) }
-      val w578 = { ...w577, inc: w577.inc.set(eId575, { ...w577.inc.get(eId575), slaBreached: true }) }
-      w578
+    val breach_575 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
+    val w576 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_575) }) }
+    val w577 = { ...w576, inc: w576.inc.set(iid, { ...w576.inc.get(iid), slaBreached: true }) }
+    val w578 = groupMembersAt(incs(w0), w577.inc.get(iid), c.deadline).foldl([], (acc, x581) => acc.append(x581.id)).foldl(w577, (wf579, eId580) => {
+      val w582 = { ...wf579, inc: wf579.inc.set(eId580, { ...wf579.inc.get(eId580), breaches: wf579.inc.get(eId580).breaches.append(breach_575) }) }
+      val w583 = { ...w582, inc: w582.inc.set(eId580, { ...w582.inc.get(eId580), slaBreached: true }) }
+      w583
     })
-    w573
+    w578
   }
 
   def e_resolution_overdue_1(w0: World, c: Ctx, iid: str): World = {
@@ -2013,9 +2039,9 @@ module im {
   }
 
   def e_resolution_overdue_2(w0: World, c: Ctx, iid: str): World = {
-    val whom_579 = settings.alerts.target
-    val w580 = if (((whom_579 != "") and (whom_579 != c.actor))) w0 else w0
-    w580
+    val whom_584 = settings.alerts.target
+    val w585 = if (((whom_584 != "") and (whom_584 != c.actor))) w0 else w0
+    w585
   }
 
   def apply_resolution_overdue(c: Ctx, iid: str, w0: World): World = {
@@ -2031,81 +2057,81 @@ module im {
   def ok_resolution_escalate(c: Ctx, iid: str): bool = all {
     Set("in_progress").contains(world.inc.get(iid).state),
     (settings.escalation.onResolutionOverdue == "escalate"),
-    { val t_581 = world.inc.get(iid).timers.get("resolution")  (((t_581.due != 0) and (t_581.due <= c.now)) and (t_581.fired != t_581.due)) },
+    { val t_586 = world.inc.get(iid).timers.get("resolution")  (((t_586.due != 0) and (t_586.due <= c.now)) and (t_586.fired != t_586.due)) },
     ((nextLevels(world.inc.get(iid)).length() > 0) == true),
   }
 
   def e_resolution_escalate_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_582 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
-    val w583 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_582) }) }
-    val w584 = { ...w583, inc: w583.inc.set(iid, { ...w583.inc.get(iid), slaBreached: true }) }
-    val w585 = groupMembersAt(incs(w0), w584.inc.get(iid), c.deadline).foldl([], (acc, x588) => acc.append(x588.id)).foldl(w584, (wf586, eId587) => {
-      val w589 = { ...wf586, inc: wf586.inc.set(eId587, { ...wf586.inc.get(eId587), breaches: wf586.inc.get(eId587).breaches.append(breach_582) }) }
-      val w590 = { ...w589, inc: w589.inc.set(eId587, { ...w589.inc.get(eId587), slaBreached: true }) }
-      w590
+    val breach_587 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
+    val w588 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_587) }) }
+    val w589 = { ...w588, inc: w588.inc.set(iid, { ...w588.inc.get(iid), slaBreached: true }) }
+    val w590 = groupMembersAt(incs(w0), w589.inc.get(iid), c.deadline).foldl([], (acc, x593) => acc.append(x593.id)).foldl(w589, (wf591, eId592) => {
+      val w594 = { ...wf591, inc: wf591.inc.set(eId592, { ...wf591.inc.get(eId592), breaches: wf591.inc.get(eId592).breaches.append(breach_587) }) }
+      val w595 = { ...w594, inc: w594.inc.set(eId592, { ...w594.inc.get(eId592), slaBreached: true }) }
+      w595
     })
-    w585
+    w590
   }
 
   def e_resolution_escalate_1(w0: World, c: Ctx, iid: str): World = {
-    val who_591 = personOf(levelUpTarget(c.before))
-    val w592 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_591 }) }
-    w592
-  }
-
-  def e_resolution_escalate_2(w0: World, c: Ctx, iid: str): World = {
-    val group_593 = groupOf(levelUpTarget(c.before))
-    val w594 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_593 }) }
-    w594
-  }
-
-  def e_resolution_escalate_3(w0: World, c: Ctx, iid: str): World = {
-    val value_595 = levelUpNumber(c.before)
-    val w596 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_595 }) }
-    w596
-  }
-
-  def e_resolution_escalate_4(w0: World, c: Ctx, iid: str): World = {
-    val w597 = if (not(timerDef("resolution").pausable)) {
-      val w598 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w599 = { ...w598, inc: w598.inc.set(iid, { ...w598.inc.get(iid), timers: w598.inc.get(iid).timers.set("resolution", { ...w598.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w599
-    } else {
-      val w600 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w601 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w602 = { ...w601, inc: w601.inc.set(iid, { ...w601.inc.get(iid), timers: w601.inc.get(iid).timers.set("resolution", { ...w601.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w603 = { ...w602, inc: w602.inc.set(iid, { ...w602.inc.get(iid), timers: w602.inc.get(iid).timers.set("resolution", { ...w602.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w603
-    } else w0
-      w600
-    }
+    val who_596 = personOf(levelUpTarget(c.before))
+    val w597 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_596 }) }
     w597
   }
 
+  def e_resolution_escalate_2(w0: World, c: Ctx, iid: str): World = {
+    val group_598 = groupOf(levelUpTarget(c.before))
+    val w599 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_598 }) }
+    w599
+  }
+
+  def e_resolution_escalate_3(w0: World, c: Ctx, iid: str): World = {
+    val value_600 = levelUpNumber(c.before)
+    val w601 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), escalationLevel: value_600 }) }
+    w601
+  }
+
+  def e_resolution_escalate_4(w0: World, c: Ctx, iid: str): World = {
+    val w602 = if (not(timerDef("resolution").pausable)) {
+      val w603 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w604 = { ...w603, inc: w603.inc.set(iid, { ...w603.inc.get(iid), timers: w603.inc.get(iid).timers.set("resolution", { ...w603.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w604
+    } else {
+      val w605 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w606 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w607 = { ...w606, inc: w606.inc.set(iid, { ...w606.inc.get(iid), timers: w606.inc.get(iid).timers.set("resolution", { ...w606.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w608 = { ...w607, inc: w607.inc.set(iid, { ...w607.inc.get(iid), timers: w607.inc.get(iid).timers.set("resolution", { ...w607.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w608
+    } else w0
+      w605
+    }
+    w602
+  }
+
   def e_resolution_escalate_5(w0: World, c: Ctx, iid: str): World = {
-    val w604 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w605 = if (timerDef("reaction").startsOnce) {
-      val w606 = ec_resumeTimer(w0, c, iid, "reaction")
-      w606
+    val w609 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w610 = if (timerDef("reaction").startsOnce) {
+      val w611 = ec_resumeTimer(w0, c, iid, "reaction")
+      w611
     } else {
-      val w607 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w608 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w609 = { ...w608, inc: w608.inc.set(iid, { ...w608.inc.get(iid), timers: w608.inc.get(iid).timers.set("reaction", { ...w608.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w610 = { ...w609, inc: w609.inc.set(iid, { ...w609.inc.get(iid), timers: w609.inc.get(iid).timers.set("reaction", { ...w609.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w610
-    } else {
-      val sec_611 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
-      val w612 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_611 < 0)) 0 else (c.now + (sec_611 * 1000))) }) }) }
-      val w613 = { ...w612, inc: w612.inc.set(iid, { ...w612.inc.get(iid), timers: w612.inc.get(iid).timers.set("reaction", { ...w612.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w612 = if ((("byEscalationLevel" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w613 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w614 = { ...w613, inc: w613.inc.set(iid, { ...w613.inc.get(iid), timers: w613.inc.get(iid).timers.set("reaction", { ...w613.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w615 = { ...w614, inc: w614.inc.set(iid, { ...w614.inc.get(iid), timers: w614.inc.get(iid).timers.set("reaction", { ...w614.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w615
+    } else {
+      val sec_616 = timerSec(w0.inc.get(iid), "reaction", (if (("byEscalationLevel" == "continue")) "" else "byEscalationLevel"))
+      val w617 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_616 < 0)) 0 else (c.now + (sec_616 * 1000))) }) }) }
+      val w618 = { ...w617, inc: w617.inc.set(iid, { ...w617.inc.get(iid), timers: w617.inc.get(iid).timers.set("reaction", { ...w617.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w619 = { ...w618, inc: w618.inc.set(iid, { ...w618.inc.get(iid), timers: w618.inc.get(iid).timers.set("reaction", { ...w618.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w620 = { ...w619, inc: w619.inc.set(iid, { ...w619.inc.get(iid), timers: w619.inc.get(iid).timers.set("reaction", { ...w619.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w620
     }
-      w607
+      w612
     }
-      w605
+      w610
     }
-    w604
+    w609
   }
 
   def e_resolution_escalate_6(w0: World, c: Ctx, iid: str): World = {
@@ -2119,15 +2145,15 @@ module im {
   }
 
   def e_resolution_escalate_8(w0: World, c: Ctx, iid: str): World = {
-    val whom_616 = c.before.owner
-    val w617 = if (((whom_616 != "") and (whom_616 != c.actor))) w0 else w0
-    w617
+    val whom_621 = c.before.owner
+    val w622 = if (((whom_621 != "") and (whom_621 != c.actor))) w0 else w0
+    w622
   }
 
   def e_resolution_escalate_9(w0: World, c: Ctx, iid: str): World = {
-    val whom_618 = addressee(w0.inc.get(iid))
-    val w619 = if (((whom_618 != "") and (whom_618 != c.actor))) w0 else w0
-    w619
+    val whom_623 = addressee(w0.inc.get(iid))
+    val w624 = if (((whom_623 != "") and (whom_623 != c.actor))) w0 else w0
+    w624
   }
 
   def apply_resolution_escalate(c: Ctx, iid: str, w0: World): World = {
@@ -2151,20 +2177,20 @@ module im {
   def ok_resolution_ceiling(c: Ctx, iid: str): bool = all {
     Set("in_progress").contains(world.inc.get(iid).state),
     (settings.escalation.onResolutionOverdue == "escalate"),
-    { val t_620 = world.inc.get(iid).timers.get("resolution")  (((t_620.due != 0) and (t_620.due <= c.now)) and (t_620.fired != t_620.due)) },
+    { val t_625 = world.inc.get(iid).timers.get("resolution")  (((t_625.due != 0) and (t_625.due <= c.now)) and (t_625.fired != t_625.due)) },
     ((nextLevels(world.inc.get(iid)).length() > 0) == false),
   }
 
   def e_resolution_ceiling_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_621 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
-    val w622 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_621) }) }
-    val w623 = { ...w622, inc: w622.inc.set(iid, { ...w622.inc.get(iid), slaBreached: true }) }
-    val w624 = groupMembersAt(incs(w0), w623.inc.get(iid), c.deadline).foldl([], (acc, x627) => acc.append(x627.id)).foldl(w623, (wf625, eId626) => {
-      val w628 = { ...wf625, inc: wf625.inc.set(eId626, { ...wf625.inc.get(eId626), breaches: wf625.inc.get(eId626).breaches.append(breach_621) }) }
-      val w629 = { ...w628, inc: w628.inc.set(eId626, { ...w628.inc.get(eId626), slaBreached: true }) }
-      w629
+    val breach_626 = { kind: "resolution", at: c.deadline, owner: addressee(c.before) }
+    val w627 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_626) }) }
+    val w628 = { ...w627, inc: w627.inc.set(iid, { ...w627.inc.get(iid), slaBreached: true }) }
+    val w629 = groupMembersAt(incs(w0), w628.inc.get(iid), c.deadline).foldl([], (acc, x632) => acc.append(x632.id)).foldl(w628, (wf630, eId631) => {
+      val w633 = { ...wf630, inc: wf630.inc.set(eId631, { ...wf630.inc.get(eId631), breaches: wf630.inc.get(eId631).breaches.append(breach_626) }) }
+      val w634 = { ...w633, inc: w633.inc.set(eId631, { ...w633.inc.get(eId631), slaBreached: true }) }
+      w634
     })
-    w624
+    w629
   }
 
   def e_resolution_ceiling_1(w0: World, c: Ctx, iid: str): World = {
@@ -2173,9 +2199,9 @@ module im {
   }
 
   def e_resolution_ceiling_2(w0: World, c: Ctx, iid: str): World = {
-    val whom_630 = settings.alerts.target
-    val w631 = if (((whom_630 != "") and (whom_630 != c.actor))) w0 else w0
-    w631
+    val whom_635 = settings.alerts.target
+    val w636 = if (((whom_635 != "") and (whom_635 != c.actor))) w0 else w0
+    w636
   }
 
   def apply_resolution_ceiling(c: Ctx, iid: str, w0: World): World = {
@@ -2190,20 +2216,20 @@ module im {
 
   def ok_hold_overdue(c: Ctx, iid: str): bool = all {
     Set("on_hold").contains(world.inc.get(iid).state),
-    { val t_632 = world.inc.get(iid).timers.get("hold")  (((t_632.due != 0) and (t_632.due <= c.now)) and (t_632.fired != t_632.due)) },
-    not(["break", "no_link"].foldl(false, (acc, y633) => acc or y633 == world.inc.get(iid).holdReasonId)),
+    { val t_637 = world.inc.get(iid).timers.get("hold")  (((t_637.due != 0) and (t_637.due <= c.now)) and (t_637.fired != t_637.due)) },
+    not(["break", "no_link"].foldl(false, (acc, y638) => acc or y638 == world.inc.get(iid).holdReasonId)),
   }
 
   def e_hold_overdue_0(w0: World, c: Ctx, iid: str): World = {
-    val breach_634 = { kind: "hold", at: c.deadline, owner: addressee(c.before) }
-    val w635 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_634) }) }
-    val w636 = { ...w635, inc: w635.inc.set(iid, { ...w635.inc.get(iid), slaBreached: true }) }
-    val w637 = groupMembersAt(incs(w0), w636.inc.get(iid), c.deadline).foldl([], (acc, x640) => acc.append(x640.id)).foldl(w636, (wf638, eId639) => {
-      val w641 = { ...wf638, inc: wf638.inc.set(eId639, { ...wf638.inc.get(eId639), breaches: wf638.inc.get(eId639).breaches.append(breach_634) }) }
-      val w642 = { ...w641, inc: w641.inc.set(eId639, { ...w641.inc.get(eId639), slaBreached: true }) }
-      w642
+    val breach_639 = { kind: "hold", at: c.deadline, owner: addressee(c.before) }
+    val w640 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), breaches: w0.inc.get(iid).breaches.append(breach_639) }) }
+    val w641 = { ...w640, inc: w640.inc.set(iid, { ...w640.inc.get(iid), slaBreached: true }) }
+    val w642 = groupMembersAt(incs(w0), w641.inc.get(iid), c.deadline).foldl([], (acc, x645) => acc.append(x645.id)).foldl(w641, (wf643, eId644) => {
+      val w646 = { ...wf643, inc: wf643.inc.set(eId644, { ...wf643.inc.get(eId644), breaches: wf643.inc.get(eId644).breaches.append(breach_639) }) }
+      val w647 = { ...w646, inc: w646.inc.set(eId644, { ...w646.inc.get(eId644), slaBreached: true }) }
+      w647
     })
-    w637
+    w642
   }
 
   def e_hold_overdue_1(w0: World, c: Ctx, iid: str): World = {
@@ -2212,9 +2238,9 @@ module im {
   }
 
   def e_hold_overdue_2(w0: World, c: Ctx, iid: str): World = {
-    val whom_643 = settings.alerts.target
-    val w644 = if (((whom_643 != "") and (whom_643 != c.actor))) w0 else w0
-    w644
+    val whom_648 = settings.alerts.target
+    val w649 = if (((whom_648 != "") and (whom_648 != c.actor))) w0 else w0
+    w649
   }
 
   def apply_hold_overdue(c: Ctx, iid: str, w0: World): World = {
@@ -2229,89 +2255,89 @@ module im {
 
   def ok_break_hold_release(c: Ctx, iid: str): bool = all {
     Set("on_hold").contains(world.inc.get(iid).state),
-    { val t_645 = world.inc.get(iid).timers.get("hold")  (((t_645.due != 0) and (t_645.due <= c.now)) and (t_645.fired != t_645.due)) },
-    ["break"].foldl(false, (acc, y646) => acc or y646 == world.inc.get(iid).holdReasonId),
+    { val t_650 = world.inc.get(iid).timers.get("hold")  (((t_650.due != 0) and (t_650.due <= c.now)) and (t_650.fired != t_650.due)) },
+    ["break"].foldl(false, (acc, y651) => acc or y651 == world.inc.get(iid).holdReasonId),
   }
 
   def e_break_hold_release_0(w0: World, c: Ctx, iid: str): World = {
-    val who_647 = ""
-    val w648 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_647 }) }
-    w648
+    val who_652 = ""
+    val w653 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_652 }) }
+    w653
   }
 
   def e_break_hold_release_1(w0: World, c: Ctx, iid: str): World = {
-    val w649 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w649
+    val w654 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w654
   }
 
   def e_break_hold_release_2(w0: World, c: Ctx, iid: str): World = {
-    val w650 = if (timerDef("hold").startsOnce) {
-      val w651 = ec_pauseTimer(w0, c, iid, "hold")
-      w651
-    } else {
-      val w652 = if (false) {
-      val w653 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w654 = { ...w653, inc: w653.inc.set(iid, { ...w653.inc.get(iid), timers: w653.inc.get(iid).timers.set("hold", { ...w653.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w655 = { ...w654, inc: w654.inc.set(iid, { ...w654.inc.get(iid), timers: w654.inc.get(iid).timers.set("hold", { ...w654.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w656 = { ...w655, inc: w655.inc.set(iid, { ...w655.inc.get(iid), timers: w655.inc.get(iid).timers.set("hold", { ...w655.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w655 = if (timerDef("hold").startsOnce) {
+      val w656 = ec_pauseTimer(w0, c, iid, "hold")
       w656
     } else {
-      val w657 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_658 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w659 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_658) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w660 = { ...w659, inc: w659.inc.set(iid, { ...w659.inc.get(iid), timers: w659.inc.get(iid).timers.set("hold", { ...w659.inc.get(iid).timers.get("hold"), paused: keep_658 }) }) }
-      val w661 = { ...w660, inc: w660.inc.set(iid, { ...w660.inc.get(iid), timers: w660.inc.get(iid).timers.set("hold", { ...w660.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w662 = { ...w661, inc: w661.inc.set(iid, { ...w661.inc.get(iid), timers: w661.inc.get(iid).timers.set("hold", { ...w661.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w657 = if (false) {
+      val w658 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w659 = { ...w658, inc: w658.inc.set(iid, { ...w658.inc.get(iid), timers: w658.inc.get(iid).timers.set("hold", { ...w658.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w660 = { ...w659, inc: w659.inc.set(iid, { ...w659.inc.get(iid), timers: w659.inc.get(iid).timers.set("hold", { ...w659.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w661 = { ...w660, inc: w660.inc.set(iid, { ...w660.inc.get(iid), timers: w660.inc.get(iid).timers.set("hold", { ...w660.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w661
+    } else {
+      val w662 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_663 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w664 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_663) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w665 = { ...w664, inc: w664.inc.set(iid, { ...w664.inc.get(iid), timers: w664.inc.get(iid).timers.set("hold", { ...w664.inc.get(iid).timers.get("hold"), paused: keep_663 }) }) }
+      val w666 = { ...w665, inc: w665.inc.set(iid, { ...w665.inc.get(iid), timers: w665.inc.get(iid).timers.set("hold", { ...w665.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w667 = { ...w666, inc: w666.inc.set(iid, { ...w666.inc.get(iid), timers: w666.inc.get(iid).timers.set("hold", { ...w666.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w667
+    }
       w662
     }
       w657
     }
-      w652
-    }
-    w650
+    w655
   }
 
   def e_break_hold_release_3(w0: World, c: Ctx, iid: str): World = {
-    val w663 = if (not(timerDef("resolution").pausable)) {
-      val w664 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w665 = { ...w664, inc: w664.inc.set(iid, { ...w664.inc.get(iid), timers: w664.inc.get(iid).timers.set("resolution", { ...w664.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w665
+    val w668 = if (not(timerDef("resolution").pausable)) {
+      val w669 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w670 = { ...w669, inc: w669.inc.set(iid, { ...w669.inc.get(iid), timers: w669.inc.get(iid).timers.set("resolution", { ...w669.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w670
     } else {
-      val w666 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w667 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w668 = { ...w667, inc: w667.inc.set(iid, { ...w667.inc.get(iid), timers: w667.inc.get(iid).timers.set("resolution", { ...w667.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w669 = { ...w668, inc: w668.inc.set(iid, { ...w668.inc.get(iid), timers: w668.inc.get(iid).timers.set("resolution", { ...w668.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w669
+      val w671 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w672 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w673 = { ...w672, inc: w672.inc.set(iid, { ...w672.inc.get(iid), timers: w672.inc.get(iid).timers.set("resolution", { ...w672.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w674 = { ...w673, inc: w673.inc.set(iid, { ...w673.inc.get(iid), timers: w673.inc.get(iid).timers.set("resolution", { ...w673.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w674
     } else w0
-      w666
+      w671
     }
-    w663
+    w668
   }
 
   def e_break_hold_release_4(w0: World, c: Ctx, iid: str): World = {
-    val w670 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w671 = if (timerDef("reaction").startsOnce) {
-      val w672 = ec_resumeTimer(w0, c, iid, "reaction")
-      w672
+    val w675 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w676 = if (timerDef("reaction").startsOnce) {
+      val w677 = ec_resumeTimer(w0, c, iid, "reaction")
+      w677
     } else {
-      val w673 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w674 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w675 = { ...w674, inc: w674.inc.set(iid, { ...w674.inc.get(iid), timers: w674.inc.get(iid).timers.set("reaction", { ...w674.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w676 = { ...w675, inc: w675.inc.set(iid, { ...w675.inc.get(iid), timers: w675.inc.get(iid).timers.set("reaction", { ...w675.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w676
-    } else {
-      val sec_677 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w678 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_677 < 0)) 0 else (c.now + (sec_677 * 1000))) }) }) }
-      val w679 = { ...w678, inc: w678.inc.set(iid, { ...w678.inc.get(iid), timers: w678.inc.get(iid).timers.set("reaction", { ...w678.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w678 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w679 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w680 = { ...w679, inc: w679.inc.set(iid, { ...w679.inc.get(iid), timers: w679.inc.get(iid).timers.set("reaction", { ...w679.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w681 = { ...w680, inc: w680.inc.set(iid, { ...w680.inc.get(iid), timers: w680.inc.get(iid).timers.set("reaction", { ...w680.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w681
+    } else {
+      val sec_682 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w683 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_682 < 0)) 0 else (c.now + (sec_682 * 1000))) }) }) }
+      val w684 = { ...w683, inc: w683.inc.set(iid, { ...w683.inc.get(iid), timers: w683.inc.get(iid).timers.set("reaction", { ...w683.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w685 = { ...w684, inc: w684.inc.set(iid, { ...w684.inc.get(iid), timers: w684.inc.get(iid).timers.set("reaction", { ...w684.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w686 = { ...w685, inc: w685.inc.set(iid, { ...w685.inc.get(iid), timers: w685.inc.get(iid).timers.set("reaction", { ...w685.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w686
     }
-      w673
+      w678
     }
-      w671
+      w676
     }
-    w670
+    w675
   }
 
   def e_break_hold_release_5(w0: World, c: Ctx, iid: str): World = {
@@ -2345,52 +2371,52 @@ module im {
   }
 
   def e_system_hold_break_0(w0: World, c: Ctx, iid: str): World = {
-    val reason_682 = "break"
-    val w683 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_682 }) }
-    w683
+    val reason_687 = "break"
+    val w688 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_687 }) }
+    w688
   }
 
   def e_system_hold_break_1(w0: World, c: Ctx, iid: str): World = {
-    val w684 = if (not(timerDef("resolution").pausable)) {
-      val w685 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w686 = { ...w685, inc: w685.inc.set(iid, { ...w685.inc.get(iid), timers: w685.inc.get(iid).timers.set("resolution", { ...w685.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w686
+    val w689 = if (not(timerDef("resolution").pausable)) {
+      val w690 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w691 = { ...w690, inc: w690.inc.set(iid, { ...w690.inc.get(iid), timers: w690.inc.get(iid).timers.set("resolution", { ...w690.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w691
     } else {
-      val w687 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w688 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w689 = { ...w688, inc: w688.inc.set(iid, { ...w688.inc.get(iid), timers: w688.inc.get(iid).timers.set("resolution", { ...w688.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w690 = { ...w689, inc: w689.inc.set(iid, { ...w689.inc.get(iid), timers: w689.inc.get(iid).timers.set("resolution", { ...w689.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w690
+      val w692 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w693 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w694 = { ...w693, inc: w693.inc.set(iid, { ...w693.inc.get(iid), timers: w693.inc.get(iid).timers.set("resolution", { ...w693.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w695 = { ...w694, inc: w694.inc.set(iid, { ...w694.inc.get(iid), timers: w694.inc.get(iid).timers.set("resolution", { ...w694.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w695
     } else w0
-      w687
+      w692
     }
-    w684
+    w689
   }
 
   def e_system_hold_break_2(w0: World, c: Ctx, iid: str): World = {
-    val w691 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
-      val w692 = if (timerDef("hold").startsOnce) {
-      val w693 = ec_resumeTimer(w0, c, iid, "hold")
-      w693
+    val w696 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
+      val w697 = if (timerDef("hold").startsOnce) {
+      val w698 = ec_resumeTimer(w0, c, iid, "hold")
+      w698
     } else {
-      val w694 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
-      val w695 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
-      val w696 = { ...w695, inc: w695.inc.set(iid, { ...w695.inc.get(iid), timers: w695.inc.get(iid).timers.set("hold", { ...w695.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w697 = { ...w696, inc: w696.inc.set(iid, { ...w696.inc.get(iid), timers: w696.inc.get(iid).timers.set("hold", { ...w696.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      w697
-    } else {
-      val sec_698 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
-      val w699 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_698 < 0)) 0 else (c.now + (sec_698 * 1000))) }) }) }
-      val w700 = { ...w699, inc: w699.inc.set(iid, { ...w699.inc.get(iid), timers: w699.inc.get(iid).timers.set("hold", { ...w699.inc.get(iid).timers.get("hold"), since: c.now }) }) }
+      val w699 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
+      val w700 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
       val w701 = { ...w700, inc: w700.inc.set(iid, { ...w700.inc.get(iid), timers: w700.inc.get(iid).timers.set("hold", { ...w700.inc.get(iid).timers.get("hold"), paused: false }) }) }
       val w702 = { ...w701, inc: w701.inc.set(iid, { ...w701.inc.get(iid), timers: w701.inc.get(iid).timers.set("hold", { ...w701.inc.get(iid).timers.get("hold"), left: 0 }) }) }
       w702
+    } else {
+      val sec_703 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
+      val w704 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_703 < 0)) 0 else (c.now + (sec_703 * 1000))) }) }) }
+      val w705 = { ...w704, inc: w704.inc.set(iid, { ...w704.inc.get(iid), timers: w704.inc.get(iid).timers.set("hold", { ...w704.inc.get(iid).timers.get("hold"), since: c.now }) }) }
+      val w706 = { ...w705, inc: w705.inc.set(iid, { ...w705.inc.get(iid), timers: w705.inc.get(iid).timers.set("hold", { ...w705.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w707 = { ...w706, inc: w706.inc.set(iid, { ...w706.inc.get(iid), timers: w706.inc.get(iid).timers.set("hold", { ...w706.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      w707
     }
-      w694
+      w699
     }
-      w692
+      w697
     }
-    w691
+    w696
   }
 
   def e_system_hold_break_3(w0: World, c: Ctx, iid: str): World = {
@@ -2416,52 +2442,52 @@ module im {
   }
 
   def e_system_hold_idle_0(w0: World, c: Ctx, iid: str): World = {
-    val reason_703 = "no_link"
-    val w704 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_703 }) }
-    w704
+    val reason_708 = "no_link"
+    val w709 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: reason_708 }) }
+    w709
   }
 
   def e_system_hold_idle_1(w0: World, c: Ctx, iid: str): World = {
-    val w705 = if (not(timerDef("resolution").pausable)) {
-      val w706 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w707 = { ...w706, inc: w706.inc.set(iid, { ...w706.inc.get(iid), timers: w706.inc.get(iid).timers.set("resolution", { ...w706.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w707
+    val w710 = if (not(timerDef("resolution").pausable)) {
+      val w711 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w712 = { ...w711, inc: w711.inc.set(iid, { ...w711.inc.get(iid), timers: w711.inc.get(iid).timers.set("resolution", { ...w711.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w712
     } else {
-      val w708 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w709 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w710 = { ...w709, inc: w709.inc.set(iid, { ...w709.inc.get(iid), timers: w709.inc.get(iid).timers.set("resolution", { ...w709.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w711 = { ...w710, inc: w710.inc.set(iid, { ...w710.inc.get(iid), timers: w710.inc.get(iid).timers.set("resolution", { ...w710.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w711
+      val w713 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w714 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w715 = { ...w714, inc: w714.inc.set(iid, { ...w714.inc.get(iid), timers: w714.inc.get(iid).timers.set("resolution", { ...w714.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w716 = { ...w715, inc: w715.inc.set(iid, { ...w715.inc.get(iid), timers: w715.inc.get(iid).timers.set("resolution", { ...w715.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w716
     } else w0
-      w708
+      w713
     }
-    w705
+    w710
   }
 
   def e_system_hold_idle_2(w0: World, c: Ctx, iid: str): World = {
-    val w712 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
-      val w713 = if (timerDef("hold").startsOnce) {
-      val w714 = ec_resumeTimer(w0, c, iid, "hold")
-      w714
+    val w717 = if ((false and (w0.inc.get(iid).timers.get("hold").due != 0))) w0 else {
+      val w718 = if (timerDef("hold").startsOnce) {
+      val w719 = ec_resumeTimer(w0, c, iid, "hold")
+      w719
     } else {
-      val w715 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
-      val w716 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
-      val w717 = { ...w716, inc: w716.inc.set(iid, { ...w716.inc.get(iid), timers: w716.inc.get(iid).timers.set("hold", { ...w716.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w718 = { ...w717, inc: w717.inc.set(iid, { ...w717.inc.get(iid), timers: w717.inc.get(iid).timers.set("hold", { ...w717.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      w718
-    } else {
-      val sec_719 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
-      val w720 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_719 < 0)) 0 else (c.now + (sec_719 * 1000))) }) }) }
-      val w721 = { ...w720, inc: w720.inc.set(iid, { ...w720.inc.get(iid), timers: w720.inc.get(iid).timers.set("hold", { ...w720.inc.get(iid).timers.get("hold"), since: c.now }) }) }
+      val w720 = if ((("" == "continue") and w0.inc.get(iid).timers.get("hold").paused)) {
+      val w721 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (c.now + w0.inc.get(iid).timers.get("hold").left) }) }) }
       val w722 = { ...w721, inc: w721.inc.set(iid, { ...w721.inc.get(iid), timers: w721.inc.get(iid).timers.set("hold", { ...w721.inc.get(iid).timers.get("hold"), paused: false }) }) }
       val w723 = { ...w722, inc: w722.inc.set(iid, { ...w722.inc.get(iid), timers: w722.inc.get(iid).timers.set("hold", { ...w722.inc.get(iid).timers.get("hold"), left: 0 }) }) }
       w723
+    } else {
+      val sec_724 = timerSec(w0.inc.get(iid), "hold", (if (("" == "continue")) "" else ""))
+      val w725 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), due: (if ((sec_724 < 0)) 0 else (c.now + (sec_724 * 1000))) }) }) }
+      val w726 = { ...w725, inc: w725.inc.set(iid, { ...w725.inc.get(iid), timers: w725.inc.get(iid).timers.set("hold", { ...w725.inc.get(iid).timers.get("hold"), since: c.now }) }) }
+      val w727 = { ...w726, inc: w726.inc.set(iid, { ...w726.inc.get(iid), timers: w726.inc.get(iid).timers.set("hold", { ...w726.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w728 = { ...w727, inc: w727.inc.set(iid, { ...w727.inc.get(iid), timers: w727.inc.get(iid).timers.set("hold", { ...w727.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      w728
     }
-      w715
+      w720
     }
-      w713
+      w718
     }
-    w712
+    w717
   }
 
   def e_system_hold_idle_3(w0: World, c: Ctx, iid: str): World = {
@@ -2470,9 +2496,9 @@ module im {
   }
 
   def e_system_hold_idle_4(w0: World, c: Ctx, iid: str): World = {
-    val whom_724 = settings.alerts.target
-    val w725 = if (((whom_724 != "") and (whom_724 != c.actor))) w0 else w0
-    w725
+    val whom_729 = settings.alerts.target
+    val w730 = if (((whom_729 != "") and (whom_729 != c.actor))) w0 else w0
+    w730
   }
 
   def apply_system_hold_idle(c: Ctx, iid: str, w0: World): World = {
@@ -2491,88 +2517,88 @@ module im {
   def ok_system_release_idle(c: Ctx, iid: str): bool = all {
     Set("on_hold").contains(world.inc.get(iid).state),
     (idleSec(c.me) >= settings.session.idleReleaseSec),
-    ["break", "no_link"].foldl(false, (acc, y726) => acc or y726 == world.inc.get(iid).holdReasonId),
+    ["break", "no_link"].foldl(false, (acc, y731) => acc or y731 == world.inc.get(iid).holdReasonId),
   }
 
   def e_system_release_idle_0(w0: World, c: Ctx, iid: str): World = {
-    val who_727 = ""
-    val w728 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_727 }) }
-    w728
+    val who_732 = ""
+    val w733 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_732 }) }
+    w733
   }
 
   def e_system_release_idle_1(w0: World, c: Ctx, iid: str): World = {
-    val w729 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w729
+    val w734 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w734
   }
 
   def e_system_release_idle_2(w0: World, c: Ctx, iid: str): World = {
-    val w730 = if (timerDef("hold").startsOnce) {
-      val w731 = ec_pauseTimer(w0, c, iid, "hold")
-      w731
-    } else {
-      val w732 = if (false) {
-      val w733 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w734 = { ...w733, inc: w733.inc.set(iid, { ...w733.inc.get(iid), timers: w733.inc.get(iid).timers.set("hold", { ...w733.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w735 = { ...w734, inc: w734.inc.set(iid, { ...w734.inc.get(iid), timers: w734.inc.get(iid).timers.set("hold", { ...w734.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w736 = { ...w735, inc: w735.inc.set(iid, { ...w735.inc.get(iid), timers: w735.inc.get(iid).timers.set("hold", { ...w735.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w735 = if (timerDef("hold").startsOnce) {
+      val w736 = ec_pauseTimer(w0, c, iid, "hold")
       w736
     } else {
-      val w737 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_738 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w739 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_738) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w740 = { ...w739, inc: w739.inc.set(iid, { ...w739.inc.get(iid), timers: w739.inc.get(iid).timers.set("hold", { ...w739.inc.get(iid).timers.get("hold"), paused: keep_738 }) }) }
-      val w741 = { ...w740, inc: w740.inc.set(iid, { ...w740.inc.get(iid), timers: w740.inc.get(iid).timers.set("hold", { ...w740.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w742 = { ...w741, inc: w741.inc.set(iid, { ...w741.inc.get(iid), timers: w741.inc.get(iid).timers.set("hold", { ...w741.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w737 = if (false) {
+      val w738 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w739 = { ...w738, inc: w738.inc.set(iid, { ...w738.inc.get(iid), timers: w738.inc.get(iid).timers.set("hold", { ...w738.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w740 = { ...w739, inc: w739.inc.set(iid, { ...w739.inc.get(iid), timers: w739.inc.get(iid).timers.set("hold", { ...w739.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w741 = { ...w740, inc: w740.inc.set(iid, { ...w740.inc.get(iid), timers: w740.inc.get(iid).timers.set("hold", { ...w740.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w741
+    } else {
+      val w742 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_743 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w744 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_743) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w745 = { ...w744, inc: w744.inc.set(iid, { ...w744.inc.get(iid), timers: w744.inc.get(iid).timers.set("hold", { ...w744.inc.get(iid).timers.get("hold"), paused: keep_743 }) }) }
+      val w746 = { ...w745, inc: w745.inc.set(iid, { ...w745.inc.get(iid), timers: w745.inc.get(iid).timers.set("hold", { ...w745.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w747 = { ...w746, inc: w746.inc.set(iid, { ...w746.inc.get(iid), timers: w746.inc.get(iid).timers.set("hold", { ...w746.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w747
+    }
       w742
     }
       w737
     }
-      w732
-    }
-    w730
+    w735
   }
 
   def e_system_release_idle_3(w0: World, c: Ctx, iid: str): World = {
-    val w743 = if (not(timerDef("resolution").pausable)) {
-      val w744 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w745 = { ...w744, inc: w744.inc.set(iid, { ...w744.inc.get(iid), timers: w744.inc.get(iid).timers.set("resolution", { ...w744.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w745
+    val w748 = if (not(timerDef("resolution").pausable)) {
+      val w749 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w750 = { ...w749, inc: w749.inc.set(iid, { ...w749.inc.get(iid), timers: w749.inc.get(iid).timers.set("resolution", { ...w749.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w750
     } else {
-      val w746 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w747 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w748 = { ...w747, inc: w747.inc.set(iid, { ...w747.inc.get(iid), timers: w747.inc.get(iid).timers.set("resolution", { ...w747.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w749 = { ...w748, inc: w748.inc.set(iid, { ...w748.inc.get(iid), timers: w748.inc.get(iid).timers.set("resolution", { ...w748.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w749
+      val w751 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w752 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w753 = { ...w752, inc: w752.inc.set(iid, { ...w752.inc.get(iid), timers: w752.inc.get(iid).timers.set("resolution", { ...w752.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w754 = { ...w753, inc: w753.inc.set(iid, { ...w753.inc.get(iid), timers: w753.inc.get(iid).timers.set("resolution", { ...w753.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w754
     } else w0
-      w746
+      w751
     }
-    w743
+    w748
   }
 
   def e_system_release_idle_4(w0: World, c: Ctx, iid: str): World = {
-    val w750 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w751 = if (timerDef("reaction").startsOnce) {
-      val w752 = ec_resumeTimer(w0, c, iid, "reaction")
-      w752
+    val w755 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w756 = if (timerDef("reaction").startsOnce) {
+      val w757 = ec_resumeTimer(w0, c, iid, "reaction")
+      w757
     } else {
-      val w753 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w754 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w755 = { ...w754, inc: w754.inc.set(iid, { ...w754.inc.get(iid), timers: w754.inc.get(iid).timers.set("reaction", { ...w754.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w756 = { ...w755, inc: w755.inc.set(iid, { ...w755.inc.get(iid), timers: w755.inc.get(iid).timers.set("reaction", { ...w755.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w756
-    } else {
-      val sec_757 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w758 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_757 < 0)) 0 else (c.now + (sec_757 * 1000))) }) }) }
-      val w759 = { ...w758, inc: w758.inc.set(iid, { ...w758.inc.get(iid), timers: w758.inc.get(iid).timers.set("reaction", { ...w758.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w758 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w759 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w760 = { ...w759, inc: w759.inc.set(iid, { ...w759.inc.get(iid), timers: w759.inc.get(iid).timers.set("reaction", { ...w759.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w761 = { ...w760, inc: w760.inc.set(iid, { ...w760.inc.get(iid), timers: w760.inc.get(iid).timers.set("reaction", { ...w760.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w761
+    } else {
+      val sec_762 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w763 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_762 < 0)) 0 else (c.now + (sec_762 * 1000))) }) }) }
+      val w764 = { ...w763, inc: w763.inc.set(iid, { ...w763.inc.get(iid), timers: w763.inc.get(iid).timers.set("reaction", { ...w763.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w765 = { ...w764, inc: w764.inc.set(iid, { ...w764.inc.get(iid), timers: w764.inc.get(iid).timers.set("reaction", { ...w764.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w766 = { ...w765, inc: w765.inc.set(iid, { ...w765.inc.get(iid), timers: w765.inc.get(iid).timers.set("reaction", { ...w765.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w766
     }
-      w753
+      w758
     }
-      w751
+      w756
     }
-    w750
+    w755
   }
 
   def e_system_release_idle_5(w0: World, c: Ctx, iid: str): World = {
@@ -2596,89 +2622,89 @@ module im {
 
   def ok_no_link_hold_release(c: Ctx, iid: str): bool = all {
     Set("on_hold").contains(world.inc.get(iid).state),
-    { val t_762 = world.inc.get(iid).timers.get("hold")  (((t_762.due != 0) and (t_762.due <= c.now)) and (t_762.fired != t_762.due)) },
-    ["no_link"].foldl(false, (acc, y763) => acc or y763 == world.inc.get(iid).holdReasonId),
+    { val t_767 = world.inc.get(iid).timers.get("hold")  (((t_767.due != 0) and (t_767.due <= c.now)) and (t_767.fired != t_767.due)) },
+    ["no_link"].foldl(false, (acc, y768) => acc or y768 == world.inc.get(iid).holdReasonId),
   }
 
   def e_no_link_hold_release_0(w0: World, c: Ctx, iid: str): World = {
-    val who_764 = ""
-    val w765 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_764 }) }
-    w765
+    val who_769 = ""
+    val w770 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_769 }) }
+    w770
   }
 
   def e_no_link_hold_release_1(w0: World, c: Ctx, iid: str): World = {
-    val w766 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w766
+    val w771 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w771
   }
 
   def e_no_link_hold_release_2(w0: World, c: Ctx, iid: str): World = {
-    val w767 = if (timerDef("hold").startsOnce) {
-      val w768 = ec_pauseTimer(w0, c, iid, "hold")
-      w768
-    } else {
-      val w769 = if (false) {
-      val w770 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w771 = { ...w770, inc: w770.inc.set(iid, { ...w770.inc.get(iid), timers: w770.inc.get(iid).timers.set("hold", { ...w770.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w772 = { ...w771, inc: w771.inc.set(iid, { ...w771.inc.get(iid), timers: w771.inc.get(iid).timers.set("hold", { ...w771.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w773 = { ...w772, inc: w772.inc.set(iid, { ...w772.inc.get(iid), timers: w772.inc.get(iid).timers.set("hold", { ...w772.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w772 = if (timerDef("hold").startsOnce) {
+      val w773 = ec_pauseTimer(w0, c, iid, "hold")
       w773
     } else {
-      val w774 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_775 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w776 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_775) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w777 = { ...w776, inc: w776.inc.set(iid, { ...w776.inc.get(iid), timers: w776.inc.get(iid).timers.set("hold", { ...w776.inc.get(iid).timers.get("hold"), paused: keep_775 }) }) }
-      val w778 = { ...w777, inc: w777.inc.set(iid, { ...w777.inc.get(iid), timers: w777.inc.get(iid).timers.set("hold", { ...w777.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w779 = { ...w778, inc: w778.inc.set(iid, { ...w778.inc.get(iid), timers: w778.inc.get(iid).timers.set("hold", { ...w778.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w774 = if (false) {
+      val w775 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w776 = { ...w775, inc: w775.inc.set(iid, { ...w775.inc.get(iid), timers: w775.inc.get(iid).timers.set("hold", { ...w775.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w777 = { ...w776, inc: w776.inc.set(iid, { ...w776.inc.get(iid), timers: w776.inc.get(iid).timers.set("hold", { ...w776.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w778 = { ...w777, inc: w777.inc.set(iid, { ...w777.inc.get(iid), timers: w777.inc.get(iid).timers.set("hold", { ...w777.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w778
+    } else {
+      val w779 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_780 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w781 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_780) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w782 = { ...w781, inc: w781.inc.set(iid, { ...w781.inc.get(iid), timers: w781.inc.get(iid).timers.set("hold", { ...w781.inc.get(iid).timers.get("hold"), paused: keep_780 }) }) }
+      val w783 = { ...w782, inc: w782.inc.set(iid, { ...w782.inc.get(iid), timers: w782.inc.get(iid).timers.set("hold", { ...w782.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w784 = { ...w783, inc: w783.inc.set(iid, { ...w783.inc.get(iid), timers: w783.inc.get(iid).timers.set("hold", { ...w783.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w784
+    }
       w779
     }
       w774
     }
-      w769
-    }
-    w767
+    w772
   }
 
   def e_no_link_hold_release_3(w0: World, c: Ctx, iid: str): World = {
-    val w780 = if (not(timerDef("resolution").pausable)) {
-      val w781 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w782 = { ...w781, inc: w781.inc.set(iid, { ...w781.inc.get(iid), timers: w781.inc.get(iid).timers.set("resolution", { ...w781.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w782
+    val w785 = if (not(timerDef("resolution").pausable)) {
+      val w786 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w787 = { ...w786, inc: w786.inc.set(iid, { ...w786.inc.get(iid), timers: w786.inc.get(iid).timers.set("resolution", { ...w786.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w787
     } else {
-      val w783 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w784 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w785 = { ...w784, inc: w784.inc.set(iid, { ...w784.inc.get(iid), timers: w784.inc.get(iid).timers.set("resolution", { ...w784.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w786 = { ...w785, inc: w785.inc.set(iid, { ...w785.inc.get(iid), timers: w785.inc.get(iid).timers.set("resolution", { ...w785.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w786
+      val w788 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w789 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w790 = { ...w789, inc: w789.inc.set(iid, { ...w789.inc.get(iid), timers: w789.inc.get(iid).timers.set("resolution", { ...w789.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w791 = { ...w790, inc: w790.inc.set(iid, { ...w790.inc.get(iid), timers: w790.inc.get(iid).timers.set("resolution", { ...w790.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w791
     } else w0
-      w783
+      w788
     }
-    w780
+    w785
   }
 
   def e_no_link_hold_release_4(w0: World, c: Ctx, iid: str): World = {
-    val w787 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w788 = if (timerDef("reaction").startsOnce) {
-      val w789 = ec_resumeTimer(w0, c, iid, "reaction")
-      w789
+    val w792 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w793 = if (timerDef("reaction").startsOnce) {
+      val w794 = ec_resumeTimer(w0, c, iid, "reaction")
+      w794
     } else {
-      val w790 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w791 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w792 = { ...w791, inc: w791.inc.set(iid, { ...w791.inc.get(iid), timers: w791.inc.get(iid).timers.set("reaction", { ...w791.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w793 = { ...w792, inc: w792.inc.set(iid, { ...w792.inc.get(iid), timers: w792.inc.get(iid).timers.set("reaction", { ...w792.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w793
-    } else {
-      val sec_794 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w795 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_794 < 0)) 0 else (c.now + (sec_794 * 1000))) }) }) }
-      val w796 = { ...w795, inc: w795.inc.set(iid, { ...w795.inc.get(iid), timers: w795.inc.get(iid).timers.set("reaction", { ...w795.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w795 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w796 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w797 = { ...w796, inc: w796.inc.set(iid, { ...w796.inc.get(iid), timers: w796.inc.get(iid).timers.set("reaction", { ...w796.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w798 = { ...w797, inc: w797.inc.set(iid, { ...w797.inc.get(iid), timers: w797.inc.get(iid).timers.set("reaction", { ...w797.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w798
+    } else {
+      val sec_799 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w800 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_799 < 0)) 0 else (c.now + (sec_799 * 1000))) }) }) }
+      val w801 = { ...w800, inc: w800.inc.set(iid, { ...w800.inc.get(iid), timers: w800.inc.get(iid).timers.set("reaction", { ...w800.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w802 = { ...w801, inc: w801.inc.set(iid, { ...w801.inc.get(iid), timers: w801.inc.get(iid).timers.set("reaction", { ...w801.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w803 = { ...w802, inc: w802.inc.set(iid, { ...w802.inc.get(iid), timers: w802.inc.get(iid).timers.set("reaction", { ...w802.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w803
     }
-      w790
+      w795
     }
-      w788
+      w793
     }
-    w787
+    w792
   }
 
   def e_no_link_hold_release_5(w0: World, c: Ctx, iid: str): World = {
@@ -2713,15 +2739,15 @@ module im {
   }
 
   def e_addressee_signed_out_to_group_0(w0: World, c: Ctx, iid: str): World = {
-    val group_799 = dutyGroupOf(w0.inc.get(iid).owner)
-    val w800 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_799 }) }
-    w800
+    val group_804 = dutyGroupOf(w0.inc.get(iid).owner)
+    val w805 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_804 }) }
+    w805
   }
 
   def e_addressee_signed_out_to_group_1(w0: World, c: Ctx, iid: str): World = {
-    val who_801 = ""
-    val w802 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_801 }) }
-    w802
+    val who_806 = ""
+    val w807 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_806 }) }
+    w807
   }
 
   def e_addressee_signed_out_to_group_2(w0: World, c: Ctx, iid: str): World = {
@@ -2730,9 +2756,9 @@ module im {
   }
 
   def e_addressee_signed_out_to_group_3(w0: World, c: Ctx, iid: str): World = {
-    val whom_803 = addressee(w0.inc.get(iid))
-    val w804 = if (((whom_803 != "") and (whom_803 != c.actor))) w0 else w0
-    w804
+    val whom_808 = addressee(w0.inc.get(iid))
+    val w809 = if (((whom_808 != "") and (whom_808 != c.actor))) w0 else w0
+    w809
   }
 
   def apply_addressee_signed_out_to_group(c: Ctx, iid: str, w0: World): World = {
@@ -2754,9 +2780,9 @@ module im {
   }
 
   def e_addressee_signed_out_to_queue_0(w0: World, c: Ctx, iid: str): World = {
-    val who_805 = ""
-    val w806 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_805 }) }
-    w806
+    val who_810 = ""
+    val w811 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_810 }) }
+    w811
   }
 
   def e_addressee_signed_out_to_queue_1(w0: World, c: Ctx, iid: str): World = {
@@ -2780,84 +2806,84 @@ module im {
   }
 
   def e_owner_signed_out_0(w0: World, c: Ctx, iid: str): World = {
-    val who_807 = ""
-    val w808 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_807 }) }
-    w808
+    val who_812 = ""
+    val w813 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_812 }) }
+    w813
   }
 
   def e_owner_signed_out_1(w0: World, c: Ctx, iid: str): World = {
-    val w809 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w809
+    val w814 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w814
   }
 
   def e_owner_signed_out_2(w0: World, c: Ctx, iid: str): World = {
-    val w810 = if (timerDef("hold").startsOnce) {
-      val w811 = ec_pauseTimer(w0, c, iid, "hold")
-      w811
-    } else {
-      val w812 = if (false) {
-      val w813 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w814 = { ...w813, inc: w813.inc.set(iid, { ...w813.inc.get(iid), timers: w813.inc.get(iid).timers.set("hold", { ...w813.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w815 = { ...w814, inc: w814.inc.set(iid, { ...w814.inc.get(iid), timers: w814.inc.get(iid).timers.set("hold", { ...w814.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w816 = { ...w815, inc: w815.inc.set(iid, { ...w815.inc.get(iid), timers: w815.inc.get(iid).timers.set("hold", { ...w815.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w815 = if (timerDef("hold").startsOnce) {
+      val w816 = ec_pauseTimer(w0, c, iid, "hold")
       w816
     } else {
-      val w817 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_818 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w819 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_818) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w820 = { ...w819, inc: w819.inc.set(iid, { ...w819.inc.get(iid), timers: w819.inc.get(iid).timers.set("hold", { ...w819.inc.get(iid).timers.get("hold"), paused: keep_818 }) }) }
-      val w821 = { ...w820, inc: w820.inc.set(iid, { ...w820.inc.get(iid), timers: w820.inc.get(iid).timers.set("hold", { ...w820.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w822 = { ...w821, inc: w821.inc.set(iid, { ...w821.inc.get(iid), timers: w821.inc.get(iid).timers.set("hold", { ...w821.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w817 = if (false) {
+      val w818 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w819 = { ...w818, inc: w818.inc.set(iid, { ...w818.inc.get(iid), timers: w818.inc.get(iid).timers.set("hold", { ...w818.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w820 = { ...w819, inc: w819.inc.set(iid, { ...w819.inc.get(iid), timers: w819.inc.get(iid).timers.set("hold", { ...w819.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w821 = { ...w820, inc: w820.inc.set(iid, { ...w820.inc.get(iid), timers: w820.inc.get(iid).timers.set("hold", { ...w820.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w821
+    } else {
+      val w822 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_823 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w824 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_823) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w825 = { ...w824, inc: w824.inc.set(iid, { ...w824.inc.get(iid), timers: w824.inc.get(iid).timers.set("hold", { ...w824.inc.get(iid).timers.get("hold"), paused: keep_823 }) }) }
+      val w826 = { ...w825, inc: w825.inc.set(iid, { ...w825.inc.get(iid), timers: w825.inc.get(iid).timers.set("hold", { ...w825.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w827 = { ...w826, inc: w826.inc.set(iid, { ...w826.inc.get(iid), timers: w826.inc.get(iid).timers.set("hold", { ...w826.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w827
+    }
       w822
     }
       w817
     }
-      w812
-    }
-    w810
+    w815
   }
 
   def e_owner_signed_out_3(w0: World, c: Ctx, iid: str): World = {
-    val w823 = if (not(timerDef("resolution").pausable)) {
-      val w824 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w825 = { ...w824, inc: w824.inc.set(iid, { ...w824.inc.get(iid), timers: w824.inc.get(iid).timers.set("resolution", { ...w824.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w825
+    val w828 = if (not(timerDef("resolution").pausable)) {
+      val w829 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w830 = { ...w829, inc: w829.inc.set(iid, { ...w829.inc.get(iid), timers: w829.inc.get(iid).timers.set("resolution", { ...w829.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w830
     } else {
-      val w826 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w827 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w828 = { ...w827, inc: w827.inc.set(iid, { ...w827.inc.get(iid), timers: w827.inc.get(iid).timers.set("resolution", { ...w827.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w829 = { ...w828, inc: w828.inc.set(iid, { ...w828.inc.get(iid), timers: w828.inc.get(iid).timers.set("resolution", { ...w828.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w829
+      val w831 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w832 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w833 = { ...w832, inc: w832.inc.set(iid, { ...w832.inc.get(iid), timers: w832.inc.get(iid).timers.set("resolution", { ...w832.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w834 = { ...w833, inc: w833.inc.set(iid, { ...w833.inc.get(iid), timers: w833.inc.get(iid).timers.set("resolution", { ...w833.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w834
     } else w0
-      w826
+      w831
     }
-    w823
+    w828
   }
 
   def e_owner_signed_out_4(w0: World, c: Ctx, iid: str): World = {
-    val w830 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w831 = if (timerDef("reaction").startsOnce) {
-      val w832 = ec_resumeTimer(w0, c, iid, "reaction")
-      w832
+    val w835 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w836 = if (timerDef("reaction").startsOnce) {
+      val w837 = ec_resumeTimer(w0, c, iid, "reaction")
+      w837
     } else {
-      val w833 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w834 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w835 = { ...w834, inc: w834.inc.set(iid, { ...w834.inc.get(iid), timers: w834.inc.get(iid).timers.set("reaction", { ...w834.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w836 = { ...w835, inc: w835.inc.set(iid, { ...w835.inc.get(iid), timers: w835.inc.get(iid).timers.set("reaction", { ...w835.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w836
-    } else {
-      val sec_837 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
-      val w838 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_837 < 0)) 0 else (c.now + (sec_837 * 1000))) }) }) }
-      val w839 = { ...w838, inc: w838.inc.set(iid, { ...w838.inc.get(iid), timers: w838.inc.get(iid).timers.set("reaction", { ...w838.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w838 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w839 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w840 = { ...w839, inc: w839.inc.set(iid, { ...w839.inc.get(iid), timers: w839.inc.get(iid).timers.set("reaction", { ...w839.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w841 = { ...w840, inc: w840.inc.set(iid, { ...w840.inc.get(iid), timers: w840.inc.get(iid).timers.set("reaction", { ...w840.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w841
+    } else {
+      val sec_842 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
+      val w843 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_842 < 0)) 0 else (c.now + (sec_842 * 1000))) }) }) }
+      val w844 = { ...w843, inc: w843.inc.set(iid, { ...w843.inc.get(iid), timers: w843.inc.get(iid).timers.set("reaction", { ...w843.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w845 = { ...w844, inc: w844.inc.set(iid, { ...w844.inc.get(iid), timers: w844.inc.get(iid).timers.set("reaction", { ...w844.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w846 = { ...w845, inc: w845.inc.set(iid, { ...w845.inc.get(iid), timers: w845.inc.get(iid).timers.set("reaction", { ...w845.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w846
     }
-      w833
+      w838
     }
-      w831
+      w836
     }
-    w830
+    w835
   }
 
   def e_owner_signed_out_5(w0: World, c: Ctx, iid: str): World = {
@@ -2885,90 +2911,90 @@ module im {
   }
 
   def e_addressee_lost_access_0(w0: World, c: Ctx, iid: str): World = {
-    val who_842 = ""
-    val w843 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_842 }) }
-    w843
+    val who_847 = ""
+    val w848 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_847 }) }
+    w848
   }
 
   def e_addressee_lost_access_1(w0: World, c: Ctx, iid: str): World = {
-    val group_844 = ""
-    val w845 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_844 }) }
-    w845
+    val group_849 = ""
+    val w850 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_849 }) }
+    w850
   }
 
   def e_addressee_lost_access_2(w0: World, c: Ctx, iid: str): World = {
-    val w846 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
-    w846
+    val w851 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w851
   }
 
   def e_addressee_lost_access_3(w0: World, c: Ctx, iid: str): World = {
-    val w847 = if (timerDef("hold").startsOnce) {
-      val w848 = ec_pauseTimer(w0, c, iid, "hold")
-      w848
-    } else {
-      val w849 = if (false) {
-      val w850 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w851 = { ...w850, inc: w850.inc.set(iid, { ...w850.inc.get(iid), timers: w850.inc.get(iid).timers.set("hold", { ...w850.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w852 = { ...w851, inc: w851.inc.set(iid, { ...w851.inc.get(iid), timers: w851.inc.get(iid).timers.set("hold", { ...w851.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w853 = { ...w852, inc: w852.inc.set(iid, { ...w852.inc.get(iid), timers: w852.inc.get(iid).timers.set("hold", { ...w852.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w852 = if (timerDef("hold").startsOnce) {
+      val w853 = ec_pauseTimer(w0, c, iid, "hold")
       w853
     } else {
-      val w854 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_855 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w856 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_855) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w857 = { ...w856, inc: w856.inc.set(iid, { ...w856.inc.get(iid), timers: w856.inc.get(iid).timers.set("hold", { ...w856.inc.get(iid).timers.get("hold"), paused: keep_855 }) }) }
-      val w858 = { ...w857, inc: w857.inc.set(iid, { ...w857.inc.get(iid), timers: w857.inc.get(iid).timers.set("hold", { ...w857.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w859 = { ...w858, inc: w858.inc.set(iid, { ...w858.inc.get(iid), timers: w858.inc.get(iid).timers.set("hold", { ...w858.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w854 = if (false) {
+      val w855 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w856 = { ...w855, inc: w855.inc.set(iid, { ...w855.inc.get(iid), timers: w855.inc.get(iid).timers.set("hold", { ...w855.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w857 = { ...w856, inc: w856.inc.set(iid, { ...w856.inc.get(iid), timers: w856.inc.get(iid).timers.set("hold", { ...w856.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w858 = { ...w857, inc: w857.inc.set(iid, { ...w857.inc.get(iid), timers: w857.inc.get(iid).timers.set("hold", { ...w857.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w858
+    } else {
+      val w859 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_860 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w861 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_860) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w862 = { ...w861, inc: w861.inc.set(iid, { ...w861.inc.get(iid), timers: w861.inc.get(iid).timers.set("hold", { ...w861.inc.get(iid).timers.get("hold"), paused: keep_860 }) }) }
+      val w863 = { ...w862, inc: w862.inc.set(iid, { ...w862.inc.get(iid), timers: w862.inc.get(iid).timers.set("hold", { ...w862.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w864 = { ...w863, inc: w863.inc.set(iid, { ...w863.inc.get(iid), timers: w863.inc.get(iid).timers.set("hold", { ...w863.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w864
+    }
       w859
     }
       w854
     }
-      w849
-    }
-    w847
+    w852
   }
 
   def e_addressee_lost_access_4(w0: World, c: Ctx, iid: str): World = {
-    val w860 = if (not(timerDef("resolution").pausable)) {
-      val w861 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w862 = { ...w861, inc: w861.inc.set(iid, { ...w861.inc.get(iid), timers: w861.inc.get(iid).timers.set("resolution", { ...w861.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w862
+    val w865 = if (not(timerDef("resolution").pausable)) {
+      val w866 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w867 = { ...w866, inc: w866.inc.set(iid, { ...w866.inc.get(iid), timers: w866.inc.get(iid).timers.set("resolution", { ...w866.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w867
     } else {
-      val w863 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w864 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w865 = { ...w864, inc: w864.inc.set(iid, { ...w864.inc.get(iid), timers: w864.inc.get(iid).timers.set("resolution", { ...w864.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w866 = { ...w865, inc: w865.inc.set(iid, { ...w865.inc.get(iid), timers: w865.inc.get(iid).timers.set("resolution", { ...w865.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w866
+      val w868 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w869 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w870 = { ...w869, inc: w869.inc.set(iid, { ...w869.inc.get(iid), timers: w869.inc.get(iid).timers.set("resolution", { ...w869.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w871 = { ...w870, inc: w870.inc.set(iid, { ...w870.inc.get(iid), timers: w870.inc.get(iid).timers.set("resolution", { ...w870.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w871
     } else w0
-      w863
+      w868
     }
-    w860
+    w865
   }
 
   def e_addressee_lost_access_5(w0: World, c: Ctx, iid: str): World = {
-    val w867 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w868 = if (timerDef("reaction").startsOnce) {
-      val w869 = ec_resumeTimer(w0, c, iid, "reaction")
-      w869
+    val w872 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w873 = if (timerDef("reaction").startsOnce) {
+      val w874 = ec_resumeTimer(w0, c, iid, "reaction")
+      w874
     } else {
-      val w870 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w871 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w872 = { ...w871, inc: w871.inc.set(iid, { ...w871.inc.get(iid), timers: w871.inc.get(iid).timers.set("reaction", { ...w871.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w873 = { ...w872, inc: w872.inc.set(iid, { ...w872.inc.get(iid), timers: w872.inc.get(iid).timers.set("reaction", { ...w872.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w873
-    } else {
-      val sec_874 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w875 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_874 < 0)) 0 else (c.now + (sec_874 * 1000))) }) }) }
-      val w876 = { ...w875, inc: w875.inc.set(iid, { ...w875.inc.get(iid), timers: w875.inc.get(iid).timers.set("reaction", { ...w875.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w875 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w876 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w877 = { ...w876, inc: w876.inc.set(iid, { ...w876.inc.get(iid), timers: w876.inc.get(iid).timers.set("reaction", { ...w876.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w878 = { ...w877, inc: w877.inc.set(iid, { ...w877.inc.get(iid), timers: w877.inc.get(iid).timers.set("reaction", { ...w877.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w878
+    } else {
+      val sec_879 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w880 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_879 < 0)) 0 else (c.now + (sec_879 * 1000))) }) }) }
+      val w881 = { ...w880, inc: w880.inc.set(iid, { ...w880.inc.get(iid), timers: w880.inc.get(iid).timers.set("reaction", { ...w880.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w882 = { ...w881, inc: w881.inc.set(iid, { ...w881.inc.get(iid), timers: w881.inc.get(iid).timers.set("reaction", { ...w881.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w883 = { ...w882, inc: w882.inc.set(iid, { ...w882.inc.get(iid), timers: w882.inc.get(iid).timers.set("reaction", { ...w882.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w883
     }
-      w870
+      w875
     }
-      w868
+      w873
     }
-    w867
+    w872
   }
 
   def e_addressee_lost_access_6(w0: World, c: Ctx, iid: str): World = {
@@ -2982,9 +3008,9 @@ module im {
   }
 
   def e_addressee_lost_access_8(w0: World, c: Ctx, iid: str): World = {
-    val whom_879 = settings.alerts.target
-    val w880 = if (((whom_879 != "") and (whom_879 != c.actor))) w0 else w0
-    w880
+    val whom_884 = settings.alerts.target
+    val w885 = if (((whom_884 != "") and (whom_884 != c.actor))) w0 else w0
+    w885
   }
 
   def apply_addressee_lost_access(c: Ctx, iid: str, w0: World): World = {
@@ -3011,41 +3037,41 @@ module im {
   }
 
   def e_addressee_cannot_accept_0(w0: World, c: Ctx, iid: str): World = {
-    val who_881 = ""
-    val w882 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_881 }) }
-    w882
+    val who_886 = ""
+    val w887 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_886 }) }
+    w887
   }
 
   def e_addressee_cannot_accept_1(w0: World, c: Ctx, iid: str): World = {
-    val group_883 = ""
-    val w884 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_883 }) }
-    w884
+    val group_888 = ""
+    val w889 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_888 }) }
+    w889
   }
 
   def e_addressee_cannot_accept_2(w0: World, c: Ctx, iid: str): World = {
-    val w885 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w886 = if (timerDef("reaction").startsOnce) {
-      val w887 = ec_resumeTimer(w0, c, iid, "reaction")
-      w887
+    val w890 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w891 = if (timerDef("reaction").startsOnce) {
+      val w892 = ec_resumeTimer(w0, c, iid, "reaction")
+      w892
     } else {
-      val w888 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w889 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w890 = { ...w889, inc: w889.inc.set(iid, { ...w889.inc.get(iid), timers: w889.inc.get(iid).timers.set("reaction", { ...w889.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w891 = { ...w890, inc: w890.inc.set(iid, { ...w890.inc.get(iid), timers: w890.inc.get(iid).timers.set("reaction", { ...w890.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w891
-    } else {
-      val sec_892 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w893 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_892 < 0)) 0 else (c.now + (sec_892 * 1000))) }) }) }
-      val w894 = { ...w893, inc: w893.inc.set(iid, { ...w893.inc.get(iid), timers: w893.inc.get(iid).timers.set("reaction", { ...w893.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w893 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w894 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w895 = { ...w894, inc: w894.inc.set(iid, { ...w894.inc.get(iid), timers: w894.inc.get(iid).timers.set("reaction", { ...w894.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w896 = { ...w895, inc: w895.inc.set(iid, { ...w895.inc.get(iid), timers: w895.inc.get(iid).timers.set("reaction", { ...w895.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w896
+    } else {
+      val sec_897 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w898 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_897 < 0)) 0 else (c.now + (sec_897 * 1000))) }) }) }
+      val w899 = { ...w898, inc: w898.inc.set(iid, { ...w898.inc.get(iid), timers: w898.inc.get(iid).timers.set("reaction", { ...w898.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w900 = { ...w899, inc: w899.inc.set(iid, { ...w899.inc.get(iid), timers: w899.inc.get(iid).timers.set("reaction", { ...w899.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w901 = { ...w900, inc: w900.inc.set(iid, { ...w900.inc.get(iid), timers: w900.inc.get(iid).timers.set("reaction", { ...w900.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w901
     }
-      w888
+      w893
     }
-      w886
+      w891
     }
-    w885
+    w890
   }
 
   def e_addressee_cannot_accept_3(w0: World, c: Ctx, iid: str): World = {
@@ -3059,9 +3085,9 @@ module im {
   }
 
   def e_addressee_cannot_accept_5(w0: World, c: Ctx, iid: str): World = {
-    val whom_897 = settings.alerts.target
-    val w898 = if (((whom_897 != "") and (whom_897 != c.actor))) w0 else w0
-    w898
+    val whom_902 = settings.alerts.target
+    val w903 = if (((whom_902 != "") and (whom_902 != c.actor))) w0 else w0
+    w903
   }
 
   def apply_addressee_cannot_accept(c: Ctx, iid: str, w0: World): World = {
@@ -3081,149 +3107,149 @@ module im {
   def ok_merge(c: Ctx, iid: str): bool = all {
     Set("new", "in_progress", "on_hold").contains(world.inc.get(iid).state),
     can(c.me, "incident:bulk"),
-    not(settings.session.states.foldl(false, (acc, s_899) => acc or ((s_899.id == agentState(c.me)) and s_899.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_904) => acc or ((s_904.id == agentState(c.me)) and s_904.readOnly))),
     ((world.inc.get(iid).owner == c.me) or unowned(world.inc.get(iid))),
-    { val ps_900 = incidentById(incs(world), c.form.primaryId)  ((((ps_900.length() > 0) and (ps_900[0].id != world.inc.get(iid).id)) and (ps_900[0].linkedTo == "")) and ((ps_900[0].state == "new") or ((ps_900[0].state == "in_progress") and (ps_900[0].owner == c.me)))) },
-    { val ps_901 = incidentById(incs(world), c.form.primaryId)  ((ps_901.length() > 0) and (ps_901[0].scenario == world.inc.get(iid).scenario)) },
+    { val ps_905 = incidentById(incs(world), c.form.primaryId)  ((((ps_905.length() > 0) and (ps_905[0].id != world.inc.get(iid).id)) and (ps_905[0].linkedTo == "")) and ((ps_905[0].state == "new") or ((ps_905[0].state == "in_progress") and (ps_905[0].owner == c.me)))) },
+    { val ps_906 = incidentById(incs(world), c.form.primaryId)  ((ps_906.length() > 0) and (ps_906[0].scenario == world.inc.get(iid).scenario)) },
   }
 
   def e_merge_0(w0: World, c: Ctx, iid: str): World = {
-    val w902 = shareAnswers(w0, w0.inc.get(iid).id, c.form.primaryId)
-    w902
+    val w907 = shareAnswers(w0, w0.inc.get(iid).id, c.form.primaryId)
+    w907
   }
 
   def e_merge_1(w0: World, c: Ctx, iid: str): World = {
-    val ps_903 = incidentById(incs(w0), c.form.primaryId)
-    val w904 = if ((ps_903.length() > 0)) {
-      val w905 = linkedOf(incs(w0), w0.inc.get(iid).id).select(e_912 => not(isDone(e_912))).foldl([], (acc, x908) => acc.append(x908.id)).foldl(w0, (wf906, cId907) => {
-      val w909 = { ...wf906, inc: wf906.inc.set(cId907, { ...wf906.inc.get(cId907), leftGroup: { primaryId: wf906.inc.get(cId907).linkedTo, linkedAt: wf906.inc.get(cId907).linkedAt, at: c.now } }) }
-      val w910 = { ...w909, inc: w909.inc.set(cId907, { ...w909.inc.get(cId907), linkedTo: ps_903[0].id }) }
-      val w911 = { ...w910, inc: w910.inc.set(cId907, { ...w910.inc.get(cId907), linkedAt: c.now }) }
-      w911
+    val ps_908 = incidentById(incs(w0), c.form.primaryId)
+    val w909 = if ((ps_908.length() > 0)) {
+      val w910 = linkedOf(incs(w0), w0.inc.get(iid).id).select(e_917 => not(isDone(e_917))).foldl([], (acc, x913) => acc.append(x913.id)).foldl(w0, (wf911, cId912) => {
+      val w914 = { ...wf911, inc: wf911.inc.set(cId912, { ...wf911.inc.get(cId912), leftGroup: { primaryId: wf911.inc.get(cId912).linkedTo, linkedAt: wf911.inc.get(cId912).linkedAt, at: c.now } }) }
+      val w915 = { ...w914, inc: w914.inc.set(cId912, { ...w914.inc.get(cId912), linkedTo: ps_908[0].id }) }
+      val w916 = { ...w915, inc: w915.inc.set(cId912, { ...w915.inc.get(cId912), linkedAt: c.now }) }
+      w916
     })
-      w905
+      w910
     } else w0
-    w904
+    w909
   }
 
   def e_merge_2(w0: World, c: Ctx, iid: str): World = {
-    val primary_913 = c.form.primaryId
-    val w914 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: primary_913 }) }
-    val w915 = { ...w914, inc: w914.inc.set(iid, { ...w914.inc.get(iid), linkedAt: c.now }) }
-    w915
-  }
-
-  def e_merge_3(w0: World, c: Ctx, iid: str): World = {
-    val who_916 = ""
-    val w917 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_916 }) }
-    w917
-  }
-
-  def e_merge_4(w0: World, c: Ctx, iid: str): World = {
-    val group_918 = ""
-    val w919 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_918 }) }
-    w919
-  }
-
-  def e_merge_5(w0: World, c: Ctx, iid: str): World = {
-    val w920 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    val primary_918 = c.form.primaryId
+    val w919 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: primary_918 }) }
+    val w920 = { ...w919, inc: w919.inc.set(iid, { ...w919.inc.get(iid), linkedAt: c.now }) }
     w920
   }
 
+  def e_merge_3(w0: World, c: Ctx, iid: str): World = {
+    val who_921 = ""
+    val w922 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_921 }) }
+    w922
+  }
+
+  def e_merge_4(w0: World, c: Ctx, iid: str): World = {
+    val group_923 = ""
+    val w924 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), assignmentGroup: group_923 }) }
+    w924
+  }
+
+  def e_merge_5(w0: World, c: Ctx, iid: str): World = {
+    val w925 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), holdReasonId: "" }) }
+    w925
+  }
+
   def e_merge_6(w0: World, c: Ctx, iid: str): World = {
-    val w921 = if (timerDef("reaction").startsOnce) {
-      val w922 = ec_pauseTimer(w0, c, iid, "reaction")
-      w922
-    } else {
-      val w923 = if (false) {
-      val w924 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      val w925 = { ...w924, inc: w924.inc.set(iid, { ...w924.inc.get(iid), timers: w924.inc.get(iid).timers.set("reaction", { ...w924.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w926 = { ...w925, inc: w925.inc.set(iid, { ...w925.inc.get(iid), timers: w925.inc.get(iid).timers.set("reaction", { ...w925.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w927 = { ...w926, inc: w926.inc.set(iid, { ...w926.inc.get(iid), timers: w926.inc.get(iid).timers.set("reaction", { ...w926.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+    val w926 = if (timerDef("reaction").startsOnce) {
+      val w927 = ec_pauseTimer(w0, c, iid, "reaction")
       w927
     } else {
-      val w928 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
-      val keep_929 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
-      val w930 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_929) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
-      val w931 = { ...w930, inc: w930.inc.set(iid, { ...w930.inc.get(iid), timers: w930.inc.get(iid).timers.set("reaction", { ...w930.inc.get(iid).timers.get("reaction"), paused: keep_929 }) }) }
-      val w932 = { ...w931, inc: w931.inc.set(iid, { ...w931.inc.get(iid), timers: w931.inc.get(iid).timers.set("reaction", { ...w931.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
-      val w933 = { ...w932, inc: w932.inc.set(iid, { ...w932.inc.get(iid), timers: w932.inc.get(iid).timers.set("reaction", { ...w932.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      val w928 = if (false) {
+      val w929 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      val w930 = { ...w929, inc: w929.inc.set(iid, { ...w929.inc.get(iid), timers: w929.inc.get(iid).timers.set("reaction", { ...w929.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w931 = { ...w930, inc: w930.inc.set(iid, { ...w930.inc.get(iid), timers: w930.inc.get(iid).timers.set("reaction", { ...w930.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w932 = { ...w931, inc: w931.inc.set(iid, { ...w931.inc.get(iid), timers: w931.inc.get(iid).timers.set("reaction", { ...w931.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w932
+    } else {
+      val w933 = if ((w0.inc.get(iid).timers.get("reaction").due == 0)) w0 else {
+      val keep_934 = (((timerDef("reaction").keepsLeft and (w0.inc.get(iid).timers.get("reaction").due != 0)) and (w0.inc.get(iid).timers.get("reaction").fired != w0.inc.get(iid).timers.get("reaction").due)) and (w0.inc.get(iid).timers.get("reaction").due > c.now))
+      val w935 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), left: (if (keep_934) (w0.inc.get(iid).timers.get("reaction").due - c.now) else 0) }) }) }
+      val w936 = { ...w935, inc: w935.inc.set(iid, { ...w935.inc.get(iid), timers: w935.inc.get(iid).timers.set("reaction", { ...w935.inc.get(iid).timers.get("reaction"), paused: keep_934 }) }) }
+      val w937 = { ...w936, inc: w936.inc.set(iid, { ...w936.inc.get(iid), timers: w936.inc.get(iid).timers.set("reaction", { ...w936.inc.get(iid).timers.get("reaction"), due: 0 }) }) }
+      val w938 = { ...w937, inc: w937.inc.set(iid, { ...w937.inc.get(iid), timers: w937.inc.get(iid).timers.set("reaction", { ...w937.inc.get(iid).timers.get("reaction"), since: 0 }) }) }
+      w938
+    }
       w933
     }
       w928
     }
-      w923
-    }
-    w921
+    w926
   }
 
   def e_merge_7(w0: World, c: Ctx, iid: str): World = {
-    val w934 = if (not(timerDef("resolution").pausable)) {
-      val w935 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w936 = { ...w935, inc: w935.inc.set(iid, { ...w935.inc.get(iid), timers: w935.inc.get(iid).timers.set("resolution", { ...w935.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w936
+    val w939 = if (not(timerDef("resolution").pausable)) {
+      val w940 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w941 = { ...w940, inc: w940.inc.set(iid, { ...w940.inc.get(iid), timers: w940.inc.get(iid).timers.set("resolution", { ...w940.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w941
     } else {
-      val w937 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w938 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w939 = { ...w938, inc: w938.inc.set(iid, { ...w938.inc.get(iid), timers: w938.inc.get(iid).timers.set("resolution", { ...w938.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w940 = { ...w939, inc: w939.inc.set(iid, { ...w939.inc.get(iid), timers: w939.inc.get(iid).timers.set("resolution", { ...w939.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w940
+      val w942 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w943 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w944 = { ...w943, inc: w943.inc.set(iid, { ...w943.inc.get(iid), timers: w943.inc.get(iid).timers.set("resolution", { ...w943.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w945 = { ...w944, inc: w944.inc.set(iid, { ...w944.inc.get(iid), timers: w944.inc.get(iid).timers.set("resolution", { ...w944.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w945
     } else w0
-      w937
+      w942
     }
-    w934
+    w939
   }
 
   def e_merge_8(w0: World, c: Ctx, iid: str): World = {
-    val ps_941 = incidentById(incs(w0), c.form.primaryId)
-    val w942 = if (((((ps_941.length() > 0) and (leftOf(w0.inc.get(iid), "resolution", c.now) >= 0)) and not(spent(w0.inc.get(iid), "resolution", c.now))) and not(spent(ps_941[0], "resolution", c.now)))) {
-      val t_943 = ps_941[0].timers.get("resolution")
-      val left_944 = leftOf(w0.inc.get(iid), "resolution", c.now)
-      val was_945 = (if ((t_943.due != 0)) (t_943.due - c.now) else (if (t_943.paused) t_943.left else (timerSec(ps_941[0], "resolution", "") * 1000)))
-      val w946 = if ((left_944 < was_945)) {
-      val w947 = ps_941.foldl([], (acc, x950) => acc.append(x950.id)).foldl(w0, (wf948, pId949) => {
-      val w951 = if ((t_943.due != 0)) {
-      val w952 = { ...wf948, inc: wf948.inc.set(pId949, { ...wf948.inc.get(pId949), timers: wf948.inc.get(pId949).timers.set("resolution", { ...wf948.inc.get(pId949).timers.get("resolution"), due: (c.now + left_944) }) }) }
-      w952
+    val ps_946 = incidentById(incs(w0), c.form.primaryId)
+    val w947 = if (((((ps_946.length() > 0) and (leftOf(w0.inc.get(iid), "resolution", c.now) >= 0)) and not(spent(w0.inc.get(iid), "resolution", c.now))) and not(spent(ps_946[0], "resolution", c.now)))) {
+      val t_948 = ps_946[0].timers.get("resolution")
+      val left_949 = leftOf(w0.inc.get(iid), "resolution", c.now)
+      val was_950 = (if ((t_948.due != 0)) (t_948.due - c.now) else (if (t_948.paused) t_948.left else (timerSec(ps_946[0], "resolution", "") * 1000)))
+      val w951 = if ((left_949 < was_950)) {
+      val w952 = ps_946.foldl([], (acc, x955) => acc.append(x955.id)).foldl(w0, (wf953, pId954) => {
+      val w956 = if ((t_948.due != 0)) {
+      val w957 = { ...wf953, inc: wf953.inc.set(pId954, { ...wf953.inc.get(pId954), timers: wf953.inc.get(pId954).timers.set("resolution", { ...wf953.inc.get(pId954).timers.get("resolution"), due: (c.now + left_949) }) }) }
+      w957
     } else {
-      val w953 = { ...wf948, inc: wf948.inc.set(pId949, { ...wf948.inc.get(pId949), timers: wf948.inc.get(pId949).timers.set("resolution", { ...wf948.inc.get(pId949).timers.get("resolution"), left: left_944 }) }) }
-      val w954 = { ...w953, inc: w953.inc.set(pId949, { ...w953.inc.get(pId949), timers: w953.inc.get(pId949).timers.set("resolution", { ...w953.inc.get(pId949).timers.get("resolution"), paused: true }) }) }
-      w954
+      val w958 = { ...wf953, inc: wf953.inc.set(pId954, { ...wf953.inc.get(pId954), timers: wf953.inc.get(pId954).timers.set("resolution", { ...wf953.inc.get(pId954).timers.get("resolution"), left: left_949 }) }) }
+      val w959 = { ...w958, inc: w958.inc.set(pId954, { ...w958.inc.get(pId954), timers: w958.inc.get(pId954).timers.set("resolution", { ...w958.inc.get(pId954).timers.get("resolution"), paused: true }) }) }
+      w959
     }
-      w951
+      w956
     })
-      w947
+      w952
     } else w0
-      w946
+      w951
     } else w0
-    w942
+    w947
   }
 
   def e_merge_9(w0: World, c: Ctx, iid: str): World = {
-    val w955 = if (timerDef("hold").startsOnce) {
-      val w956 = ec_pauseTimer(w0, c, iid, "hold")
-      w956
-    } else {
-      val w957 = if (false) {
-      val w958 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
-      val w959 = { ...w958, inc: w958.inc.set(iid, { ...w958.inc.get(iid), timers: w958.inc.get(iid).timers.set("hold", { ...w958.inc.get(iid).timers.get("hold"), paused: false }) }) }
-      val w960 = { ...w959, inc: w959.inc.set(iid, { ...w959.inc.get(iid), timers: w959.inc.get(iid).timers.set("hold", { ...w959.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w961 = { ...w960, inc: w960.inc.set(iid, { ...w960.inc.get(iid), timers: w960.inc.get(iid).timers.set("hold", { ...w960.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+    val w960 = if (timerDef("hold").startsOnce) {
+      val w961 = ec_pauseTimer(w0, c, iid, "hold")
       w961
     } else {
-      val w962 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
-      val keep_963 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
-      val w964 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_963) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
-      val w965 = { ...w964, inc: w964.inc.set(iid, { ...w964.inc.get(iid), timers: w964.inc.get(iid).timers.set("hold", { ...w964.inc.get(iid).timers.get("hold"), paused: keep_963 }) }) }
-      val w966 = { ...w965, inc: w965.inc.set(iid, { ...w965.inc.get(iid), timers: w965.inc.get(iid).timers.set("hold", { ...w965.inc.get(iid).timers.get("hold"), due: 0 }) }) }
-      val w967 = { ...w966, inc: w966.inc.set(iid, { ...w966.inc.get(iid), timers: w966.inc.get(iid).timers.set("hold", { ...w966.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      val w962 = if (false) {
+      val w963 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: 0 }) }) }
+      val w964 = { ...w963, inc: w963.inc.set(iid, { ...w963.inc.get(iid), timers: w963.inc.get(iid).timers.set("hold", { ...w963.inc.get(iid).timers.get("hold"), paused: false }) }) }
+      val w965 = { ...w964, inc: w964.inc.set(iid, { ...w964.inc.get(iid), timers: w964.inc.get(iid).timers.set("hold", { ...w964.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w966 = { ...w965, inc: w965.inc.set(iid, { ...w965.inc.get(iid), timers: w965.inc.get(iid).timers.set("hold", { ...w965.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w966
+    } else {
+      val w967 = if ((w0.inc.get(iid).timers.get("hold").due == 0)) w0 else {
+      val keep_968 = (((timerDef("hold").keepsLeft and (w0.inc.get(iid).timers.get("hold").due != 0)) and (w0.inc.get(iid).timers.get("hold").fired != w0.inc.get(iid).timers.get("hold").due)) and (w0.inc.get(iid).timers.get("hold").due > c.now))
+      val w969 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("hold", { ...w0.inc.get(iid).timers.get("hold"), left: (if (keep_968) (w0.inc.get(iid).timers.get("hold").due - c.now) else 0) }) }) }
+      val w970 = { ...w969, inc: w969.inc.set(iid, { ...w969.inc.get(iid), timers: w969.inc.get(iid).timers.set("hold", { ...w969.inc.get(iid).timers.get("hold"), paused: keep_968 }) }) }
+      val w971 = { ...w970, inc: w970.inc.set(iid, { ...w970.inc.get(iid), timers: w970.inc.get(iid).timers.set("hold", { ...w970.inc.get(iid).timers.get("hold"), due: 0 }) }) }
+      val w972 = { ...w971, inc: w971.inc.set(iid, { ...w971.inc.get(iid), timers: w971.inc.get(iid).timers.set("hold", { ...w971.inc.get(iid).timers.get("hold"), since: 0 }) }) }
+      w972
+    }
       w967
     }
       w962
     }
-      w957
-    }
-    w955
+    w960
   }
 
   def e_merge_10(w0: World, c: Ctx, iid: str): World = {
@@ -3252,8 +3278,8 @@ module im {
 
   def ok_detach(c: Ctx, iid: str): bool = all {
     Set("linked").contains(world.inc.get(iid).state),
-    not(settings.session.states.foldl(false, (acc, s_968) => acc or ((s_968.id == agentState(c.me)) and s_968.readOnly))),
-    { val ps_969 = incidentById(incs(world), world.inc.get(iid).linkedTo)  ((ps_969.length() > 0) and ((ownership(c.me, ps_969[0]) == "owner") or unowned(ps_969[0]))) },
+    not(settings.session.states.foldl(false, (acc, s_973) => acc or ((s_973.id == agentState(c.me)) and s_973.readOnly))),
+    { val ps_974 = incidentById(incs(world), world.inc.get(iid).linkedTo)  ((ps_974.length() > 0) and ((ownership(c.me, ps_974[0]) == "owner") or unowned(ps_974[0]))) },
   }
 
   def e_detach_0(w0: World, c: Ctx, iid: str): World = {
@@ -3262,64 +3288,64 @@ module im {
   }
 
   def e_detach_1(w0: World, c: Ctx, iid: str): World = {
-    val ps_970 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-    val w971 = if (((ps_970.length() > 0) and (leftOf(ps_970[0], "resolution", c.now) >= 0))) {
-      val w972 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w973 = { ...w972, inc: w972.inc.set(iid, { ...w972.inc.get(iid), timers: w972.inc.get(iid).timers.set("resolution", { ...w972.inc.get(iid).timers.get("resolution"), left: leftOf(ps_970[0], "resolution", c.now) }) }) }
-      val w974 = { ...w973, inc: w973.inc.set(iid, { ...w973.inc.get(iid), timers: w973.inc.get(iid).timers.set("resolution", { ...w973.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w975 = if ((leftOf(ps_970[0], "resolution", c.now) == 0)) {
-      val w976 = { ...w974, inc: w974.inc.set(iid, { ...w974.inc.get(iid), timers: w974.inc.get(iid).timers.set("resolution", { ...w974.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_970[0], "resolution", c.now)) ps_970[0].timers.get("resolution").fired else ps_970[0].timers.get("resolution").due) }) }) }
-      w976
-    } else w974
-      w975
+    val ps_975 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+    val w976 = if (((ps_975.length() > 0) and (leftOf(ps_975[0], "resolution", c.now) >= 0))) {
+      val w977 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w978 = { ...w977, inc: w977.inc.set(iid, { ...w977.inc.get(iid), timers: w977.inc.get(iid).timers.set("resolution", { ...w977.inc.get(iid).timers.get("resolution"), left: leftOf(ps_975[0], "resolution", c.now) }) }) }
+      val w979 = { ...w978, inc: w978.inc.set(iid, { ...w978.inc.get(iid), timers: w978.inc.get(iid).timers.set("resolution", { ...w978.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w980 = if ((leftOf(ps_975[0], "resolution", c.now) == 0)) {
+      val w981 = { ...w979, inc: w979.inc.set(iid, { ...w979.inc.get(iid), timers: w979.inc.get(iid).timers.set("resolution", { ...w979.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_975[0], "resolution", c.now)) ps_975[0].timers.get("resolution").fired else ps_975[0].timers.get("resolution").due) }) }) }
+      w981
+    } else w979
+      w980
     } else w0
-    w971
+    w976
   }
 
   def e_detach_2(w0: World, c: Ctx, iid: str): World = {
-    val w977 = if ((w0.inc.get(iid).linkedTo != "")) {
-      val ps_978 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-      val w979 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
-      val w980 = { ...w979, inc: w979.inc.set(iid, { ...w979.inc.get(iid), linkedTo: "" }) }
-      val w981 = { ...w980, inc: w980.inc.set(iid, { ...w980.inc.get(iid), linkedAt: 0 }) }
-      val w982 = if (((ps_978.length() > 0) and ("" != ""))) w981 else w981
-      val w983 = if (("" != "")) {
-      val w984 = ps_978.foldl([], (acc, x987) => acc.append(x987.id)).foldl(w982, (wf985, pId986) => wf985)
-      w984
-    } else w982
-      w983
-    } else {
-      val w988 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
-      val w989 = { ...w988, inc: w988.inc.set(iid, { ...w988.inc.get(iid), linkedAt: 0 }) }
+    val w982 = if ((w0.inc.get(iid).linkedTo != "")) {
+      val ps_983 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+      val w984 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
+      val w985 = { ...w984, inc: w984.inc.set(iid, { ...w984.inc.get(iid), linkedTo: "" }) }
+      val w986 = { ...w985, inc: w985.inc.set(iid, { ...w985.inc.get(iid), linkedAt: 0 }) }
+      val w987 = if (((ps_983.length() > 0) and ("" != ""))) w986 else w986
+      val w988 = if (("" != "")) {
+      val w989 = ps_983.foldl([], (acc, x992) => acc.append(x992.id)).foldl(w987, (wf990, pId991) => wf990)
       w989
+    } else w987
+      w988
+    } else {
+      val w993 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
+      val w994 = { ...w993, inc: w993.inc.set(iid, { ...w993.inc.get(iid), linkedAt: 0 }) }
+      w994
     }
-    w977
+    w982
   }
 
   def e_detach_3(w0: World, c: Ctx, iid: str): World = {
-    val w990 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w991 = if (timerDef("reaction").startsOnce) {
-      val w992 = ec_resumeTimer(w0, c, iid, "reaction")
-      w992
+    val w995 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w996 = if (timerDef("reaction").startsOnce) {
+      val w997 = ec_resumeTimer(w0, c, iid, "reaction")
+      w997
     } else {
-      val w993 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w994 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w995 = { ...w994, inc: w994.inc.set(iid, { ...w994.inc.get(iid), timers: w994.inc.get(iid).timers.set("reaction", { ...w994.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w996 = { ...w995, inc: w995.inc.set(iid, { ...w995.inc.get(iid), timers: w995.inc.get(iid).timers.set("reaction", { ...w995.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w996
-    } else {
-      val sec_997 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
-      val w998 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_997 < 0)) 0 else (c.now + (sec_997 * 1000))) }) }) }
-      val w999 = { ...w998, inc: w998.inc.set(iid, { ...w998.inc.get(iid), timers: w998.inc.get(iid).timers.set("reaction", { ...w998.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w998 = if ((("continue" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w999 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w1000 = { ...w999, inc: w999.inc.set(iid, { ...w999.inc.get(iid), timers: w999.inc.get(iid).timers.set("reaction", { ...w999.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w1001 = { ...w1000, inc: w1000.inc.set(iid, { ...w1000.inc.get(iid), timers: w1000.inc.get(iid).timers.set("reaction", { ...w1000.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w1001
+    } else {
+      val sec_1002 = timerSec(w0.inc.get(iid), "reaction", (if (("continue" == "continue")) "" else "continue"))
+      val w1003 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_1002 < 0)) 0 else (c.now + (sec_1002 * 1000))) }) }) }
+      val w1004 = { ...w1003, inc: w1003.inc.set(iid, { ...w1003.inc.get(iid), timers: w1003.inc.get(iid).timers.set("reaction", { ...w1003.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w1005 = { ...w1004, inc: w1004.inc.set(iid, { ...w1004.inc.get(iid), timers: w1004.inc.get(iid).timers.set("reaction", { ...w1004.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w1006 = { ...w1005, inc: w1005.inc.set(iid, { ...w1005.inc.get(iid), timers: w1005.inc.get(iid).timers.set("reaction", { ...w1005.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w1006
     }
-      w993
+      w998
     }
-      w991
+      w996
     }
-    w990
+    w995
   }
 
   def e_detach_4(w0: World, c: Ctx, iid: str): World = {
@@ -3342,44 +3368,44 @@ module im {
 
   def ok_close_linked(c: Ctx, iid: str): bool = all {
     Set("linked").contains(world.inc.get(iid).state),
-    { val ps_1002 = incidentById(incs(world), world.inc.get(iid).linkedTo)  ((ps_1002.length() > 0) and isDone(ps_1002[0])) },
+    { val ps_1007 = incidentById(incs(world), world.inc.get(iid).linkedTo)  ((ps_1007.length() > 0) and isDone(ps_1007[0])) },
   }
 
   def e_close_linked_0(w0: World, c: Ctx, iid: str): World = {
-    val ps_1003 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-    val w1004 = if ((ps_1003.length() > 0)) {
-      val w1005 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: ps_1003[0].closeResultId }) }
-      val w1006 = { ...w1005, inc: w1005.inc.set(iid, { ...w1005.inc.get(iid), closeCauseId: ps_1003[0].closeCauseId }) }
-      val w1007 = { ...w1006, inc: w1006.inc.set(iid, { ...w1006.inc.get(iid), closeCauseLabel: ps_1003[0].closeCauseLabel }) }
-      val w1008 = { ...w1007, inc: w1007.inc.set(iid, { ...w1007.inc.get(iid), result: ps_1003[0].result }) }
-      val w1009 = { ...w1008, inc: w1008.inc.set(iid, { ...w1008.inc.get(iid), closedBy: ps_1003[0].closedBy }) }
-      val w1010 = { ...w1009, inc: w1009.inc.set(iid, { ...w1009.inc.get(iid), owner: ps_1003[0].closedBy }) }
-      w1010
+    val ps_1008 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+    val w1009 = if ((ps_1008.length() > 0)) {
+      val w1010 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closeResultId: ps_1008[0].closeResultId }) }
+      val w1011 = { ...w1010, inc: w1010.inc.set(iid, { ...w1010.inc.get(iid), closeCauseId: ps_1008[0].closeCauseId }) }
+      val w1012 = { ...w1011, inc: w1011.inc.set(iid, { ...w1011.inc.get(iid), closeCauseLabel: ps_1008[0].closeCauseLabel }) }
+      val w1013 = { ...w1012, inc: w1012.inc.set(iid, { ...w1012.inc.get(iid), result: ps_1008[0].result }) }
+      val w1014 = { ...w1013, inc: w1013.inc.set(iid, { ...w1013.inc.get(iid), closedBy: ps_1008[0].closedBy }) }
+      val w1015 = { ...w1014, inc: w1014.inc.set(iid, { ...w1014.inc.get(iid), owner: ps_1008[0].closedBy }) }
+      w1015
     } else w0
-    w1004
+    w1009
   }
 
   def e_close_linked_1(w0: World, c: Ctx, iid: str): World = {
-    val w1011 = if (not(timerDef("resolution").pausable)) {
-      val w1012 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w1013 = { ...w1012, inc: w1012.inc.set(iid, { ...w1012.inc.get(iid), timers: w1012.inc.get(iid).timers.set("resolution", { ...w1012.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
-      w1013
+    val w1016 = if (not(timerDef("resolution").pausable)) {
+      val w1017 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w1018 = { ...w1017, inc: w1017.inc.set(iid, { ...w1017.inc.get(iid), timers: w1017.inc.get(iid).timers.set("resolution", { ...w1017.inc.get(iid).timers.get("resolution"), since: 0 }) }) }
+      w1018
     } else {
-      val w1014 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
-      val w1015 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
-      val w1016 = { ...w1015, inc: w1015.inc.set(iid, { ...w1015.inc.get(iid), timers: w1015.inc.get(iid).timers.set("resolution", { ...w1015.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w1017 = { ...w1016, inc: w1016.inc.set(iid, { ...w1016.inc.get(iid), timers: w1016.inc.get(iid).timers.set("resolution", { ...w1016.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      w1017
+      val w1019 = if ((w0.inc.get(iid).timers.get("resolution").due != 0)) {
+      val w1020 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), left: (if (((w0.inc.get(iid).timers.get("resolution").due - c.now) > 0)) (w0.inc.get(iid).timers.get("resolution").due - c.now) else 0) }) }) }
+      val w1021 = { ...w1020, inc: w1020.inc.set(iid, { ...w1020.inc.get(iid), timers: w1020.inc.get(iid).timers.set("resolution", { ...w1020.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w1022 = { ...w1021, inc: w1021.inc.set(iid, { ...w1021.inc.get(iid), timers: w1021.inc.get(iid).timers.set("resolution", { ...w1021.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      w1022
     } else w0
-      w1014
+      w1019
     }
-    w1011
+    w1016
   }
 
   def e_close_linked_2(w0: World, c: Ctx, iid: str): World = {
-    val value_1018 = c.now
-    val w1019 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_1018 }) }
-    w1019
+    val value_1023 = c.now
+    val w1024 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), closedAt: value_1023 }) }
+    w1024
   }
 
   def e_close_linked_3(w0: World, c: Ctx, iid: str): World = {
@@ -3388,23 +3414,23 @@ module im {
   }
 
   def e_close_linked_4(w0: World, c: Ctx, iid: str): World = {
-    val w1020 = if (["false_alarm"].foldl(false, (acc, y1021) => acc or y1021 == w0.inc.get(iid).closeResultId)) {
-      val w1022 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_1026 => not(isDone(x_1026))).foldl([], (acc, x1025) => acc.append(x1025.id)).foldl(w0, (wf1023, sId1024) => wf1023)
-      w1022
+    val w1025 = if (["false_alarm"].foldl(false, (acc, y1026) => acc or y1026 == w0.inc.get(iid).closeResultId)) {
+      val w1027 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_1031 => not(isDone(x_1031))).foldl([], (acc, x1030) => acc.append(x1030.id)).foldl(w0, (wf1028, sId1029) => wf1028)
+      w1027
     } else w0
-    w1020
+    w1025
   }
 
   def e_close_linked_5(w0: World, c: Ctx, iid: str): World = {
-    val w1027 = if (["false_alarm"].foldl(false, (acc, y1028) => acc or y1028 == w0.inc.get(iid).closeResultId)) {
-      val w1029 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_1036 => not(isDone(x_1036))).foldl([], (acc, x1032) => acc.append(x1032.id)).foldl(w0, (wf1030, sId1031) => {
-      val lead_1033 = (if ((wf1030.inc.get(sId1031).linkedTo != "")) { val ps_1034 = incidentById(incs(w0), wf1030.inc.get(sId1031).linkedTo)  (if (((ps_1034.length() > 0) and not(isDone(ps_1034[0])))) addressee(ps_1034[0]) else "") } else addressee(wf1030.inc.get(sId1031)))
-      val w1035 = if (((lead_1033 != "") and (lead_1033 != wf1030.inc.get(iid).closedBy))) wf1030 else wf1030
-      w1035
+    val w1032 = if (["false_alarm"].foldl(false, (acc, y1033) => acc or y1033 == w0.inc.get(iid).closeResultId)) {
+      val w1034 = siblingsOf(incs(w0), w0.inc.get(iid)).select(x_1041 => not(isDone(x_1041))).foldl([], (acc, x1037) => acc.append(x1037.id)).foldl(w0, (wf1035, sId1036) => {
+      val lead_1038 = (if ((wf1035.inc.get(sId1036).linkedTo != "")) { val ps_1039 = incidentById(incs(w0), wf1035.inc.get(sId1036).linkedTo)  (if (((ps_1039.length() > 0) and not(isDone(ps_1039[0])))) addressee(ps_1039[0]) else "") } else addressee(wf1035.inc.get(sId1036)))
+      val w1040 = if (((lead_1038 != "") and (lead_1038 != wf1035.inc.get(iid).closedBy))) wf1035 else wf1035
+      w1040
     })
-      w1029
+      w1034
     } else w0
-    w1027
+    w1032
   }
 
   def e_close_linked_6(w0: World, c: Ctx, iid: str): World = {
@@ -3429,68 +3455,68 @@ module im {
 
   def ok_linked_lost_access(c: Ctx, iid: str): bool = all {
     Set("linked").contains(world.inc.get(iid).state),
-    { val ps_1037 = incidentById(incs(world), world.inc.get(iid).linkedTo)  { val who_1038 = (if (((ps_1037.length() > 0) and not(isDone(ps_1037[0])))) addressee(ps_1037[0]) else "")  ((who_1038 != "") and (hasAccess(who_1038, world.inc.get(iid)) == false)) } },
+    { val ps_1042 = incidentById(incs(world), world.inc.get(iid).linkedTo)  { val who_1043 = (if (((ps_1042.length() > 0) and not(isDone(ps_1042[0])))) addressee(ps_1042[0]) else "")  ((who_1043 != "") and (hasAccess(who_1043, world.inc.get(iid)) == false)) } },
   }
 
   def e_linked_lost_access_0(w0: World, c: Ctx, iid: str): World = {
-    val ps_1039 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-    val w1040 = if (((ps_1039.length() > 0) and (leftOf(ps_1039[0], "resolution", c.now) >= 0))) {
-      val w1041 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
-      val w1042 = { ...w1041, inc: w1041.inc.set(iid, { ...w1041.inc.get(iid), timers: w1041.inc.get(iid).timers.set("resolution", { ...w1041.inc.get(iid).timers.get("resolution"), left: leftOf(ps_1039[0], "resolution", c.now) }) }) }
-      val w1043 = { ...w1042, inc: w1042.inc.set(iid, { ...w1042.inc.get(iid), timers: w1042.inc.get(iid).timers.set("resolution", { ...w1042.inc.get(iid).timers.get("resolution"), paused: true }) }) }
-      val w1044 = if ((leftOf(ps_1039[0], "resolution", c.now) == 0)) {
-      val w1045 = { ...w1043, inc: w1043.inc.set(iid, { ...w1043.inc.get(iid), timers: w1043.inc.get(iid).timers.set("resolution", { ...w1043.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_1039[0], "resolution", c.now)) ps_1039[0].timers.get("resolution").fired else ps_1039[0].timers.get("resolution").due) }) }) }
-      w1045
-    } else w1043
-      w1044
+    val ps_1044 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+    val w1045 = if (((ps_1044.length() > 0) and (leftOf(ps_1044[0], "resolution", c.now) >= 0))) {
+      val w1046 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("resolution", { ...w0.inc.get(iid).timers.get("resolution"), due: 0 }) }) }
+      val w1047 = { ...w1046, inc: w1046.inc.set(iid, { ...w1046.inc.get(iid), timers: w1046.inc.get(iid).timers.set("resolution", { ...w1046.inc.get(iid).timers.get("resolution"), left: leftOf(ps_1044[0], "resolution", c.now) }) }) }
+      val w1048 = { ...w1047, inc: w1047.inc.set(iid, { ...w1047.inc.get(iid), timers: w1047.inc.get(iid).timers.set("resolution", { ...w1047.inc.get(iid).timers.get("resolution"), paused: true }) }) }
+      val w1049 = if ((leftOf(ps_1044[0], "resolution", c.now) == 0)) {
+      val w1050 = { ...w1048, inc: w1048.inc.set(iid, { ...w1048.inc.get(iid), timers: w1048.inc.get(iid).timers.set("resolution", { ...w1048.inc.get(iid).timers.get("resolution"), fired: (if (spent(ps_1044[0], "resolution", c.now)) ps_1044[0].timers.get("resolution").fired else ps_1044[0].timers.get("resolution").due) }) }) }
+      w1050
+    } else w1048
+      w1049
     } else w0
-    w1040
+    w1045
   }
 
   def e_linked_lost_access_1(w0: World, c: Ctx, iid: str): World = {
-    val w1046 = if ((w0.inc.get(iid).linkedTo != "")) {
-      val ps_1047 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
-      val w1048 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
-      val w1049 = { ...w1048, inc: w1048.inc.set(iid, { ...w1048.inc.get(iid), linkedTo: "" }) }
-      val w1050 = { ...w1049, inc: w1049.inc.set(iid, { ...w1049.inc.get(iid), linkedAt: 0 }) }
-      val w1051 = if (((ps_1047.length() > 0) and ("workflow.journal.linked_lost_access" != ""))) w1050 else w1050
-      val w1052 = if (("workflow.journal.linked_lost_access_primary" != "")) {
-      val w1053 = ps_1047.foldl([], (acc, x1056) => acc.append(x1056.id)).foldl(w1051, (wf1054, pId1055) => wf1054)
-      w1053
-    } else w1051
-      w1052
-    } else {
-      val w1057 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
-      val w1058 = { ...w1057, inc: w1057.inc.set(iid, { ...w1057.inc.get(iid), linkedAt: 0 }) }
+    val w1051 = if ((w0.inc.get(iid).linkedTo != "")) {
+      val ps_1052 = incidentById(incs(w0), w0.inc.get(iid).linkedTo)
+      val w1053 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), leftGroup: { primaryId: w0.inc.get(iid).linkedTo, linkedAt: w0.inc.get(iid).linkedAt, at: c.now } }) }
+      val w1054 = { ...w1053, inc: w1053.inc.set(iid, { ...w1053.inc.get(iid), linkedTo: "" }) }
+      val w1055 = { ...w1054, inc: w1054.inc.set(iid, { ...w1054.inc.get(iid), linkedAt: 0 }) }
+      val w1056 = if (((ps_1052.length() > 0) and ("workflow.journal.linked_lost_access" != ""))) w1055 else w1055
+      val w1057 = if (("workflow.journal.linked_lost_access_primary" != "")) {
+      val w1058 = ps_1052.foldl([], (acc, x1061) => acc.append(x1061.id)).foldl(w1056, (wf1059, pId1060) => wf1059)
       w1058
+    } else w1056
+      w1057
+    } else {
+      val w1062 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), linkedTo: "" }) }
+      val w1063 = { ...w1062, inc: w1062.inc.set(iid, { ...w1062.inc.get(iid), linkedAt: 0 }) }
+      w1063
     }
-    w1046
+    w1051
   }
 
   def e_linked_lost_access_2(w0: World, c: Ctx, iid: str): World = {
-    val w1059 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
-      val w1060 = if (timerDef("reaction").startsOnce) {
-      val w1061 = ec_resumeTimer(w0, c, iid, "reaction")
-      w1061
+    val w1064 = if ((false and (w0.inc.get(iid).timers.get("reaction").due != 0))) w0 else {
+      val w1065 = if (timerDef("reaction").startsOnce) {
+      val w1066 = ec_resumeTimer(w0, c, iid, "reaction")
+      w1066
     } else {
-      val w1062 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
-      val w1063 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
-      val w1064 = { ...w1063, inc: w1063.inc.set(iid, { ...w1063.inc.get(iid), timers: w1063.inc.get(iid).timers.set("reaction", { ...w1063.inc.get(iid).timers.get("reaction"), paused: false }) }) }
-      val w1065 = { ...w1064, inc: w1064.inc.set(iid, { ...w1064.inc.get(iid), timers: w1064.inc.get(iid).timers.set("reaction", { ...w1064.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
-      w1065
-    } else {
-      val sec_1066 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
-      val w1067 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_1066 < 0)) 0 else (c.now + (sec_1066 * 1000))) }) }) }
-      val w1068 = { ...w1067, inc: w1067.inc.set(iid, { ...w1067.inc.get(iid), timers: w1067.inc.get(iid).timers.set("reaction", { ...w1067.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w1067 = if ((("" == "continue") and w0.inc.get(iid).timers.get("reaction").paused)) {
+      val w1068 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (c.now + w0.inc.get(iid).timers.get("reaction").left) }) }) }
       val w1069 = { ...w1068, inc: w1068.inc.set(iid, { ...w1068.inc.get(iid), timers: w1068.inc.get(iid).timers.set("reaction", { ...w1068.inc.get(iid).timers.get("reaction"), paused: false }) }) }
       val w1070 = { ...w1069, inc: w1069.inc.set(iid, { ...w1069.inc.get(iid), timers: w1069.inc.get(iid).timers.set("reaction", { ...w1069.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
       w1070
+    } else {
+      val sec_1071 = timerSec(w0.inc.get(iid), "reaction", (if (("" == "continue")) "" else ""))
+      val w1072 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), timers: w0.inc.get(iid).timers.set("reaction", { ...w0.inc.get(iid).timers.get("reaction"), due: (if ((sec_1071 < 0)) 0 else (c.now + (sec_1071 * 1000))) }) }) }
+      val w1073 = { ...w1072, inc: w1072.inc.set(iid, { ...w1072.inc.get(iid), timers: w1072.inc.get(iid).timers.set("reaction", { ...w1072.inc.get(iid).timers.get("reaction"), since: c.now }) }) }
+      val w1074 = { ...w1073, inc: w1073.inc.set(iid, { ...w1073.inc.get(iid), timers: w1073.inc.get(iid).timers.set("reaction", { ...w1073.inc.get(iid).timers.get("reaction"), paused: false }) }) }
+      val w1075 = { ...w1074, inc: w1074.inc.set(iid, { ...w1074.inc.get(iid), timers: w1074.inc.get(iid).timers.set("reaction", { ...w1074.inc.get(iid).timers.get("reaction"), left: 0 }) }) }
+      w1075
     }
-      w1062
+      w1067
     }
-      w1060
+      w1065
     }
-    w1059
+    w1064
   }
 
   def e_linked_lost_access_3(w0: World, c: Ctx, iid: str): World = {
@@ -3499,9 +3525,9 @@ module im {
   }
 
   def e_linked_lost_access_4(w0: World, c: Ctx, iid: str): World = {
-    val whom_1071 = settings.alerts.target
-    val w1072 = if (((whom_1071 != "") and (whom_1071 != c.actor))) w0 else w0
-    w1072
+    val whom_1076 = settings.alerts.target
+    val w1077 = if (((whom_1076 != "") and (whom_1076 != c.actor))) w0 else w0
+    w1077
   }
 
   def apply_linked_lost_access(c: Ctx, iid: str, w0: World): World = {
@@ -3518,7 +3544,7 @@ module im {
   def form_hold(c: Ctx, iid: str): bool = all {
     c.form.reasonId == "" or all {
       Set("third_party", "patrol", "no_data", "break", "no_link").contains(c.form.reasonId),
-      settings.holdReasons.foldl(false, (acc, r_1073) => acc or ((r_1073.id == c.form.reasonId) and (r_1073.setBy != "system"))),
+      settings.holdReasons.foldl(false, (acc, r_1078) => acc or ((r_1078.id == c.form.reasonId) and (r_1078.setBy != "system"))),
     },
   }
 
@@ -3526,18 +3552,18 @@ module im {
     c.form.targetId == "" or all {
       TARGETS.contains(c.form.targetId),
       offersTransferTo(c.me, c.form.targetId, world.inc.get(iid)),
-      linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_1074) => acc and (isDone(e_1074) or hasAccess(c.form.targetId, e_1074))),
+      linkedOf(incs(world), world.inc.get(iid).id).foldl(true, (acc, e_1079) => acc and (isDone(e_1079) or hasAccess(c.form.targetId, e_1079))),
     },
   }
 
   def form_close(c: Ctx, iid: str): bool = all {
     c.form.resultId == "" or all {
       Set("processed", "false_alarm", "duplicate", "drill", "impossible", "mass").contains(c.form.resultId),
-      closeOptions(c.me, world.inc.get(iid), c.surface).foldl(false, (acc, i_1075) => acc or (i_1075.id == c.form.resultId)),
-      settings.closeResults.foldl(false, (acc, i_1076) => acc or ((i_1076.id == c.form.resultId) and stepsOk(i_1076, world.inc.get(iid)))),
+      closeOptions(c.me, world.inc.get(iid), c.surface).foldl(false, (acc, i_1080) => acc or (i_1080.id == c.form.resultId)),
+      settings.closeResults.foldl(false, (acc, i_1081) => acc or ((i_1081.id == c.form.resultId) and stepsOk(i_1081, world.inc.get(iid)))),
     },
     c.form.causeId == "" or all {
-      settings.closeResults.foldl(false, (acc, i_1077) => acc or ((i_1077.id == c.form.resultId) and (i_1077.causeCatalog != ""))),
+      settings.closeResults.foldl(false, (acc, i_1082) => acc or ((i_1082.id == c.form.resultId) and (i_1082.causeCatalog != ""))),
       Set("animal", "weather", "equipment", "staff", "setup", "other", "power", "link", "mass_fault", "known").contains(c.form.causeId),
     },
   }
@@ -3712,9 +3738,9 @@ module im {
   val reached_linked_lost_access = lastAction.name == "linked_lost_access"
 
   def scenarioEditOk(c: Ctx, iid: str): bool = all {
-    ["in_progress"].foldl(false, (acc, y1078) => acc or y1078 == world.inc.get(iid).state),
+    ["in_progress"].foldl(false, (acc, y1083) => acc or y1083 == world.inc.get(iid).state),
     (world.inc.get(iid).owner == c.me),
-    not(settings.session.states.foldl(false, (acc, s_1079) => acc or ((s_1079.id == agentState(c.me)) and s_1079.readOnly))),
+    not(settings.session.states.foldl(false, (acc, s_1084) => acc or ((s_1084.id == agentState(c.me)) and s_1084.readOnly))),
   }
 
   /* ===== Мир модели ===== */
