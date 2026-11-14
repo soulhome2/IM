@@ -524,7 +524,7 @@
       cel.value(
         "Rule",
         {
-          guid: r.guid, priority: r.priority, createdAt: r.createdAt, scenarios: r.scenarios || [],
+          guid: r.guid, active: r.active !== false, priority: r.priority, createdAt: r.createdAt, scenarios: r.scenarios || [],
           conditions: (r.conditions || []).map((c) => ({ eventType: c.eventTypeId, device: c.deviceGuid, deviceType: c.deviceTypeId, group: c.sourceGroupGuid })),
         },
         r

@@ -10611,9 +10611,57 @@
         },
         "additionalProperties": false
       },
+      "IncidentRule": {
+        "type": "object",
+        "description": "§14.5, ТЗ-2а. Правило создания инцидентов — каким оно хранится у сервера и каким его видит конфигуратор. Поле `active` — признак «активно»: выключенное правило сохраняется целиком, но в отборе не участвует — не создаёт инцидентов и не перекрывает включённое (машина: `ruleMatches`). Переключение — запись журнала настроек (§12.4): `objectType` `incident_rule`, `action` `update`, в `before` и `after` — правило целиком, в нём `active`",
+        "required": [
+          "guid",
+          "name",
+          "priority",
+          "createdAt",
+          "scenarios",
+          "conditions"
+        ],
+        "properties": {
+          "guid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "default": true,
+            "description": "Правило включено. Не задано — `true`: у нового и у прежних правил оно включено"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "guid сценариев"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Условие: `eventTypeId`, `deviceGuid`, `deviceTypeId`, `sourceGroupGuid` (§14.5)"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
       "EventExplanationRule": {
         "type": "object",
-        "description": "Правило организации и что оно сделало с событием: `fired` — сработало (победитель инцидента), `overridden` — подошло, но перекрыто правилом `overriddenBy`, `missed` — не подошло, причина в `reason`",
+        "description": "Правило организации и что оно сделало с событием: `fired` — сработало (победитель инцидента), `overridden` — подошло, но перекрыто правилом `overriddenBy`, `missed` — не подошло, причина в `reason`, `disabled` — правило выключено (`IncidentRule.active`), в отборе не участвовало: причины и перекрывшего нет (ТЗ-2а)",
         "required": [
           "rule",
           "verdict"
@@ -10627,7 +10675,8 @@
             "enum": [
               "fired",
               "overridden",
-              "missed"
+              "missed",
+              "disabled"
             ]
           },
           "scenarios": {

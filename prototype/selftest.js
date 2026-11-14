@@ -971,6 +971,41 @@
       }
     });
 
+    await step("Выключенное правило (active: false) не создаёт инцидент и не перекрывает включённое; без поля — включено (§14.5, ТЗ-2а)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const keys = window.IM_FIXTURE.scenarios.keys;
+      const rule = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
+      const smoke5 = "20000000-0002-4000-8000-000000000005";
+      const event = (n) => ({ eventTypeId: "fire", deviceIds: [smoke5], site: "Торговый центр", location: `selftest ${n}` });
+      const mk = (tail, extra) => Object.assign({ guid: rule(tail), name: `правило ${tail}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [keys.fire], conditions: [{ eventTypeId: "fire" }] }, extra);
+      try {
+        // Единственное подошедшее правило выключено — инцидента нет
+        await standReset({ fixture: "demo", fixturePatch: { rules: [mk("e", { active: false })] } });
+        const off = await stand.raw("POST", "/test/events", event(1));
+        expect(off.body.created === 0 && off.body.incidents.length === 0 && off.body.alarmNumber == null, `выключенное правило создало ${off.body.created} инц., тревога ${off.body.alarmNumber}`);
+        // Выключенное точнее и старше по приоритету, но включённое всё равно побеждает
+        const sharp = mk("d", { active: false, priority: 100, conditions: [{ eventTypeId: "fire", deviceGuid: smoke5 }] });
+        await standReset({ fixture: "demo", fixturePatch: { rules: [sharp, mk("e")] } });
+        const on = await stand.raw("POST", "/test/events", event(2));
+        expect(on.body.created === 1 && on.body.incidents[0].ruleGuid === rule("e") && on.body.incidents[0].priority === 50, `включённое: создано ${on.body.created}, правило ${(on.body.incidents[0] || {}).ruleGuid}, приоритет ${(on.body.incidents[0] || {}).priority}`);
+        // Правило без поля active — включено (по умолчанию true)
+        await standReset({ fixture: "demo", fixturePatch: { rules: [mk("e")] } });
+        const dflt = await stand.raw("POST", "/test/events", event(3));
+        expect(dflt.body.created === 1, `правило без active создало ${dflt.body.created}`);
+        // Эталонный набор: у каждого правила поле есть и оно включено; контракт описывает поле и вердикт объяснения
+        expect(window.IM_FIXTURE.rules.every((r) => r.active === true), "у правил эталонного набора нет active: true");
+        const sc = window.IM_OPENAPI.components.schemas;
+        const f = sc.IncidentRule && sc.IncidentRule.properties.active;
+        expect(f && f.type === "boolean" && f.default === true, "IncidentRule.active в контракте — не boolean с умолчанием true");
+        expect(sc.EventExplanationRule.properties.verdict.enum.includes("disabled"), "в вердиктах объяснения нет disabled");
+        return "выключенное — не создаёт и не перекрывает; без поля — включено; набор и контракт на месте";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Правила инцидента нет в наборе — ruleGuid и ruleName null, как у сервера (контракт IncidentCard.ruleGuid)", async () => {
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");

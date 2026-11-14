@@ -4609,6 +4609,7 @@ window.IM_WORKFLOW = {
       },
       "Rule": {
         "guid": "string",
+        "active": "bool",
         "priority": "int",
         "createdAt": "int",
         "scenarios": "list<string>",
@@ -5285,8 +5286,8 @@ window.IM_WORKFLOW = {
           "e": "Event"
         },
         "returns": "bool",
-        "expr": "size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))",
-        "$comment": "§14.5, ARCH-15. Правило подошло событию: у него есть сценарий и подошло хоть одно условие. Правило без сценария в выборе не участвует"
+        "expr": "r.active && size(r.scenarios) > 0 && r.conditions.exists(c, conditionMatches(c, e))",
+        "$comment": "§14.5, ARCH-15, ТЗ-2а. Правило подошло событию: оно включено (active), у него есть сценарий и подошло хоть одно условие. Выключенное правило и правило без сценария в выборе не участвуют: в ранжировании их нет, перекрыть включённое они не могут; в объяснении отбора выключенное — вердикт disabled (§12.5)"
       },
       "ruleBeats": {
         "params": {
