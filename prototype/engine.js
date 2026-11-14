@@ -65,6 +65,7 @@
           assignmentGroup: ev.assignmentGroup, holdReasonId: ev.holdReason, escalationLevel: ev.escalationLevel,
           transferCount: ev.transferCount, closeResultId: ev.closeResult, closeCauseId: ev.massCause, closeCauseLabel: ev.closeCauseLabel, result: ev.closeComment,
           closedBy: ev.closedBy, closedAt: ev.closedAt, slaBreached: ev.slaBreached, breaches: ev.breaches, priorityManual: Boolean(ev.priorityManual),
+          maintenanceWindowId: ev.maintenanceWindowId, closeMaintenanceWindowId: ev.closeMaintenanceWindowId,
           timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
           eventGuid: ev.eventGuid,
@@ -297,6 +298,7 @@
         state: x.state, priority: o(x.priority), priorityManual: Boolean(x.priorityManual), owner: x.owner || null, assignmentGroup: x.assignmentGroup || null, holdReason: x.holdReasonId || null,
         escalationLevel: o(x.escalationLevel), transferCount: o(x.transferCount), closeResult: x.closeResultId || null,
         massCause: x.closeCauseId || null, closeCauseLabel: snapshot("closeCauseLabel", x.closeCauseLabel, ev.closeCauseLabel), closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
+        maintenanceWindowId: x.maintenanceWindowId || null, closeMaintenanceWindowId: x.closeMaintenanceWindowId || null,
         slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
         linkedTo: x.linkedTo || null, linkedAt: o(x.linkedAt) || null,
         leftGroup: x.leftGroup.primaryId ? { primaryId: x.leftGroup.primaryId, linkedAt: o(x.leftGroup.linkedAt), at: o(x.leftGroup.at) } : null,
@@ -572,6 +574,23 @@
       return unique.map((p) => ({ scenario: p.scenario, rule: cel.source(p.rule) }));
     }
 
+    // Окна плановых работ (§14.12, ТЗ-21, intake.windows машины): после выбора победителей. picks — ответ intake,
+    // windows — уже развёрнутые интервалы окон организации ({ id, device | group, from, to } в мс), event — с at.
+    // Победителя нет — null: событие «не сработало», окно о нём не говорит. Иначе первое накрывшее окно и режим
+    // maintenance.mode машины; suppress — инцидентов нет, mark — инциденты с окном и низшим приоритетом
+    function intakeWindows(picks, windows, event) {
+      if (!picks.length) return null;
+      const hits = windowsCovering(windows, event);
+      return hits.length ? { windowId: hits[0].id, mode: (W.maintenance || {}).mode || "suppress" } : null;
+    }
+    // Интервалы окон, накрывающие событие (windowsFor машины): те же, что видит отбор, — и для карточки инцидента
+    function windowsCovering(windows, event) {
+      if (!(windows || []).length) return [];
+      const e = cel.value("Event", event);
+      const ws = windows.map((w) => cel.value("MaintenanceWindow", { id: w.id, device: w.device || null, group: w.group || null, from: w.from, to: w.to }, w));
+      return def(W.intake.windows, ws, e).map((x) => cel.source(x));
+    }
+
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
 
     // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
@@ -746,6 +765,8 @@
     function candidates(field, ev) {
       if (field.source === "transferTargets") return ctx.transferTargets(ev);
       // Уровни справочника приоритетов (§2.5, ТЗ-13): значение — число уровня строкой
+      // Окна работ, пересекающиеся с инцидентом (§14.12, ТЗ-21): данные МИ, подпись — описание окна
+      if (field.source === "maintenanceWindows") return (ctx.maintenanceWindows ? ctx.maintenanceWindows(ev) : []).map((w) => ({ id: w.id, label: w.description || w.id }));
       if (field.source === "priorities") return (ctx.priorities ? ctx.priorities() : []).map((p) => ({ id: String(p.value), label: p.label || String(p.value) }));
       // Причины справочников causeCatalog результатов (causeCatalog:<поле результата>): у варианта — forValues,
       // при каких результатах он предлагается
@@ -940,6 +961,8 @@
       run,
       create,
       intake,
+      intakeWindows,
+      windowsCovering,
       form,
       badge,
       cardNote,

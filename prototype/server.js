@@ -58,6 +58,9 @@
     // Правила-фильтры (§14.5, ARCH-15): как incident_rules сервера МИ — из эталонного набора, редактора нет (§17).
     // createdAt — мс: последний шаг ранжирования
     let RULES = [];
+    // Окна плановых работ (§14.12, ТЗ-21): данные МИ организации, как правила; времена — мс. В отбор и в карточку
+    // идут уже развёрнутые интервалы (maintenanceIntervals), смысл «в окне» — определение машины windowCovers
+    let MAINT = [];
     // События (§14.5): guid от источника → номер тревоги и инциденты по порядку создания. Повтор события с тем же
     // guid ничего не создаёт. Набор отдельного списка не хранит — события собираются из eventGuid инцидентов
     let EVENTS = new Map();
@@ -94,7 +97,7 @@
     const uuid = (kind, n, tail) => `${kind}${String(n).padStart(7, "0")}-0000-4000-8000-${tail || "000000000000"}`;
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     const isGuid = (g) => typeof g === "string" && UUID.test(g.toLowerCase());
-    const serial = { macro: 0, incident: 0, event: 0 };
+    const serial = { macro: 0, incident: 0, event: 0, window: 0 };
     let events = [];
     let SIM = { enabled: false };
     let session = null;
@@ -518,6 +521,8 @@
       log,
       transferTargets: () => targets(),
       // Уровни справочника приоритетов (§2.5) — варианты формы смены приоритета (ТЗ-13), название — на языке сессии
+      // Окна работ, пересекающиеся с инцидентом (§14.12): варианты поля «окно работ» формы закрытия
+      maintenanceWindows: (ev) => windowsOfIncident(ev),
       priorities: () => PRIORITIES.map((p) => ({ value: p.value, label: (p.name && (p.name[(session && session.preferences.locale) || "ru"] || p.name.ru)) || String(p.value) })),
       hasAccess: (id, ev) => hasAccess(id, ev),
       // Факты мира для выражений машины (cel.world, CEL.md): права и состояние любого человека, состав групп
@@ -576,6 +581,7 @@
       serial.incident = 0;
       serial.macro = 0;
       serial.event = 0;
+      serial.window = 0;
       auditActions = [];
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
@@ -607,6 +613,10 @@
       myDevices = accessibleDevices(rolesOverride || me.roles || []);
       SCENARIO_ROWS = Object.fromEntries(data.scenarios.rows.map((r) => [rowKey(r.guid, r.version), r]));
       RULES = (data.rules || []).map((r) => Object.assign({}, r, { createdAt: Date.parse(r.createdAt) || 0 }));
+      // Окна набора — тоже снимок: времена сдвигаются вместе с остальными
+      MAINT = (data.maintenanceWindows || []).map((w) =>
+        Object.assign({}, w, { startsAt: abs(w.startsAt), endsAt: abs(w.endsAt), createdAt: abs(w.createdAt), endedEarlyAt: abs(w.endedEarlyAt || null) })
+      );
       // Прохождение — тоже снимок: его времена сдвигаются вместе с остальными
       const at = (time) => iso(abs(time));
       const runOf = (r) =>
@@ -859,6 +869,9 @@
         priority: ev.priority,
         // Ручной приоритет (ТЗ-13): автоматика его не меняет, переоткрытие сохраняет
         priorityManual: Boolean(ev.priorityManual),
+        // Окна работ (ТЗ-21): создан в окне при mark; закрыт «Плановой проверкой» со ссылкой на окно
+        maintenanceWindowId: ev.maintenanceWindowId || null,
+        closeMaintenanceWindowId: ev.closeMaintenanceWindowId || null,
         sourceGroup: sourceGroupOf(ev),
         sourceDeviceTypeId: src ? deviceRef(src).typeId : null,
         site: ev.site || null,
@@ -1096,6 +1109,7 @@
         media: mediaView(ev),
         result: ev.closeComment || null,
         alarm: alarmView(ev),
+        maintenanceWindows: windowsOfIncident(ev).map((w) => ({ id: w.id, description: w.description, startsAt: iso(w.from), endsAt: iso(w.to) })),
       });
     }
 
@@ -2051,7 +2065,7 @@
         },
       ],
       ["GET", "/operator/reference/priorities", () => ({ status: 200, body: JSON.parse(JSON.stringify(PRIORITIES)) })],
-    ].concat(opts.testSupport ? TEST_ROUTES() : []);
+    ].concat(MAINTENANCE_ROUTES(), opts.testSupport ? TEST_ROUTES() : []);
 
     /* ===== Тестовый стенд: только с testSupport, в боевой системе этих операций нет ===== */
 
@@ -2077,7 +2091,173 @@
     // Инцидент события по правилу (§6.2, §14.5, RULE-61): запись из события, затем переход машины create — он ставит
     // владельца, уровень, норматив реакции и запись журнала. Сценарий — последняя версия, на ней инцидент и доигрывает.
     // В очередь не попадает: всё событие применяется вместе (commitEvent). Не создался — null
-    function newIncident(event, rule, scenarioGuid, number, alarmNumber, priority) {
+    /* ===== Окна плановых работ (§14.12, ТЗ-21) ===== */
+
+    // Местные дата и время момента в поясе tz
+    function zoneParts(ms, tz) {
+      const f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const o = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+      return { y: +o.year, m: +o.month, d: +o.day, h: +o.hour, mi: +o.minute, s: +o.second };
+    }
+    const zoneOffset = (ms, tz) => {
+      const p = zoneParts(ms, tz);
+      return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000;
+    };
+    // Местное время → момент (§14.12, п. 3): двузначное — первое из двух, несуществующее — вперёд на величину перевода
+    // (Temporal disambiguation: compatible)
+    function zonedMs(y, m, d, h, mi, tz) {
+      const local = Date.UTC(y, m - 1, d, h, mi);
+      const before = local - zoneOffset(local - 864e5, tz);
+      const after = local - zoneOffset(local + 864e5, tz);
+      const fits = (c) => c + zoneOffset(c, tz) === local;
+      if (fits(before) && fits(after)) return Math.min(before, after);
+      if (fits(before)) return before;
+      if (fits(after)) return after;
+      return before;
+    }
+    // Интервалы окна вокруг момента at (§14.12): разовое — [начало, конец); повтор — дни D−1 и D местной даты at,
+    // интервал дня через полночь кончается назавтра; всё обрезано рамкой [начало, конец)
+    function windowIntervals(w, at) {
+      const base = { id: w.id, device: w.deviceGuid || null, group: w.sourceGroupGuid || null, description: w.description || "" };
+      if (!w.recurrence) return w.startsAt < w.endsAt ? [Object.assign({ from: w.startsAt, to: w.endsAt }, base)] : [];
+      const tz = w.timeZone || "UTC";
+      const p = zoneParts(at, tz);
+      const hm = (t) => t.split(":").map(Number);
+      const [sh, sm] = hm(w.recurrence.startTime);
+      const [eh, em] = hm(w.recurrence.endTime);
+      const overnight = eh * 60 + em <= sh * 60 + sm;
+      const out = [];
+      for (const k of [-1, 0]) {
+        const day = new Date(Date.UTC(p.y, p.m - 1, p.d + k));
+        if (!w.recurrence.days.includes(day.getUTCDay() || 7)) continue;
+        const end = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + (overnight ? 1 : 0)));
+        const from = Math.max(w.startsAt, zonedMs(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), sh, sm, tz));
+        const to = Math.min(w.endsAt, zonedMs(end.getUTCFullYear(), end.getUTCMonth() + 1, end.getUTCDate(), eh, em, tz));
+        if (from < to) out.push(Object.assign({ from, to }, base));
+      }
+      return out;
+    }
+    // Вход отбора (intake.windows): интервалы всех окон организации на момент at — по началу, при равенстве по id
+    const maintenanceIntervals = (at) =>
+      MAINT.flatMap((w) => windowIntervals(w, at)).sort((a, b) => a.from - b.from || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    // Окна, пересекающиеся с инцидентом: устройство-источник и время события (карточка, форма закрытия)
+    function windowsOfIncident(ev) {
+      const src = eventSource(ev);
+      if (!src || ev.occurredAt == null) return [];
+      return engine.windowsCovering(maintenanceIntervals(ev.occurredAt), { guid: ev.eventGuid || "", eventType: ev.typeId, device: src, deviceType: deviceSpec(src).type, at: ev.occurredAt });
+    }
+    const windowStatus = (w) => (now() < w.startsAt ? "planned" : now() < w.endsAt ? "active" : "ended");
+    function windowView(w) {
+      return {
+        id: w.id,
+        deviceGuid: w.deviceGuid || null,
+        sourceGroupGuid: w.sourceGroupGuid || null,
+        startsAt: iso(w.startsAt),
+        endsAt: iso(w.endsAt),
+        timeZone: w.timeZone,
+        recurrence: w.recurrence || null,
+        description: w.description || "",
+        status: windowStatus(w),
+        endedEarlyAt: iso(w.endedEarlyAt),
+        createdBy: actorRef(w.createdBy),
+        createdAt: iso(w.createdAt),
+      };
+    }
+    // Тело создания и правки → окно; неверное — null (422)
+    function windowOf(body) {
+      const b = body || {};
+      const hasDev = b.deviceGuid != null && b.deviceGuid !== "";
+      const hasGroup = b.sourceGroupGuid != null && b.sourceGroupGuid !== "";
+      const startsAt = Date.parse(b.startsAt);
+      const endsAt = Date.parse(b.endsAt);
+      const tz = b.timeZone || "UTC";
+      const r = b.recurrence || null;
+      const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+      const badRec = r && !(Array.isArray(r.days) && r.days.length && r.days.every((x) => Number.isInteger(x) && x >= 1 && x <= 7) && time.test(r.startTime || "") && time.test(r.endTime || ""));
+      if (hasDev === hasGroup || !(startsAt < endsAt) || !validZone(tz) || badRec) return null;
+      if (hasDev && !DEVICE_CATALOG[b.deviceGuid]) return null;
+      if (hasGroup && !findNode(TREE, b.sourceGroupGuid)) return null;
+      return {
+        deviceGuid: hasDev ? b.deviceGuid : null,
+        sourceGroupGuid: hasGroup ? b.sourceGroupGuid : null,
+        startsAt,
+        endsAt,
+        timeZone: tz,
+        recurrence: r ? { days: [...new Set(r.days)].sort(), startTime: r.startTime, endTime: r.endTime } : null,
+        description: String(b.description || ""),
+      };
+    }
+    const noMaintEdit = () => problem(403, "PERMISSION_DENIED", ["workflow.error.no_maintenance_edit"]);
+    const badWindow = () => problem(422, "FORM_FIELD_INVALID", ["workflow.error.maintenance_invalid"]);
+    function MAINTENANCE_ROUTES() {
+      const find = (id) => MAINT.find((w) => w.id === id) || null;
+      return [
+        ["GET", "/operator/maintenance-windows", () => ({ status: 200, body: MAINT.slice().sort((a, b) => a.startsAt - b.startsAt).map(windowView) })],
+        [
+          "POST",
+          "/operator/maintenance-windows",
+          (p, q, body) => {
+            if (!can("maintenance:edit")) return noMaintEdit();
+            const w = windowOf(body);
+            if (!w || w.endsAt <= now()) return badWindow();
+            const row = Object.assign({ id: uuid("a", ++serial.window, "000000000021") }, w, { createdBy: ME, createdAt: now(), endedEarlyAt: null });
+            MAINT.push(row);
+            return { status: 201, body: windowView(row) };
+          },
+        ],
+        [
+          "PUT",
+          "/operator/maintenance-windows/{id}",
+          (p, q, body) => {
+            if (!can("maintenance:edit")) return noMaintEdit();
+            const row = find(p.id);
+            if (!row) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            const status = windowStatus(row);
+            if (status === "ended") return problem(409, "MAINTENANCE_WINDOW_ENDED", ["workflow.error.maintenance_ended"]);
+            const w = windowOf(body);
+            if (!w || w.endsAt <= now()) return badWindow();
+            if (status === "active") {
+              // Идущее окно: меняются только конец и описание — иначе задним числом меняется итог прошлых событий
+              const same = ["deviceGuid", "sourceGroupGuid", "startsAt", "timeZone"].every((k) => w[k] === row[k]) && JSON.stringify(w.recurrence) === JSON.stringify(row.recurrence || null);
+              if (!same) return problem(409, "MAINTENANCE_WINDOW_ACTIVE", ["workflow.error.maintenance_active"]);
+            }
+            Object.assign(row, w);
+            return { status: 200, body: windowView(row) };
+          },
+        ],
+        [
+          "DELETE",
+          "/operator/maintenance-windows/{id}",
+          (p) => {
+            if (!can("maintenance:edit")) return noMaintEdit();
+            const row = find(p.id);
+            if (!row) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            const status = windowStatus(row);
+            if (status === "active") return problem(409, "MAINTENANCE_WINDOW_ACTIVE", ["workflow.error.maintenance_active"]);
+            if (status === "ended") return problem(409, "MAINTENANCE_WINDOW_ENDED", ["workflow.error.maintenance_ended"]);
+            MAINT = MAINT.filter((w) => w !== row);
+            return { status: 204, body: null };
+          },
+        ],
+        [
+          "POST",
+          "/operator/maintenance-windows/{id}/end",
+          (p) => {
+            if (!can("maintenance:edit")) return noMaintEdit();
+            const row = find(p.id);
+            if (!row) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
+            const status = windowStatus(row);
+            if (status === "ended") return problem(409, "MAINTENANCE_WINDOW_ENDED", ["workflow.error.maintenance_ended"]);
+            if (status === "planned") return badWindow();
+            row.endsAt = now();
+            row.endedEarlyAt = now();
+            return { status: 200, body: windowView(row) };
+          },
+        ],
+      ];
+    }
+
+    function newIncident(event, rule, scenarioGuid, number, alarmNumber, priority, maintenanceWindowId) {
       const row = latestRow(scenarioGuid);
       if (!row) return null;
       const ev = {
@@ -2086,6 +2266,8 @@
         eventGuid: event.guid,
         alarmNumber,
         ruleGuid: rule.guid,
+        maintenanceWindowId: maintenanceWindowId || null,
+        closeMaintenanceWindowId: null,
         typeId: event.type.id,
         typeGuid: event.type.guid,
         type: event.type.name,
@@ -2126,8 +2308,8 @@
       return engine.create(ev).ok ? ev : null;
     }
     // Запись события и его инциденты — одной транзакцией (§14.5): в очередь и в поток — все вместе
-    function commitEvent(event, alarmNumber, created) {
-      EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id) });
+    function commitEvent(event, alarmNumber, created, maintenance) {
+      EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id), maintenance: maintenance || null });
       created.forEach((ev) => events.unshift(ev));
       created.forEach((ev) => emit("incident.created", ev, "dispatcher", {}));
     }
@@ -2140,19 +2322,26 @@
       const event = eventOf(spec);
       if (!event) return null;
       const known = EVENTS.get(event.guid);
-      if (known) return { eventGuid: known.guid, alarmNumber: known.alarmNumber, created: [], incidents: known.incidentIds.map(byId).filter(Boolean) };
+      if (known) return { eventGuid: known.guid, alarmNumber: known.alarmNumber, created: [], incidents: known.incidentIds.map(byId).filter(Boolean), maintenance: known.maintenance };
       const source = event.devices[0];
-      const picks = engine.intake(RULES, { guid: event.guid, eventType: event.type.id, device: source, deviceType: deviceSpec(source).type });
+      const fact = { guid: event.guid, eventType: event.type.id, device: source, deviceType: deviceSpec(source).type, at: event.occurredAt };
+      const won = engine.intake(RULES, fact);
+      // Окна работ — после выбора победителей (intake.windows, §14.12): suppress — инцидентов нет, mark — с окном и
+      // низшим уровнем справочника вместо приоритета правила (приоритет автоматики: priorityManual не ставится)
+      const maintenance = engine.intakeWindows(won, maintenanceIntervals(event.occurredAt), fact);
+      const picks = maintenance && maintenance.mode === "suppress" ? [] : won;
+      const marked = maintenance && maintenance.mode === "mark" ? maintenance.windowId : null;
+      const lowest = PRIORITIES.length ? PRIORITIES[PRIORITIES.length - 1].value : null;
       const first = nextNumber();
       const alarmNumber = picks.length ? `INC-${first}` : null;
       const created = [];
       for (const [k, pick] of picks.entries()) {
-        const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, pick.rule.priority);
+        const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, marked && lowest != null ? lowest : pick.rule.priority, marked);
         if (!ev) return { failed: { rule: pick.rule.name || pick.rule.guid, scenario: pick.scenario } };
         created.push(ev);
       }
-      commitEvent(event, alarmNumber, created);
-      return { eventGuid: event.guid, alarmNumber, created, incidents: created };
+      commitEvent(event, alarmNumber, created, maintenance);
+      return { eventGuid: event.guid, alarmNumber, created, incidents: created, maintenance };
     }
 
     // Базовое правило типа события: одно условие, в нём только тип (эталонный набор, §14.5)
@@ -2195,7 +2384,7 @@
             // Создан хоть один — 201; повтор события или не подошло ни одно правило — 200
             return {
               status: res.created.length ? 201 : 200,
-              body: { eventGuid: res.eventGuid, alarmNumber: res.alarmNumber, created: res.created.length, incidents: res.incidents.map(card) },
+              body: { eventGuid: res.eventGuid, alarmNumber: res.alarmNumber, created: res.created.length, incidents: res.incidents.map(card), maintenance: res.maintenance || null },
             };
           },
         ],

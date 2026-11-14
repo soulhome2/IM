@@ -2384,6 +2384,7 @@
           ${renderIncidentHead(ev)}
           ${workNote(ev)}
           ${alarmBlock(ev)}
+          ${maintenanceBlock(ev)}
           ${workTabs(ev, tab)}
           ${
             tab !== "scenario"
@@ -3902,6 +3903,33 @@
 
   // Блок «По этому событию» над шагами (В15): статус тревоги и соседи строками — номер, служба, бейдж, владелец,
   // результат. Кнопок действий нет: номер — «Посмотреть», карточка соседа на просмотр. Соседей нет — блока нет
+  // Окна плановых работ, пересекающиеся с инцидентом (§14.12, ТЗ-21): идут работы — оператор закрывает «Плановой проверкой»
+  // Название устройства и группы окна — по дереву групп очереди (store.tree); не нашлось — id
+  function treeName(id, device) {
+    let found = null;
+    const walk = (nodes) =>
+      (nodes || []).forEach((n) => {
+        if (found) return;
+        if (!device && (n.guid || n.id) === id) found = n.name;
+        if (device) (n.devices || []).forEach((d) => (!found && (d.guid || d.id || d) === id ? (found = d.name || null) : null));
+        walk(n.children);
+      });
+    walk(store.tree);
+    return found || id;
+  }
+  const deviceName = (id) => treeName(id, true);
+  const groupName = (id) => treeName(id, false);
+  function maintenanceBlock(ev) {
+    const ws = ev.maintenanceWindows || [];
+    if (!ws.length && !ev.maintenanceWindowId) return "";
+    const rows = ws.map((w) => `<li class="alarm-sib"><span class="alarm-what">${asData(w.description || "—")}</span><span class="alarm-who">${escapeHtml(fmtWhen(w.startsAt))} – ${escapeHtml(fmtWhen(w.endsAt))}</span></li>`).join("");
+    return `<section class="alarm-block" id="maintenanceBlock" aria-label="${te("Плановые работы")}">
+      <div class="alarm-head"><span class="material-symbols-outlined" aria-hidden="true">engineering</span><strong>${te("Плановые работы")}</strong><span>${te(
+        ev.maintenanceWindowId ? "Инцидент создан в окне работ" : "Устройство в окне работ на время события"
+      )}</span></div>
+      <ul class="alarm-sibs">${rows}</ul>
+    </section>`;
+  }
   function alarmBlock(ev) {
     const a = ev.alarm;
     if (!a || !a.siblings.length) return "";
@@ -4374,6 +4402,16 @@
       ],
       // Приоритеты (§2.5): число, название и описание на языке оператора, цвет — квадратиком того же
       // цвета, что полоска очереди, и словом: цвет — не единственный способ его узнать (BUG-39)
+      // Окна плановых работ (§14.12, ТЗ-21): что, где, когда, повтор и состояние
+      "/operator/maintenance-windows": () => [
+        ["Окно работ", "Где", "Когда", "Состояние"],
+        data.map((w) => {
+          const where = w.deviceGuid ? deviceName(w.deviceGuid) : groupName(w.sourceGroupGuid);
+          const rec = w.recurrence ? te("Повтор: дни {days}, {from}–{to}", { days: w.recurrence.days.join(", "), from: w.recurrence.startTime, to: w.recurrence.endTime }) : te("Без повтора");
+          const st = { planned: "Впереди", active: "Идёт", ended: "Закончилось" }[w.status];
+          return `<tr><td>${asData(w.description || "—")}</td><td>${asData(where || "—")}</td><td>${asData(`${fmtWhen(w.startsAt)} – ${fmtWhen(w.endsAt)}, ${w.timeZone}`)}<span class="what">${rec}</span></td><td>${te(st)}</td></tr>`;
+        }),
+      ],
       "/operator/reference/priorities": () => [
         ["Число", "Приоритет", "Цвет"],
         data.map((p) => `<tr><td>${p.value}</td><td>${asData(inLang(p.name))}<span class="what">${asData(inLang(p.description))}</span></td><td><span class="event-pri swatch" data-color="${escapeHtml(p.color)}"></span> ${word(p.color)}</td></tr>`),

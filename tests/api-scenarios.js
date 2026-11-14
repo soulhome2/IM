@@ -161,6 +161,118 @@
     assert.status(await bare.act(other.guid, "comment", { comment: "x" }), 403, "PERMISSION_DENIED", "без права");
   });
 
+  /* ===== Окна плановых работ (ТЗ-21, §14.12, §14.5 п. 6) ===== */
+
+  const MW_SMOKE = "20000000-0002-4000-8000-000000000005";
+  const MW_OTHER = "20000000-0002-4000-8000-000000000001";
+  const MW_FLOOR = "30000000-0000-4000-8000-000000000002";
+  const MW_CAM = "20000000-0001-4000-8000-000000000031";
+  const MW_H = 3600000;
+  const mwIso = (ms) => new Date(ms).toISOString();
+  const mwMake = (env, spec) => env.call("POST", "/operator/maintenance-windows", Object.assign({ description: "работы", timeZone: "UTC", recurrence: null }, spec));
+  const mwFire = (env, dev, extra) => env.call("POST", "/test/events", Object.assign({ eventTypeId: "fire", deviceIds: [dev || MW_SMOKE], site: "ТЦ", location: "api mw" }, extra));
+  const mwLowest = Math.min(...LEVELS);
+
+  test("Окно работ: список набора, создание, событие в окне при suppress — инцидента нет, итог со ссылкой на окно (ТЗ-21)", async () => {
+    const env = await makeEnv();
+    const list = await env.call("GET", "/operator/maintenance-windows");
+    assert.status(list, 200, null, "список");
+    assert.ok(list.body.length === window.IM_FIXTURE.maintenanceWindows.length && list.body.every((w) => w.status !== "active"), "окна набора не идут сейчас");
+    const w = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    assert.status(w, 201, null, "создание");
+    assert.eq([w.body.status, w.body.createdBy && w.body.createdBy.id], ["active", ME], "идёт, автор — я");
+    const r = await mwFire(env);
+    assert.eq([r.status, r.body.created, r.body.alarmNumber, r.body.maintenance], [200, 0, null, { windowId: w.body.id, mode: "suppress" }], "подавлено");
+    const other = await mwFire(env, MW_OTHER);
+    assert.ok(other.body.created >= 1 && other.body.maintenance === null, "другое устройство — как обычно");
+  });
+
+  test("Окно работ при mark: инцидент с окном и низшим уровнем справочника, priorityManual false; карточка — окно (ТЗ-21)", async () => {
+    const env = await makeEnv({ workflowPatch: { maintenance: { mode: "mark" } } });
+    const w = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    const r = await mwFire(env);
+    assert.status(r, 201, null, "создан");
+    const inc = r.body.incidents[0];
+    assert.eq([inc.maintenanceWindowId, inc.priority, inc.priorityManual], [w.body.id, mwLowest, false], "помечен");
+    assert.eq(inc.maintenanceWindows.map((x) => x.id), [w.body.id], "окна карточки");
+  });
+
+  test("Окно работ: полуинтервал — ровно в конец вне окна; группа с вложенными; без победителя — окна нет (ТЗ-21)", async () => {
+    const env = await makeEnv();
+    await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    const atEnd = await mwFire(env, MW_SMOKE, { occurredAt: mwIso(env.now + MW_H) });
+    assert.ok(atEnd.body.created >= 1 && atEnd.body.maintenance === null, "в конец окна — инцидент");
+    await mwMake(env, { sourceGroupGuid: MW_FLOOR, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    assert.eq((await mwFire(env, MW_CAM)).body.created, 0, "камера во вложенной группе — в окне");
+    const bare = await makeEnv({ fixturePatch: { rules: [] } });
+    await mwMake(bare, { deviceGuid: MW_SMOKE, startsAt: mwIso(bare.now - MW_H), endsAt: mwIso(bare.now + MW_H) });
+    assert.eq((await mwFire(bare)).body.maintenance, null, "без правила-победителя окно не названо");
+  });
+
+  test("Повтор окна: через полночь по поясу окна и перевод часов вперёд (ТЗ-21, §14.12)", async () => {
+    const env = await makeEnv();
+    const end = mwIso(Math.max(env.now, Date.parse("2026-11-20T00:00:00Z")) + 30 * 24 * MW_H);
+    // Пн–пт 22:00–02:00 по Москве (UTC+3): ночь с пятницы на субботу — в окне, с субботы на воскресенье — нет
+    await mwMake(env, { deviceGuid: MW_SMOKE, timeZone: "Europe/Moscow", startsAt: "2026-11-01T00:00:00Z", endsAt: end, recurrence: { days: [1, 2, 3, 4, 5], startTime: "22:00", endTime: "02:00" } });
+    assert.eq((await mwFire(env, MW_SMOKE, { occurredAt: "2026-11-13T22:30:00Z" })).body.created, 0, "сб 01:30 МСК — интервал пятницы");
+    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: "2026-11-14T22:30:00Z" })).body.created >= 1, "вс 01:30 МСК — вне окна");
+    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: "2026-11-12T23:00:00Z" })).body.created >= 1, "пт 02:00 МСК ровно — вне окна");
+    // Берлин, 29.03.2026: 02:00 → 03:00. Повтор «вс 02:30–04:00»: 02:30 нет — начало 03:30 CEST (01:30Z), конец 04:00 CEST (02:00Z)
+    await mwMake(env, { deviceGuid: MW_OTHER, timeZone: "Europe/Berlin", startsAt: "2026-03-01T00:00:00Z", endsAt: end, recurrence: { days: [7], startTime: "02:30", endTime: "04:00" } });
+    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: "2026-03-29T01:15:00Z" })).body.created >= 1, "03:15 CEST — до начала");
+    assert.eq((await mwFire(env, MW_OTHER, { occurredAt: "2026-03-29T01:30:00Z" })).body.created, 0, "03:30 CEST — начало");
+    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: "2026-03-29T02:00:00Z" })).body.created >= 1, "04:00 CEST — конец, вне окна");
+  });
+
+  test("Окно работ: правка будущего, идущее — только конец и описание, досрочное завершение, удаление; коды отказов (ТЗ-21)", async () => {
+    const env = await makeEnv();
+    const fut = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now + MW_H), endsAt: mwIso(env.now + 2 * MW_H) });
+    const fid = enc(fut.body.id);
+    assert.status(await env.call("PUT", `/operator/maintenance-windows/${fid}`, { deviceGuid: MW_OTHER, startsAt: mwIso(env.now + MW_H), endsAt: mwIso(env.now + 3 * MW_H), timeZone: "UTC", recurrence: null, description: "x" }), 200, null, "будущее правится целиком");
+    assert.status(await env.call("POST", `/operator/maintenance-windows/${fid}/end`, {}), 422, "FORM_FIELD_INVALID", "будущее не завершают");
+    assert.status(await env.call("DELETE", `/operator/maintenance-windows/${fid}`), 204, null, "будущее удаляется");
+    const cur = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    const cid = enc(cur.body.id);
+    const body = { deviceGuid: MW_SMOKE, startsAt: cur.body.startsAt, timeZone: "UTC", recurrence: null };
+    assert.status(await env.call("PUT", `/operator/maintenance-windows/${cid}`, Object.assign({}, body, { startsAt: mwIso(env.now - 2 * MW_H), endsAt: cur.body.endsAt, description: "x" })), 409, "MAINTENANCE_WINDOW_ACTIVE", "начало идущего");
+    assert.status(await env.call("PUT", `/operator/maintenance-windows/${cid}`, Object.assign({}, body, { endsAt: mwIso(env.now + 2 * MW_H), description: "продлили" })), 200, null, "конец и описание идущего");
+    assert.status(await env.call("DELETE", `/operator/maintenance-windows/${cid}`), 409, "MAINTENANCE_WINDOW_ACTIVE", "удалить идущее");
+    const ended = await env.call("POST", `/operator/maintenance-windows/${cid}/end`, {});
+    assert.status(ended, 200, null, "досрочно");
+    assert.eq([ended.body.status, Date.parse(ended.body.endsAt), Date.parse(ended.body.endedEarlyAt)], ["ended", env.now, env.now], "конец — сейчас");
+    assert.ok((await mwFire(env)).body.created >= 1, "после завершения — инцидент");
+    assert.status(await env.call("POST", `/operator/maintenance-windows/${cid}/end`, {}), 409, "MAINTENANCE_WINDOW_ENDED", "уже закончилось");
+    assert.status(await env.call("PUT", `/operator/maintenance-windows/${cid}`, Object.assign({}, body, { endsAt: mwIso(env.now + MW_H), description: "x" })), 409, "MAINTENANCE_WINDOW_ENDED", "править закончившееся");
+    assert.status(await mwMake(env, { deviceGuid: MW_SMOKE, sourceGroupGuid: MW_FLOOR, startsAt: mwIso(env.now), endsAt: mwIso(env.now + MW_H) }), 422, "FORM_FIELD_INVALID", "и устройство, и группа");
+    assert.status(await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now), endsAt: mwIso(env.now + MW_H), timeZone: "Mars/Base" }), 422, "FORM_FIELD_INVALID", "неизвестный пояс");
+    assert.status(await env.call("DELETE", `/operator/maintenance-windows/${UNKNOWN}`), 404, "NOT_FOUND", "нет окна");
+  });
+
+  test("Окно работ без права maintenance:edit — 403 на создание, правку, удаление и завершение; список виден (ТЗ-21, §5)", async () => {
+    const env = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "maintenance:edit") });
+    const id = enc(window.IM_FIXTURE.maintenanceWindows[1].id);
+    assert.status(await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now + MW_H), endsAt: mwIso(env.now + 2 * MW_H) }), 403, "PERMISSION_DENIED", "создать");
+    assert.status(await env.call("PUT", `/operator/maintenance-windows/${id}`, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now + MW_H), endsAt: mwIso(env.now + 2 * MW_H), timeZone: "UTC" }), 403, "PERMISSION_DENIED", "править");
+    assert.status(await env.call("DELETE", `/operator/maintenance-windows/${id}`), 403, "PERMISSION_DENIED", "удалить");
+    assert.status(await env.call("POST", `/operator/maintenance-windows/${id}/end`, {}), 403, "PERMISSION_DENIED", "завершить");
+    assert.status(await env.call("GET", "/operator/maintenance-windows"), 200, null, "список");
+  });
+
+  test("Закрытие «Плановой проверкой» со ссылкой на окно: из пересекающихся, чужое — 422; переоткрытие очищает (ТЗ-21, §2.2)", async () => {
+    const env = await makeEnv({ workflowPatch: { maintenance: { mode: "mark" }, limits: { maxActive: null } } });
+    const w = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    const far = await mwMake(env, { deviceGuid: MW_OTHER, startsAt: mwIso(env.now - MW_H), endsAt: mwIso(env.now + MW_H) });
+    const inc = (await mwFire(env)).body.incidents[0];
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взят");
+    assert.eq((await env.act(inc.guid, "close", { resultId: "drill", maintenanceWindowId: far.body.id, comment: "работы" })).status, 422, "чужое окно");
+    const ok = await env.act(inc.guid, "close", { resultId: "drill", maintenanceWindowId: w.body.id, comment: "работы" });
+    assert.status(ok, 200, null, "закрыт");
+    assert.eq(ok.body.incident.closeMaintenanceWindowId, w.body.id, "ссылка на окно");
+    const re = await env.act(inc.guid, "reopen", { comment: "ещё раз" });
+    assert.status(re, 200, null, "переоткрыт");
+    assert.eq(re.body.incident.closeMaintenanceWindowId, null, "ссылка очищена");
+  });
+
   /* ===== Ручная смена приоритета (ТЗ-13, §2.5, §4, §6.3) ===== */
 
   const LOW = LEVELS[LEVELS.length - 1];
