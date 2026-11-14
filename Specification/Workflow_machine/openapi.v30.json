@@ -4518,7 +4518,7 @@
         ],
         "operationId": "exportBackup",
         "summary": "Резервная копия настроек в файл",
-        "description": "Проект 75. Все объекты и настройки МИ заказчика по GUID — файл JSON. Ничего не меняет. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "description": "Проект 75. Все объекты и настройки МИ заказчика по GUID — файл JSON. Настройки не меняет; в журнал настроек пишется запись `export` (объект `backup`): кто сохранил, имя файла (`objectName`), а в `after` — `fileName` и `exportedAt`. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
         "parameters": [],
         "responses": {
           "200": {
@@ -9749,7 +9749,8 @@
               "archive",
               "restore",
               "reset",
-              "reset_denied"
+              "reset_denied",
+              "export"
             ]
           },
           "fromVersion": {
