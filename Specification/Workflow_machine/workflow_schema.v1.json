@@ -100,8 +100,23 @@
   },
 
   "display": {
-    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение»",
-    "lateSec": 120
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит",
+    "lateSec": 120,
+    "inboxBlock": {
+      "filter": "inbox",
+      "maxRows": 3,
+      "sort": "priority_then_deadline",
+      "hiddenWith": ["inbox", "done", "all"]
+    },
+    "freshRowSec": 5,
+    "noticeKeepHours": 12,
+    "postStatus": [
+      { "id": "connection", "labelKey": "workflow.postStatus.connection" },
+      { "id": "disk", "labelKey": "workflow.postStatus.disk", "adminOnly": true },
+      { "id": "sound_off", "labelKey": "workflow.postStatus.sound_off" },
+      { "id": "maintenance", "labelKey": "workflow.postStatus.maintenance" },
+      { "id": "only_important", "labelKey": "workflow.postStatus.only_important" }
+    ]
   },
 
   "cardNotes": {
@@ -1452,7 +1467,7 @@
   },
 
   "queueSort": {
-    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
+    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options. priority_then_deadline — порядок блока «Мне на принятие» (display.inboxBlock.sort, §7): приоритет, внутри — как reaction_deadline; в options его нет — оператор и администратор его как порядок очереди не выбирают.",
     "default": "priority_then_oldest",
     "options": ["priority_then_oldest", "priority_then_newest", "oldest_first", "reaction_deadline"],
     "keys": {
@@ -1460,7 +1475,8 @@
       "priority_then_oldest": ["-incident.priority", "incident.occurredAt"],
       "priority_then_newest": ["-incident.priority", "-incident.occurredAt"],
       "oldest_first": ["incident.occurredAt"],
-      "reaction_deadline": ["timerRuns(incident, 'reaction') ? 0 : 1", "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"]
+      "reaction_deadline": ["timerRuns(incident, 'reaction') ? 0 : 1", "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"],
+      "priority_then_deadline": ["-incident.priority", "timerRuns(incident, 'reaction') ? 0 : 1", "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"]
     },
     "operatorMayChange": true
   },

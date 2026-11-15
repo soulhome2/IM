@@ -925,6 +925,8 @@
         state: ev.state,
         stateCategory: STATES[ev.state].category,
         ownership: engine.ownership(ev),
+        // Фильтры очереди, которые инцидент проходит для читающего (§7, план 87в): «Мои» и «Чужие» зависят от него
+        filters: engine.queueFilters(ev),
         owner: actorRef(ev.owner),
         assignmentGroup: actorRef(ev.assignmentGroup),
         // Адресат — определение addressee машины: владелец, а пока группа не приняла — группа (§8.1)

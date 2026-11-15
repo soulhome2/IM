@@ -27,7 +27,6 @@ window.IM_DICT_HTML = {
     "Атриум": "Atrium",
     "Видео и карта": "Video and map",
     "Видеомонитор": "Video monitor",
-    "Все": "All",
     "Входная группа": "Entrance area",
     "Выдержка из документа СБ-04/2025 «Действия оператора при тревожных событиях».": "Extract from document SB-04/2025 “Operator actions during alarm events”.",
     "Высокий — до": "High — up to",

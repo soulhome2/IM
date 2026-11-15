@@ -911,5 +911,61 @@
   "find": "\"volumeFloor\": 30",
   "replace": "\"volumeFloor\": 101",
   "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
+  "name": "layout-inbox-filter-uncounted",
+  "what": "раскладка: в блоке «Мне на принятие» фильтр «Завершённые» без счётчика — числа у блока нет, завершённые лезут наверх (§7)",
+  "find": "\"filter\": \"inbox\",\n      \"maxRows\": 3",
+  "replace": "\"filter\": \"done\",\n      \"maxRows\": 3",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-inbox-filter-unknown",
+  "what": "раскладка: в блоке «Мне на принятие» фильтр, которого нет в queueFilters — блок молча пуст (§7)",
+  "find": "\"filter\": \"inbox\",\n      \"maxRows\": 3",
+  "replace": "\"filter\": \"inbox_mine\",\n      \"maxRows\": 3",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-inbox-sort-unknown",
+  "what": "раскладка: порядок блока «Мне на принятие» не из queueSort.keys — сервер и клиент сортируют кто как (§7)",
+  "find": "\"sort\": \"priority_then_deadline\"",
+  "replace": "\"sort\": \"priority_deadline\"",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-inbox-hidden-unknown",
+  "what": "раскладка: в hiddenWith блока фильтр, которого нет в queueFilters — при «Все, с завершёнными» блок остаётся (§7)",
+  "find": "\"hiddenWith\": [\"inbox\", \"done\", \"all\"]",
+  "replace": "\"hiddenWith\": [\"inbox\", \"done\", \"closed\"]",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-inbox-max-rows-zero",
+  "what": "раскладка: в блоке «Мне на принятие» 0 строк — то, что ждёт моего «Принять», не видно (§7)",
+  "find": "\"maxRows\": 3",
+  "replace": "\"maxRows\": 0",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-fresh-row-zero",
+  "what": "раскладка: подсветка новой строки 0 с — новую строку не заметить (§22.3)",
+  "find": "\"freshRowSec\": 5",
+  "replace": "\"freshRowSec\": 0",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-notice-keep-zero",
+  "what": "раскладка: журнал колокольчика хранится 0 часов — после перезагрузки пусто (§22.5)",
+  "find": "\"noticeKeepHours\": 12",
+  "replace": "\"noticeKeepHours\": 0",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "layout-post-status-duplicate",
+  "what": "раскладка: пункт строки состояния поста connection дважды — «и ещё N» считает его два раза (§22.4)",
+  "find": "{ \"id\": \"only_important\", \"labelKey\": \"workflow.postStatus.only_important\" }",
+  "replace": "{ \"id\": \"connection\", \"labelKey\": \"workflow.postStatus.only_important\" }",
+  "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
  }
 ]

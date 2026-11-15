@@ -2368,6 +2368,44 @@ def check_sound(w, err):
         err.append(f"звук: вкладка «Звук» — сразу после «Работы оператора», «Хранение» последней; сейчас {tabs} (§20)")
 
 
+def check_display(w, err):
+    """Раскладка экрана оператора (§7, §22): блок «Мне на принятие» — фильтр из queueFilters со счётчиком (без
+    counted: false), порядок — из queueSort.keys, hiddenWith — id фильтров; maxRows, freshRowSec, noticeKeepHours —
+    целые от 1; у пунктов строки состояния поста postStatus — id без повторов"""
+    d = w.get("display") or {}
+    filters = {f["id"]: f for f in w.get("queueFilters", [])}
+    block = d.get("inboxBlock")
+    if not isinstance(block, dict):
+        err.append("раскладка: нет display.inboxBlock (§7)")
+    else:
+        f = block.get("filter")
+        if f not in filters:
+            err.append(f"раскладка: display.inboxBlock.filter = {f!r} — не из queueFilters {sorted(filters)} (§7)")
+        elif filters[f].get("counted") is False:
+            err.append(f"раскладка: display.inboxBlock.filter = {f!r} — фильтр без счётчика (counted: false), блок без числа (§7)")
+        keys = {k for k in (w.get("queueSort", {}).get("keys") or {}) if not k.startswith("$")}
+        if block.get("sort") not in keys:
+            err.append(f"раскладка: display.inboxBlock.sort = {block.get('sort')!r} — не из queueSort.keys {sorted(keys)} (§7)")
+        hidden = block.get("hiddenWith")
+        if not isinstance(hidden, list):
+            err.append("раскладка: display.inboxBlock.hiddenWith — не список id фильтров (§7)")
+        else:
+            for h in hidden:
+                if h not in filters:
+                    err.append(f"раскладка: display.inboxBlock.hiddenWith — {h!r} не из queueFilters (§7)")
+        if not is_int(block.get("maxRows"), 1, 10 ** 9):
+            err.append(f"раскладка: display.inboxBlock.maxRows = {block.get('maxRows')!r} — целое от 1 (§7)")
+    for k, rule in (("freshRowSec", "§22.3"), ("noticeKeepHours", "§22.5")):
+        if not is_int(d.get(k), 1, 10 ** 9):
+            err.append(f"раскладка: display.{k} = {d.get(k)!r} — целое от 1 ({rule})")
+    status = d.get("postStatus")
+    if not isinstance(status, list) or not status:
+        err.append("раскладка: нет display.postStatus — пунктов строки состояния поста (§22.4)")
+    else:
+        for dup in duplicates([s.get("id") for s in status]):
+            err.append(f"раскладка: в display.postStatus пункт {dup!r} повторяется (§22.4)")
+
+
 def check_admin_groups(tab, o, err):
     """Разделы объединённой вкладки (план 77): у каждой настройки вкладки — раздел из groups, настройки раздела идут
     подряд и в порядке разделов; раздел без настроек — с запросом (source) из контракта; без groups у настроек
@@ -2566,6 +2604,7 @@ def collect():
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
     check_sound(w, err)
+    check_display(w, err)
     check_admin_settings(w, o, err)
     check_fixture(with_post_settings(w), err)
     check_rules(fixture_with_rows(), err)
@@ -2713,6 +2752,14 @@ MUTATIONS.append(machine_json_mutation("sound-pattern-unknown", "не из ка�
 MUTATIONS.append(machine_json_mutation("sound-level-key-decimal", "ключ «75.0»"))
 MUTATIONS.append(machine_json_mutation("sound-alert-until-taken", "sound.alert.repeat"))
 MUTATIONS.append(machine_json_mutation("sound-volume-floor-over", "volumeFloor = 101"))
+MUTATIONS.append(machine_json_mutation("layout-inbox-filter-uncounted", "без счётчика"))
+MUTATIONS.append(machine_json_mutation("layout-inbox-filter-unknown", "inboxBlock.filter = 'inbox_mine'"))
+MUTATIONS.append(machine_json_mutation("layout-inbox-sort-unknown", "inboxBlock.sort"))
+MUTATIONS.append(machine_json_mutation("layout-inbox-hidden-unknown", "hiddenWith — 'closed'"))
+MUTATIONS.append(machine_json_mutation("layout-inbox-max-rows-zero", "maxRows = 0"))
+MUTATIONS.append(machine_json_mutation("layout-fresh-row-zero", "freshRowSec = 0"))
+MUTATIONS.append(machine_json_mutation("layout-notice-keep-zero", "noticeKeepHours = 0"))
+MUTATIONS.append(machine_json_mutation("layout-post-status-duplicate", "'connection' повторяется"))
 
 
 def self_test():

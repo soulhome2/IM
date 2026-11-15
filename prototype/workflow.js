@@ -158,8 +158,43 @@ window.IM_WORKFLOW = {
     ]
   },
   "display": {
-    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение»",
-    "lateSec": 120
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит",
+    "lateSec": 120,
+    "inboxBlock": {
+      "filter": "inbox",
+      "maxRows": 3,
+      "sort": "priority_then_deadline",
+      "hiddenWith": [
+        "inbox",
+        "done",
+        "all"
+      ]
+    },
+    "freshRowSec": 5,
+    "noticeKeepHours": 12,
+    "postStatus": [
+      {
+        "id": "connection",
+        "labelKey": "workflow.postStatus.connection"
+      },
+      {
+        "id": "disk",
+        "labelKey": "workflow.postStatus.disk",
+        "adminOnly": true
+      },
+      {
+        "id": "sound_off",
+        "labelKey": "workflow.postStatus.sound_off"
+      },
+      {
+        "id": "maintenance",
+        "labelKey": "workflow.postStatus.maintenance"
+      },
+      {
+        "id": "only_important",
+        "labelKey": "workflow.postStatus.only_important"
+      }
+    ]
   },
   "cardNotes": {
     "$comment": "§6.3, ARCH-08 в8. Пояснение в карточке — первое правило, чьё выражение expr истинно (CEL.md, «Правила интерфейса»); ни одного — пояснения нет. actions — доступные смотрящему действия карточки. Подстановки: who — адресат, owner — владелец, level — уровень эскалации, why — результат закрытия, holdReason — причина удержания, primaryNumber — номер основного. hiddenTextKey — текст того же правила, когда основной смотрящему не виден: номера в нём нет, он есть у каждого правила с {primaryNumber} (§5). style — вид плашки: ok, inbox или обычный. Перерыв и выход — раньше правил, которые зовут действовать: на перерыве и после выхода доступен только просмотр (§10.1, BUG-97)",
@@ -4279,7 +4314,7 @@ window.IM_WORKFLOW = {
     ]
   },
   "queueSort": {
-    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options.",
+    "$comment": "§7, RULE-62. Порядок очереди — политика поста, задаёт администратор схемы. priority_then_oldest — приоритет (по числу, большее выше, §2.5), внутри — старые выше; priority_then_newest — приоритет, внутри — новые выше; oldest_first — по времени появления, старые выше; reaction_deadline — у кого меньше осталось до нарушения норматива реакции, тот выше, кто без идущего норматива реакции — после них, по времени появления, старые выше. При равенстве — по номеру инцидента. operatorMayChange — может ли оператор выбрать другой порядок из options. priority_then_deadline — порядок блока «Мне на принятие» (display.inboxBlock.sort, §7): приоритет, внутри — как reaction_deadline; в options его нет — оператор и администратор его как порядок очереди не выбирают.",
     "default": "priority_then_oldest",
     "options": [
       "priority_then_oldest",
@@ -4301,6 +4336,11 @@ window.IM_WORKFLOW = {
         "incident.occurredAt"
       ],
       "reaction_deadline": [
+        "timerRuns(incident, 'reaction') ? 0 : 1",
+        "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"
+      ],
+      "priority_then_deadline": [
+        "-incident.priority",
         "timerRuns(incident, 'reaction') ? 0 : 1",
         "timerRuns(incident, 'reaction') ? incident.timers['reaction'].due : incident.occurredAt"
       ]

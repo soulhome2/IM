@@ -165,6 +165,94 @@
     return res.status === 200 ? scenarioInvariants(res.body) : [];
   }
 
+  // Шапка очереди (§7, план 87в): числа на кнопках состояний и приоритетов, список без блока «Мне на принятие» и
+  // filters строки — те же, что сами списки. Сужения — случайный набор: узел дерева, типы события и устройства,
+  // поиск, приоритеты. Числа сверяются с total списка при тех же параметрах
+  const COUNTED = W.queueFilters.filter((q) => q.counted !== false).map((q) => q.id);
+  const LEVELS = FX.priorities.map((p) => p.value);
+  const NODES = [];
+  const indexNodes = (groups) => groups.forEach((g) => (NODES.push(g.id), indexNodes(g.groups || [])));
+  indexNodes(FX.sourceGroups);
+  const EVENT_TYPES = [...new Set(FX.incidents.map((i) => i.eventType.guid))];
+  const DEVICE_TYPES = FX.deviceTypes.map((d) => d.id);
+  const SEARCHES = FX.incidents.map((i) => i.number).concat(FX.devices.map((d) => d.name.split(" ")[0]));
+  const some = (r, list) => list.filter(() => r() < 0.35);
+  function narrowing(r) {
+    const n = {};
+    if (r() < 0.4) n.sourceGroupGuid = pick(r, NODES);
+    if (r() < 0.3) n.eventTypeGuid = some(r, EVENT_TYPES).concat(pick(r, EVENT_TYPES)).join(",");
+    if (r() < 0.3) n.deviceTypeId = some(r, DEVICE_TYPES).concat(pick(r, DEVICE_TYPES)).join(",");
+    if (r() < 0.25) n.search = pick(r, SEARCHES);
+    const prio = some(r, LEVELS);
+    if (prio.length) n.priority = prio.join(",");
+    return n;
+  }
+  const qs = (n) => Object.entries(n).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join("");
+  const without = (n, key) => Object.fromEntries(Object.entries(n).filter(([k]) => k !== key));
+  async function layoutInvariants(env, r) {
+    const bad = [];
+    const n = narrowing(r);
+    const where = `сужения ${JSON.stringify(n)}`;
+    const list = async (query) => {
+      const res = await env.call("GET", `/operator/incidents?pageSize=1000${query}`);
+      if (res.status !== 200) bad.push(`список ${query}: ${res.status} (${where})`);
+      return res.status === 200 ? res.body : { total: 0, items: [] };
+    };
+    // Числа состояний: counters[f] = total списка с filter=f и теми же сужениями, приоритеты в том числе
+    const cRes = await env.call("GET", `/operator/incidents/counters?${qs(n).slice(1)}`);
+    if (cRes.status !== 200) bad.push(`счётчики: ${cRes.status} (${where})`);
+    const lists = {};
+    for (const f of W.queueFilters.map((q) => q.id)) lists[f] = await list(`&filter=${f}${qs(n)}`);
+    if (cRes.status === 200) {
+      COUNTED.forEach((f) => {
+        if (cRes.body[f] !== lists[f].total) bad.push(`счётчик «${f}» ${cRes.body[f]}, а в списке ${lists[f].total} (${where})`);
+      });
+    }
+    // Числа приоритетов: priorities[v] = total списка с filter, теми же сужениями без приоритетов и priority=v; нет ключа — 0
+    const f = pick(r, COUNTED);
+    const base = without(n, "priority");
+    const pRes = await env.call("GET", `/operator/incidents/counters/priorities?filter=${f}${qs(base)}`);
+    if (pRes.status !== 200) bad.push(`счётчики приоритетов «${f}»: ${pRes.status} (${where})`);
+    else {
+      Object.keys(pRes.body).filter((k) => !LEVELS.includes(Number(k))).forEach((k) => bad.push(`счётчики приоритетов «${f}»: ключ «${k}» — не уровень справочника`));
+      for (const v of LEVELS) {
+        const total = (await list(`&filter=${f}${qs(base)}&priority=${v}`)).total;
+        if ((pRes.body[String(v)] || 0) !== total) bad.push(`приоритет ${v} в «${f}»: число ${pRes.body[String(v)] || 0}, а в списке ${total} (${where})`);
+      }
+    }
+    // Фильтр без счётчика у счётчиков приоритетов — 400
+    const uncounted = W.queueFilters.find((q) => q.counted === false);
+    if (uncounted) {
+      const res = await env.call("GET", `/operator/incidents/counters/priorities?filter=${uncounted.id}`);
+      if (res.status !== 400) bad.push(`счётчики приоритетов фильтра без счётчика «${uncounted.id}»: ${res.status}, а не 400`);
+    }
+    // Список без блока: exceptFilter=inbox — это «Открытые» без строк «Мне на принятие»
+    const block = W.display.inboxBlock.filter;
+    const inBlock = new Set(lists[block].items.map((e) => e.guid));
+    const except = await list(`&filter=open&exceptFilter=${block}${qs(n)}`);
+    except.items.filter((e) => inBlock.has(e.guid)).forEach((e) => bad.push(`${e.guid}: в списке с exceptFilter=${block}, а он в блоке (${where})`));
+    const expected = lists.open.items.filter((e) => !inBlock.has(e.guid)).map((e) => e.guid);
+    if (except.total !== expected.length) bad.push(`exceptFilter=${block}: ${except.total} строк, а «Открытые» без блока — ${expected.length} (${where})`);
+    const unknown = await env.call("GET", `/operator/incidents?filter=open&exceptFilter=no_such_filter`);
+    if (unknown.status !== 400) bad.push(`неизвестный exceptFilter: ${unknown.status}, а не 400`);
+    // filters строки — её членство в списках фильтров, для читающего
+    const member = (guid) => W.queueFilters.map((q) => q.id).filter((id) => lists[id].items.some((e) => e.guid === guid));
+    lists.all.items.forEach((e) => {
+      const want = member(e.guid).join(",");
+      const got = Array.isArray(e.filters) ? e.filters.join(",") : String(e.filters);
+      if (got !== want) bad.push(`${e.guid} (${e.state}, ${e.ownership}): filters [${got}], а в списках [${want}]`);
+    });
+    // «Все в фильтре» (§11.1) — то, что видно в списке: с приоритетами и без строк блока
+    const body = Object.assign({ mode: "all_in_filter", filter: "open", exceptFilter: block, candidateTransitionIds: [] }, without(n, "priority"));
+    if (n.priority) body.priority = n.priority.split(",").map(Number);
+    const sel = await env.call("POST", "/operator/incidents/selection", body);
+    if (sel.status !== 200) bad.push(`выборка «Все в фильтре»: ${sel.status} (${where})`);
+    else if (!sel.body.truncated && [...sel.body.incidentGuids].sort().join() !== [...expected].sort().join()) {
+      bad.push(`выборка «Все в фильтре»: ${sel.body.incidentGuids.length}, а в списке ${expected.length} (${where})`);
+    }
+    return bad;
+  }
+
   async function walk(seed) {
     const r = rng(seed);
     // Лимит активных: в машине — без ограничения; каждое второе зерно — с лимитом 1, чтобы проверялся и он
@@ -266,6 +354,7 @@
         breachCount.set(inc.guid, inc.breaches.length);
       });
       if (step % 20 === 0) {
+        bad.push(...(await layoutInvariants(env, rng(seed * 1000 + step)))); // своё зерно: путь прогона не меняется
         const counters = await env.ok("GET", "/operator/incidents/counters");
         for (const f of W.queueFilters.filter((q) => q.counted !== false)) {
           const total = (await env.ok("GET", `/operator/incidents?filter=${f.id}&pageSize=1000`)).total;
@@ -380,6 +469,14 @@
     const env = await makeEnv();
     const bad = invariants(await env.all(), await env.session(), W.limits.maxActive);
     for (const inc of FX.incidents) bad.push(...(await scenarioOf(env, inc.guid)));
+    assert.ok(!bad.length, bad.slice(0, 4).join("; "));
+  });
+
+  test("Шапка очереди на начальных демо-данных: числа состояний и приоритетов, список без блока, filters строки (§7)", async () => {
+    const env = await makeEnv();
+    const r = rng(87);
+    const bad = [];
+    for (let i = 0; i < 12 && !bad.length; i++) bad.push(...(await layoutInvariants(env, r)));
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });
 
