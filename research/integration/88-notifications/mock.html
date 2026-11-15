@@ -1,0 +1,79 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Оповещения — макет</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.35 Inter,Segoe UI,Arial,sans-serif;color:#1d1f24;background:#fff}
+.top{display:flex;align-items:center;gap:16px;height:56px;padding:0 16px;border-bottom:1px solid #e3e5ea}
+.logo{display:flex;gap:10px;align-items:center;min-width:250px}.logo b{font-size:16px}.logo small{display:block;color:#777;font-size:11px}
+.hex{width:28px;height:28px;border:2px solid #555;clip-path:polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0 50%)}
+.menu{background:#1f6fe5;color:#fff;border-radius:8px;width:36px;height:36px;display:grid;place-items:center}
+.z1{flex:1;display:flex;justify-content:center;min-width:0}
+.state{display:flex;align-items:center;gap:10px;max-width:760px;width:100%;border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer}
+.state .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info{background:#e8f1fd;border:1px solid #b6d1f7;color:#0f4fa8}.warn{background:#fff3e0;border:1px solid #f3c58a;color:#8a4b00}.crit{background:#fde8e8;border:1px solid #f1a5a5;color:#a11}
+.arr{font-size:16px;padding:0 4px;cursor:pointer}.dots{display:flex;gap:4px}.dots i{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.3}.dots i.on{opacity:1}.all{font-size:12px;text-decoration:underline}.z2arr{border:1px solid #c9ccd3;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;background:#fff;flex:none}.fade{position:relative}.pager{display:flex;gap:4px;align-items:center;color:inherit;font-variant-numeric:tabular-nums}.pager span{padding:0 4px;border-radius:4px}
+.right{display:flex;gap:14px;align-items:center;font-size:13px}.right u{color:#1d1f24}.busy{background:#e6edf8;border-radius:10px;padding:2px 8px;font-size:12px}
+.acc{border-bottom:1px solid #e3e5ea;background:#fafbfc;padding:6px 16px 10px 282px}
+.acc .row{display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:6px;margin-top:4px;font-size:13px}
+.acc .row a{margin-left:auto;color:#1f6fe5;text-decoration:none}
+.main{display:flex}.side{width:300px;border-right:1px solid #e3e5ea;padding:12px;color:#333}
+.side .h{font-weight:600;margin-bottom:12px}.g{padding:8px 10px;border-radius:6px;display:flex;justify-content:space-between}.g.sel{background:#e8f0fb}
+.cnt{background:#d32f2f;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;font-weight:600}
+.tool{font-size:16px}
+.q{flex:1;min-width:0}.qh{display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid #e3e5ea}
+.qh .title{font-weight:600;white-space:nowrap}.z2{flex:1;display:flex;gap:8px;min-width:0;align-items:center}.strip{flex:1;display:flex;gap:8px;min-width:0;overflow:hidden;align-items:center;-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent)}.chip{flex:none}
+.chip{display:flex;align-items:center;gap:8px;border-radius:16px;padding:4px 6px 4px 10px;font-size:12.5px;white-space:nowrap;border:1px solid}
+.chip.a{background:#e8f1fd;border-color:#9fc2f3;color:#0f4fa8}.chip.e{background:#fde8e8;border-color:#f1a5a5;color:#a11}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor}.chip button{font:inherit;font-size:11.5px;border-radius:12px;border:1px solid currentColor;background:#fff;color:inherit;padding:1px 8px}
+.chip.new{box-shadow:0 0 0 3px rgba(31,111,229,.25)}.more{border:1px solid #c9ccd3;border-radius:16px;padding:4px 10px;font-size:12.5px;background:#fff}
+.qt{display:flex;gap:16px;align-items:center;color:#333;font-size:13px}.bell{position:relative;font-size:16px}.bell i{position:absolute;top:-6px;right:-10px;font-style:normal;background:#d32f2f;color:#fff;border-radius:9px;font-size:10px;padding:0 5px}
+.acc2{border-bottom:1px solid #e3e5ea;background:#fafbfc;padding:6px 16px 10px}
+.acc2 .row{display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:6px;margin-top:4px;font-size:13px;background:#fff;border:1px solid #e3e5ea}
+.acc2 .row .sp{flex:1}.btn{border:1px solid #c9ccd3;border-radius:6px;background:#fff;padding:3px 10px;font-size:12px}.btn.p{background:#1f6fe5;color:#fff;border-color:#1f6fe5}
+.body{display:flex}.list{flex:1;padding:12px 16px;min-width:0}
+.filters{border:1px solid #c9ccd3;border-radius:6px;height:36px;margin-bottom:10px;color:#888;padding:8px 12px}
+.card{display:flex;align-items:center;gap:14px;border:1px solid #d6d9df;border-radius:8px;padding:14px 16px;margin-bottom:10px}
+.card .bar{width:3px;align-self:stretch;background:#d32f2f;border-radius:2px}.card .n{flex:1}.card b{display:block}.card small{color:#666}
+.card .acts{display:flex;flex-direction:column;gap:6px;width:170px}.card .acts span{border-radius:5px;text-align:center;padding:5px;font-size:12.5px}
+.blue{background:#1f6fe5;color:#fff}.org{background:#d97a00;color:#fff}.out{border:1px solid #c9ccd3}
+.panel{width:360px;border-left:1px solid #e3e5ea;padding:12px 14px;background:#fff}
+.panel h4{margin:0 0 10px;display:flex;justify-content:space-between}.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs span{border:1px solid #c9ccd3;border-radius:14px;padding:2px 10px;font-size:12px}.tabs .on{background:#1d1f24;color:#fff;border-color:#1d1f24}
+.it{padding:9px 0;border-bottom:1px solid #eef0f3;font-size:13px}.it small{color:#777;display:block}.it.un{font-weight:600}.it.un::before{content:"● ";color:#1f6fe5}
+.toast{position:fixed;left:16px;bottom:16px;background:#1d1f24;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;display:flex;gap:16px}
+.cap{position:fixed;right:16px;bottom:16px;background:#fffbe6;border:1px solid #e6d27a;border-radius:6px;padding:6px 10px;font-size:12px;max-width:520px}
+.narrow .side,.narrow .logo small{display:none}
+</style><style>
+.sum{display:flex;gap:6px;align-items:center;flex:1}.pill{border:1px solid #c9ccd3;border-radius:14px;padding:3px 10px;font-size:12.5px;background:#fff;white-space:nowrap}.pill b{margin-left:4px}
+.pill.l1{border-color:#f1a5a5;color:#a11}.pill.l2{border-color:#f3c58a;color:#8a4b00}.pill.me{border-color:#9fc2f3;color:#0f4fa8}.pill.on{background:#1d1f24;color:#fff;border-color:#1d1f24}
+.pinned{border:1px solid #9fc2f3;background:#f3f8ff;border-radius:8px;padding:6px 10px;margin-bottom:12px}.pinned .h{font-size:12px;color:#0f4fa8;font-weight:600;margin:2px 0 6px}
+.pr{display:flex;gap:10px;align-items:center;padding:6px 4px;border-top:1px solid #dbe7fb;font-size:13px}.pr:first-of-type{border-top:0}.pr .sp{flex:1}.tag{font-size:11px;border-radius:10px;padding:1px 7px;border:1px solid}
+.flood{display:flex;gap:12px;align-items:center;background:#fff3e0;border:1px solid #f3c58a;color:#8a4b00;border-radius:8px;padding:7px 12px;margin-bottom:10px;font-size:13px}.flood .sp{flex:1}
+.grp{font-size:11px;background:#1d1f24;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px}
+.shelf{border:1px dashed #c9ccd3;border-radius:8px;padding:8px 12px;color:#555;font-size:13px;display:flex;gap:10px;align-items:center}.shelf .sp{flex:1}
+.dlg{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:#fff;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:18px 20px;width:440px;font-size:13px}.dlg h3{margin:0 0 10px;font-size:16px}.dlg .r{display:flex;gap:8px;margin:8px 0}.shade{position:fixed;inset:0;background:rgba(0,0,0,.25)}
+</style></head><body>
+<div id="app"></div>
+<script>
+const v=new URLSearchParams(location.search).get('v')||'1';
+const Z={none:'',
+one:'<div class="state info"><span>🛠</span><span class="t">Идут плановые работы: <b>Все камеры</b> — «Ремонт системы», до 13:30. Тревоги с этих устройств не создаются.</span></div>',
+more:'<div class="state crit"><span>⚠</span><span class="t"><b>Нет связи с агентом</b> «Склад-2»: события с 12 устройств не приходят 4 мин</span><span class="all">и ещё 2</span></div>'};
+function topBar(z){return '<div class="top"><div class="logo"><div class="hex"></div><div><b>Axxon Incident Manager</b><small>AxxonSoft / ITV</small></div><div class="menu">≡</div></div><div class="z1">'+z+'</div><div class="right">?&nbsp;<u>Конфигуратор</u><div><b>Администратор</b><br><small>cloud-admin</small></div><span class="busy">Занят</span><span>14:11</span></div></div>'}
+function sum(on,flood){const n=flood?{a:'186',l1:'3',l2:'9',l3:'174',me:'3'}:{a:'14',l1:'2',l2:'5',l3:'7',me:'3'};const c=k=>on===k?' on':'';
+return '<div class="sum"><span class="pill'+c('a')+'">Все<b>'+n.a+'</b></span><span class="pill l1'+c('l1')+'">Ур. 1<b>'+n.l1+'</b></span><span class="pill l2'+c('l2')+'">Ур. 2<b>'+n.l2+'</b></span><span class="pill'+c('l3')+'">Ур. 3<b>'+n.l3+'</b></span><span class="pill me'+c('me')+'">Мне<b>'+n.me+'</b></span></div>'}
+function qh(x,bell){return '<div class="qh"><span class="title">Очередь</span>'+x+'<div class="qt"><span>▦ Выделить ▾</span><span style="color:#aaa">Снять</span><span class="bell">🔔'+(bell?'<i>'+bell+'</i>':'')+'</span></div></div>'}
+const pinned='<div class="pinned"><div class="h">Мои задачи · 3</div><div class="pr"><span class="tag" style="color:#a11;border-color:#f1a5a5">Эскалация на вас</span><span class="sp"><b>INC-2200</b> · Тревога · ур. 1 · норматив нарушен</span><span class="btn p">Открыть</span></div><div class="pr"><span class="tag" style="color:#0f4fa8;border-color:#9fc2f3">Вам на принятие</span><span class="sp"><b>INC-2201</b> · Тревога · ур. 2 · от Иванова</span><span class="btn p">Принять</span><span class="btn">Отклонить</span></div><div class="pr"><span class="tag" style="color:#0f4fa8;border-color:#9fc2f3">Просьба о передаче</span><span class="sp"><b>INC-2195</b> · Петров просит взять</span><span class="btn p">Принять</span><span class="btn">Отклонить</span></div></div>';
+function card(t,id,lvl,act,g){return '<div class="card"><div class="bar" style="background:'+(lvl==1?'#d32f2f':lvl==2?'#d97a00':'#9aa0a6')+'"></div><div class="n"><b>'+t+(g?'<span class="grp">×'+g+'</span>':'')+'</b><small>'+id+' · ур. '+lvl+' · Склад-2, Ворота погрузки А</small></div><div class="acts"><span class="blue">'+act+'</span><span class="org">Передать</span><span class="out">Закрыть без обработки</span></div></div>'}
+const side='<div class="side"><div class="h">Группы</div><div class="g sel">Все инциденты <span class="cnt">14</span></div><div class="g">Все камеры <span><span class="tool">🛠</span> <span class="cnt">9</span></span></div><div class="g">&nbsp;&nbsp;В ремонте <span><span class="tool">🛠</span> <span class="cnt">2</span></span></div><div class="g">Склад-2 <span style="color:#a11">⚠ <span class="cnt">5</span></span></div></div>';
+const panel='<div class="panel"><h4>Оповещения <span style="font-weight:400;color:#1f6fe5;font-size:12px">Отметить всё прочитанным</span></h4><div class="tabs"><span class="on">Все</span><span>Нужно действие</span><span>Состояние поста</span></div><div class="it un">Нет связи с агентом «Склад-2»<small>14:07 · идёт</small></div><div class="it un">Мало места на диске<small>13:50 · хватит на ~9 дней</small></div><div class="it">Плановые работы: Все камеры<small>12:56 · до 13:30</small></div><div class="it un">Эскалация на вас: INC-2200<small>14:09</small></div><div class="it">INC-2187 взял Петров<small>12:40 · была просьба вам</small></div></div>';
+const caps={'1':'1. Обычно: шапка пустая; в шапке очереди — сводка по уровням, она же фильтр','2':'2. Состояние поста — одна строка в шапке; в дереве значки 🛠 и ⚠','3':'3. Несколько состояний — видно самое серьёзное и «и ещё 2», без карусели; щелчок — колокольчик','4':'4. Свои задачи закреплены сверху очереди, отдельным блоком; в очереди они не повторяются','5':'5. Щелчок по «Ур. 1» — очередь отфильтрована; раскладка та же','6':'6. Лавина: одинаковые срабатывания — одна строка «×40»; режим лавины — ур. 3 свёрнут в счётчик','7':'7. Шумный датчик можно отключить на время — с причиной и записью в журнал','8':'8. Колокольчик — журнал оповещений боковой панелью; итог действия — короткое сообщение внизу'};
+let z='none',x=sum('a'),body='',p='',bell=0,toast='',dlg='';
+const normal=card('Пожарная тревога','INC-2202',1,'Продолжить')+card('Тревога','INC-2199',2,'Принять')+card('Тревога','INC-2190',3,'Принять');
+body=normal;
+if(v==='2'){z='one'}
+if(v==='3'){z='more';bell=2}
+if(v==='4'){z='one';body=pinned+normal;bell=3}
+if(v==='5'){z='one';x=sum('l1');body=pinned.replace('Мои задачи · 3','Мои задачи · 1 (ур. 1)').replace(/<div class="pr"><span class="tag" style="color:#0f4fa8[\s\S]*?<\/div>/g,'')+card('Пожарная тревога','INC-2202',1,'Продолжить')+card('Тревога','INC-2205',1,'Принять');bell=3}
+if(v==='6'){z='more';x=sum('a',1);body='<div class="flood"><b>Режим лавины</b><span class="sp">За 5 мин 174 тревоги ур. 3 — свёрнуты, видны ур. 1–2. Новые ур. 3 не звучат.</span><span class="btn">Показать ур. 3</span><span class="btn">Выйти из режима</span></div>'+pinned+card('Пожарная тревога','INC-2202',1,'Продолжить')+card('Тревога: движение','INC-2240',2,'Принять',40)+'<div class="shelf">Ур. 3: <b>174</b> в 6 группах<span class="sp"></span><span class="btn">Развернуть</span></div>';bell=5}
+if(v==='7'){z='more';x=sum('a',1);body='<div class="shade"></div>'+card('Тревога: движение','INC-2240',2,'Принять',40);dlg='<div class="dlg"><h3>Временно отключить датчик</h3><div>Ворота погрузки А — датчик движения 3<br><span style="color:#777">40 срабатываний за 5 мин</span></div><div class="r">На: <span class="pill on">30 мин</span><span class="pill">1 ч</span><span class="pill">4 ч</span><span class="pill">до конца смены</span></div><div class="filters" style="height:56px">Причина (обязательно): ветер качает ворота</div><div style="color:#777">Тревоги датчика на это время не создаются; в шапке — «Отключено датчиков: 1»; запись в журнал; включится сам.</div><div class="r" style="justify-content:flex-end"><span class="btn">Отмена</span><span class="btn p">Отключить</span></div></div>';bell=5}
+if(v==='8'){z='more';body=normal;p=panel;bell=3;toast='<div class="toast">✓ INC-2202 передан Петрову <u>Отменить</u></div>'}
+document.getElementById('app').innerHTML=topBar(Z[z])+'<div class="main">'+side+'<div class="q">'+qh(x,bell)+'<div class="body"><div class="list"><div class="filters">Поиск по площадке, типу, ID…</div>'+body+'</div>'+p+'</div></div></div>'+toast+dlg+'<div class="cap">'+caps[v]+'</div>';
+</script></body></html>
