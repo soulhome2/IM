@@ -211,17 +211,27 @@
 
   test("Повтор окна: через полночь по поясу окна и перевод часов вперёд (ТЗ-21, §14.12)", async () => {
     const env = await makeEnv();
-    const end = "2027-06-01T00:00:00Z";
+    // Даты — от текущего времени стенда, чтобы тест не устарел: ближайшая пятница не раньше чем через двое суток
+    // и ближайшее будущее последнее воскресенье марта (в Европе часы переводят вперёд в 01:00Z)
+    const DAY = 24 * MW_H;
+    const day0 = (ms) => Math.floor(ms / DAY) * DAY;
+    let fri = day0(env.now + 2 * DAY);
+    while (new Date(fri).getUTCDay() !== 5) fri += DAY;
+    const lastMarchSunday = (y) => { let d = Date.UTC(y, 2, 31); while (new Date(d).getUTCDay() !== 0) d -= DAY; return d; };
+    let dst = lastMarchSunday(new Date(env.now).getUTCFullYear());
+    if (dst < env.now + 2 * DAY) dst = lastMarchSunday(new Date(env.now).getUTCFullYear() + 1);
+    const at = (base, h, m) => mwIso(base + h * MW_H + m * 60000);
+    const end = mwIso(Math.max(fri, dst) + 7 * DAY);
     // Пн–пт 22:00–02:00 по Москве (UTC+3): ночь с пятницы на субботу — в окне, с субботы на воскресенье — нет
     await mwMake(env, { deviceGuid: MW_SMOKE, timeZone: "Europe/Moscow", startsAt: mwIso(env.now), endsAt: end, recurrence: { days: [1, 2, 3, 4, 5], startTime: "22:00", endTime: "02:00" } });
-    assert.eq((await mwFire(env, MW_SMOKE, { occurredAt: "2027-01-15T22:30:00Z" })).body.created, 0, "сб 01:30 МСК — интервал пятницы");
-    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: "2027-01-16T22:30:00Z" })).body.created >= 1, "вс 01:30 МСК — вне окна");
-    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: "2027-01-14T23:00:00Z" })).body.created >= 1, "пт 02:00 МСК ровно — вне окна");
-    // Берлин, 28.03.2027: 02:00 → 03:00. Повтор «вс 02:30–04:00»: 02:30 нет — начало 03:30 CEST (01:30Z), конец 04:00 CEST (02:00Z)
+    assert.eq((await mwFire(env, MW_SMOKE, { occurredAt: at(fri, 22, 30) })).body.created, 0, "сб 01:30 МСК — интервал пятницы");
+    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: at(fri + DAY, 22, 30) })).body.created >= 1, "вс 01:30 МСК — вне окна");
+    assert.ok((await mwFire(env, MW_SMOKE, { occurredAt: at(fri - DAY, 23, 0) })).body.created >= 1, "пт 02:00 МСК ровно — вне окна");
+    // Берлин, последнее воскресенье марта: 02:00 → 03:00. Повтор «вс 02:30–04:00»: 02:30 нет — начало 03:30 CEST (01:30Z), конец 04:00 CEST (02:00Z)
     await mwMake(env, { deviceGuid: MW_OTHER, timeZone: "Europe/Berlin", startsAt: mwIso(env.now), endsAt: end, recurrence: { days: [7], startTime: "02:30", endTime: "04:00" } });
-    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: "2027-03-28T01:15:00Z" })).body.created >= 1, "03:15 CEST — до начала");
-    assert.eq((await mwFire(env, MW_OTHER, { occurredAt: "2027-03-28T01:30:00Z" })).body.created, 0, "03:30 CEST — начало");
-    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: "2027-03-28T02:00:00Z" })).body.created >= 1, "04:00 CEST — конец, вне окна");
+    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: at(dst, 1, 15) })).body.created >= 1, "03:15 CEST — до начала");
+    assert.eq((await mwFire(env, MW_OTHER, { occurredAt: at(dst, 1, 30) })).body.created, 0, "03:30 CEST — начало");
+    assert.ok((await mwFire(env, MW_OTHER, { occurredAt: at(dst, 2, 0) })).body.created >= 1, "04:00 CEST — конец, вне окна");
   });
 
   test("Окно работ: правка будущего, идущее — только конец и описание, досрочное завершение, удаление; коды отказов (ТЗ-21)", async () => {
