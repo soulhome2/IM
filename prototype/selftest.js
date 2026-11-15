@@ -4756,7 +4756,12 @@
       expect(soundLine("off") && $("soundIcon").textContent === "🔇", `до нажатия: значок «${$("soundIcon").textContent}», строки «Звук не включён» ${soundLine("off") ? "есть" : "нет"}`);
       await soundIncident(100);
       expect(fakeSound.rec.length === 0, `до нажатия сыграно ${fakeSound.rec.length}`);
-      await click(soundLine("off").querySelector("[data-sound-enable]"));
+      // Как в браузере: сначала pointerdown (он сам включает звук), потом click по той же кнопке — проверочный сигнал
+      // не должен потеряться из-за перерисовки строки между ними
+      const enable = soundLine("off").querySelector("[data-sound-enable]");
+      enable.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      await wait();
+      await click(enable);
       await wait();
       const now = fakeSound.rec.filter((r) => r.at <= fakeSound.clock);
       expect(now.length === 1 && now[0].pattern === window.IMSound.TEST_PATTERN, `после «Включить звук» сейчас: ${now.map((r) => r.pattern).join(", ") || "ничего"}`);
@@ -4834,6 +4839,47 @@
       if (mode() === "work") await click($("backToQueue"));
       expect(titleN() === n0, `после «Взять» заголовок «${document.title}», ждали ${n0}`);
       return document.title;
+    }, SOUND_FIRST);
+
+    await step("Звук: событие во время перечитывания очереди не теряется — взятый за это время Критический не повторяется (§21.1)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const n0 = titleN();
+      const inc = await soundIncident(100);
+      expect(titleN() === n0 + 1, `новый Критический: заголовок «${document.title}», до было ${n0}`);
+      const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(inc.guid)}`);
+      // Ответ на перечитывание очереди задержан: очередь прочитана до взятия, а событие взятия приходит раньше ответа
+      const get = stand.get;
+      let release = null;
+      const gate = new Promise((resolve) => (release = resolve));
+      stand.get = (path, params) => {
+        const res = get(path, params);
+        return path === "/operator/incidents" && params && params.pageSize === 200 ? res.then((v) => gate.then(() => v)) : res;
+      };
+      try {
+        window.dispatchEvent(new Event("im-sound-restore"));
+        await wait(20);
+        const took = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": card.headers.etag });
+        expect(took.status === 200, `«Взять»: ${took.status}`);
+        await wait(150);
+      } finally {
+        stand.get = get;
+        release();
+      }
+      await wait(200);
+      const ring = soundLine("ring");
+      expect(titleN() === n0 && !(ring && ring.querySelector(`[data-sound-go="${inc.guid}"]`)), `после перечитывания: заголовок «${document.title}» (ждали ${n0}), строка «${ring ? ring.textContent : "нет"}»`);
+      return inc.number;
+    }, SOUND_FIRST);
+
+    await step("Звук: значок вкладки мигает, пока есть непринятые (§21.6)", async () => {
+      const link = document.querySelector('link[rel="icon"]');
+      expect(titleN() > 0, `непринятых нет: «${document.title}»`);
+      expect(link && link.dataset.blink === "on", `значок вкладки: ${link ? link.dataset.blink : "нет"}`);
+      const a = link.dataset.state;
+      await wait(1100);
+      const b = link.dataset.state;
+      expect(a !== b && [a, b].includes("alert"), `значок не мигает: ${a} → ${b}`);
+      return `${a} → ${b}`;
     }, SOUND_FIRST);
 
     await step("Звук: громкость в меню не ниже порога схемы, «Проверить звук» играет с ней (§21.4)", async () => {

@@ -335,6 +335,7 @@ a { color: var(--text); text-decoration: none; }
 /* Звук (§21.4, §21.5): строки в шапке — пока звук не включён, пока что-то звучит, пока «Только важное» */
 .sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 .sound-bar:empty { display: none; }
+.sound-bar .sound-bar-menu { display: none; }
 .sound-line {
   display: inline-flex;
   align-items: center;
@@ -2158,10 +2159,13 @@ select.search-input { padding-right: 36px; }
   .work-h h2 { flex-wrap: wrap; row-gap: 4px; overflow: visible; }
   .topbar-cluster { padding-left: 8px; }
   .topbar-actions { gap: 4px; }
-  /* Звук на телефоне: в шапке места нет — строки звука отдельной полосой под шапкой, меню звука нет (громкость
-     и «Только важное» — у рабочего места); раскладка шапки переставит это (план 87б, «места раскладки») */
-  .sound-bar { position: absolute; left: 0; right: 0; top: 100%; z-index: 15; justify-content: center; padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--stroke); }
-  #soundMenu { display: none; }
+  /* Звук на телефоне: в строке шапки места нет — полоса звука встаёт второй строкой шапки, в ней значок меню звука
+     (громкость, «Только важное», уведомления); значок в шапке скрыт, меню открывается под шапкой */
+  .topbar:has(.sound-bar) { flex-wrap: wrap; row-gap: 6px; }
+  .topbar-cluster { display: contents; }
+  .sound-bar { order: 99; flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+  .sound-bar .sound-bar-menu { display: inline-flex; }
+  #soundBtn { display: none; }
   /* Язык — только значок: список тот же, он лежит поверх значка невидимым */
   .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
   .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }

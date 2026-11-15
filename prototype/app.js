@@ -4589,8 +4589,9 @@
     }
     const plan = snd.plan;
     plan.planned = plan.planned.filter((p) => p.at > now - 5);
-    for (const at of IMSound.planRepeats(top, plan.anchor, now - plan.anchor + 120)) {
-      if (at <= plan.last) continue;
+    // Дополнить от последнего запланированного до «сейчас + 120 с»; шаг длиннее запаса — один момент вперёд
+    if (plan.last - now >= 120) return;
+    for (const at of IMSound.planRepeats(top, plan.last, now + 120 - plan.last)) {
       plan.planned.push({ at, handle: out.play(top.cue.pattern, at, soundVolume()) });
       plan.last = at;
     }
@@ -4599,8 +4600,12 @@
   function soundReplan() {
     if (!snd.plan) return;
     const { key, out, anchor } = snd.plan;
+    const top = IMSound.topSounding(snd.state);
+    const step = top && top.cue.repeatSec > 0 ? top.cue.repeatSec : 0;
+    // Последний прозвучавший момент того же ритма: следующий — через шаг от него, как и без смены громкости
+    const last = step ? anchor + Math.floor((out.now() - anchor) / step) * step : out.now();
     soundStopPlan();
-    snd.plan = { key, out, anchor, last: out.now(), planned: [] };
+    snd.plan = { key, out, anchor, last, planned: [] };
     soundSchedule();
   }
   function soundUpdate() {
@@ -4611,6 +4616,8 @@
   // Событие потока — до выхода по «своему» переходу: моё действие снимает звук (§21.2, «Снимает и моё действие»)
   function soundOnEvent(msg) {
     if (!soundOn() || msg.type === "stream.reset") return;
+    // Идёт перечитывание очереди: событие может быть новее прочитанного — после restoreSound применить его ещё раз
+    if (snd.pending) snd.pending.push(msg);
     const r = IMSound.decideSound(snd.state, msg, soundCtx());
     snd.state = r.state;
     if (r.play) {
@@ -4626,6 +4633,7 @@
   async function soundRestore(keep) {
     if (!soundOn()) return;
     const run = ++soundRestoring;
+    snd.pending = [];
     const queue = [];
     try {
       for (let page = 1; page <= 50; page++) {
@@ -4634,10 +4642,15 @@
         if (!res.items.length || page * 200 >= res.total) break;
       }
     } catch (err) {
+      if (run === soundRestoring) snd.pending = null;
       return;
     }
     if (run !== soundRestoring || !soundOn()) return;
-    const next = IMSound.restoreSound(queue, soundCtx());
+    let next = IMSound.restoreSound(queue, soundCtx());
+    // События, пришедшие за время чтения, — поверх прочитанного, без звука: их звук уже сыграл на приходе.
+    // Иначе взятый за это время инцидент вернулся бы в повтор из устаревшей очереди
+    for (const msg of snd.pending) next = IMSound.decideSound(next, msg, soundCtx()).state;
+    snd.pending = null;
     if (keep) {
       const was = new Set(snd.state.sounding.map((s) => s.guid));
       next.sounding = next.sounding.filter((s) => was.has(s.guid));
@@ -4694,6 +4707,33 @@
     });
   }
 
+  // Значок вкладки: обычный и «внимание» (красная точка); мигает, пока attention непуст (§21.6)
+  const FAVICON = {
+    calm: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M16 2 28 9v14l-12 7L4 23V9z" fill="none" stroke="#1976d2" stroke-width="3"/></svg>')}`,
+    alert: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M16 2 28 9v14l-12 7L4 23V9z" fill="none" stroke="#1976d2" stroke-width="3"/><circle cx="23" cy="9" r="8" fill="#dc2626"/></svg>')}`,
+  };
+  function favicon() {
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      link.type = "image/svg+xml";
+      link.href = FAVICON.calm;
+      document.head.appendChild(link);
+    }
+    return link;
+  }
+  function blinkFavicon() {
+    const link = favicon();
+    const on = snd.state.attention.length > 0;
+    link.dataset.blink = on ? "on" : "off";
+    const next = on && link.dataset.state !== "alert" ? "alert" : "calm";
+    if (link.dataset.state !== next) {
+      link.dataset.state = next;
+      link.href = FAVICON[next];
+    }
+  }
+
   // Заголовок вкладки «(N) …»: N — непринятые, которые повторяются до взятия, и «лично вам» (§21.6); «Тихо» не сбрасывает
   function syncTitle() {
     const n = snd.state.attention.length;
@@ -4718,7 +4758,8 @@
     $("soundBtn").title = title;
     $("soundBtn").setAttribute("aria-label", title);
     $("soundBtn").dataset.sound = !ready ? "off" : important ? "important" : "on";
-    const parts = [];
+    // Значок меню звука в полосе — только на телефоне, где значка в шапке нет (styles.css)
+    const parts = [`<button type="button" class="icon-btn sound-bar-menu" data-sound-menu title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span aria-hidden="true">${icon}</span></button>`];
     if (!ready)
       parts.push(
         `<span class="sound-line warn" data-sound-line="off"><span aria-hidden="true">🔇</span> <span>${te("Звук не включён")}</span> <button type="button" class="btn small primary" data-sound-enable>${te("Включить звук")}</button></span>`
@@ -4797,13 +4838,23 @@
 
   function bindSound() {
     // Любое нажатие на странице включает звук — без проверочного сигнала (§21.5)
-    const firstPress = () => {
-      if (!soundOut().ready()) soundUnlock(false);
+    // Нажатие на кнопку, которая сама включает звук с проверкой (или ▶), — не здесь: перерисовка строки до click
+    // заменила бы кнопку, и проверочный сигнал потерялся бы (§21.5)
+    const firstPress = (e) => {
+      if (soundOut().ready() || (e.target.closest && e.target.closest("[data-sound-enable], [data-sound-test], [data-sound-play]"))) return;
+      soundUnlock(false);
     };
     document.addEventListener("pointerdown", firstPress, true);
     document.addEventListener("keydown", firstPress, true);
     $("soundBar").addEventListener("click", (e) => {
       if (e.target.closest("[data-sound-enable]")) return soundUnlock(true);
+      // Значок меню в полосе звука на телефоне: то же меню, что у значка в шапке; щелчок не должен дойти до
+      // «щелчок мимо меню закрывает»
+      if (e.target.closest("[data-sound-menu]")) {
+        e.stopPropagation();
+        $("soundBtn").click();
+        return;
+      }
       if (e.target.closest("[data-sound-silence]")) {
         snd.state = IMSound.silence(snd.state);
         return soundUpdate();
@@ -4841,6 +4892,10 @@
       soundUpdate();
     });
     window.addEventListener("im-sound-tick", soundTick);
+    // Перечитать очередь (самопроверка: событие во время перечитывания)
+    window.addEventListener("im-sound-restore", () => soundRestore());
+    // Значок вкладки мигает, пока есть непринятые (§21.6); таймер — для картинки, не для звука
+    setInterval(blinkFavicon, 1000);
   }
 
   /* ===== Настройки администратора (§20, RULE-44): только просмотр ===== */
