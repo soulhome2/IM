@@ -3969,7 +3969,7 @@ window.IM_WORKFLOW = {
       {
         "id": "not_ready",
         "labelKey": "workflow.session.state.not_ready",
-        "requiresReason": true,
+        "requiresReasonExpr": "size(session.breakReasons) > 0",
         "permission": "agent:set_not_ready",
         "readOnly": true,
         "readOnlyReasonKey": "workflow.session.readonly.not_ready"
@@ -3990,7 +3990,7 @@ window.IM_WORKFLOW = {
           "ready"
         ],
         "to": "not_ready",
-        "$comment": "Перерыв — право и причина у состояния not_ready (permission, requiresReason — позиция breakReasons)"
+        "$comment": "Перерыв — право и причина у состояния not_ready (permission; requiresReasonExpr — причина обязательна, если у поста есть причины перерыва)"
       },
       {
         "id": "back",
@@ -4016,20 +4016,8 @@ window.IM_WORKFLOW = {
         "to": "ready"
       }
     ],
-    "breakReasons": [
-      {
-        "id": "lunch",
-        "labelKey": "workflow.session.break.lunch"
-      },
-      {
-        "id": "briefing",
-        "labelKey": "workflow.session.break.briefing"
-      },
-      {
-        "id": "patrol",
-        "labelKey": "workflow.session.break.patrol"
-      }
-    ],
+    "breakReasons": [],
+    "$commentBreakReasons": "Решение 2026-11-15: причин перерыва в машине нет — их заводит администратор поста. Список пуст — оператор уходит на перерыв без причины, поля нет; есть хоть одна — выбор обязателен (requiresReasonExpr у not_ready).",
     "heartbeatSec": 30,
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
@@ -4659,8 +4647,13 @@ window.IM_WORKFLOW = {
         "readOnly": "bool",
         "readOnlyReasonKey": "string"
       },
+      "BreakReason": {
+        "id": "string",
+        "labelKey": "string"
+      },
       "Session": {
         "states": "list<SessionState>",
+        "breakReasons": "list<BreakReason>",
         "heartbeatSec": "int",
         "idleHoldSec": "int",
         "idleReleaseSec": "int"

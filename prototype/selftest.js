@@ -1731,6 +1731,37 @@
       }
     });
 
+    await step("Причины перерыва без пунктов (решение 2026-11-15): пустой список — перерыв без причины, поля нет; есть пункт — без причины отказ", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const put = (body) => stand.raw("PUT", "/operator/session/agent-state", body);
+      try {
+        await standReset({ fixture: "demo", workflowPatch: { session: { breakReasons: [] } } });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await click($("breakBtn"));
+        expect(!$("modalDialog").hidden, "форма перерыва не открылась");
+        expect(!field("reasonId"), "при пустом списке причин поле причины есть");
+        await click($("dialogConfirm"));
+        await wait(200);
+        expect(!$("breakBanner").hidden, "без причин оператор не ушёл на перерыв");
+        await click($("breakBtn"));
+        await wait(200);
+        expect($("breakBanner").hidden, "не вернулся с перерыва");
+        await standReset({ fixture: "demo", workflowPatch: { session: { breakReasons: [{ id: "probe", labelKey: "workflow.session.state.not_ready" }] } } });
+        await wait(300);
+        const bad = await put({ agentState: "not_ready" });
+        expect(bad.status === 422, `перерыв без причины при непустом списке: ${bad.status}`);
+        const ok = await put({ agentState: "not_ready", reasonId: "probe" });
+        expect(ok.status === 200, `с причиной перерыв не начался: ${ok.status}`);
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        await standReset({ fixture: "demo" });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+      }
+    });
+
     await step("«Обработан» недоступен, пока сценарий не заполнен: в «Закрыть без обработки» его нет, «Итога» не открыть", async () => {
       await setFilter("open");
       const b = button($("eventsList"), "claim");

@@ -1549,15 +1549,18 @@
     confirmLabel: "Уйти на перерыв",
     style: "primary",
     note: sessionNote("not_ready"),
-    fields: [
-      {
-        name: "reasonId",
-        kind: "select",
-        label: "Причина перерыва",
-        required: true,
-        options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: lbl(r) })),
-      },
-    ],
+    // Причин у поста нет — поля нет: выбирать не из чего, сервер тогда причину не требует (requiresReasonExpr машины)
+    fields: WORKFLOW.session.breakReasons.length
+      ? [
+          {
+            name: "reasonId",
+            kind: "select",
+            label: "Причина перерыва",
+            required: true,
+            options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: lbl(r) })),
+          },
+        ]
+      : [],
   });
 
   // Видно ли поле и обязательно ли — по таблице сервера (fieldRules действия): правила форм вычисляет он.

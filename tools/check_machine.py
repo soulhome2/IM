@@ -385,7 +385,8 @@ def check_fixture(w, err):
     for o in people["operators"]:
         if o.get("agentState") not in agent_states:
             err.append(f"эталон: у человека {o['id']} состояние agentState «{o.get('agentState')}» — нет среди хранимых в session.states машины (§12.1, RULE-99)")
-        needs_reason = any(st["id"] == o.get("agentState") and st.get("requiresReason") for st in w["session"]["states"])
+        # Причина нужна, если у состояния есть requiresReasonExpr и у поста есть причины перерыва (решение 2026-11-15)
+        needs_reason = bool(w["session"]["breakReasons"]) and any(st["id"] == o.get("agentState") and st.get("requiresReasonExpr") for st in w["session"]["states"])
         if needs_reason and o.get("reasonId") not in {r["id"] for r in w["session"]["breakReasons"]}:
             err.append(f"эталон: у человека {o['id']} на перерыве причина reasonId «{o.get('reasonId')}» — нет в session.breakReasons (§12.1)")
         if not needs_reason and o.get("reasonId") is not None:
@@ -2095,7 +2096,7 @@ def check_session_machine(w, err):
             err.append(f"состояние оператора {s}: derived — запись с of и expr (RULE-99)")
         elif d.get("of") not in states or d["of"] in derived:
             err.append(f"состояние оператора {s}: derived.of «{d.get('of')}» — не хранимое состояние машины оператора (RULE-99)")
-        for k in ("initial", "permission", "requiresReason", "readOnly"):
+        for k in ("initial", "permission", "requiresReasonExpr", "readOnly"):
             if states[s].get(k):
                 err.append(f"состояние оператора {s}: у производного не бывает {k} — оно не хранится и в сменах не участвует (RULE-99)")
     initial = [s for s in states if states[s].get("initial")]
@@ -2125,7 +2126,7 @@ def check_session_machine(w, err):
     for s, st in states.items():
         if s not in derived and not edges.get(s):
             err.append(f"состояние оператора {s}: из него нет смены — оператор в нём застрянет")
-        for k in ("permission", "requiresReason"):
+        for k in ("permission", "requiresReasonExpr"):
             if st.get(k) and s not in targets:
                 err.append(f"состояние оператора {s}: {k} — у состояния, куда нет смены, его никто не проверит")
 
@@ -2242,8 +2243,10 @@ def with_post_settings(w):
     """Машина с настройками поста эталонного набора (settings в fixtures/demo.json, решение 2026-11-15): пункты
     справочников причин — после пунктов машины, как prototype/post-settings.js"""
     with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
-        catalogs = (json.load(f).get("settings") or {}).get("reasonCatalogs") or {}
+        settings = json.load(f).get("settings") or {}
+    catalogs = settings.get("reasonCatalogs") or {}
     out = json.loads(json.dumps(w))
+    out["session"]["breakReasons"] = out["session"].get("breakReasons", []) + list((settings.get("session") or {}).get("breakReasons") or [])
     for cid, cat in catalogs.items():
         if not cid.startswith("$"):
             out["reasonCatalogs"][cid]["items"] += [dict({"setBy": "operator"}, **i) for i in cat.get("items", [])]

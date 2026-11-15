@@ -6,8 +6,15 @@
   "operatorPreferences": {
     "locale": "ru"
   },
-  "$commentSettings": "Настройки поста (решение 2026-11-15): пункты справочников причин заводит администратор поста, в машине их нет — только устройство справочника и системные причины удержания. Прототип добавляет эти пункты после пунктов машины (prototype/post-settings.js); бэкенд — из своих настроек поста.",
+  "$commentSettings": "Настройки поста (решение 2026-11-15): пункты справочников причин и причины перерыва (session.breakReasons) заводит администратор поста, в машине их нет — только устройство справочника и системные причины удержания. Прототип добавляет эти пункты после пунктов машины (prototype/post-settings.js); бэкенд — из своих настроек поста.",
   "settings": {
+    "session": {
+      "breakReasons": [
+        {"id": "lunch", "labelKey": "workflow.session.break.lunch"},
+        {"id": "briefing", "labelKey": "workflow.session.break.briefing"},
+        {"id": "patrol", "labelKey": "workflow.session.break.patrol"}
+      ]
+    },
     "reasonCatalogs": {
       "hold": {
         "items": [

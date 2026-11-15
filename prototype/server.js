@@ -1699,7 +1699,7 @@
           const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || id];
           if (!move || !target) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
           if (target.permission && !can(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
-          if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
+          if (engine.agentReasonRequired(to) && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
           // Вход, выход, перерыв и возврат — в журнал действий (§12.4)
           audit(ME, to === "not_ready" ? "break" : to === "offline" ? "sign_out" : from === "offline" ? "sign_in" : "back", to === "not_ready" ? { reasonId: body.reasonId || undefined } : {});
           if (to === "not_ready") {

@@ -1357,20 +1357,17 @@
     "states": [
       { "id": "ready", "labelKey": "workflow.session.state.ready" },
       { "id": "busy", "labelKey": "workflow.session.state.busy", "derived": { "of": "ready", "expr": "countMine(me, 'in_progress', '') > 0" } },
-      { "id": "not_ready", "labelKey": "workflow.session.state.not_ready", "requiresReason": true, "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.not_ready" },
+      { "id": "not_ready", "labelKey": "workflow.session.state.not_ready", "requiresReasonExpr": "size(session.breakReasons) > 0", "permission": "agent:set_not_ready", "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.not_ready" },
       { "id": "offline", "labelKey": "workflow.session.state.offline", "initial": true, "readOnly": true, "readOnlyReasonKey": "workflow.session.readonly.offline" }
     ],
     "transitions": [
-      { "id": "break", "noteKey": "workflow.session.transition.break.note", "from": ["ready"], "to": "not_ready", "$comment": "Перерыв — право и причина у состояния not_ready (permission, requiresReason — позиция breakReasons)" },
+      { "id": "break", "noteKey": "workflow.session.transition.break.note", "from": ["ready"], "to": "not_ready", "$comment": "Перерыв — право и причина у состояния not_ready (permission; requiresReasonExpr — причина обязательна, если у поста есть причины перерыва)" },
       { "id": "back", "from": ["not_ready"], "to": "ready" },
       { "id": "sign_out", "noteKey": "workflow.session.transition.sign_out.note", "from": ["ready", "not_ready"], "to": "offline" },
       { "id": "sign_in", "from": ["offline"], "to": "ready" }
     ],
-    "breakReasons": [
-      { "id": "lunch", "labelKey": "workflow.session.break.lunch" },
-      { "id": "briefing", "labelKey": "workflow.session.break.briefing" },
-      { "id": "patrol", "labelKey": "workflow.session.break.patrol" }
-    ],
+    "breakReasons": [],
+    "$commentBreakReasons": "Решение 2026-11-15: причин перерыва в машине нет — их заводит администратор поста. Список пуст — оператор уходит на перерыв без причины, поля нет; есть хоть одна — выбор обязателен (requiresReasonExpr у not_ready).",
     "heartbeatSec": 30,
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
@@ -1547,7 +1544,8 @@
       "FormFile": { "id": "string", "fileName": "string", "mime": "string", "size": "int" },
       "Limits": { "maxActive": "int", "maxOnHold": "int", "maxBulk": "int", "reopenWindowMin": "int", "reopenResolutionSec": "int", "commentMaxLength": "int", "commentMaxFiles": "int", "attachmentMaxBytes": "int", "attachmentTypes": "list<string>" },
       "SessionState": { "id": "string", "readOnly": "bool", "readOnlyReasonKey": "string" },
-      "Session": { "states": "list<SessionState>", "heartbeatSec": "int", "idleHoldSec": "int", "idleReleaseSec": "int" },
+      "BreakReason": { "id": "string", "labelKey": "string" },
+      "Session": { "states": "list<SessionState>", "breakReasons": "list<BreakReason>", "heartbeatSec": "int", "idleHoldSec": "int", "idleReleaseSec": "int" },
       "Escalation": { "enabled": "bool", "levels": "list<Level>", "maxLevel": "int", "onResolutionOverdue": "string" },
       "Level": { "level": "int", "targetKind": "string", "target": "string", "reactionSec": "int" },
       "Alerts": { "targetKind": "string", "target": "string", "noRecipientLog": "string" },

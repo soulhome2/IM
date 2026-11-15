@@ -245,7 +245,7 @@ MUTATIONS = [
     ("back-after-next", "styles.css", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n", ".scenario-actions-end {\n  grid-area: next;\n  justify-self: end;\n  display: flex;\n  flex-direction: row-reverse;\n", "ui"),
     ("sort-ignores-keys", "server.js", "for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];", "", "api"),
     ("agent-move-any", "server.js", "if (!move || !target) return problem(409,", "if (!target) return problem(409,", "api"),
-    ("agent-reason-optional", "server.js", "if (target.requiresReason && !W.session.breakReasons.some((r) => r.id === body.reasonId))", "if (false)", "api"),
+    ("agent-reason-optional", "server.js", "if (engine.agentReasonRequired(to) && !W.session.breakReasons.some((r) => r.id === body.reasonId))", "if (false)", "api"),
     ("run-all-skips-check", "engine.js", "        if (!a.ok) return { ok: false, why: a.why, guard: a.guard, notFrom: a.notFrom, ev };", "", "api"),
     ("card-note-ignores-actions", "server.js", "base.actions.filter((a) => a.enabled).map((a) => a.id)", "base.actions.map((a) => a.id)", "api"),
     ("card-note-not-sent", "server.js", "        note: noteView(ev, base.actions.filter((a) => a.enabled).map((a) => a.id)),\n", "", "api"),

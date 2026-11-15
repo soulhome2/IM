@@ -892,6 +892,13 @@
       const d = W.session.states.find((s) => s.derived && s.derived.of === stored && ruleOf(`session.states.${s.id}.derived.expr`, scope));
       return d ? d.id : stored;
     };
+    // Нужна ли причина при смене в состояние оператора (requiresReasonExpr машины, §12.2): перерыв — если у поста есть причины
+    const agentReasonRequired = (to) => {
+      const st = W.session.states.find((s) => s.id === to);
+      if (!st || st.requiresReasonExpr == null) return false;
+      const scope = { me: ME, actor: ME, incident: undefined, incidents: () => ctx.events().map(celIncident), form: {}, surface: "", now: now(), world: celWorld };
+      return ruleOf(`session.states.${st.id}.requiresReasonExpr`, scope);
+    };
 
     // «Взять в работу» на выборке (§11): переход с bulk.mode merge на каждом, кроме основного,
     // и, если основной новый, — grouping.takeWith на нём. Всё или ничего: сначала проверка всех
@@ -966,6 +973,7 @@
       inQueueFilter,
       queueFilters,
       shownAgentState,
+      agentReasonRequired,
       availability,
       actions,
       session: W.session,
