@@ -177,6 +177,8 @@
             </div>
           </header>
           <div class="panel-b events-body">
+            <!-- Идут плановые работы (ТЗ-21, §19.1): не модальная полоса над очередью, сама появляется и исчезает -->
+            <div class="maint-banner" id="maintBanner" role="status" aria-live="polite" hidden></div>
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
             <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
             <div class="events-toolbar" id="eventsToolbar">

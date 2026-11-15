@@ -596,6 +596,12 @@
       return def("windowsFor", celWindows(windows), cel.value("Event", event)).map((x) => cel.source(x));
     }
 
+    // Интервалы окон, идущие в момент at (windowsRunning машины) — полоса работ и значок дерева (ТЗ-21)
+    function windowsRunning(windows, at) {
+      if (!(windows || []).length) return [];
+      return def("windowsRunning", celWindows(windows), BigInt(at)).map((x) => cel.source(x));
+    }
+
     /* ===== Автоматические переходы (§6.2): планировщик ===== */
 
     // Автоматические и системные переходы машины (trigger: timer / system), чьи условия
@@ -968,6 +974,7 @@
       intake,
       intakeWindows,
       windowsCovering,
+      windowsRunning,
       form,
       badge,
       cardNote,

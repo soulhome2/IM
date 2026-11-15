@@ -634,6 +634,8 @@
     targets: [],
     card: null,
     selection: null,
+    // Идущие окна плановых работ, видимые оператору (ТЗ-21): полоса над очередью и значки дерева
+    maint: { windows: [], nextChangeAt: null },
   };
 
   const state = {
@@ -889,12 +891,15 @@
       const jump = state.jump;
       state.focus = false;
       state.jump = false;
-      let [session, page, counters, tree] = await Promise.all([
+      let [session, page, counters, tree, maint] = await Promise.all([
         api.get("/operator/session"),
         api.get("/operator/incidents", queueQuery()),
         api.get("/operator/incidents/counters"),
         api.get("/operator/reference/source-groups", { withCounters: true }),
+        fetchMaintenance(),
       ]);
+      store.maint = maint;
+      scheduleMaintenance();
       // После действия очередь открывается на странице с выбранным инцидентом
       if (jump && page.focusPage && page.focusPage !== page.page) {
         state.page = page.focusPage;
@@ -929,6 +934,23 @@
         }
       });
     return loading;
+  }
+
+  // Идущие окна работ (ТЗ-21, §14.12): сервер отдаёт только видимые оператору; не ответил — полосы нет
+  const fetchMaintenance = () => api.get("/operator/maintenance-windows/current").catch(() => ({ windows: [], nextChangeAt: null }));
+  let maintTimer = null;
+  // Окно начинается и кончается по времени, без события потока: список перечитывается в nextChangeAt
+  function scheduleMaintenance() {
+    clearTimeout(maintTimer);
+    const at = store.maint.nextChangeAt ? Date.parse(store.maint.nextChangeAt) : NaN;
+    if (Number.isNaN(at)) return;
+    maintTimer = setTimeout(refreshMaintenance, Math.min(Math.max(at - serverNow(), 0) + 500, 864e5));
+  }
+  async function refreshMaintenance() {
+    store.maint = await fetchMaintenance();
+    scheduleMaintenance();
+    renderMaintBanner();
+    renderGroups();
   }
 
   async function loadCard() {
@@ -1028,6 +1050,45 @@
   }
 
   // Ответ «дата и время» — местными датой и временем на языке интерфейса, а не строкой ISO (BUG-71)
+  // «До» окна работ: сегодня — часы и минуты, другой день — дата и время
+  function fmtUntil(value) {
+    const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+    const d = new Date(value);
+    if (new Date(serverNow()).toDateString() !== d.toDateString()) return fmtWhen(value);
+    return d.toLocaleTimeString(locale, { hour12: false, hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Полоса «Идут плановые работы» над очередью (ТЗ-21, §19.1): не модальная, role=status, не перекрывает очередь.
+  // Текст по режиму машины maintenance.mode: suppress — тревоги не создаются, mark — приходят с пометкой
+  function renderMaintBanner() {
+    const box = $("maintBanner");
+    if (!box) return;
+    const ws = store.maint.windows || [];
+    box.hidden = !ws.length;
+    if (!ws.length) {
+      state.maintOpen = false;
+      box.innerHTML = "";
+      return;
+    }
+    const mark = (WORKFLOW.maintenance || {}).mode === "mark";
+    const tail = te(mark ? "Тревоги с этих устройств приходят с пометкой и низшим приоритетом." : "Тревоги с этих устройств не создаются.");
+    const one = (w) => t("{what} — «{desc}», до {until}", { what: w.objectName, desc: w.description || "—", until: fmtUntil(w.endsAt) });
+    const head =
+      ws.length === 1
+        ? te("Идут плановые работы: {one}.", { one: one(ws[0]) })
+        : te("Идут плановые работы: {n, plural, one {# окно} few {# окна} other {# окон}}, ближайшее закончится в {until}.", { n: ws.length, until: fmtUntil(ws[0].endsAt) });
+    const item = (w) => te("{what} — «{desc}», с {from} до {until}", { what: w.objectName, desc: w.description || "—", from: fmtUntil(w.startsAt), until: fmtUntil(w.endsAt) });
+    const open = Boolean(state.maintOpen);
+    box.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">construction</span>
+      <span class="maint-text">${head} ${tail}</span>
+      <button type="button" class="btn ghost small" id="maintBannerMore" aria-expanded="${open}" aria-controls="maintBannerList">${te(open ? "Скрыть" : "Подробнее")}</button>
+      <ul class="maint-list" id="maintBannerList"${open ? "" : " hidden"}>${ws.map((w) => `<li>${item(w)}</li>`).join("")}</ul>`;
+    $("maintBannerMore").onclick = () => {
+      state.maintOpen = !open;
+      renderMaintBanner();
+    };
+  }
+
   function fmtWhen(value) {
     const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
     const d = new Date(value);
@@ -2044,6 +2105,39 @@
   }
 
   // all — узел внутри найденной группы, которую оператор раскрыл: поиск его не скрывает
+  // Окна работ, действующие на узел дерева (ТЗ-21): окно на устройство — у устройства; окно на группу — у группы,
+  // всех её подгрупп и устройств. Родителям группы окна значка нет: работы идут не во всей их зоне
+  function maintByNode() {
+    const out = new Map();
+    const add = (id, w) => out.set(id, (out.get(id) || []).concat(w));
+    const mark = (node, w) => {
+      add(node.guid, w);
+      (node.children || []).forEach((c) => mark(c, w));
+      groupDevices(node).forEach((d) => add(d.guid, w));
+    };
+    const find = (nodes, id) => {
+      for (const n of nodes) {
+        if (n.guid === id) return n;
+        const f = find(n.children || [], id);
+        if (f) return f;
+      }
+      return null;
+    };
+    store.maint.windows.forEach((w) => {
+      if (w.deviceGuid) return add(w.deviceGuid, w);
+      const node = find(store.tree, w.sourceGroupGuid);
+      if (node) mark(node, w);
+    });
+    return out;
+  }
+  let maintNodes = new Map();
+  function maintBadge(id) {
+    const ws = maintNodes.get(id);
+    if (!ws) return "";
+    const tip = ws.map((w) => t("Плановые работы: «{what}», до {until}", { what: w.description || w.objectName, until: fmtUntil(w.endsAt) })).join("\n");
+    return `<span class="tree-maint material-symbols-outlined" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">construction</span>`;
+  }
+
   function treeItemHtml(item, isDevice, level, trace, q, all) {
     const kids = isDevice ? [] : (item.children || []).concat(groupDevices(item));
     const hasKids = kids.length > 0;
@@ -2070,6 +2164,7 @@
               <span class="toggle-icon material-symbols-outlined">chevron_right</span>
               <span class="material-symbols-outlined">${icon}</span>
               <span class="node-text">${markMatch(t(item.name), q)}</span>
+              ${maintBadge(item.guid)}
               ${isDevice ? "" : filterButtons(item.guid)}
               ${
                 counters.open
@@ -2119,6 +2214,7 @@
 
     const open = store.counters.open || 0;
     const crit = store.tree.some((n) => n.counters && n.counters.topPriority > 0);
+    maintNodes = maintByNode();
     $("groupsList").innerHTML = `
       <li class="tree-node tree-all ${state.groupId === "all" ? "active" : ""}" data-id="all" data-type="group" role="treeitem" tabindex="-1"
           aria-level="1" aria-selected="${state.groupId === "all"}">
@@ -3027,6 +3123,7 @@
     renderVideo();
     renderMap();
     renderStatus();
+    renderMaintBanner();
     $("breakBanner").hidden = !onBreak();
     $("signedOutBanner").hidden = !signedOut();
   }
@@ -4545,6 +4642,8 @@
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     // Свой переход — без уведомления. О закрытом мной соседе сервер мне и не пишет — даже когда я в дежурной группе-адресате
     // (§6.1, решение 2026-10-29)
+    // Окна работ изменились (ТЗ-21): полоса и значки дерева — по перечитанному списку, и после своей правки
+    if (msg.type === "maintenance.windows_changed") return refreshMaintenance();
     if (mine && msg.type !== "incident.card_evicted") return;
     // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
     if (msg.type === "stream.reset") return reload();

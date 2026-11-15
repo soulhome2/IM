@@ -268,6 +268,36 @@
     assert.status(await env.call("GET", "/operator/maintenance-windows"), 200, null, "список");
   });
 
+  test("Идущие окна оператору: только видимые по доступу, интервал «сейчас», ближайшая смена; поток — maintenance.windows_changed (ТЗ-21, §14.12)", async () => {
+    // Оператор ТЦ видит только устройства «Торгового центра»: окно на «1-й этаж» Главного офиса ему не видно
+    const env = await makeEnv({ roles: ["Оператор ТЦ"] });
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    try {
+      const empty = await env.call("GET", "/operator/maintenance-windows/current");
+      assert.status(empty, 200, null, "идущие окна");
+      assert.eq([empty.body.windows, empty.body.nextChangeAt], [[], null], "окон набора сейчас нет");
+      const mine = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now), endsAt: mwIso(env.now + MW_H), description: "замена датчика" });
+      await mwMake(env, { sourceGroupGuid: MW_FLOOR, startsAt: mwIso(env.now), endsAt: mwIso(env.now + 2 * MW_H) });
+      const later = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now + 3 * MW_H), endsAt: mwIso(env.now + 4 * MW_H) });
+      const cur = await env.call("GET", "/operator/maintenance-windows/current");
+      assert.eq(cur.body.windows.map((w) => [w.id, w.deviceGuid, w.description, w.endsAt]), [[mine.body.id, MW_SMOKE, "замена датчика", mwIso(env.now + MW_H)]], "только видимое и идущее");
+      assert.ok(cur.body.windows[0].objectName, "у окна — имя объекта");
+      assert.eq(cur.body.nextChangeAt, mwIso(env.now + MW_H), "ближайшая смена — конец идущего");
+      await new Promise((r) => setTimeout(r, 200));
+      assert.ok(got.filter((m) => m.type === "maintenance.windows_changed").length >= 3, "поток о создании окон");
+      const n = got.length;
+      assert.status(await env.call("POST", `/operator/maintenance-windows/${enc(mine.body.id)}/end`, {}), 200, null, "досрочно");
+      await new Promise((r) => setTimeout(r, 200));
+      assert.ok(got.slice(n).some((m) => m.type === "maintenance.windows_changed"), "поток о завершении");
+      const after = await env.call("GET", "/operator/maintenance-windows/current");
+      assert.eq([after.body.windows, after.body.nextChangeAt], [[], mwIso(env.now + 3 * MW_H)], "после завершения окон нет, следующее — начало будущего");
+      assert.ok(later.status === 201, "будущее создано");
+    } finally {
+      stop();
+    }
+  });
+
   test("Закрытие «Плановой проверкой» со ссылкой на окно: из пересекающихся, чужое — 422; переоткрытие очищает (ТЗ-21, §2.2)", async () => {
     const env = await makeEnv({ workflowPatch: { maintenance: { mode: "mark" }, limits: { maxActive: null } } });
     const w = await mwMake(env, { deviceGuid: MW_SMOKE, startsAt: mwIso(env.now), endsAt: mwIso(env.now + MW_H) });

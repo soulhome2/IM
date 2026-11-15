@@ -5503,6 +5503,15 @@ window.IM_WORKFLOW = {
         "expr": "size(windowsAfterWinners(winners, ws, e)) > 0 ? maintenance.mode : ''",
         "$comment": "§14.12, ТЗ-21. Итог окна для события: режим maintenance.mode (suppress — инцидентов нет, mark — с окном и низшим приоритетом) или '' — окно не действует. Окно итога — первое из windowsAfterWinners. Итог и окно сервер сохраняет с событием при приёме: объяснение отбора отдаёт их, а не пересчитывает по текущим окнам"
       },
+      "windowsRunning": {
+        "params": {
+          "ws": "list<MaintenanceWindow>",
+          "at": "int"
+        },
+        "returns": "list<MaintenanceWindow>",
+        "expr": "ws.filter(w, w.from <= at && at < w.to)",
+        "$comment": "§14.12, §19.1, ТЗ-21 (решение 2026-11-15). Интервалы окон работ, идущие в момент at: тот же полуинтервал [from, to), что у windowCovers, без устройства. По нему сервер отбирает окна для полосы «Идут плановые работы» и значка в дереве групп (GET /operator/maintenance-windows/current) — из интервалов, видимых оператору по его доступу (§5)"
+      },
       "windowsFor": {
         "params": {
           "ws": "list<MaintenanceWindow>",

@@ -3096,6 +3096,114 @@
       }
     });
 
+    // Полоса плановых работ над очередью и значок в дереве групп (ТЗ-21, §14.12, §19.1, решение 2026-11-15)
+    const mwBanner = () => $("maintBanner");
+    const mwShown = () => !mwBanner().hidden;
+    async function mwUntil(cond, what) {
+      for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+      expect(cond(), what);
+    }
+    const mwBadge = (id) => $("groupsList").querySelector(`[data-id="${id}"] > .node-content .tree-maint`);
+    const mwShop = "30000000-0000-4000-8000-000000000023"; // «Магазин 1» → «1-й этаж» → «Торговый центр»
+    const mwTcFloor = "30000000-0000-4000-8000-000000000022";
+
+    await step("Полоса плановых работ: без окна её нет; идёт окно — над очередью объект, описание, конец и «тревоги не создаются», role=status (ТЗ-21)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      expect(window.IM_OPENAPI.paths["/operator/maintenance-windows/current"], "в контракте нет GET /operator/maintenance-windows/current");
+      try {
+        if (mode() !== "queue") await click($("backToQueue"));
+        const now = await mwSetup();
+        await wait(300);
+        expect(mwBanner(), "нет полосы плановых работ (#maintBanner)");
+        await mwUntil(() => !mwShown(), "полоса видна без идущего окна");
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour), description: "замена датчика" });
+        expect(w.status === 201, `окно не создано: ${w.status}`);
+        await mwUntil(mwShown, "полоса не появилась при идущем окне");
+        const text = mwBanner().textContent;
+        expect(mwBanner().getAttribute("role") === "status", "у полосы нет role=status");
+        expect(/замена датчика/.test(text) && /не создаются/.test(text), `текст полосы: ${text}`);
+        expect(mwBanner().compareDocumentPosition($("eventsList")) & Node.DOCUMENT_POSITION_FOLLOWING, "полоса не над очередью");
+        return text.replace(/\s+/g, " ").trim();
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Полоса при mark — «тревоги приходят с пометкой»; два окна — «N окон», «Подробнее» раскрывает список (ТЗ-21)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup({ workflowPatch: { maintenance: { mode: "mark" } } });
+        await wait(300);
+        await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
+        await mwUntil(mwShown, "полоса не появилась");
+        expect(/с пометкой/.test(mwBanner().textContent), `текст режима mark: ${mwBanner().textContent}`);
+        await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now), endsAt: mwIso(now + 2 * mwHour) });
+        await mwUntil(() => /2 окна/.test(mwBanner().textContent), `два окна: ${mwBanner().textContent}`);
+        const list = $("maintBannerList");
+        expect(list && list.hidden, "список окон раскрыт сразу");
+        await click($("maintBannerMore"));
+        const shown = $("maintBannerList");
+        expect(!shown.hidden && shown.querySelectorAll("li").length === 2, "«Подробнее» не раскрыл список из двух окон");
+        return mwBanner().textContent.replace(/\s+/g, " ").trim();
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Полоса исчезает после досрочного завершения окна (ТЗ-21)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup();
+        await wait(300);
+        const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
+        await mwUntil(mwShown, "полоса не появилась");
+        const end = await stand.raw("POST", `/operator/maintenance-windows/${w.body.id}/end`, {});
+        expect(end.status === 200, `досрочное завершение: ${end.status}`);
+        await mwUntil(() => !mwShown(), "полоса не исчезла после досрочного завершения");
+        return "исчезла";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Значок работ в дереве: у группы окна и её подгруппы, с подсказкой; у устройства окна (ТЗ-21)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup();
+        await wait(300);
+        await mwCreate({ sourceGroupGuid: mwTcFloor, startsAt: mwIso(now), endsAt: mwIso(now + mwHour), description: "ремонт этажа" });
+        await mwUntil(() => mwBadge(mwTcFloor), "нет значка у группы окна");
+        expect(mwBadge(mwShop), "нет значка у подгруппы группы окна");
+        expect(/ремонт этажа/.test(mwBadge(mwShop).title), `подсказка значка: ${mwBadge(mwShop).title}`);
+        expect(!mwBadge("30000000-0000-4000-8000-000000000021"), "значок у родителя группы окна");
+        return mwBadge(mwShop).title;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
+    await step("Окно на недоступное оператору устройство не видно: ни полосы, ни значка (ТЗ-21, §5)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const now = await mwSetup({ operatorRoles: ["Оператор ТЦ"] });
+        await wait(300);
+        const w = await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
+        expect(w.status === 201, `окно: ${w.status}`);
+        const cur = await stand.raw("GET", "/operator/maintenance-windows/current");
+        expect(cur.status === 200 && cur.body.windows.length === 0, `идущие окна оператору ТЦ: ${JSON.stringify(cur.body)}`);
+        await wait(500);
+        expect(!mwShown() && !$("groupsList").querySelector(".tree-maint"), "окно чужого объекта видно");
+        return "не видно";
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Окно работ: правило «окно только при победителе» и режим — определения машины (ТЗ-21, ревью I-1)", async () => {
       const W = window.IM_WORKFLOW;
       const d = W.cel.definitions;

@@ -2209,9 +2209,38 @@
     // Начало не раньше «сейчас» минус допуск часов (maintenance.startSkewSec): окно не объясняет прошлое задним числом
     const startsInPast = (w) => w.startsAt < now() - ((W.maintenance || {}).startSkewSec || 0) * 1000;
     const pastStart = () => problem(422, "MAINTENANCE_WINDOW_STARTS_IN_PAST", ["workflow.error.maintenance_starts_in_past"]);
+    // Окно видно оператору (§5): устройство окна — в его доступе; у окна на группу — в группе (с вложенными)
+    // есть доступное ему устройство. Окон другой организации в MAINT нет
+    const windowVisible = (w) => (w.device ? myDevices.has(w.device) : collectDeviceIds(findNode(TREE, w.group)).some((id) => myDevices.has(id)));
+    // Идущие окна оператору (ТЗ-21, решение 2026-11-15): интервалы, накрывающие «сейчас» (windowsRunning машины),
+    // видимые по доступу; nextChangeAt — ближайший конец идущего или начало следующего видимого интервала за сутки
+    function maintenanceNow() {
+      const t = now();
+      const horizon = t + 864e5;
+      const all = [];
+      MAINT.forEach((w) => {
+        const seen = new Set();
+        for (let k = 0; k <= 2; k++)
+          windowIntervals(w, Math.min(t + k * 864e5, Math.max(w.endsAt - 1, t))).forEach((x) => {
+            const key = `${x.from}|${x.to}`;
+            if (!seen.has(key) && x.to > t) seen.add(key) && all.push(x);
+          });
+      });
+      const visible = all.filter(windowVisible);
+      const running = engine.windowsRunning(visible, t).sort((a, b) => a.to - b.to || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const marks = visible.flatMap((x) => [x.from, x.to]).filter((m) => m > t && m <= horizon);
+      const nodeName = (x) => (x.device ? deviceSpec(x.device).name : (findNode(TREE, x.group) || {}).name || "");
+      return {
+        windows: running.map((x) => ({ id: x.id, deviceGuid: x.device, sourceGroupGuid: x.group, objectName: nodeName(x), description: x.description, startsAt: iso(x.from), endsAt: iso(x.to) })),
+        nextChangeAt: marks.length ? iso(Math.min(...marks)) : null,
+      };
+    }
+    // Окна изменились — всем на посту: клиент перечитывает идущие окна (полоса и значки дерева)
+    const windowsChanged = () => send({ type: "maintenance.windows_changed", at: iso(now()), incidentGuid: null, actor: actorRef(ME), incident: null, payload: {} });
     function MAINTENANCE_ROUTES() {
       const find = (id) => MAINT.find((w) => w.id === id) || null;
       return [
+        ["GET", "/operator/maintenance-windows/current", () => ({ status: 200, body: maintenanceNow() })],
         ["GET", "/operator/maintenance-windows", () => ({ status: 200, body: MAINT.slice().sort((a, b) => a.startsAt - b.startsAt).map(windowView) })],
         [
           "POST",
@@ -2223,6 +2252,7 @@
             if (startsInPast(w)) return pastStart();
             const row = Object.assign({ id: uuid("a", ++serial.window, "000000000021") }, w, { createdBy: ME, createdAt: now(), endedEarlyAt: null });
             MAINT.push(row);
+            windowsChanged();
             return { status: 201, body: windowView(row) };
           },
         ],
@@ -2243,6 +2273,7 @@
               if (!same) return problem(409, "MAINTENANCE_WINDOW_ACTIVE", ["workflow.error.maintenance_active"]);
             } else if (w.startsAt !== row.startsAt && startsInPast(w)) return pastStart();
             Object.assign(row, w);
+            windowsChanged();
             return { status: 200, body: windowView(row) };
           },
         ],
@@ -2257,6 +2288,7 @@
             if (status === "active") return problem(409, "MAINTENANCE_WINDOW_ACTIVE", ["workflow.error.maintenance_active"]);
             if (status === "ended") return problem(409, "MAINTENANCE_WINDOW_ENDED", ["workflow.error.maintenance_ended"]);
             MAINT = MAINT.filter((w) => w !== row);
+            windowsChanged();
             return { status: 204, body: null };
           },
         ],
@@ -2272,6 +2304,7 @@
             if (status === "planned") return badWindow();
             row.endsAt = now();
             row.endedEarlyAt = now();
+            windowsChanged();
             return { status: 200, body: windowView(row) };
           },
         ],
@@ -2428,6 +2461,8 @@
             if (W !== before) emit("workflow.schema_published", null, null, { schemaVersion: W.schema.version });
             // Справочник приоритетов сменился — так же (§2.5, RULE-68)
             if (JSON.stringify(PRIORITIES) !== prioritiesBefore) emit("reference.priorities_changed", null, null, {});
+            // Окна набора заменили созданные прогоном — полоса работ и значки дерева перечитываются (ТЗ-21)
+            windowsChanged();
             return { status: 200, body: { fixture: "demo", now: iso(now()), frozen: clock.frozenAt != null } };
           },
         ],

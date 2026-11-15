@@ -832,12 +832,27 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   flex-shrink: 0;
 }
 .tree-ev.crit { color: var(--crit); }
+.tree-maint { font-size: 16px; color: var(--break-text); flex-shrink: 0; }
 
 .tree-all { margin-bottom: 4px; }
 .tree-all.active .node-content { background: var(--accent-dim); }
 .tree-all .node-text { font-weight: 600; }
 
 .events-body { display: flex; flex-direction: column; }
+/* Полоса «Идут плановые работы» (ТЗ-21): в потоке над очередью, не поверх неё */
+.maint-banner {
+  background: var(--break-bg);
+  color: var(--break-text);
+  border-bottom: 1px solid var(--break-border);
+  padding: 6px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.maint-banner:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.maint-banner .maint-text { flex: 1 1 200px; min-width: 0; }
+.maint-banner .btn { flex-shrink: 0; color: inherit; }
+.maint-banner .maint-list { flex-basis: 100%; margin: 2px 0 0 28px; padding: 0; }
+.maint-banner .maint-list[hidden] { display: none; }
 /* Ширина фильтра — по самому длинному варианту: подписи разной длины в трёх языках */
 .events-toolbar {
   display: grid;
