@@ -472,7 +472,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.claim"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card", "observerNotice": { "key": "workflow.notice.claim", "audience": "observers" } }
+      "ui": { "surface": ["queue", "card"], "placement": "primary", "style": "primary", "navigate": "card", "observerNotice": { "key": "workflow.notice.claim", "audience": "observers" } }
     },
     {
       "id": "accept",
@@ -499,7 +499,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "bulkDoneKey": "workflow.transition.accept.bulk.done", "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
+      "ui": { "bulkDoneKey": "workflow.transition.accept.bulk.done", "surface": ["queue", "card"], "placement": "primary", "style": "primary", "navigate": "card" }
     },
     {
       "id": "reject",
@@ -522,7 +522,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.reject"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "bulkDoneKey": "workflow.transition.reject.bulk.done", "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.reject.bulk.done", "surface": ["queue", "card"], "placement": "menu", "style": "outline", "navigate": "queue" }
     },
     {
       "id": "hold",
@@ -549,7 +549,7 @@
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "bulkDoneKey": "workflow.transition.hold.bulk.done", "surface": ["card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.hold.bulk.done", "surface": ["card"], "placement": "menu", "style": "outline", "navigate": "queue" }
     },
     {
       "id": "resume",
@@ -575,7 +575,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resume"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["queue", "card"], "style": "primary", "navigate": "card" }
+      "ui": { "surface": ["queue", "card"], "placement": "primary", "style": "primary", "navigate": "card" }
     },
     {
       "id": "release",
@@ -602,7 +602,7 @@
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
-      "ui": { "bulkDoneKey": "workflow.transition.release.bulk.done", "surface": ["card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.release.bulk.done", "surface": ["card"], "placement": "menu", "style": "outline", "navigate": "queue" }
     },
     {
       "id": "transfer",
@@ -644,7 +644,7 @@
         { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2, "sharedForm": true },
-      "ui": { "bulkDoneKey": "workflow.transition.transfer.bulk.done", "surface": ["queue", "card"], "style": "warn", "navigate": "queue", "observerNotice": { "key": "workflow.notice.transfer", "audience": "newAddressee" } }
+      "ui": { "bulkDoneKey": "workflow.transition.transfer.bulk.done", "surface": ["queue", "card"], "placement": "primary", "style": "warn", "navigate": "queue", "observerNotice": { "key": "workflow.notice.transfer", "audience": "newAddressee" } }
     },
     {
       "id": "takeover",
@@ -679,7 +679,7 @@
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
       "ui": {
         "bulkDoneKey": "workflow.transition.takeover.bulk.done",
-        "surface": ["card"],
+        "surface": ["card"], "placement": "primary",
         "style": "danger",
         "navigate": "card",
         "$comment": "§7. В строке очереди нет: оператор должен сначала увидеть, что уже сделано. Несколько отмеченных — панелью выборки (§11.1, bulk)."
@@ -731,7 +731,7 @@
         "scopeNoteKey": "workflow.form.close.bulk.note.scenario",
         "skippedReasonKey": "workflow.error.selection.other_scenario"
       },
-      "ui": { "bulkDoneKey": "workflow.transition.close.bulk.done", "surface": ["queue", "card"], "style": "outline", "navigate": "queue" }
+      "ui": { "bulkDoneKey": "workflow.transition.close.bulk.done", "surface": ["queue", "card"], "placement": "menu", "danger": true, "style": "outline", "navigate": "queue" }
     },
     {
       "id": "reopen",
@@ -766,7 +766,7 @@
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["queue", "card"], "style": "outline", "navigate": "card" }
+      "ui": { "surface": ["queue", "card"], "placement": "primary", "style": "outline", "navigate": "card" }
     },
 
     {
@@ -792,7 +792,7 @@
         { "kind": "transactional", "fn": "appendComment", "args": ["workflow.journal.comment"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["card"], "style": "outline" }
+      "ui": { "surface": ["card"], "placement": "header", "style": "outline" }
     },
     {
       "id": "change_priority",
@@ -818,7 +818,7 @@
         { "kind": "transactional", "fn": "appendPriorityLog", "args": ["workflow.journal.priority_changed"] }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["card"], "style": "outline" }
+      "ui": { "surface": ["card"], "placement": "menu", "style": "outline" }
     },
     {
       "id": "auto_escalate",
@@ -1228,7 +1228,7 @@
         { "kind": "transactional", "fn": "returnToQueue" }
       ],
       "bulk": { "allowed": false },
-      "ui": { "surface": ["card"], "style": "outline", "navigate": null }
+      "ui": { "surface": ["card"], "placement": "menu", "style": "outline", "navigate": null }
     },
     {
       "id": "close_linked",

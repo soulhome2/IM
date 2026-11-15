@@ -1067,6 +1067,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "primary",
         "style": "primary",
         "navigate": "card",
         "observerNotice": {
@@ -1162,6 +1163,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "primary",
         "style": "primary",
         "navigate": "card"
       }
@@ -1229,6 +1231,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "menu",
         "style": "outline",
         "navigate": "queue"
       }
@@ -1312,6 +1315,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "menu",
         "style": "outline",
         "navigate": "queue"
       }
@@ -1390,6 +1394,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "primary",
         "style": "primary",
         "navigate": "card"
       }
@@ -1480,6 +1485,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "menu",
         "style": "outline",
         "navigate": "queue"
       }
@@ -1635,6 +1641,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "primary",
         "style": "warn",
         "navigate": "queue",
         "observerNotice": {
@@ -1765,6 +1772,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "primary",
         "style": "danger",
         "navigate": "card",
         "$comment": "§7. В строке очереди нет: оператор должен сначала увидеть, что уже сделано. Несколько отмеченных — панелью выборки (§11.1, bulk)."
@@ -1951,6 +1959,8 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "menu",
+        "danger": true,
         "style": "outline",
         "navigate": "queue"
       }
@@ -2104,6 +2114,7 @@ window.IM_WORKFLOW = {
           "queue",
           "card"
         ],
+        "placement": "primary",
         "style": "outline",
         "navigate": "card"
       }
@@ -2169,6 +2180,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "header",
         "style": "outline"
       }
     },
@@ -2252,6 +2264,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "menu",
         "style": "outline"
       }
     },
@@ -3630,6 +3643,7 @@ window.IM_WORKFLOW = {
         "surface": [
           "card"
         ],
+        "placement": "menu",
         "style": "outline",
         "navigate": null
       }

@@ -389,6 +389,47 @@
       return closedId;
     });
 
+    await step("Нижняя панель карточки — один ряд: главные действия машины, остальные в «Ещё», «Закрыть без обработки» последним; «Комментарий» в шапке", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const W = window.IM_WORKFLOW;
+      const ui = (id) => (W.transitions.find((x) => x.id === id) || {}).ui || {};
+      const card = await stand.get(`/operator/incidents/${encodeURIComponent(closedId)}`);
+      const acts = card.actions.filter((a) => a.kind === "transition");
+      expect(acts.every((a) => a.placement === (ui(a.id).placement || "menu")), "у действий сервера нет placement из машины");
+      const ids = (sel) => [...root().querySelectorAll(sel)].map((b) => b.dataset.do);
+      const want = (p) => acts.filter((a) => (ui(a.id).placement || "menu") === p).map((a) => a.id);
+      const bottom = ids(".work-acts > [data-do]");
+      expect(JSON.stringify(bottom) === JSON.stringify(want("primary")), `в нижней панели ${bottom.join(", ")}, ожидались ${want("primary").join(", ")}`);
+      expect(bottom.includes("transfer"), "«Передать» не в нижней панели");
+      const more = root().querySelector("#moreActs");
+      expect(more && more.getAttribute("aria-haspopup") === "menu", "нет кнопки «Ещё»");
+      const menu = ids(".more-menu [role=menuitem]:not(.more-primary)");
+      const rest = want("menu");
+      expect(menu.length === rest.length && rest.every((id) => menu.includes(id)), `в меню ${menu.join(", ")}, ожидались ${rest.join(", ")}`);
+      expect(menu[menu.length - 1] === "close" && ui("close").danger, `последним в меню ${menu[menu.length - 1]}`);
+      expect(root().querySelector(".more-menu [role=separator] + [data-do=close]"), "перед «Закрыть без обработки» нет разделителя");
+      expect(!root().querySelector(".work-bottom [data-do=comment]") && root().querySelector(".incident-head [data-do=comment]"), "«Комментарий» не в шапке карточки");
+      // Один ряд: всё на одной линии
+      const box = (sel) => root().querySelector(sel).getBoundingClientRect();
+      const line = ["#backToQueue", ".work-acts", "#moreActs", "#stepBack", "#stepNext"].map((s) => Math.round(box(s).top + box(s).height / 2));
+      expect(Math.max(...line) - Math.min(...line) < 6, `нижняя панель не в один ряд: ${line.join(", ")}`);
+      expect(!root().querySelector("#stepBack").classList.contains("primary") && root().querySelector("#stepNext").classList.contains("primary"), "акцентная — не только «Далее»");
+      // Клавиатура: Enter открывает, стрелка — следующий пункт, Esc закрывает и возвращает фокус на «Ещё»
+      const pop = root().querySelector(".more-menu");
+      more.focus();
+      more.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await wait(30);
+      expect(!pop.hidden && more.getAttribute("aria-expanded") === "true", "Enter не открыл меню");
+      const items = [...pop.querySelectorAll("[role=menuitem]")].filter((b) => b.offsetParent);
+      expect(document.activeElement === items[0], "фокус не на первом пункте меню");
+      document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      expect(document.activeElement === items[1], "стрелка вниз не перевела фокус");
+      document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await wait(30);
+      expect(pop.hidden && document.activeElement === root().querySelector("#moreActs"), "Esc не закрыл меню или фокус не вернулся на «Ещё»");
+      return `${bottom.join(", ")} | ${menu.join(", ")}`;
+    });
+
     await step(
       "Камера и план — из ответа сервера: картинка камеры, источник на плане",
       async () => {
@@ -2563,6 +2604,7 @@
         await click(view);
         const b = button(root(), "comment");
         expect(b, "в карточке нет кнопки «Комментарий»");
+        expect(b.closest(".incident-head"), "«Комментарий» закрытой карточки не в шапке");
         await click(b);
         expect(!$("modalDialog").hidden, "форма комментария не открылась");
         const input = $("dialogFields").querySelector('input[type="file"][data-files="files"]');

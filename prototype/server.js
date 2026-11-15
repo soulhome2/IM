@@ -840,6 +840,8 @@
             formId: a.formId || null,
             navigate: a.navigate || null,
             icon: a.icon || null,
+            placement: a.placement || null,
+            danger: Boolean(a.danger),
             bulkAllowed: Boolean(tr && tr.bulk && tr.bulk.allowed),
           },
           a.enabled ? formView(tr, ev, surface, surface === "queue") : {}

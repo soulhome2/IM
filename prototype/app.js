@@ -679,6 +679,7 @@
     summaryOff: new Set(),
     // Журнал карточки: раскрыт у этого инцидента; сколько записей уже видел оператор — новые подсвечиваются
     logOpen: null,
+    moreOpen: null,
     logSeen: new Map(),
     videoMode: "archive",
     activeCam: null,
@@ -1290,6 +1291,9 @@
       icon: a.icon || null,
       disabled: !a.enabled,
       nav: a.kind === "nav",
+      // Место в карточке — из машины (ui.placement, ui.danger перехода, §7): primary, menu или header
+      placement: a.placement || "menu",
+      danger: Boolean(a.danger),
     };
   }
 
@@ -2358,13 +2362,17 @@
     const path = pathOf(ev);
     const editable = !ev.readOnly;
     const acts = cardActions(ev);
+    const primary = acts.filter((a) => a.placement === "primary");
+    const head = acts.filter((a) => a.placement === "header");
+    const more = acts.filter((a) => a.placement === "menu");
     // Вкладка карточки: «Сценарий» или «Привязанные инциденты» (есть, только если привязанные есть);
     // другая карточка — со сценария
     // Открыта из поиска, нашедшего привязанный, — сразу на вкладке привязанных
     if (state.workTabFor !== ev.guid) Object.assign(state, { workTab: foundLinked(ev.guid).length ? "linked" : "scenario", workTabFor: ev.guid });
     const tab = ev.linkedCount ? state.workTab : "scenario";
-    // Внизу один ряд: «К очереди», действия с инцидентом, «Назад» и «Далее» рядом (RULE-89). Кнопки всегда
-    // на месте и с теми же названиями — недоступные серые, в том числе на вкладке привязанных
+    // Внизу один ряд (§7, RULE-89): «К очереди»; главные действия машины (ui.placement = primary) и меню «Ещё»
+    // с остальными; «Назад» и «Далее» справа. Недоступные — серые, в том числе на вкладке привязанных.
+    // «Комментарий» (placement = header) — в шапке карточки
 
     const i = cursorOf(ev);
     const step = stepOf(ev, path[i]);
@@ -2381,7 +2389,7 @@
       <div class="work-wrap">
       <div class="work-doc">
         <div class="work-top">
-          ${renderIncidentHead(ev)}
+          ${renderIncidentHead(ev, head)}
           ${workNote(ev)}
           ${alarmBlock(ev)}
           ${maintenanceBlock(ev)}
@@ -2451,22 +2459,12 @@
         <div class="work-bottom">
           <div class="scenario-actions">
             <div class="scenario-actions-start">
-              <button type="button" class="btn outline" id="backToQueue" title="${te("Вернуться к очереди, инцидент остаётся за вами")}">
-                <span class="material-symbols-outlined">arrow_back</span>${te("К очереди")}
+              <button type="button" class="btn outline" id="backToQueue" aria-label="${te("К очереди")}" title="${te("Вернуться к очереди, инцидент остаётся за вами")}">
+                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span><span class="btq-label">${te("К очереди")}</span>
               </button>
             </div>
-            ${
-              acts.length
-                ? `<div class="work-acts">${acts
-                    .map(
-                      (a) =>
-                        `<button type="button" class="btn ${a.style}" data-do="${a.id}" data-ev="${escapeHtml(ev.guid)}" title="${escapeHtml(
-                          a.hint
-                        )}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`
-                    )
-                    .join("")}</div>`
-                : ""
-            }
+            ${primary.length ? `<div class="work-acts">${primary.map((a) => actButton(a, ev)).join("")}</div>` : ""}
+            ${moreMenu(primary, more, ev)}
             <div class="scenario-actions-end">
               <button type="button" class="btn outline" id="stepBack" ${offAttr(!(tab !== "scenario" || (i === 0 && !summary)), backWhy(tab))}>${te("Назад")}</button>
               <button type="button" class="btn ${editable ? "primary" : "outline"}" id="stepNext" ${offAttr(canNext, nextWhy(ev, i, editable, tab, summary))}>${te("Далее")}</button>
@@ -2578,13 +2576,92 @@
 
   // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90). Номер, состояние
   // и нормативы — в заголовке карточки (renderWorkHeader)
-  function renderIncidentHead(ev) {
+  function renderIncidentHead(ev, acts) {
     return `
       <div class="incident-head">
-        <h3>${te(ev.eventType.name)}</h3>
-        <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
+        <div class="incident-title">
+          <h3>${te(ev.eventType.name)}</h3>
+          <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
+        </div>
+        ${acts && acts.length ? `<div class="head-acts">${acts.map((a) => actButton(a, ev)).join("")}</div>` : ""}
       </div>
     `;
+  }
+
+  // Кнопка действия карточки; item — пункт меню «Ещё» (primary — копия главного действия для узкой карточки)
+  function actButton(a, ev, item) {
+    const cls = item ? `more-item${a.danger ? " danger" : ""}${item === "primary" ? " more-primary" : ""}` : `btn ${a.style}`;
+    return `<button type="button" class="${cls}" ${item ? 'role="menuitem" tabindex="-1"' : ""} data-do="${a.id}" data-ev="${escapeHtml(ev.guid)}" title="${escapeHtml(
+      a.hint
+    )}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`;
+  }
+
+  // Меню «Ещё» нижней панели (§7): действия с ui.placement = menu, опасные (ui.danger) — последними, после
+  // разделителя. Главные действия здесь тоже есть — видны только на узкой карточке, где их нет в ряду
+  function moreMenu(primary, more, ev) {
+    if (!more.length && !primary.length) return "";
+    const plain = more.filter((a) => !a.danger);
+    const danger = more.filter((a) => a.danger);
+    const open = state.moreOpen === ev.guid;
+    const items = [
+      ...primary.map((a) => actButton(a, ev, "primary")),
+      ...plain.map((a) => actButton(a, ev, "menu")),
+      ...(danger.length ? ['<div class="more-sep" role="separator"></div>', ...danger.map((a) => actButton(a, ev, "menu"))] : []),
+    ];
+    return `
+      <div class="more${more.length ? "" : " only-primary"}">
+        <button type="button" class="btn outline" id="moreActs" aria-haspopup="menu" aria-expanded="${open}" aria-controls="moreMenu">
+          ${te("Ещё")}<span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+        </button>
+        <div class="more-menu" id="moreMenu" role="menu" aria-label="${te("Другие действия")}" ${open ? "" : "hidden"}>${items.join("")}</div>
+      </div>`;
+  }
+  const moreItems = () => [...document.querySelectorAll("#moreMenu [role=menuitem]")].filter((b) => b.offsetParent);
+  function setMore(open, focus) {
+    const btn = $("moreActs");
+    const menu = $("moreMenu");
+    if (!btn || !menu) return;
+    const ev = selected();
+    state.moreOpen = open && ev ? ev.guid : null;
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+    if (open) {
+      const list = moreItems();
+      const at = focus === "last" ? list[list.length - 1] : list[0];
+      if (focus && at) at.focus();
+    } else if (focus) btn.focus();
+  }
+  // Клавиатура меню «Ещё»: Enter, пробел и стрелки открывают, стрелки, Home и End — по пунктам, Esc и Tab
+  // закрывают, после Esc фокус — на «Ещё»
+  function moreKey(e) {
+    if (e.target.closest("#moreActs")) {
+      if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) {
+        e.preventDefault();
+        setMore(true, e.key === "ArrowUp" ? "last" : "first");
+      } else if (e.key === "Escape" && state.moreOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setMore(false, true);
+      }
+      return true;
+    }
+    if (!e.target.closest("#moreMenu")) return false;
+    const list = moreItems();
+    const i = list.indexOf(document.activeElement);
+    const go = (k) => list.length && list[(k + list.length) % list.length].focus();
+    if (e.key === "ArrowDown") go(i + 1);
+    else if (e.key === "ArrowUp") go(i - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(list.length - 1);
+    else if (e.key === "Escape") {
+      e.stopPropagation();
+      setMore(false, true);
+    } else {
+      if (e.key === "Tab") setMore(false);
+      return true;
+    }
+    e.preventDefault();
+    return true;
   }
 
   // Пометки в шапке шага: «необязательно»; у шага без переответа на текущем шаге — заранее, что ответ потом
@@ -3483,6 +3560,7 @@
       renderScenario();
     });
     $("scenarioRoot").addEventListener("keydown", (e) => {
+      if (moreKey(e)) return;
       if (e.key !== "Enter" && e.key !== " ") return;
       const crumb = e.target.closest("[data-crumb]");
       if (!crumb) return;
@@ -3501,6 +3579,11 @@
       if (e.target.closest("#backToQueue")) return backToQueue();
       const ev = selected();
       if (!ev) return;
+      if (e.target.closest("#moreActs")) {
+        setMore(state.moreOpen !== ev.guid);
+        return;
+      }
+      if (state.moreOpen && e.target.closest("#moreMenu [data-do]")) setMore(false);
       if (e.target.closest("[data-log-toggle]")) {
         state.logOpen = state.logOpen === ev.guid ? null : ev.guid;
         renderScenario();
@@ -3693,6 +3776,10 @@
     });
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".menu")) closeMenus();
+    });
+    // Меню «Ещё» закрывается щелчком мимо
+    document.addEventListener("click", (e) => {
+      if (state.moreOpen && e.target.isConnected && !e.target.closest(".more")) setMore(false);
     });
     // Раскрытый журнал сворачивается щелчком мимо; нажатая при этом кнопка карточки тоже срабатывает
     document.addEventListener("click", (e) => {

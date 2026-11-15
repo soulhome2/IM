@@ -174,6 +174,8 @@
           enabled: Boolean(a.ok),
           formId: tr.form,
           navigate: tr.ui.navigate,
+          placement: tr.ui.placement || "menu",
+          danger: Boolean(tr.ui.danger),
         });
       });
       W.navActions.items.forEach((nav) => {

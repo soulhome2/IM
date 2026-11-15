@@ -1132,7 +1132,11 @@ select.search-input { padding-right: 36px; }
   text-align: center;
 }
 
-.incident-head { padding: var(--card-y) var(--card-x) 8px; }
+.incident-head { padding: var(--card-y) var(--card-x) 8px; display: flex; align-items: flex-start; gap: 12px; }
+.incident-title { flex: 1; min-width: 0; }
+/* Действия шапки карточки (ui.placement = header): «Комментарий» — есть и у закрытого */
+.head-acts { display: flex; gap: 8px; flex-shrink: 0; }
+.head-acts .btn { font-size: 14px; padding: 6px 12px; }
 .incident-head h3 { margin: 0 0 3px; font-size: 20px; font-weight: 600; }
 .incident-meta { color: var(--muted); font-size: 14px; }
 .sla { color: var(--warn-text); }
@@ -1417,29 +1421,84 @@ select.search-input { padding-right: 36px; }
 /* Переходы по состоянию инцидента отделены от навигации по шагам сценария */
 /* В ряду «Назад» — действия — «Далее»: действия по центру карточки. Крайние колонки равной ширины —
    поэтому центр ряда, а не середина оставшегося места */
+/* Один ряд без переноса (§7, RULE-89): «К очереди» слева; главные действия машины и «Ещё» — у «Назад» / «Далее» */
 .work-acts {
-  grid-area: acts;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-wrap: nowrap;
   gap: 8px;
+  margin-left: auto;
 }
 
 .scenario-actions {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  grid-template-areas: "back acts next";
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   padding: 12px var(--card-x);
 }
-.scenario-actions-start { grid-area: back; justify-self: start; display: flex; flex-wrap: nowrap; gap: 8px; }
-/* Узкая карточка: «К очереди» и «Назад» / «Далее» — строкой, действия — строкой ниже, по центру (RULE-89) */
+.scenario-actions-start { margin-right: auto; display: flex; flex-wrap: nowrap; gap: 8px; }
+.scenario-actions .btn { white-space: nowrap; }
+
+/* Меню «Ещё»: раскрывается вверх над нижней панелью; опасное — последним, после разделителя */
+.more { position: relative; flex-shrink: 0; }
+#moreActs { gap: 2px; padding-right: 8px; }
+#moreActs .material-symbols-outlined { font-size: 18px; color: inherit; }
+.more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px var(--overlay);
+}
+.more-menu[hidden] { display: none; }
+.more-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.more-item:hover,
+.more-item:focus-visible { background: var(--hover); outline: none; }
+.more-item[aria-disabled="true"] { color: var(--muted); cursor: default; }
+.more-item.danger:not([aria-disabled="true"]) { color: var(--crit-text); }
+.more-sep { height: 1px; margin: 6px 0; background: var(--stroke-2); }
+/* Копии главных действий в меню — только на узкой карточке */
+.more-item.more-primary { display: none; }
+/* Меню только из копий главных действий — на широкой карточке не нужно */
+.more.only-primary { display: none; }
+
 .work-bottom { container-type: inline-size; }
-@container (max-width: 900px) {
-  .scenario-actions { grid-template-columns: 1fr auto; grid-template-areas: "back next" "acts acts"; }
-  /* «Назад» и «Далее» в своей строке — отделять нечем */
+/* Узкая карточка: ряд не переносится — главные действия уходят в «Ещё», у «К очереди» остаётся значок */
+@container (max-width: 640px) {
+  .scenario-actions:has(.more) .work-acts { display: none; }
+  .scenario-actions:has(.more) .more-item.more-primary { display: block; }
+  .more.only-primary { display: block; }
+  /* Меню — от левого края ряда, чтобы не уйти за край экрана */
+  .scenario-actions { position: relative; }
+  .more { position: static; }
+  .more-menu { left: var(--card-x); right: auto; bottom: calc(100% - 6px); }
   .scenario-actions-end { padding-left: 0; border-left: 0; }
+}
+@container (max-width: 480px) {
+  .scenario-actions .btq-label { display: none; }
+  .scenario-actions #backToQueue { padding: 8px 10px; }
+  .scenario-actions .btn { padding: 8px 10px; }
 }
 /* Крупнее только в карточке: .btn общий с очередью и модальными окнами */
 .scenario-actions .btn { font-size: 14px; padding: 8px 14px; }
@@ -2175,9 +2234,7 @@ select.search-input { padding-right: 36px; }
   .crumbs { padding: 6px var(--card-x) 10px; }
   .crumb:not(.current) { display: none; }
   .crumb.current .crumb-line { display: none; }
-  /* Телефон: «Назад» и «Далее» — одной строкой, действия — строкой ниже, по центру */
-  .scenario-actions { grid-template-columns: 1fr 1fr; grid-template-areas: "back next" "acts acts"; }
-  .scenario-actions-end { padding-left: 0; border-left: 0; }
+  /* Телефон: тот же один ряд — главные действия в «Ещё» (@container .work-bottom выше) */
 
   /* На телефоне карточка не делится на зоны — прокручивается целиком */
   #scenarioRoot { overflow: auto; }

@@ -45,8 +45,10 @@ SCREENS = [
     ("очередь «Чужие»", S.FOREIGN),
     ("очередь «Завершённые»", [("filter", "done")]),
     ("своя карточка", CLAIM),
-    ("форма «Закрыть»", CLAIM + ["#scenarioRoot button[data-do=close]"]),
-    ("форма «Отложить»", CLAIM + ["#scenarioRoot button[data-do=hold]"]),
+    # Нижняя панель карточки: «Отложить» и «Закрыть без обработки» — в меню «Ещё» (§7)
+    ("меню «Ещё» карточки", CLAIM + ["#moreActs"]),
+    ("форма «Закрыть»", CLAIM + ["#moreActs", "#moreMenu button[data-do=close]"]),
+    ("форма «Отложить»", CLAIM + ["#moreActs", "#moreMenu button[data-do=hold]"]),
     ("форма «Передать»", ["#eventsList button[data-do=transfer]", ".target-combo .mselect-input"]),
     ("чужая карточка", S.FOREIGN + ["#eventsList button[data-do=view]"]),
     ("закрытая карточка", [("filter", "done"), "#eventsList button[data-do=view]"]),

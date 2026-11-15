@@ -154,6 +154,8 @@ window.IM_DICT_UI = {
     "Группа реагирования": "Response team",
     "Действие «{name}» недоступно в текущем состоянии": "Action “{name}” is unavailable in the current state",
     "Журнал": "Journal",
+    "Ещё": "More",
+    "Другие действия": "Other actions",
     "Закрытие": "Resolution",
     "Закрыто": "Closed",
     "Закрыть": "Close",
