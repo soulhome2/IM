@@ -11,7 +11,8 @@
 // в начале — { sounding: [], attention: [] }. Шаг — одно из:
 //   { now?, event }       — decideSound(state, event, ctx)
 //   { now?, silence }     — silence(state), «Тихо»
-//   { now?, tick: {...} } — сменить поля ctx (agentState, onlyImportantUntil) и applyCtx(state, ctx)
+//   { now?, tick: {...} } — сменить поля ctx (agentState, onlyImportantUntil; settings — Merge Patch поверх текущих:
+//                           новая схема) и applyCtx(state, ctx)
 //   { now?, restore: [] } — restoreSound(очередь IncidentSummary, ctx): перечитанная очередь, без залпа
 //   { plan: { start, horizonSec? } } — planRepeats(topSounding(state), start, horizonSec)
 //   { cue: уровень | { level, byPriority } } — cueForPriority(byPriority ?? ctx.settings.byPriority, level)
@@ -101,7 +102,9 @@ function run() {
         } else if (step.silence) {
           state = S.silence(clone(state));
         } else if (step.tick) {
-          Object.assign(ctx, step.tick);
+          const { settings, ...rest } = step.tick;
+          Object.assign(ctx, rest);
+          if (settings !== undefined) ctx.settings = mergePatch(ctx.settings, settings);
           state = S.applyCtx(clone(state), clone(ctx));
         } else if (step.restore) {
           state = S.restoreSound(clone(step.restore), clone(ctx));

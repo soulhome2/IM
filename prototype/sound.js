@@ -9,10 +9,16 @@
 
    SoundState = { sounding: Sounding[], attention: guid[] }
      sounding  — что повторяется до взятия сейчас (снимает «Тихо», перерыв, взятие);
-     attention — непринятые инциденты, которые повторяются до взятия: по приоритету в «Новом» без адресата и «лично вам»
-                 (число в заголовке вкладки, §21.6). Зеркало очереди: от «Тихо», состояния оператора и автора события
+     attention — непринятые: повторяющиеся до взятия по приоритету в «Новом» без адресата и «лично вам» при любом
+                 repeat (число в заголовке вкладки, §21.6). Зеркало очереди: от «Тихо», состояния оператора и автора события
                  не зависит, меняется, когда инцидент перестал или начал подходить.
-   Sounding = { guid, number, kind: 'priority'|'personal'|'alert', priority, cue: SoundCue, since } */
+   Sounding = { guid, number, kind: 'priority'|'personal'|'alert', priority, cue: SoundCue, since }
+
+   Когда клиент зовёт restoreSound(текущая очередь, ctx) — повторы непринятых возобновляются без залпа, первый сигнал
+   по расписанию (planRepeats): загрузка страницы, переподключение потока, stream.reset; возврат в «Готов» с перерыва
+   или выхода и из «Занят» (перерыв и «Занят» звук только приостанавливают, applyCtx); workflow.schema_published и
+   reference.priorities_changed — звук и шаг повтора в sounding пересчитываются по новой схеме и справочнику.
+   Конец «Только важного» возобновлять нечего: повторяющиеся и «лично вам» в нём звучат. */
 (() => {
   const LEVEL_KEY = /^(0|[1-9][0-9]?|100)$/;
   const UNTIL = "until_taken";
@@ -45,8 +51,8 @@
     }
     return false;
   }
-  // Непринятый, который повторяется до взятия: «лично вам» или по приоритету
-  const awaits = (inc, settings) => (settings.personal.repeat === UNTIL && fits("personal", inc, settings)) || fits("priority", inc, settings);
+  // Непринятый для числа в заголовке: «лично вам» при любом repeat или повторяющийся до взятия по приоритету
+  const awaits = (inc, settings) => fits("personal", inc, settings) || fits("priority", inc, settings);
 
   // Слышит ли оператор звук этого вида сейчас (§21.3, §21.4)
   function hears(kind, cue, priority, ctx) {
@@ -123,12 +129,13 @@
   // «Тихо»: звучащее молкнет, внимание остаётся (§21.4)
   const silence = (state) => ({ sounding: [], attention: state.attention.slice() });
 
-  // Сменилось состояние оператора или «Только важное»: звучит только то, что он теперь слышит. Вернулся — снятое
-  // не возобновляется до нового события или перечитывания очереди
+  // Сменилось состояние оператора или «Только важное»: звучит только то, что он теперь слышит (приостановка).
+  // Вернулся в «Готов» или вышел из «Занят» — клиент зовёт restoreSound с текущей очередью
   const applyCtx = (state, ctx) => filterHeard({ sounding: state.sounding.slice(), attention: state.attention.slice() }, ctx);
 
   // Перечитанная очередь (загрузка, переподключение, stream.reset, §21.1): повторяющиеся до взятия возобновляются без
-  // залпа — play нет, первый сигнал по расписанию повтора (planRepeats); «один раз» задним числом не играет
+  // залпа — play нет, первый сигнал по расписанию повтора (planRepeats); «один раз» задним числом не играет.
+  // Состояние строится заново, since = ctx.now у всех: «кто раньше зазвучал» при равенстве — порядок очереди
   function restoreSound(queue, ctx) {
     const settings = ctx.settings;
     const snd = [];
@@ -136,9 +143,9 @@
     for (const inc of queue || []) {
       if (!awaits(inc, settings)) continue;
       att.push(inc.guid);
-      const kind = settings.personal.repeat === UNTIL && fits("personal", inc, settings) ? "personal" : "priority";
+      const kind = fits("personal", inc, settings) ? "personal" : "priority";
       const cue = kind === "personal" ? settings.personal : priorityCue(inc, settings);
-      if (hears(kind, cue, inc.priority, ctx)) snd.push(sounding(inc, kind, cue, ctx.now));
+      if (cue.repeat === UNTIL && hears(kind, cue, inc.priority, ctx)) snd.push(sounding(inc, kind, cue, ctx.now));
     }
     return { sounding: snd, attention: att };
   }
@@ -158,11 +165,13 @@
     return top;
   }
 
-  // Моменты повтора на часах AudioContext: шаг repeatSec, первый — через шаг после start, на horizonSec вперёд
+  // Моменты повтора на часах AudioContext: шаг repeatSec, первый — через шаг после start, на horizonSec вперёд;
+  // шаг длиннее запаса (121…300 с) — запас растягивается до шага, первый момент есть всегда
   function planRepeats(top, startCtxTime, horizonSec = 120) {
     if (!top || top.cue.repeat !== UNTIL || !(top.cue.repeatSec > 0)) return [];
     const out = [];
-    for (let k = 1; k * top.cue.repeatSec <= horizonSec; k++) out.push(startCtxTime + k * top.cue.repeatSec);
+    const horizon = Math.max(horizonSec, top.cue.repeatSec);
+    for (let k = 1; k * top.cue.repeatSec <= horizon; k++) out.push(startCtxTime + k * top.cue.repeatSec);
     return out;
   }
 
