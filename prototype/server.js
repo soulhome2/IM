@@ -548,6 +548,8 @@
         return res.moved.length;
       },
       actorName: (id) => rawName(id),
+      // Название дежурной группы правила (§8.1, М1) — снимок при приёме, у инцидента (ruleDutyGroupName)
+      ruleGroupName: (ev) => ev.ruleDutyGroupName || ev.ruleDutyGroup,
       // Снимок названия (labelSnapshots машины) — текст на языке того, кто выполняет переход
       labelText: (key) => render(key),
       log,

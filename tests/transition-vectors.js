@@ -371,6 +371,7 @@
       // Функции сервера мимо cel.world — с ленты под приставкой ctx. (решение 26); null в аргументах — ""
       actorName: (id) => answer("ctx.actorName", [blank(id)]),
       labelText: (key) => answer("ctx.labelText", [blank(key)]),
+      ruleGroupName: (ev) => answer("ctx.ruleGroupName", [ref(ev.id)]),
       progress: (ev) => answer("ctx.progress", [ref(ev.id)]),
       stepNumber: (ev) => answer("ctx.stepNumber", [ref(ev.id)]),
       // Варианты поля с source: transferTargets — факт transferTargets той же ленты
@@ -622,6 +623,12 @@
       on("actorName", (f) => (id) => {
         const r = f(id);
         note("ctx.actorName", [blank(id)], r);
+        return r;
+      });
+      // Название дежурной группы правила (§8.1, М1) — снимок сервера при приёме, с ленты
+      on("ruleGroupName", (f) => (ev) => {
+        const r = f(ev);
+        note("ctx.ruleGroupName", [ref(ev.id)], r);
         return r;
       });
       // Текст снимка названия (labelSnapshots, ТЗ-4) — на языке сервера, с ленты

@@ -747,6 +747,7 @@ function syntheticTransitions(env) {
       log: (ev, who, k, v, at) => ev.log.push({ at, whoId: who, k, v: v || null }),
       actorName: (id) => (id ? `name:${id}` : ["workflow.label.unassigned"]),
       labelText: (key) => `text:${key}`,
+      ruleGroupName: (ev) => `group:${ev.ruleDutyGroup}`,
       progress: () => ({ filled: 0, total: 2 }),
       stepNumber: () => 1,
       transferTargets: () => world.transferTargets().map((id) => ({ id })),

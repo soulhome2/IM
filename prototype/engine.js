@@ -210,8 +210,9 @@
           totalSteps: prog.total,
           escalationReason: [W.escalation.reasonKey],
           primaryNumber: ev.linkedTo && byId(ev.linkedTo) ? byId(ev.linkedTo).number : "",
-          // Группа правила (§8.1, М1) — снимок названия при приёме (ruleDutyGroupName); группы уже нет — последнее известное, нет и его — id
-          ruleGroupName: ev.ruleDutyGroup ? ev.ruleDutyGroupName || ev.ruleDutyGroup : "",
+          // Группа правила (§8.1, М1) — снимок названия при приёме: его даёт сервер (ctx.ruleGroupName, на ленте векторов
+          // переходов); группы уже нет — последнее известное, нет и его — id. У инцидента без группы правила сервер не спрашивают
+          ruleGroupName: ev.ruleDutyGroup ? (ctx.ruleGroupName ? ctx.ruleGroupName(ev) : ev.ruleDutyGroup) : "",
         },
         extra || {}
       );
@@ -330,7 +331,7 @@
       });
       const ev = Object.assign({}, base, {
         id: plain.id, number: plain.number, typeId: plain.eventType, priority: plain.priority, occurredAt: plain.occurredAt,
-        eventGuid: plain.eventGuid, scenarioGuid: plain.scenario,
+        eventGuid: plain.eventGuid, scenarioGuid: plain.scenario, ruleDutyGroup: plain.ruleDutyGroup || "",
         // Снимок в виде — уже текст: writeBack его не переводит
         closeCauseLabel: plain.closeCauseLabel || null,
       });
