@@ -31,7 +31,7 @@
 
 ## ТЗ-21. Окна плановых работ
 
-Решения — в плане задачи 5 `tz-21-maintenance-windows.md` (будет).
+Решения — [tz-21-maintenance-windows.md](tz-21-maintenance-windows.md), раздел «Решения».
 
 Дополнение к ТЗ-18, 19 (по ревью):
 

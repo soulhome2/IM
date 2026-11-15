@@ -2337,7 +2337,8 @@
                 "schema",
                 "post_settings",
                 "backup",
-                "customer"
+                "customer",
+                "maintenance_window"
               ]
             },
             "description": "Вид объекта."
@@ -2478,7 +2479,8 @@
                 "schema",
                 "post_settings",
                 "backup",
-                "customer"
+                "customer",
+                "maintenance_window"
               ]
             },
             "description": "Вид объекта."
@@ -2810,7 +2812,8 @@
                 "schema",
                 "post_settings",
                 "backup",
-                "customer"
+                "customer",
+                "maintenance_window"
               ]
             },
             "description": "Вид объекта."
@@ -10517,7 +10520,8 @@
               "schema",
               "post_settings",
               "backup",
-              "customer"
+              "customer",
+              "maintenance_window"
             ]
           },
           "objectId": {
@@ -10861,7 +10865,8 @@
               "schema",
               "post_settings",
               "backup",
-              "customer"
+              "customer",
+              "maintenance_window"
             ]
           },
           "objectId": {
@@ -11805,7 +11810,7 @@
       },
       "MaintenanceRecurrence": {
         "type": "object",
-        "description": "§14.12, ТЗ-21. Еженедельный повтор окна: дни недели и время суток начала и конца в часовом поясе окна. Конец не позже начала (`endTime` <= `startTime`) — интервал идёт через полночь и кончается на следующий день. Ежедневно — все семь дней. Интервал дня повтора — [дата + startTime, дата (+1 день через полночь) + endTime) в поясе `timeZone`, обрезанный рамкой окна [`startsAt`, `endsAt`). Летнее время: несуществующее местное время (перевод вперёд) сдвигается вперёд на величину перевода, двузначное (перевод назад) — первое из двух; так считают `Temporal` (`disambiguation: compatible`) и Go `time.Date`",
+        "description": "§14.12, ТЗ-21. Еженедельный повтор окна: дни недели и время суток начала и конца в часовом поясе окна. Конец не позже начала (`endTime` <= `startTime`) — интервал идёт через полночь и кончается на следующий день. Ежедневно — все семь дней. Интервал дня повтора — [дата + startTime, дата (+1 день через полночь) + endTime) в поясе `timeZone`, обрезанный рамкой окна [`startsAt`, `endsAt`). Летнее время: несуществующее местное время (перевод вперёд) сдвигается вперёд на величину перевода, двузначное (перевод назад) — первое из двух; как в `Temporal` (`disambiguation: compatible`)",
         "required": [
           "days",
           "startTime",
