@@ -66,6 +66,9 @@ def short_hold(w):
     no_grace(w)
     for item in w["reasonCatalogs"]["hold"]["items"]:
         item["maxMinutes"] = 0.03
+    # Причин оператора в машине нет — они в настройках поста эталонного набора и идут после пунктов машины
+    # (решение 2026-11-15): короткая причина оператора — первой в форме «Отложить»
+    w["reasonCatalogs"]["hold"]["items"].insert(0, {"id": "probe_short", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 0.03, "setBy": "operator"})
 
 
 def transfer_to_self(w):

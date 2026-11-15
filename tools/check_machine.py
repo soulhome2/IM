@@ -153,7 +153,8 @@ def check_workflow(w, err):
 
     # Срок из порогов молчания (deadlineFromIdle) — вместо срока справочника: оба сразу — значение справочника
     # молча не учитывалось бы (BUG-119)
-    for item in w["reasonCatalogs"].get("hold", {}).get("items", []):
+    # Причины поста (settings эталонного набора) — тоже: срок у причины оператора обязателен (решение 2026-11-15)
+    for item in with_post_settings(w)["reasonCatalogs"].get("hold", {}).get("items", []):
         if item.get("deadlineFromIdle") and item.get("maxMinutes") is not None:
             err.append(f"причина удержания {item['id']}: срок из порогов молчания (deadlineFromIdle) — maxMinutes должен быть null")
         # Срок у причины обязателен — и у причин оператора, и у системных: без него инцидент лежал бы отложенным
@@ -2237,6 +2238,18 @@ def check_admin_settings(w, o, err):
                 err.append(f"настройки: {key} — ни в перечне adminSettings, ни в notSettings")
 
 
+def with_post_settings(w):
+    """Машина с настройками поста эталонного набора (settings в fixtures/demo.json, решение 2026-11-15): пункты
+    справочников причин — после пунктов машины, как prototype/post-settings.js"""
+    with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
+        catalogs = (json.load(f).get("settings") or {}).get("reasonCatalogs") or {}
+    out = json.loads(json.dumps(w))
+    for cid, cat in catalogs.items():
+        if not cid.startswith("$"):
+            out["reasonCatalogs"][cid]["items"] += [dict({"setBy": "operator"}, **i) for i in cat.get("items", [])]
+    return out
+
+
 def collect():
     """Все ошибки машины, правил, контракта и прототипа — списком"""
     err = []
@@ -2265,7 +2278,7 @@ def collect():
     check_priorities(w, o, err)
     check_priority_literals(err)
     check_limits(w, err)
-    check_strings(w, err)
+    check_strings(with_post_settings(w), err)
     check_fail_keys(w, err)
     check_observer_notice(w, err)
     check_timer_declarations(w, err)
@@ -2292,7 +2305,7 @@ def collect():
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
     check_admin_settings(w, o, err)
-    check_fixture(w, err)
+    check_fixture(with_post_settings(w), err)
     check_rules(fixture_with_rows(), err)
     check_intake(w, err)
     check_open_questions(err)
@@ -2322,8 +2335,8 @@ MUTATIONS = [
     ("timer-not-started", "машина: «не может принять» не запускает реакцию при входе в «Новый» (RULE-51)", MACHINE,
      '{ "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },\n        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }',
      '{ "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }'),
-    ("hold-reason-no-deadline", "машина: у причины оператора нет срока (§4, правило 7; RULE-135)", MACHINE,
-     '"maxMinutes": 30, "setBy": "operator"', '"maxMinutes": null, "setBy": "operator"'),
+    ("hold-reason-no-deadline", "эталон: у причины оператора в настройках поста нет срока (§4, правило 7; RULE-135)", FIXTURE,
+     '"workflow.catalog.hold.third_party", "maxMinutes": 30}', '"workflow.catalog.hold.third_party", "maxMinutes": null}'),
     ("exit-hold-limited", "машина: при лимите отложенных «Отложить» считается выходом (RULE-136)", MACHINE,
      '"requiresAnyOfWithHoldLimit": ["incident:release", "incident:close"]', '"requiresAnyOfWithHoldLimit": ["incident:hold", "incident:close"]'),
     ("flag-agent-ready", "машина: «Отложить» без agentReady (readOnlyByAgentState)", MACHINE,

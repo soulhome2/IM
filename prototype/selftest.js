@@ -1637,6 +1637,59 @@
       }
     });
 
+    await step("Справочник причин без пунктов (решение 2026-11-15): причина не нужна и поля нет; есть пункт — без причины отказ; нет причин удержания — «Отложить» нет", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const W = window.IM_WORKFLOW;
+      const sys = W.reasonCatalogs.hold.items.filter((r) => r.setBy === "system");
+      const act = async (guid, tr, formValues) => {
+        const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
+        return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${tr}`, { formValues, surface: "card" }, { "If-Match": card.headers.etag });
+      };
+      try {
+        // Пустые справочники: машина задаёт только устройство, пунктов заводит администратор поста
+        await standReset({ fixture: "demo", workflowPatch: { reasonCatalogs: { false_alarm_cause: { items: [] }, hold: { items: sys } } } });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const b = button($("eventsList"), "claim");
+        expect(b, "нет доступной кнопки «Взять»");
+        const id = b.dataset.ev;
+        await click(b);
+        expect(mode() === "work", "карточка не открылась");
+        expect(!button(root(), "hold"), "без причин удержания «Отложить» доступно");
+        const held = await act(id, "hold", { reasonId: "break", comment: "" });
+        expect(held.status >= 400, `отложено без причин оператора: ${held.status}`);
+        await click(button(root(), "close"));
+        await setField("resultId", "false_alarm");
+        const box = $("dialogFields").querySelector('[data-field-box="causeId"]');
+        expect(!box || box.hidden, "у пустого справочника поле причины видно");
+        await click($("dialogConfirm"));
+        await wait(200);
+        const card = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(id)}`)).body;
+        expect(card.state === "closed" && !card.closeCauseId, `ложная тревога без причины не закрылась: ${card.state}, ${card.closeCauseId}`);
+        // Пункт есть — причина обязательна
+        await standReset({ fixture: "demo", workflowPatch: { reasonCatalogs: { false_alarm_cause: { items: [{ id: "bird", labelKey: "workflow.form.close.field.causeId", setBy: "operator" }] } } } });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const b2 = button($("eventsList"), "claim");
+        expect(b2, "нет доступной кнопки «Взять»");
+        const inc = { guid: b2.dataset.ev };
+        await click(b2);
+        if (mode() !== "queue") await click($("backToQueue"));
+        const bad = await act(inc.guid, "close", { resultId: "false_alarm", causeId: "", comment: "" });
+        expect(bad.status >= 400, `закрыто без причины при непустом справочнике: ${bad.status}`);
+        const ok = await act(inc.guid, "close", { resultId: "false_alarm", causeId: "bird", comment: "" });
+        expect(ok.status === 200, `с причиной не закрылось: ${ok.status} ${JSON.stringify(ok.body)}`);
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await setFilter("open");
+        await wait(300);
+      }
+    });
+
     await step("«Обработан» недоступен, пока сценарий не заполнен: в «Закрыть без обработки» его нет, «Итога» не открыть", async () => {
       await setFilter("open");
       const b = button($("eventsList"), "claim");

@@ -74,19 +74,24 @@ const UNCOVERED_OK = {
 
 // patch — набор на машине с патчем: ядро получает исходную машину с наложенным MACHINE_PATCH (patchMachine), bytes —
 // байты исходной машины
+// Векторы пишутся на машине с настройками поста эталонного набора (settings в fixtures/demo.json, решение
+// 2026-11-15: пунктов справочников причин в машине нет): post — эти настройки, в файле — postSettings
+const POST_SETTINGS = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/demo.json"), "utf8")).settings || null;
 function load(machinePath, enginePath, patch) {
   const bytes = fs.readFileSync(machinePath);
-  const W = patch ? patchMachine(JSON.parse(bytes.toString("utf8")), patch) : JSON.parse(bytes.toString("utf8"));
   const g = { console, TextEncoder, TextDecoder };
   g.window = g;
   vm.createContext(g);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, "prototype/post-settings.js"), "utf8"), g, { filename: "prototype/post-settings.js" });
+  const base = g.IMPostSettings.apply(JSON.parse(bytes.toString("utf8")), POST_SETTINGS);
+  const W = patch ? patchMachine(base, patch) : base;
   // Ядро прототипа и библиотека векторов переходов — для их повтора, как в tools/check_quint_replay.mjs
   for (const f of ["prototype/vendor/cel-js/cel.js", "prototype/cel-runtime.js", "prototype/engine.js", "tests/cel-vectors.js", "tests/transition-vectors.js"]) {
     // enginePath — копия ядра для проб порчи (--engine): подменяет только prototype/engine.js
     const src = f === "prototype/engine.js" && enginePath ? enginePath : path.join(ROOT, f);
     vm.runInContext(fs.readFileSync(src, "utf8"), g, { filename: f });
   }
-  return { W, bytes, patch: patch || null, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
+  return { W, bytes, post: POST_SETTINGS, patch: patch || null, IMCel: g.IMCel, lib: g.IMCelVectors.lib, IMEngine: g.IMEngine, tlib: g.IMTransitionVectors.lib };
 }
 const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
@@ -153,7 +158,7 @@ function refs(v, out) {
 }
 // Файл из данных: векторы — по id, в пуле — только то, на что ссылаются векторы, по ключу; counts — по векторам.
 // Ключи верхнего уровня — по алфавиту, как в каноне
-function serialize(lib, { incidents, vectors, machineSha256, skipped }) {
+function serialize(lib, { incidents, vectors, machineSha256, postSettings, skipped }) {
   const vs = [...vectors].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const used = [...refs(vs, new Set())].sort();
   used.forEach((k) => {
@@ -163,14 +168,14 @@ function serialize(lib, { incidents, vectors, machineSha256, skipped }) {
   return (
     `{"$comment":${JSON.stringify(COMMENT)},"counts":${lib.canonical(counts)},"format":1,\n` +
     `"incidents":{\n${used.map((k) => `${JSON.stringify(k)}:${lib.canonical(incidents[k])}`).join(",\n")}},\n` +
-    `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)},\n` +
+    `"machineSha256":${JSON.stringify(machineSha256)},"postSettings":${lib.canonical(postSettings ?? null)},"skipped":${lib.canonical(skipped)},\n` +
     `"vectors":[\n${vs.map((v) => lib.canonical(v)).join(",\n")}]}\n`
   );
 }
 
 // Файл переходов: векторы — по id, пул — как записан (в нём только инциденты оставленных векторов), counts — по op.
 // Набор на машине с патчем (есть machinePatch): в шапке ещё baseMachineSha256 и machinePatch, поля uncovered нет
-function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped, uncovered, baseMachineSha256, machinePatch }) {
+function serializeTransitions(lib, { incidents, vectors, machineSha256, postSettings, skipped, uncovered, baseMachineSha256, machinePatch }) {
   const vs = [...vectors].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const counts = Object.fromEntries(OPS.map((o) => [o, vs.filter((v) => v.op === o).length]));
   const patched = machinePatch !== undefined;
@@ -181,7 +186,7 @@ function serializeTransitions(lib, { incidents, vectors, machineSha256, skipped,
     head +
     `"incidents":{\n${Object.keys(incidents).sort().map((k) => `${JSON.stringify(k)}:${lib.canonical(incidents[k])}`).join(",\n")}},\n` +
     (patched ? `"machinePatch":${lib.canonical(machinePatch)},\n` : "") +
-    `"machineSha256":${JSON.stringify(machineSha256)},"skipped":${lib.canonical(skipped)}${patched ? "" : `,"uncovered":${lib.canonical(uncovered)}`},\n` +
+    `"machineSha256":${JSON.stringify(machineSha256)},"postSettings":${lib.canonical(postSettings ?? null)},"skipped":${lib.canonical(skipped)}${patched ? "" : `,"uncovered":${lib.canonical(uncovered)}`},\n` +
     `"vectors":[\n${vs.map((v) => lib.canonical(v)).join(",\n")}]}\n`
   );
 }
@@ -192,6 +197,7 @@ function patchedText(env, synth) {
     incidents: synth.incidents,
     vectors: synth.vectors,
     machineSha256: machineCanonSha(env.lib, env.W),
+    postSettings: env.post,
     skipped: Object.fromEntries(env.tlib.SKIPPED.map((k) => [k, 0])),
     baseMachineSha256: sha256(env.bytes),
     machinePatch: env.patch,
@@ -206,7 +212,7 @@ function transitionsText(env, tr, synth, machineSha256) {
   if (problem) throw new Error(`запись переходов: ${problem}. Файлы не записаны`);
   const ids = new Set(synth.vectors.map((v) => v.id));
   const vectors = tr.vectors.filter((v) => !ids.has(v.id)).concat(synth.vectors);
-  const text = serializeTransitions(env.lib, { incidents: Object.assign({}, tr.incidents, synth.incidents), vectors, machineSha256, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
+  const text = serializeTransitions(env.lib, { incidents: Object.assign({}, tr.incidents, synth.incidents), vectors, machineSha256, postSettings: env.post, skipped: tr.skipped, uncovered: UNCOVERED_TRANSITIONS_OK });
   const size = Buffer.byteLength(text, "utf8");
   if (size > TRANSITIONS_MAX_BYTES) throw new Error(`файл переходов ${(size / 1048576).toFixed(2)} МБ — больше 4 МБ. Файлы не записаны`);
   return text;
@@ -225,6 +231,7 @@ function check(text, env, where) {
     return fail(`${where}: правлен руками — не JSON (${e.message}): node tools/cel_vectors.mjs --update`);
   }
   if (data.machineSha256 !== sha256(env.bytes)) return fail(`${where}: машина изменилась после сборки векторов: node tools/cel_vectors.mjs --update`);
+  if (lib.canonical(data.postSettings ?? null) !== lib.canonical(env.post ?? null)) return fail(`${where}: настройки поста эталонного набора изменились после сборки векторов: node tools/cel_vectors.mjs --update`);
   if (data.format !== 1) return fail(`${where}: формат ${data.format}, а этот инструмент знает 1`);
   let canon;
   try {
@@ -366,6 +373,7 @@ function checkTransitionFile(text, env, synthEnv, where) {
     if (lib.canonical(data.machinePatch ?? null) !== lib.canonical(env.patch)) return fail(`${where}: machinePatch файла не равен MACHINE_PATCH tools/cel_vectors.mjs: ${again}`);
     if (data.machineSha256 !== machineCanonSha(lib, W)) return fail(`${where}: machineSha256 — не sha256 канона машины с патчем: ${again}`);
   } else if (data.machineSha256 !== sha256(env.bytes)) return fail(`${where}: машина изменилась после сборки векторов переходов: ${again}`);
+  if (lib.canonical(data.postSettings ?? null) !== lib.canonical(env.post ?? null)) return fail(`${where}: настройки поста эталонного набора изменились после сборки векторов: ${again}`);
   if (data.format !== 1) return fail(`${where}: формат ${data.format}, а этот инструмент знает 1`);
   const problem = tlib.recordedProblem(data);
   if (problem) return fail(`${where}: правлен руками — ${problem}: ${again}`);
@@ -1046,6 +1054,7 @@ if (opt("engine") && argv.includes("--update")) {
       incidents: Object.assign({}, rec.data.incidents, synth.incidents),
       vectors: chosen.concat(synth.vectors),
       machineSha256: sha256(env.bytes),
+      postSettings: env.post,
       skipped: { tapeRepeat: rec.stats.tapeRepeat, worldError: rec.stats.skipped },
     });
     // Переходы — тоже до записи: стоп любого из трёх файлов не оставляет записанным ни один

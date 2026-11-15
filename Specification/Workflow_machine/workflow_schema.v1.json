@@ -209,9 +209,6 @@
       "field": "hold_reason",
       "requiredOnTransition": ["hold"],
       "items": [
-        { "id": "third_party", "labelKey": "workflow.catalog.hold.third_party", "maxMinutes": 30, "setBy": "operator" },
-        { "id": "patrol", "labelKey": "workflow.catalog.hold.patrol", "maxMinutes": 45, "setBy": "operator" },
-        { "id": "no_data", "labelKey": "workflow.catalog.hold.no_data", "maxMinutes": 60, "setBy": "operator" },
         { "id": "break", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 30, "setBy": "system", "$comment": "§12.2 (RULE-106). Срок перерыва: истёк — инцидент в очередь (break_hold_release), нарушения удержания нет" },
         { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": null, "setBy": "system", "deadlineFromIdle": true, "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118, RULE-129, BUG-119). deadlineFromIdle: срок не в справочнике (maxMinutes — null), а из порогов молчания: порог возврата в очередь минус порог удержания (holdSec) — оператор молчит дальше, в очередь по молчанию (system_release_idle) в тот же момент; связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет" }
       ]
@@ -246,10 +243,6 @@
       "field": "close_cause",
       "requiredOnTransition": ["close"],
       "items": [
-        { "id": "power", "labelKey": "workflow.catalog.mass_fault.power", "setBy": "operator" },
-        { "id": "link", "labelKey": "workflow.catalog.mass_fault.link", "setBy": "operator" },
-        { "id": "mass_fault", "labelKey": "workflow.catalog.mass_fault.mass_fault", "setBy": "operator" },
-        { "id": "known", "labelKey": "workflow.catalog.mass_fault.known", "setBy": "operator" }
       ]
     },
     "false_alarm_cause": {
@@ -257,12 +250,6 @@
       "field": "close_cause",
       "requiredOnTransition": ["close"],
       "items": [
-        { "id": "animal", "labelKey": "workflow.catalog.false_alarm_cause.animal", "setBy": "operator" },
-        { "id": "weather", "labelKey": "workflow.catalog.false_alarm_cause.weather", "setBy": "operator" },
-        { "id": "equipment", "labelKey": "workflow.catalog.false_alarm_cause.equipment", "setBy": "operator" },
-        { "id": "staff", "labelKey": "workflow.catalog.false_alarm_cause.staff", "setBy": "operator" },
-        { "id": "setup", "labelKey": "workflow.catalog.false_alarm_cause.setup", "setBy": "operator" },
-        { "id": "other", "labelKey": "workflow.catalog.false_alarm_cause.other", "setBy": "operator", "commentRequired": true }
       ]
     }
   },
@@ -375,7 +362,7 @@
           "labelKey": "workflow.form.close.field.causeId",
           "requiredExpr": "true",
           "source": "causeCatalog:resultId",
-          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
+          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && size(causeCatalogs[i.causeCatalog].items) > 0)",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
           "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
         },
@@ -551,7 +538,8 @@
         { "fn": "hasPermission", "args": ["incident:hold"] },
         { "fn": "isOwner" },
         { "fn": "agentReady" },
-        { "fn": "withinHoldLimit" }
+        { "fn": "withinHoldLimit" },
+        { "fn": "hasHoldReasons" }
       ],
       "effects": [
         { "kind": "transactional", "fn": "setHoldReason", "args": ["form.reasonId"] },
@@ -1492,6 +1480,7 @@
     "workflow.guard.cause_comment_required": { "vars": [] },
     "workflow.guard.timer_not_expired": { "vars": [] },
     "workflow.guard.other_hold_reason": { "vars": [] },
+    "workflow.guard.no_hold_reasons": { "vars": [] },
     "workflow.guard.wrong_state": { "vars": [] },
     "workflow.guard.setting_off": { "vars": [] },
     "workflow.guard.setting_other": { "vars": [] },
@@ -1707,6 +1696,7 @@
       { "fn": "addresseeCanAccept", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected", "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_can_accept'", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.addressee_can_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Может ли владелец или адресат инцидента принять: право incident:accept и доступ к объекту; группе-адресату — хотя бы у одного участника и то, и другое. Инцидент без адресата условию false не отвечает." },
       { "fn": "ownerHasDutyGroup", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected", "onFail": "hide", "failKeys": ["workflow.guard.owner_duty_group"], "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — определение dutyGroupOf." },
       { "fn": "withinActiveLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxActive == 0 || countMine(me, 'in_progress', incident.id) < limits.maxActive", "failVars": { "n": "limits.maxActive", "id": "mineOf(me, 'in_progress', incident.id)[0].number" }, "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || countMine(me, 'on_hold', '') < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'", "onFail": "disable", "failKeys": ["workflow.guard.active_limit", "workflow.guard.active_limit_no_hold"], "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца. Подсказка — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна, есть право и лимит отложенных не исчерпан (BUG-104)." },
+      { "fn": "hasHoldReasons", "args": [], "argTypes": {}, "expr": "holdReasons.exists(r, r.setBy != 'system')", "onFail": "hide", "failKeys": ["workflow.guard.no_hold_reasons"], "extendsBaseRegistry": true, "$comment": "§4, решение 2026-11-15. В справочнике причин удержания есть причина оператора: срок удержания — от причины, без причин отложить нельзя. Пунктов в машине нет — их заводит администратор поста" },
       { "fn": "withinHoldLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxOnHold == 0 || countMine(me, 'on_hold', incident.id) < limits.maxOnHold", "failVars": { "n": "limits.maxOnHold" }, "onFail": "disable", "failKeys": ["workflow.guard.hold_limit"], "extendsBaseRegistry": true, "$comment": "§10.2. Отложенных у оператора меньше limits.maxOnHold. Только у ручного «Отложить»." },
       { "fn": "closeCauseAllowed", "errorCode": "CLOSE_CAUSE_INVALID", "args": [], "argTypes": {}, "expr": "form.resultId == '' || form.causeId == '' || !closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '') || (causeOk(form.resultId, form.causeId) && (!causeCommentRequired(form.resultId, form.causeId) || form.comment != ''))", "failKey": "causeOk(form.resultId, form.causeId) ? 'workflow.guard.cause_comment_required' : 'workflow.guard.cause_required'", "onFail": "disable", "failKeys": ["workflow.guard.cause_required", "workflow.guard.cause_comment_required"], "extendsBaseRegistry": true, "$comment": "§2.2, ТЗ-4. У результата со справочником причин (causeCatalog) причина — из его справочника: «Ложная тревога» без причины или с причиной сбоя не закрывается. Причина требует комментария (commentRequired, «Другое») — без комментария не закрыть. Без form.resultId — не проверяется: так решается, показывать ли кнопку. Пустая причина — тоже: её не даёт обязательное поле causeId (field_required)" },
       { "fn": "withinReopenWindow", "errorCode": "REOPEN_WINDOW_EXPIRED", "args": [], "argTypes": {}, "expr": "now - incident.closedAt <= limits.reopenWindowMin * 60000", "failVars": { "n": "limits.reopenWindowMin" }, "onFail": "hide", "failKeys": ["workflow.guard.reopen_window"], "extendsBaseRegistry": true, "$comment": "§6.1, §10.1. С закрытия прошло не больше limits.reopenWindowMin минут." },

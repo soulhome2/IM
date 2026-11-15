@@ -80,6 +80,7 @@
   "workflow.guard.cause_comment_required": "This cause needs a comment",
   "workflow.guard.timer_not_expired": "The target has not expired",
   "workflow.guard.other_hold_reason": "Different hold reason",
+  "workflow.guard.no_hold_reasons": "No hold reasons set up",
   "workflow.guard.wrong_state": "Not available in the current state",
   "workflow.guard.setting_off": "Disabled by a setting",
   "workflow.guard.setting_other": "The setting has a different value",

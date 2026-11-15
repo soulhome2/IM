@@ -13,11 +13,17 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const Q = path.join(ROOT, "Specification/Workflow_machine/quint");
 const opt = (name) => (process.argv.find((a) => a.startsWith(`--${name}=`)) || "").slice(name.length + 3) || null;
-const W = JSON.parse(fs.readFileSync(opt("machine") || path.join(ROOT, "Specification/Workflow_machine/workflow_schema.v1.json"), "utf8"));
 const g = { console, TextEncoder, TextDecoder };
 g.window = g;
 vm.createContext(g);
 vm.runInContext(fs.readFileSync(path.join(ROOT, "prototype/vendor/cel-js/cel.js"), "utf8"), g);
+vm.runInContext(fs.readFileSync(path.join(ROOT, "prototype/post-settings.js"), "utf8"), g);
+// Модель — машина с настройками поста эталонного набора (settings в fixtures/demo.json): пунктов справочников
+// причин в машине нет (решение 2026-11-15), модели нужны причины удержания оператора и причины закрытия
+const W = g.IMPostSettings.apply(
+  JSON.parse(fs.readFileSync(opt("machine") || path.join(ROOT, "Specification/Workflow_machine/workflow_schema.v1.json"), "utf8")),
+  JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/demo.json"), "utf8")).settings,
+);
 const parse = (expr) => g.CEL.parse(expr).ast;
 
 const own = (o) => Object.entries(o || {}).filter(([k]) => !k.startsWith("$"));
@@ -580,7 +586,7 @@ transitions();
 const part = (n) => fs.readFileSync(path.join(opt("src") || path.join(Q, "src"), n), "utf8").replace(/\s+$/, "");
 const text = [
   "// -*- mode: Bluespec; -*-",
-  "// Собрано скриптом tools/gen_quint.mjs из Specification/Workflow_machine/workflow_schema.v1.json и частей quint/src/.",
+  "// Собрано скриптом tools/gen_quint.mjs из Specification/Workflow_machine/workflow_schema.v1.json (с настройками поста fixtures/demo.json) и частей quint/src/.",
   "// Руками не править: правится машина или часть в src/, затем сборка.",
   part("head.qnt"),
   "",

@@ -468,24 +468,6 @@ window.IM_WORKFLOW = {
       ],
       "items": [
         {
-          "id": "third_party",
-          "labelKey": "workflow.catalog.hold.third_party",
-          "maxMinutes": 30,
-          "setBy": "operator"
-        },
-        {
-          "id": "patrol",
-          "labelKey": "workflow.catalog.hold.patrol",
-          "maxMinutes": 45,
-          "setBy": "operator"
-        },
-        {
-          "id": "no_data",
-          "labelKey": "workflow.catalog.hold.no_data",
-          "maxMinutes": 60,
-          "setBy": "operator"
-        },
-        {
           "id": "break",
           "labelKey": "workflow.catalog.hold.break",
           "maxMinutes": 30,
@@ -624,28 +606,7 @@ window.IM_WORKFLOW = {
       "requiredOnTransition": [
         "close"
       ],
-      "items": [
-        {
-          "id": "power",
-          "labelKey": "workflow.catalog.mass_fault.power",
-          "setBy": "operator"
-        },
-        {
-          "id": "link",
-          "labelKey": "workflow.catalog.mass_fault.link",
-          "setBy": "operator"
-        },
-        {
-          "id": "mass_fault",
-          "labelKey": "workflow.catalog.mass_fault.mass_fault",
-          "setBy": "operator"
-        },
-        {
-          "id": "known",
-          "labelKey": "workflow.catalog.mass_fault.known",
-          "setBy": "operator"
-        }
-      ]
+      "items": []
     },
     "false_alarm_cause": {
       "$comment": "§2.2, ТЗ-4. Причина ложной тревоги — уточнение к результату «Ложная тревога». То же поле close_cause, что у причины сбоя: у закрытия одна причина, справочник выбирает результат (causeCatalog). commentRequired — без комментария не закрыть («Другое»)",
@@ -653,39 +614,7 @@ window.IM_WORKFLOW = {
       "requiredOnTransition": [
         "close"
       ],
-      "items": [
-        {
-          "id": "animal",
-          "labelKey": "workflow.catalog.false_alarm_cause.animal",
-          "setBy": "operator"
-        },
-        {
-          "id": "weather",
-          "labelKey": "workflow.catalog.false_alarm_cause.weather",
-          "setBy": "operator"
-        },
-        {
-          "id": "equipment",
-          "labelKey": "workflow.catalog.false_alarm_cause.equipment",
-          "setBy": "operator"
-        },
-        {
-          "id": "staff",
-          "labelKey": "workflow.catalog.false_alarm_cause.staff",
-          "setBy": "operator"
-        },
-        {
-          "id": "setup",
-          "labelKey": "workflow.catalog.false_alarm_cause.setup",
-          "setBy": "operator"
-        },
-        {
-          "id": "other",
-          "labelKey": "workflow.catalog.false_alarm_cause.other",
-          "setBy": "operator",
-          "commentRequired": true
-        }
-      ]
+      "items": []
     }
   },
   "stepSets": {
@@ -881,7 +810,7 @@ window.IM_WORKFLOW = {
           "labelKey": "workflow.form.close.field.causeId",
           "requiredExpr": "true",
           "source": "causeCatalog:resultId",
-          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '')",
+          "visibleExpr": "closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && size(causeCatalogs[i.causeCatalog].items) > 0)",
           "placeholderKey": "workflow.form.close.field.causeId.placeholder",
           "$comment": "RULE-110, ТЗ-4: причина уходит в отчёт — пусто, пока оператор не выберет сам. Источник causeCatalog:resultId — позиции справочника causeCatalog результата, выбранного в поле resultId; у варианта — forValues: результаты, у которых эта причина в справочнике; по нему клиент оставляет причины выбранного результата. Варианты от значений формы не зависят (CEL.md): что причина из справочника выбранного результата, проверяет условие closeCauseAllowed"
         },
@@ -1334,6 +1263,9 @@ window.IM_WORKFLOW = {
         },
         {
           "fn": "withinHoldLimit"
+        },
+        {
+          "fn": "hasHoldReasons"
         }
       ],
       "effects": [
@@ -4431,6 +4363,9 @@ window.IM_WORKFLOW = {
     "workflow.guard.other_hold_reason": {
       "vars": []
     },
+    "workflow.guard.no_hold_reasons": {
+      "vars": []
+    },
     "workflow.guard.wrong_state": {
       "vars": []
     },
@@ -5900,6 +5835,18 @@ window.IM_WORKFLOW = {
           "workflow.guard.active_limit_no_hold"
         ],
         "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца. Подсказка — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна, есть право и лимит отложенных не исчерпан (BUG-104)."
+      },
+      {
+        "fn": "hasHoldReasons",
+        "args": [],
+        "argTypes": {},
+        "expr": "holdReasons.exists(r, r.setBy != 'system')",
+        "onFail": "hide",
+        "failKeys": [
+          "workflow.guard.no_hold_reasons"
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§4, решение 2026-11-15. В справочнике причин удержания есть причина оператора: срок удержания — от причины, без причин отложить нельзя. Пунктов в машине нет — их заводит администратор поста"
       },
       {
         "fn": "withinHoldLimit",
