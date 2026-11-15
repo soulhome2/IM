@@ -457,7 +457,7 @@
   "workflow.settings.tab.source_groups": "Группы устройств",
   "workflow.settings.tab.source_groups.what": "Дерево групп устройств: по нему строятся группы доступа и фильтры очереди",
   "workflow.settings.tab.links": "Справочные ссылки",
-  "workflow.settings.tab.links.what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие ссылки и ссылки площадки",
+  "workflow.settings.tab.links.what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие и ссылки групп устройств",
   "workflow.settings.tab.camera_links": "Связи камер",
   "workflow.settings.tab.camera_links.what": "Связи устройств и камер: какие камеры показывать и в каком порядке; инцидент показывает камеры всех связей своего источника, первая — главная",
   "workflow.settings.tab.system_status": "Состояние системы",
