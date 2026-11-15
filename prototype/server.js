@@ -1507,11 +1507,15 @@
     // Переход — одно событие потока (§9, RULE-60): какой, чем вызван и что было → стало. Что сказать
     // наблюдателям, клиент берёт из машины (ui.observerNotice), а не из имени перехода
     function emitTransition(ev, transitionId, actorId, facts) {
-      const tr = engine.transition(transitionId);
       const f = facts || { from: {}, to: {} };
       // В аудит — до потока: поток не говорит об инцидентах вне групп доступа, аудит пишет всё (§12.4)
       auditTransition(ev, transitionId, actorId, f);
-      emit("incident.transitioned", ev, actorId, {
+      emit("incident.transitioned", ev, actorId, transitionPayload(ev, transitionId, f));
+    }
+    // StreamTransitionedPayload: и у incident.transitioned, и у incident.created — какой переход появления (М1)
+    function transitionPayload(ev, transitionId, f) {
+      const tr = engine.transition(transitionId);
+      return {
         transitionId,
         trigger: tr ? tr.trigger : null,
         state: { from: f.from.state || null, to: ev.state },
@@ -1520,7 +1524,7 @@
         // Адресовано смотрящему — ему или его дежурной группе (isSelf машины): поток у каждого оператора свой
         addressedToMe: engine.isSelf(engine.addressee(ev)),
         breach: f.breach || null,
-      });
+      };
     }
 
     // Сбой вычисления — ошибка сервера: 500, текст ошибки в тело не попадает (CEL.md, PROC-44 в3)
@@ -2485,13 +2489,17 @@
         intakeDeliveries = null;
       }
       if (!res.ok) return null;
-      // Итог адресации (§12.5, $commentAddressing машины): group или queue — аргумент условия ruleAddressingIs
-      // выполненного перехода; у правила без группы итога нет
-      const guard = (W.transitions.find((t) => t.id === res.transitionId).guards || []).find((g) => g.fn === "ruleAddressingIs");
-      const outcome = guard ? guard.args[0] : null;
+      // Итог адресации (§12.5, $commentAddressing машины): аргумент условия ruleAddressingIs выполненного перехода —
+      // у каждого перехода intake.create оно ровно одно (check_machine.py); нет — ошибка машины, а не «итога нет»
+      const guards = (engine.transition(res.transitionId).guards || []).filter((g) => g.fn === "ruleAddressingIs");
+      if (guards.length !== 1) throw new Error(`intake.create ${res.transitionId}: ruleAddressingIs × ${guards.length}`);
+      const outcome = guards[0].args[0];
       pendingIntake.set(ev.id, {
         deliveries,
-        addressing: dutyGroupId && outcome !== "none" ? { incidentGuid: ev.id, number: ev.number, ruleGuid: rule.guid, ruleName: rule.name || null, dutyGroupId, dutyGroupName: ev.ruleDutyGroupName, outcome } : null,
+        transitionId: res.transitionId,
+        facts: res.facts,
+        // Итог — только у правила с группой: group или queue; none — у правила без группы, итога нет
+        addressing: outcome === "none" ? null : { incidentGuid: ev.id, number: ev.number, ruleGuid: rule.guid, ruleName: rule.name || null, dutyGroupId, dutyGroupName: ev.ruleDutyGroupName, outcome },
       });
       return ev;
     }
@@ -2504,7 +2512,9 @@
       const addressing = intake.map((x) => x.addressing).filter(Boolean);
       EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id), maintenance: maintenance || null, addressing });
       created.forEach((ev) => events.unshift(ev));
-      created.forEach((ev) => emit("incident.created", ev, "dispatcher", {}));
+      // Какой переход появления и кому адресован (addressedToMe): по ui.observerNotice перехода клиент уведомляет
+      // группу-адресата create_to_group так же, как адресата передачи (§8.1, М1)
+      created.forEach((ev, i) => emit("incident.created", ev, "dispatcher", intake[i].transitionId ? transitionPayload(ev, intake[i].transitionId, intake[i].facts) : {}));
       intake.forEach((x) => x.deliveries.forEach((fn) => fn()));
     }
 
@@ -2532,7 +2542,14 @@
       const alarmNumber = picks.length ? `INC-${first}` : null;
       const created = [];
       for (const [k, pick] of picks.entries()) {
-        const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, marked && lowest != null ? lowest : pick.rule.priority, marked);
+        let ev;
+        try {
+          ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, marked && lowest != null ? lowest : pick.rule.priority, marked);
+        } catch (err) {
+          // Исключение при появлении (сбой вычисления, ошибка машины) — соседи события тоже не создаются
+          created.forEach((x) => pendingIntake.delete(x.id));
+          throw err;
+        }
         if (!ev) {
           created.forEach((x) => pendingIntake.delete(x.id));
           return { failed: { rule: pick.rule.name || pick.rule.guid, scenario: pick.scenario } };

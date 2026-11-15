@@ -466,7 +466,7 @@
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.create_to_group"] },
         { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
       ],
-      "ui": { "surface": [] }
+      "ui": { "surface": [], "observerNotice": { "key": "workflow.notice.create_to_group", "audience": "newAddressee" } }
     },
     {
       "id": "rule_group_cannot_accept",

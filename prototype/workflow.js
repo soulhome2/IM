@@ -1062,7 +1062,11 @@ window.IM_WORKFLOW = {
         }
       ],
       "ui": {
-        "surface": []
+        "surface": [],
+        "observerNotice": {
+          "key": "workflow.notice.create_to_group",
+          "audience": "newAddressee"
+        }
       }
     },
     {

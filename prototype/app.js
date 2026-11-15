@@ -4806,9 +4806,10 @@
       const p = msg.payload;
       const item = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === p.closeResultId);
       toast(t("{n} того же события закрыт: {result}", { n: p.siblingNumber, result: item ? lbl(item) : p.closeResultId }));
-    } else if (msg.type === "incident.transitioned") {
+    } else if (msg.type === "incident.transitioned" || (msg.type === "incident.created" && tid)) {
       // Что сказать о чужом или автоматическом переходе — в машине (ui.observerNotice, RULE-60, BUG-32):
-      // observers — всем, кто видит инцидент; newAddressee — новому адресату, лично или его группе
+      // observers — всем, кто видит инцидент; newAddressee — новому адресату, лично или его группе.
+      // Появление (incident.created) — так же по переходу появления: у группы правила — как адресату передачи (§8.1, М1)
       const tr = transitionDef(tid);
       const notice = tr && tr.ui && tr.ui.observerNotice;
       const p = msg.payload;

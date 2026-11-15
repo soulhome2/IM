@@ -2736,7 +2736,10 @@
         expect(journalOf(a).join() === "workflow.journal.create_to_group" && born.vars.targetName === groupName("grp-leads"), `у группы: журнал ${journalOf(a).join()}, группа «${born && born.vars.targetName}»`);
         await setFilter("inbox");
         expect($("eventsList").querySelector(`[data-id="${a.guid}"]`), `${a.number} нет в «Мне на принятие» участника группы`);
-        out.push(`у группы ${a.number}`);
+        // Уведомление участнику группы-адресата — как при передаче (ui.observerNotice перехода появления, newAddressee)
+        const notice = (n, g) => toastWith(new RegExp(`Новый ${n} — вашей группе «${groupName(g)}»`));
+        expect(notice(a.number, "grp-leads"), `участнику группы нет уведомления о ${a.number}`);
+        out.push(`у группы ${a.number}, уведомление участнику`);
         // 2. «Группа реагирования»: все вышли из МИ — «Новое» в очереди, оповещение с названием группы
         const b = await setup("grp-response", { sidorov: { agentState: "offline" }, gusev: { agentState: "offline" } });
         expect(b.state === "new" && !b.assignmentGroup && !b.owner, `все вышли: состояние ${b.state}, адресат ${b.assignmentGroup && b.assignmentGroup.id}`);
@@ -2749,7 +2752,9 @@
         // 3. Сидоров на перерыве, Гусев вышел: перерыв не мешает — у группы
         const c = await setup("grp-response", { sidorov: { agentState: "not_ready" }, gusev: { agentState: "offline" } });
         expect(c.state === "pending_acceptance" && c.assignmentGroup && c.assignmentGroup.id === "grp-response", `перерыв: состояние ${c.state}, адресат ${c.assignmentGroup && c.assignmentGroup.id}`);
-        out.push("перерыв — у группы");
+        // Я не в «Группе реагирования» — уведомления адресату мне нет
+        expect(!notice(c.number, "grp-response"), `не участнику группы пришло уведомление о ${c.number}`);
+        out.push("перерыв — у группы, не участнику уведомления нет");
         // 4. «Охрана ТЦ»: Кузнецов на месте, но устройство вне ТЦ — доступа нет, в очередь
         const d = await setup("grp-tc", { kuznetsov: { agentState: "ready" } });
         expect(d.state === "new" && !d.assignmentGroup && journalOf(d).join() === "workflow.journal.rule_group_cannot_accept", `нет доступа: состояние ${d.state}, журнал ${journalOf(d).join()}`);

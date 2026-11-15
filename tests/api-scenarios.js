@@ -2486,6 +2486,56 @@
     }
   });
 
+  test("Адресация из правила: incident.created — переход появления и адресат; участнику группы addressedToMe, у ui.observerNotice — newAddressee (§8.1, §9, М1)", async () => {
+    const { card, got } = await addressed("grp-leads");
+    const m = got.find((x) => x.type === "incident.created" && x.incidentGuid === card.guid);
+    assert.eq([m.payload.transitionId, m.payload.trigger, m.payload.state.from, m.payload.state.to], ["create_to_group", "event", null, "pending_acceptance"], "переход появления");
+    assert.eq([m.payload.addressee && m.payload.addressee.id, m.payload.addressedToMe], ["grp-leads", true], "адресат — моя группа");
+    assert.eq(W.transitions.find((t) => t.id === "create_to_group").ui.observerNotice.audience, "newAddressee", "уведомление — как у передачи");
+    // Не участник: «Группа реагирования», я в ней не состою
+    const other = await addressed("grp-response");
+    const n = other.got.find((x) => x.type === "incident.created" && x.incidentGuid === other.card.guid);
+    assert.eq([n.payload.transitionId, n.payload.addressedToMe], ["create_to_group", false], "чужая группа — не мне");
+    // Без группы — create, адресата нет
+    const none = await addressed(null);
+    const z = none.got.find((x) => x.type === "incident.created" && x.incidentGuid === none.card.guid);
+    assert.eq([z.payload.transitionId, z.payload.addressee, z.payload.addressedToMe], ["create", null, false], "без группы");
+  });
+
+  test("Адресация из правила: одно событие, два правила — у каждого инцидента группа своего победителя (§14.5 п. 3–4, §8.1, М1)", async () => {
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.forEach((o) => ["sidorov", "gusev"].includes(o.id) && (o.agentState = "offline"));
+    const base = window.IM_FIXTURE.rules.find((r) => r.guid === RULE(1));
+    const medical = (dutyGroupId) => Object.assign({ guid: RULE("d"), active: true, name: "медпункт — пожар", priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [KEYS.medical], conditions: [{ eventTypeId: "fire" }] }, dutyGroupId ? { dutyGroupId } : {});
+    for (const [why, second, outcome] of [
+      ["второе без группы", medical(null), { state: "new", key: "workflow.journal.create", group: null }],
+      ["у второго все вышли", medical("grp-response"), { state: "new", key: "workflow.journal.rule_group_cannot_accept", group: null }],
+    ]) {
+      const env = await makeEnv({ fixturePatch: { people, rules: [Object.assign({}, base, { dutyGroupId: "grp-leads" }), second] } });
+      const res = await env.call("POST", "/test/events", fireAt(S1));
+      assert.status(res, 201, null, `${why}: событие`);
+      assert.eq(res.body.created, 2, `${why}: два инцидента`);
+      const cards = await Promise.all(res.body.incidents.map(async (c) => (await env.call("GET", `/operator/incidents/${c.guid}`)).body));
+      const fire = cards.find((c) => scenarioOf(c) === KEYS.fire);
+      const med = cards.find((c) => scenarioOf(c) === KEYS.medical);
+      assert.eq([fire.state, fire.assignmentGroup && fire.assignmentGroup.id], ["pending_acceptance", "grp-leads"], `${why}: пожар — у группы своего правила`);
+      assert.eq([med.state, med.assignmentGroup, med.journal.filter((j) => BORN.test(j.templateKey)).map((j) => j.templateKey)], [outcome.state, outcome.group, [outcome.key]], `${why}: медпункт — по своему правилу`);
+      assert.eq(res.body.alarmNumber, res.body.incidents[0].number, `${why}: номер тревоги — первого`);
+    }
+  });
+
+  test("Адресация из правила в окне работ mark: инцидент с окном и низшим приоритетом — всё равно у группы (§14.12, §8.1, М1)", async () => {
+    const rule = Object.assign({}, window.IM_FIXTURE.rules.find((r) => r.guid === RULE(1)), { dutyGroupId: "grp-leads" });
+    const env = await makeEnv({ workflowPatch: { maintenance: { mode: "mark" } }, fixturePatch: { rules: [rule] } });
+    const w = await mwMake(env, { deviceGuid: S1, startsAt: mwIso(env.now), endsAt: mwIso(env.now + MW_H) });
+    assert.status(w, 201, null, "окно");
+    const res = await env.call("POST", "/test/events", fireAt(S1));
+    assert.status(res, 201, null, "создан");
+    assert.eq(res.body.maintenance, { windowId: w.body.id, mode: "mark" }, "итог окна");
+    const inc = res.body.incidents[0];
+    assert.eq([inc.maintenanceWindowId, inc.priority, inc.state, inc.assignmentGroup && inc.assignmentGroup.id], [w.body.id, mwLowest, "pending_acceptance", "grp-leads"], "помечен и у группы");
+  });
+
   test("Адресация из правила: у правила нет группы — как раньше, «Новое», запись create, без оповещения (§8.1, М1)", async () => {
     const { card, got, born } = await addressed(null);
     assert.eq([card.state, card.assignmentGroup], ["new", null], "состояние и адресат");

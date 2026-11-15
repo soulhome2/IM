@@ -481,6 +481,7 @@
   "workflow.error.test.event_failed": "Событие не обработано: у правила «{rule}» нет сценария {scenario} в наборе. Не создан ни один инцидент, событие не записано",
   "workflow.notice.claim": "{id} взял в работу {who}",
   "workflow.notice.transfer": "{who} передал {id} вам",
+  "workflow.notice.create_to_group": "Новый {id} — вашей группе «{addressee}»",
   "workflow.notice.auto_escalate": "Автоэскалация {id} → {addressee}",
   "workflow.notice.system_hold_idle": "Нет связи с {previousOwner} — {id} отложен системой",
   "workflow.journal.timer_overridden": "Норматив «{timer}» истёк — действие оператора успело раньше, чем «{transition}»",

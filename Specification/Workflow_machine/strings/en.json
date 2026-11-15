@@ -481,6 +481,7 @@
   "workflow.error.test.event_failed": "The event is not processed: rule «{rule}» has no scenario {scenario} in the data set. No incident was created and the event was not recorded",
   "workflow.notice.claim": "{who} took {id}",
   "workflow.notice.transfer": "{who} transferred {id} to you",
+  "workflow.notice.create_to_group": "New {id} for your group “{addressee}”",
   "workflow.notice.auto_escalate": "Auto-escalation {id} → {addressee}",
   "workflow.notice.system_hold_idle": "No link to {previousOwner} — the system put {id} on hold",
   "workflow.journal.timer_overridden": "Target «{timer}» expired — the operator acted before «{transition}»",
