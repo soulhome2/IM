@@ -2036,6 +2036,28 @@
       expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });
 
+    await step("Состояние системы: свой раздел из четырёх блоков; «Хранение» — без статистики, со ссылкой (§14.11, §20)", async () => {
+      await click($("adminBtn"));
+      expect($("adminTabs").querySelector('[data-admin-tab="system_status"]'), "раздела «Состояние системы» нет");
+      await click($("adminTabs").querySelector('[data-admin-tab="storage"]'));
+      await wait(200);
+      expect(!$("adminTable").querySelector("[data-status-block]") && !/Размер базы|Свободно на диске/.test($("adminTable").textContent), "на «Хранении» осталась статистика");
+      const link = $("adminNote").querySelector('[data-admin-goto="system_status"]');
+      expect(link && /Посмотреть состояние/.test(link.textContent), "на «Хранении» нет ссылки «Посмотреть состояние»");
+      await click(link);
+      await wait(300);
+      const blocks = [...$("adminTable").querySelectorAll("[data-status-block]")].map((r) => r.dataset.statusBlock).join();
+      expect(blocks === "database,retention,backup,server", `блоки: ${blocks}`);
+      expect(/общий для сервера/i.test($("adminTable").textContent), "размер базы не помечен «общий для сервера»");
+      expect(/нет данных/.test($("adminTable").textContent), "о копии базы нет честного «нет данных»");
+      const refresh = $("adminNote").querySelector("[data-admin-refresh]");
+      expect(refresh, "нет кнопки «Обновить»");
+      await click(refresh);
+      await wait(200);
+      expect($("adminTable").querySelector('[data-status-block="server"]'), "после «Обновить» блоков нет");
+      await click(document.querySelector('[data-close="modalAdmin"]'));
+    });
+
     // Взять новое в работу служебным запросом стенда — с версией записи, как клиент
     async function standClaim(stand, guid) {
       const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
@@ -4323,6 +4345,20 @@
         await wait(400);
         await setFilter("open");
       }
+    });
+
+    // Сброс стенда меняет данные — шаг в конце, чтобы не трогать шаги выше
+    await step("Состояние системы без права: пункта настроек нет, запрос — 403 (§5, §20)", async () => {
+      // Без права: раздела (и всей админки) нет, запрос — 403
+      const stand = window.IM_SELFTEST_API;
+      await standReset({ fixture: "demo", operatorPermissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin") });
+      await wait(600);
+      const denied = await stand.raw("GET", "/operator/admin/system-status");
+      expect(denied.status === 403, `без права — ${denied.status}, а не 403`);
+      expect($("adminBtn").hidden, "без права пункт настроек виден");
+      await standReset({ fixture: "demo" });
+      await wait(600);
+      expect(!$("adminBtn").hidden, "право не вернулось");
     });
 
     await step("Ответы встроенного сервера соответствуют openapi.json", async () => {

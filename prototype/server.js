@@ -64,6 +64,8 @@
     // События (§14.5): guid от источника → номер тревоги и инциденты по порядку создания. Повтор события с тем же
     // guid ничего не создаёт. Набор отдельного списка не хранит — события собираются из eventGuid инцидентов
     let EVENTS = new Map();
+    // Когда принято каждое событие (мс) — для «приёма в минуту» раздела «Состояние системы» (§20)
+    let intakeLog = [];
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
     // или из /test/reset (operatorRoles); видимые ему устройства считаются один раз при загрузке
     let ACCESS_GROUPS = [];
@@ -680,6 +682,7 @@
       }));
       // События набора — из инцидентов: первым — тот, чей номер — номер тревоги, затем по номеру
       EVENTS = new Map();
+      intakeLog = [];
       events.forEach((ev) => {
         const known = EVENTS.get(ev.eventGuid) || { guid: ev.eventGuid, typeId: ev.typeId, devices: ev.deviceIds, alarmNumber: ev.alarmNumber, incidentIds: [] };
         known.incidentIds.push(ev.id);
@@ -2163,6 +2166,68 @@
     // Состояние окна (§14.12): впереди — до начала первого интервала; идёт — от него до конца (у серии — и в
     // промежутках между интервалами); закончилось — после конца
     const windowStatus = (w) => (now() >= w.endsAt ? "ended" : now() < firstStart(w) ? "planned" : "active");
+    /* ===== Состояние системы (§14.11, §20): что прототип знает — считает, остальное — числа стенда (demoFields) ===== */
+    function systemStatus(q) {
+      if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
+      // Организация — из токена; параметров у запроса нет, чужую не запросить
+      if (Object.keys(q || {}).length) return problem(400, "BAD_REQUEST", ["workflow.error.bad_request"]);
+      const at = now();
+      const MIN = 60000;
+      const perMinute = Array.from({ length: 60 }, (_, i) => intakeLog.filter((t) => t > at - (60 - i) * MIN && t <= at - (59 - i) * MIN).length);
+      const minIso = (list) => (list.length ? iso(Math.min(...list)) : null);
+      const MB = 1048576;
+      // Демо: размер базы растёт с числом инцидентов стенда; диск и прирост — правдоподобные числа
+      const parts = [
+        ["events", 180 * MB + events.length * 2048],
+        ["incidents", 95 * MB + events.length * 6144],
+        ["journal", 70 * MB + auditActions.length * 1024],
+        ["comment_files", 40 * MB],
+        ["maintenance_windows", MB + MAINT.length * 512],
+      ].map(([name, bytes]) => ({ name, bytes }));
+      const named = parts.reduce((s, x) => s + x.bytes, 0);
+      const other = 48 * MB;
+      const growthWeek = 210 * MB;
+      const free = 50 * 1024 * MB;
+      const audit = auditActions.map((r) => Date.parse(r.at)).concat(settingsAudit.map((r) => Date.parse(r.at)));
+      const backupRun = (action) => {
+        const r = settingsAudit.filter((x) => x.objectType === "backup" && x.action === action).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+        return r ? { at: r.at, actorId: r.actorId, actorName: r.actorName, fileName: r.objectName, bytes: null } : null;
+      };
+      const lastPurgeAt = at - 20 * MIN;
+      return {
+        status: 200,
+        body: {
+          at: iso(at),
+          database: {
+            scope: "server",
+            bytes: named + other,
+            growthDayBytes: 30 * MB,
+            growthWeekBytes: growthWeek,
+            diskFreeBytes: free,
+            daysLeft: Math.floor(free / (growthWeek / 7)),
+            parts: parts.sort((a, b) => b.bytes - a.bytes).concat({ name: "other", bytes: other }),
+          },
+          retention: {
+            lastPurge: { at: iso(lastPurgeAt), incidents: 0, events: 0, streamEvents: 0 },
+            nextPurgeAt: iso(lastPurgeAt + 60 * MIN),
+            oldestEventAt: minIso(events.map((e) => e.createdAt).filter((x) => x != null)),
+            oldestIncidentAt: minIso(events.map((e) => e.createdAt).filter((x) => x != null)),
+            oldestAuditAt: minIso(audit.filter((x) => !Number.isNaN(x))),
+          },
+          // Резервной копии в прототипе нет (§17): записей журнала о ней нет — null, честно
+          backup: { lastExport: backupRun("export"), lastRestore: backupRun("restore"), dataBackup: null },
+          server: {
+            eventsPerMinute: perMinute,
+            operatorsOnline: 1 + (SIM.enabled ? OPERATORS.filter((op) => op.id !== ME && !colleagueIdleSince[op.id]).length : 0),
+            serverVersion: "prototype",
+            workflowVersion: W.schema.version,
+            maintenanceActive: MAINT.filter((w) => windowStatus(w) === "active").length,
+          },
+          demoFields: ["database", "retention.lastPurge", "retention.nextPurgeAt"],
+        },
+      };
+    }
+
     function windowView(w) {
       return {
         id: w.id,
@@ -2241,6 +2306,7 @@
       const find = (id) => MAINT.find((w) => w.id === id) || null;
       return [
         ["GET", "/operator/maintenance-windows/current", () => ({ status: 200, body: maintenanceNow() })],
+        ["GET", "/operator/admin/system-status", (p, q) => systemStatus(q)],
         ["GET", "/operator/maintenance-windows", () => ({ status: 200, body: MAINT.slice().sort((a, b) => a.startsAt - b.startsAt).map(windowView) })],
         [
           "POST",
@@ -2378,6 +2444,7 @@
       const known = EVENTS.get(event.guid);
       // Повтор события — прежние инциденты, до окон: окно касается только создания новых (§14.12)
       if (known) return { eventGuid: known.guid, alarmNumber: known.alarmNumber, created: [], incidents: known.incidentIds.map(byId).filter(Boolean), maintenance: known.maintenance };
+      intakeLog.push(now());
       const source = event.devices[0];
       const fact = { guid: event.guid, eventType: event.type.id, device: source, deviceType: deviceSpec(source).type, at: event.occurredAt };
       const won = engine.intake(RULES, fact);

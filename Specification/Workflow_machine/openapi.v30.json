@@ -2697,7 +2697,7 @@
         ],
         "operationId": "getDatabaseStats",
         "summary": "Статистика базы",
-        "description": "§14.11. Для вкладки «Хранение» настроек поста. Своя организация: число устройств, правил, дежурных групп, операторов (заходивших за 30 дней); у сценариев (без архивных), событий, всех, открытых и закрытых инцидентов — число, самое раннее и самое позднее время (у сценариев — создания, у событий — приёма, у инцидентов — события); последняя очистка по сроку (`lastPurge`). Вся база (все организации): место крупных таблиц (`tables`) и всей базы (`databaseBytes`, `pg_database_size`). Только чтение, отдельный запрос — считается до пары секунд. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
+        "description": "§14.11. Устарел (решение 2026-11-15): вкладка «Хранение» статистику больше не показывает, наблюдение — раздел «Состояние системы», `GET /operator/admin/system-status`. Остаётся, пока конфигуратор не перешёл. Своя организация: число устройств, правил, дежурных групп, операторов (заходивших за 30 дней); у сценариев (без архивных), событий, всех, открытых и закрытых инцидентов — число, самое раннее и самое позднее время (у сценариев — создания, у событий — приёма, у инцидентов — события); последняя очистка по сроку (`lastPurge`). Вся база (все организации): место крупных таблиц (`tables`) и всей базы (`databaseBytes`, `pg_database_size`). Только чтение, отдельный запрос — считается до пары секунд. Право `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2709,6 +2709,167 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/operator/admin/system-status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getSystemStatus",
+        "summary": "Состояние системы",
+        "description": "§14.11, §20. Раздел админки «Состояние системы», только чтение: база и диск, хранение, резервная копия, работа сервера. Клиент запрашивает при открытии раздела, по кнопке «Обновить» и раз в минуту, пока раздел открыт. Организация — из токена, параметров нет: чужую не запросить, любой параметр (в том числе `customerGuid`) — `400 BAD_REQUEST`. Размер базы и диска общий для сервера (`database.scope = server`): организация видит общий итог и части, но не части других организаций. Право `im.system.view`, в первой версии его даёт `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Считается до пары секунд.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Состояние системы",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemStatus"
+                },
+                "example": {
+                  "at": "2026-11-15T09:30:00Z",
+                  "database": {
+                    "scope": "server",
+                    "bytes": 2147483648,
+                    "growthDayBytes": 31457280,
+                    "growthWeekBytes": 209715200,
+                    "diskFreeBytes": 53687091200,
+                    "daysLeft": 1792,
+                    "parts": [
+                      {
+                        "name": "events",
+                        "bytes": 966367641
+                      },
+                      {
+                        "name": "incidents",
+                        "bytes": 429496729
+                      },
+                      {
+                        "name": "journal",
+                        "bytes": 322122547
+                      },
+                      {
+                        "name": "comment_files",
+                        "bytes": 214748364
+                      },
+                      {
+                        "name": "maintenance_windows",
+                        "bytes": 1048576
+                      },
+                      {
+                        "name": "other",
+                        "bytes": 213699791
+                      }
+                    ]
+                  },
+                  "retention": {
+                    "lastPurge": {
+                      "at": "2026-11-15T09:00:04Z",
+                      "incidents": 12,
+                      "events": 340,
+                      "streamEvents": 5210
+                    },
+                    "nextPurgeAt": "2026-11-15T10:00:04Z",
+                    "oldestEventAt": "2026-08-17T10:12:00Z",
+                    "oldestIncidentAt": "2026-08-17T10:12:00Z",
+                    "oldestAuditAt": "2024-01-10T08:00:00Z"
+                  },
+                  "backup": {
+                    "lastExport": {
+                      "at": "2026-11-14T18:02:11Z",
+                      "actorId": "admin-1",
+                      "actorName": "Иванова А.",
+                      "fileName": "im-backup-2026-11-14.json",
+                      "bytes": 48213
+                    },
+                    "lastRestore": null,
+                    "dataBackup": null
+                  },
+                  "server": {
+                    "eventsPerMinute": [
+                      3,
+                      5,
+                      2,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4,
+                      4
+                    ],
+                    "operatorsOnline": 4,
+                    "serverVersion": "1.8.2",
+                    "workflowVersion": 4,
+                    "maintenanceActive": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -6450,6 +6611,15 @@
                 "rules": {
                   "type": "string",
                   "description": "Разделы правил"
+                },
+                "seeAlso": {
+                  "type": "string",
+                  "description": "Решение 2026-11-15. id вкладки, на которую ведёт ссылка из этой: у «Хранения» — «Посмотреть состояние» (system_status)"
+                },
+                "refreshSec": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Решение 2026-11-15. Вкладка только для наблюдения: клиент перечитывает её запрос (source) раз в столько секунд, пока она открыта, и даёт кнопку «Обновить»"
                 },
                 "groups": {
                   "type": "array",
@@ -11877,6 +12047,417 @@
           }
         },
         "additionalProperties": false
+      },
+      "SystemStatus": {
+        "type": "object",
+        "required": [
+          "at",
+          "database",
+          "retention",
+          "backup",
+          "server"
+        ],
+        "description": "§14.11, §20. Состояние системы для раздела админки «Состояние системы»: база, хранение, резервная копия, работа сервера. Всё, кроме `database`, — только своей организации",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда посчитано"
+          },
+          "database": {
+            "$ref": "#/components/schemas/SystemDatabase"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/SystemRetention"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/SystemBackup"
+          },
+          "server": {
+            "$ref": "#/components/schemas/SystemServer"
+          },
+          "demoFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Поля, которые встроенный сервер прототипа не считает, а подставляет правдоподобными числами стенда (путь через точку: `database`, `retention.lastPurge`). Рабочий сервер поле не отдаёт; клиент помечает такие строки «демо»"
+          }
+        },
+        "example": {
+          "at": "2026-11-15T09:30:00Z",
+          "database": {
+            "scope": "server",
+            "bytes": 2147483648,
+            "growthDayBytes": 31457280,
+            "growthWeekBytes": 209715200,
+            "diskFreeBytes": 53687091200,
+            "daysLeft": 1792,
+            "parts": [
+              {
+                "name": "events",
+                "bytes": 966367641
+              },
+              {
+                "name": "incidents",
+                "bytes": 429496729
+              },
+              {
+                "name": "journal",
+                "bytes": 322122547
+              },
+              {
+                "name": "comment_files",
+                "bytes": 214748364
+              },
+              {
+                "name": "maintenance_windows",
+                "bytes": 1048576
+              },
+              {
+                "name": "other",
+                "bytes": 213699791
+              }
+            ]
+          },
+          "retention": {
+            "lastPurge": {
+              "at": "2026-11-15T09:00:04Z",
+              "incidents": 12,
+              "events": 340,
+              "streamEvents": 5210
+            },
+            "nextPurgeAt": "2026-11-15T10:00:04Z",
+            "oldestEventAt": "2026-08-17T10:12:00Z",
+            "oldestIncidentAt": "2026-08-17T10:12:00Z",
+            "oldestAuditAt": "2024-01-10T08:00:00Z"
+          },
+          "backup": {
+            "lastExport": {
+              "at": "2026-11-14T18:02:11Z",
+              "actorId": "admin-1",
+              "actorName": "Иванова А.",
+              "fileName": "im-backup-2026-11-14.json",
+              "bytes": 48213
+            },
+            "lastRestore": null,
+            "dataBackup": null
+          },
+          "server": {
+            "eventsPerMinute": [
+              3,
+              5,
+              2,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4
+            ],
+            "operatorsOnline": 4,
+            "serverVersion": "1.8.2",
+            "workflowVersion": 4,
+            "maintenanceActive": 1
+          }
+        }
+      },
+      "SystemDatabase": {
+        "type": "object",
+        "required": [
+          "scope",
+          "bytes",
+          "growthDayBytes",
+          "growthWeekBytes",
+          "diskFreeBytes",
+          "daysLeft",
+          "parts"
+        ],
+        "description": "База и место на диске. Общие для сервера, всех организаций: по организации размер не делится. Клиент подписывает блок «общий для сервера»",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "server"
+            ],
+            "description": "Чьё это: всегда `server` — вся база, все организации"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Размер базы, `pg_database_size`"
+          },
+          "growthDayBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Прирост за сутки: размер сейчас минус снимок суточной давности; снимка ещё нет — null. Бывает отрицательным после очистки",
+            "nullable": true
+          },
+          "growthWeekBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Прирост за неделю, так же по снимку недельной давности",
+            "nullable": true
+          },
+          "diskFreeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Свободно на диске, где лежит база; сервер МИ этого не знает (база на другой машине) — null",
+            "nullable": true
+          },
+          "daysLeft": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Хватит на столько дней: `diskFreeBytes / (growthWeekBytes / 7)`, вниз до целого. Нет свободного места или прироста, прирост не больше нуля — null",
+            "nullable": true
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemDatabasePart"
+            },
+            "description": "Крупнейшие части по убыванию; последняя — `other`: вся база за вычетом перечисленных"
+          }
+        }
+      },
+      "SystemDatabasePart": {
+        "type": "object",
+        "required": [
+          "name",
+          "bytes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "events",
+              "incidents",
+              "journal",
+              "comment_files",
+              "maintenance_windows",
+              "other"
+            ],
+            "description": "`events` — события; `incidents` — инциденты с историей; `journal` — журналы инцидентов, действий и настроек, поток событий; `comment_files` — файлы комментариев и вложения шагов; `maintenance_windows` — окна плановых работ; `other` — остальное"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Таблицы части с индексами и TOAST, `pg_total_relation_size`"
+          }
+        }
+      },
+      "SystemRetention": {
+        "type": "object",
+        "required": [
+          "lastPurge",
+          "nextPurgeAt",
+          "oldestEventAt",
+          "oldestIncidentAt",
+          "oldestAuditAt"
+        ],
+        "description": "Хранение своей организации (§14.11)",
+        "properties": {
+          "lastPurge": {
+            "description": "Последняя очистка по сроку; до первой — null",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RetentionRun"
+              }
+            ]
+          },
+          "nextPurgeAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Следующая очистка: через час после последней; до первой — null",
+            "nullable": true
+          },
+          "oldestEventAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Самое старое событие — время приёма; событий нет — null",
+            "nullable": true
+          },
+          "oldestIncidentAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Самый старый инцидент — время события; нет — null",
+            "nullable": true
+          },
+          "oldestAuditAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Самая старая запись аудита (действия и настройки, §12.4); нет — null",
+            "nullable": true
+          }
+        }
+      },
+      "SystemBackupRun": {
+        "type": "object",
+        "required": [
+          "at",
+          "actorId",
+          "actorName",
+          "fileName"
+        ],
+        "description": "Запись журнала настроек о резервной копии (§12.4, объект `backup`)",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "actorName": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Размер файла; у восстановления не отдаётся, не записан — null",
+            "nullable": true
+          }
+        }
+      },
+      "SystemBackup": {
+        "type": "object",
+        "required": [
+          "lastExport",
+          "lastRestore",
+          "dataBackup"
+        ],
+        "description": "Резервная копия. МИ сохраняет в файл только настройки и объекты своей организации (`GET /operator/admin/backup`); запись журнала пишется, когда файл собран, — значит, копия удалась. Копию базы с инцидентами и журналами делает площадка, а не МИ",
+        "properties": {
+          "lastExport": {
+            "description": "Последнее сохранение настроек в файл; не было — null",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemBackupRun"
+              }
+            ]
+          },
+          "lastRestore": {
+            "description": "Последнее восстановление из файла; не было — null",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemBackupRun"
+              }
+            ]
+          },
+          "dataBackup": {
+            "description": "Копия базы. МИ её не делает и о ней не знает — в первой версии всегда null; клиент пишет «нет данных: копию базы делает площадка»",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemBackupRun"
+              }
+            ]
+          }
+        }
+      },
+      "SystemServer": {
+        "type": "object",
+        "required": [
+          "eventsPerMinute",
+          "operatorsOnline",
+          "serverVersion",
+          "workflowVersion",
+          "maintenanceActive"
+        ],
+        "description": "Работа сервера для своей организации",
+        "properties": {
+          "eventsPerMinute": {
+            "type": "array",
+            "minItems": 60,
+            "maxItems": 60,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Принято событий по минутам за последний час, от старой минуты к текущей"
+          },
+          "operatorsOnline": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Операторы на связи: сессия есть и признак активности (§12.3) не старше `session.idleHoldSec`"
+          },
+          "serverVersion": {
+            "type": "string",
+            "description": "Версия сервера МИ"
+          },
+          "workflowVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Версия действующей схемы (машины), §14.6"
+          },
+          "maintenanceActive": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Идущих сейчас окон плановых работ (§14.12); список — `GET /operator/maintenance-windows`"
+          }
+        }
       }
     }
   }

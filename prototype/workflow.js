@@ -7574,6 +7574,7 @@ window.IM_WORKFLOW = {
         "id": "storage",
         "labelKey": "workflow.settings.tab.storage",
         "rules": "§14.11",
+        "seeAlso": "system_status",
         "groups": [
           {
             "id": "retention",
@@ -7684,6 +7685,15 @@ window.IM_WORKFLOW = {
         "rules": "§19.1",
         "source": "GET /operator/admin/camera-links",
         "whatKey": "workflow.settings.tab.camera_links.what"
+      },
+      {
+        "id": "system_status",
+        "$comment": "Решение 2026-11-15: наблюдение — отдельный раздел, не настройки. Только чтение; refreshSec — автообновление, пока раздел открыт. Право im.system.view, в первой версии — incident:schema:admin (§5)",
+        "labelKey": "workflow.settings.tab.system_status",
+        "rules": "§14.11, §20",
+        "source": "GET /operator/admin/system-status",
+        "whatKey": "workflow.settings.tab.system_status.what",
+        "refreshSec": 60
       }
     ],
     "notSettings": [

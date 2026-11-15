@@ -460,6 +460,8 @@
   "workflow.settings.tab.links.what": "Меню справки: регламент, телефоны, схемы, контакты служб — общие ссылки и ссылки площадки",
   "workflow.settings.tab.camera_links": "Связи камер",
   "workflow.settings.tab.camera_links.what": "Связи устройств и камер: какие камеры показывать и в каком порядке; инцидент показывает камеры всех связей своего источника, первая — главная",
+  "workflow.settings.tab.system_status": "Состояние системы",
+  "workflow.settings.tab.system_status.what": "Только чтение: база и место на диске, очистка по сроку хранения, резервная копия, работа сервера. Обновляется при открытии, кнопкой и раз в минуту",
   "workflow.label.unassigned": "Не назначен",
   "workflow.label.role.system": "система",
   "workflow.label.role.group": "группа",

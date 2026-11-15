@@ -3848,6 +3848,23 @@
       adminState.tab = btn.dataset.adminTab;
       renderAdmin();
     });
+    // Ссылка «Посмотреть состояние» на «Хранении» и кнопка «Обновить» раздела «Состояние системы» (§20)
+    const adminLinks = (e) => {
+      const go = e.target.closest("[data-admin-goto]");
+      if (go) {
+        adminState.tab = go.dataset.adminGoto;
+        renderAdmin();
+      }
+      if (e.target.closest("[data-admin-refresh]")) renderAdmin();
+    };
+    $("adminNote").addEventListener("click", adminLinks);
+    $("adminTable").addEventListener("click", adminLinks);
+    // Автообновление раздела с refreshSec, пока он открыт (раз в минуту — «Состояние системы»)
+    setInterval(() => {
+      if ($("modalAdmin").hidden) return;
+      const tab = WORKFLOW.adminSettings.tabs.find((x) => x.id === adminState.tab);
+      if (tab && tab.refreshSec && Date.now() - (adminState.shownAt || 0) >= tab.refreshSec * 1000) renderAdmin();
+    }, 5000);
     document.querySelectorAll(".menu").forEach((menu) => {
       const trigger = menu.querySelector("[aria-haspopup]");
       const pop = menu.querySelector(".menu-pop");
@@ -4535,7 +4552,11 @@
     $("adminTabs").innerHTML = tabs
       .map((x) => `<button type="button" role="tab" data-admin-tab="${x.id}" class="${x.id === tab.id ? "active" : ""}" aria-selected="${x.id === tab.id}">${escapeHtml(lbl(x))}</button>`)
       .join("");
-    $("adminNote").textContent = `${t("Правила")}: ${tab.rules}` + (hasLbl(tab, "what") ? `. ${lbl(tab, "what")}` : "");
+    const note = escapeHtml(`${t("Правила")}: ${tab.rules}` + (hasLbl(tab, "what") ? `. ${lbl(tab, "what")}` : ""));
+    const goto = tab.seeAlso ? ` <button type="button" class="btn ghost small" data-admin-goto="${tab.seeAlso}">${te("Посмотреть состояние")}</button>` : "";
+    const refresh = tab.refreshSec ? ` <button type="button" class="btn ghost small" data-admin-refresh>${te("Обновить")}</button>` : "";
+    $("adminNote").innerHTML = note + goto + refresh;
+    adminState.shownAt = Date.now();
     const table = $("adminTable");
     table.className = tab.items ? "doc-table settings" : "doc-table";
     if (tab.items) {
@@ -4562,10 +4583,68 @@
       table.innerHTML = `<tbody><tr><td>${te("В прототипе запроса нет: эти данные МИ ещё не вынесены в контракт")}</td></tr></tbody>`;
       return;
     }
-    const html = await sourceTable(tab);
+    const html = sourcePath(tab) === "/operator/admin/system-status" ? await systemStatusTable() : await sourceTable(tab);
     if ((tabs.find((x) => x.id === adminState.tab) || tabs[0]) !== tab) return; // пока ждали запрос, открыли другую вкладку
     table.innerHTML = html;
   }
+  // Раздел «Состояние системы» (§14.11, §20): четыре блока строками «что — сейчас»; числа, которые прототип
+  // не считает (demoFields), помечены «демо»
+  async function systemStatusTable() {
+    const s = await api.get("/operator/admin/system-status").catch((err) => ({ error: problemText(err) }));
+    if (s.error) return `<tbody><tr><td>${escapeHtml(s.error)}</td></tr></tbody>`;
+    const demo = new Set(s.demoFields || []);
+    const mark = (path) => ([...demo].some((d) => path === d || path.startsWith(`${d}.`)) ? ` <span class="badge">${te("демо")}</span>` : "");
+    const bytes = (n) => {
+      if (n == null) return te("нет данных");
+      const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+      let v = Math.abs(n);
+      let i = 0;
+      while (v >= 1024 && i < units.length - 1) {
+        v /= 1024;
+        i++;
+      }
+      return `${n < 0 ? "−" : ""}${v.toFixed(i ? 1 : 0)} ${te(units[i])}`;
+    };
+    const when = (v) => (v ? escapeHtml(fmtWhen(v)) : te("нет данных"));
+    const row = (label, value, path, what) => `<tr><td>${te(label)}${what ? `<span class="what">${te(what)}</span>` : ""}</td><td>${value}${path ? mark(path) : ""}</td></tr>`;
+    const head = (id, label, what) => `<tr class="admin-group" data-status-block="${id}"><th colspan="2">${te(label)}${what ? `<span class="what">${te(what)}</span>` : ""}</th></tr>`;
+    const PART = { events: "События", incidents: "Инциденты", journal: "Журналы", comment_files: "Файлы комментариев", maintenance_windows: "Окна плановых работ", other: "Остальное" };
+    const db = s.database;
+    const r = s.retention;
+    const p = r.lastPurge;
+    const b = s.backup;
+    const sv = s.server;
+    const perHour = sv.eventsPerMinute.reduce((x, y) => x + y, 0);
+    const run = (x) => (x ? `${when(x.at)}, ${asData(x.actorName)}, ${asData(x.fileName)}${x.bytes != null ? `, ${bytes(x.bytes)}` : ""} — ${te("успешно")}` : te("не было"));
+    const body = [
+      head("database", "База", "Общий для сервера: размер и диск — всех организаций"),
+      row("Размер базы", bytes(db.bytes), "database"),
+      row("Прирост за сутки", bytes(db.growthDayBytes), "database"),
+      row("Прирост за неделю", bytes(db.growthWeekBytes), "database"),
+      row("Свободно на диске", bytes(db.diskFreeBytes), "database"),
+      row("Хватит при текущем приросте", db.daysLeft == null ? te("нет данных") : te("на {n} дн.", { n: db.daysLeft }), "database"),
+      ...db.parts.map((x) => row(PART[x.name] || x.name, bytes(x.bytes), "database")),
+      head("retention", "Хранение", "Очистка по сроку хранения — раз в час, только своей организации"),
+      row("Последняя очистка", p ? `${when(p.at)}: ${te("инцидентов {i}, событий {e}, записей потока {s}", { i: p.incidents, e: p.events, s: p.streamEvents })}` : te("ещё не было"), "retention.lastPurge"),
+      row("Следующая очистка", when(r.nextPurgeAt), "retention.nextPurgeAt"),
+      row("Самое старое событие", when(r.oldestEventAt)),
+      row("Самый старый инцидент", when(r.oldestIncidentAt)),
+      row("Самая старая запись аудита", when(r.oldestAuditAt)),
+      head("backup", "Резервная копия", "МИ сохраняет в файл настройки и объекты организации; копию базы делает площадка"),
+      row("Последнее сохранение настроек", run(b.lastExport), "backup.lastExport"),
+      row("Последнее восстановление", run(b.lastRestore), "backup.lastRestore"),
+      row("Копия базы", b.dataBackup ? run(b.dataBackup) : te("нет данных: копию базы делает площадка, не МИ")),
+      head("server", "Работа сервера"),
+      row("Приём событий в минуту", te("сейчас {now}, за час {hour}, в среднем {avg}", { now: sv.eventsPerMinute[59], hour: perHour, avg: (perHour / 60).toFixed(1) }), "server.eventsPerMinute"),
+      row("Операторов на связи", String(sv.operatorsOnline), "server.operatorsOnline"),
+      row("Версия сервера", asData(sv.serverVersion), "server.serverVersion"),
+      row("Версия машины", String(sv.workflowVersion), "server.workflowVersion"),
+      row("Идут окна плановых работ", `${sv.maintenanceActive} <button type="button" class="btn ghost small" data-admin-goto="maintenance">${te("Открыть окна")}</button>`, "server.maintenanceActive"),
+      row("Обновлено", when(s.at)),
+    ].join("");
+    return `<thead><tr><th>${te("Что")}</th><th>${te("Сейчас")}</th></tr></thead><tbody>${body}</tbody>`;
+  }
+
   // Данные МИ вкладки или раздела с запросом (source): шапка и строки таблицы, ошибка — строкой
   async function sourceTable(tab) {
     const data = await api.get(sourcePath(tab)).catch((err) => ({ error: problemText(err) }));

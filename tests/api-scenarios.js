@@ -161,6 +161,27 @@
     assert.status(await bare.act(other.guid, "comment", { comment: "x" }), 403, "PERMISSION_DENIED", "без права");
   });
 
+  /* ===== Состояние системы (§14.11, §20, решение 2026-11-15) ===== */
+
+  test("Состояние системы: четыре блока с полями, база общая для сервера; без права — 403; чужую организацию не запросить — 400 (§14.11, §20)", async () => {
+    const env = await makeEnv();
+    await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000001"], site: "ТЦ", location: "api status" });
+    const res = await env.call("GET", "/operator/admin/system-status");
+    assert.status(res, 200, null, "состояние");
+    const s = res.body;
+    assert.eq(Object.keys(s).filter((k) => ["database", "retention", "backup", "server"].includes(k)).length, 4, "четыре блока");
+    assert.eq(s.database.scope, "server", "база — общая для сервера");
+    assert.ok(s.database.parts.length > 0 && s.database.parts[s.database.parts.length - 1].name === "other", "части базы, последняя — other");
+    assert.eq(s.server.eventsPerMinute.length, 60, "приём за час по минутам");
+    assert.ok(s.server.eventsPerMinute[59] >= 1, "событие этой минуты посчитано");
+    assert.eq(s.server.workflowVersion, W.schema.version, "версия машины — действующая");
+    assert.eq(s.backup.dataBackup, null, "копию базы МИ не знает");
+    assert.ok(s.retention.oldestIncidentAt !== undefined && s.retention.oldestEventAt !== undefined, "самая старая запись");
+    assert.status(await env.call("GET", "/operator/admin/system-status?customerGuid=10000000-0000-4000-8000-000000000001"), 400, "BAD_REQUEST", "чужая организация");
+    const bare = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin") });
+    assert.status(await bare.call("GET", "/operator/admin/system-status"), 403, "PERMISSION_DENIED", "без права");
+  });
+
   /* ===== Окна плановых работ (ТЗ-21, §14.12, §14.5 п. 6) ===== */
 
   const MW_SMOKE = "20000000-0002-4000-8000-000000000005";
