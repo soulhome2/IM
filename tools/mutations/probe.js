@@ -557,7 +557,7 @@
       const smoke2 = "80000000-0000-4000-8000-00000000000a";
       const rules = window.IM_FIXTURE.rules.map((r) => (r.guid === smoke2 ? Object.assign({}, r, { priority: 25 }) : r));
       await stand.raw("POST", "/test/reset", { fixture: "demo", fixturePatch: { rules } });
-      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000002"], site: "Главный офис" });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000002"] });
       const inc = res.body && res.body.incidents ? res.body.incidents[0] : null;
       return [Boolean(inc) && inc.priority === 75, `приоритет инцидента пожара на датчике дыма 2: ${inc ? inc.priority : res.status}`];
     },
@@ -570,7 +570,7 @@
       const keys = window.IM_FIXTURE.scenarios.keys;
       const timers = window.IM_WORKFLOW.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: [{ scenario: keys.medical, sec: 90 }] }) : t));
       await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { timers } });
-      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр" });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"] });
       const fire = res.body && res.body.incidents ? res.body.incidents.find((c) => c.scenario.scenarioGuid === keys.fire) : null;
       const sec = fire ? (Date.parse(fire.timer.dueAt) - Date.parse(fire.createdAt)) / 1000 : null;
       return [sec === 90, `норматив реакции пожара в торговом центре: ${sec === null ? res.status : sec} с`];
@@ -583,7 +583,7 @@
       const keys = window.IM_FIXTURE.scenarios.keys;
       const timers = window.IM_WORKFLOW.timers.map((t) => (t.id === "reaction" ? Object.assign({}, t, { overrides: t.overrides.concat([{ scenario: keys.medical, sec: 90 }]) }) : t));
       await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { timers } });
-      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр" });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"] });
       const med = res.body && res.body.incidents ? res.body.incidents.find((c) => c.scenario.scenarioGuid === keys.medical) : null;
       const sec = med ? (Date.parse(med.timer.dueAt) - Date.parse(med.createdAt)) / 1000 : null;
       return [sec === 240, `норматив реакции медпункта в торговом центре: ${sec === null ? res.status : sec} с`];
@@ -672,7 +672,7 @@
       const stand = IMApi.create({ server });
       await stand.raw("POST", "/test/reset", { fixture: "demo" });
       const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
-      const made = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "проба", ruleGuid: "80000000-0000-4000-8000-000000000009" });
+      const made = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], ruleGuid: "80000000-0000-4000-8000-000000000009" });
       const p = made.body.guid;
       await stand.raw("POST", `/operator/incidents/${p}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": made.headers.etag });
       const merged = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: [p, med] });
@@ -690,7 +690,7 @@
       const server = IMServer.create({ workflow: window.IM_WORKFLOW, fixture: window.IM_FIXTURE, strings: window.IM_STRINGS, colleagues: false, autoTick: false, testSupport: true });
       const stand = IMApi.create({ server });
       await stand.raw("POST", "/test/reset", { fixture: "demo" });
-      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр" });
+      const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"] });
       const n = res.body ? res.body.created : null;
       return [n === 1, `инцидентов от события пожара в торговом центре: ${n === null ? res.status : n}`];
     },

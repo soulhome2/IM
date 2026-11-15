@@ -162,6 +162,14 @@
 
   // Идентификатор инцидента по номеру из эталонного набора: guid — UUID, на экране — номер
   const guidOf = (number) => window.IM_FIXTURE.incidents.find((i) => i.number === number).guid;
+  // Инцидент набора в Торговом центре: площадка — группа устройств (§1), источник — в группе ТЦ или во вложенной
+  function inMall(guid) {
+    const fx = window.IM_FIXTURE;
+    const find = (groups) => groups.reduce((hit, g) => hit || (g.name === "Торговый центр" ? g : null), null);
+    const all = (g) => (g.devices || []).concat(...(g.groups || []).map(all));
+    const inc = fx.incidents.find((i) => i.guid === guid);
+    return Boolean(inc) && all(find(fx.sourceGroups)).includes(inc.devices[0]);
+  }
 
   async function openOwn(id) {
     if (mode() === "work") return;
@@ -667,7 +675,7 @@
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
-        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source] });
         expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
         const guid = created.body.guid;
         await setFilter("open");
@@ -734,7 +742,7 @@
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
-        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source] });
         expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
         const guid = created.body.guid;
         await setFilter("open");
@@ -821,7 +829,7 @@
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
-        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "selftest" });
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source] });
         expect(created.status === 201 && created.body.scenario.scenarioVersion === version, `инцидент не на версии ${version}`);
         const guid = created.body.guid;
         await setFilter("open");
@@ -948,7 +956,7 @@
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const keys = window.IM_FIXTURE.scenarios.keys;
-      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "selftest" };
+      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"] };
       const timers = window.IM_WORKFLOW.timers.map((t) =>
         t.id === "reaction" ? Object.assign({}, t, { overrides: t.overrides.concat([{ scenario: keys.medical, sec: 90 }]) }) : t);
       try {
@@ -975,7 +983,7 @@
       const keys = window.IM_FIXTURE.scenarios.keys;
       const rule = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
       // Датчик дыма 5 в торговом центре: базовое правило пожара и правило медпункта
-      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], site: "Торговый центр", location: "selftest" };
+      const event = { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"] };
       const count = async () => (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.length;
       try {
         const before = await count();
@@ -1018,7 +1026,7 @@
       const keys = window.IM_FIXTURE.scenarios.keys;
       const rule = (tail) => `80000000-0000-4000-8000-00000000000${tail}`;
       const smoke5 = "20000000-0002-4000-8000-000000000005";
-      const event = (n) => ({ eventTypeId: "fire", deviceIds: [smoke5], site: "Торговый центр", location: `selftest ${n}` });
+      const event = (n) => ({ eventTypeId: "fire", deviceIds: [smoke5] });
       const mk = (tail, extra) => Object.assign({ guid: rule(tail), name: `правило ${tail}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [keys.fire], conditions: [{ eventTypeId: "fire" }] }, extra);
       try {
         // Единственное подошедшее правило выключено — инцидента нет
@@ -1087,7 +1095,7 @@
         expect(/INC-1853 — Медпомощь при пожаре · Новое/.test(fireChip.title), `подсказка чипа INC-1847: «${fireChip.title}»`);
         const medRow = await rowOnPages(med);
         expect(medRow, "INC-1853 нет в «Открытых»");
-        expect(/^INC-1853 · тревога INC-1847 · /.test(sub(medRow)), `у INC-1853 — после номера «тревога INC-1847»: «${sub(medRow)}»`);
+        expect(/^INC-1853 · тревога INC-1847$/.test(sub(medRow).trim()), `у INC-1853 — после номера «тревога INC-1847»: «${sub(medRow)}»`);
         expect(chip(medRow) === "событие: ещё 1", `чип INC-1853: «${chip(medRow)}»`);
         // Карточка INC-1847: блок над шагами, строка соседа без кнопок действий
         await setFilter("open");
@@ -2102,13 +2110,23 @@
       expect($("breakBanner").hidden, "кнопка на плашке не вернула с перерыва");
     });
 
-    await step("Меню справки: ссылки из справочника, ссылка площадки — только при её инциденте (§7, RULE-49)", async () => {
+    await step("Меню справки: общие ссылки и ссылка группы — только при инциденте её устройств (§7, RULE-49)", async () => {
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("open");
+      // Площадка — группа устройств (§1): ссылка группы Торгового центра — у инцидентов, источник которых в нём
+      const fx = window.IM_FIXTURE;
+      const inGroup = (gid) => {
+        const find = (groups) => groups.reduce((hit, g) => hit || (g.id === gid ? g : find(g.groups || [])), null);
+        const all = (g) => (g.devices || []).concat(...(g.groups || []).map(all));
+        return new Set(all(find(fx.sourceGroups)));
+      };
+      const evacLink = fx.helpLinks.find((l) => l.scope === "group");
+      const mallDevices = inGroup(evacLink.groupGuid);
+      const sourceIn = (id) => mallDevices.has((fx.incidents.find((i) => i.guid === id) || { devices: [] }).devices[0]);
       // Строки одиночных событий: у строки группы события могут быть с разных площадок
-      const rows = [...$("eventsList").querySelectorAll(".event:not(.event-group)")];
-      const mall = rows.find((r) => /Торговый центр/.test(r.textContent));
-      const other = rows.find((r) => !/Торговый центр/.test(r.textContent));
+      const rows = [...$("eventsList").querySelectorAll(".event:not(.event-group)")].filter((r) => fx.incidents.some((i) => i.guid === r.dataset.id));
+      const mall = rows.find((r) => sourceIn(r.dataset.id));
+      const other = rows.find((r) => !sourceIn(r.dataset.id));
       expect(mall && other, "в очереди нет инцидентов ТЦ и других площадок");
       // Строку ищем заново: после щелчка очередь перерисовывается
       const linksFor = async (row) => {
@@ -2119,8 +2137,8 @@
         document.body.click();
         return text;
       };
-      const evac = window.IM_FIXTURE.helpLinks.find((l) => l.site === "Торговый центр").title;
-      const common = window.IM_FIXTURE.helpLinks.find((l) => !l.site).title;
+      const evac = evacLink.title;
+      const common = fx.helpLinks.find((l) => l.scope === "shared").title;
       const atOther = await linksFor(other);
       expect(atOther.includes(common) && !atOther.includes(evac), `не в ТЦ: «${atOther.trim()}»`);
       const atMall = await linksFor(mall);
@@ -2287,7 +2305,7 @@
       try {
         await setFilter("open");
         const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="transfer"]') && r.querySelector('[data-do="claim"]'));
-        const mall = (r) => r.querySelector(".event-sub").textContent.includes("Торговый центр");
+        const mall = (r) => inMall(r.dataset.id);
         const sent = rows.filter(mall).slice(0, 2);
         const kept = rows.filter((r) => !mall(r)).slice(0, 1);
         expect(sent.length && kept.length, "на странице нет новых в ТЦ и вне его");
@@ -2525,7 +2543,7 @@
 
     await step("Потеря доступа: уведомление с номером, карточка закрыта (§5, BUG-24)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
-      const number = await claimFromQueue((r) => !/Торговый центр/.test(r.textContent));
+      const number = await claimFromQueue((r) => !inMall(r.dataset.id) && !/Торговый центр/.test(r.textContent));
       expect(mode() === "work", "карточка взятого инцидента не открылась");
       await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
       await wait(300);
@@ -2560,7 +2578,7 @@
       const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
       const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
       const top = Math.max(...window.IM_FIXTURE.priorities.map((p) => p.value));
-      const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source], site: fire.site, location: "selftest" });
+      const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source] });
       expect(created.status === 201, `инцидент не появился: ${created.status}`);
       const number = created.body.number;
       const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === top).sec;
@@ -2571,6 +2589,119 @@
       const toast = toastWith(new RegExp(`Автоэскалация ${number} → `));
       expect(toast, `нет уведомления об автоэскалации ${number}`);
       return toast.textContent;
+    });
+
+    // Сбрасывает стенд в конце — стоит перед шагом, который и так начинается со сброса
+    await step("address: источник и адрес — строка очереди, поиск, карточка, меню справки по группе (§1, §7, план 87а)", async () => {
+      if (mode() === "work") await click($("backToQueue"));
+      const stand = window.IM_SELFTEST_API;
+      const fx = window.IM_FIXTURE;
+      const device = (id) => fx.devices.find((d) => d.id === id);
+      const inc = (n) => fx.incidents.find((i) => i.number === n);
+      const sourceOf = (n) => device(inc(n).devices[0]);
+      // Поиск очереди — по фильтру «Все»: строки, которые нашлись
+      const search = async (text) => {
+        $("eventSearch").value = text;
+        $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
+        await wait(300);
+        return [...$("eventsList").querySelectorAll(".event")].map((r) => r.dataset.id);
+      };
+      const rowOf = async (n) => {
+        await search(n);
+        return $("eventsList").querySelector(`.event[data-id="${guidOf(n)}"]`);
+      };
+      const sourceLine = async (n) => {
+        const row = await rowOf(n);
+        expect(row, `${n} не нашёлся поиском по номеру`);
+        const line = row.querySelector(".event-source");
+        expect(line, `${n}: под заголовком нет строки «устройство · адрес»`);
+        return line;
+      };
+      await setFilter("all");
+      try {
+        // Торговый центр: «устройство · адрес», полный адрес — во всплывающей подсказке, длинный обрезается многоточием
+        const mall = sourceOf("INC-1847");
+        expect(mall.address && !mall.addressIm, "у источника INC-1847 в наборе нет адреса источника");
+        const line = await sourceLine("INC-1847");
+        expect(line.textContent.trim() === `${mall.name} · ${mall.address}`, `строка INC-1847: «${line.textContent.trim()}»`);
+        expect(line.title === mall.address, `подсказка строки INC-1847: «${line.title}»`);
+        const css = getComputedStyle(line);
+        expect(css.textOverflow === "ellipsis" && css.whiteSpace === "nowrap" && css.overflow === "hidden", `строка источника не обрезается многоточием: ${css.textOverflow}, ${css.whiteSpace}, ${css.overflow}`);
+        // Поиск — по части адреса и по названию устройства
+        const part = mall.address.split(", ").slice(1).join(", ");
+        expect((await search(part.slice(0, 14))).includes(guidOf("INC-1847")), `поиск по части адреса «${part.slice(0, 14)}» не нашёл INC-1847`);
+        expect((await search(mall.name)).includes(guidOf("INC-1847")), `поиск по устройству «${mall.name}» не нашёл INC-1847`);
+        // Адрес, введённый в МИ, — вместо адреса источника: и в строке, и в поиске
+        const typed = sourceOf("INC-1827");
+        expect(typed.addressIm && typed.address && typed.addressIm !== typed.address, "у источника INC-1827 в наборе нет addressIm, отличного от адреса источника");
+        const typedLine = await sourceLine("INC-1827");
+        expect(typedLine.textContent.trim() === `${typed.name} · ${typed.addressIm}` && typedLine.title === typed.addressIm, `INC-1827: «${typedLine.textContent.trim()}», подсказка «${typedLine.title}» — а действует адрес МИ «${typed.addressIm}»`);
+        expect((await search(typed.addressIm)).includes(guidOf("INC-1827")), "поиск по адресу МИ не нашёл INC-1827");
+        expect(!(await search(typed.address)).includes(guidOf("INC-1827")), "поиск по заменённому адресу источника нашёл INC-1827");
+        // Устройство без адреса — только название
+        const bare = sourceOf("INC-1840");
+        expect(!bare.address && !bare.addressIm, "у источника INC-1840 в наборе есть адрес");
+        const bareLine = await sourceLine("INC-1840");
+        expect(bareLine.textContent.trim() === bare.name && !bareLine.title, `INC-1840 без адреса: «${bareLine.textContent.trim()}», подсказка «${bareLine.title}»`);
+        // Карточка: блок «Источник» — устройство, тип, адрес
+        const type = fx.deviceTypes.find((t) => t.id === mall.type).label;
+        await rowOf("INC-1847");
+        await click(button($("eventsList"), "view", guidOf("INC-1847")));
+        expect(mode() === "work", "карточка INC-1847 не открылась");
+        const block = root().querySelector(".incident-source");
+        const text = block ? block.textContent.replace(/\s+/g, " ") : "";
+        expect(block && /Источник/.test(text) && text.includes(mall.name) && text.includes(type) && text.includes(mall.address), `блок «Источник» карточки: «${text.trim()}»`);
+        await click($("backToQueue"));
+        await rowOf("INC-1840");
+        await click(button($("eventsList"), "view", guidOf("INC-1840")));
+        const bareBlock = root().querySelector(".incident-source");
+        expect(bareBlock && bareBlock.textContent.includes(bare.name) && !bareBlock.querySelector(".src-address"), `карточка INC-1840: «${bareBlock ? bareBlock.textContent.trim() : "нет блока"}»`);
+        await click($("backToQueue"));
+        // Меню справки: ссылка группы Торгового центра — при его инциденте, при инциденте Главного офиса — нет;
+        // «не назначена» — никогда
+        const group = fx.helpLinks.find((l) => l.scope === "group");
+        const lost = fx.helpLinks.find((l) => l.scope === "unassigned");
+        expect(group && lost, "в наборе нет ссылки группы или ссылки «не назначена»");
+        const menuAt = async (n) => {
+          await rowOf(n);
+          await click($("eventsList").querySelector(`.event[data-id="${guidOf(n)}"]`));
+          await click($("helpBtn"));
+          await wait(150);
+          const t = $("helpLinks").textContent;
+          document.body.click();
+          return t;
+        };
+        const atMall = await menuAt("INC-1847");
+        expect(atMall.includes(group.title) && !atMall.includes(lost.title), `меню при INC-1847: «${atMall.trim()}»`);
+        const office = fx.incidents.find((i) => i.state === "new" && (sourceOf(i.number).address || "").startsWith("Главный офис"));
+        const atOffice = await menuAt(office.number);
+        expect(!atOffice.includes(group.title) && !atOffice.includes(lost.title), `меню при ${office.number} (Главный офис): «${atOffice.trim()}»`);
+        // Без права администратора схемы справочник без инцидента — только общие
+        const all = await stand.get("/operator/reference/help-links");
+        expect(all.some((l) => l.scope === "unassigned") && all.some((l) => l.scope === "group"), "администратору без инцидента — не весь справочник");
+        await standReset({ fixture: "demo", operatorPermissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin") });
+        await wait(400);
+        const plain = await stand.get("/operator/reference/help-links");
+        expect(plain.length && plain.every((l) => l.scope === "shared"), `без права администратора без инцидента: ${plain.map((l) => `${l.id}:${l.scope}`).join(", ")}`);
+        // Удалённое устройство: «устройство удалено», адреса нет; ни название, ни адрес не ищутся
+        await standReset({ fixture: "demo", fixturePatch: { devices: fx.devices.map((d) => (d.id === mall.id ? Object.assign({}, d, { deleted: true }) : d)) } });
+        await wait(400);
+        await setFilter("all");
+        const goneLine = await sourceLine("INC-1847");
+        expect(goneLine.textContent.trim() === "устройство удалено" && !goneLine.title, `удалённый источник INC-1847: «${goneLine.textContent.trim()}», подсказка «${goneLine.title}»`);
+        expect(!(await search(part.slice(0, 14))).includes(guidOf("INC-1847")), "адрес удалённого устройства нашёлся поиском");
+        expect(!(await search(mall.name)).includes(guidOf("INC-1847")), "название удалённого устройства нашлось поиском");
+        await rowOf("INC-1847");
+        await click(button($("eventsList"), "view", guidOf("INC-1847")));
+        const goneBlock = root().querySelector(".incident-source");
+        expect(goneBlock && /устройство удалено/.test(goneBlock.textContent) && !goneBlock.textContent.includes(mall.address), `карточка удалённого источника: «${goneBlock ? goneBlock.textContent.trim() : "нет блока"}»`);
+        await click($("backToQueue"));
+      } finally {
+        await search("");
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
     });
 
     await step("Карточку увели — у прежнего владельца уведомление с причиной: эскалация по нормативу закрытия (§6.2, §14.8, BUG-86)", async () => {
@@ -2753,7 +2884,7 @@
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
         const top = Math.max(...window.IM_FIXTURE.priorities.map((p) => p.value));
-        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source], site: fire.site, location: "selftest" });
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: top, deviceIds: [source] });
         expect(created.status === 201, `инцидент не появился: ${created.status}`);
         const guid = created.body.guid;
         const norm = window.IM_WORKFLOW.timers.find((t) => t.id === "reaction").overrides.find((o) => o.priority === top).sec;
@@ -3092,7 +3223,7 @@
     const mwSmoke = "20000000-0002-4000-8000-000000000005";
     const mwCam = "20000000-0001-4000-8000-000000000031"; // «Зона ожидания» → «Приемная» → «1-й этаж»
     const mwFloor = "30000000-0000-4000-8000-000000000002";
-    const mwEvent = (n, dev, type) => ({ eventTypeId: type || "fire", deviceIds: [dev || mwSmoke], site: "Торговый центр", location: `selftest mw ${n}` });
+    const mwEvent = (n, dev, type) => ({ eventTypeId: type || "fire", deviceIds: [dev || mwSmoke] });
     const mwIso = (ms) => new Date(ms).toISOString();
     const mwHour = 3600000;
     // Стенд с часами; ответ — «сейчас» стенда в мс

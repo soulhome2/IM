@@ -91,7 +91,7 @@ window.IM_DICT_HTML = {
     "Подтвердить сработку по ближайшим камерам в течение": "Confirm the trigger on the nearest cameras within",
     "Пожарная охрана и МЧС": "Fire and rescue service",
     "Поиск в группах...": "Search groups...",
-    "Поиск по площадке, типу, ID...": "Search by site, type, ID...",
+    "Поиск по номеру, типу, устройству, адресу…": "Search by number, type, device, address…",
     "Полиция": "Police",
     "После вызова обязательно зафиксируйте номер наряда и время прибытия в карточке инцидента.": "After the call, always record the unit number and the arrival time in the incident card.",
     "Пост оператора": "Operator post",

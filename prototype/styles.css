@@ -1065,6 +1065,8 @@ select.search-input { padding-right: 36px; }
 .event-open:hover strong { color: var(--accent-text); text-decoration-color: currentColor; }
 .event-open:hover .event-eye { color: var(--accent-text); }
 .event-sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Источник в строке (§7, план 87а): «устройство · адрес» одной строкой, длинный адрес — многоточием, полный — в подсказке */
+.event-source { color: var(--text); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .event-sla { font-size: 12px; font-weight: 500; color: var(--warn-text); }
 .event-sla.late { color: var(--crit-text); }
@@ -1153,7 +1155,11 @@ select.search-input { padding-right: 36px; }
 .head-acts { display: flex; gap: 8px; flex-shrink: 0; }
 .head-acts .btn { font-size: 14px; padding: 6px 12px; }
 .incident-head h3 { margin: 0 0 3px; font-size: 20px; font-weight: 600; }
-.incident-meta { color: var(--muted); font-size: 14px; }
+/* Блок «Источник» карточки (§7): подпись, устройство · тип; адрес — второй строкой, длинный — многоточием */
+.incident-source { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; min-width: 0; }
+.incident-source .src-label { font-size: 12px; font-weight: 600; }
+.incident-source .src-device { color: var(--text); }
+.incident-source .src-address { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sla { color: var(--warn-text); }
 .sla.late { color: var(--crit-text); }
 

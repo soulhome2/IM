@@ -403,10 +403,38 @@ def check_fixture(w, err):
         if link_ids.count(lid) > 1 or lid in others:
             err.append(f"эталон: связь камер {lid} — идентификатор не уникален")
     plans = {p["id"] for p in fx.get("plans", [])}
-    sites = {i.get("site") for i in fx["incidents"]}
+    # Подпись плана (site) — площадка, то есть верхняя группа устройств (§1, план 87а)
+    sites = {g["name"] for g in fx["sourceGroups"]}
     for p in fx.get("plans", []):
         if p.get("site") and p["site"] not in sites:
-            err.append(f"эталон: план {p['id']} — площадки «{p['site']}» нет ни у одного инцидента")
+            err.append(f"эталон: план {p['id']} — площадки «{p['site']}» нет среди верхних групп устройств")
+    for d in fx["devices"]:
+        for key in ("address", "addressIm"):
+            value = d.get(key)
+            if value is not None and (not isinstance(value, str) or value != value.strip() or not value or len(value) > 500):
+                err.append(f"эталон: устройство {d['id']} — {key} не строка 1–500 символов без пробелов по краям (§1)")
+        if "deleted" in d and not isinstance(d["deleted"], bool):
+            err.append(f"эталон: устройство {d['id']} — deleted не true/false")
+    for inc in fx["incidents"]:
+        for key in ("site", "siteType", "location"):
+            if key in inc:
+                err.append(f"эталон: {inc['number']} — поле {key}: площадки и места у инцидента нет, адрес — у устройства (§1)")
+    groups_all = set()
+
+    def collect(groups):
+        for g in groups:
+            groups_all.add(g["id"])
+            collect(g.get("groups", []))
+
+    collect(fx["sourceGroups"])
+    for link in fx.get("helpLinks", []):
+        scope, group, legacy = link.get("scope"), link.get("groupGuid"), link.get("legacySite")
+        if "site" in link or scope not in ("shared", "group", "unassigned"):
+            err.append(f"эталон: ссылка {link.get('id')} — область scope не shared, group или unassigned (§7)")
+        elif (scope == "group") != (group is not None) or (group is not None and group not in groups_all):
+            err.append(f"эталон: ссылка {link.get('id')} — groupGuid есть только у group и это группа набора (§7)")
+        elif legacy is not None and scope != "unassigned":
+            err.append(f"эталон: ссылка {link.get('id')} — legacySite только у «не назначена» (§7)")
     for d in fx["devices"]:
         pos = d.get("position")
         if pos and (pos.get("plan") not in plans or not all(isinstance(pos.get(k), (int, float)) for k in ("x", "y"))):
@@ -857,8 +885,8 @@ def check_fixture_history(w, err):
 def check_fixture_media(err):
     """Панели инцидента эталонного набора (`media`, в API `mediaKinds`, §19.1) сходятся с камерами
     и планом (DATA-07): камеры есть — видео не скрыто; карта — только если есть план. Камеры — из
-    связей источника, план — тот, где стоит источник, устройство или камера события, иначе план
-    площадки (как planOf сервера)."""
+    связей источника, план — тот, где стоит источник, устройство или камера события; ни у кого
+    положения нет — плана нет (как planOf сервера)."""
     with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
     devices = {d["id"]: d for d in fx["devices"]}
@@ -866,7 +894,7 @@ def check_fixture_media(err):
         src = inc["devices"][0]
         cameras = [c for link in fx["cameraLinks"] if src in link["devices"] for c in link["cameras"]]
         placed = next((devices[i]["position"] for i in [*inc["devices"], *cameras] if (devices.get(i) or {}).get("position")), None)
-        plan = next((p for p in fx["plans"] if (p["id"] == placed["plan"] if placed else p["site"] == inc["site"])), None)
+        plan = next((p for p in fx["plans"] if placed and p["id"] == placed["plan"]), None)
         media = inc.get("media")
         if media not in ("video", "map", "both"):
             err.append(f"эталон: {inc['number']} — media «{media}», а нужно video, map или both (§19.1)")
@@ -879,10 +907,10 @@ def check_fixture_media(err):
 
 
 def check_fixture_places(err):
-    """Место инцидента и план устройства сходятся с деревом групп устройств (DATA-12): у плана есть
+    """Адрес устройства и план сходятся с деревом групп устройств (DATA-12): у плана есть
     площадка; план «Площадка · часть» — только для устройств, у которых эта часть (этаж, корпус) на
-    пути группы; место инцидента, которое начинается с названия группы площадки, — это группа на пути
-    источника. Иначе фильтр по группе и план показывают оператору разное."""
+    пути группы; адрес из источника «Площадка, часть, …», где часть — название группы площадки, — это
+    группа на пути устройства. Иначе фильтр по группе, план и адрес показывают оператору разное."""
     with open(os.path.join(ROOT, "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as f:
         fx = json.load(f)
     paths, names = {}, {}
@@ -909,14 +937,15 @@ def check_fixture_places(err):
         if not mine or (part and not any(part in x for x in mine)):
             where = "; ".join(" / ".join(x) for x in paths.get(d["id"], [])) or "ни в одной группе"
             err.append(f"эталон: устройство «{d['name']}» — на плане «{plan['name']}», а в группах: {where} (DATA-12)")
-    for inc in fx["incidents"]:
-        head = inc["location"].split(",")[0].strip()
-        if head not in names.get(inc["site"], set()):
+    for d in fx["devices"]:
+        parts = [x.strip() for x in (d.get("address") or "").split(",")]
+        if len(parts) < 2 or parts[1] not in names.get(parts[0], set()):
             continue
-        src = paths.get(inc["devices"][0], [])
-        if not any(head in x for x in src if x[0] == inc["site"]):
+        site, head = parts[0], parts[1]
+        src = paths.get(d["id"], [])
+        if not any(head in x for x in src if x[0] == site):
             where = "; ".join(" / ".join(x) for x in src) or "ни в одной группе"
-            err.append(f"эталон: {inc['number']} — место «{inc['location']}», а источник в группах: {where} — фильтр по «{head}» его не покажет (DATA-12)")
+            err.append(f"эталон: устройство «{d['name']}» — адрес «{d['address']}», а в группах: {where} — фильтр по «{head}» его не покажет (DATA-12)")
 
 
 def check_doc_numbers(w, o, err):

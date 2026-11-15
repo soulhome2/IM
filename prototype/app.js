@@ -2371,6 +2371,17 @@
     $("eventsList").innerHTML = items.map(eventRowHtml).join("") || `<div class="empty">${te("Нет инцидентов в текущем фильтре")}</div>`;
   }
 
+  // Источник в строке очереди (§7, план 87а): «устройство · адрес» под типом события, длинный адрес — многоточием,
+  // полный — в подсказке; нет адреса — только устройство; удалено — «устройство удалено», адреса нет
+  function sourceLine(e) {
+    if (!e.source) return "";
+    if (e.source.deleted) return `<div class="event-source">${te("устройство удалено")}</div>`;
+    const where = e.address ? t(e.address) : "";
+    return `<div class="event-source"${where ? ` title="${escapeHtml(where)}"` : ""}>${te(e.source.name)}${where ? ` · ${escapeHtml(where)}` : ""}</div>`;
+  }
+  // Название источника там, где адрес не нужен (привязанные): удалённое — «устройство удалено»
+  const sourceName = (e) => (!e.source ? "" : e.source.deleted ? t("устройство удалено") : t(e.source.name));
+
   function eventRowHtml(e) {
     const badge = badgeView(e);
     const prog = stepProgress(e);
@@ -2401,7 +2412,8 @@
           }${linkedChip(e)}${siblingChip(e)}</span>
           <time datetime="${escapeHtml(e.occurredAt)}">${fmtTime(e.occurredAt)}</time>
         </div>
-        <div class="event-sub">${escapeHtml(e.number)}${alarmTag(e)} · ${te(e.site)} · ${te(e.location)}</div>
+        ${sourceLine(e)}
+        <div class="event-sub">${escapeHtml(e.number)}${alarmTag(e)}</div>
         ${
           e.matchedLinked
             ? `<div class="event-found"><span class="material-symbols-outlined" aria-hidden="true">link</span>${te("Найдено в привязанных: {ids}", {
@@ -2683,6 +2695,19 @@
     renderScenario();
   }
 
+  // Блок «Источник» карточки (§7, план 87а): устройство, тип и действующий адрес на момент открытия;
+  // нет адреса — устройство и тип; удалено — «устройство удалено», адреса нет
+  function sourceBlock(ev) {
+    const src = ev.source;
+    const body = !src
+      ? `<span class="src-device">${te("Источник не указан")}</span>`
+      : src.deleted
+        ? `<span class="src-device">${te("устройство удалено")}</span>`
+        : `<span class="src-device">${te(src.name)}</span> · <span class="src-type">${te(src.typeLabel)}</span>${
+            ev.address ? `<span class="src-address" title="${escapeHtml(t(ev.address))}">${te(ev.address)}</span>` : ""
+          }`;
+    return `<div class="incident-source"><span class="src-label">${te("Источник")}</span>${body}</div>`;
+  }
   // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90). Номер, состояние
   // и нормативы — в заголовке карточки (renderWorkHeader)
   function renderIncidentHead(ev, acts) {
@@ -2690,7 +2715,7 @@
       <div class="incident-head">
         <div class="incident-title">
           <h3>${te(ev.eventType.name)}</h3>
-          <div class="incident-meta">${te(ev.site)} · ${te(ev.location)}</div>
+          ${sourceBlock(ev)}
         </div>
         ${acts && acts.length ? `<div class="head-acts">${acts.map((a) => actButton(a, ev)).join("")}</div>` : ""}
       </div>
@@ -3849,7 +3874,7 @@
         .catch((err) => toast(problemText(err)));
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
-    // Меню справки — по открытому инциденту: ссылки его площадки (§7)
+    // Меню справки — по открытому инциденту: ссылки групп его источника (§7)
     $("helpBtn").addEventListener("click", () => renderHelpLinks());
     $("adminBtn").addEventListener("click", () => {
       closeMenus();
@@ -4229,7 +4254,7 @@
           const found = foundLinked(ev.guid).some((x) => x.guid === m.guid);
           return `<div class="lnk-member ${found ? "found" : ""}">
             <span class="lnk-num">${escapeHtml(m.number)}</span>
-            <span class="lnk-where">${te(m.eventType.name)} · ${te(m.location)}</span>
+            <span class="lnk-where">${te(m.eventType.name)} · ${escapeHtml(sourceName(m))}</span>
             <time>${fmtTime(m.occurredAt)}</time>
             <span class="badge ${b.cls}">${escapeHtml(b.text)}</span>
             ${d ? `<button type="button" class="btn ghost small" data-detach="${escapeHtml(m.guid)}" data-number="${escapeHtml(m.number)}" ${off}>${escapeHtml(lbl(transitionDef(d.id)))}</button>` : "<span></span>"}
@@ -4479,13 +4504,13 @@
     backToQueue();
   }
 
-  /* ===== Меню справки (§7, RULE-49): справочник ссылок — общие и площадки открытого инцидента ===== */
+  /* ===== Меню справки (§7, RULE-49): справочник ссылок — общие и групп источника открытого инцидента ===== */
 
   // Демо-адреса набора открывают окна прототипа; настоящие — новой вкладкой
   const DEMO_DOCS = { regulation: "modalRegulation", contacts: "modalContacts", evacuation: "modalEvacuation", emergency: "modalEmergency" };
   async function renderHelpLinks() {
     const ev = selected();
-    const links = await api.get("/operator/reference/help-links", ev && ev.site ? { site: ev.site } : {}).catch(() => []);
+    const links = await api.get("/operator/reference/help-links", ev ? { incidentGuid: ev.guid } : {}).catch(() => []);
     const item = (l) => {
       const demo = /^demo:doc\/(.+)$/.exec(l.url);
       const target = demo ? `data-doc="${DEMO_DOCS[demo[1]] || ""}"` : `data-url="${escapeHtml(l.url)}"`;
@@ -4494,11 +4519,16 @@
         <span data-i18n-skip>${escapeHtml(l.title)}</span>
       </button>`;
     };
-    const common = links.filter((l) => !l.site);
-    const site = links.filter((l) => l.site);
+    // Без инцидента ответ администратору — весь справочник (для вкладки настроек): в меню — только общие.
+    // Ссылки групп — разделом на группу, подпись — название группы; «не назначена» в меню не бывает
+    const common = links.filter((l) => l.scope === "shared");
+    const byGroup = new Map();
+    (ev ? links.filter((l) => l.scope === "group") : []).forEach((l) => byGroup.set(l.groupGuid, (byGroup.get(l.groupGuid) || []).concat(l)));
     $("helpLinks").innerHTML =
       common.map(item).join("") +
-      (site.length ? `<div class="menu-sep"></div><div class="menu-label" data-i18n-skip>${escapeHtml(site[0].site)}</div>${site.map(item).join("")}` : "");
+      [...byGroup.values()]
+        .map((list) => `<div class="menu-sep"></div><div class="menu-label" data-i18n-skip>${escapeHtml(list[0].groupName || "")}</div>${list.map(item).join("")}`)
+        .join("");
   }
 
   /* ===== Настройки администратора (§20, RULE-44): только просмотр ===== */
@@ -4669,8 +4699,13 @@
         data.map((g) => `<tr><td>${asData(g.name)}</td><td>${asData(g.roles.join(", ") || "—")}</td><td>${asData(g.members.map(personName).join(", ") || "—")}</td><td>${asData(g.memberIds.map(personName).join(", ") || "—")}</td></tr>`),
       ],
       "/operator/reference/help-links": () => [
-        ["Ссылка", "Вид", "Площадка"],
-        data.map((l) => `<tr><td>${asData(l.title)}<span class="what">${escapeHtml(l.url)}</span></td><td>${te(l.kind === "file" ? "файл" : "веб-страница")}</td><td>${l.site ? asData(l.site) : te("общая")}</td></tr>`),
+        ["Ссылка", "Вид", "Группа"],
+        // Область (§7): общая, группа устройств или «не назначена» — «выберите группу» с прежней площадкой
+        data.map((l) => {
+          const scope =
+            l.scope === "group" ? asData(l.groupName || "—") : l.scope === "unassigned" ? `${te("выберите группу")}${l.legacySite ? `<span class="what">${asData(l.legacySite)}</span>` : ""}` : te("общая");
+          return `<tr><td>${asData(l.title)}<span class="what">${escapeHtml(l.url)}</span></td><td>${te(l.kind === "file" ? "файл" : "веб-страница")}</td><td>${scope}</td></tr>`;
+        }),
       ],
       // Приоритеты (§2.5): число, название и описание на языке оператора, цвет — квадратиком того же
       // цвета, что полоска очереди, и словом: цвет — не единственный способ его узнать (BUG-39)

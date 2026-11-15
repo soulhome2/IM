@@ -32,6 +32,19 @@
   // Новое событие пожара самого срочного уровня — их в демо два, однотипная пара для группы (§11)
   // Название сценария пожара: событие пожара даёт и инциденты других сценариев (медпункт, §14.5, ARCH-15)
   const FIRE_TITLE = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === window.IM_FIXTURE.scenarios.keys.fire).name;
+  // Площадка инцидента — верхняя группа дерева, где стоит его источник: своего поля площадки у инцидента нет,
+  // площадка в МИ — группа устройств (§1, план 87а). Верхние группы-площадки — те, что подписаны у планов набора
+  const SITE_OF_DEVICE = (() => {
+    const sites = new Set(window.IM_FIXTURE.plans.map((p) => p.site));
+    const out = {};
+    const walk = (g, site) => {
+      (g.devices || []).forEach((d) => (out[d] = out[d] || site));
+      (g.groups || []).forEach((c) => walk(c, site));
+    };
+    window.IM_FIXTURE.sourceGroups.filter((g) => sites.has(g.name)).forEach((g) => walk(g, g.name));
+    return out;
+  })();
+  const siteOf = (e) => (e.source ? SITE_OF_DEVICE[e.source.guid] : null) || null;
   const newFire = (env) => env.find((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE && e.priority === TOP);
 
   /* ===== Взять, лимит активных (§6.1, §10.2) ===== */
@@ -165,7 +178,7 @@
 
   test("Состояние системы: три блока с полями, база общая для сервера; без права — 403; чужую организацию не запросить — 400 (§14.11, §20)", async () => {
     const env = await makeEnv();
-    await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000001"], site: "ТЦ", location: "api status" });
+    await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000001"] });
     const res = await env.call("GET", "/operator/admin/system-status");
     assert.status(res, 200, null, "состояние");
     const s = res.body;
@@ -191,7 +204,7 @@
   const MW_H = 3600000;
   const mwIso = (ms) => new Date(ms).toISOString();
   const mwMake = (env, spec) => env.call("POST", "/operator/maintenance-windows", Object.assign({ description: "работы", timeZone: "UTC", recurrence: null }, spec));
-  const mwFire = (env, dev, extra) => env.call("POST", "/test/events", Object.assign({ eventTypeId: "fire", deviceIds: [dev || MW_SMOKE], site: "ТЦ", location: "api mw" }, extra));
+  const mwFire = (env, dev, extra) => env.call("POST", "/test/events", Object.assign({ eventTypeId: "fire", deviceIds: [dev || MW_SMOKE] }, extra));
   const mwLowest = Math.min(...LEVELS);
 
   test("Окно работ: список набора, создание, событие в окне при suppress — инцидента нет, итог со ссылкой на окно (ТЗ-21)", async () => {
@@ -700,7 +713,7 @@
     assert.ok(inCard && inCard.options.length > 0, "в карточке варианты адресата есть");
     assert.ok(actionOf(row, "close").fieldOptions.resultId.options.length > 0, "результаты закрытия в строке на месте");
     // Форма выборки — по-прежнему с адресатами
-    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    const two = (await env.all("open")).filter((e) => e.state === "new" && siteOf(e) === "Главный офис").slice(0, 2).map((e) => e.guid);
     const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: two });
     const bulk = sel.actions.find((a) => a.id === "transfer");
     assert.ok(bulk && bulk.fieldOptions.targetId && bulk.fieldOptions.targetId.options.length > 0, "на выборке адресаты есть");
@@ -1003,7 +1016,7 @@
 
   test("Передача адресату, который уже вышел, — сразу его дежурной группе (§8.1, RULE-47)", async () => {
     const env = await makeEnv();
-    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    const mall = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) === "Торговый центр");
     // Кузнецов в наборе вышел, но передать ему можно: список это показывает, но не запрещает
     const target = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "kuznetsov");
     assert.eq([target && target.available], [false], "Кузнецов в списке, не на месте");
@@ -1375,7 +1388,7 @@
     const env = await makeEnv({ fixturePatch: { cameraLinks: [X, Y, Z] } });
     assert.eq(await camerasOf(env, inc.guid), [A, B, C], "две связи источника: общая камера — один раз, главная — первая камера первой связи; связь другого устройства события — не добавляет");
     assert.eq(await camerasOf(env, other.guid), [], "источник ни в одной связи — без камер");
-    const res = await env.call("POST", "/test/incidents", { eventTypeId: inc.eventType.id, priority: TOP, deviceIds: [S, O], site: inc.site, location: "тест" });
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: inc.eventType.id, priority: TOP, deviceIds: [S, O] });
     assert.status(res, 201, null, "появился");
     assert.eq(await camerasOf(env, res.body.guid), [A, B, C], "появившийся инцидент — камеры из связей источника");
 
@@ -1383,15 +1396,86 @@
     assert.eq(await camerasOf(swapped, inc.guid), [B, C, A], "порядок связей в списке задаёт порядок камер и главную");
   });
 
-  test("Справочные ссылки (§7, RULE-49): без площадки — все, с площадкой — общие и этой площадки", async () => {
+  test("Справочные ссылки (§7, RULE-49, план 87а): с инцидентом — общие и ссылки групп его источника с предками; «не назначена» — никогда; весь справочник — только администратору", async () => {
+    const fx = window.IM_FIXTURE;
+    const ids = (list) => list.map((l) => l.id);
+    const shared = ids(fx.helpLinks.filter((l) => l.scope === "shared"));
+    // Порядок — как в справочнике: общие и ссылки группы вперемешку, как стоят
+    const withGroup = ids(fx.helpLinks.filter((l) => l.scope === "shared" || l.scope === "group"));
+    const groupLink = fx.helpLinks.find((l) => l.scope === "group");
+    const lost = fx.helpLinks.find((l) => l.scope === "unassigned");
+    assert.ok(groupLink && lost, "в наборе есть ссылка группы и ссылка «не назначена»");
     const env = await makeEnv();
-    const fx = window.IM_FIXTURE.helpLinks;
+    // Без инцидента администратору — весь справочник, с областью, группой и прежней площадкой
     const all = await env.ok("GET", "/operator/reference/help-links");
-    assert.eq(all.map((l) => l.id), fx.map((l) => l.id), "без площадки — весь справочник");
-    const mall = await env.ok("GET", `/operator/reference/help-links?site=${enc("Торговый центр")}`);
-    assert.eq(mall.map((l) => l.id), fx.filter((l) => !l.site || l.site === "Торговый центр").map((l) => l.id), "в ТЦ — общие и ссылки ТЦ");
-    const office = await env.ok("GET", `/operator/reference/help-links?site=${enc("Главный офис")}`);
-    assert.ok(office.length && office.every((l) => l.site == null), "на другой площадке — только общие");
+    assert.eq(ids(all), ids(fx.helpLinks), "администратору без инцидента — весь справочник");
+    const g = all.find((l) => l.id === groupLink.id);
+    assert.eq([g.scope, g.groupGuid, g.groupName, g.legacySite], ["group", groupLink.groupGuid, "Торговый центр", null], "ссылка группы — с группой и её названием");
+    const u = all.find((l) => l.id === lost.id);
+    assert.eq([u.scope, u.groupGuid, u.groupName, u.legacySite], ["unassigned", null, null, lost.legacySite], "«не назначена» — без группы, с прежней площадкой");
+    // Источник INC-1847 — в «Магазине 1», вложенной в «Торговый центр»: ссылка группы-предка видна
+    const mall = fx.incidents.find((i) => i.number === "INC-1847");
+    const office = fx.incidents.find((i) => siteOf({ source: { guid: i.devices[0] } }) === "Главный офис");
+    const warehouse = fx.incidents.find((i) => siteOf({ source: { guid: i.devices[0] } }) === lost.legacySite);
+    const at = (inc) => env.ok("GET", `/operator/reference/help-links?incidentGuid=${enc(inc)}`);
+    assert.eq(ids(await at(mall.guid)), withGroup, "инцидент ТЦ — общие и ссылка группы ТЦ");
+    assert.eq(ids(await at(office.guid)), shared, "инцидент Главного офиса — только общие");
+    assert.eq(ids(await at(warehouse.guid)), shared, "инцидент прежней площадки «не назначенной» — она не показывается");
+    assert.eq(ids(await at("10000000-0000-4000-8000-00000000ffff")), shared, "инцидент не найден — только общие");
+    // Ссылка вложенной группы — только у инцидентов этой группы, не у соседней
+    const nested = { id: "nested", title: "Магазин 1", kind: "web", url: "https://example.com/1", scope: "group", groupGuid: "30000000-0000-4000-8000-000000000023", icon: null };
+    const withNested = await makeEnv({ fixturePatch: { helpLinks: fx.helpLinks.concat(nested) } });
+    const atNested = (inc) => withNested.ok("GET", `/operator/reference/help-links?incidentGuid=${enc(inc)}`);
+    assert.ok(ids(await atNested(mall.guid)).includes("nested"), "источник в «Магазине 1» — ссылка «Магазина 1» есть");
+    const find = (groups, id) => groups.reduce((hit, x) => hit || (x.id === id ? x : find(x.groups || [], id)), null);
+    const store1 = new Set(find(fx.sourceGroups, nested.groupGuid).devices);
+    const kino = fx.incidents.find((i) => siteOf({ source: { guid: i.devices[0] } }) === "Торговый центр" && !store1.has(i.devices[0]));
+    const kinoLinks = ids(await atNested(kino.guid));
+    assert.ok(kinoLinks.includes(groupLink.id) && !kinoLinks.includes("nested"), `${kino.number} не в «Магазине 1»: ссылка ТЦ есть, «Магазина 1» нет — ${kinoLinks.join(", ")}`);
+    // Без права администратора схемы без инцидента — только общие
+    const plain = await makeEnv({ permissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin") });
+    assert.eq(ids(await plain.ok("GET", "/operator/reference/help-links")), shared, "без incident:schema:admin без инцидента — только общие");
+    assert.eq(ids(await plain.ok("GET", `/operator/reference/help-links?incidentGuid=${enc(mall.guid)}`)), withGroup, "для меню право не нужно");
+    // Невидимый инцидент — только общие: оператору ТЦ не виден Главный офис, ссылка группы офиса ему не уходит (§5)
+    const officeLink = { id: "office", title: "Офис", kind: "web", url: "https://example.com/office", scope: "group", groupGuid: "30000000-0000-4000-8000-000000000001", icon: null };
+    const mallOnly = await makeEnv({ roles: ["Оператор ТЦ"], fixturePatch: { helpLinks: fx.helpLinks.concat(officeLink) } });
+    assert.eq(ids(await mallOnly.ok("GET", `/operator/reference/help-links?incidentGuid=${enc(office.guid)}`)), shared, "невидимый инцидент — только общие, без ссылки его группы");
+    assert.eq(ids(await mallOnly.ok("GET", `/operator/reference/help-links?incidentGuid=${enc(mall.guid)}`)), withGroup, "свой инцидент ТЦ — со ссылкой группы");
+  });
+
+  test("Источник и адрес в сводке (§1, §7, §14.5, план 87а): устройство и действующий адрес на момент чтения; адрес МИ важнее; удалённое — deleted, адреса нет; поиск — по устройству и адресу", async () => {
+    const fx = window.IM_FIXTURE;
+    const dev = Object.fromEntries(fx.devices.map((d) => [d.id, d]));
+    const env = await makeEnv();
+    const items = await env.all("all");
+    for (const e of items) {
+      const inc = fx.incidents.find((i) => i.guid === e.guid);
+      if (!inc) continue;
+      const d = dev[inc.devices[0]];
+      assert.eq([e.source && e.source.guid, e.source && e.source.name, e.source && e.source.deleted, e.address], [d.id, d.name, false, d.addressIm || d.address || null], `${e.number}: источник и адрес`);
+      assert.ok(!("site" in e) && !("location" in e) && !("siteType" in e), `${e.number}: площадки и места в сводке нет`);
+    }
+    const typed = fx.devices.find((d) => d.addressIm);
+    const bare = fx.devices.find((d) => !d.address && !d.addressIm && fx.incidents.some((i) => i.devices[0] === d.id));
+    assert.ok(typed && bare, "в наборе есть устройство с адресом МИ и источник без адреса");
+    const search = async (envx, text) => (await envx.api.get("/operator/incidents", { filter: "all", pageSize: 200, search: text })).items.map((e) => e.number);
+    const mall = fx.incidents.find((i) => i.number === "INC-1847");
+    const smoke = dev[mall.devices[0]];
+    assert.ok((await search(env, smoke.address.slice(-12).toUpperCase())).includes("INC-1847"), "поиск по части адреса, без учёта регистра");
+    assert.ok((await search(env, smoke.name)).includes("INC-1847"), "поиск по названию устройства");
+    const typedInc = fx.incidents.find((i) => i.devices[0] === typed.id);
+    assert.ok((await search(env, typed.addressIm)).includes(typedInc.number), "поиск по адресу МИ");
+    assert.ok(!(await search(env, typed.address)).includes(typedInc.number), "заменённый адрес источника не ищется");
+    // Карточка — то же: source из сводки
+    const card = await env.ok("GET", `/operator/incidents/${enc(mall.guid)}`);
+    assert.eq([card.source.name, card.source.typeId, card.address], [smoke.name, smoke.type, smoke.address], "карточка: источник и адрес");
+    // Удалённое устройство: deleted, адреса нет, ни название, ни адрес не ищутся
+    const gone = await makeEnv({ fixturePatch: { devices: fx.devices.map((d) => (d.id === smoke.id ? Object.assign({}, d, { deleted: true }) : d)) } });
+    const goneCard = await gone.ok("GET", `/operator/incidents/${enc(mall.guid)}`);
+    assert.eq([goneCard.source.guid, goneCard.source.deleted, goneCard.address], [smoke.id, true, null], "удалённый источник — deleted: true, адреса нет");
+    assert.ok(!(await search(gone, smoke.address)).includes("INC-1847"), "адрес удалённого устройства не ищется");
+    assert.ok(!(await search(gone, smoke.name)).includes("INC-1847"), "название удалённого устройства не ищется");
+    assert.ok((await search(gone, "INC-1847")).includes("INC-1847"), "по номеру — находится");
   });
 
   test("Настройки администратора: группы доступа и дежурные группы (§20, RULE-44) — как в наборе; без права incident:schema:admin — 403", async () => {
@@ -1872,7 +1956,7 @@
       }
       return { fired, card: await api.get(`/operator/incidents/${enc(inc.guid)}`) };
     }
-    const inMall = (e) => e.site === "Торговый центр";
+    const inMall = (e) => siteOf(e) === "Торговый центр";
     const skip = await escalate(["user:kuznetsov", "user:noc"], (e) => !inMall(e));
     assert.eq([skip.fired, skip.card.owner && skip.card.owner.id, skip.card.escalationLevel], [["auto_escalate"], "noc", 2], "вне ТЦ: уровень 1 без доступа пропущен — сразу уровень 2");
     const keep = await escalate(["user:kuznetsov", "user:noc"], inMall);
@@ -2247,7 +2331,7 @@
     const source = (await env.card(fire.guid)).source.guid;
     // Событие у источника — час назад: норматив реакции всё равно от появления в МИ
     const occurredAt = new Date(Date.parse(fire.occurredAt) - 3600 * 1000).toISOString();
-    const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: fire.site, location: "тест", occurredAt });
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], occurredAt });
     assert.status(res, 201, null, "появился");
     const c = res.body;
     assert.eq([c.state, c.owner, c.assignmentGroup, c.escalationLevel], ["new", null, null, 0], "новый, ничей, уровень 0");
@@ -2269,7 +2353,7 @@
   async function fireWith(env, priority) {
     const fire = (await env.all("open")).find((e) => e.eventType.id === "fire");
     const source = (await env.card(fire.guid)).source.guid;
-    return env.call("POST", "/test/incidents", Object.assign({ eventTypeId: "fire", deviceIds: [source], site: fire.site, location: "тест" }, priority === undefined ? {} : { priority }));
+    return env.call("POST", "/test/incidents", Object.assign({ eventTypeId: "fire", deviceIds: [source] }, priority === undefined ? {} : { priority }));
   }
   const reactionSec = (card) => (Date.parse(card.timer.dueAt) - Date.parse(card.createdAt)) / 1000;
 
@@ -2282,7 +2366,7 @@
       const env = await makeEnv({ workflowPatch: { timers: timers(by) } });
       const fire = await newFire(env);
       const source = (await env.card(fire.guid)).source.guid;
-      const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: fire.site });
+      const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source] });
       assert.status(created, 201, null, "появился инцидент");
       const c = created.body;
       assert.eq((Date.parse(c.timer.dueAt) - Date.parse(c.createdAt)) / 1000, sec, `overridesBy ${JSON.stringify(by)}: норматив реакции`);
@@ -2313,7 +2397,7 @@
   const KEYS = window.IM_FIXTURE.scenarios.keys;
   const scenarioOf = (card) => card.scenario.scenarioGuid;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-  const fireAt = (device, extra) => Object.assign({ eventTypeId: "fire", deviceIds: [device], site: "Торговый центр", location: "тест" }, extra || {});
+  const fireAt = (device, extra) => Object.assign({ eventTypeId: "fire", deviceIds: [device] }, extra || {});
   // Правило набора с изменёнными полями — для патча стенда (правила заменяются списком целиком)
   const rulesWith = (change) => window.IM_FIXTURE.rules.map((r) => (change[r.guid] ? Object.assign({}, r, change[r.guid]) : r));
   // Победитель среди правил одного сценария: стенд с этими правилами, событие пожара на S5 — один инцидент
@@ -2330,7 +2414,7 @@
     const got = [];
     const stop = env.api.subscribe((m) => got.push(m));
     await pause(300);
-    const res = await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: [S5], site: "Торговый центр" });
+    const res = await env.call("POST", "/test/events", { eventTypeId: "fire", deviceIds: [S5] });
     assert.status(res, 201, null, "событие с инцидентами");
     const { eventGuid, alarmNumber, created, incidents } = res.body;
     assert.eq(created, 2, "создано инцидентов");
@@ -2384,7 +2468,7 @@
   test("Пересекающиеся правила одного сценария — один инцидент; побеждает самое точное, даже с приоритетом ниже (§14.5, ARCH-15)", async () => {
     for (const [patch, priority] of [[null, 100], [{ [RULE("a")]: { priority: 25 } }, 25]]) {
       const env = await makeEnv(patch ? { fixturePatch: { rules: rulesWith(patch) } } : undefined);
-      const res = await env.call("POST", "/test/events", fireAt(S2, { site: "Главный офис" }));
+      const res = await env.call("POST", "/test/events", fireAt(S2));
       assert.status(res, 201, null, "событие с инцидентом");
       assert.eq(res.body.created, 1, "базовое правило и правило датчика — один сценарий, один инцидент");
       const c = res.body.incidents[0];
@@ -2481,7 +2565,7 @@
     const device = sabotage.devices[0];
     const bare = { guid: RULE("b"), name: "Саботаж без сценария", priority: 100, createdAt: "2026-09-01T09:00:00Z", scenarios: [], conditions: [{ eventTypeId: "sabotage", deviceGuid: device }] };
     const env = await makeEnv({ fixturePatch: { rules: window.IM_FIXTURE.rules.concat(bare) } });
-    const res = await env.call("POST", "/test/events", { eventTypeId: "sabotage", deviceIds: [device], site: sabotage.site });
+    const res = await env.call("POST", "/test/events", { eventTypeId: "sabotage", deviceIds: [device] });
     assert.status(res, 201, null, "событие с инцидентом");
     assert.eq(res.body.created, 1, "один инцидент");
     assert.eq([res.body.incidents[0].ruleGuid, res.body.incidents[0].priority], [RULE(3), 50], "по базовому правилу саботажа, правило без сценария не в счёт");
@@ -2489,7 +2573,7 @@
     const glass = window.IM_FIXTURE.incidents.find((i) => i.eventType.id === "glass");
     const none = await makeEnv({ fixturePatch: { rules: window.IM_FIXTURE.rules.filter((r) => r.guid !== RULE(7)) } });
     const before = (await none.all("all")).length;
-    const quiet = await none.call("POST", "/test/events", { eventTypeId: "glass", deviceIds: [glass.devices[0]], site: glass.site });
+    const quiet = await none.call("POST", "/test/events", { eventTypeId: "glass", deviceIds: [glass.devices[0]] });
     assert.status(quiet, 200, null, "событие без инцидентов");
     assert.eq([quiet.body.created, quiet.body.alarmNumber, quiet.body.incidents], [0, null, []], "ни инцидентов, ни номера тревоги");
     assert.eq((await none.all("all")).length, before, "в очереди нового нет");
@@ -2766,7 +2850,7 @@
     // Петрова — только «Оператор ТЦ»: инцидент другой площадки ей не виден
     const env = await makeEnv();
     assert.status(await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] }), 200, null, "Петрова — только ТЦ");
-    const far = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const far = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     assert.ok(far, "есть новый инцидент не в торговом центре");
     const before = await env.card(far.guid);
     const res = await asColleague(env, "petrova", far.guid, "claim");
@@ -2821,7 +2905,7 @@
     async function stand() {
       const env = await makeEnv();
       const [fire, c] = await Promise.all(["INC-1847", "INC-1853"].map((n) => env.guidOf(n)));
-      const made = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [S5], site: "Торговый центр", location: "тест", ruleGuid: RULE(9) });
+      const made = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [S5], ruleGuid: RULE(9) });
       assert.status(made, 201, null, "второй медпункт — своим событием");
       const p = made.body.guid;
       assert.status(await env.act(p, "claim", {}, "queue"), 200, null, `взять ${made.body.number}`);
@@ -3563,7 +3647,7 @@
     const source = (await env.card(sample.guid)).source.guid;
     const at = Date.parse((await env.session()).serverTime || new Date().toISOString());
     const fire = async (priority, minutesAgo) => {
-      const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], location: "тест", priority, occurredAt: new Date(at - minutesAgo * 60000).toISOString() });
+      const res = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], priority, occurredAt: new Date(at - minutesAgo * 60000).toISOString() });
       assert.status(res, 201, null, "инцидент появился");
       return res.body.guid;
     };
@@ -3826,7 +3910,7 @@
       const due = (await env.card(calm.guid)).timer.dueAt;
       if (mergeAtDue) await env.advance((Date.parse(due) - env.now) / 1000);
       const source = (await env.card(calm.guid)).source.guid;
-      const born = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], location: "тест", priority: calm.priority });
+      const born = await env.call("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [source], priority: calm.priority });
       assert.status(born, 201, null, "появился новый");
       const fresh = { guid: born.body.guid };
       assert.status(await mergeInto(env, calm.guid, [fresh.guid]), 200, null, "присоединить новый");
@@ -3921,8 +4005,8 @@
     people.operators.find((o) => o.id === "kuznetsov").agentState = "ready";
     const env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { onResolutionOverdue: "escalate", levels }) }, fixturePatch: { people } });
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire");
-    const mall = fires.find((e) => e.site === "Торговый центр");
-    const office = fires.find((e) => e.site !== "Торговый центр");
+    const mall = fires.find((e) => siteOf(e) === "Торговый центр");
+    const office = fires.find((e) => siteOf(e) !== "Торговый центр");
     assert.ok(mall && office, "пожары в ТЦ и вне его");
     assert.status(await env.act(mall.guid, "claim", {}, "queue"), 200, null, "взять пожар ТЦ");
     await (await mergeInto(env, mall.guid, [office.guid])).body;
@@ -3991,7 +4075,7 @@
     assert.status(await env.act(old, "hold", { reasonId: "third_party", comment: "тест" }), 200, null, "отложить");
     // Новый пожар — последняя версия сценария, v2: после kind — evacuation, потом note
     const source = (await env.card(old)).source.guid;
-    const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source], site: "Торговый центр" });
+    const created = await env.call("POST", "/test/incidents", { eventTypeId: "fire", priority: TOP, deviceIds: [source] });
     assert.status(created, 201, null, "новый пожар");
     assert.ok(created.body.scenario.script.steps.some((s) => s.id === "evacuation"), "у нового — сценарий с шагом evacuation");
     const res = await env.ok("POST", "/operator/incidents/merge", { incidentGuids: [created.body.guid, old] });
@@ -4115,7 +4199,7 @@
 
   test("Повтор массового действия с тем же ключом — прежний ответ, второй раз не применяется (idempotencyKey, BUG-84)", async () => {
     const env = await makeEnv();
-    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    const two = (await env.all("open")).filter((e) => e.state === "new" && siteOf(e) === "Главный офис").slice(0, 2).map((e) => e.guid);
     assert.eq(two.length, 2, "два новых в офисе");
     const body = { incidentGuids: two, formValues: { targetId: "sidorov", comment: "тест" }, idempotencyKey: "bug-84-once" };
     const first = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", body);
@@ -4327,14 +4411,14 @@
     const initial = await env.session();
     Object.entries(preset).forEach(([key, value]) => assert.eq(initial.preferences[key], value, `после сброса ${key} — из эталонного набора`));
     assert.eq(initial.lastTransferTargetId, null, "после сброса — никого");
-    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.site !== "Торговый центр");
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     assert.eq(actionOf(await env.card(a.guid), "transfer").fieldOptions.targetId.defaultValue || null, null, "передач ещё не было — поле пустое");
     assert.status(await env.act(a.guid, "transfer", { targetId: "noc", comment: "тест" }, "queue"), 200, null, "передать Дежурному ЦОД");
     assert.eq((await env.session()).lastTransferTargetId, "noc", "сервер запомнил");
     const again = await env.card(b.guid);
     assert.eq(actionOf(again, "transfer").fieldOptions.targetId.defaultValue, "noc", "в следующей форме — он же");
     // Адресату, которому этот инцидент передать нельзя (нет доступа), не подставляется
-    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    const mall = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) === "Торговый центр");
     assert.status(await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue"), 200, null, "передать Кузнецову событие ТЦ");
     assert.eq((await env.session()).lastTransferTargetId, "kuznetsov", "последний — Кузнецов");
     const office = await env.card(b.guid);
@@ -4373,9 +4457,9 @@
         camerasOf(inc).map((id) => [id, dev[id].thumbnailUrl || null, id === source]),
         `${inc.number}: камеры из связей источника`
       );
-      // План — там, где источник или первое устройство с положением, иначе план площадки
+      // План — там, где источник или первое устройство с положением; положения нет ни у кого — плана нет
       const placed = [source, ...ids].map((id) => dev[id] && dev[id].position).find(Boolean);
-      const plan = fx.plans.find((p) => (placed ? p.id === placed.plan : p.site === inc.site)) || null;
+      const plan = (placed && fx.plans.find((p) => p.id === placed.plan)) || null;
       if (!plan) {
         assert.eq(media.map, null, `${inc.number}: плана нет`);
         continue;
@@ -4443,7 +4527,7 @@
 
   test("Дежурная группа с доступом ко всем объектам — в адресатах передачи у любого инцидента; своей группы там нет (§8.1)", async () => {
     const env = await makeEnv();
-    const office = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const office = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     const options = actionOf(await env.card(office.guid), "transfer").fieldOptions.targetId.options;
     const group = options.find((o) => o.id === "grp-response");
     assert.ok(group && !group.disabled, `«Группа реагирования» в форме передачи ${office.number}: ${options.map((o) => o.id)}`);
@@ -4458,8 +4542,8 @@
   test("Передача только адресату с доступом (§8.1): Кузнецов и «Охрана ТЦ» видят только «Торговый центр»", async () => {
     const env = await makeEnv();
     const news = (await env.all("open")).filter((e) => e.state === "new");
-    const mall = news.filter((e) => e.site === "Торговый центр");
-    const elsewhere = news.filter((e) => e.site !== "Торговый центр");
+    const mall = news.filter((e) => siteOf(e) === "Торговый центр");
+    const elsewhere = news.filter((e) => siteOf(e) !== "Торговый центр");
     assert.ok(mall.length >= 1 && elsewhere.length >= 1, "есть новые и в ТЦ, и вне его");
     const targetsOf = async (inc) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => t.id);
     const outside = await targetsOf(elsewhere[0]);
@@ -4488,7 +4572,7 @@
     const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
     fixture.people.dutyGroups.find((g) => g.id === "grp-tc").members.push("gusev");
     const api = (await standWith({ fixture })).api;
-    const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     const targets = (await api.get("/operator/transfer-targets", { incidentGuid: inc.guid })).map((t) => t.id);
     assert.ok(targets.includes("grp-tc") && !targets.includes("kuznetsov"), `группа есть, Кузнецова нет: ${targets}`);
     const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
@@ -4500,13 +4584,13 @@
     const env = await makeEnv();
     const open = await env.all("open");
     const hers = open.filter((e) => e.owner && e.owner.id === "petrova");
-    assert.ok(hers.some((e) => e.site !== "Торговый центр"), "у Петровой есть инциденты вне ТЦ");
+    assert.ok(hers.some((e) => siteOf(e) !== "Торговый центр"), "у Петровой есть инциденты вне ТЦ");
     // Инцидент ТЦ — Петровой: после смены роли он должен остаться у неё
-    const mall = open.find((e) => e.state === "new" && e.site === "Торговый центр");
+    const mall = open.find((e) => e.state === "new" && siteOf(e) === "Торговый центр");
     assert.status(await env.act(mall.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "передать Петровой инцидент ТЦ");
     const res = await env.call("PUT", "/test/operators/petrova/roles", { roles: ["Оператор ТЦ"] });
     assert.status(res, 200, null, "сменить роли Петровой");
-    for (const inc of hers.filter((e) => e.site !== "Торговый центр")) {
+    for (const inc of hers.filter((e) => siteOf(e) !== "Торговый центр")) {
       assert.ok(res.body.fired.some((f) => f.incidentGuid === inc.guid && f.transitionId === "addressee_lost_access"), `${inc.number}: сработала потеря доступа`);
       const c = await env.card(inc.guid);
       assert.eq([c.state, c.owner, c.holdReasonId], ["new", null, null], `${inc.number}: снова новый, ничей`);
@@ -4515,12 +4599,12 @@
     const kept = await env.card(mall.guid);
     assert.eq([kept.state, kept.owner && kept.owner.id], ["pending_acceptance", "petrova"], "инцидент ТЦ остался у Петровой");
     // Группе старших операторов хватает доступа у меня; без него — в очередь
-    const forGroup = (await env.all("all")).find((e) => e.assignmentGroup && e.assignmentGroup.id === "grp-leads" && e.site !== "Торговый центр");
+    const forGroup = (await env.all("all")).find((e) => e.assignmentGroup && e.assignmentGroup.id === "grp-leads" && siteOf(e) !== "Торговый центр");
     assert.ok(!res.body.fired.some((f) => f.incidentGuid === forGroup.guid), "группе хватает доступа у одного участника");
     // Мой инцидент вне ТЦ: после смены моей роли он мне не виден — приходит только номер (BUG-24)
-    const taken = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const taken = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     assert.status(await env.act(taken.guid, "claim", {}, "queue"), 200, null, "взять инцидент вне ТЦ");
-    const notMine = (await env.all("open")).filter((e) => e.site !== "Торговый центр" && !(e.owner && e.owner.id === "me") && !(e.assignmentGroup && e.assignmentGroup.id === "grp-leads"));
+    const notMine = (await env.all("open")).filter((e) => siteOf(e) !== "Торговый центр" && !(e.owner && e.owner.id === "me") && !(e.assignmentGroup && e.assignmentGroup.id === "grp-leads"));
     const got = [];
     const stop = env.api.subscribe((m) => got.push(m));
     // По сети поток подключается не сразу
@@ -4541,11 +4625,11 @@
   test("Дежурная группа — по ролям и отдельным людям (§8.1); человек в нескольких группах — при выходе первая по порядку", async () => {
     const env = await makeEnv();
     assert.eq((await env.session()).operator.dutyGroupGuids, ["grp-leads"], "я в группе старших операторов — как отдельный участник");
-    const elsewhere = (await env.all("open")).find((e) => e.state === "new" && e.site !== "Торговый центр");
+    const elsewhere = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     const target = async (id) => (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(elsewhere.guid)}`)).find((t) => t.id === id);
     assert.ok(!(await target("grp-tc")), "вне ТЦ «Охраны ТЦ» нет: у её участников нет доступа");
     // Группа на месте, если на месте хотя бы один участник: в «Охране ТЦ» пока только Кузнецов, он «Вышел»
-    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    const mall = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) === "Торговый центр");
     const tcBefore = (await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(mall.guid)}`)).find((t) => t.id === "grp-tc");
     assert.eq([tcBefore.name, tcBefore.available], ["Охрана ТЦ", false], "у группы название; на месте никого");
     // Гусеву — роль «Оператор ТЦ»: он входит в «Охрану ТЦ» по роли, и у группы появляется доступ
@@ -4567,10 +4651,10 @@
     const open = await env.all("open");
     const labels = async (inc) =>
       Object.fromEntries((await env.ok("GET", `/operator/transfer-targets?incidentGuid=${enc(inc.guid)}`)).map((t) => [t.id, [t.available, t.availabilityLabel]]));
-    const office = await labels(open.find((e) => e.state === "new" && e.site !== "Торговый центр"));
+    const office = await labels(open.find((e) => e.state === "new" && siteOf(e) !== "Торговый центр"));
     assert.eq(office.orlova, [false, "перерыв: Обед"], "Орлова на обеде");
     assert.eq(office.sidorov, [true, null], "Сидоров на месте — без подписи");
-    const mall = await labels(open.find((e) => e.state === "new" && e.site === "Торговый центр"));
+    const mall = await labels(open.find((e) => e.state === "new" && siteOf(e) === "Торговый центр"));
     assert.eq(mall.kuznetsov, [false, "оффлайн"], "Кузнецов вне МИ");
     assert.eq(mall["grp-tc"], [false, "никого нет на месте"], "в «Охране ТЦ» никого");
   });
@@ -4833,7 +4917,7 @@
   });
 
   test("сбой вычисления условия после фиксации — выполненный в failed, ответ целый", async () => {
-    const [first, second] = (await (await makeEnv()).all("open")).filter((e) => e.state === "new" && e.site === "Главный офис");
+    const [first, second] = (await (await makeEnv()).all("open")).filter((e) => e.state === "new" && siteOf(e) === "Главный офис");
     // Условие действия, которое появляется после передачи. У первого оно падает, только когда передан и второй: оба
     // перехода выполнены и поток прошёл, падает сборка строки ответа
     const after = W.transitions.find((t) => t.trigger === "manual" && t.from.includes("pending_acceptance") && !t.from.includes("new") && t.ui.surface.includes("queue"));
@@ -4891,7 +4975,7 @@
 
   test("массовый маршрут: не-guid — 400 до расхода ключа", async () => {
     const env = await makeEnv();
-    const two = (await env.all("open")).filter((e) => e.state === "new" && e.site === "Главный офис").slice(0, 2).map((e) => e.guid);
+    const two = (await env.all("open")).filter((e) => e.state === "new" && siteOf(e) === "Главный офис").slice(0, 2).map((e) => e.guid);
     assert.eq(two.length, 2, "два новых в офисе");
     const url = "/operator/incidents/transitions/transfer/bulk";
     const body = (incidentGuids) => ({ incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, idempotencyKey: "not-a-guid-once" });
@@ -4962,7 +5046,7 @@
 
   test("ответ после системного перехода — инцидент уже после него (ARCH-10)", async () => {
     const env = await makeEnv();
-    const mall = (await env.all("open")).find((e) => e.state === "new" && e.site === "Торговый центр");
+    const mall = (await env.all("open")).find((e) => e.state === "new" && siteOf(e) === "Торговый центр");
     // Кузнецов в наборе вышел: после передачи ему срабатывает addressee_signed_out_* — в том же запросе
     const res = await env.act(mall.guid, "transfer", { targetId: "kuznetsov", comment: "тест" }, "queue");
     assert.status(res, 200, null, "передать вышедшему");

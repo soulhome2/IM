@@ -23,7 +23,7 @@
   async function created(env, type) {
     const sample = (await env.all("all")).find((e) => e.eventType.id === type);
     const source = (await env.card(sample.guid)).source.guid;
-    const res = await env.call("POST", "/test/incidents", { eventTypeId: type, deviceIds: [source], location: "тест" });
+    const res = await env.call("POST", "/test/incidents", { eventTypeId: type, deviceIds: [source] });
     assert.status(res, 201, null, "инцидент появился");
     return res.body;
   }

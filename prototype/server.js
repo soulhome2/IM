@@ -326,7 +326,12 @@
     function deviceRef(id) {
       const spec = deviceSpec(id);
       const type = DEVICE_TYPES[spec.type] ? spec.type : "camera";
-      return { guid: id, name: spec.name, typeId: type, typeLabel: DEVICE_TYPES[type].label };
+      return { guid: id, name: spec.name, typeId: type, typeLabel: DEVICE_TYPES[type].label, deleted: Boolean(spec.deleted) };
+    }
+    // Действующий адрес устройства (§1): введённый в МИ, иначе из источника; удалённое — без адреса
+    function addressOf(id) {
+      const spec = deviceSpec(id);
+      return spec.deleted ? null : spec.addressIm || spec.address || null;
     }
     function findNode(nodes, id) {
       for (const node of nodes) {
@@ -396,6 +401,28 @@
         return null;
       };
       return walk(TREE);
+    }
+    // Группы, куда входит устройство, — с предками: ссылка группы видна и при инциденте вложенной (§7)
+    function groupsOfDevice(id) {
+      const out = new Set();
+      const walk = (nodes, path) =>
+        nodes.forEach((node) => {
+          if (node.isDevice) {
+            if (node.id === id) path.forEach((g) => out.add(g));
+          } else walk(node.children || [], path.concat(node.id));
+        });
+      walk(TREE, []);
+      return out;
+    }
+    // Справочная ссылка (§7): область, группа с названием, прежняя площадка «не назначенной»
+    function helpLinkView(l) {
+      const group = l.groupGuid ? findNode(TREE, l.groupGuid) : null;
+      return Object.assign({ icon: null }, l, {
+        scope: l.scope,
+        groupGuid: l.groupGuid || null,
+        groupName: group ? group.name : null,
+        legacySite: l.legacySite || null,
+      });
     }
     // Инцидент относится к группе и устройству по устройству-источнику (§19.1, RULE-85): камеры рядом
     // и другие устройства события тревогой не считаются — ни в счётчиках дерева, ни в фильтре группы
@@ -594,7 +621,11 @@
       ACTORS = OPERATORS.concat(GROUPS, data.people.system.map((a) => Object.assign({ system: true }, a)));
       DEVICE_TYPES = Object.fromEntries(data.deviceTypes.map((t) => [t.id, { label: t.label }]));
       DEVICE_CATALOG = Object.fromEntries(
-        data.devices.map((d) => [d.id, { name: d.name, type: d.type, position: d.position || null, thumbnailUrl: d.thumbnailUrl || null }])
+        data.devices.map((d) => [
+          d.id,
+          // Адрес (§1, §19.1): из источника и введённый в МИ; удалённое устройство (deleted) — для сводки «устройство удалено»
+          { name: d.name, type: d.type, position: d.position || null, thumbnailUrl: d.thumbnailUrl || null, address: d.address || null, addressIm: d.addressIm || null, deleted: Boolean(d.deleted) },
+        ])
       );
       PLANS = data.plans || [];
       ACCESS_GROUPS = data.accessGroups || [];
@@ -641,9 +672,6 @@
         type: inc.eventType.name,
         priority: inc.priority,
         priorityManual: Boolean(inc.priorityManual),
-        site: inc.site,
-        siteType: inc.siteType,
-        location: inc.location,
         occurredAt: abs(inc.occurredAt),
         deviceIds: inc.devices,
         cameras: camerasOf(inc.devices[0]),
@@ -880,9 +908,9 @@
         closeMaintenanceWindowId: ev.closeMaintenanceWindowId || null,
         sourceGroup: sourceGroupOf(ev),
         sourceDeviceTypeId: src ? deviceRef(src).typeId : null,
-        site: ev.site || null,
-        siteType: ev.siteType || null,
-        location: ev.location || null,
+        // Источник и его действующий адрес — на момент чтения, не снимок события (§14.5, план 87а)
+        source: src ? deviceRef(src) : null,
+        address: src ? addressOf(src) : null,
         state: ev.state,
         stateCategory: STATES[ev.state].category,
         ownership: engine.ownership(ev),
@@ -1108,7 +1136,6 @@
         ruleName: (RULES.find((r) => r.guid === ev.ruleGuid) || {}).name || null,
         // Доступные действия карточки уже посчитаны в summary — условия машины второй раз не вычисляются
         note: noteView(ev, base.actions.filter((a) => a.enabled).map((a) => a.id)),
-        source: src ? deviceRef(src) : null,
         devices: deviceIds.filter((id) => myDevices.has(id)).map(deviceRef),
         scenario: scenarioView(ev),
         journal: journalView(ev),
@@ -1142,12 +1169,12 @@
       };
     }
 
-    // План инцидента: тот, где стоит источник или первое устройство события с положением,
-    // иначе план площадки
+    // План инцидента: тот, где стоит источник или первое устройство события с положением; ни у кого
+    // положения нет — плана нет (площадки у инцидента нет, §1)
     function planOf(ev) {
       const ids = [eventSource(ev), ...(ev.deviceIds || []), ...(ev.cameras || [])].filter(Boolean);
       const placed = ids.map((id) => deviceSpec(id).position).find(Boolean);
-      return PLANS.find((p) => (placed ? p.id === placed.plan : p.site === ev.site)) || null;
+      return (placed && PLANS.find((p) => p.id === placed.plan)) || null;
     }
 
     function mediaView(ev) {
@@ -1256,9 +1283,15 @@
       return list.sort((a, b) => cmp(a, b) || byNumber(a, b));
     }
 
-    // Поиск — по номеру, номеру тревоги (§7, ARCH-15), типу, площадке и месту. Привязанные инциденты в списках
-    // не видны, но ищутся: их находит строка основного, в ней — кто из привязанных подошёл (matchedLinked)
-    const hit = (e, needle) => `${e.number} ${e.alarmNumber} ${e.type} ${e.site} ${e.location}`.toLowerCase().includes(needle);
+    // Поиск — по номеру, номеру тревоги (§7, ARCH-15), типу, названию устройства-источника и его действующему
+    // адресу; у удалённого устройства ни название, ни адрес не ищутся (§7, план 87а). Поля — по отдельности:
+    // строка не находится на стыке двух. Привязанные инциденты в списках не видны, но ищутся: их находит строка
+    // основного, в ней — кто из привязанных подошёл (matchedLinked)
+    const hit = (e, needle) => {
+      const src = eventSource(e);
+      const alive = src && !deviceSpec(src).deleted;
+      return [e.number, e.alarmNumber, e.type, alive ? deviceSpec(src).name : null, alive ? addressOf(src) : null].some((v) => v != null && String(v).toLowerCase().includes(needle));
+    };
     const linkedHits = (e, needle) => events.filter((x) => x.linkedTo === e.id && canSee(x) && hit(x, needle));
     function visible(q) {
       // В списках — инциденты, которые проходят хоть один фильтр очереди машины: привязанные инциденты
@@ -2052,11 +2085,22 @@
         () => ({ status: 200, body: Object.entries(DEVICE_TYPES).map(([id, d]) => ({ id, label: d.label })) }),
       ],
       ["GET", "/operator/reference/source-groups", (p, q) => ({ status: 200, body: treeView(TREE, q.withCounters === "true") })],
-      // Без площадки — все ссылки; с площадкой — общие и этой площадки (§7)
+      // Меню справки (§7, план 87а): с инцидентом — общие и ссылки групп, куда входит его источник (с вложенными);
+      // инцидент не найден или не виден — только общие; «не назначена» в меню не попадает никогда.
+      // Без инцидента — вкладка администрирования: весь справочник — только администратору схемы, иначе общие
       [
         "GET",
         "/operator/reference/help-links",
-        (p, q) => ({ status: 200, body: HELP_LINKS.filter((l) => q.site == null || l.site == null || l.site === q.site).map((l) => Object.assign({ icon: null }, l)) }),
+        (p, q) => {
+          let keep;
+          if (q.incidentGuid == null) keep = (l) => can("incident:schema:admin") || l.scope === "shared";
+          else {
+            const ev = events.find((e) => e.id === q.incidentGuid);
+            const groups = ev && canSee(ev) ? groupsOfDevice(eventSource(ev)) : new Set();
+            keep = (l) => l.scope === "shared" || (l.scope === "group" && groups.has(l.groupGuid));
+          }
+          return { status: 200, body: HELP_LINKS.filter(keep).map(helpLinkView) };
+        },
       ],
       // Приоритеты — справочник машины в порядке важности (DOC-29)
       // Каталог строк (§14.9): язык — из запроса, иначе из настроек оператора; ключа нет на этом
@@ -2086,8 +2130,6 @@
         guid: spec.eventGuid || uuid("e", ++serial.event),
         type,
         devices: devices.slice(),
-        site: spec.site || null,
-        location: spec.location || null,
         occurredAt: spec.occurredAt ? Date.parse(spec.occurredAt) : now(),
       };
     }
@@ -2386,8 +2428,6 @@
         typeGuid: event.type.guid,
         type: event.type.name,
         priority,
-        site: event.site,
-        location: event.location,
         occurredAt: event.occurredAt,
         createdAt: now(),
         deviceIds: event.devices.slice(),
