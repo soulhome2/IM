@@ -1619,9 +1619,10 @@
 
     await step("Причина закрытия по результату (ТЗ-4): список — по forValues, смена результата очищает причину, «Другое» требует комментарий, карточка и журнал — снимок", async () => {
       const W = window.IM_WORKFLOW;
-      const ids = (c) => W.reasonCatalogs[c].items.map((i) => i.id).join(",");
+      // Набор пунктов, без порядка: список идёт по названию (§2.2), порядок проверяет свой шаг
+      const ids = (c) => W.reasonCatalogs[c].items.map((i) => i.id).sort().join(",");
       // Предлагаемые варианты причины — видимые и доступные, без подсказки
-      const offered = () => [...field("causeId").options].filter((o) => o.value && !o.hidden && !o.disabled).map((o) => o.value).join(",");
+      const offered = () => [...field("causeId").options].filter((o) => o.value && !o.hidden && !o.disabled).map((o) => o.value).sort().join(",");
       const starred = (name) => /\*\s*$/.test(($("dialogFields").querySelector(`[data-label-for="${name}"]`) || {}).textContent || "");
       const stand = window.IM_SELFTEST_API;
       if (mode() !== "queue") await click($("backToQueue"));
@@ -1784,6 +1785,78 @@
         await standReset({ fixture: "demo" });
         await setFilter("open");
         await wait(300);
+      }
+    });
+
+    await step("Списки причин — по алфавиту (решение 2026-11-15): перерыв, «Отложить», причины ложной тревоги и массового сбоя, вкладка «Причины» — по названию, а не по порядку настроек поста", async () => {
+      const W = window.IM_WORKFLOW;
+      const own = (items) => items.filter((r) => r.setBy !== "system");
+      const sys = W.reasonCatalogs.hold.items.filter((r) => r.setBy === "system");
+      // Настройки поста — в обратном порядке стартового набора: порядок списка от них не зависит
+      const rev = (items) => items.slice().reverse();
+      const patch = {
+        session: { breakReasons: rev(W.session.breakReasons) },
+        reasonCatalogs: {
+          hold: { items: rev(own(W.reasonCatalogs.hold.items)).concat(sys) },
+          false_alarm_cause: { items: rev(W.reasonCatalogs.false_alarm_cause.items) },
+          mass_fault: { items: rev(W.reasonCatalogs.mass_fault.items) },
+        },
+      };
+      const coll = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+      const byName = (list) => list.every((x, i) => i === 0 || coll.compare(list[i - 1], x) <= 0);
+      const shown = (name) => [...field(name).options].filter((o) => o.value && !o.hidden).map((o) => o.textContent.trim());
+      const check = (name, what, n) => {
+        const list = shown(name);
+        expect(list.length === n, `${what}: в списке ${list.length} пунктов, а не ${n}: ${list.join(", ")}`);
+        expect(byName(list), `${what} — не по алфавиту: ${list.join(", ")}`);
+      };
+      try {
+        await standReset({ fixture: "demo", workflowPatch: patch });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const b = button($("eventsList"), "claim");
+        expect(b, "нет доступной кнопки «Взять»");
+        await click(b);
+        expect(mode() === "work", "карточка не открылась");
+        await click(button(root(), "hold"));
+        check("reasonId", "причины «Отложить»", own(W.reasonCatalogs.hold.items).length);
+        document.querySelector('[data-close="modalDialog"]').click();
+        await click(button(root(), "close"));
+        await setField("resultId", "false_alarm");
+        check("causeId", "причины ложной тревоги", W.reasonCatalogs.false_alarm_cause.items.length);
+        // «Другое» — на своём месте по букве, а не в конце
+        const other = window.IM_STRINGS.ru["workflow.catalog.false_alarm_cause.other"];
+        const list = shown("causeId");
+        expect(list.indexOf(other) >= 0 && list.indexOf(other) < list.length - 1, `«${other}» не на своём месте: ${list.join(", ")}`);
+        await setField("resultId", "mass");
+        check("causeId", "причины массового сбоя", W.reasonCatalogs.mass_fault.items.length);
+        document.querySelector('[data-close="modalDialog"]').click();
+        await click($("backToQueue"));
+        await click($("breakBtn"));
+        check("reasonId", "причины перерыва", W.session.breakReasons.length);
+        document.querySelector('[data-close="modalDialog"]').click();
+        // Вкладка «Причины» настроек: каждый список — по названию
+        await click($("adminBtn"));
+        await click($("adminTabs").querySelector('[data-admin-tab="reasons"]'));
+        const rows = [...$("adminTable").querySelectorAll("tbody tr")].filter((r) => r.cells.length === 2);
+        expect(rows.length >= 4, `на вкладке «Причины» ${rows.length} строк`);
+        rows.forEach((r) => {
+          const lines = r.cells[1].innerHTML.split("<br>").map((h) => {
+            const d = document.createElement("div");
+            d.innerHTML = h;
+            return d.textContent.trim();
+          });
+          expect(byName(lines), `«${r.cells[0].textContent.trim()}» на вкладке — не по алфавиту: ${lines.join(", ")}`);
+        });
+        await click(document.querySelector('[data-close="modalAdmin"]'));
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (!$("modalAdmin").hidden) document.querySelector('[data-close="modalAdmin"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+        await setFilter("open");
       }
     });
 
@@ -2061,7 +2134,7 @@
       const tabs = [...$("adminTabs").querySelectorAll("[data-admin-tab]")];
       expect(tabs.length === window.IM_WORKFLOW.adminSettings.tabs.length, `вкладок ${tabs.length}, в машине ${window.IM_WORKFLOW.adminSettings.tabs.length}`);
       // План 77: вкладок с настройками четыре — сроки и эскалация, работа оператора, причины, хранение (ТЗ-21: и плановые работы); прежние
-      // вкладки — разделами внутри, в том же порядке, и ни одна настройка не потерялась
+      // вкладки — разделами внутри, в том же порядке, и ни одна настройка не потерялась.
       const settingTabs = window.IM_WORKFLOW.adminSettings.tabs.filter((x) => x.items).map((x) => x.id);
       expect(settingTabs.join() === "timing,operator,reasons,storage,maintenance", `вкладки с настройками: ${settingTabs.join(", ")}`);
       const groupsOf = { timing: "norms,escalation", operator: "queue,limits,session,links", storage: "retention" };

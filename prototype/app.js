@@ -1557,7 +1557,7 @@
             kind: "select",
             label: "Причина перерыва",
             required: true,
-            options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: lbl(r) })),
+            options: WORKFLOW.session.breakReasons.map((r) => ({ id: r.id, label: lbl(r) })).sort(byName((o) => o.label)),
           },
         ]
       : [],
@@ -1577,6 +1577,15 @@
   const fieldRequired = (field, values) => fieldRule(field, values).required;
 
   const optionLabel = (o) => (o.disabled && o.reason ? `${t(o.label)} — ${t(o.reason)}` : t(o.label));
+  // Списки причин — по алфавиту (§2.2, решение 2026-11-15): по показанному названию на языке интерфейса, без
+  // учёта регистра и «ё», числа по значению; равные — по id. «Другое» — на своём месте по букве; порядок
+  // в настройках поста не важен
+  function byName(name) {
+    const coll = new Intl.Collator(LANG, { sensitivity: "base", numeric: true });
+    return (a, b) => coll.compare(name(a), name(b)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  }
+  const reasonSource = (source) => /^(reasonCatalog|causeCatalog):/.test(String(source || ""));
+  const reasonsByName = (field) => (reasonSource(field.source) ? Object.assign({}, field, { options: (field.options || []).slice().sort(byName(optionLabel)) }) : field);
 
   // «Кому передать» (§8.1): поле с поиском по подстроке имени и роли. Сначала кто на месте, потом кого
   // нет — с причиной; в каждом разделе люди, потом дежурные группы, как их прислал сервер. Значение —
@@ -1738,7 +1747,8 @@
     });
   }
 
-  function showForm(open, form) {
+  function showForm(open, given) {
+    const form = Object.assign({}, given, { fields: given.fields.map(reasonsByName) });
     state.dialog = Object.assign(open, { form, combo: { open: false, q: "" } });
     $("dialogTitle").textContent = lbl(form, "title");
     $("dialogNote").textContent = form.note || "";
@@ -4566,7 +4576,9 @@
       // Разделы объединённой вкладки (план 77): заголовок раздела строкой, настройки раздела — под ним; раздел без
       // настроек, с запросом (source), — вложенной таблицей своих данных
       const groups = tab.groups || [];
-      const itemRow = (item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(settingAt(item.path), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`;
+      // Список причин — по названию, как в формах оператора (§2.2)
+      const reasons = (path, v) => (Array.isArray(v) && /^(reasonCatalogs\.[^.]+\.items|session\.breakReasons)$/.test(path) ? v.slice().sort(byName((x) => (hasLbl(x, "label") ? lbl(x) : t(x.id)))) : v);
+      const itemRow = (item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`;
       const groupHead = (g) => `<tr class="admin-group" data-admin-group="${g.id}"><th colspan="2">${escapeHtml(lbl(g))}<span class="what">${escapeHtml(`${t("Правила")}: ${g.rules}`)}</span></th></tr>`;
       const body = groups.length
         ? (
