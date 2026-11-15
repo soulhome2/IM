@@ -1712,6 +1712,28 @@
       expect(JSON.stringify(draft.added) === '["reasonCatalogs.mass_fault.items"]' && draft.settings.reasonCatalogs.hold.items.length === 0, `черновик пересчитан неверно: ${JSON.stringify(draft.added)}`);
     });
 
+    await step("Сброс — пост как новый (§20, решение 2026-11-15): после прогона с очищенными списками сброс возвращает причины стартового набора", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const D = window.IM_POST_DEFAULTS;
+      const ids = (list) => JSON.stringify((list || []).filter((r) => r.setBy !== "system").map((x) => x.id));
+      const lists = (w) => ({ hold: ids(w.reasonCatalogs.hold.items), mass: ids(w.reasonCatalogs.mass_fault.items), fa: ids(w.reasonCatalogs.false_alarm_cause.items), br: ids(w.session.breakReasons) });
+      const sys = window.IM_WORKFLOW.reasonCatalogs.hold.items.filter((r) => r.setBy === "system");
+      try {
+        await standReset({ fixture: "demo", workflowPatch: { reasonCatalogs: { hold: { items: sys }, mass_fault: { items: [] }, false_alarm_cause: { items: [] } }, session: { breakReasons: [] } } });
+        const cleared = lists((await stand.raw("GET", "/operator/workflow/active")).body);
+        expect(Object.values(cleared).every((v) => v === "[]"), `списки поста не очистились: ${JSON.stringify(cleared)}`);
+        await standReset({ fixture: "demo" });
+        const after = lists((await stand.raw("GET", "/operator/workflow/active")).body);
+        const want = { hold: ids(D.reasonCatalogs.hold.items), mass: ids(D.reasonCatalogs.mass_fault.items), fa: ids(D.reasonCatalogs.false_alarm_cause.items), br: ids(D.session.breakReasons) };
+        expect(JSON.stringify(after) === JSON.stringify(want), `после сброса причины не из стартового набора: ${JSON.stringify(after)}`);
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+      }
+    });
+
     await step("Справочник причин без пунктов (решение 2026-11-15): причина не нужна и поля нет; есть пункт — без причины отказ; нет причин удержания — «Отложить» нет", async () => {
       const stand = window.IM_SELFTEST_API;
       const W = window.IM_WORKFLOW;
