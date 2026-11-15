@@ -2152,9 +2152,10 @@
       const tabs = [...$("adminTabs").querySelectorAll("[data-admin-tab]")];
       expect(tabs.length === window.IM_WORKFLOW.adminSettings.tabs.length, `вкладок ${tabs.length}, в машине ${window.IM_WORKFLOW.adminSettings.tabs.length}`);
       // План 77: вкладок с настройками четыре — сроки и эскалация, работа оператора, причины, хранение (ТЗ-21: и плановые работы); прежние
-      // вкладки — разделами внутри, в том же порядке, и ни одна настройка не потерялась. Хранение — последней (решение 2026-11-15)
+      // вкладки — разделами внутри, в том же порядке, и ни одна настройка не потерялась. Хранение — последней (решение 2026-11-15).
+      // Звук (§21) — сразу после работы оператора
       const settingTabs = window.IM_WORKFLOW.adminSettings.tabs.filter((x) => x.items).map((x) => x.id);
-      expect(settingTabs.join() === "timing,operator,reasons,maintenance,storage", `вкладки с настройками: ${settingTabs.join(", ")}`);
+      expect(settingTabs.join() === "timing,operator,sound,reasons,maintenance,storage", `вкладки с настройками: ${settingTabs.join(", ")}`);
       const groupsOf = { timing: "norms,escalation", operator: "queue,limits,session,links", storage: "retention" };
       for (const [id, want] of Object.entries(groupsOf)) {
         await click($("adminTabs").querySelector(`[data-admin-tab="${id}"]`));

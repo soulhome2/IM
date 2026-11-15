@@ -2266,6 +2266,108 @@ def check_escalation_settings(w, o, err):
             err.append(f"эскалация: уровень {lvl.get('level')} — targetKind user или group и target — id (§8.3, ARCH-07 в7)")
 
 
+SOUND_KEYS = {"patterns", "byPriority", "personal", "alert", "busyHears", "muteMinutes", "volumeFloor"}
+SOUND_REPEATS = ("none", "once", "until_taken")
+SOUND_LEVEL = re.compile(r"(0|[1-9][0-9]?|100)")
+
+
+def is_int(v, lo, hi):
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+
+
+def check_sound_cue(cue, where, ids, err, repeats=SOUND_REPEATS):
+    """Звук и повтор (§21.2, §21.7): звук из каталога, повтор из перечня, шаг 5…300 с — обязателен при until_taken.
+    При другом повторе шаг допускается: слияние патча поста поверх машины при until_taken → once оставляет шаг машины."""
+    if not isinstance(cue, dict):
+        err.append(f"звук: {where} — не объект «звук и повтор» (§21.7)")
+        return
+    for k in cue:
+        if not k.startswith("$") and k not in ("pattern", "repeat", "repeatSec"):
+            err.append(f"звук: {where}.{k} — лишний ключ: у звука только pattern, repeat, repeatSec (§21.7)")
+    if cue.get("pattern") not in ids:
+        err.append(f"звук: {where}.pattern = {cue.get('pattern')!r} — не из каталога sound.patterns {sorted(ids)} (§21)")
+    if cue.get("repeat") not in repeats:
+        err.append(f"звук: {where}.repeat = {cue.get('repeat')!r} — одно из {list(repeats)} (§21.2)")
+    if "repeatSec" in cue and not is_int(cue["repeatSec"], 5, 300):
+        err.append(f"звук: {where}.repeatSec = {cue['repeatSec']!r} — целое от 5 до 300 с (§21.7)")
+    if cue.get("repeat") == "until_taken" and "repeatSec" not in cue:
+        err.append(f"звук: {where} — повтор «пока не взят» без шага repeatSec (§21.7)")
+
+
+def check_sound(w, err):
+    """Раздел sound (§21): форма и допустимые значения — те же правила проверяет сервер при публикации схемы. Строка
+    byPriority — у каждого уровня эталонного справочника приоритетов: уровень без строки взял бы строку уровня ниже, а
+    ниже самой низкой — тишина, и это молча. Каталог звуков — модель (notSettings), вкладка «Звук» — после «Работы
+    оператора», «Хранение» остаётся последней (§20)."""
+    s = w.get("sound")
+    if not isinstance(s, dict):
+        err.append("звук: в машине нет раздела sound (§21.7)")
+        return
+    for k in s:
+        if not k.startswith("$") and k not in SOUND_KEYS:
+            err.append(f"звук: sound.{k} — лишний ключ (§21.7)")
+    for k in sorted(SOUND_KEYS - set(s)):
+        err.append(f"звук: нет sound.{k} (§21.7)")
+    patterns = s.get("patterns")
+    ids = set()
+    if not isinstance(patterns, list) or not patterns:
+        err.append("звук: sound.patterns — непустой список встроенных звуков (§21)")
+    else:
+        for p in patterns:
+            if not isinstance(p, dict) or not p.get("id") or not str(p.get("labelKey", "")).startswith("workflow.sound.pattern."):
+                err.append(f"звук: sound.patterns — пункт без id или labelKey workflow.sound.pattern.*: {p}")
+                continue
+            if set(p) - {"id", "labelKey"} - {k for k in p if k.startswith("$")}:
+                err.append(f"звук: sound.patterns.{p['id']} — лишние ключи, у звука только id и labelKey (§21.7)")
+            if p["id"] in ids:
+                err.append(f"звук: sound.patterns — звук {p['id']} повторяется")
+            ids.add(p["id"])
+    by = s.get("byPriority")
+    if not isinstance(by, dict):
+        err.append("звук: sound.byPriority — объект «уровень → звук» (§21.2)")
+        by = {}
+    for key, cue in by.items():
+        if key.startswith("$"):
+            continue
+        if not SOUND_LEVEL.fullmatch(key):
+            err.append(f"звук: sound.byPriority — ключ «{key}» не целое 0…100 без ведущих нулей (§21.7)")
+        check_sound_cue(cue, f"sound.byPriority.{key}", ids, err)
+    with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
+        levels = [p.get("value") for p in json.load(f).get("priorities") or []]
+    for v in levels:
+        if str(v) not in by:
+            err.append(f"звук: у уровня {v} эталонного справочника нет строки sound.byPriority (§21.2)")
+    if "personal" in s:
+        check_sound_cue(s["personal"], "sound.personal", ids, err)
+    if "alert" in s:
+        # Инцидент оповещения получатель не берёт: повторять до взятия нечего (§21.2)
+        check_sound_cue(s["alert"], "sound.alert", ids, err, repeats=("none", "once"))
+    busy = s.get("busyHears")
+    if not isinstance(busy, dict):
+        err.append("звук: sound.busyHears — объект minPriority, personal, alert (§21.3)")
+    else:
+        for k in busy:
+            if not k.startswith("$") and k not in ("minPriority", "personal", "alert"):
+                err.append(f"звук: sound.busyHears.{k} — лишний ключ (§21.7)")
+        if "minPriority" not in busy or not (busy["minPriority"] is None or is_int(busy["minPriority"], 0, 100)):
+            err.append(f"звук: sound.busyHears.minPriority = {busy.get('minPriority', '—')!r} — целое 0…100 или null (§21.3)")
+        for k in ("personal", "alert"):
+            if not isinstance(busy.get(k), bool):
+                err.append(f"звук: sound.busyHears.{k} — true или false (§21.3)")
+    if "muteMinutes" in s and not is_int(s["muteMinutes"], 1, 60):
+        err.append(f"звук: sound.muteMinutes = {s['muteMinutes']!r} — целое от 1 до 60 мин (§21.4)")
+    if "volumeFloor" in s and not is_int(s["volumeFloor"], 0, 100):
+        err.append(f"звук: sound.volumeFloor = {s['volumeFloor']!r} — целое от 0 до 100 % (§21.4)")
+    a = w.get("adminSettings") or {}
+    if "sound" not in a.get("sections", []):
+        err.append("звук: sound нет в adminSettings.sections — патч поста раздел не меняет (§20)")
+    if not any(n.get("path") == "sound.patterns" for n in a.get("notSettings", [])):
+        err.append("звук: sound.patterns нет в adminSettings.notSettings — каталог звуков модель, а не настройка (§21.7)")
+    tabs = [t["id"] for t in a.get("tabs", []) if "items" in t]
+    if "sound" not in tabs or "operator" not in tabs or tabs.index("sound") != tabs.index("operator") + 1 or tabs[-1] != "storage":
+        err.append(f"звук: вкладка «Звук» — сразу после «Работы оператора», «Хранение» последней; сейчас {tabs} (§20)")
+
+
 def check_admin_groups(tab, o, err):
     """Разделы объединённой вкладки (план 77): у каждой настройки вкладки — раздел из groups, настройки раздела идут
     подряд и в порядке разделов; раздел без настроек — с запросом (source) из контракта; без groups у настроек
@@ -2463,6 +2565,7 @@ def collect():
     check_effect_kinds(w, err)
     check_automatic_fields(w, err)
     check_escalation_settings(w, o, err)
+    check_sound(w, err)
     check_admin_settings(w, o, err)
     check_fixture(with_post_settings(w), err)
     check_rules(fixture_with_rows(), err)
@@ -2605,6 +2708,11 @@ MUTATIONS.append(machine_json_mutation("system-guard-reads-others-via-family", "
 MUTATIONS.append(machine_json_mutation("system-effect-agent-world", "меняет мир агента"))
 MUTATIONS.append(machine_json_mutation("system-unlink-no-primary", "не пишет в бывший основной"))
 MUTATIONS.append(machine_json_mutation("system-relink-others", "меняет связь другого инцидента"))
+MUTATIONS.append(machine_json_mutation("sound-repeat-sec-zero", "repeatSec = 0"))
+MUTATIONS.append(machine_json_mutation("sound-pattern-unknown", "не из каталога"))
+MUTATIONS.append(machine_json_mutation("sound-level-key-decimal", "ключ «75.0»"))
+MUTATIONS.append(machine_json_mutation("sound-alert-until-taken", "sound.alert.repeat"))
+MUTATIONS.append(machine_json_mutation("sound-volume-floor-over", "volumeFloor = 101"))
 
 
 def self_test():

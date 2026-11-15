@@ -9,6 +9,9 @@
   anyOf/oneOf с {"type": "null"}          -> вариант без null (или остальные варианты) + nullable: true
   examples: [..]                          -> example: первое значение
   const, if / then / else                 -> убираются (проверку делает машина и сервер, не схема)
+  propertyNames                           -> убирается (ключи проверяют машина и сервер)
+  patternProperties                       -> убирается; рядом additionalProperties: false — тоже: в 3.0 закрытая
+                                             схема отвергла бы пояснения «$comment…», которые 3.1 пропускает
   $ref рядом с другими полями             -> allOf: [{$ref}] плюс остальные поля
   схема без type, $ref, enum и составных  -> nullable: true (в 3.1 она принимает и null)
 И вне схем: info.summary (его нет в 3.0)   -> убирается.
@@ -21,7 +24,7 @@ import copy
 SCHEMA_MAP = ("properties",)                  # значения — схемы
 SCHEMA_ONE = ("items", "additionalProperties", "not")
 SCHEMA_LIST = ("allOf", "anyOf", "oneOf")
-DROPPED = ("const", "if", "then", "else")
+DROPPED = ("const", "if", "then", "else", "propertyNames")
 
 
 def _is_null(v):
@@ -36,6 +39,11 @@ def _schema(s, path, found):
         if key in s:
             found.append(f"{path}/{key}")
             del s[key]
+    if "patternProperties" in s:
+        found.append(f"{path}/patternProperties")
+        del s["patternProperties"]
+        if s.get("additionalProperties") is False:
+            del s["additionalProperties"]
     # Схема без type, $ref, enum и составных частей в 3.1 принимает любое значение, и null тоже; в 3.0 — только с nullable
     if not any(k in s for k in ("type", "$ref", "enum") + SCHEMA_LIST):
         s["nullable"] = True

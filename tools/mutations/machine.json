@@ -876,5 +876,40 @@
   "what": "инцидент появляется у группы правила сразу на уровне эскалации 1, а не 0 (§8.1, §8.3, М1)",
   "find": "{ \"kind\": \"transactional\", \"fn\": \"setAssignmentGroup\", \"args\": [\"incident.ruleDutyGroup\"] },\n        { \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"escalationLevel\", \"0\"] }",
   "replace": "{ \"kind\": \"transactional\", \"fn\": \"setAssignmentGroup\", \"args\": [\"incident.ruleDutyGroup\"] },\n        { \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"escalationLevel\", \"1\"] }"
+ },
+ {
+  "name": "sound-repeat-sec-zero",
+  "what": "звук: шаг повтора Критического 0 с — повтор «пока не взят» без паузы (§21.7)",
+  "find": "\"repeatSec\": 15 }",
+  "replace": "\"repeatSec\": 0 }",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
+  "name": "sound-pattern-unknown",
+  "what": "звук: у Высокого звук не из каталога sound.patterns — клиенту нечего играть (§21)",
+  "find": "\"75\": { \"pattern\": \"double\"",
+  "replace": "\"75\": { \"pattern\": \"chime\"",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
+  "name": "sound-level-key-decimal",
+  "what": "звук: ключ уровня «75.0» вместо «75» — строка Высокого молча не найдена, 75 звучит как 50 (§21.2, §21.7)",
+  "find": "\"75\": { \"pattern\": \"double\"",
+  "replace": "\"75.0\": { \"pattern\": \"double\"",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
+  "name": "sound-alert-until-taken",
+  "what": "звук: оповещение повторяется «пока не взят» — инцидент оповещения получатель не берёт, повтор вечный (§21.2)",
+  "find": "\"alert\": { \"pattern\": \"bell\", \"repeat\": \"once\" }",
+  "replace": "\"alert\": { \"pattern\": \"bell\", \"repeat\": \"until_taken\", \"repeatSec\": 30 }",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
+  "name": "sound-volume-floor-over",
+  "what": "звук: нижний порог громкости 101 % (§21.4)",
+  "find": "\"volumeFloor\": 30",
+  "replace": "\"volumeFloor\": 101",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
  }
 ]

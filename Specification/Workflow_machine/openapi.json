@@ -5701,6 +5701,9 @@
           "alerts": {
             "$ref": "#/components/schemas/AlertsPolicy"
           },
+          "sound": {
+            "$ref": "#/components/schemas/SoundSettings"
+          },
           "adminSettings": {
             "$ref": "#/components/schemas/AdminSettings"
           },
@@ -6788,6 +6791,174 @@
             "description": "Ключ записи журнала (§14.9), если получателя на месте с доступом к объекту нет: нарушение и запись перехода при этом остаются."
           }
         }
+      },
+      "SoundCue": {
+        "type": "object",
+        "description": "§21.2, §21.7. Звук и повтор: какой звук из каталога `SoundSettings.patterns` и сколько раз. `repeat`: `none` — без звука; `once` — один раз; `until_taken` — повтор с шагом `repeatSec`, пока инцидент ждёт взятия или моего ответа. `repeatSec` обязателен при `until_taken`, при другом `repeat` допускается и не читается: слияние патча поста (JSON Merge Patch) при переключении `until_taken → once` оставляет шаг машины. Других ключей нет, кроме пояснений `$comment…`.",
+        "required": [
+          "pattern",
+          "repeat"
+        ],
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "id звука из `SoundSettings.patterns`."
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "once",
+              "until_taken"
+            ],
+            "description": "Повтор: без звука, один раз, пока не взят."
+          },
+          "repeatSec": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 300,
+            "description": "Шаг повтора, с: целое 5…300. Обязателен при `until_taken`."
+          }
+        },
+        "patternProperties": {
+          "^\\$comment": {}
+        },
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "repeat": {
+              "const": "until_taken"
+            }
+          },
+          "required": [
+            "repeat"
+          ]
+        },
+        "then": {
+          "required": [
+            "repeatSec"
+          ]
+        }
+      },
+      "SoundSettings": {
+        "type": "object",
+        "description": "§21. Раздел `sound` машины: звук оператора. Звучать или нет, решает клиент по событиям потока, этому разделу, состоянию оператора и «Только важному»; сервер звук не решает, а только проверяет раздел при публикации схемы. Раздел — настройка поста (`adminSettings.sections`), кроме каталога `patterns` — он модель. Старый сервер раздела может не отдавать: клиент без раздела молчит, поэтому в `WorkflowDefinition.required` его нет. Других ключей нет, кроме пояснений `$comment…`.",
+        "required": [
+          "patterns",
+          "byPriority",
+          "personal",
+          "alert",
+          "busyHears",
+          "muteMinutes",
+          "volumeFloor"
+        ],
+        "properties": {
+          "patterns": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Каталог встроенных звуков: `id` и ключ подписи (§14.9). Рецепт звука (тоны, ритм) — в коде клиента под тем же `id`. Модель, а не настройка: патч поста каталог не меняет.",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "labelKey"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              },
+              "patternProperties": {
+                "^\\$comment": {}
+              },
+              "additionalProperties": false
+            }
+          },
+          "byPriority": {
+            "type": "object",
+            "description": "Звук по числу уровня приоритета (§2.5, §21.2): ключ — десятичная запись целого 0…100 без ведущих нулей, значение — звук и повтор. Уровень без своей строки звучит как ближайший уровень ниже (90 → 75), ниже самой низкой строки — без звука.",
+            "propertyNames": {
+              "pattern": "^(0|[1-9][0-9]?|100)$"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SoundCue"
+            }
+          },
+          "personal": {
+            "$ref": "#/components/schemas/SoundCue",
+            "description": "«Лично вам» (§21.1): передано или эскалировано мне или моей дежурной группе, адресовано правилом моей группе."
+          },
+          "alert": {
+            "description": "Оповещение §9 получателю оповещений. `repeat` — только `none` или `once`: инцидент оповещения получатель не берёт, повторять до взятия нечего.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SoundCue"
+              },
+              {
+                "properties": {
+                  "repeat": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "once"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "busyHears": {
+            "type": "object",
+            "description": "Что слышит оператор в состоянии «Занят» (§21.3).",
+            "required": [
+              "minPriority",
+              "personal",
+              "alert"
+            ],
+            "properties": {
+              "minPriority": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Порог приоритета: звук по приоритету — от этого уровня и выше; `null` — по приоритету «Занят» не слышит ничего."
+              },
+              "personal": {
+                "type": "boolean",
+                "description": "Слышит ли «лично вам»."
+              },
+              "alert": {
+                "type": "boolean",
+                "description": "Слышит ли оповещение."
+              }
+            },
+            "patternProperties": {
+              "^\\$comment": {}
+            },
+            "additionalProperties": false
+          },
+          "muteMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Срок «Только важного», мин (§21.4)."
+          },
+          "volumeFloor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Нижний порог громкости, % (§21.4): ниже оператор не убавит."
+          }
+        },
+        "patternProperties": {
+          "^\\$comment": {}
+        },
+        "additionalProperties": false
       },
       "EscalationPolicy": {
         "type": "object",

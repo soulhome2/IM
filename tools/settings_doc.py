@@ -64,6 +64,8 @@ def value(v, key="", seconds=False):
         if v in RU:
             return RU[v]
         return f"`{v}`" if ":" in v and " " not in v else v
+    if isinstance(v, dict) and "pattern" in v and "repeat" in v:
+        return cue(v)
     if isinstance(v, dict):
         return "; ".join(f"{word(k)}: {value(x, k, sec)}" for k, x in v.items() if not k.startswith("$")) or "нет"
     if isinstance(v, list):
@@ -71,6 +73,16 @@ def value(v, key="", seconds=False):
             return "нет"
         return "; ".join(element(x, sec) for x in v)
     return str(v)
+
+
+def cue(v):
+    """Звук и повтор раздела sound (§21.2): «Сирена — пока не взят, каждые 15 с»; без звука — так и сказать"""
+    repeat = RU.get(f"workflow.sound.repeat.{v['repeat']}", v["repeat"])
+    if v["repeat"] == "none":
+        return repeat.lower()
+    pattern = RU.get(f"workflow.sound.pattern.{v['pattern']}", v["pattern"])
+    text = f"{pattern} — {repeat.lower()}"
+    return text + (f", каждые {duration(v['repeatSec'])}" if v["repeat"] == "until_taken" and "repeatSec" in v else "")
 
 
 def element(x, sec):

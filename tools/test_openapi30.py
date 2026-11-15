@@ -70,6 +70,21 @@ class Openapi30Test(unittest.TestCase):
                  "if": {"properties": {"m": {"const": "a"}}}, "then": {"required": ["x"]}})
         self.assertEqual(s, {"type": "object", "required": ["m"], "properties": {"m": {"type": "string"}}})
 
+    def test_closed_with_comment_opened(self):
+        """Закрытая схема с пояснениями «$comment…» (раздел sound, §21.7): patternProperties в 3.0 нет — убирается
+        вместе с additionalProperties: false, иначе 3.0 отвергла бы пояснения"""
+        s = one({"type": "object", "properties": {"a": {"type": "integer"}},
+                 "patternProperties": {"^\\$comment": {}}, "additionalProperties": False})
+        self.assertEqual(s, {"type": "object", "properties": {"a": {"type": "integer"}}})
+
+    def test_closed_without_pattern_kept(self):
+        s = one({"type": "object", "properties": {"a": {"type": "integer"}}, "additionalProperties": False})
+        self.assertIs(s["additionalProperties"], False)
+
+    def test_property_names_dropped(self):
+        s = one({"type": "object", "propertyNames": {"pattern": "^[0-9]+$"}, "additionalProperties": {"type": "integer"}})
+        self.assertEqual(s, {"type": "object", "additionalProperties": {"type": "integer"}})
+
     def test_ref_with_siblings(self):
         self.assertEqual(one({"$ref": "#/x", "description": "d"}),
                          {"allOf": [{"$ref": "#/x"}], "description": "d"})

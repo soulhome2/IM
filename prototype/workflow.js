@@ -4041,6 +4041,66 @@ window.IM_WORKFLOW = {
     "target": "grp-leads",
     "noRecipientLog": "workflow.journal.alert_no_recipient"
   },
+  "sound": {
+    "$comment": "§21 «Звук» оператора. Звучать или нет, решает клиент по событиям потока (§14.10), этому разделу, состоянию оператора (§12) и «Только важному»; сервер звук не решает, он только проверяет раздел при публикации схемы (те же правила — tools/check_machine.py, check_sound). patterns — каталог встроенных звуков, модель: рецепт звука (тоны, ритм) — в коде клиента под тем же id, патч поста каталог не меняет (adminSettings.notSettings). Звук и повтор (SoundCue): pattern — id из patterns, repeat — none (без звука), once (один раз) или until_taken (пока инцидент ждёт взятия или моего ответа); repeatSec — шаг повтора, целое 5…300 с, обязателен при until_taken, при другом повторе допускается и не читается (слияние патча поста при until_taken → once оставляет шаг машины). byPriority — по числу уровня (§2.5): ключ — целое 0…100 без ведущих нулей; уровень без своей строки звучит как ближайший уровень ниже, ниже самой низкой строки — без звука. personal — «лично вам» (§21.1). alert — оповещение §9, повтор только none или once: инцидент оповещения получатель не берёт. busyHears — что слышит «Занят» (§21.3): minPriority — порог приоритета, null — по приоритету ничего; personal, alert — да или нет. muteMinutes — срок «Только важного», 1…60 мин; volumeFloor — нижний порог громкости, 0…100 % (§21.4).",
+    "patterns": [
+      {
+        "id": "siren",
+        "labelKey": "workflow.sound.pattern.siren"
+      },
+      {
+        "id": "alarm",
+        "labelKey": "workflow.sound.pattern.alarm"
+      },
+      {
+        "id": "double",
+        "labelKey": "workflow.sound.pattern.double"
+      },
+      {
+        "id": "bell",
+        "labelKey": "workflow.sound.pattern.bell"
+      },
+      {
+        "id": "soft",
+        "labelKey": "workflow.sound.pattern.soft"
+      }
+    ],
+    "byPriority": {
+      "100": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+      },
+      "75": {
+        "pattern": "double",
+        "repeat": "once"
+      },
+      "50": {
+        "pattern": "soft",
+        "repeat": "none"
+      },
+      "25": {
+        "pattern": "soft",
+        "repeat": "none"
+      }
+    },
+    "personal": {
+      "pattern": "bell",
+      "repeat": "until_taken",
+      "repeatSec": 30
+    },
+    "alert": {
+      "pattern": "bell",
+      "repeat": "once"
+    },
+    "busyHears": {
+      "minPriority": 100,
+      "personal": true,
+      "alert": false
+    },
+    "muteMinutes": 5,
+    "volumeFloor": 30
+  },
   "limits": {
     "$comment": "§10.2, §11. Привязанные инциденты объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
     "maxActive": null,
@@ -7499,6 +7559,7 @@ window.IM_WORKFLOW = {
       "reasonCatalogs",
       "escalation",
       "alerts",
+      "sound",
       "limits",
       "session",
       "queueSort",
@@ -7506,14 +7567,17 @@ window.IM_WORKFLOW = {
       "maintenance"
     ],
     "valueLabels": {
-      "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов и цвета приоритетов. Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
+      "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов, цвета приоритетов и повтор звука (§21.2, sound.*.repeat). Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
       "priority": "workflow.settings.word.priority",
       "eventType": "workflow.settings.word.eventType",
       "sourceGroup": "workflow.settings.word.sourceGroup",
       "red": "workflow.priority.color.red",
       "amber": "workflow.priority.color.amber",
       "blue": "workflow.priority.color.blue",
-      "grey": "workflow.priority.color.grey"
+      "grey": "workflow.priority.color.grey",
+      "none": "workflow.sound.repeat.none",
+      "once": "workflow.sound.repeat.once",
+      "until_taken": "workflow.sound.repeat.until_taken"
     },
     "tabs": [
       {
@@ -7718,6 +7782,54 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "id": "sound",
+        "labelKey": "workflow.settings.tab.sound",
+        "rules": "§21",
+        "items": [
+          {
+            "path": "sound.byPriority",
+            "labelKey": "workflow.settings.sound.byPriority",
+            "whatKey": "workflow.settings.sound.byPriority.what"
+          },
+          {
+            "path": "sound.personal",
+            "labelKey": "workflow.settings.sound.personal",
+            "whatKey": "workflow.settings.sound.personal.what"
+          },
+          {
+            "path": "sound.alert",
+            "labelKey": "workflow.settings.sound.alert",
+            "whatKey": "workflow.settings.sound.alert.what"
+          },
+          {
+            "path": "sound.busyHears.minPriority",
+            "labelKey": "workflow.settings.sound.busyHears.minPriority",
+            "whatKey": "workflow.settings.sound.busyHears.minPriority.what",
+            "nullKey": "workflow.settings.sound.busyHears.minPriority.none"
+          },
+          {
+            "path": "sound.busyHears.personal",
+            "labelKey": "workflow.settings.sound.busyHears.personal",
+            "whatKey": "workflow.settings.sound.busyHears.personal.what"
+          },
+          {
+            "path": "sound.busyHears.alert",
+            "labelKey": "workflow.settings.sound.busyHears.alert",
+            "whatKey": "workflow.settings.sound.busyHears.alert.what"
+          },
+          {
+            "path": "sound.muteMinutes",
+            "labelKey": "workflow.settings.sound.muteMinutes",
+            "whatKey": "workflow.settings.sound.muteMinutes.what"
+          },
+          {
+            "path": "sound.volumeFloor",
+            "labelKey": "workflow.settings.sound.volumeFloor",
+            "whatKey": "workflow.settings.sound.volumeFloor.what"
+          }
+        ]
+      },
+      {
         "id": "reasons",
         "labelKey": "workflow.settings.tab.reasons",
         "rules": "§2.2, §4, §12.1",
@@ -7871,6 +7983,10 @@ window.IM_WORKFLOW = {
       }
     ],
     "notSettings": [
+      {
+        "path": "sound.patterns",
+        "why": "каталог встроенных звуков — рецепты в коде клиента, модель (§21)"
+      },
       {
         "path": "timers.reaction",
         "why": "кроме нормативов — устройство таймера: когда запускается и останавливается (модель, §4)"
