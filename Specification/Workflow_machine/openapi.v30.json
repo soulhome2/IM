@@ -2727,7 +2727,7 @@
         ],
         "operationId": "getSystemStatus",
         "summary": "Состояние системы",
-        "description": "§14.11, §20. Раздел админки «Состояние системы», только чтение: база и диск, хранение, резервная копия, работа сервера. Клиент запрашивает при открытии раздела, по кнопке «Обновить» и раз в минуту, пока раздел открыт. Организация — из токена, параметров нет: чужую не запросить, любой параметр (в том числе `customerGuid`) — `400 BAD_REQUEST`. Размер базы и диска общий для сервера (`database.scope = server`): организация видит общий итог и части, но не части других организаций. Право `im.system.view`, в первой версии его даёт `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Считается до пары секунд.",
+        "description": "§14.11, §20. Раздел админки «Состояние системы», только чтение: база и диск, хранение, работа сервера. Клиент запрашивает при открытии раздела, по кнопке «Обновить» и раз в минуту, пока раздел открыт. Организация — из токена, параметров нет: чужую не запросить, любой параметр (в том числе `customerGuid`) — `400 BAD_REQUEST`. Размер базы и диска общий для сервера (`database.scope = server`): организация видит общий итог и части, но не части других организаций. Право `im.system.view`, в первой версии его даёт `incident:schema:admin` (в облаке `incident_manager.manage`), без него — `403 PERMISSION_DENIED`. Считается до пары секунд.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2784,17 +2784,6 @@
                     "oldestEventAt": "2026-08-17T10:12:00Z",
                     "oldestIncidentAt": "2026-08-17T10:12:00Z",
                     "oldestAuditAt": "2024-01-10T08:00:00Z"
-                  },
-                  "backup": {
-                    "lastExport": {
-                      "at": "2026-11-14T18:02:11Z",
-                      "actorId": "admin-1",
-                      "actorName": "Иванова А.",
-                      "fileName": "im-backup-2026-11-14.json",
-                      "bytes": 48213
-                    },
-                    "lastRestore": null,
-                    "dataBackup": null
                   },
                   "server": {
                     "eventsPerMinute": [
@@ -12054,10 +12043,9 @@
           "at",
           "database",
           "retention",
-          "backup",
           "server"
         ],
-        "description": "§14.11, §20. Состояние системы для раздела админки «Состояние системы»: база, хранение, резервная копия, работа сервера. Всё, кроме `database`, — только своей организации",
+        "description": "§14.11, §20. Состояние системы для раздела админки «Состояние системы»: база, хранение, работа сервера. Всё, кроме `database`, — только своей организации",
         "properties": {
           "at": {
             "type": "string",
@@ -12069,9 +12057,6 @@
           },
           "retention": {
             "$ref": "#/components/schemas/SystemRetention"
-          },
-          "backup": {
-            "$ref": "#/components/schemas/SystemBackup"
           },
           "server": {
             "$ref": "#/components/schemas/SystemServer"
@@ -12131,17 +12116,6 @@
             "oldestEventAt": "2026-08-17T10:12:00Z",
             "oldestIncidentAt": "2026-08-17T10:12:00Z",
             "oldestAuditAt": "2024-01-10T08:00:00Z"
-          },
-          "backup": {
-            "lastExport": {
-              "at": "2026-11-14T18:02:11Z",
-              "actorId": "admin-1",
-              "actorName": "Иванова А.",
-              "fileName": "im-backup-2026-11-14.json",
-              "bytes": 48213
-            },
-            "lastRestore": null,
-            "dataBackup": null
           },
           "server": {
             "eventsPerMinute": [
@@ -12344,76 +12318,6 @@
             "format": "date-time",
             "description": "Самая старая запись аудита (действия и настройки, §12.4); нет — null",
             "nullable": true
-          }
-        }
-      },
-      "SystemBackupRun": {
-        "type": "object",
-        "required": [
-          "at",
-          "actorId",
-          "actorName",
-          "fileName"
-        ],
-        "description": "Запись журнала настроек о резервной копии (§12.4, объект `backup`)",
-        "properties": {
-          "at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "actorId": {
-            "type": "string"
-          },
-          "actorName": {
-            "type": "string"
-          },
-          "fileName": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Размер файла; у восстановления не отдаётся, не записан — null",
-            "nullable": true
-          }
-        }
-      },
-      "SystemBackup": {
-        "type": "object",
-        "required": [
-          "lastExport",
-          "lastRestore",
-          "dataBackup"
-        ],
-        "description": "Резервная копия. МИ сохраняет в файл только настройки и объекты своей организации (`GET /operator/admin/backup`); запись журнала пишется, когда файл собран, — значит, копия удалась. Копию базы с инцидентами и журналами делает площадка, а не МИ",
-        "properties": {
-          "lastExport": {
-            "description": "Последнее сохранение настроек в файл; не было — null",
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SystemBackupRun"
-              }
-            ]
-          },
-          "lastRestore": {
-            "description": "Последнее восстановление из файла; не было — null",
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SystemBackupRun"
-              }
-            ]
-          },
-          "dataBackup": {
-            "description": "Копия базы. МИ её не делает и о ней не знает — в первой версии всегда null; клиент пишет «нет данных: копию базы делает площадка»",
-            "nullable": true,
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SystemBackupRun"
-              }
-            ]
           }
         }
       },

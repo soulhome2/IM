@@ -2189,10 +2189,6 @@
       const growthWeek = 210 * MB;
       const free = 50 * 1024 * MB;
       const audit = auditActions.map((r) => Date.parse(r.at)).concat(settingsAudit.map((r) => Date.parse(r.at)));
-      const backupRun = (action) => {
-        const r = settingsAudit.filter((x) => x.objectType === "backup" && x.action === action).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
-        return r ? { at: r.at, actorId: r.actorId, actorName: r.actorName, fileName: r.objectName, bytes: null } : null;
-      };
       const lastPurgeAt = at - 20 * MIN;
       return {
         status: 200,
@@ -2214,8 +2210,6 @@
             oldestIncidentAt: minIso(events.map((e) => e.createdAt).filter((x) => x != null)),
             oldestAuditAt: minIso(audit.filter((x) => !Number.isNaN(x))),
           },
-          // Резервной копии в прототипе нет (§17): записей журнала о ней нет — null, честно
-          backup: { lastExport: backupRun("export"), lastRestore: backupRun("restore"), dataBackup: null },
           server: {
             eventsPerMinute: perMinute,
             operatorsOnline: 1 + (SIM.enabled ? OPERATORS.filter((op) => op.id !== ME && !colleagueIdleSince[op.id]).length : 0),

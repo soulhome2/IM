@@ -4615,10 +4615,8 @@
     const db = s.database;
     const r = s.retention;
     const p = r.lastPurge;
-    const b = s.backup;
     const sv = s.server;
     const perHour = sv.eventsPerMinute.reduce((x, y) => x + y, 0);
-    const run = (x) => (x ? `${when(x.at)}, ${asData(x.actorName)}, ${asData(x.fileName)}${x.bytes != null ? `, ${bytes(x.bytes)}` : ""} — ${te("успешно")}` : te("не было"));
     const body = [
       head("database", "База", "Общий для сервера: размер и диск — всех организаций"),
       row("Размер базы", bytes(db.bytes), "database"),
@@ -4633,10 +4631,6 @@
       row("Самое старое событие", when(r.oldestEventAt)),
       row("Самый старый инцидент", when(r.oldestIncidentAt)),
       row("Самая старая запись аудита", when(r.oldestAuditAt)),
-      head("backup", "Резервная копия", "МИ сохраняет в файл настройки и объекты организации; копию базы делает площадка"),
-      row("Последнее сохранение настроек", run(b.lastExport), "backup.lastExport"),
-      row("Последнее восстановление", run(b.lastRestore), "backup.lastRestore"),
-      row("Копия базы", b.dataBackup ? run(b.dataBackup) : te("нет данных: копию базы делает площадка, не МИ")),
       head("server", "Работа сервера"),
       row("Приём событий в минуту", te("сейчас {now}, за час {hour}, в среднем {avg}", { now: sv.eventsPerMinute[59], hour: perHour, avg: (perHour / 60).toFixed(1) }), "server.eventsPerMinute"),
       row("Операторов на связи", String(sv.operatorsOnline), "server.operatorsOnline"),

@@ -2123,7 +2123,7 @@
       expect($("modalAdmin").hidden, "экран настроек не закрылся");
     });
 
-    await step("Состояние системы: свой раздел из четырёх блоков; «Хранение» — без статистики, со ссылкой (§14.11, §20)", async () => {
+    await step("Состояние системы: свой раздел из трёх блоков; «Хранение» — без статистики, со ссылкой (§14.11, §20)", async () => {
       await click($("adminBtn"));
       expect($("adminTabs").querySelector('[data-admin-tab="system_status"]'), "раздела «Состояние системы» нет");
       await click($("adminTabs").querySelector('[data-admin-tab="storage"]'));
@@ -2134,9 +2134,8 @@
       await click(link);
       await wait(300);
       const blocks = [...$("adminTable").querySelectorAll("[data-status-block]")].map((r) => r.dataset.statusBlock).join();
-      expect(blocks === "database,retention,backup,server", `блоки: ${blocks}`);
+      expect(blocks === "database,retention,server", `блоки: ${blocks}`);
       expect(/общий для сервера/i.test($("adminTable").textContent), "размер базы не помечен «общий для сервера»");
-      expect(/нет данных/.test($("adminTable").textContent), "о копии базы нет честного «нет данных»");
       const refresh = $("adminNote").querySelector("[data-admin-refresh]");
       expect(refresh, "нет кнопки «Обновить»");
       await click(refresh);
