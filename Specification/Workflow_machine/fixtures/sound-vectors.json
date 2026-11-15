@@ -1,0 +1,4969 @@
+{
+ "$comment": "Векторы функции решения звука (§21 правил, план 87б): источник, правится руками, ожидания — по правилам. Прогон и формат — tools/sound_vectors.mjs; реализации — prototype/sound.js (IMSound) и конфигуратор src/operator/sound/decide.ts. settings — раздел sound машины без $comment, у вектора settings — JSON Merge Patch поверх него. Поля события, которые функция не читает (transitionId и др.), опущены; имена состояний в payload.state — условные: сравниваются только на равенство.",
+ "format": 1,
+ "settings": {
+  "patterns": [
+   {
+    "id": "siren",
+    "labelKey": "workflow.sound.pattern.siren"
+   },
+   {
+    "id": "alarm",
+    "labelKey": "workflow.sound.pattern.alarm"
+   },
+   {
+    "id": "double",
+    "labelKey": "workflow.sound.pattern.double"
+   },
+   {
+    "id": "bell",
+    "labelKey": "workflow.sound.pattern.bell"
+   },
+   {
+    "id": "soft",
+    "labelKey": "workflow.sound.pattern.soft"
+   }
+  ],
+  "byPriority": {
+   "100": {
+    "pattern": "siren",
+    "repeat": "until_taken",
+    "repeatSec": 15
+   },
+   "75": {
+    "pattern": "double",
+    "repeat": "once"
+   },
+   "50": {
+    "pattern": "soft",
+    "repeat": "none"
+   },
+   "25": {
+    "pattern": "soft",
+    "repeat": "none"
+   }
+  },
+  "personal": {
+   "pattern": "bell",
+   "repeat": "until_taken",
+   "repeatSec": 30
+  },
+  "alert": {
+   "pattern": "bell",
+   "repeat": "once"
+  },
+  "busyHears": {
+   "minPriority": 100,
+   "personal": true,
+   "alert": false
+  },
+  "muteMinutes": 5,
+  "volumeFloor": 30
+ },
+ "vectors": [
+  {
+   "name": "уровни: своя строка, ближайшая ниже, ниже самой низкой — без звука",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "cue": 100,
+     "expect": {
+      "cue": {
+       "pattern": "siren",
+       "repeat": "until_taken",
+       "repeatSec": 15
+      }
+     }
+    },
+    {
+     "cue": 90,
+     "expect": {
+      "cue": {
+       "pattern": "double",
+       "repeat": "once"
+      }
+     }
+    },
+    {
+     "cue": 75,
+     "expect": {
+      "cue": {
+       "pattern": "double",
+       "repeat": "once"
+      }
+     }
+    },
+    {
+     "cue": 60,
+     "expect": {
+      "cue": {
+       "pattern": "soft",
+       "repeat": "none"
+      }
+     }
+    },
+    {
+     "cue": 25,
+     "expect": {
+      "cue": {
+       "pattern": "soft",
+       "repeat": "none"
+      }
+     }
+    },
+    {
+     "cue": 24,
+     "expect": {
+      "cue": null
+     }
+    },
+    {
+     "cue": 10,
+     "expect": {
+      "cue": null
+     }
+    },
+    {
+     "cue": 0,
+     "expect": {
+      "cue": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "уровни: неверные ключи не читаются, пустой byPriority — без звука",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "cue": {
+      "level": 80,
+      "byPriority": {
+       "075": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "75.0": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "-5": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "101": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "x": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "50": {
+        "pattern": "double",
+        "repeat": "once"
+       }
+      }
+     },
+     "expect": {
+      "cue": {
+       "pattern": "double",
+       "repeat": "once"
+      }
+     }
+    },
+    {
+     "cue": {
+      "level": 100,
+      "byPriority": {
+       "101": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "50": {
+        "pattern": "double",
+        "repeat": "once"
+       }
+      }
+     },
+     "expect": {
+      "cue": {
+       "pattern": "double",
+       "repeat": "once"
+      }
+     }
+    },
+    {
+     "cue": {
+      "level": 40,
+      "byPriority": {
+       "50": {
+        "pattern": "double",
+        "repeat": "once"
+       }
+      }
+     },
+     "expect": {
+      "cue": null
+     }
+    },
+    {
+     "cue": {
+      "level": 100,
+      "byPriority": {}
+     },
+     "expect": {
+      "cue": null
+     }
+    },
+    {
+     "cue": {
+      "level": 0,
+      "byPriority": {
+       "0": {
+        "pattern": "double",
+        "repeat": "once"
+       }
+      }
+     },
+     "expect": {
+      "cue": {
+       "pattern": "double",
+       "repeat": "once"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический новый — «Сирена», повтор до взятия",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1000
+      },
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ],
+      "top": "a0000000-0000-4000-8000-000000000001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "новый уровень 90 звучит как Высокий 75 — один раз",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 90,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 90,
+       "cue": {
+        "pattern": "double",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": [],
+      "top": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "уровень ниже 25 — тишина",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 10,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "Средний — строка «без звука»: тишина, в внимание не попадает",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "новый уровень 100 без своей строки звучит как 75",
+   "rules": "21.2",
+   "settings": {
+    "byPriority": {
+     "100": null
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "double",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический повторяется — его берёт сам оператор: событие моё, повтор снят",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ]
+     }
+    },
+    {
+     "now": 1020,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "owner",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [],
+      "top": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический повторяется — берёт коллега: повтор снят",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1020,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический повторяется — передан коллеге (адресат есть, всё ещё «Новое»): повтор снят",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1020,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Тихо»: звучащее молкнет, внимание остаётся; новое событие звучит снова",
+   "rules": "21.4",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1005,
+     "silence": true,
+     "expect": {
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ],
+      "top": null
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1010
+      },
+      "sounding": [
+       {
+        "guid": "b0000000-0000-4000-8000-000000000002",
+        "number": "INC-1002",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1010
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "повтор события по тому же инциденту заменяет запись, а не добавляет",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1030,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-b",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1030
+      },
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1030
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Занят»: Высокий молчит, Критический и «лично вам» звучат, оповещение молчит",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1001
+      },
+      "sounding": [
+       {
+        "guid": "b0000000-0000-4000-8000-000000000002",
+        "number": "INC-1002",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1001
+       }
+      ],
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "kind": "personal",
+       "priority": 25,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "until_taken",
+        "repeatSec": 30
+       },
+       "since": 1002
+      },
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    },
+    {
+     "now": 1003,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": null,
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Занят», порог null: по приоритету не слышит ничего, внимание считается",
+   "rules": "21.3",
+   "settings": {
+    "busyHears": {
+     "minPriority": null
+    }
+   },
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Занят», оповещение включено настройкой — звучит",
+   "rules": "21.3",
+   "settings": {
+    "busyHears": {
+     "alert": true
+    }
+   },
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 75,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "kind": "alert",
+       "priority": 75,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Занят», «лично вам» выключено настройкой — молчит",
+   "rules": "21.3",
+   "settings": {
+    "busyHears": {
+     "personal": false
+    }
+   },
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "Перерыв (не готов) — ничего не слышит",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "not_ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    },
+    {
+     "now": 1003,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "Вышел (не в сети) — ничего не слышит",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "offline",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "уход на перерыв посреди повтора — звук молкнет, внимание остаётся",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ]
+     }
+    },
+    {
+     "now": 1010,
+     "tick": {
+      "agentState": "not_ready"
+     },
+     "expect": {
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ],
+      "top": null
+     }
+    },
+    {
+     "now": 1020,
+     "tick": {
+      "agentState": "ready"
+     },
+     "expect": {
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "стал «Занят» при пороге null — повтор по приоритету молкнет, «лично вам» звучит",
+   "rules": "21.3",
+   "settings": {
+    "busyHears": {
+     "minPriority": null
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "tick": {
+      "agentState": "busy"
+     },
+     "expect": {
+      "sounding": [
+       {
+        "guid": "d0000000-0000-4000-8000-000000000004",
+        "number": "INC-1004",
+        "kind": "personal",
+        "priority": 50,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1001
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ],
+      "top": "d0000000-0000-4000-8000-000000000004"
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Только важное»: Высокий и оповещение молчат, Критический и «лично вам» звучат",
+   "rules": "21.4",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": 2000,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": null
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1002
+      },
+      "sounding": [
+       {
+        "guid": "b0000000-0000-4000-8000-000000000002",
+        "number": "INC-1002",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1002
+       }
+      ]
+     }
+    },
+    {
+     "now": 1003,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "kind": "personal",
+       "priority": 25,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "until_taken",
+        "repeatSec": 30
+       },
+       "since": 1003
+      },
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Только важное»: «лично вам» один раз (настройка) тоже звучит",
+   "rules": "21.4",
+   "settings": {
+    "personal": {
+     "repeat": "once"
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": 2000,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "kind": "personal",
+       "priority": 25,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once",
+        "repeatSec": 30
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "«Только важное»: срок истёк — всё как обычно",
+   "rules": "21.4",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": 2000,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "now": 2000,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 75,
+       "cue": {
+        "pattern": "double",
+        "repeat": "once"
+       },
+       "since": 2000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 2500,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "kind": "alert",
+       "priority": 100,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 2500
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "чужой переход: коллега взял Высокий — тишина",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "done",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-b",
+        "to": "state-d"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "моё действие не звучит: я отклонил — инцидент снова в очереди, у меня тихо, но он непринятый",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "моё создание вручную не звучит",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "инцидент окна работ — тишина",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": "f0000000-0000-4000-8000-000000000009"
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": "f0000000-0000-4000-8000-000000000009"
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "привязанный инцидент — тишина",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "linked",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "смена приоритета внутри «Нового» (было = стало) — нового звука нет",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "b0000000-0000-4000-8000-000000000002",
+        "number": "INC-1002",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1001
+       }
+      ],
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "смена приоритета внутри «Нового»: Критический стал Высоким — повтор снят; Высокий стал Критическим — не звучит",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1020,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "прочие события не звучат: обновление, журнал, сосед, макрос, сброс потока, схема",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.updated",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "stepIds": [
+        "s1"
+       ]
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ]
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "journal.appended",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {}
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ]
+     }
+    },
+    {
+     "now": 1003,
+     "event": {
+      "type": "incident.sibling_closed",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "siblingGuid": "c0000000-0000-4000-8000-000000000003",
+       "siblingNumber": "INC-1003",
+       "closeResultId": "r"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    },
+    {
+     "now": 1004,
+     "event": {
+      "type": "stream.reset",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {}
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ]
+     }
+    },
+    {
+     "now": 1005,
+     "event": {
+      "type": "workflow.schema_published",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "schemaVersion": 2
+      }
+     },
+     "expect": {
+      "play": null,
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "создан на чужую группу — тишина",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": {
+        "id": "grp-other",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-other",
+        "kind": "duty_group"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "отклонён коллегой — снова в очереди — звучит по приоритету",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 75,
+       "cue": {
+        "pattern": "double",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "until_taken",
+        "repeatSec": 15
+       },
+       "since": 1001
+      },
+      "attention": [
+       "b0000000-0000-4000-8000-000000000002"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "инцидент сразу у моей группы по правилу М1 — «лично вам»",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "kind": "personal",
+       "priority": 50,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "until_taken",
+        "repeatSec": 30
+       },
+       "since": 1000
+      },
+      "sounding": [
+       {
+        "guid": "d0000000-0000-4000-8000-000000000004",
+        "number": "INC-1004",
+        "kind": "personal",
+        "priority": 50,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ],
+      "top": "d0000000-0000-4000-8000-000000000004"
+     }
+    }
+   ]
+  },
+  {
+   "name": "передан мне — «лично вам» при любом приоритете; принял — снят",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "kind": "personal",
+       "priority": 25,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "until_taken",
+        "repeatSec": 30
+       },
+       "since": 1000
+      },
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "active",
+       "ownership": "owner",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "«лично вам» — передан дальше: снят",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "«лично вам» — я отклонил: снят у меня, моё действие не звучит",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-c",
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический из очереди передан мне: по приоритету снят, «лично вам» звучит",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "personal",
+       "priority": 100,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "until_taken",
+        "repeatSec": 30
+       },
+       "since": 1010
+      },
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "personal",
+        "priority": 100,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1010
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "потеря доступа снимает повтор (по guid)",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.access_lost",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": null,
+      "payload": {
+       "number": "INC-1004"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "потеря доступа снимает повтор (по номеру, без guid)",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.access_lost",
+      "incidentGuid": null,
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": null,
+      "payload": {
+       "number": "INC-1001"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "потеря доступа после «Тихо» убирает и внимание",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1005,
+     "silence": true,
+     "expect": {
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.access_lost",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": null,
+      "payload": {
+       "number": "INC-1001"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "оповещение — один раз, повтор не трогает",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 50,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "kind": "alert",
+       "priority": 50,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1001
+      },
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "два звучат: при равном приоритете «лично вам» раньше; снят — повторяется следующий",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {
+      "top": "d0000000-0000-4000-8000-000000000004"
+     }
+    },
+    {
+     "now": 1020,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-me",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "owner",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "top": "a0000000-0000-4000-8000-000000000001",
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "два звучат: наибольший приоритет раньше «лично вам» ниже",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-c"
+       },
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "top": "a0000000-0000-4000-8000-000000000001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "два Критических: повторяется кто раньше зазвучал",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "now": 1005,
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "b0000000-0000-4000-8000-000000000002",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "top": "a0000000-0000-4000-8000-000000000001"
+     }
+    },
+    {
+     "now": 1010,
+     "event": {
+      "type": "incident.transitioned",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": "op-col",
+       "kind": "operator"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "manual",
+       "state": {
+        "from": "state-a",
+        "to": "state-b"
+       },
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "top": "b0000000-0000-4000-8000-000000000002"
+     }
+    }
+   ]
+  },
+  {
+   "name": "planRepeats: шаг повтора и запас 120 с вперёд, первый сигнал — через шаг",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "plan": {
+      "start": 10
+     },
+     "expect": {
+      "repeats": [
+       25,
+       40,
+       55,
+       70,
+       85,
+       100,
+       115,
+       130
+      ]
+     }
+    },
+    {
+     "plan": {
+      "start": 10,
+      "horizonSec": 30
+     },
+     "expect": {
+      "repeats": [
+       25,
+       40
+      ]
+     }
+    },
+    {
+     "plan": {
+      "start": 0.5,
+      "horizonSec": 45
+     },
+     "expect": {
+      "repeats": [
+       15.5,
+       30.5,
+       45.5
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "planRepeats: «лично вам» — шаг 30 с; нечему повторяться — пусто",
+   "rules": "21.2",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "plan": {
+      "start": 0
+     },
+     "expect": {
+      "repeats": []
+     }
+    },
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "d0000000-0000-4000-8000-000000000004",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "addressedToMe": true
+      }
+     },
+     "expect": {}
+    },
+    {
+     "plan": {
+      "start": 100
+     },
+     "expect": {
+      "repeats": [
+       130,
+       160,
+       190,
+       220
+      ]
+     }
+    },
+    {
+     "silence": true,
+     "expect": {
+      "sounding": []
+     }
+    },
+    {
+     "plan": {
+      "start": 100
+     },
+     "expect": {
+      "repeats": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "шаг повтора из патча поста: Критический каждые 5 с",
+   "rules": "21.7",
+   "settings": {
+    "byPriority": {
+     "100": {
+      "pattern": "alarm",
+      "repeatSec": 5
+     }
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "alarm",
+        "repeat": "until_taken",
+        "repeatSec": 5
+       },
+       "since": 1000
+      }
+     }
+    },
+    {
+     "plan": {
+      "start": 0,
+      "horizonSec": 20
+     },
+     "expect": {
+      "repeats": [
+       5,
+       10,
+       15,
+       20
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "Критический один раз (патч until_taken → once, шаг машины остался) — без повтора",
+   "rules": "21.7",
+   "settings": {
+    "byPriority": {
+     "100": {
+      "repeat": "once"
+     }
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "kind": "priority",
+       "priority": 100,
+       "cue": {
+        "pattern": "siren",
+        "repeat": "once",
+        "repeatSec": 15
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление: Критический новый — повтор без немедленного сигнала",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ],
+      "top": "a0000000-0000-4000-8000-000000000001"
+     }
+    },
+    {
+     "plan": {
+      "start": 50
+     },
+     "expect": {
+      "repeats": [
+       65,
+       80,
+       95,
+       110,
+       125,
+       140,
+       155,
+       170
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление: Высокий новый — тишина (один раз задним числом не играет)",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 90,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [],
+      "attention": [],
+      "top": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление: «лично вам» — повтор",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 25,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [
+       {
+        "guid": "d0000000-0000-4000-8000-000000000004",
+        "number": "INC-1004",
+        "kind": "personal",
+        "priority": 25,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "d0000000-0000-4000-8000-000000000004"
+      ],
+      "top": "d0000000-0000-4000-8000-000000000004"
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление: Критический уже взят — ничего",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "owner",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "c0000000-0000-4000-8000-000000000003",
+       "number": "INC-1003",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [],
+      "attention": [],
+      "top": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление: очередь целиком — состояние заменяется, повторяется самый важный",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {}
+    },
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "b0000000-0000-4000-8000-000000000002",
+       "number": "INC-1002",
+       "priority": 75,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "grp-me",
+        "kind": "duty_group"
+       },
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "c0000000-0000-4000-8000-000000000003",
+       "number": "INC-1003",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": "f0000000-0000-4000-8000-000000000009"
+      },
+      {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "linked",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       },
+       {
+        "guid": "d0000000-0000-4000-8000-000000000004",
+        "number": "INC-1004",
+        "kind": "personal",
+        "priority": 100,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ],
+      "top": "d0000000-0000-4000-8000-000000000004"
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление на перерыве: не звучит, внимание считается",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "not_ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ],
+      "top": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "восстановление «Занят»: Критический и «лично вам» по порогу",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "restore": [
+      {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      {
+       "guid": "d0000000-0000-4000-8000-000000000004",
+       "number": "INC-1004",
+       "priority": 50,
+       "stateCategory": "pending",
+       "ownership": "target",
+       "addressee": {
+        "id": "op-me",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      }
+     ],
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       },
+       {
+        "guid": "d0000000-0000-4000-8000-000000000004",
+        "number": "INC-1004",
+        "kind": "personal",
+        "priority": 50,
+        "cue": {
+         "pattern": "bell",
+         "repeat": "until_taken",
+         "repeatSec": 30
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001",
+       "d0000000-0000-4000-8000-000000000004"
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

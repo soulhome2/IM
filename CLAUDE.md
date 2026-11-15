@@ -28,6 +28,7 @@ Production-кода нет. Обзор и порядок чтения — [READM
 |---|---|
 | машину, контракт, эталонный набор | сборка (выше), самопроверка и тесты API; затронутые мутации машины — `python3 tools/check_mutations.py <имя> …`; машину — ещё `node tools/cel_vectors.mjs --update` |
 | `prototype/cel-runtime.js`, `engine.js`, `tests/cel-vectors.js`, `tests/transition-vectors.js` | `node tools/test_cel.mjs`, `node tools/cel_vectors.mjs --check` |
+| `prototype/sound.js`, `fixtures/sound-vectors.json` | `node tools/sound_vectors.mjs --check` |
 | `strings/*.json`, переводы | `python3 tools/check_i18n.py`, `python3 tools/check_guide.py` |
 | сценарии, `Scenario_machine/`, `prototype/scenario.js` | `python3 tools/check_scenarios.py`, `node tools/check_scenario_states.mjs` (и `--mutations`), `tests/scenario.html` |
 | `prototype/*.js` | самопроверка и тесты API; порчи кода не устарели (скилл im-fix) |
