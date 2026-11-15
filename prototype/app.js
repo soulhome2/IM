@@ -801,7 +801,7 @@
     STATIC.html.forEach((item) => (item.el.innerHTML = t(item.ru)));
     STATIC.attr.forEach((item) => item.el.setAttribute(item.attr, t(item.ru)));
     STATIC.text.forEach((item) => (item.node.nodeValue = item.pre + t(item.ru) + item.post));
-    document.title = t(STATIC.title);
+    syncTitle();
   }
 
   function applyLang(id) {
@@ -907,6 +907,7 @@
       }
       noteServerTime(page.items);
       Object.assign(store, { session, page, counters, tree });
+      soundSession();
       state.page = page.page;
       if (!state.openGroups.size && !state.treeSeen) {
         tree.forEach((n) => state.openGroups.add(n.guid));
@@ -3150,6 +3151,7 @@
     ws.dataset.view = state.mobileView;
     applyLayoutState();
     renderTopbar();
+    renderSound();
     renderGroups();
     if (state.mode === "queue") {
       renderEvents();
@@ -3894,6 +3896,8 @@
         renderAdmin();
       }
       if (e.target.closest("[data-admin-refresh]")) renderAdmin();
+      const play = e.target.closest("[data-sound-play]");
+      if (play) soundPreview(play.dataset.soundPlay);
     };
     $("adminNote").addEventListener("click", adminLinks);
     $("adminTable").addEventListener("click", adminLinks);
@@ -4531,6 +4535,314 @@
         .join("");
   }
 
+  /* ===== Звук (§21, план 87б) =====
+     Звучать или нет — функция sound.js (IMSound.decideSound и др.) от события потока, раздела sound схемы, состояния
+     оператора и «Только важного»; здесь только вызовы, вывод и шапка. Рецепты и вывод — sound-synth.js (IMSound.output).
+     Повтор планируется на часах вывода вперёд (planRepeats, 120 с) и дополняется таймером раз в 5 с: свёрнутая вкладка
+     с таймером раз в минуту не замолкает. В прототипе звучит каждая вкладка, без выбора ведущей (отступление §17). */
+  const ONLY_IMPORTANT_KEY = "im-sound-only-important";
+  const snd = {
+    state: { sounding: [], attention: [] },
+    // Расписание повтора верхнего: key — кто и с какого раза, anchor — от какого момента часов вывода, last — последний
+    // запланированный момент, planned — { at, handle } на выводе out
+    plan: null,
+    volume: IMSound.loadVolume(),
+    onlyUntil: null,
+    agent: null,
+  };
+  try {
+    const until = Number(localStorage.getItem(ONLY_IMPORTANT_KEY));
+    snd.onlyUntil = until > Date.now() ? until : null;
+  } catch (e) {
+    snd.onlyUntil = null;
+  }
+  const soundOn = () => Boolean(WORKFLOW && WORKFLOW.sound && store.session);
+  const soundOut = () => IMSound.output;
+  const onlyImportant = () => snd.onlyUntil != null && Date.now() < snd.onlyUntil;
+  const soundVolume = () => IMSound.effectiveVolume(snd.volume, WORKFLOW.sound.volumeFloor);
+  const soundCtx = () => ({
+    settings: WORKFLOW.sound,
+    agentState: store.session.agentState,
+    meGuid: store.session.operator.guid,
+    onlyImportantUntil: snd.onlyUntil,
+    now: Date.now(),
+  });
+  // Один звук сейчас — поверх повтора; до разблокировки не играет ничего: накопленное залпом не звучит (§21.5)
+  function soundPlayNow(pattern) {
+    const out = soundOut();
+    if (out.ready()) out.play(pattern, out.now(), soundVolume());
+  }
+  function soundStopPlan() {
+    if (snd.plan) snd.plan.planned.forEach((p) => snd.plan.out.stop(p.handle));
+    snd.plan = null;
+  }
+  // Повтор только у верхнего (§21.2): сменился верхний — прежнее расписание снимается, новое — через шаг от сейчас
+  function soundSchedule() {
+    const out = soundOut();
+    const top = soundOn() ? IMSound.topSounding(snd.state) : null;
+    if (!top || !out.ready()) return soundStopPlan();
+    const now = out.now();
+    const key = `${top.guid}|${top.kind}|${top.since}|${top.cue.pattern}|${top.cue.repeatSec}`;
+    if (!snd.plan || snd.plan.key !== key || snd.plan.out !== out) {
+      soundStopPlan();
+      snd.plan = { key, out, anchor: now, last: now, planned: [] };
+    }
+    const plan = snd.plan;
+    plan.planned = plan.planned.filter((p) => p.at > now - 5);
+    for (const at of IMSound.planRepeats(top, plan.anchor, now - plan.anchor + 120)) {
+      if (at <= plan.last) continue;
+      plan.planned.push({ at, handle: out.play(top.cue.pattern, at, soundVolume()) });
+      plan.last = at;
+    }
+  }
+  // Громкость сменилась: запланированное вперёд — заново с новой громкостью, ритм повтора тот же
+  function soundReplan() {
+    if (!snd.plan) return;
+    const { key, out, anchor } = snd.plan;
+    soundStopPlan();
+    snd.plan = { key, out, anchor, last: out.now(), planned: [] };
+    soundSchedule();
+  }
+  function soundUpdate() {
+    soundSchedule();
+    renderSound();
+  }
+
+  // Событие потока — до выхода по «своему» переходу: моё действие снимает звук (§21.2, «Снимает и моё действие»)
+  function soundOnEvent(msg) {
+    if (!soundOn() || msg.type === "stream.reset") return;
+    const r = IMSound.decideSound(snd.state, msg, soundCtx());
+    snd.state = r.state;
+    if (r.play) {
+      soundPlayNow(r.play.cue.pattern);
+      soundNotify(msg.incident);
+    }
+    soundUpdate();
+  }
+
+  // Перечитанная очередь (§21.1): загрузка, переподключение, сброс потока, возврат в «Готов». keep — только
+  // пересчитать звучащее (новая схема или справочник): заглушённое «Тихо» не возобновляется
+  let soundRestoring = 0;
+  async function soundRestore(keep) {
+    if (!soundOn()) return;
+    const run = ++soundRestoring;
+    const queue = [];
+    try {
+      for (let page = 1; page <= 50; page++) {
+        const res = await api.get("/operator/incidents", { filter: "open", page, pageSize: 200 });
+        queue.push(...res.items);
+        if (!res.items.length || page * 200 >= res.total) break;
+      }
+    } catch (err) {
+      return;
+    }
+    if (run !== soundRestoring || !soundOn()) return;
+    const next = IMSound.restoreSound(queue, soundCtx());
+    if (keep) {
+      const was = new Set(snd.state.sounding.map((s) => s.guid));
+      next.sounding = next.sounding.filter((s) => was.has(s.guid));
+    }
+    snd.state = next;
+    soundUpdate();
+  }
+
+  // Состояние оператора сменилось (§21.3): вернулся в «Готов» — по перечитанной очереди, иначе — что он ещё слышит
+  function soundSession() {
+    if (!soundOn()) return;
+    const now = store.session.agentState;
+    const prev = snd.agent;
+    snd.agent = now;
+    if (!prev || prev === now) return;
+    if (now === "ready") soundRestore();
+    else {
+      snd.state = IMSound.applyCtx(snd.state, soundCtx());
+      soundSchedule();
+    }
+  }
+
+  // Уведомление браузера, когда вкладка не видна (§21.6): «Пожарная тревога — Склад-2, Критический»; щелчок — к инциденту
+  function soundNotify(inc) {
+    if (!inc || !document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
+    const pri = PRIORITIES[inc.priority];
+    const where = inc.sourceGroup ? inc.sourceGroup.name : "";
+    const what = [inc.eventType && inc.eventType.name, where].filter(Boolean).join(" — ");
+    try {
+      const note = new Notification(pri ? `${what}, ${inLang(pri.name)}` : what, { body: inc.number, tag: inc.guid });
+      note.onclick = () => {
+        window.focus();
+        soundGo(inc.guid, inc.number);
+        note.close();
+      };
+    } catch (e) {
+      /* браузер не дал показать — звук всё равно звучит */
+    }
+  }
+
+  // К строке звучащего (§21.4): в очереди — выделить и прокрутить; не на этой странице — открыть её страницу
+  function soundGo(guid, number) {
+    if (state.mode !== "queue") return toast(t("{id} ждёт в очереди", { id: number }));
+    const rowOf = () => $("eventsList").querySelector(`[data-id="${CSS.escape(guid)}"]`);
+    state.selectedId = guid;
+    if (rowOf()) {
+      renderAll();
+      rowOf().scrollIntoView({ block: "nearest" });
+      return;
+    }
+    state.jump = true;
+    reload().then(() => {
+      if (!rowOf()) toast(t("{id} скрыт фильтром очереди", { id: number }));
+    });
+  }
+
+  // Заголовок вкладки «(N) …»: N — непринятые, которые повторяются до взятия, и «лично вам» (§21.6); «Тихо» не сбрасывает
+  function syncTitle() {
+    const n = snd.state.attention.length;
+    document.title = (n ? `(${n}) ` : "") + t(STATIC.title);
+  }
+
+  const priorityName = (level) => (PRIORITIES[level] ? inLang(PRIORITIES[level].name) : String(level));
+  function onlyUntilText() {
+    const locale = (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+    return new Date(snd.onlyUntil).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  // Шапка: значок 🔊/🔉/🔇 и строки «Звук не включён», «Звучит … · Тихо», «Только важное до … · Вернуть» (§21.4, §21.5)
+  function renderSound() {
+    syncTitle();
+    if (!soundOn()) return;
+    const ready = soundOut().ready();
+    const important = onlyImportant();
+    const icon = !ready ? "🔇" : important ? "🔉" : "🔊";
+    const title = t(!ready ? "Звук не включён" : important ? "Только важное" : "Звук");
+    $("soundIcon").textContent = icon;
+    $("soundBtn").title = title;
+    $("soundBtn").setAttribute("aria-label", title);
+    $("soundBtn").dataset.sound = !ready ? "off" : important ? "important" : "on";
+    const parts = [];
+    if (!ready)
+      parts.push(
+        `<span class="sound-line warn" data-sound-line="off"><span aria-hidden="true">🔇</span> <span>${te("Звук не включён")}</span> <button type="button" class="btn small primary" data-sound-enable>${te("Включить звук")}</button></span>`
+      );
+    const top = ready ? IMSound.topSounding(snd.state) : null;
+    if (top) {
+      const n = snd.state.sounding.length;
+      const what = top.kind === "personal" ? te("лично вам") : asData(priorityName(top.priority));
+      const link = (text) => `<button type="button" class="link-btn" data-sound-go="${escapeHtml(top.guid)}" data-sound-number="${escapeHtml(top.number)}">${text}</button>`;
+      const body = n > 1 ? `${te("Звучит:")} ${link(`${n} (${what})`)}` : `${te("Звучит:")} ${what}, ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
+      parts.push(
+        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
+      );
+    }
+    if (important)
+      parts.push(
+        `<span class="sound-line info" data-sound-line="important"><span aria-hidden="true">🔉</span> ${te("Только важное до {time}", { time: onlyUntilText() })} <button type="button" class="btn small ghost" data-sound-back>${te("Вернуть")}</button></span>`
+      );
+    $("soundBar").innerHTML = parts.join("");
+    if (!$("soundPop").hidden) renderSoundMenu();
+  }
+
+  // Меню звука (§21.4): громкость не ниже порога схемы, «Проверить звук», «Только важное», разрешение уведомлений
+  function renderSoundMenu() {
+    const s = WORKFLOW.sound;
+    const v = soundVolume();
+    const notify = "Notification" in window && Notification.permission === "default";
+    $("soundPop").innerHTML = `
+      <div class="menu-label">${te("Звук")}</div>
+      <label class="menu-field sound-volume"><span>${te("Громкость")}</span>
+        <span class="sound-volume-row"><input type="range" id="soundVolume" min="${s.volumeFloor}" max="100" step="1" value="${v}" /><output id="soundVolumeOut">${v}%</output></span>
+      </label>
+      <button type="button" class="menu-item" role="menuitem" data-sound-test>▶ ${te("Проверить звук")}</button>
+      <button type="button" class="menu-item" role="menuitem" data-sound-important>${onlyImportant() ? te("Вернуть весь звук") : te("Только важное — {n} мин", { n: s.muteMinutes })}</button>
+      ${notify ? `<button type="button" class="menu-item" role="menuitem" data-sound-notify>${te("Разрешить уведомления")}</button>` : ""}
+      <div class="menu-note">${te("Громкость не ниже {n}% — так настроено в схеме.", { n: s.volumeFloor })}</div>`;
+  }
+
+  // Включить звук: разблокировать вывод; с проверкой — сразу проверочный сигнал (§21.5)
+  async function soundUnlock(check) {
+    const out = soundOut();
+    if (!out.ready()) await out.unlock();
+    if (check) soundPlayNow(IMSound.TEST_PATTERN);
+    soundUpdate();
+  }
+  // ▶ «Прослушать» в настройках: нажатие и есть разблокировка
+  async function soundPreview(pattern) {
+    if (!soundOut().ready()) await soundOut().unlock();
+    soundPlayNow(pattern);
+    renderSound();
+  }
+  function setOnlyImportant(on) {
+    snd.onlyUntil = on ? Date.now() + WORKFLOW.sound.muteMinutes * 60000 : null;
+    try {
+      if (on) localStorage.setItem(ONLY_IMPORTANT_KEY, String(snd.onlyUntil));
+      else localStorage.removeItem(ONLY_IMPORTANT_KEY);
+    } catch (e) {
+      /* хранилище недоступно — до перезагрузки */
+    }
+    snd.state = IMSound.applyCtx(snd.state, soundCtx());
+    soundUpdate();
+  }
+  // Раз в 5 с: срок «Только важного» и дополнение расписания повтора
+  function soundTick() {
+    if (snd.onlyUntil != null && !onlyImportant()) {
+      snd.onlyUntil = null;
+      try {
+        localStorage.removeItem(ONLY_IMPORTANT_KEY);
+      } catch (e) {
+        /* хранилище недоступно */
+      }
+      renderSound();
+    }
+    soundSchedule();
+  }
+
+  function bindSound() {
+    // Любое нажатие на странице включает звук — без проверочного сигнала (§21.5)
+    const firstPress = () => {
+      if (!soundOut().ready()) soundUnlock(false);
+    };
+    document.addEventListener("pointerdown", firstPress, true);
+    document.addEventListener("keydown", firstPress, true);
+    $("soundBar").addEventListener("click", (e) => {
+      if (e.target.closest("[data-sound-enable]")) return soundUnlock(true);
+      if (e.target.closest("[data-sound-silence]")) {
+        snd.state = IMSound.silence(snd.state);
+        return soundUpdate();
+      }
+      if (e.target.closest("[data-sound-back]")) return setOnlyImportant(false);
+      const go = e.target.closest("[data-sound-go]");
+      if (go) soundGo(go.dataset.soundGo, go.dataset.soundNumber);
+    });
+    $("soundBtn").addEventListener("click", () => {
+      if (!$("soundPop").hidden) renderSoundMenu();
+    });
+    $("soundPop").addEventListener("input", (e) => {
+      if (e.target.id !== "soundVolume") return;
+      snd.volume = IMSound.effectiveVolume(Number(e.target.value), WORKFLOW.sound.volumeFloor);
+      if (Number(e.target.value) !== snd.volume) e.target.value = String(snd.volume);
+      IMSound.saveVolume(snd.volume);
+      $("soundVolumeOut").textContent = `${snd.volume}%`;
+      soundReplan();
+    });
+    $("soundPop").addEventListener("click", (e) => {
+      if (e.target.closest("[data-sound-test]")) return soundUnlock(true);
+      if (e.target.closest("[data-sound-important]")) {
+        closeMenus();
+        return setOnlyImportant(!onlyImportant());
+      }
+      if (e.target.closest("[data-sound-notify]"))
+        Promise.resolve(Notification.requestPermission())
+          .catch(() => null)
+          .then(() => renderSoundMenu());
+    });
+    setInterval(soundTick, 5000);
+    // Вывод подменили (самопроверка): прежнее расписание — снять на прежнем выводе, дальше — на новом
+    window.addEventListener("im-sound-output", () => {
+      soundStopPlan();
+      soundUpdate();
+    });
+    window.addEventListener("im-sound-tick", soundTick);
+  }
+
   /* ===== Настройки администратора (§20, RULE-44): только просмотр ===== */
 
   // Вкладки и пути — из машины (adminSettings); данные МИ, которых нет в схеме, — запросами
@@ -4580,6 +4892,29 @@
       .map(([k, val]) => `${word(k)}: ${fmtSetting(val, k, sec)}`)
       .join("<br>");
   }
+  // Звук схемы (§21.2): звук по уровням справочника — строкой на уровень, как его услышит оператор (уровень без своей
+  // строки — как ближайший ниже, cueForPriority), и звук «лично вам» и оповещения; ▶ «Прослушать» играет звук
+  function cueCells(cue) {
+    if (!cue || cue.repeat === "none") return [te("без звука"), "—"];
+    const pattern = (WORKFLOW.sound.patterns || []).find((p) => p.id === cue.pattern);
+    const name = pattern ? lbl(pattern) : cue.pattern;
+    const play = `<button type="button" class="btn ghost small sound-play" data-sound-play="${escapeHtml(cue.pattern)}" title="${te("Прослушать")}" aria-label="${te("Прослушать: {what}", { what: name })}">▶</button>`;
+    const repeat = cue.repeat === "until_taken" ? `${word("until_taken")}, ${te("каждые {n} с", { n: cue.repeatSec })}` : word(cue.repeat);
+    return [`${escapeHtml(name)} ${play}`, repeat];
+  }
+  function soundSetting(path) {
+    if (!WORKFLOW.sound || !/^sound\.(byPriority|personal|alert)$/.test(path)) return null;
+    if (path !== "sound.byPriority") return cueCells(settingAt(path)).join(" · ");
+    const rows = store.priorities
+      .slice()
+      .sort((a, b) => b.value - a.value)
+      .map((p) => {
+        const [sound, repeat] = cueCells(IMSound.cueForPriority(WORKFLOW.sound.byPriority, p.value));
+        return `<tr data-sound-level="${p.value}"><td>${asData(inLang(p.name))} <span class="what">${p.value}</span></td><td>${sound}</td><td>${repeat}</td></tr>`;
+      })
+      .join("");
+    return `<table class="doc-table sound-levels"><thead><tr><th>${te("Приоритет")}</th><th>${te("Звук")}</th><th>${te("Повтор")}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
   const sourcePath = (tab) => tab.source.split(" ")[1];
   // Названия и имена — данные, они не переводятся (§14.9)
   const asData = (text) => `<span data-i18n-skip>${escapeHtml(text)}</span>`;
@@ -4608,7 +4943,10 @@
       const groups = tab.groups || [];
       // Список причин — по названию, как в формах оператора (§2.2)
       const reasons = (path, v) => (Array.isArray(v) && /^(reasonCatalogs\.[^.]+\.items|session\.breakReasons)$/.test(path) ? v.slice().sort(byName((x) => (hasLbl(x, "label") ? lbl(x) : t(x.id)))) : v);
-      const itemRow = (item) => `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)}</td></tr>`;
+      const itemRow = (item) =>
+        `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${
+          soundSetting(item.path) || fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)
+        }</td></tr>`;
       const groupHead = (g) => `<tr class="admin-group" data-admin-group="${g.id}"><th colspan="2">${escapeHtml(lbl(g))}<span class="what">${escapeHtml(`${t("Правила")}: ${g.rules}`)}</span></th></tr>`;
       const body = groups.length
         ? (
@@ -4763,22 +5101,26 @@
     const id = msg.incident ? msg.incident.number : msg.incidentGuid;
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
+    // Звук решается раньше выхода по своему переходу: моё действие снимает повтор (§21.2)
+    soundOnEvent(msg);
     // Свой переход — без уведомления. О закрытом мной соседе сервер мне и не пишет — даже когда я в дежурной группе-адресате
     // (§6.1, решение 2026-10-29)
     // Окна работ изменились (ТЗ-21): полоса и значки дерева — по перечитанному списку, и после своей правки
     if (msg.type === "maintenance.windows_changed") return refreshMaintenance();
     if (mine && msg.type !== "incident.card_evicted") return;
     // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
-    if (msg.type === "stream.reset") return reload();
+    if (msg.type === "stream.reset") return reload().then(() => soundRestore());
     // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)
     if (msg.type === "reference.priorities_changed") {
-      return loadPriorities().then(() => reload());
+      return loadPriorities()
+        .then(() => reload())
+        .then(() => soundRestore(true));
     }
     // Опубликована новая схема: подписи, кнопки, фильтры и порядок очереди — по ней (§14.6)
     if (msg.type === "workflow.schema_published") {
       return loadWorkflow().then(() => {
         renderTypeFilters();
-            reload();
+        reload().then(() => soundRestore(true));
       });
     }
     // Доступ к объекту пропал (§5): данных инцидента больше нет — только номер; карточка закрывается
@@ -4868,7 +5210,10 @@
     applyTheme(savedTheme);
     await reload();
     applyLang(savedLang);
-    api.subscribe(onServerEvent, () => reload());
+    bindSound();
+    snd.agent = store.session ? store.session.agentState : null;
+    await soundRestore();
+    api.subscribe(onServerEvent, () => reload().then(() => soundRestore()));
     renderHelpLinks();
   }
 

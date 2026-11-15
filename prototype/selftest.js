@@ -4709,6 +4709,184 @@
       }
     });
 
+    /* Звук (§21, план 87б): без слуха. Вывод IMSound.output подменён записью { pattern, at, volume } на своих часах:
+       запланированное вперёд слышно, когда часы до него дошли и его не остановили */
+    const fakeSound = { rec: [], clock: 1000, ready: false };
+    const soundOut = {
+      ready: () => fakeSound.ready,
+      unlock: () => ((fakeSound.ready = true), Promise.resolve(true)),
+      now: () => fakeSound.clock,
+      play(pattern, at, volume) {
+        const r = { pattern, at, volume, stopped: false };
+        fakeSound.rec.push(r);
+        return r;
+      },
+      stop(r) {
+        if (r && r.at > fakeSound.clock) r.stopped = true;
+      },
+    };
+    const heard = (pattern) => fakeSound.rec.filter((r) => r.at <= fakeSound.clock && !r.stopped && (!pattern || r.pattern === pattern)).length;
+    const soundAdvance = async (sec) => {
+      fakeSound.clock += sec;
+      window.dispatchEvent(new Event("im-sound-tick"));
+      await wait();
+    };
+    const soundLine = (kind) => $("soundBar").querySelector(`[data-sound-line="${kind}"]`);
+    const DEV5 = "20000000-0002-4000-8000-000000000005";
+    // Инцидент нужного приоритета от встроенного сервера: появление — событием потока incident.created
+    async function soundIncident(priority) {
+      const res = await window.IM_SELFTEST_API.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: [DEV5], priority });
+      expect(res.status === 201, `инцидент приоритета ${priority}: ${res.status}`);
+      await wait(150);
+      return res.body;
+    }
+    const titleN = () => {
+      const m = document.title.match(/^\((\d+)\) /);
+      return m ? Number(m[1]) : 0;
+    };
+    const SOUND_FIRST = "Звук: до первого нажатия молчит и не стреляет накопленным; «Включить звук» — один проверочный сигнал (§21.5)";
+
+    await step(SOUND_FIRST, async () => {
+      expect(window.IMSound && window.IMSound.output && window.IMSound.decideSound, "sound.js и sound-synth.js не подключены");
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      window.IMSound.output = soundOut;
+      window.dispatchEvent(new Event("im-sound-output"));
+      await wait();
+      expect(soundLine("off") && $("soundIcon").textContent === "🔇", `до нажатия: значок «${$("soundIcon").textContent}», строки «Звук не включён» ${soundLine("off") ? "есть" : "нет"}`);
+      await soundIncident(100);
+      expect(fakeSound.rec.length === 0, `до нажатия сыграно ${fakeSound.rec.length}`);
+      await click(soundLine("off").querySelector("[data-sound-enable]"));
+      await wait();
+      const now = fakeSound.rec.filter((r) => r.at <= fakeSound.clock);
+      expect(now.length === 1 && now[0].pattern === window.IMSound.TEST_PATTERN, `после «Включить звук» сейчас: ${now.map((r) => r.pattern).join(", ") || "ничего"}`);
+      expect(!soundLine("off") && $("soundIcon").textContent === "🔊", `после включения: значок «${$("soundIcon").textContent}»`);
+      return `проверочный — ${now[0].pattern}`;
+    });
+
+    await step("Звук: «Только важное — 5 мин» — значок 🔉, строка «до ЧЧ:ММ · Вернуть»; Высокий молчит, после «Вернуть» — звучит (§21.4)", async () => {
+      await click($("soundBtn"));
+      const item = $("soundPop").querySelector("[data-sound-important]");
+      expect(!$("soundPop").hidden && item, "меню звука не открылось");
+      expect(item.textContent.includes(String(window.IM_WORKFLOW.sound.muteMinutes)), `пункт меню: «${item.textContent}»`);
+      await click(item);
+      const line = soundLine("important");
+      expect($("soundIcon").textContent === "🔉" && line && /\d\d:\d\d/.test(line.textContent) && line.querySelector("[data-sound-back]"), `«Только важное»: значок «${$("soundIcon").textContent}», строка «${line ? line.textContent : "нет"}»`);
+      const before = heard("double");
+      await soundIncident(75);
+      expect(heard("double") === before, "при «Только важное» Высокий прозвучал");
+      await click(soundLine("important").querySelector("[data-sound-back]"));
+      expect(!soundLine("important") && $("soundIcon").textContent === "🔊", "«Вернуть» не вернул звук");
+      await soundIncident(75);
+      expect(heard("double") === before + 1, `после «Вернуть» Высокий: ${heard("double") - before} сигналов`);
+      return line.textContent.trim();
+    }, SOUND_FIRST);
+
+    await step("Звук: Критический — сирена, повтор каждые 15 с, «Тихо» глушит (§21.2, §21.4)", async () => {
+      const before = heard("siren");
+      await soundIncident(100);
+      expect(heard("siren") === before + 1, `новый Критический: сирен ${heard("siren") - before}`);
+      const ring = soundLine("ring");
+      expect(ring && ring.textContent.includes("Звучит") && ring.querySelector("[data-sound-go]"), `строка «Звучит»: ${ring ? ring.textContent : "нет"}`);
+      await soundAdvance(45);
+      expect(heard("siren") === before + 4, `за 45 с повторов ${heard("siren") - before - 1}, ждали 3`);
+      await click(soundLine("ring").querySelector("[data-sound-silence]"));
+      expect(!soundLine("ring"), "после «Тихо» строка «Звучит» осталась");
+      const all = heard();
+      await soundAdvance(60);
+      expect(heard() === all, `после «Тихо» за 60 с прозвучало ещё ${heard() - all}`);
+      return ring.textContent.trim();
+    }, SOUND_FIRST);
+
+    await step("Звук: «лично вам» — передача коллегой звучит колоколом, «Принять» снимает повтор (§21.1, §21.2)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const inc = await soundIncident(50);
+      const as = (tr, formValues, surface) => stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(inc.guid)}/transitions/${tr}`, { formValues: formValues || {}, surface: surface || "card" });
+      expect((await as("claim", {}, "queue")).status === 200, "Петрова не взяла");
+      const before = heard("bell");
+      const sent = await as("transfer", { targetId: "me", comment: NOTE });
+      expect(sent.status === 200, `Петрова не передала мне: ${sent.status}`);
+      await wait(200);
+      expect(heard("bell") === before + 1, `передача мне: колоколов ${heard("bell") - before}`);
+      await setFilter("inbox");
+      const b = await buttonOnPages("accept", inc.guid);
+      expect(b, `${inc.number} нет в «Мне на принятие»`);
+      await click(b);
+      await wait(200);
+      if (mode() === "work") await click($("backToQueue"));
+      const ring = soundLine("ring");
+      expect(!ring || !ring.querySelector(`[data-sound-go="${inc.guid}"]`), "после «Принять» звучит принятый");
+      const bells = heard("bell");
+      await soundAdvance(60);
+      expect(heard("bell") === bells, `после «Принять» колоколов ещё ${heard("bell") - bells}`);
+      await setFilter("open");
+      return inc.number;
+    }, SOUND_FIRST);
+
+    await step("Звук: заголовок вкладки «(N) …» — непринятые Критические и «лично вам»; взял — число меньше (§21.6)", async () => {
+      const n0 = titleN();
+      const inc = await soundIncident(100);
+      expect(titleN() === n0 + 1, `заголовок «${document.title}», до было ${n0}`);
+      const b = await buttonOnPages("claim", inc.guid);
+      expect(b, `у ${inc.number} нет «Взять»`);
+      await click(b);
+      await wait(200);
+      if (mode() === "work") await click($("backToQueue"));
+      expect(titleN() === n0, `после «Взять» заголовок «${document.title}», ждали ${n0}`);
+      return document.title;
+    }, SOUND_FIRST);
+
+    await step("Звук: громкость в меню не ниже порога схемы, «Проверить звук» играет с ней (§21.4)", async () => {
+      const floor = window.IM_WORKFLOW.sound.volumeFloor;
+      const was = window.IMSound.loadVolume();
+      await click($("soundBtn"));
+      const range = $("soundVolume");
+      expect(range && Number(range.min) === floor, `ползунок: ${range ? range.min : "нет"}`);
+      try {
+        range.value = "0";
+        range.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(Number(range.value) >= floor && window.IMSound.loadVolume() >= floor, `громкость ниже порога: ${range.value}, сохранено ${window.IMSound.loadVolume()}`);
+        const n = fakeSound.rec.length;
+        await click($("soundPop").querySelector("[data-sound-test]"));
+        const last = fakeSound.rec[fakeSound.rec.length - 1];
+        expect(fakeSound.rec.length > n && last.pattern === window.IMSound.TEST_PATTERN && last.volume >= floor, `«Проверить звук»: ${last ? `${last.pattern} ${last.volume}%` : "нет"}`);
+        return `${$("soundVolumeOut").textContent}, порог ${floor}%`;
+      } finally {
+        range.value = String(was);
+        range.dispatchEvent(new Event("input", { bubbles: true }));
+        document.body.click();
+      }
+    }, SOUND_FIRST);
+
+    await step("Звук: вкладка «Звук» настроек — строки уровней справочника, ▶ «Прослушать» играет (§21.2, §20)", async () => {
+      try {
+        $("adminBtn").click();
+        await wait(200);
+        const tab = $("adminTabs").querySelector('[data-admin-tab="sound"]');
+        expect(tab, "нет вкладки «Звук»");
+        await click(tab);
+        await wait(150);
+        const levels = (await window.IM_SELFTEST_API.get("/operator/reference/priorities")).map((p) => String(p.value));
+        const rows = [...$("adminTable").querySelectorAll("[data-sound-level]")].map((r) => r.dataset.soundLevel);
+        expect(rows.length === levels.length && levels.every((l) => rows.includes(l)), `строки уровней: ${rows.join(", ")}; справочник: ${levels.join(", ")}`);
+        const play = $("adminTable").querySelector("[data-sound-play]");
+        expect(play, "нет ▶ «Прослушать»");
+        const n = fakeSound.rec.length;
+        await click(play);
+        expect(fakeSound.rec.length === n + 1 && fakeSound.rec[n].pattern === play.dataset.soundPlay, `▶: ${fakeSound.rec.slice(n).map((r) => r.pattern).join(", ") || "ничего"}`);
+        return `уровней ${rows.length}, ▶ ${play.dataset.soundPlay}`;
+      } finally {
+        if (!$("modalAdmin").hidden) document.querySelector('[data-close="modalAdmin"]').click();
+        // Вывод — снова настоящий, стенд — как был
+        window.IMSound.output = window.IMSound.webAudio();
+        window.dispatchEvent(new Event("im-sound-output"));
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+        await setFilter("open");
+      }
+    }, SOUND_FIRST);
+
     // Сброс стенда меняет данные — шаг в конце, чтобы не трогать шаги выше
     await step("Состояние системы без права: пункта настроек нет, запрос — 403 (§5, §20)", async () => {
       // Без права: раздела (и всей админки) нет, запрос — 403

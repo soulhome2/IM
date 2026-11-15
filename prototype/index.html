@@ -27,9 +27,17 @@
         <button type="button" class="icon-btn" id="toggleMedia" aria-pressed="true">
           <span class="material-symbols-outlined">right_panel_close</span>
         </button>
+        <!-- Звук (§21.4, §21.5): «Звук не включён · Включить звук», «Звучит … · Тихо», «Только важное до … · Вернуть»; строит app.js -->
+        <div class="sound-bar" id="soundBar" role="status"></div>
       </div>
 
       <div class="topbar-actions">
+        <div class="menu" id="soundMenu">
+          <button type="button" class="icon-btn sound-btn" id="soundBtn" aria-haspopup="menu" aria-expanded="false"><span id="soundIcon" aria-hidden="true"></span></button>
+          <!-- Меню звука (§21.4): громкость, «Проверить звук», «Только важное», разрешение уведомлений; строит app.js -->
+          <div class="menu-pop wide sound-pop" role="menu" id="soundPop" hidden></div>
+        </div>
+
         <label class="lang" for="langSelect">
           <span class="material-symbols-outlined" aria-hidden="true">language</span>
           <select id="langSelect" data-i18n-skip aria-label="Язык интерфейса" title="Язык интерфейса">
@@ -523,6 +531,8 @@
   <script src="engine.js"></script>
   <script src="vendor/json-logic-js/logic.js"></script>
   <script src="scenario.js"></script>
+  <script src="sound.js"></script>
+  <script src="sound-synth.js"></script>
   <script src="fixture.js"></script>
   <script src="post-defaults.js"></script>
   <script src="post-settings.js"></script>
