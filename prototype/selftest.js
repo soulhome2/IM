@@ -3051,12 +3051,12 @@
       }
     });
 
-    await step("Пояс окна по умолчанию — пояс поста maintenance.defaultTimeZone (ТЗ-21, ревью I-4а)", async () => {
+    await step("Окно без timeZone считается в UTC (ТЗ-21, ревью I-4а)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
-        const now = await mwSetup({ workflowPatch: { maintenance: { defaultTimeZone: "Asia/Yekaterinburg" } } });
+        const now = await mwSetup();
         const w = await stand.raw("POST", "/operator/maintenance-windows", { deviceGuid: mwSmoke, startsAt: mwIso(now + mwHour), endsAt: mwIso(now + 2 * mwHour), description: "без пояса" });
-        expect(w.status === 201 && w.body.timeZone === "Asia/Yekaterinburg", `пояс: ${w.status} ${w.body.timeZone}`);
+        expect(w.status === 201 && w.body.timeZone === "UTC", `пояс: ${w.status} ${w.body.timeZone}`);
         return w.body.timeZone;
       } finally {
         await standReset({ fixture: "demo" });

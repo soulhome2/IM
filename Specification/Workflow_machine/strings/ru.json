@@ -182,8 +182,6 @@
   "workflow.error.scenario.invalid_answer": "Ответ не подходит к шагу «{step}»",
   "workflow.error.no_schema_admin": "Нет права настраивать схему",
   "workflow.error.maintenance_starts_in_past": "Начало окна уже прошло: окно не может объяснять прошлые события задним числом",
-  "workflow.settings.maintenance.defaultTimeZone": "Часовой пояс поста для окон",
-  "workflow.settings.maintenance.defaultTimeZone.what": "Пояс IANA, в котором считаются дни и время повтора окна, если у окна свой пояс не задан",
   "workflow.error.no_maintenance_edit": "Нет права править окна плановых работ",
   "workflow.error.maintenance_active": "Окно уже идёт: можно изменить только конец и описание или завершить досрочно",
   "workflow.error.maintenance_ended": "Окно закончилось: его можно только смотреть",

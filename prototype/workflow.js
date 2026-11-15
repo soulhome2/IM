@@ -4184,8 +4184,6 @@ window.IM_WORKFLOW = {
       "mark"
     ],
     "markPriority": "lowest",
-    "defaultTimeZone": "UTC",
-    "$commentDefaultTimeZone": "Пояс поста (IANA) для окон без своего пояса: окно сохраняется с ним. По умолчанию UTC",
     "startSkewSec": 300,
     "$commentStartSkewSec": "Допуск на расхождение часов: начало окна при создании и при переносе будущего — не раньше «сейчас» минус столько секунд, иначе 422 MAINTENANCE_WINDOW_STARTS_IN_PAST: окно не объясняет задним числом прошлые события"
   },
@@ -4805,7 +4803,6 @@ window.IM_WORKFLOW = {
         "mode": "string",
         "modes": "list<string>",
         "markPriority": "string",
-        "defaultTimeZone": "string",
         "startSkewSec": "int"
       },
       "MaintenanceWindow": {
@@ -7679,12 +7676,6 @@ window.IM_WORKFLOW = {
               "suppress": "workflow.settings.maintenance.mode.value.suppress",
               "mark": "workflow.settings.maintenance.mode.value.mark"
             },
-            "group": "maintenance_mode"
-          },
-          {
-            "path": "maintenance.defaultTimeZone",
-            "labelKey": "workflow.settings.maintenance.defaultTimeZone",
-            "whatKey": "workflow.settings.maintenance.defaultTimeZone.what",
             "group": "maintenance_mode"
           }
         ]

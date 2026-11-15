@@ -2184,8 +2184,8 @@
       const hasGroup = b.sourceGroupGuid != null && b.sourceGroupGuid !== "";
       const startsAt = Date.parse(b.startsAt);
       const endsAt = Date.parse(b.endsAt);
-      // Пояс не задан — пояс поста (maintenance.defaultTimeZone), его нет — UTC
-      const tz = b.timeZone || (W.maintenance || {}).defaultTimeZone || "UTC";
+      // Пояс не задан — UTC (клиент присылает пояс браузера администратора)
+      const tz = b.timeZone || "UTC";
       const r = b.recurrence || null;
       const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       const badRec = r && !(Array.isArray(r.days) && r.days.length && r.days.every((x) => Number.isInteger(x) && x >= 1 && x <= 7) && time.test(r.startTime || "") && time.test(r.endTime || ""));

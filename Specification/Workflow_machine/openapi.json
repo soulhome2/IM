@@ -4884,7 +4884,7 @@
         ],
         "operationId": "createMaintenanceWindow",
         "summary": "Создать окно плановых работ",
-        "description": "§14.12, ТЗ-21. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `create`. Нет ни устройства, ни группы или заданы оба, конец не позже начала, неизвестный пояс, повтор без дней — `422 FORM_FIELD_INVALID`. Устройство или группа не из организации — `422`. Начало — не раньше «сейчас» минус 5 мин (`maintenance.startSkewSec`), иначе `422 MAINTENANCE_WINDOW_STARTS_IN_PAST`; конец в прошлом — `422 FORM_FIELD_INVALID`. Пояс не задан — пояс поста `maintenance.defaultTimeZone`.",
+        "description": "§14.12, ТЗ-21. Право `maintenance:edit` (в облаке `incident_manager.maintenance.edit`), без него — `403 PERMISSION_DENIED`. Запись журнала изменений настроек (§12.4): `objectType` `maintenance_window`, `action` `create`. Нет ни устройства, ни группы или заданы оба, конец не позже начала, неизвестный пояс, повтор без дней — `422 FORM_FIELD_INVALID`. Устройство или группа не из организации — `422`. Начало — не раньше «сейчас» минус 5 мин (`maintenance.startSkewSec`), иначе `422 MAINTENANCE_WINDOW_STARTS_IN_PAST`; конец в прошлом — `422 FORM_FIELD_INVALID`. Пояс не задан — UTC.",
         "requestBody": {
           "required": true,
           "content": {
@@ -11884,7 +11884,7 @@
             "examples": [
               "Europe/Moscow"
             ],
-            "description": "Часовой пояс IANA — для повтора. Не задан — пояс поста `maintenance.defaultTimeZone` машины (по умолчанию UTC), окно сохраняется с ним. Неизвестный — 422 `FORM_FIELD_INVALID`"
+            "description": "Часовой пояс IANA — для повтора. Необязательное: не задан — UTC. Клиенты передают пояс браузера администратора и показывают его подписью у полей времени; пояс задаёт, в каком времени набраны числа. Неизвестный — 422 `FORM_FIELD_INVALID`"
           },
           "recurrence": {
             "oneOf": [
@@ -11954,7 +11954,7 @@
             "examples": [
               "Europe/Moscow"
             ],
-            "description": "Часовой пояс IANA — для повтора; не задан в форме — пояс поста. Неизвестный — 422 `FORM_FIELD_INVALID`"
+            "description": "Часовой пояс IANA — для повтора; не задан — UTC (форма подставляет пояс браузера). Неизвестный — 422 `FORM_FIELD_INVALID`"
           },
           "recurrence": {
             "oneOf": [
