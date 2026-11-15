@@ -1,0 +1,36 @@
+{
+  "session": {
+    "breakReasons": [
+      {"id": "lunch", "labelKey": "workflow.session.break.lunch"},
+      {"id": "briefing", "labelKey": "workflow.session.break.briefing"},
+      {"id": "patrol", "labelKey": "workflow.session.break.patrol"}
+    ]
+  },
+  "reasonCatalogs": {
+    "hold": {
+      "items": [
+        {"id": "third_party", "labelKey": "workflow.catalog.hold.third_party", "maxMinutes": 30},
+        {"id": "patrol", "labelKey": "workflow.catalog.hold.patrol", "maxMinutes": 45},
+        {"id": "no_data", "labelKey": "workflow.catalog.hold.no_data", "maxMinutes": 60}
+      ]
+    },
+    "mass_fault": {
+      "items": [
+        {"id": "power", "labelKey": "workflow.catalog.mass_fault.power"},
+        {"id": "link", "labelKey": "workflow.catalog.mass_fault.link"},
+        {"id": "mass_fault", "labelKey": "workflow.catalog.mass_fault.mass_fault"},
+        {"id": "known", "labelKey": "workflow.catalog.mass_fault.known"}
+      ]
+    },
+    "false_alarm_cause": {
+      "items": [
+        {"id": "animal", "labelKey": "workflow.catalog.false_alarm_cause.animal"},
+        {"id": "weather", "labelKey": "workflow.catalog.false_alarm_cause.weather"},
+        {"id": "equipment", "labelKey": "workflow.catalog.false_alarm_cause.equipment"},
+        {"id": "staff", "labelKey": "workflow.catalog.false_alarm_cause.staff"},
+        {"id": "setup", "labelKey": "workflow.catalog.false_alarm_cause.setup"},
+        {"id": "other", "labelKey": "workflow.catalog.false_alarm_cause.other", "commentRequired": true}
+      ]
+    }
+  }
+}

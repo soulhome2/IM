@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Сборка prototype/workflow.js, openapi.js, fixture.js и strings.js из Specification/Workflow_machine/,
+"""Сборка prototype/workflow.js, openapi.js, fixture.js, post-defaults.js и strings.js из Specification/Workflow_machine/,
 примеров машины сценариев для её тестов (tests/scenario-examples.js) из Specification/Scenario_machine/examples/,
 таблицы переходов для человека Specification/Workflow_machine/TRANSITIONS.md и перечня настроек
 администратора Specification/Workflow_machine/SETTINGS.md.
 
 Прототип открывают как файл (file://), а оттуда браузер не даёт прочитать JSON.
 Поэтому машина, контракт API и эталонный набор данных подключаются обычными скриптами:
-window.IM_WORKFLOW, window.IM_OPENAPI, window.IM_FIXTURE и каталог строк window.IM_STRINGS
+window.IM_WORKFLOW, window.IM_OPENAPI, window.IM_FIXTURE, стартовый набор настроек поста
+window.IM_POST_DEFAULTS (§20) и каталог строк window.IM_STRINGS
 (§14.9: strings/<язык>.json → { язык: { ключ: строка } }). Машину исполняет встроенный
 сервер прототипа на эталонных данных, по контракту самопроверка и тесты сверяют его ответы.
 Руками эти файлы не правятся — только исходники и затем эта сборка.
@@ -32,6 +33,7 @@ TARGETS = [
     ("workflow_schema.v1.json", "workflow.js", "IM_WORKFLOW", 2),
     ("openapi.json", "openapi.js", "IM_OPENAPI", None),
     ("fixtures/demo.json", "fixture.js", "IM_FIXTURE", None),
+    ("post-defaults.json", "post-defaults.js", "IM_POST_DEFAULTS", None),
 ]
 
 

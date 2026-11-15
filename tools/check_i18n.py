@@ -19,7 +19,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROTO = os.path.join(ROOT, "prototype")
 DICTS = ["i18n-ui.js", "i18n-data.js", "i18n-html.js"]
-SOURCES = ["app.js", "engine.js", "server.js", "fixture.js", "colleagues.js", "api.js", "workflow.js", "strings.js", "index.html", "selftest.js"]
+SOURCES = ["app.js", "engine.js", "server.js", "fixture.js", "post-defaults.js", "colleagues.js", "api.js", "workflow.js", "strings.js", "index.html", "selftest.js"]
 ENTRY = r'^    "((?:[^"\\]|\\.)*)":\s*(?:\n\s*)?"(?:[^"\\]|\\.)*",\n'
 CATALOGS = os.path.join(ROOT, "Specification", "Workflow_machine", "strings")
 # Подстановка имени, а за ней точка: «{ownerName}.»

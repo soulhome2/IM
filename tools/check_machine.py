@@ -2239,11 +2239,48 @@ def check_admin_settings(w, o, err):
                 err.append(f"настройки: {key} — ни в перечне adminSettings, ни в notSettings")
 
 
+def check_post_defaults(w, err):
+    """Стартовый набор настроек поста post-defaults.json (§20, решение 2026-11-15) — патч настроек поста, как его
+    публикует сервер: только списки, которые администратор правит на вкладках (adminSettings.tabs), без комментариев
+    «$…»; пункты — с id, без повторов и без пунктов машины; результаты закрытия — модель, их в наборе нет"""
+    with open(os.path.join(DIR, "post-defaults.json"), encoding="utf-8") as f:
+        d = json.load(f)
+    editable = {i["path"] for tab in w["adminSettings"]["tabs"] for i in tab.get("items", [])}
+
+    def walk(value, path):
+        if isinstance(value, list):
+            yield path, value
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                if k.startswith("$"):
+                    err.append(f"post-defaults.json: {path + '.' if path else ''}{k} — комментарий в патче настроек: сервер публикует файл как есть")
+                    continue
+                yield from walk(v, f"{path}.{k}" if path else k)
+        else:
+            err.append(f"post-defaults.json: {path} — не список: в стартовом наборе только списки (§20)")
+
+    for path, items in walk(d, ""):
+        if path not in editable:
+            err.append(f"post-defaults.json: {path} — не настройка вкладок adminSettings")
+            continue
+        machine_ids = {x.get("id") for x in (w["session"]["breakReasons"] if path == "session.breakReasons" else w["reasonCatalogs"][path.split(".")[1]]["items"])}
+        seen = set()
+        for i in items:
+            if not isinstance(i, dict) or not i.get("id") or not i.get("labelKey"):
+                err.append(f"post-defaults.json: {path} — пункт без id или labelKey: {i}")
+                continue
+            if i["id"] in seen or i["id"] in machine_ids:
+                err.append(f"post-defaults.json: {path}.{i['id']} — повтор или пункт машины")
+            if i.get("setBy", "operator") != "operator":
+                err.append(f"post-defaults.json: {path}.{i['id']} — setBy {i['setBy']}: системные причины задаёт машина")
+            seen.add(i["id"])
+
+
 def with_post_settings(w):
-    """Машина с настройками поста эталонного набора (settings в fixtures/demo.json, решение 2026-11-15): пункты
-    справочников причин — после пунктов машины, как prototype/post-settings.js"""
-    with open(os.path.join(DIR, "fixtures", "demo.json"), encoding="utf-8") as f:
-        settings = json.load(f).get("settings") or {}
+    """Машина с настройками поста стенда — стартовым набором post-defaults.json (решение 2026-11-15, §20: пост
+    стенда — новый пост): пункты справочников причин — после пунктов машины, как prototype/post-settings.js"""
+    with open(os.path.join(DIR, "post-defaults.json"), encoding="utf-8") as f:
+        settings = json.load(f)
     catalogs = settings.get("reasonCatalogs") or {}
     out = json.loads(json.dumps(w))
     out["session"]["breakReasons"] = out["session"].get("breakReasons", []) + list((settings.get("session") or {}).get("breakReasons") or [])
@@ -2281,6 +2318,7 @@ def collect():
     check_priorities(w, o, err)
     check_priority_literals(err)
     check_limits(w, err)
+    check_post_defaults(w, err)
     check_strings(with_post_settings(w), err)
     check_fail_keys(w, err)
     check_observer_notice(w, err)
@@ -2322,6 +2360,7 @@ def collect():
 MACHINE = "Specification/Workflow_machine/workflow_schema.v1.json"
 RULES = "Specification/State_rules/States rules IM.md"
 FIXTURE = "Specification/Workflow_machine/fixtures/demo.json"
+POST_DEFAULTS = "Specification/Workflow_machine/post-defaults.json"
 OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
     ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
@@ -2338,7 +2377,7 @@ MUTATIONS = [
     ("timer-not-started", "машина: «не может принять» не запускает реакцию при входе в «Новый» (RULE-51)", MACHINE,
      '{ "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },\n        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }',
      '{ "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.addressee_cannot_accept"] }'),
-    ("hold-reason-no-deadline", "эталон: у причины оператора в настройках поста нет срока (§4, правило 7; RULE-135)", FIXTURE,
+    ("hold-reason-no-deadline", "стартовый набор: у причины оператора в настройках поста нет срока (§4, правило 7; RULE-135)", POST_DEFAULTS,
      '"workflow.catalog.hold.third_party", "maxMinutes": 30}', '"workflow.catalog.hold.third_party", "maxMinutes": null}'),
     ("exit-hold-limited", "машина: при лимите отложенных «Отложить» считается выходом (RULE-136)", MACHINE,
      '"requiresAnyOfWithHoldLimit": ["incident:release", "incident:close"]', '"requiresAnyOfWithHoldLimit": ["incident:hold", "incident:close"]'),

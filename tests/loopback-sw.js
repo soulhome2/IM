@@ -14,6 +14,8 @@ importScripts(
   "../prototype/vendor/json-logic-js/logic.js",
   "../prototype/scenario.js",
   "../prototype/fixture.js",
+  "../prototype/post-defaults.js",
+  "../prototype/post-settings.js",
   "../prototype/strings.js",
   "../prototype/server.js"
 );

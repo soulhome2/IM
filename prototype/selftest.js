@@ -1678,6 +1678,40 @@
       }
     });
 
+    await step("Стартовый набор настроек поста (§20, решение 2026-11-15): новый пост получает причины из файла набора; заданный список, и пустой тоже, не трогается", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const D = window.IM_POST_DEFAULTS;
+      const P = window.IMPostSettings;
+      expect(D && P && typeof P.withDefaults === "function", "нет стартового набора (post-defaults.js) или IMPostSettings.withDefaults");
+      const ids = (list) => (list || []).map((x) => x.id);
+      const holdIds = (w) => ids(w.reasonCatalogs.hold.items.filter((r) => r.setBy !== "system"));
+      // Новый пост (ни одной версии): весь набор — версией 1; сброс стенда — тот же новый пост
+      await standReset({ fixture: "demo" });
+      const served = (await stand.raw("GET", "/operator/workflow/active")).body;
+      expect(JSON.stringify(holdIds(served)) === JSON.stringify(ids(D.reasonCatalogs.hold.items)), `причины удержания поста не из набора: ${holdIds(served)}`);
+      ["mass_fault", "false_alarm_cause"].forEach((c) =>
+        expect(JSON.stringify(ids(served.reasonCatalogs[c].items)) === JSON.stringify(ids(D.reasonCatalogs[c].items)), `${c}: пункты поста не из набора: ${ids(served.reasonCatalogs[c].items)}`)
+      );
+      expect(JSON.stringify(ids(served.session.breakReasons)) === JSON.stringify(ids(D.session.breakReasons)), `причины перерыва поста не из набора: ${ids(served.session.breakReasons)}`);
+      const fresh = P.withDefaults(null, D);
+      expect(JSON.stringify(fresh.settings) === JSON.stringify(D) && fresh.added.length === 4, `новому посту не весь набор: ${JSON.stringify(fresh.added)}`);
+      // Существующий пост: ложатся только списки, которых в опубликованных настройках нет; очищенный ([]) — пуст
+      const published = { reasonCatalogs: { false_alarm_cause: { items: [] } }, session: { breakReasons: [{ id: "own", labelKey: "workflow.session.state.not_ready" }] } };
+      const once = P.withDefaults(published, D);
+      expect(JSON.stringify(once.added) === JSON.stringify(["reasonCatalogs.hold.items", "reasonCatalogs.mass_fault.items"]), `добавлены не те списки: ${JSON.stringify(once.added)}`);
+      expect(once.settings.reasonCatalogs.false_alarm_cause.items.length === 0, "очищенный список ложных тревог вернулся из набора");
+      expect(JSON.stringify(ids(once.settings.session.breakReasons)) === '["own"]', "заданные причины перерыва заменены набором");
+      expect(published.reasonCatalogs.hold === undefined, "опубликованные настройки изменены на месте");
+      const W = P.apply(P.base, once.settings);
+      expect(W.reasonCatalogs.false_alarm_cause.items.length === 0, "у очищенного списка на машине поста есть пункты");
+      expect(JSON.stringify(holdIds(W)) === JSON.stringify(ids(D.reasonCatalogs.hold.items)), "причины удержания набора не легли на машину поста");
+      // Всё задано — новой версии нет; повтор шага ничего не добавляет
+      expect(P.withDefaults(once.settings, D).added.length === 0, "повторный шаг добавил списки");
+      // Черновик администратора: при публикации списки, которых в нём нет, берутся из новой версии
+      const draft = P.withDefaults({ reasonCatalogs: { hold: { items: [] } } }, D, once.added);
+      expect(JSON.stringify(draft.added) === '["reasonCatalogs.mass_fault.items"]' && draft.settings.reasonCatalogs.hold.items.length === 0, `черновик пересчитан неверно: ${JSON.stringify(draft.added)}`);
+    });
+
     await step("Справочник причин без пунктов (решение 2026-11-15): причина не нужна и поля нет; есть пункт — без причины отказ; нет причин удержания — «Отложить» нет", async () => {
       const stand = window.IM_SELFTEST_API;
       const W = window.IM_WORKFLOW;

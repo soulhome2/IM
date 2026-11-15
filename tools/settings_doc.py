@@ -12,6 +12,9 @@ with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # Приоритеты — справочник МИ, не схема (§2.5, RULE-68): названия уровней для нормативов по приоритету
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "Workflow_machine", "fixtures", "demo.json"), encoding="utf-8") as _f:
     PRIORITY_NAMES = {str(p["value"]): p["name"]["ru"] for p in json.load(_f).get("priorities", [])}
+# Стартовый набор настроек поста (§20, решение 2026-11-15): что получает новый пост поверх машины
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Specification", "Workflow_machine", "post-defaults.json"), encoding="utf-8") as _f:
+    POST_DEFAULTS = json.load(_f)
 
 
 def at(w, path):
@@ -96,7 +99,8 @@ def render(w):
         "# Настройки администратора",
         "",
         "Собрано из раздела `adminSettings` машины [workflow_schema.v1.json](workflow_schema.v1.json) скриптом `tools/build_workflow.py` — руками не править. "
-        "Что меняет администратор с правом `incident:schema:admin`, по вкладкам будущей админки, и какое значение сейчас (RULE-44). "
+        "Что меняет администратор с правом `incident:schema:admin`, по вкладкам будущей админки, и какое значение сейчас (RULE-44); "
+        "у списков причин — ещё стартовый набор [post-defaults.json](post-defaults.json), который получает новый пост (правила §20). "
         "Переходы, состояния, формы и бейджи — модель, а не настройки: их здесь нет. "
         "Тот же перечень показывает прототип: меню пользователя → «Настройки администратора». "
         "`check_machine.py` проверяет, что каждая настройка схемы есть здесь или в списке «Не настройки» в конце.",
@@ -121,6 +125,9 @@ def render(w):
                 values = item.get("values", {})
                 # nullKey — подпись пустого значения, например «без ограничения» (RULE-69)
                 shown = RU.get(item["nullKey"], item["nullKey"]) if current is None and item.get("nullKey") else RU.get(values[current], values[current]) if isinstance(current, str) and current in values else value(current, key, seconds)
+                starter = at(POST_DEFAULTS, item["path"])
+                if starter is not None:
+                    shown += f"; новому посту — стартовый набор: {value(starter, key, seconds)}"
                 out.append(f"| {RU.get(item.get('labelKey'), item.get('label'))} | {RU.get(item.get('whatKey'), item.get('what'))} | {shown} | `{item['path']}` |")
             for g in tab.get("groups", []):
                 if g.get("source"):

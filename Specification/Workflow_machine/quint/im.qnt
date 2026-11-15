@@ -1,5 +1,5 @@
 // -*- mode: Bluespec; -*-
-// Собрано скриптом tools/gen_quint.mjs из Specification/Workflow_machine/workflow_schema.v1.json (с настройками поста fixtures/demo.json) и частей quint/src/.
+// Собрано скриптом tools/gen_quint.mjs из Specification/Workflow_machine/workflow_schema.v1.json (с настройками поста post-defaults.json) и частей quint/src/.
 // Руками не править: правится машина или часть в src/, затем сборка.
 /* Машина состояний инцидента МИ — формальная модель на Quint (ARCH-07.6).
 

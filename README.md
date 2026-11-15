@@ -14,6 +14,7 @@
 | [Specification/Scenario_machine/](Specification/Scenario_machine/README.md) | Машина сценариев: формат сценария (формат редактора продукта, спецификация формата сценария v1), схема, примеры, профиль МИ и откуда перенесено. Исполнитель — [prototype/scenario.js](prototype/scenario.js), стык с машиной инцидента — §14.5 правил |
 | [prototype/api.js](prototype/api.js) | Клиент API: запросы интерфейса уходят во встроенный сервер, а с `?api=https://…` — на настоящий бэкенд |
 | [fixtures/demo.json](Specification/Workflow_machine/fixtures/demo.json) | Эталонный набор данных: инциденты, люди, устройства, группы; сценарии — файлами рядом, в [fixtures/scenarios/](Specification/Workflow_machine/fixtures/scenarios/). На нём работает встроенный сервер, его же загружает бэкенд на тестовом стенде |
+| [post-defaults.json](Specification/Workflow_machine/post-defaults.json) | Стартовый набор настроек поста (§20): причины удержания, массового сбоя, ложной тревоги и перерыва, которые новый пост получает версией настроек от системы. Формат — патч настроек поста |
 | [BACKEND.md](Specification/Workflow_machine/BACKEND.md) | Памятка для команды бэкенда: что реализовать, как проверить на тестовом стенде, когда готово |
 | [FRONTEND.md](Specification/Workflow_machine/FRONTEND.md) | Памятка для команды фронтенда: что из прототипа — требование, что только демо, что ещё за вами, когда готово |
 | [TRANSITIONS.md](Specification/Workflow_machine/TRANSITIONS.md) | Переходы машины словами — собраны из `workflow_schema.v1.json`. Рядом с §6 правил: что задумано и что сделано |

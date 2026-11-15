@@ -74,9 +74,9 @@ const UNCOVERED_OK = {
 
 // patch — набор на машине с патчем: ядро получает исходную машину с наложенным MACHINE_PATCH (patchMachine), bytes —
 // байты исходной машины
-// Векторы пишутся на машине с настройками поста эталонного набора (settings в fixtures/demo.json, решение
-// 2026-11-15: пунктов справочников причин в машине нет): post — эти настройки, в файле — postSettings
-const POST_SETTINGS = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/fixtures/demo.json"), "utf8")).settings || null;
+// Векторы пишутся на машине с настройками поста стенда — стартовым набором post-defaults.json (решение 2026-11-15,
+// §20: пунктов справочников причин в машине нет, пост стенда — новый пост): post — эти настройки, в файле — postSettings
+const POST_SETTINGS = JSON.parse(fs.readFileSync(path.join(ROOT, "Specification/Workflow_machine/post-defaults.json"), "utf8"));
 function load(machinePath, enginePath, patch) {
   const bytes = fs.readFileSync(machinePath);
   const g = { console, TextEncoder, TextDecoder };

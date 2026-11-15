@@ -6,43 +6,7 @@
   "operatorPreferences": {
     "locale": "ru"
   },
-  "$commentSettings": "Настройки поста (решение 2026-11-15): пункты справочников причин и причины перерыва (session.breakReasons) заводит администратор поста, в машине их нет — только устройство справочника и системные причины удержания. Прототип добавляет эти пункты после пунктов машины (prototype/post-settings.js); бэкенд — из своих настроек поста.",
-  "settings": {
-    "session": {
-      "breakReasons": [
-        {"id": "lunch", "labelKey": "workflow.session.break.lunch"},
-        {"id": "briefing", "labelKey": "workflow.session.break.briefing"},
-        {"id": "patrol", "labelKey": "workflow.session.break.patrol"}
-      ]
-    },
-    "reasonCatalogs": {
-      "hold": {
-        "items": [
-          {"id": "third_party", "labelKey": "workflow.catalog.hold.third_party", "maxMinutes": 30},
-          {"id": "patrol", "labelKey": "workflow.catalog.hold.patrol", "maxMinutes": 45},
-          {"id": "no_data", "labelKey": "workflow.catalog.hold.no_data", "maxMinutes": 60}
-        ]
-      },
-      "mass_fault": {
-        "items": [
-          {"id": "power", "labelKey": "workflow.catalog.mass_fault.power"},
-          {"id": "link", "labelKey": "workflow.catalog.mass_fault.link"},
-          {"id": "mass_fault", "labelKey": "workflow.catalog.mass_fault.mass_fault"},
-          {"id": "known", "labelKey": "workflow.catalog.mass_fault.known"}
-        ]
-      },
-      "false_alarm_cause": {
-        "items": [
-          {"id": "animal", "labelKey": "workflow.catalog.false_alarm_cause.animal"},
-          {"id": "weather", "labelKey": "workflow.catalog.false_alarm_cause.weather"},
-          {"id": "equipment", "labelKey": "workflow.catalog.false_alarm_cause.equipment"},
-          {"id": "staff", "labelKey": "workflow.catalog.false_alarm_cause.staff"},
-          {"id": "setup", "labelKey": "workflow.catalog.false_alarm_cause.setup"},
-          {"id": "other", "labelKey": "workflow.catalog.false_alarm_cause.other", "commentRequired": true}
-        ]
-      }
-    }
-  },
+  "$commentSettings": "Настройки поста (решение 2026-11-15, правила §20): своего раздела settings у набора нет — пост стенда после сброса как новый пост, его настройки — стартовый набор ../post-defaults.json (причины удержания, массового сбоя, ложной тревоги и перерыва). Прототип накладывает его на машину (prototype/post-settings.js); бэкенд стенда публикует его версией настроек поста.",
   "people": {
     "operators": [
       {
