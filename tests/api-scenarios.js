@@ -2432,6 +2432,67 @@
     incidents.forEach((c) => assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === c.guid), `событие потока incident.created у ${c.number}`));
   });
 
+  // Адресация из правила (§8.1, §6.2, М1): у базового правила пожара — дежурная группа, событие на датчике дыма 1
+  // (приёмная главного офиса, вне ТЦ); состояния коллег — поверх набора
+  const S1 = "20000000-0002-4000-8000-000000000001";
+  const GROUP_NAME = (id) => window.IM_FIXTURE.people.dutyGroups.find((g) => g.id === id).name;
+  const BORN = /^workflow\.journal\.(create|create_to_group|rule_group_cannot_accept)$/;
+  async function addressed(dutyGroupId, states) {
+    const people = JSON.parse(JSON.stringify(window.IM_FIXTURE.people));
+    people.operators.forEach((o) => Object.assign(o, (states || {})[o.id] || {}));
+    const rule = Object.assign({}, window.IM_FIXTURE.rules.find((r) => r.guid === RULE(1)), dutyGroupId ? { dutyGroupId } : {});
+    const env = await makeEnv({ fixturePatch: { people, rules: [rule] } });
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    await pause(300);
+    const res = await env.call("POST", "/test/events", fireAt(S1));
+    assert.status(res, 201, null, "событие с инцидентом");
+    assert.eq(res.body.created, 1, "одно правило — один инцидент");
+    await pause(300);
+    stop();
+    const card = (await env.call("GET", `/operator/incidents/${res.body.incidents[0].guid}`)).body;
+    return { card, got, born: card.journal.filter((j) => BORN.test(j.templateKey)) };
+  }
+
+  test("Адресация из правила: в группе кто-то может принять — сразу «Ожидает принятия» у группы, уровень 0, уведомление как при передаче (§8.1, §6.2, М1)", async () => {
+    const { card, got, born } = await addressed("grp-leads");
+    assert.eq([card.state, card.owner, card.assignmentGroup && card.assignmentGroup.id], ["pending_acceptance", null, "grp-leads"], "состояние, владелец, адресат");
+    assert.eq([card.escalationLevel, card.transferCount], [0, 0], "уровень и передачи");
+    assert.eq(born.map((j) => j.templateKey), ["workflow.journal.create_to_group"], "запись появления");
+    assert.eq(born[0].vars.targetName, GROUP_NAME("grp-leads"), "в записи — группа");
+    assert.ok(got.some((m) => m.type === "incident.created" && m.incidentGuid === card.guid), "incident.created");
+    assert.ok(!got.some((m) => m.type === "incident.alert" && m.incidentGuid === card.guid), "оповещения нет");
+    // Перерыв не мешает: Сидоров на перерыве, Гусев вышел — у «Группы реагирования»
+    const pause1 = await addressed("grp-response", { sidorov: { agentState: "not_ready" }, gusev: { agentState: "offline" } });
+    assert.eq([pause1.card.state, pause1.card.assignmentGroup && pause1.card.assignmentGroup.id], ["pending_acceptance", "grp-response"], "участник на перерыве — у группы");
+  });
+
+  test("Адресация из правила: принять некому, нет доступа к устройству или группы нет — «Новое» в очереди и оповещение с названием группы после incident.created (§8.1, §6.2, М1)", async () => {
+    for (const [why, group, states] of [
+      ["все вышли", "grp-response", { sidorov: { agentState: "offline" }, gusev: { agentState: "offline" } }],
+      ["нет доступа", "grp-tc", { kuznetsov: { agentState: "ready" } }],
+      ["группы нет", "grp-missing", {}],
+    ]) {
+      const { card, got, born } = await addressed(group, states);
+      assert.eq([card.state, card.owner, card.assignmentGroup], ["new", null, null], `${why}: состояние, владелец, адресат`);
+      assert.eq(born.map((j) => j.templateKey), ["workflow.journal.rule_group_cannot_accept"], `${why}: запись появления`);
+      const name = group === "grp-missing" ? group : GROUP_NAME(group);
+      assert.eq(born[0].vars.ruleGroupName, name, `${why}: в записи — группа правила`);
+      // Получатель оповещений (alerts.target) — «Старшие операторы», оператор стенда в ней
+      const created = got.findIndex((m) => m.type === "incident.created" && m.incidentGuid === card.guid);
+      const alert = got.findIndex((m) => m.type === "incident.alert" && m.incidentGuid === card.guid);
+      assert.ok(created >= 0 && alert > created, `${why}: оповещение после incident.created (${created}, ${alert})`);
+      assert.eq([got[alert].payload.transitionId, got[alert].payload.groupName], ["rule_group_cannot_accept", name], `${why}: переход и группа оповещения`);
+    }
+  });
+
+  test("Адресация из правила: у правила нет группы — как раньше, «Новое», запись create, без оповещения (§8.1, М1)", async () => {
+    const { card, got, born } = await addressed(null);
+    assert.eq([card.state, card.assignmentGroup], ["new", null], "состояние и адресат");
+    assert.eq(born.map((j) => j.templateKey), ["workflow.journal.create"], "запись появления");
+    assert.ok(!got.some((m) => m.type === "incident.alert" && m.incidentGuid === card.guid), "оповещения нет");
+  });
+
   test("Порядок создания и номер тревоги — по точности победителя, а не по приоритету; сценарии одного правила — по его списку (§14.5, ARCH-15, решение 2026-10-28)", async () => {
     // Медпункт с приоритетом ниже пожара: условие точнее (группа против только типа) — всё равно первый и номер тревоги
     const env = await makeEnv({ fixturePatch: { rules: rulesWith({ [RULE(9)]: { priority: 25 } }) } });

@@ -68,7 +68,7 @@
           maintenanceWindowId: ev.maintenanceWindowId, closeMaintenanceWindowId: ev.closeMaintenanceWindowId,
           timers: Object.fromEntries(Object.keys(FIELDS).map((id) => [id, celTimer(ev, id)])),
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
-          eventGuid: ev.eventGuid,
+          eventGuid: ev.eventGuid, ruleDutyGroup: ev.ruleDutyGroup || "",
         },
         ev
       );
@@ -210,6 +210,8 @@
           totalSteps: prog.total,
           escalationReason: [W.escalation.reasonKey],
           primaryNumber: ev.linkedTo && byId(ev.linkedTo) ? byId(ev.linkedTo).number : "",
+          // Группа правила (§8.1, М1) — снимок названия при приёме (ruleDutyGroupName); группы уже нет — последнее известное, нет и его — id
+          ruleGroupName: ev.ruleDutyGroup ? ev.ruleDutyGroupName || ev.ruleDutyGroup : "",
         },
         extra || {}
       );
@@ -519,13 +521,17 @@
       return found;
     }
 
-    // Появление инцидента (§6.2, RULE-61): переход машины с trigger: event — без исходного состояния,
-    // от имени его actor. Его выполняет появление, а не кнопка и не планировщик
+    // Появление инцидента (§6.2, RULE-61, §8.1 М1): один из переходов появления машины (intake.create) — без исходного
+    // состояния, от имени его actor; какой — решают условия перехода (адресация по группе правила, ruleAddressing).
+    // Проходят условия не ровно у одного — ошибка машины, а не тихий выбор первого. Его выполняет появление, а не кнопка
+    // и не планировщик. transitionId — какой переход выполнен: по нему сервер сохраняет итог адресации
     function create(ev) {
-      const tr = W.transitions.find((t) => t.trigger === "event");
-      if (!tr) return { ok: false, why: ["workflow.error.unknown_action"] };
+      const ids = [].concat(W.intake.create);
+      const fits = ids.map((id) => transitions[id]).filter((tr) => tr && tr.trigger === "event" && !firstFail(ev, tr.guards));
+      if (fits.length !== 1) return { ok: false, why: ["workflow.error.unknown_action"], fits: fits.map((tr) => tr.id) };
+      const tr = fits[0];
       const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");
-      return applied.ok ? Object.assign(applied, { facts: applied.facts[0] }) : applied;
+      return applied.ok ? Object.assign(applied, { facts: applied.facts[0], transitionId: tr.id }) : applied;
     }
 
     /* ===== Событие через правила (§14.5, раздел intake машины) ===== */

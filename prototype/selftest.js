@@ -2704,6 +2704,72 @@
       }
     });
 
+    await step("rule-addressing: адресация из правила — группе, в очередь с оповещением, без группы (§8.1, §6.2, М1)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() === "work") await click($("backToQueue"));
+      const fx = window.IM_FIXTURE;
+      // Датчик дыма 1 в приёмной главного офиса — вне торгового центра; правило — только базовое правило пожара
+      const smoke1 = "20000000-0002-4000-8000-000000000001";
+      const fireRule = fx.rules.find((r) => r.guid === "80000000-0000-4000-8000-000000000001");
+      const groupName = (id) => fx.people.dutyGroups.find((g) => g.id === id).name;
+      // Состояния и роли коллег — поверх набора; группа правила — dutyGroupId (§17: поле задаёт набор)
+      const setup = async (dutyGroupId, states) => {
+        const people = JSON.parse(JSON.stringify(fx.people));
+        people.operators.forEach((o) => Object.assign(o, (states || {})[o.id] || {}));
+        const rule = Object.assign({}, fireRule, dutyGroupId ? { dutyGroupId } : {});
+        await standReset({ fixture: "demo", fixturePatch: { people, rules: [rule] } });
+        await wait(300);
+        const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: [smoke1] });
+        expect(res.status === 201 && res.body.created === 1, `событие: ${res.status}, создано ${res.body.created}`);
+        await wait(300);
+        return stand.get(`/operator/incidents/${encodeURIComponent(res.body.incidents[0].guid)}`);
+      };
+      const journalOf = (card) => card.journal.map((j) => j.templateKey).filter((k) => /^workflow\.journal\.(create|create_to_group|rule_group_cannot_accept)$/.test(k));
+      const out = [];
+      try {
+        // 1. Группа «Старшие операторы» (я и Петрова): я на месте, с доступом и правом — сразу у группы
+        const a = await setup("grp-leads");
+        expect(a.state === "pending_acceptance", `у группы: состояние ${a.state}`);
+        expect(a.assignmentGroup && a.assignmentGroup.id === "grp-leads" && !a.owner, `у группы: адресат ${a.assignmentGroup && a.assignmentGroup.id}, владелец ${a.owner && a.owner.id}`);
+        expect(a.escalationLevel === 0 && a.transferCount === 0, `у группы: уровень ${a.escalationLevel}, передач ${a.transferCount}`);
+        const born = a.journal.find((j) => j.templateKey === "workflow.journal.create_to_group");
+        expect(journalOf(a).join() === "workflow.journal.create_to_group" && born.vars.targetName === groupName("grp-leads"), `у группы: журнал ${journalOf(a).join()}, группа «${born && born.vars.targetName}»`);
+        await setFilter("inbox");
+        expect($("eventsList").querySelector(`[data-id="${a.guid}"]`), `${a.number} нет в «Мне на принятие» участника группы`);
+        out.push(`у группы ${a.number}`);
+        // 2. «Группа реагирования»: все вышли из МИ — «Новое» в очереди, оповещение с названием группы
+        const b = await setup("grp-response", { sidorov: { agentState: "offline" }, gusev: { agentState: "offline" } });
+        expect(b.state === "new" && !b.assignmentGroup && !b.owner, `все вышли: состояние ${b.state}, адресат ${b.assignmentGroup && b.assignmentGroup.id}`);
+        const queued = b.journal.find((j) => j.templateKey === "workflow.journal.rule_group_cannot_accept");
+        expect(journalOf(b).join() === "workflow.journal.rule_group_cannot_accept" && queued.vars.ruleGroupName === groupName("grp-response"), `все вышли: журнал ${journalOf(b).join()}, группа «${queued && queued.vars.ruleGroupName}»`);
+        // Получатель оповещений (alerts.target) — «Старшие операторы», я в ней: уведомление с номером и группой
+        const toast = toastWith(new RegExp(`Оповещение: ${b.number} — .*«${groupName("grp-response")}»`));
+        expect(toast, `нет оповещения по ${b.number} с названием группы`);
+        out.push(`все вышли — в очередь, «${toast.textContent}»`);
+        // 3. Сидоров на перерыве, Гусев вышел: перерыв не мешает — у группы
+        const c = await setup("grp-response", { sidorov: { agentState: "not_ready" }, gusev: { agentState: "offline" } });
+        expect(c.state === "pending_acceptance" && c.assignmentGroup && c.assignmentGroup.id === "grp-response", `перерыв: состояние ${c.state}, адресат ${c.assignmentGroup && c.assignmentGroup.id}`);
+        out.push("перерыв — у группы");
+        // 4. «Охрана ТЦ»: Кузнецов на месте, но устройство вне ТЦ — доступа нет, в очередь
+        const d = await setup("grp-tc", { kuznetsov: { agentState: "ready" } });
+        expect(d.state === "new" && !d.assignmentGroup && journalOf(d).join() === "workflow.journal.rule_group_cannot_accept", `нет доступа: состояние ${d.state}, журнал ${journalOf(d).join()}`);
+        out.push("без доступа — в очередь");
+        // 5. Группы с таким id нет (isGroup ложно) — в очередь, а не ошибка приёма
+        const e = await setup("grp-missing");
+        expect(e.state === "new" && journalOf(e).join() === "workflow.journal.rule_group_cannot_accept", `группы нет: состояние ${e.state}, журнал ${journalOf(e).join()}`);
+        out.push("группы нет — в очередь");
+        // 6. У правила нет группы — как раньше: «Новое», запись create
+        const f = await setup(null);
+        expect(f.state === "new" && !f.assignmentGroup && journalOf(f).join() === "workflow.journal.create", `без группы: состояние ${f.state}, журнал ${journalOf(f).join()}`);
+        out.push("без группы — как раньше");
+        return out.join("; ");
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     await step("Карточку увели — у прежнего владельца уведомление с причиной: эскалация по нормативу закрытия (§6.2, §14.8, BUG-86)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const esc = window.IM_WORKFLOW.escalation;

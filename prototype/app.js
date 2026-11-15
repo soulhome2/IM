@@ -4796,8 +4796,11 @@
       if (!notice || notice.audience !== "observers") toast(t("{id}: карточка только для просмотра — {what}", { id, what: tr ? lbl(tr) : tid }));
     } else if (msg.type === "incident.alert") {
       // Оповещение получателю оповещений (§9): что случилось — подпись перехода из машины
+      // Группа правила не может принять (М1) — с названием группы (payload.groupName)
       const tr = transitionDef(tid);
-      toast(t("Оповещение: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));
+      const what = tr ? lbl(tr) : tid;
+      const group = msg.payload && msg.payload.groupName;
+      toast(group ? t("Оповещение: {id} — {what}: «{group}»", { id, what, group }) : t("Оповещение: {id} — {what}", { id, what }));
     } else if (msg.type === "incident.sibling_closed") {
       // Сосед того же события закрыт «Ложной тревогой» (§6.1, ARCH-15): адресату моего инцидента — какой и чем
       const p = msg.payload;

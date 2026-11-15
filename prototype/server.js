@@ -64,6 +64,9 @@
     // События (§14.5): guid от источника → номер тревоги и инциденты по порядку создания. Повтор события с тем же
     // guid ничего не создаёт. Набор отдельного списка не хранит — события собираются из eventGuid инцидентов
     let EVENTS = new Map();
+    // Приём события (§14.5): уведомления переходов появления и итог адресации до записи события (commitEvent)
+    let intakeDeliveries = null;
+    const pendingIntake = new Map();
     // Когда принято каждое событие (мс) — для «приёма в минуту» раздела «Состояние системы» (§20)
     let intakeLog = [];
     // Группы доступа (§5): какие устройства доступны ролям. Роли оператора стенда — из набора
@@ -570,7 +573,12 @@
       // потока; уведомление о закрытом «Ложной тревогой» соседе (about, notifySiblings, ARCH-15) — тоже; остальные
       // уведомления интерфейс выводит из событий о переходах
       deliver: (ev, recipients, { alert, transitionId, about, actor }) => {
-        if (alert && recipients.includes(ME)) emit("incident.alert", ev, "dispatcher", { transitionId });
+        // Появление инцидента (intake.create): доставка — после записи события, вслед за incident.created (commitEvent);
+        // оповещение «группа правила не может принять» — с названием группы (StreamTransitionIdPayload.groupName, М1)
+        const born = [].concat(W.intake.create).includes(transitionId);
+        if (born && intakeDeliveries) return intakeDeliveries.push(() => engineCtx.deliver(ev, recipients, { alert, transitionId, about, actor }));
+        const extra = born && alert && ev.ruleDutyGroup ? { groupName: ev.ruleDutyGroupName } : {};
+        if (alert && recipients.includes(ME)) emit("incident.alert", ev, "dispatcher", Object.assign({ transitionId }, extra));
         if (about && recipients.includes(ME)) emit("incident.sibling_closed", ev, actor, { siblingGuid: about.id, siblingNumber: about.number, closeResultId: about.closeResult });
       },
       // Инцидент изменился не своим переходом (действие мира touch): нарушение основного записано тому, кто был
@@ -710,6 +718,7 @@
       }));
       // События набора — из инцидентов: первым — тот, чей номер — номер тревоги, затем по номеру
       EVENTS = new Map();
+      pendingIntake.clear();
       intakeLog = [];
       events.forEach((ev) => {
         const known = EVENTS.get(ev.eventGuid) || { guid: ev.eventGuid, typeId: ev.typeId, devices: ev.deviceIds, alarmNumber: ev.alarmNumber, incidentIds: [] };
@@ -2416,6 +2425,10 @@
     function newIncident(event, rule, scenarioGuid, number, alarmNumber, priority, maintenanceWindowId) {
       const row = latestRow(scenarioGuid);
       if (!row) return null;
+      // Дежурная группа правила-победителя (§8.1, М1): поле машины ruleDutyGroup и снимок названия на момент приёма;
+      // группы уже нет — название неизвестно, остаётся id
+      const dutyGroupId = rule.dutyGroupId || "";
+      const dutyGroup = dutyGroupId ? GROUPS.find((g) => g.id === dutyGroupId) : null;
       const ev = {
         id: uuid(6, ++serial.incident),
         number,
@@ -2458,14 +2471,41 @@
         viewStepId: null,
         log: [],
         version: 1,
+        ruleDutyGroup: dutyGroupId,
+        ruleDutyGroupName: dutyGroupId ? (dutyGroup ? dutyGroup.name : dutyGroupId) : "",
       };
-      return engine.create(ev).ok ? ev : null;
+      // Переход появления — один из intake.create по условиям машины; уведомления и оповещения откладываются до
+      // записи события (commitEvent): не создался сосед — их не было
+      const deliveries = [];
+      intakeDeliveries = deliveries;
+      let res;
+      try {
+        res = engine.create(ev);
+      } finally {
+        intakeDeliveries = null;
+      }
+      if (!res.ok) return null;
+      // Итог адресации (§12.5, $commentAddressing машины): group или queue — аргумент условия ruleAddressingIs
+      // выполненного перехода; у правила без группы итога нет
+      const guard = (W.transitions.find((t) => t.id === res.transitionId).guards || []).find((g) => g.fn === "ruleAddressingIs");
+      const outcome = guard ? guard.args[0] : null;
+      pendingIntake.set(ev.id, {
+        deliveries,
+        addressing: dutyGroupId && outcome !== "none" ? { incidentGuid: ev.id, number: ev.number, ruleGuid: rule.guid, ruleName: rule.name || null, dutyGroupId, dutyGroupName: ev.ruleDutyGroupName, outcome } : null,
+      });
+      return ev;
     }
     // Запись события и его инциденты — одной транзакцией (§14.5): в очередь и в поток — все вместе
+    // Итог адресации по инциденту (§8.1, М1) хранится с событием — для «Почему?» (§12.5; прототип его не отдаёт);
+    // уведомления и оповещения переходов появления — после incident.created
     function commitEvent(event, alarmNumber, created, maintenance) {
-      EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id), maintenance: maintenance || null });
+      const intake = created.map((ev) => pendingIntake.get(ev.id) || { deliveries: [], addressing: null });
+      created.forEach((ev) => pendingIntake.delete(ev.id));
+      const addressing = intake.map((x) => x.addressing).filter(Boolean);
+      EVENTS.set(event.guid, { guid: event.guid, typeId: event.type.id, devices: event.devices, alarmNumber, incidentIds: created.map((ev) => ev.id), maintenance: maintenance || null, addressing });
       created.forEach((ev) => events.unshift(ev));
       created.forEach((ev) => emit("incident.created", ev, "dispatcher", {}));
+      intake.forEach((x) => x.deliveries.forEach((fn) => fn()));
     }
 
     // Событие проходит через правила (§14.5, intake машины): повтор — прежние инциденты; иначе по инциденту на
@@ -2493,7 +2533,10 @@
       const created = [];
       for (const [k, pick] of picks.entries()) {
         const ev = newIncident(event, pick.rule, pick.scenario, `INC-${first + k}`, alarmNumber, marked && lowest != null ? lowest : pick.rule.priority, marked);
-        if (!ev) return { failed: { rule: pick.rule.name || pick.rule.guid, scenario: pick.scenario } };
+        if (!ev) {
+          created.forEach((x) => pendingIntake.delete(x.id));
+          return { failed: { rule: pick.rule.name || pick.rule.guid, scenario: pick.scenario } };
+        }
         created.push(ev);
       }
       commitEvent(event, alarmNumber, created, maintenance);

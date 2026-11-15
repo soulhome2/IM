@@ -5343,8 +5343,8 @@ window.IM_WORKFLOW = {
           "x": "Incident"
         },
         "returns": "string",
-        "expr": "x.ruleDutyGroup == '' ? 'none' : canAcceptNow(x.ruleDutyGroup, x, '') ? 'group' : 'queue'",
-        "$comment": "§8.1, М1. Адресация инцидента при появлении по дежурной группе правила-победителя (ruleDutyGroup): none — у правила нет группы (create), group — в группе кто-то вошёл в МИ, видит устройство-источник и может принять (canAcceptNow; create_to_group), queue — принять некому или группы уже нет (rule_group_cannot_accept). При пустой группе фактов мира не спрашивает (план 84)"
+        "expr": "x.ruleDutyGroup == '' ? 'none' : isGroup(x.ruleDutyGroup) && canAcceptNow(x.ruleDutyGroup, x, '') ? 'group' : 'queue'",
+        "$comment": "§8.1, М1. Адресация инцидента при появлении по дежурной группе правила-победителя (ruleDutyGroup): none — у правила нет группы (create), group — в группе кто-то вошёл в МИ, видит устройство-источник и может принять (canAcceptNow; create_to_group), queue — принять некому или группы уже нет (isGroup ложно: без этой проверки canAcceptNow принял бы id за человека; rule_group_cannot_accept). При пустой группе фактов мира не спрашивает (план 84)"
       },
       "nextLevels": {
         "params": {

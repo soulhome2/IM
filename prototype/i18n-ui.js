@@ -161,6 +161,7 @@ window.IM_DICT_UI = {
     "Устройств": "Devices",
     "Настройки администратора": "Administrator settings",
     "Оповещение: {id} — {what}": "Alert: {id} — {what}",
+    "Оповещение: {id} — {what}: «{group}»": "Alert: {id} — {what}: “{group}”",
     "{n} того же события закрыт: {result}": "{n} of the same event was closed: {result}",
     "{id}: карточка только для просмотра — {what}": "{id}: the card is now view-only — {what}",
     "Вернуться с перерыва": "Back from break",

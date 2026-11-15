@@ -278,10 +278,10 @@ module im {
   def canAcceptNow(who: str, x: Incident, except: str): bool =
     (if (isGroup(who)) members(who).foldl(false, (acc, m_37) => acc or (((m_37 != except) and signedIn(m_37)) and canAcceptPerson(m_37, x))) else (canAcceptPerson(who, x) and (signedIn(who) or { val g_38 = dutyGroupOf(who)  ((g_38 != "") and members(g_38).foldl(false, (acc, m_39) => acc or ((((m_39 != except) and (m_39 != who)) and signedIn(m_39)) and canAcceptPerson(m_39, x)))) })))
 
-  // §8.1, М1. Адресация инцидента при появлении по дежурной группе правила-победителя (ruleDutyGroup): none — у правила нет группы (create), group — в группе кто-то вошёл в МИ, видит устройство-источник и может принять (canAcceptNow; create_to_group), queue — принять некому или группы уже нет (rule_group_cannot_accept). При пустой группе фактов мира не спрашивает (план 84)
+  // §8.1, М1. Адресация инцидента при появлении по дежурной группе правила-победителя (ruleDutyGroup): none — у правила нет группы (create), group — в группе кто-то вошёл в МИ, видит устройство-источник и может принять (canAcceptNow; create_to_group), queue — принять некому или группы уже нет (isGroup ложно: без этой проверки canAcceptNow принял бы id за человека; rule_group_cannot_accept). При пустой группе фактов мира не спрашивает (план 84)
 
   def ruleAddressing(x: Incident): str =
-    (if ((x.ruleDutyGroup == "")) "none" else (if (canAcceptNow(x.ruleDutyGroup, x, "")) "group" else "queue"))
+    (if ((x.ruleDutyGroup == "")) "none" else (if ((isGroup(x.ruleDutyGroup) and canAcceptNow(x.ruleDutyGroup, x, ""))) "group" else "queue"))
 
   // §8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять сейчас (canAcceptNow, RULE-100); уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
 
