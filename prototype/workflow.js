@@ -7564,6 +7564,36 @@ window.IM_WORKFLOW = {
         ]
       },
       {
+        "id": "maintenance",
+        "labelKey": "workflow.settings.tab.maintenance",
+        "rules": "§14.12",
+        "groups": [
+          {
+            "id": "maintenance_mode",
+            "labelKey": "workflow.settings.tab.maintenance_mode",
+            "rules": "§14.12"
+          },
+          {
+            "id": "maintenance_windows",
+            "labelKey": "workflow.settings.tab.maintenance_windows",
+            "rules": "§14.12",
+            "source": "GET /operator/maintenance-windows"
+          }
+        ],
+        "items": [
+          {
+            "path": "maintenance.mode",
+            "labelKey": "workflow.settings.maintenance.mode",
+            "whatKey": "workflow.settings.maintenance.mode.what",
+            "values": {
+              "suppress": "workflow.settings.maintenance.mode.value.suppress",
+              "mark": "workflow.settings.maintenance.mode.value.mark"
+            },
+            "group": "maintenance_mode"
+          }
+        ]
+      },
+      {
         "id": "storage",
         "labelKey": "workflow.settings.tab.storage",
         "rules": "§14.11",
@@ -7611,36 +7641,6 @@ window.IM_WORKFLOW = {
             "labelKey": "workflow.settings.limits.attachmentTypes",
             "whatKey": "workflow.settings.limits.attachmentTypes.what",
             "group": "retention"
-          }
-        ]
-      },
-      {
-        "id": "maintenance",
-        "labelKey": "workflow.settings.tab.maintenance",
-        "rules": "§14.12",
-        "groups": [
-          {
-            "id": "maintenance_mode",
-            "labelKey": "workflow.settings.tab.maintenance_mode",
-            "rules": "§14.12"
-          },
-          {
-            "id": "maintenance_windows",
-            "labelKey": "workflow.settings.tab.maintenance_windows",
-            "rules": "§14.12",
-            "source": "GET /operator/maintenance-windows"
-          }
-        ],
-        "items": [
-          {
-            "path": "maintenance.mode",
-            "labelKey": "workflow.settings.maintenance.mode",
-            "whatKey": "workflow.settings.maintenance.mode.what",
-            "values": {
-              "suppress": "workflow.settings.maintenance.mode.value.suppress",
-              "mark": "workflow.settings.maintenance.mode.value.mark"
-            },
-            "group": "maintenance_mode"
           }
         ]
       },
