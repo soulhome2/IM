@@ -23,8 +23,8 @@ module im {
   type World = { inc: str -> Incident, answers: str -> Set[str] }
   type Transition = { id: str, trigger: str, actor: str, from: Set[str], timer: str, idleSec: int, ownedByAgent: bool, surfaces: Set[str], bulkOnly: bool }
   // Последнее действие — с параметрами: по ним историю модели повторяют на исполнителе прототипа
-  // (tools/check_quint_replay.mjs). others — набор объединения, prio, scenario и event — у появления
-  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str, event: str }
+  // (tools/check_quint_replay.mjs). others — набор объединения, prio, scenario, event и ruleGroup (дежурная группа правила, §8.1) — у появления
+  type Action = { name: str, actor: str, incident: str, kind: str, form: Form, surface: str, others: List[str], prio: int, scenario: str, event: str, ruleGroup: str }
 
   /* ===== Типы машины (cel.types) ===== */
 
@@ -539,6 +539,11 @@ module im {
     (ruleAddressing(world.inc.get(iid)) == "none"),
   }
 
+  def okAt_create(c: Ctx, iid: str, w: World): bool = all {
+    w.inc.get(iid).state == "",
+    (ruleAddressing(w.inc.get(iid)) == "none"),
+  }
+
   def e_create_0(w0: World, c: Ctx, iid: str): World = {
     val who_104 = ""
     val w105 = { ...w0, inc: w0.inc.set(iid, { ...w0.inc.get(iid), owner: who_104 }) }
@@ -604,6 +609,11 @@ module im {
   def ok_create_to_group(c: Ctx, iid: str): bool = all {
     world.inc.get(iid).state == "",
     (ruleAddressing(world.inc.get(iid)) == "group"),
+  }
+
+  def okAt_create_to_group(c: Ctx, iid: str, w: World): bool = all {
+    w.inc.get(iid).state == "",
+    (ruleAddressing(w.inc.get(iid)) == "group"),
   }
 
   def e_create_to_group_0(w0: World, c: Ctx, iid: str): World = {
@@ -678,6 +688,11 @@ module im {
   def ok_rule_group_cannot_accept(c: Ctx, iid: str): bool = all {
     world.inc.get(iid).state == "",
     (ruleAddressing(world.inc.get(iid)) == "queue"),
+  }
+
+  def okAt_rule_group_cannot_accept(c: Ctx, iid: str, w: World): bool = all {
+    w.inc.get(iid).state == "",
+    (ruleAddressing(w.inc.get(iid)) == "queue"),
   }
 
   def e_rule_group_cannot_accept_0(w0: World, c: Ctx, iid: str): World = {
@@ -3788,6 +3803,14 @@ module im {
     else if (tid == "linked_lost_access") ok_linked_lost_access(c, iid)
     else false
 
+  pure val INTAKE_CREATE: List[str] = ["create", "create_to_group", "rule_group_cannot_accept"]
+
+  def trOkAt(tid: str, c: Ctx, iid: str, w: World): bool =
+    if (tid == "create") okAt_create(c, iid, w)
+    else if (tid == "create_to_group") okAt_create_to_group(c, iid, w)
+    else if (tid == "rule_group_cannot_accept") okAt_rule_group_cannot_accept(c, iid, w)
+    else false
+
   def trApply(tid: str, c: Ctx, iid: str, w: World): World =
     if (tid == "create") apply_create(c, iid, w)
     else if (tid == "create_to_group") apply_create_to_group(c, iid, w)
@@ -3943,6 +3966,10 @@ module im {
   pure val GROUP_LIST: List[str] = [GROUP, GROUP2]
   pure val GROUPS: Set[str] = Set(GROUP, GROUP2)
   pure val TARGETS: Set[str] = OPERATORS.union(GROUPS)
+  // Дежурная группа правила-победителя у появляющегося инцидента (ruleDutyGroup, §8.1, М1): нет (""), одна из групп
+  // модели или id группы, которой уже нет (её удалили после правки правила, isGroup ложно)
+  pure val GONE_GROUP = "gone"
+  pure val RULE_GROUPS: Set[str] = Set("", GONE_GROUP).union(GROUPS)
   // Сценарий без графа (§14.5): два сценария, у каждого два шага по порядку; пройден — отвечены оба (набор closing)
   pure val SCENARIOS: Set[str] = Set("fire", "water")
   pure val STEPS: Set[str] = Set("s1", "s2")
@@ -4033,7 +4060,7 @@ module im {
   def sees(a: str, i: str): bool = cfg.access.get(a).contains(i)
   def incOf(i: str): Incident = world.inc.get(i)
   pure def act0(kind: str, name: str, actor: str, i: str): Action =
-    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "" }
+    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "", ruleGroup: "" }
 
   /* ===== Ядро исполнения (CEL.md, «Ядро исполнения») — как у исполнителя прототипа prototype/engine.js ===== */
 
@@ -4120,26 +4147,34 @@ module im {
 
   /* ===== Появление инцидента (переход с trigger event) ===== */
 
-  // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий и приоритет; сам
-  // выбор правила по событию — вне модели (его держат тесты API и порчи кода intake-*). Ключ — intake.uniqueKey машины
-  // (intakeKeySame, генерируется; сейчас событие + сценарий, PROC-93): второго инцидента с тем же ключом нет, повтор события
-  // и пересекающиеся правила его не дают
-  def born(i: str, ev: str, sc: str, prio: int): Incident =
-    { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev }
+  // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий, приоритет и дежурная
+  // группа правила rg (ruleDutyGroup, §8.1, М1; "" — у правила группы нет); сам выбор правила по событию — вне модели
+  // (его держат тесты API и порчи кода intake-*). Ключ — intake.uniqueKey машины (intakeKeySame, генерируется; сейчас
+  // событие + сценарий, PROC-93): второго инцидента с тем же ключом нет, повтор события и пересекающиеся правила его не дают
+  def born(i: str, ev: str, sc: str, prio: int, rg: str): Incident =
+    { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev, ruleDutyGroup: rg }
   def createOk(i: str, ev: str, sc: str): bool = all {
     incOf(i).state == "",
-    not(INCIDENTS.exists(j => incOf(j).state != "" and intakeKeySame(incOf(j), born(i, ev, sc, 0)))),
+    not(INCIDENTS.exists(j => incOf(j).state != "" and intakeKeySame(incOf(j), born(i, ev, sc, 0, "")))),
   }
-  action create(i: str, ev: str, sc: str, prio: int): bool = {
-    val t = ofTrigger("event")[0]
-    val w0 = { ...world,
-      inc: world.inc.set(i, born(i, ev, sc, prio)),
-      answers: world.answers.set(i, Set()) }
+  // Мир с рождённым инцидентом — до перехода появления: его условия смотрят в ruleDutyGroup инцидента
+  def bornWorld(i: str, ev: str, sc: str, prio: int, rg: str): World =
+    { ...world, inc: world.inc.set(i, born(i, ev, sc, prio, rg)), answers: world.answers.set(i, Set()) }
+  // Переходы появления (intake.create), условия которых выполнены, — по ruleAddressing машины ровно один (инвариант
+  // intakeExactlyOne); ядро берёт его, а не первый по порядку списка
+  def intakeReady(i: str, w: World): List[str] =
+    INTAKE_CREATE.select(tid => trOkAt(tid, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w))
+  action createIn(i: str, ev: str, sc: str, prio: int, rg: str): bool = {
+    val w0 = bornWorld(i, ev, sc, prio, rg)
+    val ts = intakeReady(i, w0)
     all {
       createOk(i, ev, sc),
-      commit({ ...act0("create", t.id, DISPATCHER, i), prio: prio, scenario: sc, event: ev }, trApply(t.id, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
+      ts.length() > 0,
+      commit({ ...act0("create", ts[0], DISPATCHER, i), prio: prio, scenario: sc, event: ev, ruleGroup: rg }, trApply(ts[0], ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
     }
   }
+  // Правило без дежурной группы — прежнее появление (create)
+  action create(i: str, ev: str, sc: str, prio: int): bool = createIn(i, ev, sc, prio, "")
 
   /* ===== Ручное действие (§6.1): условия перехода, видимость, окно после дедлайна ===== */
 
@@ -4427,7 +4462,10 @@ module im {
     nondet ev = eventsFor(i).oneOf()
     nondet sc = SCENARIOS.oneOf()
     nondet prio = PRIORITIES.oneOf()
-    create(i, ev, sc, prio)
+    // Дежурная группа правила (§8.1, М1): нет, одна из групп модели или группы уже нет (id не группы — ruleAddressing
+    // даёт queue)
+    nondet rg = RULE_GROUPS.oneOf()
+    createIn(i, ev, sc, prio, rg)
   }
   action manualAny(a: str, i: str, tids: Set[str], results: Set[str]): bool = {
     nondet tid = tids.oneOf()
@@ -4919,6 +4957,43 @@ module im {
   //     и eventScenarioUnique — страховка на случай, если одно из них ослабнет
   val siblingsNotLinked = INCIDENTS.forall(i => incOf(i).linkedTo != NOBODY implies incOf(i).eventGuid != primaryOf(incOf(i)).eventGuid)
 
+  // 26. Появление по дежурной группе правила (§8.1, М1) — своими словами, не определением ruleAddressing машины: в группе
+  //     правила есть участник, который вошёл в МИ (не offline; перерыв не мешает), с правом «Принимать» и доступом к
+  //     объекту инцидента. Группы нет (id не группы модели) — принять некому
+  def ruleGroupCanTake(x: Incident): bool =
+    GROUPS.contains(x.ruleDutyGroup) and cfg.members.get(x.ruleDutyGroup).exists(m => agents.get(m) != "offline" and can(m, "incident:accept") and access(m, x))
+  // 26а. Из переходов появления (intake.create) при любой группе правила — нет, группа модели, группы нет — условия
+  //      выполнены ровно у одного: появление не теряется и не раздваивается
+  val intakeExactlyOne = INCIDENTS.forall(i => RULE_GROUPS.forall(rg => intakeReady(i, bornWorld(i, OWN_EVENT.get(i), "fire", 100, rg)).length() == 1))
+  // 26б. Как появился инцидент: без группы правила — create в «Новый» без адресата; группа может принять —
+  //      create_to_group «Ожидает принятия» у группы правила, без владельца, уровень 0, передач 0; не может — в «Новый»
+  //      без адресата переходом rule_group_cannot_accept (его оповещение модель не видит: уведомления мир не меняют)
+  val intakeByRuleGroup = lastAction.kind == "create" implies {
+    val x = incOf(lastAction.incident)
+    val rg = lastAction.ruleGroup
+    all {
+      x.ruleDutyGroup == rg,
+      if (rg == "") lastAction.name == "create" and x.state == "new" and x.assignmentGroup == NOBODY
+      else if (ruleGroupCanTake(x)) all {
+        lastAction.name == "create_to_group",
+        x.state == "pending_acceptance",
+        x.owner == NOBODY,
+        x.assignmentGroup == rg,
+        x.escalationLevel == 0,
+        x.transferCount == 0,
+      }
+      else lastAction.name == "rule_group_cannot_accept" and x.state == "new" and x.owner == NOBODY and x.assignmentGroup == NOBODY,
+    }
+  }
+  // 26в. «Ожидает принятия» у группы без эскалаций и передач — только появление у группы правила: адресат — группа
+  //      правила (§8.1, М1)
+  val ruleGroupPendingAddressee = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    (x.state == "pending_acceptance" and x.owner == NOBODY and x.escalationLevel == 0 and x.transferCount == 0) implies x.assignmentGroup == x.ruleDutyGroup
+  })
+  // 26г. Группа правила — снимок при появлении: ни один переход её не меняет
+  val ruleDutyGroupKept = INCIDENTS.forall(i => prev.world.inc.get(i).state != "" implies incOf(i).ruleDutyGroup == prev.world.inc.get(i).ruleDutyGroup)
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -4963,6 +5038,10 @@ module im {
     exitExists,
     eventScenarioUnique,
     siblingsNotLinked,
+    intakeExactlyOne,
+    intakeByRuleGroup,
+    ruleGroupPendingAddressee,
+    ruleDutyGroupKept,
   }
 
   /* ===== Свидетели посылок (PROC-72) =====

@@ -466,6 +466,43 @@
   //     и eventScenarioUnique — страховка на случай, если одно из них ослабнет
   val siblingsNotLinked = INCIDENTS.forall(i => incOf(i).linkedTo != NOBODY implies incOf(i).eventGuid != primaryOf(incOf(i)).eventGuid)
 
+  // 26. Появление по дежурной группе правила (§8.1, М1) — своими словами, не определением ruleAddressing машины: в группе
+  //     правила есть участник, который вошёл в МИ (не offline; перерыв не мешает), с правом «Принимать» и доступом к
+  //     объекту инцидента. Группы нет (id не группы модели) — принять некому
+  def ruleGroupCanTake(x: Incident): bool =
+    GROUPS.contains(x.ruleDutyGroup) and cfg.members.get(x.ruleDutyGroup).exists(m => agents.get(m) != "offline" and can(m, "incident:accept") and access(m, x))
+  // 26а. Из переходов появления (intake.create) при любой группе правила — нет, группа модели, группы нет — условия
+  //      выполнены ровно у одного: появление не теряется и не раздваивается
+  val intakeExactlyOne = INCIDENTS.forall(i => RULE_GROUPS.forall(rg => intakeReady(i, bornWorld(i, OWN_EVENT.get(i), "fire", 100, rg)).length() == 1))
+  // 26б. Как появился инцидент: без группы правила — create в «Новый» без адресата; группа может принять —
+  //      create_to_group «Ожидает принятия» у группы правила, без владельца, уровень 0, передач 0; не может — в «Новый»
+  //      без адресата переходом rule_group_cannot_accept (его оповещение модель не видит: уведомления мир не меняют)
+  val intakeByRuleGroup = lastAction.kind == "create" implies {
+    val x = incOf(lastAction.incident)
+    val rg = lastAction.ruleGroup
+    all {
+      x.ruleDutyGroup == rg,
+      if (rg == "") lastAction.name == "create" and x.state == "new" and x.assignmentGroup == NOBODY
+      else if (ruleGroupCanTake(x)) all {
+        lastAction.name == "create_to_group",
+        x.state == "pending_acceptance",
+        x.owner == NOBODY,
+        x.assignmentGroup == rg,
+        x.escalationLevel == 0,
+        x.transferCount == 0,
+      }
+      else lastAction.name == "rule_group_cannot_accept" and x.state == "new" and x.owner == NOBODY and x.assignmentGroup == NOBODY,
+    }
+  }
+  // 26в. «Ожидает принятия» у группы без эскалаций и передач — только появление у группы правила: адресат — группа
+  //      правила (§8.1, М1)
+  val ruleGroupPendingAddressee = INCIDENTS.forall(i => {
+    val x = incOf(i)
+    (x.state == "pending_acceptance" and x.owner == NOBODY and x.escalationLevel == 0 and x.transferCount == 0) implies x.assignmentGroup == x.ruleDutyGroup
+  })
+  // 26г. Группа правила — снимок при появлении: ни один переход её не меняет
+  val ruleDutyGroupKept = INCIDENTS.forall(i => prev.world.inc.get(i).state != "" implies incOf(i).ruleDutyGroup == prev.world.inc.get(i).ruleDutyGroup)
+
   val inv = all {
     ownerByState,
     holdReasonIffOnHold,
@@ -510,6 +547,10 @@
     exitExists,
     eventScenarioUnique,
     siblingsNotLinked,
+    intakeExactlyOne,
+    intakeByRuleGroup,
+    ruleGroupPendingAddressee,
+    ruleDutyGroupKept,
   }
 
   /* ===== Свидетели посылок (PROC-72) =====

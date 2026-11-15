@@ -387,12 +387,20 @@ function transitions() {
   W.registries.effects.forEach((e) => collectCalls(e.do));
   [...called].forEach(effectOnCall);
   const ok = [];
+  const okAt = [];
   const apply = [];
   for (const t of W.transitions) {
     const guards = (t.guards || []).map((x) => guardCall(x, "world", "iid"));
     const from = (t.from || []).length ? `Set(${t.from.map((s) => JSON.stringify(s)).join(", ")}).contains(world.inc.get(iid).state)` : `world.inc.get(iid).state == ""`;
     emit(`  // ${t.id}: ${t.trigger}${t.to ? ` → ${t.to}` : ""}`);
     emit(`  def ok_${t.id}(c: Ctx, iid: str): bool = all {\n    ${[from, ...guards].join(",\n    ")},\n  }`);
+    // Переход появления (trigger event, intake.create): условия — над миром с уже рождённым инцидентом (w), а не над
+    // world: до появления инцидента в world нет, а ruleAddressing смотрит в его ruleDutyGroup (§8.1, М1)
+    if (t.trigger === "event") {
+      const guardsAt = (t.guards || []).map((x) => guardCall(x, "w", "iid"));
+      emit(`  def okAt_${t.id}(c: Ctx, iid: str, w: World): bool = all {\n    ${[`w.inc.get(iid).state == ""`, ...guardsAt].join(",\n    ")},\n  }`);
+      okAt.push(t.id);
+    }
     const names = (t.effects || []).map((e, i) => {
       const name = `e_${t.id}_${i}`;
       effectOnUse(e, name);
@@ -443,6 +451,13 @@ function transitions() {
   emit(`  def formOk(tid: str, c: Ctx, iid: str): bool =\n    ${formOk.map((id) => `if (tid == ${JSON.stringify(id)}) form_${id}(c, iid)`).join("\n    else ")}\n    else true`);
   // Таблицы для ядра: условия и эффекты по имени перехода, вид, таймер, нарушение в окне после дедлайна
   emit(`  def trOk(tid: str, c: Ctx, iid: str): bool =\n    ${ok.map((id) => `if (tid == ${JSON.stringify(id)}) ok_${id}(c, iid)`).join("\n    else ")}\n    else false`);
+  // Появление (intake.create, §14.5, §8.1): переходы по порядку машины и их условия над миром с рождённым инцидентом.
+  // Ядро берёт тот, у кого условия выполнены, а не первый по порядку: порядок списка смысла не несёт
+  const intake = (W.intake || {}).create;
+  if (!Array.isArray(intake) || !intake.length || intake.some((id) => !okAt.includes(id)) || okAt.some((id) => !intake.includes(id)))
+    fail(`intake.create ${JSON.stringify(intake)}: нужен список всех переходов с trigger: event (${okAt.join(", ")})`);
+  emit(`  pure val INTAKE_CREATE: List[str] = [${intake.map((id) => JSON.stringify(id)).join(", ")}]`);
+  emit(`  def trOkAt(tid: str, c: Ctx, iid: str, w: World): bool =\n    ${okAt.map((id) => `if (tid == ${JSON.stringify(id)}) okAt_${id}(c, iid, w)`).join("\n    else ")}\n    else false`);
   emit(`  def trApply(tid: str, c: Ctx, iid: str, w: World): World =\n    ${apply.map((id) => `if (tid == ${JSON.stringify(id)}) apply_${id}(c, iid, w)`).join("\n    else ")}\n    else w`);
   const timerOf = (t) => ((t.guards || []).find((x) => x.fn === "timerExpired") || { args: [""] }).args[0];
   const idleOf = (t) => ((t.guards || []).find((x) => x.fn === "agentIdleFor") || { args: [] }).args[0];

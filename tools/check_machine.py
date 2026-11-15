@@ -657,14 +657,17 @@ def check_intake(w, err):
             if t.get("trigger") == "event" and t["id"] not in create:
                 err.append(f"машина: переход {t['id']} с trigger: event не в intake.create (§14.5)")
         seen = []
+        addressing = {}
         for i in create:
             g = [x for x in by_id.get(i, {}).get("guards", []) if x.get("fn") == "ruleAddressingIs"]
             if len(g) != 1:
                 err.append(f"машина: intake.create — у {i} условий ruleAddressingIs {len(g)}, нужно ровно одно (§8.1)")
                 continue
             seen.append(str(g[0].get("args", [""])[0]).strip("'\""))
+            addressing[seen[-1]] = by_id.get(i, {})
         if sorted(seen) != ["group", "none", "queue"]:
             err.append(f"машина: intake.create — адресация {sorted(seen)}, нужно по одному разу none, group, queue (§8.1)")
+        check_intake_addressing(w, create, addressing, err)
     key = intake.get("uniqueKey")
     if not isinstance(key, list) or not key or any(k not in fields for k in key):
         err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
@@ -676,6 +679,61 @@ def check_intake(w, err):
     rule = w.get("cel", {}).get("types", {}).get("Rule", {})
     if rule.get(intake.get("ruleOrder")) != "string":
         err.append(f"машина: intake.ruleOrder {intake.get('ruleOrder')!r} — нужно строковое поле Rule, по которому упорядочен список правил (§14.5)")
+
+
+def split_ternary(expr):
+    """Тернарное выражение CEL верхнего уровня «c ? a : b» → (c, a, b) без крайних пробелов; не тернарное — None.
+    Скобки и строки в кавычках пропускаются; вложенный тернарный оператор — в b (правоассоциативно)"""
+    depth, quote, q = 0, None, None
+    for k, ch in enumerate(expr):
+        if quote:
+            quote = None if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and ch == "?" and q is None:
+            q = k
+        elif depth == 0 and ch == ":" and q is not None:
+            return expr[:q].strip(), expr[q + 1:k].strip(), expr[k + 1:].strip()
+    return None
+
+
+def check_intake_addressing(w, create, addressing, err):
+    """Адресация появления по дежурной группе правила (§8.1, М1): смысл трёх итогов ruleAddressing, условие
+    ruleAddressingIs и что делает переход каждого итога. Порядок intake.create — первым переход без группы (create)."""
+    d = w.get("cel", {}).get("definitions", {}).get("ruleAddressing", {})
+    expr = " ".join(str(d.get("expr", "")).split())
+    outer = split_ternary(expr)
+    inner = split_ternary(outer[2]) if outer else None
+    # x.ruleDutyGroup == '' ? 'none' : <группа есть и кто-то может принять сейчас> ? 'group' : 'queue'
+    if d.get("returns") != "string" or list(d.get("params", {}).values()) != ["Incident"]:
+        err.append("машина: определение ruleAddressing — нужно (x: Incident) → string (§8.1, М1)")
+    elif not outer or not inner or outer[0] != "x.ruleDutyGroup == ''" or (outer[1], inner[1], inner[2]) != ("'none'", "'group'", "'queue'"):
+        err.append(f"машина: ruleAddressing «{expr}» — нужно x.ruleDutyGroup == '' ? 'none' : … ? 'group' : 'queue' (§8.1, М1)")
+    elif "isGroup(x.ruleDutyGroup)" not in inner[0] or "canAcceptNow(x.ruleDutyGroup, x, '')" not in inner[0]:
+        err.append(f"машина: ruleAddressing — условие group «{inner[0]}» без isGroup(x.ruleDutyGroup) и canAcceptNow(x.ruleDutyGroup, x, '') (§8.1, §12.1, М1)")
+    guard = next((g for g in w.get("registries", {}).get("guards", []) if g.get("fn") == "ruleAddressingIs"), {})
+    if " ".join(str(guard.get("expr", "")).split()) != "ruleAddressing(incident) == expected" or guard.get("args") != ["expected"]:
+        err.append(f"машина: условие ruleAddressingIs «{guard.get('expr')}» — нужно ruleAddressing(incident) == expected (§8.1, М1)")
+    initial = next((s["id"] for s in w["states"] if s.get("initial")), None)
+    effects = lambda t: [(e.get("fn"), e.get("args", [None])[0]) for e in t.get("effects", [])]  # noqa: E731
+    want = {
+        "none": (initial, ("setAssignmentGroup", "''"), None),
+        "group": ("pending_acceptance", ("setAssignmentGroup", "incident.ruleDutyGroup"), None),
+        "queue": (initial, ("setAssignmentGroup", "''"), ("notify", "alerts.target")),
+    }
+    for a, (to, group, notify) in want.items():
+        t = addressing.get(a)
+        if t is None:
+            continue
+        if t.get("to") != to or group not in effects(t) or (notify and notify not in effects(t)):
+            err.append(f"машина: переход {t['id']} (адресация {a}) — нужно в {to}, {group[0]}({group[1]})"
+                       f"{', notify(' + notify[1] + ')' if notify else ''} (§8.1, М1)")
+    if addressing.get("none") and create and create[0] != addressing["none"]["id"]:
+        err.append(f"машина: intake.create {create} — первым переход без группы правила {addressing['none']['id']} (§14.5, §8.1)")
 
 
 def check_open_questions(err):
@@ -2503,6 +2561,14 @@ MUTATIONS = [
      '"ruleOrder": "guid"', '"ruleOrder": "createdAt"', "intake.ruleOrder"),
     ("intake-key-late-field", "машина: в ключе уникальности поле, которого до создания инцидента нет (PROC-93)", MACHINE,
      '"uniqueKey": ["eventGuid", "scenario"]', '"uniqueKey": ["eventGuid", "owner"]', "intake.uniqueKey"),
+    ("intake-addressing-ternary", "машина: в ruleAddressing перепутаны итоги group и queue — инцидент уходит группе, где принять некому (§8.1, М1)", MACHINE,
+     "canAcceptNow(x.ruleDutyGroup, x, '') ? 'group' : 'queue'", "canAcceptNow(x.ruleDutyGroup, x, '') ? 'queue' : 'group'", "ruleAddressing"),
+    ("intake-addressing-guard-expr", "машина: условие ruleAddressingIs выполнено, когда адресация НЕ равна аргументу (§8.1, М1)", MACHINE,
+     '"expr": "ruleAddressing(incident) == expected"', '"expr": "ruleAddressing(incident) != expected"', "нужно ruleAddressing(incident) == expected"),
+    ("intake-create-order", "машина: в intake.create первым — create_to_group, а не переход без группы create (§14.5, §8.1)", MACHINE,
+     '"create": ["create", "create_to_group", "rule_group_cannot_accept"]', '"create": ["create_to_group", "create", "rule_group_cannot_accept"]', "первым"),
+    ("intake-group-to-new", "машина: create_to_group ведёт в «Новый», а не в «Ожидает принятия» (§8.1, М1)", MACHINE,
+     '"to": "pending_acceptance",\n      "trigger": "event",', '"to": "new",\n      "trigger": "event",', "адресация group"),
     ("registry-base-unmarked", "машина: notifySiblings сверх базового реестра §14.8 без extendsBaseRegistry (RULE-139)", MACHINE,
      '"about": "incident"}}]}]}]}], "extendsBaseRegistry": true, ', '"about": "incident"}}]}]}]}], ', "extendsBaseRegistry"),
     ("registry-base-marked", "машина: appendLog из базового реестра помечен extendsBaseRegistry (RULE-139)", MACHINE,

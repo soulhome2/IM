@@ -681,4 +681,49 @@ module im_test {
       .then(create("i3", "ev2", "sc1", 100))
       .expect(x3.eventGuid == "ev2" and x3.scenario == "sc1")
       .expect(inv)
+
+  /* ===== 8. Появление по дежурной группе правила (§8.1, М1) ===== */
+
+  // Правило без группы — прежнее появление: create, «Новый» без адресата
+  run intakeNoRuleGroupTest =
+    start
+      .then(createIn("i1", "ev1", "fire", 100, ""))
+      .expect(lastAction.name == "create" and x1.state == "new" and x1.assignmentGroup == "" and x1.ruleDutyGroup == "")
+      .expect(inv)
+
+  // В группе правила g — b: вошёл, право и доступ есть — create_to_group, «Ожидает принятия» у g, уровень 0; b принимает
+  run intakeRuleGroupTest =
+    start
+      .then(createIn("i1", "ev1", "fire", 100, GROUP))
+      .expect(lastAction.name == "create_to_group" and x1.state == "pending_acceptance" and x1.owner == "")
+      .expect(x1.assignmentGroup == GROUP and x1.ruleDutyGroup == GROUP and x1.escalationLevel == 0 and x1.transferCount == 0)
+      .expect(runs(reactionOf(x1)))
+      .expect(inv)
+      .then(act("b", "accept", "i1"))
+      .expect(x1.state == "in_progress" and x1.owner == "b" and x1.ruleDutyGroup == GROUP)
+      .expect(inv)
+
+  // Перерыв не мешает (§12.1): b на перерыве — всё равно у группы
+  run intakeRuleGroupBreakTest =
+    start
+      .then(agentMove("b", "break"))
+      .then(createIn("i1", "ev1", "fire", 100, GROUP))
+      .expect(lastAction.name == "create_to_group" and x1.assignmentGroup == GROUP)
+      .expect(inv)
+
+  // Принять некому: b вышел из МИ (g), группа h пустая, группы «gone» нет — rule_group_cannot_accept, «Новый» без
+  // адресата, реакция идёт; группа правила остаётся у инцидента
+  run intakeRuleGroupQueueTest =
+    start
+      .then(signOut("b"))
+      .then(createIn("i1", "ev1", "fire", 100, GROUP))
+      .expect(lastAction.name == "rule_group_cannot_accept" and x1.state == "new" and x1.assignmentGroup == "" and x1.ruleDutyGroup == GROUP)
+      .expect(runs(reactionOf(x1)))
+      .expect(inv)
+      .then(createIn("i2", "ev2", "fire", 100, GROUP2))
+      .expect(lastAction.name == "rule_group_cannot_accept" and x2.state == "new")
+      .expect(inv)
+      .then(createIn("i3", "ev3", "fire", 100, GONE_GROUP))
+      .expect(lastAction.name == "rule_group_cannot_accept" and x3.state == "new" and x3.ruleDutyGroup == GONE_GROUP)
+      .expect(inv)
 }

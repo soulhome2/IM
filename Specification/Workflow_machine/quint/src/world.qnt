@@ -15,6 +15,10 @@
   pure val GROUP_LIST: List[str] = [GROUP, GROUP2]
   pure val GROUPS: Set[str] = Set(GROUP, GROUP2)
   pure val TARGETS: Set[str] = OPERATORS.union(GROUPS)
+  // Дежурная группа правила-победителя у появляющегося инцидента (ruleDutyGroup, §8.1, М1): нет (""), одна из групп
+  // модели или id группы, которой уже нет (её удалили после правки правила, isGroup ложно)
+  pure val GONE_GROUP = "gone"
+  pure val RULE_GROUPS: Set[str] = Set("", GONE_GROUP).union(GROUPS)
   // Сценарий без графа (§14.5): два сценария, у каждого два шага по порядку; пройден — отвечены оба (набор closing)
   pure val SCENARIOS: Set[str] = Set("fire", "water")
   pure val STEPS: Set[str] = Set("s1", "s2")
@@ -105,4 +109,4 @@
   def sees(a: str, i: str): bool = cfg.access.get(a).contains(i)
   def incOf(i: str): Incident = world.inc.get(i)
   pure def act0(kind: str, name: str, actor: str, i: str): Action =
-    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "" }
+    { name: name, actor: actor, incident: i, kind: kind, form: NO_FORM, surface: "", others: [], prio: 0, scenario: "", event: "", ruleGroup: "" }

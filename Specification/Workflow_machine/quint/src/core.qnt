@@ -83,26 +83,34 @@
 
   /* ===== Появление инцидента (переход с trigger event) ===== */
 
-  // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий и приоритет; сам
-  // выбор правила по событию — вне модели (его держат тесты API и порчи кода intake-*). Ключ — intake.uniqueKey машины
-  // (intakeKeySame, генерируется; сейчас событие + сценарий, PROC-93): второго инцидента с тем же ключом нет, повтор события
-  // и пересекающиеся правила его не дают
-  def born(i: str, ev: str, sc: str, prio: int): Incident =
-    { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev }
+  // Инцидент события ev со сценарием sc (§14.5, ARCH-15). Правило уже выбрано — от него сценарий, приоритет и дежурная
+  // группа правила rg (ruleDutyGroup, §8.1, М1; "" — у правила группы нет); сам выбор правила по событию — вне модели
+  // (его держат тесты API и порчи кода intake-*). Ключ — intake.uniqueKey машины (intakeKeySame, генерируется; сейчас
+  // событие + сценарий, PROC-93): второго инцидента с тем же ключом нет, повтор события и пересекающиеся правила его не дают
+  def born(i: str, ev: str, sc: str, prio: int, rg: str): Incident =
+    { ...NO_INCIDENT, id: i, number: i, eventType: "fire", priority: prio, occurredAt: clock, scenario: sc, eventGuid: ev, ruleDutyGroup: rg }
   def createOk(i: str, ev: str, sc: str): bool = all {
     incOf(i).state == "",
-    not(INCIDENTS.exists(j => incOf(j).state != "" and intakeKeySame(incOf(j), born(i, ev, sc, 0)))),
+    not(INCIDENTS.exists(j => incOf(j).state != "" and intakeKeySame(incOf(j), born(i, ev, sc, 0, "")))),
   }
-  action create(i: str, ev: str, sc: str, prio: int): bool = {
-    val t = ofTrigger("event")[0]
-    val w0 = { ...world,
-      inc: world.inc.set(i, born(i, ev, sc, prio)),
-      answers: world.answers.set(i, Set()) }
+  // Мир с рождённым инцидентом — до перехода появления: его условия смотрят в ruleDutyGroup инцидента
+  def bornWorld(i: str, ev: str, sc: str, prio: int, rg: str): World =
+    { ...world, inc: world.inc.set(i, born(i, ev, sc, prio, rg)), answers: world.answers.set(i, Set()) }
+  // Переходы появления (intake.create), условия которых выполнены, — по ruleAddressing машины ровно один (инвариант
+  // intakeExactlyOne); ядро берёт его, а не первый по порядку списка
+  def intakeReady(i: str, w: World): List[str] =
+    INTAKE_CREATE.select(tid => trOkAt(tid, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w))
+  action createIn(i: str, ev: str, sc: str, prio: int, rg: str): bool = {
+    val w0 = bornWorld(i, ev, sc, prio, rg)
+    val ts = intakeReady(i, w0)
     all {
       createOk(i, ev, sc),
-      commit({ ...act0("create", t.id, DISPATCHER, i), prio: prio, scenario: sc, event: ev }, trApply(t.id, ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
+      ts.length() > 0,
+      commit({ ...act0("create", ts[0], DISPATCHER, i), prio: prio, scenario: sc, event: ev, ruleGroup: rg }, trApply(ts[0], ctx(DISPATCHER, DISPATCHER, NO_FORM, ""), i, w0)),
     }
   }
+  // Правило без дежурной группы — прежнее появление (create)
+  action create(i: str, ev: str, sc: str, prio: int): bool = createIn(i, ev, sc, prio, "")
 
   /* ===== Ручное действие (§6.1): условия перехода, видимость, окно после дедлайна ===== */
 
@@ -390,7 +398,10 @@
     nondet ev = eventsFor(i).oneOf()
     nondet sc = SCENARIOS.oneOf()
     nondet prio = PRIORITIES.oneOf()
-    create(i, ev, sc, prio)
+    // Дежурная группа правила (§8.1, М1): нет, одна из групп модели или группы уже нет (id не группы — ruleAddressing
+    // даёт queue)
+    nondet rg = RULE_GROUPS.oneOf()
+    createIn(i, ev, sc, prio, rg)
   }
   action manualAny(a: str, i: str, tids: Set[str], results: Set[str]): bool = {
     nondet tid = tids.oneOf()

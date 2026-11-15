@@ -43,7 +43,8 @@ const OPS = ["create", "merge", "run", "runAll", "tick"];
 // Требования покрытия векторов переходов без вектора — с причиной словами (ключ → причина); не больше 3, больше —
 // синтетика (syntheticTransitions). Ключ — как у требования в transitionCoverage: имя перехода («reopen», «create») —
 // нет вектора ok с этим именем; «op:refusal» («run:refusal», «runAll:refusal», «merge:refusal») — нет отказа у op;
-// «run:canceled» — нет вектора run с canceled; «tick:<переход>» — нет вектора tick, где он сработал. Пишется в поле
+// «run:canceled» — нет вектора run с canceled; «tick:<переход>» — нет вектора tick, где он сработал; «create:<переход>» —
+// нет вектора create с записью журнала этого перехода появления (intake.create). Пишется в поле
 // uncovered файла переходов
 // Переходы по таймеру, которые на исходной машине не наступают (их включает другая настройка), покрыты набором на
 // машине с патчем (PATCHED_FILE, MACHINE_PATCH)
@@ -332,6 +333,13 @@ function transitionCoverage(lib, W, data, patched) {
     .map((t) => t.id)
     .concat("create")
     .forEach((n) => (need[n] = has((v) => v.name === n && v.expect.ok)));
+  // Каждый переход появления (intake.create, §8.1, М1): вектор create, в журнале которого — запись этого перехода
+  // (appendLog): у вектора имя всегда create, какой переход выполнен — видно по журналу
+  [].concat((W.intake || {}).create || []).forEach((id) => {
+    const t = W.transitions.find((x) => x.id === id) || {};
+    const key = ((t.effects || []).find((e) => e.fn === "appendLog") || { args: [] }).args[0];
+    need[`create:${id}`] = has((v) => v.op === "create" && v.expect.ok && Object.values(v.expect.ok.journal || {}).some((es) => es.some((e) => e.templateKey === key)));
+  });
   ["run", "runAll", "merge"].forEach((o) => (need[`${o}:refusal`] = has((v) => v.op === o && v.expect.refusal)));
   need["run:canceled"] = has((v) => v.op === "run" && v.expect.ok && Object.keys(v.expect.ok.canceled || {}).length > 0);
   need["journal:once"] = has((v) => v.expect.ok && lib.canonical(v.expect.ok.journalAtNow || {}) !== lib.canonical(v.journalAtNow || {}));
@@ -550,6 +558,32 @@ function synthetic(env) {
     agentState: () => "ready",
     access: () => true,
   });
+
+  // ruleAddressing (§8.1, М1): адресация появляющегося инцидента по дежурной группе правила. Группа g1 — участник m1;
+  // по умолчанию он на месте, с правом «Принимать» и доступом. При пустой группе фактов мира не спрашивает (план 84)
+  const ruleWorld = (over = {}) =>
+    Object.assign(
+      {
+        isGroup: (id) => id === "g1",
+        members: (g) => (g === "g1" ? ["m1"] : []),
+        agentState: () => "ready",
+        can: (who, perm) => who === "m1" && perm === "incident:accept",
+        access: () => true,
+        isOperator: (id) => id === "m1",
+      },
+      over
+    );
+  [
+    ["у правила нет группы — none", "", "none", {}],
+    ["m1 вошёл, доступ и право есть — group", "g1", "group", ruleWorld()],
+    ["m1 на перерыве — group: перерыв не мешает (§12.1)", "g1", "group", ruleWorld({ agentState: () => "not_ready" })],
+    ["m1 вышел из МИ — queue", "g1", "queue", ruleWorld({ agentState: () => "offline" })],
+    ["у m1 нет доступа к устройству — queue", "g1", "queue", ruleWorld({ access: () => false })],
+    ["у m1 нет права «Принимать» — queue", "g1", "queue", ruleWorld({ can: () => false })],
+    ["g1 не группа (группы уже нет) — queue", "g1", "queue", ruleWorld({ isGroup: () => false })],
+  ].forEach(([what, group, expected, world]) =>
+    definition("ruleAddressing", `определение ruleAddressing: ${what}`, (cel) => [incident(cel, { state: "", owner: "", ruleDutyGroup: group })], expected, world)
+  );
 
   // leftOf и spent: остаток 0 на паузе и у дедлайна
   [
@@ -855,6 +889,32 @@ function syntheticTransitions(env) {
     const x = after(v, pool, id1);
     return ok(v).concat(x && x.timers.reaction.due === NOW + 300000 ? [] : [`ждали reaction.due ${NOW + 300000}, а ${x && x.timers.reaction.due}`]);
   });
+
+  // Появление по дежурной группе правила (§8.1, М1): у 9001 ruleDutyGroup g1, в ней op2. op2 на месте — create_to_group,
+  // «Ожидает принятия» у g1, уровень 0; op2 вышел — rule_group_cannot_accept, «Новый» без адресата, запись журнала своя
+  const JOURNAL_TO_GROUP = "workflow.journal.create_to_group";
+  const JOURNAL_CANNOT = "workflow.journal.rule_group_cannot_accept";
+  const ruleGroup = (state) => ({ isGroup: (id) => id === "g1", members: (g) => (g === "g1" ? ["op2"] : []), dutyGroups: () => ["g1"], agentState: () => state });
+  add("Появление с группой правила g1: op2 в группе на месте — create_to_group, pending_acceptance у g1, уровень 0", (engine, events, mk) => {
+    events.push(mk(9002));
+    engine.create(mk(9001, { state: "", ruleDutyGroup: "g1" }));
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(
+      x && x.state === "pending_acceptance" && x.owner === "" && x.assignmentGroup === "g1" && x.escalationLevel === 0 && x.transferCount === 0 ? [] : [`ждали 9001 у g1 в pending_acceptance, а ${x && x.state} ${x && x.assignmentGroup}`],
+      keys(v, id1).includes(JOURNAL_TO_GROUP) ? [] : [`ждали в журнале ${JOURNAL_TO_GROUP}`]
+    );
+  }, { world: ruleGroup("ready") });
+  add("Появление с группой правила g1: op2 вышел из МИ — rule_group_cannot_accept, new без адресата", (engine, events, mk) => {
+    events.push(mk(9002));
+    engine.create(mk(9001, { state: "", ruleDutyGroup: "g1" }));
+  }, (v, pool) => {
+    const x = after(v, pool, id1);
+    return ok(v).concat(
+      x && x.state === "new" && x.owner === "" && x.assignmentGroup === "" ? [] : [`ждали 9001 в new без адресата, а ${x && x.state} ${x && x.assignmentGroup}`],
+      keys(v, id1).includes(JOURNAL_CANNOT) ? [] : [`ждали в журнале ${JOURNAL_CANNOT}`]
+    );
+  }, { world: ruleGroup("offline") });
 
   // once (решения 21 и 27): запись с тем же ключом в момент now уже есть — её подстановки заменяются, новой нет.
   // Основной 9003 в работе у op1, срок закрытия через час, в журнале в момент now уже «срок группы» {number INC-9002}

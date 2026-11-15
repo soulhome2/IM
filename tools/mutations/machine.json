@@ -845,5 +845,36 @@
   "find": "{ \"fn\": \"priorityChanged\" }",
   "replace": "{ \"fn\": \"agentReady\" }",
   "model": "кандидат в инвариант: в модели нет сравнения срока с нормативом уровня и записи «было → стало»; ловят тесты API (ТЗ-13)"
+ },
+ {
+  "name": "rule-group-ignored",
+  "what": "дежурная группа правила не действует: ruleAddressing всегда none — инцидент с группой правила появляется «Новым» в общей очереди (§8.1, М1)",
+  "find": "\"expr\": \"x.ruleDutyGroup == '' ? 'none' : isGroup(x.ruleDutyGroup) && canAcceptNow(x.ruleDutyGroup, x, '') ? 'group' : 'queue'\"",
+  "replace": "\"expr\": \"'none'\""
+ },
+ {
+  "name": "rule-group-signed-out",
+  "what": "инцидент уходит группе правила, из которой все вышли из МИ: canAcceptNow заменено на canAccept (§8.1, §12.1, М1)",
+  "find": "canAcceptNow(x.ruleDutyGroup, x, '')",
+  "replace": "canAccept(x.ruleDutyGroup, x, '')"
+ },
+ {
+  "name": "rule-group-no-access",
+  "what": "инцидент уходит группе правила, где никто не видит устройство-источник: без access, только право «Принимать» (§5, §8.1, М1)",
+  "find": "isGroup(x.ruleDutyGroup) && canAcceptNow(x.ruleDutyGroup, x, '') ? 'group'",
+  "replace": "isGroup(x.ruleDutyGroup) && members(x.ruleDutyGroup).exists(m, signedIn(m) && can(m, 'incident:accept')) ? 'group'"
+ },
+ {
+  "name": "rule-group-cannot-accept-silent",
+  "what": "группа правила не может принять — инцидент в очереди, а оповещения получателю нет (§8.1, М1)",
+  "find": "\"args\": [\"workflow.journal.rule_group_cannot_accept\"] },\n        { \"kind\": \"external\", \"fn\": \"notify\", \"args\": [\"alerts.target\", true] }",
+  "replace": "\"args\": [\"workflow.journal.rule_group_cannot_accept\"] }",
+  "model": "мир модели: уведомления модель не меняют"
+ },
+ {
+  "name": "rule-group-level",
+  "what": "инцидент появляется у группы правила сразу на уровне эскалации 1, а не 0 (§8.1, §8.3, М1)",
+  "find": "{ \"kind\": \"transactional\", \"fn\": \"setAssignmentGroup\", \"args\": [\"incident.ruleDutyGroup\"] },\n        { \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"escalationLevel\", \"0\"] }",
+  "replace": "{ \"kind\": \"transactional\", \"fn\": \"setAssignmentGroup\", \"args\": [\"incident.ruleDutyGroup\"] },\n        { \"kind\": \"transactional\", \"fn\": \"setFlag\", \"args\": [\"escalationLevel\", \"1\"] }"
  }
 ]
