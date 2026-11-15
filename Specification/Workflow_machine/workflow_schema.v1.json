@@ -434,18 +434,56 @@
     {
       "id": "create",
       "labelKey": "workflow.transition.create",
-      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент. Единственный переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно. По правилу (intake, §14.5): приоритет — правила; все инциденты события — одной транзакцией с отметкой события (§14.5).",
+      "$comment": "§2.1, §3, RULE-61. Источник прислал событие — в МИ появляется инцидент; у правила-победителя нет дежурной группы (§8.1). Переход без исходного состояния и с trigger: event: его выполняет появление, а не кнопка или планировщик; из трёх переходов появления (intake.create) выполняется ровно один — по ruleAddressing. Норматив реакции — от появления в МИ (createdAt); время события у источника (occurredAt) хранится отдельно. По правилу (intake, §14.5): приоритет — правила; все инциденты события — одной транзакцией с отметкой события (§14.5).",
       "from": [],
       "to": "new",
       "trigger": "event",
       "actor": "dispatcher",
-      "guards": [],
+      "guards": [{ "fn": "ruleAddressingIs", "args": ["none"] }],
       "effects": [
         { "kind": "transactional", "fn": "setOwner", "args": ["''"] },
         { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["''"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["escalationLevel", "0"] },
         { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.create"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
+      "id": "create_to_group",
+      "labelKey": "workflow.transition.create_to_group",
+      "$comment": "§8.1, §6.2 (М1, план 88). Источник прислал событие, у правила-победителя есть дежурная группа (incident.ruleDutyGroup), и в ней кто-то может принять сейчас (ruleAddressing = group): инцидент появляется сразу «Ожидает принятия» у группы — владельца нет, уровень эскалации 0, число передач 0. Норматив реакции — от появления, как у create. Уведомление группе — как при передаче (transfer). Дальше — по действующим правилам, новых переходов нет: группа, из которой все вышли, ждёт норматива реакции и автоэскалации (§9).",
+      "from": [],
+      "to": "pending_acceptance",
+      "trigger": "event",
+      "actor": "dispatcher",
+      "guards": [{ "fn": "ruleAddressingIs", "args": ["group"] }],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": ["''"] },
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["incident.ruleDutyGroup"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["escalationLevel", "0"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.create_to_group"] },
+        { "kind": "external", "fn": "notify", "args": ["addressee(incident)"] }
+      ],
+      "ui": { "surface": [] }
+    },
+    {
+      "id": "rule_group_cannot_accept",
+      "labelKey": "workflow.transition.rule_group_cannot_accept",
+      "$comment": "§8.1, §6.2 (М1, план 88). Источник прислал событие, у правила-победителя есть дежурная группа, но принять в ней сейчас некому — или группы уже нет (ruleAddressing = queue): инцидент появляется «Новым» в общей очереди, как у create, а получателю оповещений — оповещение с номером инцидента и названием группы ({ruleGroupName}): в пустой группе инцидент не ждёт.",
+      "from": [],
+      "to": "new",
+      "trigger": "event",
+      "actor": "dispatcher",
+      "guards": [{ "fn": "ruleAddressingIs", "args": ["queue"] }],
+      "effects": [
+        { "kind": "transactional", "fn": "setOwner", "args": ["''"] },
+        { "kind": "transactional", "fn": "setAssignmentGroup", "args": ["''"] },
+        { "kind": "transactional", "fn": "setFlag", "args": ["escalationLevel", "0"] },
+        { "kind": "transactional", "fn": "startTimer", "args": ["reaction"] },
+        { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.rule_group_cannot_accept"] },
+        { "kind": "external", "fn": "notify", "args": ["alerts.target", true] }
       ],
       "ui": { "surface": [] }
     },
@@ -1466,6 +1504,7 @@
     "workflow.guard.addressee_can_accept": { "vars": [] },
     "workflow.guard.no_escalation_level": { "vars": [] },
     "workflow.guard.owner_duty_group": { "vars": [] },
+    "workflow.guard.rule_addressing": { "vars": [] },
     "workflow.guard.agent_online": { "vars": [] },
     "workflow.guard.active_limit": { "vars": ["n", "id"] },
     "workflow.guard.active_limit_no_hold": { "vars": ["n", "id"] },
@@ -1496,6 +1535,7 @@
     "workflow.error.selection_too_large": { "vars": ["n"] },
     "workflow.error.selection_too_small": { "vars": ["n"] },
     "workflow.error.not_found": { "vars": [] },
+    "workflow.error.duty_group_in_rules": { "vars": ["rules"], "$comment": "§8.1, М1. Отказ 409 DUTY_GROUP_IN_USE при удалении дежурной группы, на которую ссылаются правила создания: rules — названия правил через запятую (details.rules)" },
     "workflow.error.read_only": { "vars": [] },
     "workflow.error.scenario.not_on_path": { "vars": [] },
     "workflow.error.scenario.not_editable": { "vars": [] },
@@ -1536,7 +1576,7 @@
   "cel": {
     "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
     "types": {
-      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "maintenanceWindowId": "string", "closeMaintenanceWindowId": "string", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string" },
+      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "maintenanceWindowId": "string", "closeMaintenanceWindowId": "string", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string", "ruleDutyGroup": "string" },
       "Timer": { "due": "int", "paused": "bool", "left": "int", "fired": "int", "since": "int" },
       "Breach": { "kind": "string", "at": "int", "owner": "string" },
       "LeftGroup": { "primaryId": "string", "linkedAt": "int", "at": "int" },
@@ -1618,6 +1658,7 @@
       "dutyGroupOf": { "params": { "who": "string" }, "returns": "string", "expr": "cel.bind(gs, dutyGroups().filter(g, who in members(g)), size(gs) > 0 ? gs[0] : '')", "$comment": "§8.1. Дежурная группа человека — первая, в которую он входит" },
       "signedIn": { "params": { "who": "string" }, "returns": "bool", "expr": "agentState(who) != 'offline'", "$comment": "§12.1. Человек вошёл в МИ: на месте или на перерыве, но не вышел (RULE-100)" },
       "canAcceptNow": { "params": { "who": "string", "x": "Incident", "except": "string" }, "returns": "bool", "expr": "isGroup(who) ? members(who).exists(m, m != except && signedIn(m) && canAcceptPerson(m, x)) : canAcceptPerson(who, x) && (signedIn(who) || cel.bind(g, dutyGroupOf(who), g != '' && members(g).exists(m, m != except && m != who && signedIn(m) && canAcceptPerson(m, x))))", "$comment": "§8.3, RULE-100. Адресат уровня эскалации может принять сейчас: как canAccept, и принимающий не вышел из МИ; вышедшему человеку инцидент уйдёт его дежурной группе (addressee_signed_out_to_group) — уровень доступен, если в ней кто-то, кроме except, не вышел и может принять. Перерыв не мешает (§12.1)" },
+      "ruleAddressing": { "params": { "x": "Incident" }, "returns": "string", "expr": "x.ruleDutyGroup == '' ? 'none' : canAcceptNow(x.ruleDutyGroup, x, '') ? 'group' : 'queue'", "$comment": "§8.1, М1. Адресация инцидента при появлении по дежурной группе правила-победителя (ruleDutyGroup): none — у правила нет группы (create), group — в группе кто-то вошёл в МИ, видит устройство-источник и может принять (canAcceptNow; create_to_group), queue — принять некому или группы уже нет (rule_group_cannot_accept). При пустой группе фактов мира не спрашивает (план 84)" },
       "nextLevels": { "params": { "x": "Incident" }, "returns": "list<Level>", "expr": "escalation.levels.filter(l, l.level > x.escalationLevel && l.level <= escalation.maxLevel && l.target != addressee(x) && canAcceptNow(l.target, x, x.owner))", "$comment": "§8.3. Уровни автоэскалации выше текущего и не выше потолка, адресат которых может принять сейчас (canAcceptNow, RULE-100); уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)" },
       "closeOptions": { "params": { "who": "string", "x": "Incident", "surface": "string" }, "returns": "list<CloseResultItem>", "expr": "closeResults.filter(i, can(who, i.permission) && x.state in i.fromStates && !(x.state in i.ownerOnlyInStates && x.owner != who) && (surface == '' || size(i.surfaces) == 0 || surface in i.surfaces))", "$comment": "§2.2. Результаты закрытия, которые этот оператор может выбрать для инцидента" },
       "causeOk": { "params": { "r": "string", "c": "string" }, "returns": "bool", "expr": "closeResults.exists(i, i.id == r && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && causeCatalogs[i.causeCatalog].items.exists(x, x.id == c))", "$comment": "§2.2, ТЗ-4. Причина c есть в справочнике причин (causeCatalog) результата r; у результата без справочника — нет" },
@@ -1660,7 +1701,7 @@
   },
 
   "intake": {
-    "$comment": "§14.5, ARCH-15. Как событие становится инцидентами; исполняет сервер, смысл — определения машины, имена — отсюда. 1) Событие с тем же guid уже есть — ничего не создаётся, ответ — прежние инциденты. 2) Подошедшие правила — match (правило без сценария не подходит). 3) Для каждого сценария подошедших правил — один инцидент; правило-победитель — первое из winner, от него приоритет и ruleGuid; сценарий — последняя версия. Ключ уникальности — uniqueKey, поля Incident, которые известны до создания: eventGuid, eventType, scenario; сейчас — событие + сценарий. На ключ — один инцидент: из тех, у кого ключ совпал, создаётся первый по порядку создания (п. 4), так исполняют и сервер, и модель Quint (PROC-93). 4) Все инциденты события и запись события — одной транзакцией, каждый — переходом create; порядок создания и номеров: чей победитель старше (ruleBeats) — раньше, сценарии одного правила — по порядку его списка; номер тревоги события — номер первого созданного. 5) Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано как обработанное. ruleOrder — поле Rule, по которому упорядочен список правил перед выбором (по возрастанию, guid — строкой в нижнем регистре): им решается полное равенство в ruleBeats — и победитель, и порядок создания. Порядок строк в базе не задан, поэтому список упорядочивается явно; в CEL это не выражение — строки в Quint только сравниваются на равенство.",
+    "$comment": "§14.5, ARCH-15. Как событие становится инцидентами; исполняет сервер, смысл — определения машины, имена — отсюда. 1) Событие с тем же guid уже есть — ничего не создаётся, ответ — прежние инциденты. 2) Подошедшие правила — match (правило без сценария не подходит). 3) Для каждого сценария подошедших правил — один инцидент; правило-победитель — первое из winner, от него приоритет и ruleGuid; сценарий — последняя версия. Ключ уникальности — uniqueKey, поля Incident, которые известны до создания: eventGuid, eventType, scenario; сейчас — событие + сценарий. На ключ — один инцидент: из тех, у кого ключ совпал, создаётся первый по порядку создания (п. 4), так исполняют и сервер, и модель Quint (PROC-93). 4) Все инциденты события и запись события — одной транзакцией, каждый — одним из переходов create (по ruleAddressing, $commentAddressing); порядок создания и номеров: чей победитель старше (ruleBeats) — раньше, сценарии одного правила — по порядку его списка; номер тревоги события — номер первого созданного. 5) Не подошло ни одно правило — инцидентов и номера тревоги нет, событие записано как обработанное. ruleOrder — поле Rule, по которому упорядочен список правил перед выбором (по возрастанию, guid — строкой в нижнем регистре): им решается полное равенство в ruleBeats — и победитель, и порядок создания. Порядок строк в базе не задан, поэтому список упорядочивается явно; в CEL это не выражение — строки в Quint только сравниваются на равенство.",
     "uniqueKey": ["eventGuid", "scenario"],
     "ruleOrder": "guid",
     "windows": "windowsAfterWinners",
@@ -1668,7 +1709,8 @@
     "$commentWindows": "§14.5 п. 6, §14.12, ТЗ-21. Окна работ проверяются после выбора правил-победителей: событие без победителя остаётся «не сработало», окно о нём не говорит. Вход — интервалы окон организации на момент события (MaintenanceWindow): разовое окно — один интервал [начало, конец), повтор — интервалы дней повтора вокруг времени события, развёрнутые по часовому поясу окна (§14.12); досрочно завершённое — с концом в момент завершения. Event.at — время события, мс. Есть хоть один победитель и windows вернул непустой список — по maintenance.mode: suppress — инцидентов нет; mark — инциденты с maintenanceWindowId первого окна и низшим приоритетом справочника. Окно другой организации во вход не попадает. Определения: windows — windowsAfterWinners(winners, ws, e): winners — число инцидентов, которые дали бы победители; outcome — maintenanceOutcome(winners, ws, e): режим или пусто. Итог (режим и id окна) сохраняется с событием при приёме; повтор события идёт в прежние инциденты до окон (п. 1).",
     "match": "ruleMatches",
     "winner": "ruleFor",
-    "create": "create"
+    "create": ["create", "create_to_group", "rule_group_cannot_accept"],
+    "$commentAddressing": "§8.1, §14.5 п. 3–4, М1. Какой из переходов create выполняет инцидент, решает определение ruleAddressing: ровно у одного из них условие ruleAddressingIs выполнено. Сервер ставит инциденту ruleDutyGroup — дежурную группу его правила-победителя (поле правила, '' — нет группы); у соседей события она своя. При пустой группе — create, фактов мира не нужно (у правила без группы ни одного нового запроса, план 84). Группа задана — факты мира того же заказчика: isGroup(группа) — группа есть; members(группа) — её участники сейчас; agentState(участник) — состояние сессии (signedIn — не offline); can(участник, 'incident:accept') и access(участник, инцидент) — право и доступ к устройству-источнику по группам доступа (§5). Сессии участников сервер читает в транзакции приёма под FOR SHARE: выход участника ждёт её конца, и итог не устаревает до commit; блокировки — в порядке «сессии → счётчик номеров». Итог (group или queue) и название группы на момент приёма сохраняются с событием для «Почему?» (§12.5) и не пересчитываются; повтор события (п. 1) ничего не пересчитывает. В окне работ mark адресация действует, в suppress инцидентов нет и итога адресации нет. После появления новых переходов нет: группа, из которой все вышли, ждёт норматива реакции и автоэскалации (§9)."
   },
 
   "registries": {
@@ -1693,6 +1735,7 @@
       { "fn": "agentIdleFor", "args": ["seconds"], "argTypes": { "seconds": "setting" }, "expr": "idleSec(me) >= seconds", "onFail": "disable", "failKeys": ["workflow.guard.agent_online"], "extendsBaseRegistry": true, "$comment": "§12.3. Сессия оператора не присылает признак активности не меньше заданного; аргумент — путь к настройке в секундах." },
       { "fn": "addresseeHasAccess", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "addressee(incident) != '' && hasAccess(addressee(incident), incident) == expected", "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_access'", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.addressee_access"], "extendsBaseRegistry": true, "$comment": "§5. Есть ли у владельца или адресата инцидента доступ к его объекту: человеку — по ролям, группе-адресату — хотя бы у одного участника. Инцидент без адресата условию false не отвечает." },
       { "fn": "addresseeCanAccept", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "addressee(incident) != '' && canAccept(addressee(incident), incident, '') == expected", "failKey": "addressee(incident) == '' ? 'workflow.guard.no_addressee' : 'workflow.guard.addressee_can_accept'", "onFail": "hide", "failKeys": ["workflow.guard.no_addressee", "workflow.guard.addressee_can_accept"], "extendsBaseRegistry": true, "$comment": "§8.1. Может ли владелец или адресат инцидента принять: право incident:accept и доступ к объекту; группе-адресату — хотя бы у одного участника и то, и другое. Инцидент без адресата условию false не отвечает." },
+      { "fn": "ruleAddressingIs", "args": ["expected"], "argTypes": { "expected": "string" }, "expr": "ruleAddressing(incident) == expected", "onFail": "hide", "failKeys": ["workflow.guard.rule_addressing"], "extendsBaseRegistry": true, "$comment": "§8.1, М1. Адресация появляющегося инцидента по дежурной группе правила (ruleAddressing) равна аргументу: none, group или queue. У каждого перехода появления (intake.create) — ровно одно такое условие." },
       { "fn": "ownerHasDutyGroup", "args": ["expected"], "argTypes": { "expected": "bool" }, "expr": "(incident.owner != '' && dutyGroupOf(incident.owner) != '') == expected", "onFail": "hide", "failKeys": ["workflow.guard.owner_duty_group"], "extendsBaseRegistry": true, "$comment": "§8.1. Состоит ли владелец-человек в дежурной группе: true — да, false — нет. Его группа — определение dutyGroupOf." },
       { "fn": "withinActiveLimit", "errorCode": "LIMIT_EXCEEDED", "args": [], "argTypes": {}, "expr": "limits.maxActive == 0 || countMine(me, 'in_progress', incident.id) < limits.maxActive", "failVars": { "n": "limits.maxActive", "id": "mineOf(me, 'in_progress', incident.id)[0].number" }, "failKey": "can(me, 'incident:hold') && (limits.maxOnHold == 0 || countMine(me, 'on_hold', '') < limits.maxOnHold) ? 'workflow.guard.active_limit' : 'workflow.guard.active_limit_no_hold'", "onFail": "disable", "failKeys": ["workflow.guard.active_limit", "workflow.guard.active_limit_no_hold"], "$comment": "§10.2. Сколько инцидентов уже в работе, не считая самого инцидента; привязанные инциденты объединённого в лимит не входят — у них нет владельца. Подсказка — по тому, что сейчас возможно: «отложите» — только если «Отложить» доступна, есть право и лимит отложенных не исчерпан (BUG-104)." },
       { "fn": "hasHoldReasons", "args": [], "argTypes": {}, "expr": "holdReasons.exists(r, r.setBy != 'system')", "onFail": "hide", "failKeys": ["workflow.guard.no_hold_reasons"], "extendsBaseRegistry": true, "$comment": "§4, решение 2026-11-15. В справочнике причин удержания есть причина оператора: срок удержания — от причины, без причин отложить нельзя. Пунктов в машине нет — их заводит администратор поста" },

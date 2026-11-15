@@ -641,8 +641,30 @@ def check_intake(w, err):
         err.append("машина: intake.match — определение должно давать bool")
     if defs.get(intake.get("winner"), {}).get("returns") != "list<Rule>":
         err.append("машина: intake.winner — определение должно давать list<Rule>")
-    if not any(t["id"] == intake.get("create") and t.get("trigger") == "event" for t in w["transitions"]):
-        err.append(f"машина: intake.create — нет перехода {intake.get('create')} с trigger: event")
+    # Появление — один из переходов intake.create по адресации правила-победителя (§8.1, М1): каждый — trigger: event
+    # без исходного состояния, других переходов появления нет; у каждого ровно одно условие ruleAddressingIs, и
+    # значения none, group, queue покрыты по одному разу — из трёх выполняется ровно один
+    create = intake.get("create")
+    by_id = {t["id"]: t for t in w["transitions"]}
+    if not isinstance(create, list) or not create:
+        err.append(f"машина: intake.create {create!r} — нужен список переходов появления (§14.5, §8.1)")
+    else:
+        for i in create:
+            t = by_id.get(i)
+            if t is None or t.get("trigger") != "event" or t.get("from") != []:
+                err.append(f"машина: intake.create — нет перехода {i} с trigger: event и from: [] (§14.5)")
+        for t in w["transitions"]:
+            if t.get("trigger") == "event" and t["id"] not in create:
+                err.append(f"машина: переход {t['id']} с trigger: event не в intake.create (§14.5)")
+        seen = []
+        for i in create:
+            g = [x for x in by_id.get(i, {}).get("guards", []) if x.get("fn") == "ruleAddressingIs"]
+            if len(g) != 1:
+                err.append(f"машина: intake.create — у {i} условий ruleAddressingIs {len(g)}, нужно ровно одно (§8.1)")
+                continue
+            seen.append(str(g[0].get("args", [""])[0]).strip("'\""))
+        if sorted(seen) != ["group", "none", "queue"]:
+            err.append(f"машина: intake.create — адресация {sorted(seen)}, нужно по одному разу none, group, queue (§8.1)")
     key = intake.get("uniqueKey")
     if not isinstance(key, list) or not key or any(k not in fields for k in key):
         err.append(f"машина: intake.uniqueKey {key} — нужны поля Incident (§14.5)")
@@ -665,9 +687,14 @@ def check_open_questions(err):
     start = text.index("\n## 15. Открытые вопросы")
     end = text.index("Решённые вопросы", start)
     section = text[start:end]
-    for words in ("цепочка эскалации по службе", "дежурной группе правила"):
+    for words in ("цепочка эскалации по службе",):
         if words not in section:
             err.append(f"правила, §15: нет вопроса «{words}» (ARCH-15)")
+    # Решённые вопросы этапа 1б тоже не теряются: стоят в таблице «Решённые вопросы» с местом решения
+    resolved = text[end:text.index("\n## ", end)]
+    for words in ("дежурной группе правила",):
+        if words not in resolved:
+            err.append(f"правила, §15: вопрос «{words}» решён (М1, план 88), но его нет в «Решённых вопросах» (ARCH-15)")
 
 
 def check_layers(err):
@@ -765,8 +792,12 @@ def check_rules_diagram(w, err):
     drawn = set(re.findall(r"^\s*(\w+) --> (\w+)", block, re.M))
     initial = [s["id"] for s in w["states"] if s.get("initial")]
     starts = re.findall(r"^\s*\[\*\] --> (\w+)", block, re.M)
-    if initial and starts != initial[:1]:
-        err.append(f"диаграмма §3 правил: начало [*] ведёт в {starts}, а начальное состояние машины — {initial[0]} (RULE-46)")
+    # Первая стрелка из [*] — в начальное состояние; остальные — куда ведут другие переходы появления (from: [],
+    # §8.1, М1): create_to_group — сразу в pending_acceptance
+    appear = {t["to"] for t in w["transitions"] if t.get("from") == [] and t.get("to")}
+    if initial and (starts[:1] != initial[:1] or set(starts) != appear | set(initial[:1]) or len(set(starts)) != len(starts)):
+        err.append(f"диаграмма §3 правил: начало [*] ведёт в {starts}, а нужно в начальное состояние машины {initial[0]} "
+                   f"и туда, куда ведут переходы появления: {sorted(appear)} (RULE-46)")
     for t in w["transitions"]:
         if not t.get("to"):
             continue
@@ -981,7 +1012,7 @@ def check_doc_numbers(w, o, err):
     num = lambda v: words.get(v, int(v) if v.isdigit() else -1)
     checks = [
         ("README машины", r"\*\*OpenAPI 3\.1\*\* — (\d+) адрес\w*, (\d+) операц\w*, (\d+) схем", [("адресов", len(o["paths"])), ("операций", len(ops)), ("схем", len(o["components"]["schemas"]))]),
-        ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w* \+ появление\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(automatic(w))), ("форм", len(w["forms"]))]),
+        ("README машины", r"(\d+) переход\w* \((\d+) ручн\w* \+ (\d+) автоматическ\w* \+ (\d+) переход\w* появления\), (\d+) форм", [("переходов", len(w["transitions"])), ("ручных", manual), ("автоматических", len(automatic(w))), ("появления", sum(1 for t in w["transitions"] if t["trigger"] == "event")), ("форм", len(w["forms"]))]),
         ("README машины", r"описывает (\w+) служебн\w+ операц", [("служебных операций", test_ops)]),
         ("README машины", r"Нужны (\w+) операц\w* выше", [("служебных операций", test_ops)]),
         ("README машины", r"приведена к v(\d+)", [("версия правил", version)]),

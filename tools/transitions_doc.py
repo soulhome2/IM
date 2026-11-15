@@ -66,6 +66,7 @@ REVIEWED = {
     "isTarget": "71cd9932",
     "mergePrimaryValid": "b4e339d8",
     "ownerHasDutyGroup": "04004c43",
+    "ruleAddressingIs": "4821af4d",
     "primaryAddresseeHasAccess": "a22463d9",
     "primaryClosed": "ca2d9ec1",
     "primaryEditable": "b860780a",
@@ -144,6 +145,8 @@ class Doc:
             return "я — кто выполнил"
         if v == "dutyGroupOf(incident.owner)":
             return "дежурная группа владельца"
+        if v == "incident.ruleDutyGroup":
+            return "дежурная группа правила (`ruleDutyGroup`)"
         source = "адресат из формы" if "form." in v else "адресат уровня эскалации"
         return f"{source}, если это {kind}"
 
@@ -171,6 +174,7 @@ class Doc:
             "agentReady": lambda: "я не на перерыве и не вышел",
             "agentStateIs": lambda: f"состояние оператора — «{self.agent.get(a[0], a[0])}»",
             "ownerHasDutyGroup": lambda: "владелец состоит в дежурной группе" if a[0] else "владелец не состоит ни в одной дежурной группе",
+            "ruleAddressingIs": lambda: {"none": "у правила нет дежурной группы", "group": "в дежурной группе правила кто-то вошёл и может принять", "queue": "у правила есть дежурная группа, но принять в ней некому"}.get(a[0], f"адресация по группе правила — {a[0]}"),
             "agentIdleFor": lambda: f"оператор не присылает признак активности дольше {self.setting(a[0])} с",
             "withinActiveLimit": lambda: f"лимит активных не исчерпан ({self.setting('limits.maxActive')})",
             "hasHoldReasons": lambda: "у поста заведены причины удержания",
