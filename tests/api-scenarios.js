@@ -187,7 +187,7 @@
     assert.ok(res.body.message.includes(res.body.current.owner.name), `текст называет взявшего: ${res.body.message}`);
   });
 
-  test("Закрыл коллега — 412 про состояние «Закрыт», а не «взял»: состояние сверяется раньше адресата (§14.1, §22.6, RULE-142)", async () => {
+  test("Закрыл коллега — 412 про состояние «Закрыт», а не «взял»: закрытый — всегда состояние (§14.1, §22.6, RULE-142)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     const before = await env.card(inc.guid);

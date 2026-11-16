@@ -382,6 +382,8 @@ MUTATIONS = [
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
     ("ui-no-expected", "app.js", "  const seenOf = (ev) =>\n    ev.seenAtMark", "  const seenOf = () => ({});\n  const seenOfUnused = (ev) =>\n    ev.seenAtMark", "ui"),
     # Один отмеченный не на странице — шлётся снимок на момент отметки, а не перечитанная карточка (RULE-142, A2)
+    # После 412 снимок отметки забывается: повтор идёт по нынешнему, а не снова 412 (BUG-106, RULE-142)
+    ("ui-mark-kept-after-412", "app.js", "      if (err && err.problem && err.problem.code === \"INCIDENT_CHANGED\") checkedSeen.delete(ev.guid);\n", "", "ui"),
     ("ui-mark-snapshot-ignored", "app.js", "    ev.seenAtMark\n      ? {", "    false\n      ? {", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");', 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)

@@ -4910,7 +4910,7 @@
       }
     });
 
-    await step("Одно отмеченное не на странице, после отметки его отложили в другой вкладке — «Вернуть в очередь» панели не уводит его: сверяется снимок отметки (§14.1, BUG-84, RULE-142)", async () => {
+    await step("Одно отмеченное не на странице, после отметки его отложили в другой вкладке — «Вернуть в очередь» панели не уводит его: сверяется снимок отметки; повтор после отказа проходит (§14.1, BUG-84, BUG-106, RULE-142)", async () => {
       if (mode() !== "queue") await click($("backToQueue"));
       const stand = window.IM_SELFTEST_API;
       let g = null;
@@ -4940,6 +4940,15 @@
         await wait();
         const now = (await stand.raw("GET", path)).body;
         expect(now.state === "on_hold", `после «Вернуть в очередь» по устаревшей отметке: ${now.state}`);
+        // Причину оператор увидел — повтор идёт по нынешнему снимку и проходит, а не снова 412 (BUG-106, RULE-142)
+        const again = $("selBar").querySelector('[data-sel-do="release"]');
+        expect(again && !off(again), "после отказа в панели выборки нет «Вернуть в очередь»");
+        await click(again);
+        await wait();
+        if (!$("modalDialog").hidden) await confirmDialog(NOTE);
+        await wait();
+        const after = (await stand.raw("GET", path)).body;
+        expect(after.state !== "on_hold", `повтор после отказа: ${after.state}; ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
         return now.number;
       } finally {
         if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

@@ -2003,6 +2003,8 @@
       // Изменилось то, что видел оператор (412 INCIDENT_CHANGED, RULE-142): карточка — из ответа, без второго запроса
       const current = err && err.problem && err.problem.code === "INCIDENT_CHANGED" ? err.problem.current : null;
       if (current && store.card && store.card.guid === current.guid) store.card = current;
+      // Снимок отметки устарел, причину оператор увидел — повтор по нынешнему снимку, а не снова 412 (BUG-106)
+      if (err && err.problem && err.problem.code === "INCIDENT_CHANGED") checkedSeen.delete(ev.guid);
       // Опоздал — инцидент уже у другого: мягкое «Уже взял Петров», уходит само (§8.1, §22.6); иначе — ошибка до «✕»
       // с текстом сервера: что изменилось («Пришло новое событие — проверьте»)
       const late = lateText(id, err, store.session && store.session.operator.guid);
