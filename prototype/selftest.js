@@ -3137,6 +3137,75 @@
       }
     });
 
+    await step("Эскалация: метка «Эскалация: <название уровня>» в строке и в заголовке карточки, подсказка «шаг N из M», на втором шаге — где не взяли; запись журнала с названием (§8.3)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const esc = window.IM_WORKFLOW.escalation;
+      const [l1, l2] = esc.levels;
+      expect(l1 && l2 && l1.name && l2.name, `у уровней поставки нет названий: ${JSON.stringify(esc.levels)}`);
+      // Уровень 1 — я: эскалированный инцидент приходит мне на принятие; уровень 2 — как в поставке
+      const levels = [Object.assign({}, l1, { targetKind: "user", target: "me" }), l2];
+      const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
+      // Часы — за реакцию и окно после дедлайна, шагами короче порога «нет связи», перед каждым — признак активности
+      async function overdue(guid) {
+        const due = Date.parse((await stand.get(`/operator/incidents/${encodeURIComponent(guid)}`)).timer.dueAt);
+        let left = Math.ceil((due - Date.parse((await stand.raw("POST", "/test/clock", { advanceSec: 0 })).body.now)) / 1000) + grace + 1;
+        for (; left > 0; left -= 240) {
+          await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
+          await stand.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
+        }
+        await wait(300);
+        return stand.get(`/operator/incidents/${encodeURIComponent(guid)}`);
+      }
+      const chipOf = async (guid) => {
+        const row = await rowOnPages(guid);
+        return row && row.querySelector(".chip.lvl");
+      };
+      try {
+        await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }), limits: { maxActive: null } } });
+        await wait(300);
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
+        const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
+        const created = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: 25, deviceIds: [source] });
+        expect(created.status === 201, `инцидент не появился: ${created.status}`);
+        const guid = created.body.guid;
+        expect(!(await chipOf(guid)), "у неэскалированного (уровень 0) — метка эскалации");
+        const one = await overdue(guid);
+        expect(one.escalationLevel === 1 && one.state === "pending_acceptance", `после реакции: уровень ${one.escalationLevel}, ${one.state}`);
+        const entry = one.journal.find((j) => j.templateKey === "workflow.journal.auto_escalate");
+        expect(entry && entry.text.includes(`«${l1.name}», шаг 1`), `запись журнала: ${entry ? entry.text : "нет"}`);
+        const c1 = await chipOf(guid);
+        expect(c1 && c1.textContent.trim() === `Эскалация: ${l1.name}` && c1.title === `Автоэскалация, шаг 1 из ${esc.maxLevel}`, `уровень 1: «${c1 ? c1.textContent : "нет"}», подсказка «${c1 ? c1.title : ""}»`);
+        const two = await overdue(guid);
+        expect(two.escalationLevel === 2, `после второй реакции: уровень ${two.escalationLevel}, ${two.state}`);
+        const c2 = await chipOf(guid);
+        const tip2 = `Автоэскалация, шаг 2 из ${esc.maxLevel} — не взят вовремя на шаге «${l1.name}»`;
+        expect(c2 && c2.textContent.trim() === `Эскалация: ${l2.name}` && c2.title === tip2, `уровень 2: «${c2 ? c2.textContent : "нет"}», подсказка «${c2 ? c2.title : ""}»`);
+        // Заголовок карточки — та же метка
+        const row = await rowOnPages(guid);
+        await click(row.querySelector('[data-do="view"], [data-do="open_card"]'));
+        expect(mode() === "work", "карточка не открылась");
+        const head = $("workTitle").querySelector(".chip.lvl");
+        expect(head && head.textContent.trim() === `Эскалация: ${l2.name}` && head.title === tip2, `заголовок карточки: «${head ? head.textContent : "нет"}»`);
+        await click($("backToQueue"));
+        // Уровень без названия — «Уровень N»
+        await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels: [Object.assign({}, levels[0], { name: "  " }), l2] }), limits: { maxActive: null } } });
+        await wait(300);
+        await setFilter("open");
+        const plain = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: 25, deviceIds: [source] });
+        const p1 = await overdue(plain.body.guid);
+        const pe = p1.journal.find((j) => j.templateKey === "workflow.journal.auto_escalate");
+        const c0 = await chipOf(plain.body.guid);
+        expect(c0 && c0.textContent.trim() === "Эскалация: Уровень 1" && pe && pe.text.includes("«Уровень 1», шаг 1"), `без названия: «${c0 ? c0.textContent : "нет"}», журнал «${pe ? pe.text : "нет"}»`);
+        return `${c1.textContent.trim()}; ${c2.title}`;
+      } finally {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Комментарий в окне после дедлайна реакции не отменяет автоэскалацию (ТЗ-18, §10.1, правило 5; RULE-83)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
@@ -4922,8 +4991,18 @@
       window.dispatchEvent(new Event("im-sound-tick"));
       await wait();
     };
-    // «Звук не включён», «Только важное» — пункты строки поста (§22.4), «Звучит» — строка звука
-    const soundLine = (kind) => document.querySelector(`#postStatus [data-sound-line="${kind}"], #soundBar [data-sound-line="${kind}"]`);
+    // «Звук не включён», «Только важное» — пункты строки поста (§22.4)
+    const soundLine = (kind) => document.querySelector(`#postStatus [data-sound-line="${kind}"]`);
+    // Что-то звучит (§21.4): значок звука звенит, слева «Тихо»; звучащая строка — значок динамика (§22.3)
+    const ringOn = () => $("soundBtn").dataset.ringing === "on";
+    const ringGuid = () => (ringOn() ? $("soundBtn").dataset.soundGo : null);
+    const quietBtn = () => ($("soundQuiet").hidden ? null : $("soundQuiet").querySelector("[data-sound-silence]"));
+    const rowSoundOf = (guid) => document.querySelector(`#eventsList [data-id="${CSS.escape(guid)}"] [data-row-sound]`);
+    // Меню звука — щелчком по значку; пока значок звенит, он ведёт к звучащему, поэтому сначала «Тихо» (§21.4)
+    async function soundMenuOpen() {
+      if (quietBtn()) await click(quietBtn());
+      await click($("soundBtn"));
+    }
     const DEV5 = "20000000-0002-4000-8000-000000000005";
     // Инцидент нужного приоритета от встроенного сервера: появление — событием потока incident.created
     async function soundIncident(priority) {
@@ -4965,7 +5044,7 @@
     });
 
     await step("Звук: «Только важное — 5 мин» — значок 🔉, строка «до ЧЧ:ММ · Вернуть»; Высокий молчит, после «Вернуть» — звучит (§21.4)", async () => {
-      await click($("soundBtn"));
+      await soundMenuOpen();
       const item = $("soundPop").querySelector("[data-sound-important]");
       expect(!$("soundPop").hidden && item, "меню звука не открылось");
       expect(item.textContent.includes(String(window.IM_WORKFLOW.sound.muteMinutes)), `пункт меню: «${item.textContent}»`);
@@ -4992,7 +5071,7 @@
       return wait();
     };
     async function onlyImportantOn() {
-      await click($("soundBtn"));
+      await soundMenuOpen();
       await click($("soundPop").querySelector("[data-sound-important]"));
     }
     async function postCleanup() {
@@ -5073,9 +5152,9 @@
       }
     }, POST_STEP);
 
-    await step("Шапка: строка поста и «Звучит» не меняют её высоту на 1560, 1280 и 1024 px; при «Звучит» со «скрыт фильтром» от пункта поста видны значок и кнопки, «Тихо» на месте (§22.1, §22.4)", async () => {
+    await step("Шапка: строка поста и звенящий значок с «Тихо» не меняют её высоту на 1560, 1280 и 1024 px; на телефоне значок и «Тихо» — в первой строке; от пункта поста видны значок и кнопки (§21.4, §22.1, §22.4)", async () => {
       // Разметка — с экрана: «Только важное» с «Вернуть»; два состояния («Нет связи» и «и ещё 1»); длинный текст работ;
-      // самая длинная строка «Звучит» — со «скрыт фильтром · Показать»
+      // звенит — значок звука красный, слева «Тихо»
       let oneHtml = "";
       let twoHtml = "";
       try {
@@ -5088,20 +5167,16 @@
       }
       expect(/data-sound-back/.test(oneHtml) && /и ещё 1/.test(twoHtml), `нет пунктов: ${oneHtml.slice(0, 80)} / ${twoHtml.slice(0, 80)}`);
       const longText = "Идут плановые работы: Камера 12 на складе готовой продукции — «замена датчика дыма в зоне погрузки», до 14:00.";
-      const ring =
-        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: Критический,</span> <button type="button" class="link-btn" data-sound-go>INC-2210</button><span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">скрыт фильтром</span><span class="hid-short">скрыт</span></span> · <button type="button" class="link-btn" data-sound-show>Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
-      // Без «скрыт фильтром»: номер звучащего — тоже на виду
-      const ringPlain = ring.replace(/<span class="sound-hid">.*?<\/button><\/span>/, "");
       const bar = document.querySelector(".topbar").cloneNode(true);
       bar.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       bar.querySelector(".post-status").setAttribute("hidden", "");
       bar.querySelector(".post-status").innerHTML = "";
-      bar.querySelectorAll(".sound-bar .sound-line").forEach((el) => el.remove());
       const base = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
       // Шрифт значков в headless не грузится — значок рисуется словом («notifications»); ширина — как у шрифта, 24 px
       const icons = ".material-symbols-outlined { display: inline-block; width: 24px; overflow: hidden; white-space: nowrap; }";
       const out = [];
-      for (const width of [1560, 1280, 1024]) {
+      for (const width of [1560, 1280, 1024, 360]) {
+        const phone = width <= 600;
         const frame = document.createElement("iframe");
         frame.style.cssText = `position:fixed;left:-9999px;top:0;width:${width}px;height:300px;border:0`;
         const loaded = new Promise((resolve) => {
@@ -5115,15 +5190,18 @@
           const doc = frame.contentDocument;
           const top = doc.querySelector(".topbar");
           const ps = doc.querySelector(".post-status");
-          const sb = doc.querySelector(".sound-bar");
+          const btn = doc.querySelector(".topbar-actions .sound-btn");
+          const quiet = doc.querySelector(".sound-quiet");
+          const bell = doc.querySelector(".bell-btn");
           const rect = (el) => el.getBoundingClientRect();
           const h = () => Math.round(rect(top).height * 10) / 10;
           const set = (post, long, ringOn) => {
             ps.innerHTML = post || "";
             ps.hidden = !post;
             if (post && long) ps.querySelector(".post-text").textContent = longText;
-            sb.querySelectorAll(".sound-line").forEach((el) => el.remove());
-            if (ringOn) sb.insertAdjacentHTML("beforeend", ringOn === "plain" ? ringPlain : ring);
+            btn.dataset.ringing = ringOn ? "on" : "off";
+            quiet.innerHTML = ringOn ? '<button type="button" class="btn small outline" data-sound-silence>Тихо</button>' : "";
+            quiet.hidden = !ringOn;
             window.IM_SELFTEST_UI.fitHead(doc);
             return h();
           };
@@ -5133,31 +5211,34 @@
             return a.width > 0 && a.left >= b.left - 1 && a.right <= b.right + 1;
           };
           const empty = set("", false, false);
-          const got = { one: set(oneHtml, false, false), two: set(twoHtml, false, false), long: set(twoHtml, true, false), ring: set("", false, true) };
-          // Пункт поста при «Звучит»: значок виден, кнопки пункта — в рамке строки поста, «Тихо» и «Показать» — в рамке «Звучит»
-          for (const [name, html, kind] of [["one", oneHtml, true], ["two", twoHtml, true], ["one-plain", oneHtml, "plain"], ["two-plain", twoHtml, "plain"]]) {
-            got[`${name}+ring`] = set(html, true, kind);
-            const go = sb.querySelector("[data-sound-go]");
-            expect(inside(go, sb) && rect(go).width >= 30, `${width} px, ${name}: номер звучащего не виден (${Math.round(rect(go).width)} px)`);
-            const item = ps.querySelector(".post-item");
-            const seen = Math.min(rect(item).right, rect(ps).right) - Math.max(rect(item).left, rect(ps).left);
-            expect(seen >= 24, `${width} px, ${name} при «Звучит»: от пункта поста видно ${Math.round(seen)} px`);
-            const icon = item.querySelector('[aria-hidden="true"]');
-            expect(inside(icon, ps), `${width} px, ${name}: значок пункта обрезан`);
-            item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(inside(b, ps), `${width} px, ${name}: кнопка пункта «${b.textContent.trim()}» вне строки поста`));
-            const show = sb.querySelector("[data-sound-show]");
-            expect(inside(sb.querySelector("[data-sound-silence]"), sb) && (!show || inside(show, sb)), `${width} px, ${name}: «Тихо» или «Показать» обрезаны`);
-            const quiet = rect(sb.querySelector("[data-sound-silence]"));
-            const line = rect(sb.querySelector(".sound-line"));
-            expect(quiet.right <= line.right + 0.5 && quiet.left >= line.left, `${width} px, ${name}: «Тихо» за рамкой «Звучит»: ${Math.round(quiet.left)}–${Math.round(quiet.right)} в ${Math.round(line.left)}–${Math.round(line.right)}`);
-            const pill = rect(item);
-            item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(rect(b).right <= pill.right + 0.5, `${width} px, ${name}: кнопка «${b.textContent.trim()}» за рамкой пункта`));
-            const actions = doc.querySelector(".topbar-actions");
-            expect(rect(ps).right <= rect(sb).left + 1 && rect(sb).right <= rect(actions).left + 1, `${width} px, ${name}: строки заходят друг на друга или на кнопки шапки`);
-            expect(item.title.length > 0, `${width} px, ${name}: у пункта нет подсказки с полным текстом`);
+          const got = { one: set(oneHtml, false, false), two: set(twoHtml, false, false), long: set(twoHtml, true, false) };
+          const bellAt = Math.round(rect(bell).left);
+          for (const [name, html] of [["ring", ""], ["one+ring", oneHtml], ["two+ring", twoHtml]]) {
+            got[name] = set(html, true, true);
+            const q = quiet.querySelector("[data-sound-silence]");
+            expect(rect(btn).width > 0 && rect(q).width > 0, `${width} px, ${name}: звенящий значок или «Тихо» не видны`);
+            // «Тихо» — слева от значка, вплотную; колокольчик на месте (§21.4)
+            expect(rect(q).right <= rect(btn).left + 1 && rect(btn).left - rect(q).right < 16, `${width} px, ${name}: «Тихо» не рядом со значком`);
+            if (!phone) expect(Math.round(rect(bell).left) === bellAt, `${width} px, ${name}: колокольчик сдвинулся ${bellAt} → ${Math.round(rect(bell).left)}`);
+            // На телефоне значок и «Тихо» — в первой строке, с колокольчиком
+            const mid = (el) => (rect(el).top + rect(el).bottom) / 2;
+            if (phone) expect(Math.abs(mid(btn) - mid(bell)) < 4 && Math.abs(mid(q) - mid(bell)) < 4, `${width} px, ${name}: значок или «Тихо» не в первой строке (${Math.round(mid(btn))}, ${Math.round(mid(q))} при колокольчике ${Math.round(mid(bell))})`);
+            if (html) {
+              const item = ps.querySelector(".post-item");
+              const icon = item.querySelector('[aria-hidden="true"]');
+              expect(inside(icon, ps), `${width} px, ${name}: значок пункта обрезан`);
+              item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(inside(b, ps), `${width} px, ${name}: кнопка пункта «${b.textContent.trim()}» вне строки поста`));
+              if (!phone) expect(rect(ps).right <= rect(doc.querySelector(".topbar-actions")).left + 1, `${width} px, ${name}: строка поста заходит на кнопки шапки`);
+              expect(item.title.length > 0, `${width} px, ${name}: у пункта нет подсказки с полным текстом`);
+            }
           }
-          const bad = Object.entries(got).filter(([, v]) => Math.abs(v - empty) > 0.5);
-          expect(empty > 0 && !bad.length, `${width} px: без пунктов ${empty} px, ${bad.map(([k, v]) => `${k} ${v} px`).join(", ")}`);
+          // Высота шапки — та же при любом наборе; на телефоне — та же, что без звона, при той же строке поста
+          if (!phone) {
+            const bad = Object.entries(got).filter(([, v]) => Math.abs(v - empty) > 0.5);
+            expect(empty > 0 && !bad.length, `${width} px: без пунктов ${empty} px, ${bad.map(([k, v]) => `${k} ${v} px`).join(", ")}`);
+          } else {
+            expect(Math.abs(got["two+ring"] - got.long) <= 0.5 && Math.abs(got.ring - empty) <= 0.5, `${width} px: высота шапки при звоне ${got.ring}/${got["two+ring"]} px, без — ${empty}/${got.long} px`);
+          }
           // Ничего не уходит за правый край шапки
           const over = [...top.querySelectorAll("*")].filter((el) => el.getClientRects().length && rect(el).right > width + 1).map((el) => el.className || el.tagName);
           expect(!over.length, `${width} px: за краем шапки ${over.slice(0, 3).join(", ")}`);
@@ -5173,16 +5254,31 @@
       const before = heard("siren");
       await soundIncident(100);
       expect(heard("siren") === before + 1, `новый Критический: сирен ${heard("siren") - before}`);
-      const ring = soundLine("ring");
-      expect(ring && ring.textContent.includes("Звучит") && ring.querySelector("[data-sound-go]"), `строка «Звучит»: ${ring ? ring.textContent : "нет"}`);
+      const crit = window.IM_FIXTURE.priorities.find((p) => p.value === 100).name.ru;
+      expect(ringOn() && quietBtn() && $("soundBtn").title.startsWith(`Звучит — ${crit}`), `значок: звенит ${ringOn()}, «Тихо» ${quietBtn() ? "есть" : "нет"}, подсказка «${$("soundBtn").title}»`);
+      expect(!$("soundBar").textContent.includes("Звучит") && !document.querySelector(".topbar [data-sound-go]:not(#soundBtn)"), `в шапке осталась строка «Звучит»: ${$("soundBar").textContent}`);
+      const inc = { guid: ringGuid() };
+      const mark = rowSoundOf(inc.guid);
+      expect(!$("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`) || (mark && mark.title === `Звучит — ${crit}`), `значок звучащей строки: ${mark ? mark.title : "нет"}`);
       await soundAdvance(45);
       expect(heard("siren") === before + 4, `за 45 с повторов ${heard("siren") - before - 1}, ждали 3`);
-      await click(soundLine("ring").querySelector("[data-sound-silence]"));
-      expect(!soundLine("ring"), "после «Тихо» строка «Звучит» осталась");
+      // Щелчок по звенящему значку — к звучащему инциденту, не меню (§21.4)
+      await click($("soundBtn"));
+      await wait(200);
+      const picked = $("eventsList").querySelector(".selected");
+      expect($("soundPop").hidden && picked && picked.dataset.id === inc.guid, `щелчок по значку: меню ${$("soundPop").hidden ? "закрыто" : "открыто"}, выбран ${picked ? picked.dataset.id : "никто"}`);
+      await click(quietBtn());
+      expect(!ringOn() && !quietBtn() && !rowSoundOf(inc.guid), "после «Тихо» значок звенит или «Тихо» и значок строки остались");
       const all = heard();
       await soundAdvance(60);
       expect(heard() === all, `после «Тихо» за 60 с прозвучало ещё ${heard() - all}`);
-      return ring.textContent.trim();
+      // Тихо — значок снова открывает меню
+      await click($("soundBtn"));
+      expect(!$("soundPop").hidden, "после «Тихо» значок не открывает меню");
+      await click($("soundBtn"));
+      // Переход прокрутил список к звучавшему — следующие шаги начинают с верха списка, как до перехода
+      $("eventsList").scrollTop = 0;
+      return $("soundIcon").textContent;
     }, SOUND_FIRST);
 
     await step("Звук: «лично вам» — передача коллегой звучит колоколом, «Принять» снимает повтор (§21.1, §21.2)", async () => {
@@ -5195,14 +5291,16 @@
       expect(sent.status === 200, `Петрова не передала мне: ${sent.status}`);
       await wait(200);
       expect(heard("bell") === before + 1, `передача мне: колоколов ${heard("bell") - before}`);
+      // Строка блока «Мне на принятие» — со значком динамика «лично вам» (§22.3)
+      const blockMark = document.querySelector(`#eventsList .inbox-block [data-id="${CSS.escape(inc.guid)}"] [data-row-sound]`);
+      expect(blockMark && blockMark.title === "Звучит — лично вам", `значок строки блока: ${blockMark ? blockMark.title : "нет"}`);
       await setFilter("inbox");
       const b = await buttonOnPages("accept", inc.guid);
       expect(b, `${inc.number} нет в «Мне на принятие»`);
       await click(b);
       await wait(200);
       if (mode() === "work") await click($("backToQueue"));
-      const ring = soundLine("ring");
-      expect(!ring || !ring.querySelector(`[data-sound-go="${inc.guid}"]`), "после «Принять» звучит принятый");
+      expect(ringGuid() !== inc.guid && !rowSoundOf(inc.guid), "после «Принять» звучит принятый");
       const bells = heard("bell");
       await soundAdvance(60);
       expect(heard("bell") === bells, `после «Принять» колоколов ещё ${heard("bell") - bells}`);
@@ -5248,8 +5346,7 @@
         release();
       }
       await wait(200);
-      const ring = soundLine("ring");
-      expect(titleN() === n0 && !(ring && ring.querySelector(`[data-sound-go="${inc.guid}"]`)), `после перечитывания: заголовок «${document.title}» (ждали ${n0}), строка «${ring ? ring.textContent : "нет"}»`);
+      expect(titleN() === n0 && ringGuid() !== inc.guid, `после перечитывания: заголовок «${document.title}» (ждали ${n0}), звучит ${ringGuid()}`);
       return inc.number;
     }, SOUND_FIRST);
 
@@ -5312,15 +5409,13 @@
         await wait(100);
       }
       expect(list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`).classList.contains("fresh"), "новая строка не подсвечена");
-      const ring = soundLine("ring");
-      expect(ring && !ring.querySelector("[data-sound-hidden]"), "строка видна, а в «Звучит» — «скрыт фильтром»");
-      await click(ring.querySelector("[data-sound-silence]"));
+      expect(ringOn() && rowSoundOf(inc.guid), "новый Критический на виду: значок не звенит или у строки нет значка динамика");
+      await click(quietBtn());
       return `${inc.number} — над ${guid}`;
     }, SOUND_FIRST);
 
-    await step("Скрыт фильтром: «Мои» + новый Критический — «скрыт фильтром · Показать», «+1» на «Открытые» и Критическом; «Показать» — строка видна (§22.3)", async () => {
-      const ring0 = soundLine("ring");
-      if (ring0) await click(ring0.querySelector("[data-sound-silence]"));
+    await step("Скрыт фильтром: «Мои» + новый Критический — значок звенит, «+1» на «Открытые» и Критическом; щелчок по значку — строка видна (§22.3)", async () => {
+      if (quietBtn()) await click(quietBtn());
       await setFilter("mine");
       // «+N» — все спрятанные звучавшие, которых ещё не видели: считаем прибавку от нового
       const openBtn = () => $("stateButtons").querySelector('[data-state="open"]');
@@ -5334,22 +5429,19 @@
       const inc = await soundIncident(100);
       await wait(150);
       try {
-        const ring = soundLine("ring");
-        expect(ring && ring.querySelector("[data-sound-hidden]") && ring.querySelector(`[data-sound-show="${inc.guid}"]`), `строка «Звучит»: ${ring ? ring.textContent : "нет"}`);
+        expect(ringGuid() === inc.guid && !$("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`), `звенит ${ringGuid()}, ждали ${inc.guid} скрытым`);
         // На узком окне «Открытые» — пункт списка состояний, на широком — кнопка
         expect(openMark() === was.open + 1, `«+1» на «Открытые»: +${openMark()}, до было +${was.open}`);
         expect(priMark(inc.priority) === was.pri + 1, `«+1» на приоритете: +${priMark(inc.priority)}, до было +${was.pri}`);
-        await click(ring.querySelector("[data-sound-show]"));
+        await click($("soundBtn"));
         await wait(200);
         const row = $("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`);
-        expect($("eventFilter").value === "open" && row, `после «Показать»: состояние ${$("eventFilter").value}, строки ${row ? "есть" : "нет"}`);
-        const after = soundLine("ring");
-        expect(!(after && after.querySelector("[data-sound-hidden]")), "после «Показать» — всё ещё «скрыт фильтром»");
-        expect(openMark() <= was.open && priMark(inc.priority) <= was.pri, `после «Показать» «+1» осталась: +${openMark()}, +${priMark(inc.priority)}`);
+        expect($("eventFilter").value === "open" && row && row.querySelector("[data-row-sound]"), `после щелчка по значку: состояние ${$("eventFilter").value}, строки ${row ? "есть" : "нет"}`);
+        expect($("soundPop").hidden, "щелчок по звенящему значку открыл меню");
+        expect(openMark() <= was.open && priMark(inc.priority) <= was.pri, `после перехода «+1» осталась: +${openMark()}, +${priMark(inc.priority)}`);
         return inc.number;
       } finally {
-        const ring = soundLine("ring");
-        if (ring) await click(ring.querySelector("[data-sound-silence]"));
+        if (quietBtn()) await click(quietBtn());
         await setFilter("open");
       }
     }, SOUND_FIRST);
@@ -5357,7 +5449,7 @@
     await step("Звук: громкость в меню не ниже порога схемы, «Проверить звук» играет с ней (§21.4)", async () => {
       const floor = window.IM_WORKFLOW.sound.volumeFloor;
       const was = window.IMSound.loadVolume();
-      await click($("soundBtn"));
+      await soundMenuOpen();
       const range = $("soundVolume");
       expect(range && Number(range.min) === floor, `ползунок: ${range ? range.min : "нет"}`);
       try {

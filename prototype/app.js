@@ -1145,33 +1145,29 @@
   let postPrev = null;
   // Что длилось при входе: ни начало, ни конец такого состояния в журнал не пишутся (§22.4)
   let postAtEntry = null;
-  // Шапка тесна (§22.1, §22.4): сначала сжимается текст «Звучит», затем текст пункта поста; почти не осталось — короткие
-  // метки: у «Звучит» — «скрыт», у пункта — значок, кнопки и «+N». root — документ (самопроверка мерит копию шапки)
+  // Шапка тесна (§22.1, §22.4): сжимается текст пункта поста; почти не осталось — от пункта значок, кнопки и «+N».
+  // Звук в середине шапки места не занимает: звенящий значок и «Тихо» — у колокольчика (§21.4). root — документ
+  // (самопроверка мерит копию шапки)
   function fitHead(root) {
     const doc = root || document;
-    const pairs = [
-      [doc.querySelector(".topbar .post-status"), doc.querySelector(".topbar .post-item")],
-      [doc.querySelector(".topbar .sound-bar"), doc.querySelector(".topbar .sound-line.ring")],
-    ];
+    const box = doc.querySelector(".topbar .post-status");
+    const item = doc.querySelector(".topbar .post-item");
     // Гарантированный минимум (§22.4): ширина пункта с короткими метками и без текста — значок, цвет, кнопки, «+N»
-    pairs.forEach(([box, item]) => {
-      if (!box) return;
+    if (box) {
       box.style.minWidth = "";
-      if (!item) return;
-      item.classList.remove("tight");
-      item.classList.add("fit-min");
-      // Замер — без сжатия: пункт — гибкий элемент своей полосы и иначе сжался бы под неё
-      item.style.width = "max-content";
-      item.style.flexShrink = "0";
-      const min = Math.ceil(item.getBoundingClientRect().width);
-      item.style.width = "";
-      item.style.flexShrink = "";
-      item.classList.remove("fit-min");
-      if (min) box.style.minWidth = `${min}px`;
-    });
-    const [[, item], [, ring]] = pairs;
-    const ringText = ring && ring.querySelector(".sound-text");
-    if (ringText && ring.querySelector(".sound-hid") && ringText.scrollWidth > ringText.clientWidth + 1) ring.classList.add("tight");
+      if (item) {
+        item.classList.remove("tight");
+        item.classList.add("fit-min");
+        // Замер — без сжатия: пункт — гибкий элемент своей полосы и иначе сжался бы под неё
+        item.style.width = "max-content";
+        item.style.flexShrink = "0";
+        const min = Math.ceil(item.getBoundingClientRect().width);
+        item.style.width = "";
+        item.style.flexShrink = "";
+        item.classList.remove("fit-min");
+        if (min) box.style.minWidth = `${min}px`;
+      }
+    }
     const text = item && item.querySelector(".post-text");
     if (text && text.scrollWidth > text.clientWidth + 1 && text.clientWidth < 48) item.classList.add("tight");
   }
@@ -1331,7 +1327,7 @@
   // Звучащие, спрятанные фильтром, которых оператор ещё не видел: «+1» на кнопках, пока строка не показалась
   const unseen = new Set();
   function noteUnseen() {
-    // Звук не включён — ничего не звучит, и «Звучит» нет (§21.5)
+    // Звук не включён — ничего не звучит, и значок не звенит (§21.5)
     if (!soundOn() || !soundOut().ready()) return;
     snd.state.sounding.forEach((s) => hiddenNow(s.guid) && unseen.add(s.guid));
     // Ушёл из «Открытых» (взяли, закрыли) — внимания больше не ждёт
@@ -1340,7 +1336,7 @@
   }
   const unseenOf = (pred) => [...unseen].filter((g) => incCache.get(g) && pred(incCache.get(g))).length;
 
-  // «Показать» у звучащего скрытого (§22.3): состояние — «Открытые», а если там его нет — фильтр, где он есть;
+  // К звучащему скрытому — щелчок по звенящему значку (§22.3, прежнее «Показать»): состояние — «Открытые», а если там его нет — фильтр, где он есть;
   // мешающие приоритеты, типы — долой; сценарий, поиск и узел — только если без них строки всё равно нет
   // (решение 6); затем очередь на странице инцидента и прокрутка к строке. «Сбросить фильтры» (§7) — другое: узел не трогает
   async function showHidden(guid) {
@@ -2956,6 +2952,32 @@
   const filtersOn = () =>
     state.filter !== "open" || Boolean(state.priorities.length || state.eventTypes.length || state.scenarios.length || state.deviceTypes.length || state.search);
 
+  // Уровень эскалации (§8.3): название из машины по escalationLevel — текст организации (в демо его переводит словарь
+  // данных); нет названия или уровня — «Уровень N»
+  function levelName(n) {
+    const lvl = (WORKFLOW.escalation.levels || []).find((l) => l.level === n);
+    const name = lvl && typeof lvl.name === "string" ? lvl.name.trim() : "";
+    return name ? t(name) : t("workflow.escalation.level.unnamed", { n });
+  }
+  // Метка «Эскалация: <название>» полностью; подсказка — шаг из потолка и, со второго шага, на каком шаге не взяли.
+  // Уровень 0 — метки нет
+  function levelChip(e) {
+    const n = e && e.escalationLevel;
+    if (!n) return "";
+    const below = (WORKFLOW.escalation.levels || []).filter((l) => l.level < n).sort((a, b) => b.level - a.level)[0];
+    let tip = t("Автоэскалация, шаг {n} из {max}", { n, max: WORKFLOW.escalation.maxLevel });
+    if (n > 1) tip += ` ${t("— не взят вовремя на шаге «{name}»", { name: levelName(below ? below.level : n - 1) })}`;
+    return `<span class="chip lvl" data-level="${n}" title="${escapeHtml(tip)}">${te("Эскалация: {name}", { name: levelName(n) })}</span>`;
+  }
+  // Звучащая строка (§22.3): маленький пульсирующий значок динамика слева от названия; что звучит — в подсказке
+  function rowSoundTip(s) {
+    return t("Звучит — {what}", { what: s.kind === "personal" ? t("лично вам") : priorityName(s.priority) });
+  }
+  function rowSound(e) {
+    const s = soundingOf(e.guid);
+    return s ? `<span class="row-sound" data-row-sound title="${escapeHtml(rowSoundTip(s))}" aria-label="${escapeHtml(rowSoundTip(s))}" role="img">🔊</span>` : "";
+  }
+
   // Блок «Мне на принятие»: всё, что ждёт моего «Принять». Что в нём, сколько строк, в каком порядке — display.inboxBlock
   function inboxRowHtml(e) {
     const pri = PRIORITIES[e.priority];
@@ -2968,8 +2990,8 @@
       <div class="inbox-main">
         <div class="inbox-top">
           <span class="badge ${escapeHtml(e.badge.style)}">${escapeHtml(badgeView(e).text)}</span>
-          ${e.escalationLevel ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>` : ""}
-          <strong>${te(e.eventType.name)}</strong>
+          ${levelChip(e)}
+          ${rowSound(e)}<strong>${te(e.eventType.name)}</strong>
           <span class="inbox-num">${escapeHtml(e.number)}</span>
         </div>
         ${sourceLine(e)}
@@ -3129,7 +3151,7 @@
     // название; остальные действия — колонкой справа (RULE-81)
     const open = queueActions(e).find((a) => a.style === "icon");
     const acts = queueActions(e).filter((a) => a.style !== "icon");
-    const title = `<strong>${te(e.eventType.name)}</strong>`;
+    const title = `${rowSound(e)}<strong>${te(e.eventType.name)}</strong>`;
     const pickable = !e.gone && bulkEligible(e);
     return `
     <article class="event ${state.selectedId === e.guid ? "selected" : ""} ${e.gone ? "gone" : ""} ${freshCls(e.guid)}" data-id="${escapeHtml(e.guid)}">
@@ -3164,11 +3186,7 @@
         <div class="event-foot">
           <span class="pri-name" data-color="${escapeHtml(PRIORITIES[e.priority].color)}">${escapeHtml(inLang(PRIORITIES[e.priority].name))}</span>
           <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
-          ${
-            e.escalationLevel
-              ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>`
-              : ""
-          }
+          ${levelChip(e)}
           ${timerChip(e)}
           ${holdChip(e)}
           ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}
@@ -3199,7 +3217,7 @@
     $("workTitle").innerHTML = `
       <span class="work-num">${escapeHtml(ev.number)}</span>
       <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
-      ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
+      ${levelChip(ev)}
       ${PRIORITIES[ev.priority] ? `<span class="pri-name" data-color="${escapeHtml(PRIORITIES[ev.priority].color)}">${escapeHtml(inLang(PRIORITIES[ev.priority].name))}</span>` : ""}
       ${timerChip(ev, "sla")}
       ${holdChip(ev, "sla")}
@@ -5507,6 +5525,8 @@
   function soundGo(guid, number) {
     if (state.mode !== "queue") return toast(t("{id} ждёт в очереди", { id: number }));
     const rowOf = () => $("eventsList").querySelector(`[data-id="${CSS.escape(guid)}"]`);
+    // Строку спрятал фильтр — тот же переход, что прежнее «Показать» (§22.3)
+    if (!rowOf() && hiddenNow(guid)) return void showHidden(guid);
     state.selectedId = guid;
     if (rowOf()) {
       renderAll();
@@ -5558,8 +5578,12 @@
     return new Date(snd.onlyUntil).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
   }
 
-  // Шапка: значок 🔊/🔉/🔇 и строка «Звучит … · Тихо» (§21.4); «Звук не включён · Включить звук» и «Только важное до … ·
-  // Вернуть» — пункты строки состояния поста (§21.5, §22.4)
+  // Шапка (§21.4): значок 🔊/🔉/🔇; пока что-то звучит — значок красный и пульсирует, рядом «Тихо», щелчок по значку — к самому
+  // важному звучащему (soundGo). «Звук не включён · Включить звук» и «Только важное до … · Вернуть» — пункты строки
+  // состояния поста (§21.5, §22.4)
+  function soundingOf(guid) {
+    return soundOn() && soundOut().ready() ? snd.state.sounding.find((s) => s.guid === guid) || null : null;
+  }
   function renderSound() {
     syncTitle();
     if (!soundOn()) return;
@@ -5569,35 +5593,53 @@
     if ([...unseen].join() !== unseenWas) renderQueueHead();
     const ready = soundOut().ready();
     const important = onlyImportant();
-    const icon = !ready ? "🔇" : important ? "🔉" : "🔊";
-    const title = t(!ready ? "Звук не включён" : important ? "Только важное" : "Звук");
+    const top = ready ? IMSound.topSounding(snd.state) : null;
+    const icon = !ready ? "🔇" : important && !top ? "🔉" : "🔊";
+    const menuTitle = t(!ready ? "Звук не включён" : important ? "Только важное" : "Звук");
+    const title = top ? `${rowSoundTip(top)} · ${t("показать в очереди")}` : menuTitle;
     $("soundIcon").textContent = icon;
     $("soundBtn").title = title;
     $("soundBtn").setAttribute("aria-label", title);
     $("soundBtn").dataset.sound = !ready ? "off" : important ? "important" : "on";
-    // Значок меню звука в полосе — только на телефоне, где значка в шапке нет (styles.css)
-    const parts = [`<button type="button" class="icon-btn sound-bar-menu" data-sound-menu title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span aria-hidden="true">${icon}</span></button>`];
-    const top = ready ? IMSound.topSounding(snd.state) : null;
+    $("soundBtn").dataset.ringing = top ? "on" : "off";
     if (top) {
-      const n = snd.state.sounding.length;
-      const what = top.kind === "personal" ? te("лично вам") : asData(priorityName(top.priority));
-      const link = (text) => `<button type="button" class="link-btn" data-sound-go="${escapeHtml(top.guid)}" data-sound-number="${escapeHtml(top.number)}">${text}</button>`;
-      // Ссылка на звучащий — вне сжимаемого текста: номер виден и в тесной шапке (§21.4)
-      const body = n > 1 ? `<span class="sound-text">${te("Звучит:")}</span> ${link(`${n} (${what})`)}` : `<span class="sound-text">${te("Звучит:")} ${what},</span> ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
-      // Строку звучащего спрятал фильтр — «скрыт фильтром · Показать» (§21.4, §22.3)
-      // Места мало — сначала сжимается текст «Звучит» (многоточие), метка — короче «скрыт» (fitHead), «Показать» и «Тихо» на месте
-      const hid = hiddenNow(top.guid)
-        ? `<span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">${te("скрыт фильтром")}</span><span class="hid-short">${te("скрыт")}</span></span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button></span>`
-        : "";
-      parts.push(
-        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body}${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
-      );
+      $("soundBtn").dataset.soundGo = top.guid;
+      $("soundBtn").dataset.soundNumber = top.number;
     }
-    $("soundBar").innerHTML = parts.join("");
+    $("soundQuiet").innerHTML = top ? `<button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button>` : "";
+    $("soundQuiet").hidden = !top;
+    // Значок меню звука в полосе — только на телефоне, где значка в шапке нет (styles.css)
+    $("soundBar").innerHTML = `<button type="button" class="icon-btn sound-bar-menu" data-sound-menu title="${escapeHtml(menuTitle)}" aria-label="${escapeHtml(menuTitle)}"><span aria-hidden="true">${!ready ? "🔇" : important ? "🔉" : "🔊"}</span></button>`;
+    syncRowSound();
     if (!$("soundPop").hidden) renderSoundMenu();
     renderPost();
   }
+  // Значки звучащих строк (§22.3) — без перерисовки очереди: звук меняется чаще строк
+  function syncRowSound() {
+    document.querySelectorAll("#eventsList [data-id]").forEach((row) => {
+      const s = soundingOf(row.dataset.id);
+      const mark = row.querySelector("[data-row-sound]");
+      if (!s) return void (mark && mark.remove());
+      const tip = rowSoundTip(s);
+      if (mark) {
+        mark.title = tip;
+        mark.setAttribute("aria-label", tip);
+        return;
+      }
+      const name = row.querySelector(".event-title strong, .inbox-top strong");
+      if (name) name.insertAdjacentHTML("beforebegin", `<span class="row-sound" data-row-sound title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}" role="img">🔊</span>`);
+    });
+  }
 
+  // Меню звука открыть — и при звенящем значке (значок меню в полосе на телефоне): как кнопка меню, без перехода
+  function openSoundMenu() {
+    const pop = $("soundPop");
+    const willOpen = pop.hidden;
+    closeMenus();
+    pop.hidden = !willOpen;
+    $("soundBtn").setAttribute("aria-expanded", String(willOpen));
+    if (willOpen) renderSoundMenu();
+  }
   // Меню звука (§21.4): громкость не ниже порога схемы, «Проверить звук», «Только важное», разрешение уведомлений
   function renderSoundMenu() {
     const s = WORKFLOW.sound;
@@ -5669,7 +5711,7 @@
       // «щелчок мимо меню закрывает»
       if (e.target.closest("[data-sound-menu]")) {
         e.stopPropagation();
-        $("soundBtn").click();
+        openSoundMenu();
         return;
       }
       if (e.target.closest("[data-sound-silence]")) {
@@ -5677,12 +5719,21 @@
         return soundUpdate();
       }
       if (e.target.closest("[data-sound-back]")) return setOnlyImportant(false);
-      const show = e.target.closest("[data-sound-show]");
-      if (show) return void showHidden(show.dataset.soundShow);
-      const go = e.target.closest("[data-sound-go]");
-      if (go) soundGo(go.dataset.soundGo, go.dataset.soundNumber);
     };
     $("soundBar").addEventListener("click", soundClick);
+    $("soundQuiet").addEventListener("click", soundClick);
+    // Звенящий значок — к самому важному звучащему, а не меню (§21.4): перехват до кнопки меню
+    $("soundMenu").addEventListener(
+      "click",
+      (e) => {
+        const btn = e.target.closest("#soundBtn");
+        if (!btn || btn.dataset.ringing !== "on") return;
+        e.stopPropagation();
+        closeMenus();
+        soundGo(btn.dataset.soundGo, btn.dataset.soundNumber);
+      },
+      true
+    );
     $("postStatus").addEventListener("click", (e) => {
       if (e.target.closest("[data-post-open]")) return openBell("system");
       soundClick(e);
@@ -5759,7 +5810,9 @@
       return v
         .map((x) => {
           if (typeof x !== "object") return fmtSetting(x, key, sec);
-          if (x.level != null) return `${te("Уровень {n}", { n: x.level })}: ${asData(personName(String(x.target)))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
+          // Уровень эскалации (§8.3): номер, название (текст организации) — адресат и норматив
+          if (x.level != null)
+            return `${te("Уровень {n}", { n: x.level })}${typeof x.name === "string" && x.name.trim() ? ` «${escapeHtml(t(x.name.trim()))}»` : ""}: ${asData(personName(String(x.target)))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           // Срок null — без срока; у причины со сроком из порогов молчания (deadlineFromIdle, «Нет связи») — так и сказать (BUG-119)
           const limit = x.deadlineFromIdle ? ` (${te("порог «в очередь» минус «отложить»")})` : x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "maxMinutes" in x ? ` (${te("без срока")})` : "";

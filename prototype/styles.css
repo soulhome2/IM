@@ -336,8 +336,7 @@ a { color: var(--text); text-decoration: none; }
 
 /* Строка состояния поста (§22.4) — в середине шапки, одной строкой: длинный текст обрезается, высоту шапки не меняет (§22.1) */
 .topbar-cluster { min-width: 0; }
-/* Места мало — текст «Звучит» и текст пункта поста сжимаются поровну. От пункта всегда остаются значок, цвет, кнопки
-   и «+N» (min-width: auto — по ним), «Тихо» не сжимается */
+/* Места мало — сжимается текст пункта поста. От пункта всегда остаются значок, цвет, кнопки и «+N» (min-width: auto — по ним) */
 .post-status { flex: 0 1 auto; min-width: 0; margin: 0 auto; display: flex; overflow: hidden; }
 .post-status[hidden] { display: none; }
 .post-item {
@@ -367,57 +366,44 @@ a { color: var(--text); text-decoration: none; }
 .post-item.tight .more-short { display: inline; }
 /* Замер минимума (fitHead): без текста, с короткими метками */
 /* Текст — нулевой ширины, а не display: none: промежуток после него остаётся в замере */
-.topbar .fit-min .post-text,
-.topbar .fit-min .sound-text { display: block; width: 0; min-width: 0; padding: 0; flex: 0 0 0; }
-.topbar .fit-min .more-long,
-.topbar .fit-min .hid-long { display: none; }
-.topbar .fit-min .more-short,
-.topbar .fit-min .hid-short { display: inline; }
+.topbar .fit-min .post-text { display: block; width: 0; min-width: 0; padding: 0; flex: 0 0 0; }
+.topbar .fit-min .more-long { display: none; }
+.topbar .fit-min .more-short { display: inline; }
 .post-item > [aria-hidden="true"] { flex-shrink: 0; }
 .post-item .btn.small,
-.sound-line .btn.small { flex-shrink: 0; padding: 2px 10px; }
-/* Звук (§21.4): строка «Звучит … · Тихо» в шапке — пока что-то звучит; одной строкой, высоту шапки не меняет */
-.sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex: 0 1 auto; flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
-.post-status:not([hidden]) + .sound-bar { margin-left: 0; }
-/* Окно уже 1440: строке поста и «Звучит» нужно место в середине шапки — название продукта остаётся знаком */
+.sound-quiet .btn.small { flex-shrink: 0; padding: 2px 10px; }
+/* Значок меню звука второй строкой шапки — только на телефоне (ниже); на широком экране меню — у значка в шапке */
+.sound-bar { display: none; }
+/* Окно уже 1440: строке поста нужно место в середине шапки — название продукта остаётся знаком */
 @media (max-width: 1439px) {
   .brand { min-width: 0; }
   .brand-text { display: none; }
 }
 @media (max-width: 1279px) {
-  /* Часам места нет: строке поста и «Звучит» нужны их минимумы (§22.4); скрыты всегда, а не на время тревоги — иначе
-     кнопки шапки прыгали бы в её начале и конце */
+  /* Часам места нет: строке поста нужен её минимум, а «Тихо» — место у значка звука (§21.4, §22.4); скрыты всегда,
+     а не на время тревоги — иначе кнопки шапки прыгали бы в её начале и конце */
   .clock { display: none; }
   /* Язык — только значок, как на телефоне: список лежит поверх значка невидимым */
   .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
   .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }
 }
-.sound-bar:empty { display: none; }
 .sound-bar .sound-bar-menu { display: none; }
-.sound-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 30px;
-  box-sizing: border-box;
-  padding: 0 4px 0 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  white-space: nowrap;
-  border: 1px solid var(--stroke-2);
-  background: var(--panel-2);
-  color: var(--text);
+/* Звенит (§21.4): пока что-то звучит у оператора, значок звука красный и пульсирует, слева — «Тихо». «Меньше движения» —
+   только цвет. Звучащая строка очереди и блока (§22.3) — маленький пульсирующий значок динамика слева от названия */
+.sound-quiet { display: inline-flex; align-items: center; }
+.sound-quiet[hidden] { display: none; }
+.sound-btn[data-ringing="on"] { background: var(--danger-bg); box-shadow: 0 0 0 2px var(--crit); animation: sound-ring 1.2s ease-in-out infinite; }
+@keyframes sound-ring {
+  50% { box-shadow: 0 0 0 5px var(--danger-border); }
 }
-.sound-line.warn { border-color: var(--warn); color: var(--warn-text); }
-.sound-line.ring { border-color: var(--danger-border); background: var(--danger-bg); color: var(--crit-text); }
-.sound-line .sound-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.sound-line .sound-hid,
-.sound-line [data-sound-go] { flex-shrink: 0; white-space: nowrap; }
-.sound-line .hid-short,
-.sound-line.tight .hid-long { display: none; }
-.sound-line.tight .hid-short { display: inline; }
-.sound-line .link-btn { border: none; background: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+.row-sound { display: inline-block; margin-right: 4px; font-size: 12px; line-height: 1; animation: row-sound 1.2s ease-in-out infinite; }
+@keyframes row-sound {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sound-btn[data-ringing="on"],
+  .row-sound { animation: none; }
+}
 .sound-btn #soundIcon { font-size: 18px; line-height: 1; }
 .sound-pop .sound-volume-row { display: flex; align-items: center; gap: 8px; }
 .sound-pop input[type="range"] { flex: 1; accent-color: var(--accent); }
@@ -1015,7 +1001,6 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .event.fresh, .inbox-row.fresh { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-dim); }
 .state-btn .plus, .pri-btn .plus { font-weight: 700; color: var(--crit-text); }
 .state-btn[aria-pressed="true"] .plus { color: inherit; }
-.sound-hidden { font-weight: 600; }
 /* Узкое окно: типы, сценарий и порядок — под «⚙ Фильтры» (§7) */
 .events-toolbar.narrow .events-more { display: inline-flex; }
 .events-toolbar.narrow:not(.more-open) .events-types,
@@ -2357,16 +2342,22 @@ select.search-input { padding-right: 36px; }
   .work-h h2 { flex-wrap: wrap; row-gap: 4px; overflow: visible; }
   .topbar-cluster { padding-left: 8px; }
   .topbar-actions { gap: 4px; }
-  /* Звук на телефоне: в строке шапки места нет — полоса звука встаёт второй строкой шапки, в ней значок меню звука
-     (громкость, «Только важное», уведомления); значок в шапке скрыт, меню открывается под шапкой */
+  /* Звук на телефоне: значок меню звука (громкость, «Только важное», уведомления) — второй строкой шапки; значок в шапке
+     скрыт, меню открывается под шапкой. Пока что-то звучит, звенящий значок и «Тихо» — в первой строке (§21.4) */
   .topbar:has(.sound-bar) { flex-wrap: wrap; row-gap: 6px; }
   .topbar-cluster { display: contents; }
-  .sound-bar { order: 100; flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+  .sound-bar { display: flex; align-items: center; gap: 8px; order: 100; flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
   /* Строка поста — во второй строке шапки, рядом со значком меню звука */
   .post-status { order: 99; flex: 1 1 calc(100% - 52px); margin: 0; }
   .post-status:not([hidden]) + .sound-bar { flex-basis: auto; }
   .sound-bar .sound-bar-menu { display: inline-flex; }
-  #soundBtn { display: none; }
+  .topbar-actions .sound-btn { display: none; }
+  .topbar-actions .sound-btn[data-ringing="on"] { display: inline-flex; }
+  /* Звенит — значок и «Тихо» в первой строке; на время звона из неё уходят знак продукта, язык и тема: в 360 px иначе
+     не помещается, а справка (телефоны служб) и меню оператора нужны и во время тревоги */
+  .topbar:has(.sound-btn[data-ringing="on"]) .brand,
+  .topbar:has(.sound-btn[data-ringing="on"]) .lang,
+  .topbar:has(.sound-btn[data-ringing="on"]) .theme-btn { display: none; }
   /* Язык — только значок: список тот же, он лежит поверх значка невидимым */
   .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
   .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }

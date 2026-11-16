@@ -30,21 +30,24 @@
         <!-- Строка состояния поста (§22.4): самое серьёзное из того, что длится, и «и ещё N»; пункты — из машины (display.postStatus),
              щелчок — колокольчик на вкладке «Система»; строит app.js. Высоту шапки не меняет (§22.1) -->
         <div class="post-status" id="postStatus" role="status" aria-live="polite" hidden></div>
-        <!-- Звук (§21.4): «Звучит … · Тихо»; строит app.js -->
-        <div class="sound-bar" id="soundBar" role="status"></div>
+        <!-- Значок меню звука на телефоне (второй строкой шапки, §21.4); строит app.js -->
+        <div class="sound-bar" id="soundBar"></div>
       </div>
 
       <div class="topbar-actions">
+        <!-- Звук (§21.4): пока что-то звучит — «Тихо» слева от значка, значок красный и пульсирует, щелчок по нему — к самому
+             важному звучащему; иначе значок открывает меню. «Тихо» слева: появляясь, она не сдвигает значок и колокольчик -->
+        <span class="sound-quiet" id="soundQuiet" role="status" hidden></span>
+        <div class="menu" id="soundMenu">
+          <button type="button" class="icon-btn sound-btn" id="soundBtn" aria-haspopup="menu" aria-expanded="false" data-ringing="off"><span id="soundIcon" aria-hidden="true"></span></button>
+          <!-- Меню звука (§21.4): громкость, «Проверить звук», «Только важное», разрешение уведомлений; строит app.js -->
+          <div class="menu-pop wide sound-pop" role="menu" id="soundPop" hidden></div>
+        </div>
         <!-- Колокольчик — журнал оповещений (§22.5): число — непрочитанные, кружок серо-синий -->
         <button type="button" class="icon-btn bell-btn" id="bellBtn" aria-expanded="false" aria-controls="bellPanel" title="Оповещения" aria-label="Оповещения">
           <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
           <em class="bell-n" id="bellCount" hidden>0</em>
         </button>
-        <div class="menu" id="soundMenu">
-          <button type="button" class="icon-btn sound-btn" id="soundBtn" aria-haspopup="menu" aria-expanded="false"><span id="soundIcon" aria-hidden="true"></span></button>
-          <!-- Меню звука (§21.4): громкость, «Проверить звук», «Только важное», разрешение уведомлений; строит app.js -->
-          <div class="menu-pop wide sound-pop" role="menu" id="soundPop" hidden></div>
-        </div>
 
         <label class="lang" for="langSelect">
           <span class="material-symbols-outlined" aria-hidden="true">language</span>
