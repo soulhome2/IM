@@ -181,7 +181,7 @@ MUTATIONS = [
     ("group-roles-ignored", "server.js", "const byRole = OPERATORS.filter((o) => rolesOf(o.id).some((r) => (group.roles || []).includes(r))).map((o) => o.id);", "const byRole = [];", "api"),
     ("group-shift-ignored", "server.js", "(op.group ? membersOf(op).some((m) => present({ id: m })) :", "(op.group ? true :", "api"),
     ("agent-state-ignored", "server.js", ": engine.onDuty(op.id));", ": true);", "api"),
-    ("ui-bulk-failures-hidden", "app.js", "const failedText = res.failed.length ? `${okText} ", "const failedText = false ? `${okText} ", "ui"),
+    ("ui-bulk-failures-hidden", "app.js", "const failedText = res.failed.length ? sentences(okText, ", "const failedText = false ? sentences(okText, ", "ui"),
     # «Массовый сбой» на выборке (§11.1, ARCH-15): маршрут bulk верит панели — scope не применяется, закрываются все отмеченные;
     # выборка устарела, а действие со scope всё равно выполняется по новому основному
     ("bulk-scope-route-dropped", "server.js", "const scope = bulkScope(bulkTr, list);", "const scope = { list, skipped: [] };", "api"),

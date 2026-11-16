@@ -309,7 +309,7 @@
   function findText(cyr) {
     const skip = (el) =>
       // Записи колокольчика — на языке, на котором записаны (§22.5); панель закрыта — их не видно
-      el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts, #bellList") ||
+      el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts, #toastList, #bellList") ||
       (el.closest("#bellPanel") && $("bellPanel").hidden) ||
       (el.closest("#modalDialog") && $("modalDialog").hidden) ||
       (el.closest("#adminTable, #adminTabs, #adminNote") && $("modalAdmin").hidden) ||
@@ -1219,7 +1219,7 @@
         await confirmDialog(NOTE);
         await wait(200);
         const text = ($("toasts").lastElementChild || {}).textContent || "";
-        expect(/Не закрыты — другой сценарий: INC-1853/.test(text), `уведомление: «${text}»`);
+        expect(/Закрыто: 2\. Не закрыты: 1 — другой сценарий: INC-1853/.test(text), `уведомление: «${text}»`);
         const states = [await state("INC-1847"), await state("INC-1851"), await state("INC-1853")];
         expect(states.join(",") === "closed,closed,new", `состояния INC-1847, INC-1851, INC-1853: ${states.join(", ")}`);
         return text;
@@ -2255,25 +2255,81 @@
       return "граница по якорю; connection+2, диск только администратору; «Уже взял Петрова Е. А.»";
     });
 
-    await step("Сообщения о моих действиях — внизу слева: итог уходит сам, ошибка висит до «✕» (§22.6)", async () => {
+    await step("Итог моего действия — одна плашка в шапке справа от строки поста: 300 пропущенных — коротко, «ещё N», итог поверх ошибки на время, «✕» убирает все, колокольчик не растёт (§22.6, BUG-123)", async () => {
       const ui = window.IM_SELFTEST_UI;
-      const done = `Итог самопроверки ${Date.now()}`;
-      const fail = `Ошибка самопроверки ${Date.now()}`;
-      ui.toast(done);
-      ui.toast(fail, "error");
-      const find = (text) => [...$("toasts").children].find((x) => x.textContent === text);
-      const a = find(done);
-      const b = find(fail);
-      expect(a && b, "сообщения не появились");
-      const box = a.getBoundingClientRect();
-      expect(box.left < innerWidth / 2 && box.bottom > innerHeight / 2, `итог не внизу слева: left ${Math.round(box.left)}, bottom ${Math.round(box.bottom)} при окне ${innerWidth}×${innerHeight}`);
-      expect(a.dataset.kind === "done" && !a.querySelector(".toast-close") && b.dataset.kind === "error" && b.querySelector(".toast-close"), "у итога есть «✕» или у ошибки её нет");
-      await wait(3500);
-      expect(!find(done), "итог не ушёл сам за 3,2 с");
-      expect(find(fail), "ошибка ушла сама — должна висеть до «✕»");
-      await click(b.querySelector(".toast-close"));
-      expect(!find(fail), "«✕» не закрыл ошибку");
-      return "итог — 3,2 с, ошибка — до «✕»";
+      const shown = () => [...$("toasts").children].filter((x) => !x.hidden);
+      const one = () => {
+        const v = shown();
+        expect(v.length <= 1, `плашек сразу: ${v.length}`);
+        return v[0] || null;
+      };
+      const rect = (el) => el.getBoundingClientRect();
+      const bellCount = () => `${$("bellCount").hidden ? 0 : $("bellCount").textContent}/${$("bellList").children.length}`;
+      const bellAt = bellCount();
+      const out = [];
+      ui.toastMs(60);
+      try {
+        // Ошибки прежних шагов — «✕»: отсюда счёт «ещё N» с нуля
+        const left = $("toasts").querySelector(".toast-close");
+        if (left) await click(left);
+        await wait(100);
+        // 300 пропущенных выборки — синтетикой: число и причина, номера — два и «и ещё N»
+        const skipped = Array.from({ length: 300 }, (_, i) => ({ incidentGuid: `g${i}`, number: `INC-${9000 + i}`, reasonKey: "workflow.error.selection.other_scenario" }));
+        const big = ui.skippedText(skipped);
+        expect(big === "Не закрыты: 300 — другой сценарий: INC-9000, INC-9001 и ещё 298", `300 пропущенных: «${big}»`);
+        const few = ui.skippedText(skipped.slice(0, 5));
+        expect(few === "Не закрыты: 5 — другой сценарий: INC-9000, INC-9001, INC-9002, INC-9003, INC-9004", `5 пропущенных: «${few}»`);
+        const first = `Закрыто: 120. ${big}`;
+        ui.toast(first, "error");
+        const a = one();
+        expect(a && a.dataset.kind === "error" && a.textContent === first, `плашка ошибки: «${a && a.textContent}»`);
+        // Плашка — в шапке (широкое окно) или сразу под ней (узкое), одной строкой; «✕» на экране
+        const bar = rect(document.querySelector(".topbar"));
+        const box = rect(a);
+        const x = rect(a.querySelector(".toast-close"));
+        expect(box.height <= 40 && box.height <= innerHeight / 3, `высота плашки ${Math.round(box.height)} px при окне ${innerHeight}`);
+        expect(box.top >= bar.top - 1 && box.top <= bar.bottom + 8, `плашка не в шапке и не сразу под ней: ${Math.round(box.top)} при шапке ${Math.round(bar.top)}–${Math.round(bar.bottom)}`);
+        expect(x.width > 0 && x.left >= 0 && x.right <= innerWidth && x.top >= 0 && x.bottom <= innerHeight, "«✕» не на экране");
+        expect(a.title === first, `нет подсказки с полным текстом: «${a.title}»`);
+        // Вторая ошибка заменяет первую, на плашке «ещё 1»; нажатие — список прежних под плашкой
+        const second = "Ошибка самопроверки: вторая";
+        ui.toast(second, "error");
+        const b = one();
+        expect(b.textContent === second && b.querySelector("[data-toast-more]") && b.querySelector("[data-toast-more]").dataset.toastMore === "ещё 1", `вторая ошибка: «${b.textContent}», «${(b.querySelector("[data-toast-more]") || {}).dataset ? b.querySelector("[data-toast-more]").dataset.toastMore : "нет"}»`);
+        await click(b.querySelector(".toast-text"));
+        const list = $("toastList");
+        expect(!list.hidden && list.textContent.includes(first) && list.textContent.includes(second), `список ошибок: «${list.hidden ? "скрыт" : list.textContent}»`);
+        expect(rect(list).height <= innerHeight / 3 + 1, `список выше трети экрана: ${Math.round(rect(list).height)} px`);
+        await click(b.querySelector(".toast-text"));
+        expect(list.hidden, "второе нажатие не убрало список");
+        // Итог при висящей ошибке — поверх неё на время, затем ошибка возвращается
+        const done = "Итог самопроверки: обработано";
+        ui.toast(done);
+        const c = one();
+        expect(c && c.dataset.kind === "done" && c.textContent === done && !c.querySelector(".toast-close"), `итог поверх ошибки: «${c && c.textContent}»`);
+        await wait(200);
+        const d = one();
+        expect(d && d.dataset.kind === "error" && d.textContent === second, `после итога не вернулась ошибка: «${d && d.textContent}»`);
+        // Новый итог заменяет прежний
+        ui.toast("Итог 1");
+        ui.toast("Итог 2");
+        expect(one().textContent === "Итог 2" && ![...$("toasts").children].some((y) => y.textContent === "Итог 1"), "новый итог не заменил прежний");
+        await wait(200);
+        // «✕» убирает все ошибки
+        await click(one().querySelector(".toast-close"));
+        expect(!one(), "«✕» убрал не все ошибки");
+        // Без ошибок итог уходит сам
+        ui.toast("Итог 3");
+        await wait(200);
+        expect(!one(), "итог не ушёл сам");
+        expect(bellCount() === bellAt, `колокольчик изменился: ${bellAt} → ${bellCount()}`);
+        out.push(`${Math.round(box.width)}×${Math.round(box.height)} px`, big);
+      } finally {
+        ui.toastMs(null);
+        $("toasts").replaceChildren();
+        $("toastList").hidden = true;
+      }
+      return out.join("; ");
     });
 
     await step("Перерыв и возврат с перерыва", async () => {
@@ -4014,7 +4070,7 @@
         await confirmDialog(NOTE);
         await wait(200);
         text = ($("toasts").lastElementChild || {}).textContent || "";
-        expect(/Не закрыты — другой сценарий: INC-1847/.test(text), `уведомление: «${text}»`);
+        expect(/Не закрыты: 1 — другой сценарий: INC-1847/.test(text), `уведомление: «${text}»`);
         const states = [await state("INC-1847"), await state("INC-1853")];
         expect(states.join(",") === "in_progress,closed", `состояния INC-1847, INC-1853: ${states.join(", ")}`);
       } finally {
@@ -5152,7 +5208,7 @@
       }
     }, POST_STEP);
 
-    await step("Шапка: строка поста и звенящий значок с «Тихо» не меняют её высоту на 1560, 1280 и 1024 px; на телефоне значок и «Тихо» — в первой строке; от пункта поста видны значок и кнопки (§21.4, §22.1, §22.4)", async () => {
+    await step("Шапка: строка поста, плашка итога и звенящий значок с «Тихо» не меняют её высоту на 1560, 1280 и 1024 px; на телефоне значок и «Тихо» — в первой строке, плашка — под шапкой; от пункта поста видны значок и кнопки, у плашки — «✕» (§21.4, §22.1, §22.4, §22.6)", async () => {
       // Разметка — с экрана: «Только важное» с «Вернуть»; два состояния («Нет связи» и «и ещё 1»); длинный текст работ;
       // звенит — значок звука красный, слева «Тихо»
       let oneHtml = "";
@@ -5167,6 +5223,8 @@
       }
       expect(/data-sound-back/.test(oneHtml) && /и ещё 1/.test(twoHtml), `нет пунктов: ${oneHtml.slice(0, 80)} / ${twoHtml.slice(0, 80)}`);
       const longText = "Идут плановые работы: Камера 12 на складе готовой продукции — «замена датчика дыма в зоне погрузки», до 14:00.";
+      const longErr = "Закрыто: 120. Не закрыты: 450 — другой сценарий: INC-26103, INC-26104 и ещё 448. Не выполнено: 3. INC-26110: Инцидент уже изменён";
+      const errHtml = `<div class="toast error" data-kind="error" title="${longErr}"><span class="toast-text">${longErr}</span><span class="toast-more" data-toast-more="ещё 2"></span><button type="button" class="toast-close"></button></div>`;
       const bar = document.querySelector(".topbar").cloneNode(true);
       bar.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       bar.querySelector(".post-status").setAttribute("hidden", "");
@@ -5195,7 +5253,9 @@
           const bell = doc.querySelector(".bell-btn");
           const rect = (el) => el.getBoundingClientRect();
           const h = () => Math.round(rect(top).height * 10) / 10;
-          const set = (post, long, ringOn) => {
+          const plaque = doc.querySelector(".toast-stack");
+          const set = (post, long, ringOn, err) => {
+            plaque.innerHTML = err ? errHtml : "";
             ps.innerHTML = post || "";
             ps.hidden = !post;
             if (post && long) ps.querySelector(".post-text").textContent = longText;
@@ -5222,6 +5282,10 @@
             if (!phone) expect(Math.round(rect(bell).left) === bellAt, `${width} px, ${name}: колокольчик сдвинулся ${bellAt} → ${Math.round(rect(bell).left)}`);
             // На телефоне значок и «Тихо» — в первой строке, с колокольчиком
             const mid = (el) => (rect(el).top + rect(el).bottom) / 2;
+            // На телефоне строка поста и значок меню звука — одной второй строкой (плашка итога между ними в разметке
+            // её не разрывает, BUG-123)
+            const bar2 = doc.querySelector(".sound-bar");
+            if (phone && html && rect(bar2).width > 0) expect(Math.abs(mid(ps) - mid(bar2)) < 4, `${width} px, ${name}: строка поста и значок меню звука — не одной строкой`);
             if (phone) expect(Math.abs(mid(btn) - mid(bell)) < 4 && Math.abs(mid(q) - mid(bell)) < 4, `${width} px, ${name}: значок или «Тихо» не в первой строке (${Math.round(mid(btn))}, ${Math.round(mid(q))} при колокольчике ${Math.round(mid(bell))})`);
             if (html) {
               const item = ps.querySelector(".post-item");
@@ -5230,6 +5294,24 @@
               item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(inside(b, ps), `${width} px, ${name}: кнопка пункта «${b.textContent.trim()}» вне строки поста`));
               if (!phone) expect(rect(ps).right <= rect(doc.querySelector(".topbar-actions")).left + 1, `${width} px, ${name}: строка поста заходит на кнопки шапки`);
               expect(item.title.length > 0, `${width} px, ${name}: у пункта нет подсказки с полным текстом`);
+            }
+          }
+          // Плашка итога (§22.6, BUG-123): длинная ошибка с «ещё N» при длинной строке поста и звоне — справа от строки
+          // поста (узкое окно — под шапкой во всю ширину), одной строкой; «✕» и значок пункта поста на экране
+          for (const [name, html, ringOn] of [["err", "", false], ["long+err", twoHtml, false], ["long+err+ring", twoHtml, true]]) {
+            got[name] = set(html, true, ringOn, true);
+            const pl = plaque.querySelector(".toast");
+            const x = pl.querySelector(".toast-close");
+            const more = pl.querySelector(".toast-more");
+            expect(rect(pl).height <= 32, `${width} px, ${name}: плашка в ${Math.round(rect(pl).height)} px — не одной строкой`);
+            expect(rect(x).width > 0 && rect(x).right <= width && inside(x, pl) && inside(more, pl), `${width} px, ${name}: «✕» или «ещё N» не на плашке`);
+            if (html) expect(inside(ps.querySelector('.post-item [aria-hidden="true"]'), ps), `${width} px, ${name}: значок пункта поста обрезан`);
+            if (width > 900) {
+              expect(rect(pl).top >= rect(top).top && rect(pl).bottom <= rect(top).bottom, `${width} px, ${name}: плашка не в шапке`);
+              expect(rect(pl).right <= rect(doc.querySelector(".topbar-actions")).left + 1, `${width} px, ${name}: плашка заходит на кнопки шапки`);
+              if (html) expect(rect(pl).left >= rect(ps).right - 1, `${width} px, ${name}: плашка не справа от строки поста`);
+            } else {
+              expect(Math.abs(rect(pl).top - rect(top).bottom - 6) <= 1 && rect(pl).width >= width - 17, `${width} px, ${name}: плашка не под шапкой во всю ширину (${Math.round(rect(pl).top)}, ${Math.round(rect(pl).width)} px)`);
             }
           }
           // Высота шапки — та же при любом наборе; на телефоне — та же, что без звона, при той же строке поста

@@ -30,6 +30,12 @@
         <!-- Строка состояния поста (§22.4): самое серьёзное из того, что длится, и «и ещё N»; пункты — из машины (display.postStatus),
              щелчок — колокольчик на вкладке «Система»; строит app.js. Высоту шапки не меняет (§22.1) -->
         <div class="post-status" id="postStatus" role="status" aria-live="polite" hidden></div>
+        <!-- Итог моего действия и ошибка (§22.6): одна плашка справа от строки поста, нет строки — по центру шапки; узкое
+             окно — сразу под шапкой. Итог уходит сам, ошибка — до «✕»; нажатие — полный текст и прежние ошибки. Строит app.js -->
+        <div class="toast-slot">
+          <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
+          <ul class="toast-list" id="toastList" hidden></ul>
+        </div>
         <!-- Значок меню звука на телефоне (второй строкой шапки, §21.4); строит app.js -->
         <div class="sound-bar" id="soundBar"></div>
       </div>
@@ -546,8 +552,6 @@
     <div class="bell-states" id="bellStates" hidden></div>
     <ul class="bell-list" id="bellList"></ul>
   </aside>
-  <!-- Итог моего действия и ошибки (§22.6): внизу слева; итог уходит сам, ошибка — до «✕» -->
-  <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
   <script src="i18n-data.js"></script>
   <script src="i18n-html.js"></script>
   <script src="i18n-ui.js"></script>

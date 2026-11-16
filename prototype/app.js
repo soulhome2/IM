@@ -864,30 +864,87 @@
     return true;
   }
 
-  // Короткое сообщение внизу слева (§22.6) — только об итоге моего действия: done — итог, уходит сам; late — опоздал
-  // («Уже взял Петров»), уходит сам; error — ошибка или отказ, висит до «✕». О чужих и автоматических событиях —
-  // не здесь, а в колокольчике (notice)
-  const TOAST_MAX = 5;
-  function toast(text, kind = "done") {
+  // Итог моего действия (§22.6) — одна плашка в верхней шапке справа от строки состояния поста (§22.4); узкое окно —
+  // сразу под шапкой. done — итог, late — опоздал («Уже взял Петров»): уходят сами, новый заменяет прежний, никуда не
+  // сохраняются. error — ошибка или отказ: висит до «✕»; новая заменяет её, на плашке «ещё N», нажатие — список
+  // прежних под плашкой, «✕» убирает все. Итог при висящей ошибке встаёт поверх неё на время, затем ошибка
+  // возвращается. О чужих и автоматических событиях — не здесь, а в колокольчике (notice); сюда — не в колокольчик
+  const TOAST_MS = 3200;
+  let toastMs = TOAST_MS;
+  const toasts = { errors: [], soft: null, timer: 0 };
+  function toastEl(text, kind) {
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
     el.dataset.kind = kind;
+    el.title = text;
     const msg = document.createElement("span");
     msg.className = "toast-text";
     msg.textContent = text;
     el.appendChild(msg);
+    // Полный текст и прежние ошибки — по нажатию на плашку (текст обрезан многоточием, если места мало)
+    el.addEventListener("click", (e) => {
+      if (!e.target.closest(".toast-close")) toggleToastList(el);
+    });
+    return el;
+  }
+  function toggleToastList(el) {
+    const list = $("toastList");
+    if (!list.hidden || !el) {
+      list.hidden = true;
+      return;
+    }
+    const lines = el.dataset.kind === "error" ? toasts.errors.slice().reverse() : [el.textContent];
+    list.innerHTML = lines.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    list.hidden = false;
+  }
+  function closeErrors() {
+    toasts.errors = [];
+    $("toasts").querySelectorAll(".toast.error").forEach((x) => x.remove());
+    toggleToastList(null);
+    fitHead();
+  }
+  function toast(text, kind = "done") {
+    const box = $("toasts");
+    toggleToastList(null);
+    clearTimeout(toasts.timer);
+    if (toasts.soft) toasts.soft.remove();
+    toasts.soft = null;
     if (kind === "error") {
+      box.querySelectorAll(".toast.error").forEach((x) => x.remove());
+      toasts.errors.push(text);
+      const el = toastEl(text, kind);
+      if (toasts.errors.length > 1) {
+        // «ещё N» — рисует CSS из атрибута: текст плашки остаётся текстом ошибки
+        const more = document.createElement("span");
+        more.className = "toast-more";
+        more.dataset.toastMore = t("ещё {n}", { n: toasts.errors.length - 1 });
+        el.appendChild(more);
+      }
       const x = document.createElement("button");
       x.type = "button";
       x.className = "toast-close";
       x.title = t("Закрыть сообщение");
       x.setAttribute("aria-label", x.title);
-      x.onclick = () => el.remove();
+      x.onclick = closeErrors;
       el.appendChild(x);
-    } else setTimeout(() => el.remove(), 3200);
-    const box = $("toasts");
-    box.appendChild(el);
-    while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
+      box.appendChild(el);
+    } else {
+      const under = box.querySelector(".toast.error");
+      if (under) under.hidden = true;
+      const el = toastEl(text, kind);
+      box.appendChild(el);
+      toasts.soft = el;
+      toasts.timer = setTimeout(() => {
+        if (toasts.soft !== el) return;
+        if (!$("toastList").hidden) toggleToastList(null);
+        el.remove();
+        toasts.soft = null;
+        const back = box.querySelector(".toast.error");
+        if (back) back.hidden = false;
+        fitHead();
+      }, toastMs);
+    }
+    fitHead();
   }
   // Опоздал (§8.1, §22.6): действие не прошло, потому что инцидент уже у другого — мягкое «Уже принял / взял {who}».
   // before — инцидент, каким его видел оператор, fresh — перечитанный. Только если владелец сменился и новый — не я;
@@ -1245,6 +1302,11 @@
       conn,
       heartbeat: () => heartbeat(true),
       toast: (text, kind) => toast(text, kind),
+      skippedText: (skipped) => skippedText(skipped),
+      // Время итога на плашке — короче для самопроверки; null — обычное
+      toastMs: (ms) => {
+        toastMs = ms || TOAST_MS;
+      },
       // Журнал колокольчика — заново из браузера, как после перезагрузки страницы (§22.5)
       noticeReload: () => {
         bell.key = null;
@@ -1896,12 +1958,17 @@
     return ev ? `${ev.number}: ${why}` : why;
   }
 
-  // Пропущенные сервером — другой сценарий, чем у основного выборки (skipped, §11.1, ARCH-15): номера по причине
+  // Пропущенные сервером — другой сценарий, чем у основного выборки (skipped, §11.1, ARCH-15): по причине — сколько и
+  // номера; больше SKIPPED_NUMBERS — два первых и «и ещё N»: плашка итога — одна строка (§22.6, BUG-123)
+  const SKIPPED_NUMBERS = 5;
   function skippedText(skipped) {
     const by = new Map();
     (skipped || []).forEach((s) => by.set(s.reasonKey, (by.get(s.reasonKey) || []).concat(s.number)));
-    return [...by].map(([key, numbers]) => t("Не закрыты — {reason}: {ids}", { reason: say(key), ids: numbers.join(", ") })).join(" ");
+    const ids = (numbers) => (numbers.length <= SKIPPED_NUMBERS ? numbers.join(", ") : t("{ids} и ещё {n}", { ids: numbers.slice(0, 2).join(", "), n: numbers.length - 2 }));
+    return [...by].map(([key, numbers]) => t("Не закрыты: {n} — {reason}: {ids}", { n: numbers.length, reason: say(key), ids: ids(numbers) })).join(". ");
   }
+  // Два предложения уведомления — через точку: «Закрыто: 120. Не закрыты: 450 — другой сценарий»
+  const sentences = (...parts) => parts.filter(Boolean).map((x, i, all) => (i < all.length - 1 && !/[.!?…]$/.test(x) ? `${x}.` : x)).join(" ");
 
   async function runBulk(id, guids, form, surface) {
     let res;
@@ -1920,7 +1987,7 @@
     if (!res.succeeded.length) {
       const why = res.failed.length ? failureText(res.failed) : t("Действие недоступно");
       // Пропущенные другого сценария — названы и здесь: им ничего не сделано (§11.1, ARCH-15)
-      toast(skippedText(res.skipped) ? `${why} ${skippedText(res.skipped)}` : why, "error");
+      toast(sentences(why, skippedText(res.skipped)), "error");
       // Причину оператор увидел: у изменённых после отметки версия — нынешняя, повтор — его решение (BUG-106)
       res.failed.filter((f) => f.problem.code === "VERSION_CONFLICT").forEach((f) => checkedVersions.delete(f.incidentGuid));
       await updateSelection();
@@ -1933,8 +2000,8 @@
     const copy = bulkCopy(id, done.length);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
     // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
-    const failedText = res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText;
-    toast(skippedText(res.skipped) ? `${failedText} ${skippedText(res.skipped)}` : failedText, res.failed.length ? "error" : "done");
+    const failedText = res.failed.length ? sentences(okText, t("Не выполнено: {n}", { n: res.failed.length }), failureText(res.failed)) : okText;
+    toast(sentences(failedText, skippedText(res.skipped)), res.failed.length ? "error" : "done");
     state.selectedId = done[0].id;
     navigate(res.navigate);
     await reload();
