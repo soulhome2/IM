@@ -336,8 +336,9 @@ a { color: var(--text); text-decoration: none; }
 
 /* Строка состояния поста (§22.4) — в середине шапки, одной строкой: длинный текст обрезается, высоту шапки не меняет (§22.1) */
 .topbar-cluster { min-width: 0; }
-/* Места мало — сначала сжимается строка поста, потом «Звучит»; «Тихо» и кнопки пункта не сжимаются */
-.post-status { flex: 0 100 auto; min-width: 0; margin: 0 auto; display: flex; overflow: hidden; }
+/* Места мало — сначала сжимается текст «Звучит», потом текст пункта поста. От пункта всегда остаются значок, цвет, кнопки
+   и «+N» (min-width: auto — по ним), «Тихо» не сжимается */
+.post-status { flex: 0 1 auto; min-width: 0; margin: 0 auto; display: flex; overflow: hidden; }
 .post-status[hidden] { display: none; }
 .post-item {
   display: inline-flex;
@@ -360,15 +361,29 @@ a { color: var(--text); text-decoration: none; }
 .post-item .post-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .post-item .link-btn { border: none; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .post-item .post-more { flex-shrink: 0; text-decoration: underline; padding-right: 6px; }
+.post-item .more-short,
+.post-item.tight .more-long,
+.post-item.tight .post-text { display: none; }
+.post-item.tight .more-short { display: inline; }
+/* Замер минимума (fitHead): без текста, с короткими метками */
+.topbar .fit-min .post-text,
+.topbar .fit-min .sound-text,
+.topbar .fit-min .more-long,
+.topbar .fit-min .hid-long { display: none; }
+.topbar .fit-min .more-short,
+.topbar .fit-min .hid-short { display: inline; }
+.post-item > [aria-hidden="true"] { flex-shrink: 0; }
 .post-item .btn.small,
 .sound-line .btn.small { flex-shrink: 0; padding: 2px 10px; }
 /* Звук (§21.4): строка «Звучит … · Тихо» в шапке — пока что-то звучит; одной строкой, высоту шапки не меняет */
-.sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
+.sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex: 0 100 auto; flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
 .post-status:not([hidden]) + .sound-bar { margin-left: 0; }
 /* Окно уже 1280: строке поста нужно место в середине шапки — название продукта остаётся знаком */
 @media (max-width: 1279px) {
   .brand { min-width: 0; }
   .brand-text { display: none; }
+  /* Звучит — часам места нет: строке поста и «Звучит» нужны их минимумы (§22.4) */
+  .topbar:has(.sound-line.ring) .clock { display: none; }
 }
 .sound-bar:empty { display: none; }
 .sound-bar .sound-bar-menu { display: none; }
@@ -390,6 +405,10 @@ a { color: var(--text); text-decoration: none; }
 .sound-line.warn { border-color: var(--warn); color: var(--warn-text); }
 .sound-line.ring { border-color: var(--danger-border); background: var(--danger-bg); color: var(--crit-text); }
 .sound-line .sound-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sound-line .sound-hid { flex-shrink: 0; white-space: nowrap; }
+.sound-line .hid-short,
+.sound-line.tight .hid-long { display: none; }
+.sound-line.tight .hid-short { display: inline; }
 .sound-line .link-btn { border: none; background: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
 .sound-btn #soundIcon { font-size: 18px; line-height: 1; }
 .sound-pop .sound-volume-row { display: flex; align-items: center; gap: 8px; }

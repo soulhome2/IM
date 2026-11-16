@@ -42,6 +42,7 @@ window.IM_DICT_UI = {
     "«Только важное» закончилось — звучит всё": "“Important only” has ended — all sounds are back",
     "{what} — закончилось": "{what} — ended",
     "и ещё {n}": "and {n} more",
+    "скрыт": "hidden",
     "{what}: {who} — только просмотр": "{what}: {who} — view only",
     "{what} — только просмотр": "{what} — view only",
     "{what} — «{desc}», до {until}": "{what} — “{desc}”, until {until}",

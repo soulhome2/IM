@@ -2240,10 +2240,14 @@
       expect(line([], true) === "—+0", "без состояний строка пуста");
       const err = (code) => ({ status: 409, problem: { code } });
       const petrova = { owner: { id: "petrova", name: "Петрова Е. А." } };
-      const late = (id, code, fresh) => ui.lateText(id, err(code), fresh, "me");
+      // Видел инцидент без владельца; перечитанный — у другого человека
+      const late = (id, code, fresh, before) => ui.lateText(id, err(code), before || { owner: null }, fresh, "me");
       expect(late("claim", "VERSION_CONFLICT", petrova) === "Уже взял Петрова Е. А.", `опоздал со «Взять»: ${late("claim", "VERSION_CONFLICT", petrova)}`);
       expect(late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova) === "Уже принял Петрова Е. А.", `опоздал с «Принять»: ${late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova)}`);
       expect(late("claim", "VERSION_CONFLICT", { owner: { id: "me" } }) === null && late("claim", "GUARD_FAILED", petrova) === null && late("claim", "VERSION_CONFLICT", { owner: null }) === null, "«Уже взял» — не только когда инцидент у другого");
+      // Владелец не сменился (был Петрова и остался) — обычная ошибка, не «опоздал»
+      expect(late("claim", "VERSION_CONFLICT", petrova, petrova) === null, "«Уже взял» без смены владельца");
+      expect(late("claim", "VERSION_CONFLICT", petrova, { owner: { id: "sidorov" } }) === "Уже взял Петрова Е. А.", "смена владельца с Сидорова на Петрову — не «Уже взял»");
       return "граница по якорю; connection+2, диск только администратору; «Уже взял Петрова Е. А.»";
     });
 
@@ -4948,6 +4952,9 @@
       const now = fakeSound.rec.filter((r) => r.at <= fakeSound.clock);
       expect(now.length === 1 && now[0].pattern === window.IMSound.TEST_PATTERN, `после «Включить звук» сейчас: ${now.map((r) => r.pattern).join(", ") || "ничего"}`);
       expect(!soundLine("off") && $("soundIcon").textContent === "🔊", `после включения: значок «${$("soundIcon").textContent}»`);
+      // «Звук не включён» длилось с входа — ни начала, ни конца в журнале (§22.4)
+      const startedLater = [...$("bellList").querySelectorAll("[data-notice]")].some((li) => /Звук не включён/.test(li.textContent));
+      expect(startedLater || !noticeWith(/Звук включён/), `конец состояния, длившегося с входа, — в журнале: ${noticeList()}`);
       return `проверочный — ${now[0].pattern}`;
     });
 
@@ -5060,26 +5067,31 @@
       }
     }, POST_STEP);
 
-    await step("Шапка: строка поста и «Звучит» не меняют её высоту на 1560, 1280 и 1024 px (§22.1)", async () => {
-      // Разметка — с экрана: два состояния поста (и «и ещё 1»), длинный текст работ, самая длинная строка «Звучит»
-      let postHtml = "";
+    await step("Шапка: строка поста и «Звучит» не меняют её высоту на 1560, 1280 и 1024 px; при «Звучит» со «скрыт фильтром» от пункта поста видны значок и кнопки, «Тихо» на месте (§22.1, §22.4)", async () => {
+      // Разметка — с экрана: «Только важное» с «Вернуть»; два состояния («Нет связи» и «и ещё 1»); длинный текст работ;
+      // самая длинная строка «Звучит» — со «скрыт фильтром · Показать»
+      let oneHtml = "";
+      let twoHtml = "";
       try {
         await onlyImportantOn();
+        oneHtml = $("postStatus").innerHTML;
         await heartbeatDown(true);
-        postHtml = $("postStatus").innerHTML;
+        twoHtml = $("postStatus").innerHTML;
       } finally {
         await postCleanup();
       }
-      expect(/и ещё 1/.test(postHtml), `нет двух состояний: ${postHtml.slice(0, 120)}`);
+      expect(/data-sound-back/.test(oneHtml) && /и ещё 1/.test(twoHtml), `нет пунктов: ${oneHtml.slice(0, 80)} / ${twoHtml.slice(0, 80)}`);
       const longText = "Идут плановые работы: Камера 12 на складе готовой продукции — «замена датчика дыма в зоне погрузки», до 14:00.";
       const ring =
-        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: <button type="button" class="link-btn">3 (Критический)</button> · <span class="sound-hidden">скрыт фильтром</span> · <button type="button" class="link-btn">Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
+        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: <button type="button" class="link-btn">3 (Критический)</button></span><span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">скрыт фильтром</span><span class="hid-short">скрыт</span></span> · <button type="button" class="link-btn" data-sound-show>Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
       const bar = document.querySelector(".topbar").cloneNode(true);
       bar.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       bar.querySelector(".post-status").setAttribute("hidden", "");
       bar.querySelector(".post-status").innerHTML = "";
       bar.querySelectorAll(".sound-bar .sound-line").forEach((el) => el.remove());
       const base = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
+      // Шрифт значков в headless не грузится — значок рисуется словом («notifications»); ширина — как у шрифта, 24 px
+      const icons = ".material-symbols-outlined { display: inline-block; width: 24px; overflow: hidden; white-space: nowrap; }";
       const out = [];
       for (const width of [1560, 1280, 1024]) {
         const frame = document.createElement("iframe");
@@ -5088,7 +5100,7 @@
           frame.onload = resolve;
           setTimeout(resolve, 5000);
         });
-        frame.srcdoc = `<!DOCTYPE html><html lang="ru" data-theme="${document.documentElement.dataset.theme}"><head><meta charset="UTF-8"><base href="${base}"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="bridge.css"></head><body><div class="app">${bar.outerHTML}</div></body></html>`;
+        frame.srcdoc = `<!DOCTYPE html><html lang="ru" data-theme="${document.documentElement.dataset.theme}"><head><meta charset="UTF-8"><base href="${base}"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="bridge.css"><style>${icons}</style></head><body><div class="app">${bar.outerHTML}</div></body></html>`;
         document.body.appendChild(frame);
         await loaded;
         try {
@@ -5096,25 +5108,42 @@
           const top = doc.querySelector(".topbar");
           const ps = doc.querySelector(".post-status");
           const sb = doc.querySelector(".sound-bar");
-          const h = () => Math.round(top.getBoundingClientRect().height * 10) / 10;
+          const rect = (el) => el.getBoundingClientRect();
+          const h = () => Math.round(rect(top).height * 10) / 10;
           const set = (post, long, ringOn) => {
-            ps.innerHTML = post ? postHtml : "";
+            ps.innerHTML = post || "";
             ps.hidden = !post;
             if (post && long) ps.querySelector(".post-text").textContent = longText;
             sb.querySelectorAll(".sound-line").forEach((el) => el.remove());
             if (ringOn) sb.insertAdjacentHTML("beforeend", ring);
+            window.IM_SELFTEST_UI.fitHead(doc);
             return h();
           };
-          const empty = set(false, false, false);
-          const got = { post: set(true, false, false), long: set(true, true, false), ring: set(false, false, true), both: set(true, true, true) };
+          const inside = (el, box) => {
+            const a = rect(el);
+            const b = rect(box);
+            return a.width > 0 && a.left >= b.left - 1 && a.right <= b.right + 1;
+          };
+          const empty = set("", false, false);
+          const got = { one: set(oneHtml, false, false), two: set(twoHtml, false, false), long: set(twoHtml, true, false), ring: set("", false, true) };
+          // Пункт поста при «Звучит»: значок виден, кнопки пункта — в рамке строки поста, «Тихо» и «Показать» — в рамке «Звучит»
+          for (const [name, html] of [["one", oneHtml], ["two", twoHtml]]) {
+            got[`${name}+ring`] = set(html, true, true);
+            const item = ps.querySelector(".post-item");
+            const seen = Math.min(rect(item).right, rect(ps).right) - Math.max(rect(item).left, rect(ps).left);
+            expect(seen >= 24, `${width} px, ${name} при «Звучит»: от пункта поста видно ${Math.round(seen)} px`);
+            const icon = item.querySelector('[aria-hidden="true"]');
+            expect(inside(icon, ps), `${width} px, ${name}: значок пункта обрезан`);
+            item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(inside(b, ps), `${width} px, ${name}: кнопка пункта «${b.textContent.trim()}» вне строки поста`));
+            expect(inside(sb.querySelector("[data-sound-silence]"), sb) && inside(sb.querySelector("[data-sound-show]"), sb), `${width} px, ${name}: «Тихо» или «Показать» обрезаны`);
+            const actions = doc.querySelector(".topbar-actions");
+            expect(rect(ps).right <= rect(sb).left + 1 && rect(sb).right <= rect(actions).left + 1, `${width} px, ${name}: строки заходят друг на друга или на кнопки шапки`);
+            expect(item.title.length > 0, `${width} px, ${name}: у пункта нет подсказки с полным текстом`);
+          }
           const bad = Object.entries(got).filter(([, v]) => Math.abs(v - empty) > 0.5);
           expect(empty > 0 && !bad.length, `${width} px: без пунктов ${empty} px, ${bad.map(([k, v]) => `${k} ${v} px`).join(", ")}`);
-          // «Тихо» не обрезан: строка звука важнее строки поста
-          const quiet = sb.querySelector("[data-sound-silence]").getBoundingClientRect();
-          const clip = sb.getBoundingClientRect();
-          expect(quiet.width > 0 && quiet.right <= clip.right + 1 && quiet.left >= clip.left - 1, `${width} px: «Тихо» обрезан строкой звука`);
           // Ничего не уходит за правый край шапки
-          const over = [...top.querySelectorAll("*")].filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > width + 1).map((el) => el.className || el.tagName);
+          const over = [...top.querySelectorAll("*")].filter((el) => el.getClientRects().length && rect(el).right > width + 1).map((el) => el.className || el.tagName);
           expect(!over.length, `${width} px: за краем шапки ${over.slice(0, 3).join(", ")}`);
           out.push(`${width}: ${empty} px`);
         } finally {

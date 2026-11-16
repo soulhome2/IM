@@ -890,11 +890,13 @@
     while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
   }
   // Опоздал (§8.1, §22.6): действие не прошло, потому что инцидент уже у другого — мягкое «Уже принял / взял {who}».
-  // fresh — перечитанный инцидент; владелец — я или никто — обычная ошибка
+  // before — инцидент, каким его видел оператор, fresh — перечитанный. Только если владелец сменился и новый — не я;
+  // иначе — обычная ошибка
   const LATE_CODES = ["VERSION_CONFLICT", "TRANSITION_NOT_ALLOWED_FROM_STATE"];
-  function lateText(transitionId, err, fresh, meGuid) {
+  function lateText(transitionId, err, before, fresh, meGuid) {
     const code = err && err.problem && err.problem.code;
     if (!LATE_CODES.includes(code) || !fresh || !fresh.owner || fresh.owner.id === meGuid) return null;
+    if (before && before.owner && before.owner.id === fresh.owner.id) return null;
     return t(transitionId === "accept" ? "Уже принял {who}" : "Уже взял {who}", { who: actorName(fresh.owner) });
   }
 
@@ -930,7 +932,11 @@
       }
       bell.list = list;
       noticesPrune();
-      bell.list.push(...bell.pending.splice(0));
+      // Записанное до сессии — в журнал оператора и сразу в браузер
+      if (bell.pending.length) {
+        bell.list.push(...bell.pending.splice(0));
+        noticesSave();
+      }
     }
     return bell.list;
   }
@@ -1041,6 +1047,7 @@
   }
 
   function bindBell() {
+    window.addEventListener("resize", () => fitHead());
     $("bellBtn").addEventListener("click", () => (bell.open ? closeBell(false) : openBell()));
     $("bellClose").addEventListener("click", () => closeBell(true));
     $("bellPanel").addEventListener("click", (e) => {
@@ -1128,10 +1135,46 @@
     const line = POST_SOUND_LINE[def.id] ? ` data-sound-line="${POST_SOUND_LINE[def.id]}"` : "";
     const icon = `<span aria-hidden="true">${POST_ICON[def.id] || "•"}</span>`;
     const text = full ? `<span class="post-text">${postText(def, true)}</span>` : `<button type="button" class="post-text link-btn" data-post-open>${postText(def, false)}</button>`;
-    const tail = more ? ` <button type="button" class="link-btn post-more" data-post-open>${te("и ещё {n}", { n: more })}</button>` : "";
-    return `<div class="post-item ${POST_CLASS[def.id] || "info"}" data-post-state="${escapeHtml(def.id)}"${line}>${icon} ${text}${postButtons(def)}${tail}</div>`;
+    // Места мало — от пункта остаются значок, кнопки и «+N» (fitHead); полный текст — в подсказке
+    const tail = more
+      ? ` <button type="button" class="link-btn post-more" data-post-open><span class="more-long">${te("и ещё {n}", { n: more })}</span><span class="more-short">+${more}</span></button>`
+      : "";
+    const title = full ? "" : ` title="${escapeHtml(more ? `${postShort(def)} · ${t("и ещё {n}", { n: more })}` : postShort(def))}"`;
+    return `<div class="post-item ${POST_CLASS[def.id] || "info"}" data-post-state="${escapeHtml(def.id)}"${line}${title}>${icon} ${text}${postButtons(def)}${tail}</div>`;
   }
   let postPrev = null;
+  // Что длилось при входе: ни начало, ни конец такого состояния в журнал не пишутся (§22.4)
+  let postAtEntry = null;
+  // Шапка тесна (§22.1, §22.4): сначала сжимается текст «Звучит», затем текст пункта поста; почти не осталось — короткие
+  // метки: у «Звучит» — «скрыт», у пункта — значок, кнопки и «+N». root — документ (самопроверка мерит копию шапки)
+  function fitHead(root) {
+    const doc = root || document;
+    const pairs = [
+      [doc.querySelector(".topbar .post-status"), doc.querySelector(".topbar .post-item")],
+      [doc.querySelector(".topbar .sound-bar"), doc.querySelector(".topbar .sound-line.ring")],
+    ];
+    // Гарантированный минимум (§22.4): ширина пункта с короткими метками и без текста — значок, цвет, кнопки, «+N»
+    pairs.forEach(([box, item]) => {
+      if (!box) return;
+      box.style.minWidth = "";
+      if (!item) return;
+      item.classList.remove("tight");
+      item.classList.add("fit-min");
+      // Замер — без сжатия: пункт — гибкий элемент своей полосы и иначе сжался бы под неё
+      item.style.width = "max-content";
+      item.style.flexShrink = "0";
+      const min = Math.ceil(item.getBoundingClientRect().width);
+      item.style.width = "";
+      item.style.flexShrink = "";
+      item.classList.remove("fit-min");
+      if (min) box.style.minWidth = `${min}px`;
+    });
+    const [[, item], [, ring]] = pairs;
+    const ringText = ring && ring.querySelector(".sound-text");
+    if (ringText && ring.querySelector(".sound-hid") && ringText.scrollWidth > ringText.clientWidth + 1) ring.classList.add("tight");
+    const text = item && item.querySelector(".post-text");
+    if (text && text.scrollWidth > text.clientWidth + 1 && text.clientWidth < 48) item.classList.add("tight");
+  }
   function renderPost() {
     const box = $("postStatus");
     if (!box || !WORKFLOW) return;
@@ -1145,10 +1188,14 @@
         line.all.filter((d) => !postPrev.has(d.id)).forEach((d) => notice(postShort(d), { kind: "system" }));
         postDefs()
           .filter((d) => postPrev.has(d.id) && !now.has(d.id))
-          .forEach((d) => notice(POST_END[d.id] ? t(POST_END[d.id]) : t("{what} — закончилось", { what: lbl(d) }), { kind: "system" }));
-      }
+          .forEach((d) => {
+            if (postAtEntry.delete(d.id)) return;
+            notice(POST_END[d.id] ? t(POST_END[d.id]) : t("{what} — закончилось", { what: lbl(d) }), { kind: "system" });
+          });
+      } else postAtEntry = new Set(now);
       postPrev = now;
     }
+    fitHead();
     // Вкладка «Система» — идущие состояния полностью, и при закрытой панели: её откроют щелчком по строке
     renderBell();
   }
@@ -1198,6 +1245,7 @@
       get hiddenBy() { return hiddenBy; },
       get postStatusLine() { return postStatusLine; },
       get lateText() { return lateText; },
+      get fitHead() { return fitHead; },
       conn,
       heartbeat: () => heartbeat(true),
       toast: (text, kind) => toast(text, kind),
@@ -1952,7 +2000,7 @@
     } catch (err) {
       // Опоздал — инцидент уже у другого: мягкое «Уже взял Петров», уходит само (§8.1, §22.6); иначе — ошибка до «✕»
       const fresh = LATE_CODES.includes(err && err.problem && err.problem.code) ? await api.get(incPath(ev.guid)).catch(() => null) : null;
-      const late = lateText(id, err, fresh, store.session && store.session.operator.guid);
+      const late = lateText(id, err, ev, fresh, store.session && store.session.operator.guid);
       if (late) toast(late, "late");
       else toast(problemText(err), "error");
       await reload();
@@ -5536,11 +5584,12 @@
       const link = (text) => `<button type="button" class="link-btn" data-sound-go="${escapeHtml(top.guid)}" data-sound-number="${escapeHtml(top.number)}">${text}</button>`;
       const body = n > 1 ? `${te("Звучит:")} ${link(`${n} (${what})`)}` : `${te("Звучит:")} ${what}, ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
       // Строку звучащего спрятал фильтр — «скрыт фильтром · Показать» (§21.4, §22.3)
+      // Места мало — сначала сжимается текст «Звучит» (многоточие), метка — короче «скрыт» (fitHead), «Показать» и «Тихо» на месте
       const hid = hiddenNow(top.guid)
-        ? ` · <span class="sound-hidden" data-sound-hidden>${te("скрыт фильтром")}</span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button>`
+        ? `<span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">${te("скрыт фильтром")}</span><span class="hid-short">${te("скрыт")}</span></span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button></span>`
         : "";
       parts.push(
-        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">${body}${hid}</span> <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
+        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">${body}</span>${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
       );
     }
     $("soundBar").innerHTML = parts.join("");
