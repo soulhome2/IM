@@ -7113,6 +7113,7 @@
                 "$ref": "#/components/schemas/SoundCue"
               },
               {
+                "type": "object",
                 "properties": {
                   "repeat": {
                     "type": "string",
