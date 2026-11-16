@@ -1455,7 +1455,7 @@
       assert.eq([e.source && e.source.guid, e.source && e.source.name, e.source && e.source.deleted, e.address], [d.id, d.name, false, d.addressIm || d.address || null], `${e.number}: источник и адрес`);
       assert.ok(!("site" in e) && !("location" in e) && !("siteType" in e), `${e.number}: площадки и места в сводке нет`);
     }
-    const typed = fx.devices.find((d) => d.addressIm);
+    const typed = fx.devices.find((d) => d.addressIm && d.address && d.addressIm !== d.address && fx.incidents.some((i) => i.devices[0] === d.id));
     const bare = fx.devices.find((d) => !d.address && !d.addressIm && fx.incidents.some((i) => i.devices[0] === d.id));
     assert.ok(typed && bare, "в наборе есть устройство с адресом МИ и источник без адреса");
     const search = async (envx, text) => (await envx.api.get("/operator/incidents", { filter: "all", pageSize: 200, search: text })).items.map((e) => e.number);

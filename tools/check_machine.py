@@ -1041,15 +1041,52 @@ def check_fixture_places(err):
         if not mine or (part and not any(part in x for x in mine)):
             where = "; ".join(" / ".join(x) for x in paths.get(d["id"], [])) or "ни в одной группе"
             err.append(f"эталон: устройство «{d['name']}» — на плане «{plan['name']}», а в группах: {where} (DATA-12)")
+    # Адрес источника — «почтовый адрес объекта, часть, …» ($commentAddresses набора)
+    site_of = {g["address"]: g["name"] for g in fx["sourceGroups"] if isinstance(g.get("address"), str)}
     for d in fx["devices"]:
-        parts = [x.strip() for x in (d.get("address") or "").split(",")]
-        if len(parts) < 2 or parts[1] not in names.get(parts[0], set()):
+        address = d.get("address") or ""
+        postal = next((a for a in site_of if address.startswith(a + ", ")), None)
+        if postal is None:
             continue
-        site, head = parts[0], parts[1]
+        site, head = site_of[postal], address[len(postal) + 2:].split(",")[0].strip()
+        if head not in names.get(site, set()):
+            continue
         src = paths.get(d["id"], [])
         if not any(head in x for x in src if x[0] == site):
             where = "; ".join(" / ".join(x) for x in src) or "ни в одной группе"
             err.append(f"эталон: устройство «{d['name']}» — адрес «{d['address']}», а в группах: {where} — фильтр по «{head}» его не покажет (DATA-12)")
+    # Адрес по объекту ($commentAddresses набора, §1, §19.1): у объекта (верхней группы с адресом) — почтовый адрес,
+    # у каждого адреса его устройств (источника и МИ) почтовая часть — та же; устройство одного объекта — не в другом.
+    # Функциональные группы (в них устройства разных объектов) и вложенные группы — без адреса.
+    def group_devices(g):
+        return set(g.get("devices", [])).union(*(group_devices(s) for s in g.get("groups", [])))
+
+    def nested_with_address(groups):
+        return [g["id"] for g in groups if "address" in g] + [x for g in groups for x in nested_with_address(g.get("groups", []))]
+
+    device_by_id = {d["id"]: d for d in fx["devices"]}
+    device_object = {}
+    for top in fx["sourceGroups"]:
+        for gid in nested_with_address(top.get("groups", [])):
+            err.append(f"эталон: у вложенной группы {gid} адрес — адрес только у объекта, верхней группы (§19.1)")
+        postal = top.get("address")
+        if postal is None:
+            continue
+        if not isinstance(postal, str) or postal != postal.strip() or not postal or len(postal) > 500:
+            err.append(f"эталон: у группы {top['id']} адрес не строка 1–500 символов без пробелов по краям (§1)")
+            continue
+        for dev in sorted(group_devices(top)):
+            if dev in device_object:
+                err.append(f"эталон: устройство {dev} в двух объектах — «{device_object[dev]}» и «{top['name']}»: чей адрес, неясно")
+                continue
+            device_object[dev] = top["name"]
+            for key in ("address", "addressIm"):
+                value = device_by_id.get(dev, {}).get(key)
+                if isinstance(value, str) and value != postal and not value.startswith(postal + ", "):
+                    err.append(f"эталон: устройство {dev}, {key} «{value}» — почтовая часть не адрес объекта «{top['name']}» «{postal}»")
+    for d in fx["devices"]:
+        if d["id"] not in device_object and (d.get("address") or d.get("addressIm")):
+            err.append(f"эталон: у устройства {d['id']} адрес, а объекта с адресом у него нет — у объекта (верхней группы) адрес нужен")
 
 
 def check_doc_numbers(w, o, err):
@@ -2651,6 +2688,18 @@ MUTATIONS = [
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,
      '"number": "INC-1853",\n      "eventGuid": "70000000-0000-4000-8000-000000001847",\n      "alarmNumber": "INC-1847",',
      '"number": "INC-1853",\n      "eventGuid": "70000000-0000-4000-8000-000000001847",\n      "alarmNumber": "INC-1853",', "номер"),
+    ("address-other-object", "набор: адрес МИ устройства ТЦ — с почтовым адресом главного офиса (§1, §19.1)", FIXTURE,
+     '"addressIm": "г. Екатеринбург, ул. Щербакова, 23, 1-й этаж, кассы 1–6"', '"addressIm": "г. Екатеринбург, ул. Радищева, 18, 1-й этаж, кассы 1–6"',
+     "почтовая часть"),
+    ("address-functional-group", "набор: у функциональной группы «Все камеры» — адрес, как у объекта (§19.1)", FIXTURE,
+     '"name": "Все камеры",', '"name": "Все камеры",\n      "address": "г. Екатеринбург, ул. Радищева, 18",', "в двух объектах"),
+    ("address-object-missing", "набор: у объекта «Технопарк» нет адреса, а у его устройств — есть (§19.1)", FIXTURE,
+     '"name": "Технопарк",\n      "address": "г. Екатеринбург, ул. Студенческая, 42",', '"name": "Технопарк",', "объекта с адресом у него нет"),
+    ("address-nested-group", "набор: у вложенной группы «Корпус А» — адрес (§19.1)", FIXTURE,
+     '"name": "Корпус А",', '"name": "Корпус А",\n          "address": "г. Екатеринбург, ул. Студенческая, 42",', "вложенной группы"),
+    ("address-place-wrong-group", "набор: в адресе источника камеры склада — склад, в группах которого её нет (DATA-12)", FIXTURE,
+     '"address": "г. Екатеринбург, ул. Монтажников, 7, Склад №1, ворота погрузки А"', '"address": "г. Екатеринбург, ул. Монтажников, 7, Склад №3, ворота погрузки А"',
+     "фильтр по «Склад №3»"),
     ("rules-from-wrong", "§6.1: у «Взять» в колонке «Откуда» — не то состояние", RULES,
      "| **Взять** | `claim` | `new` | `in_progress` |", "| **Взять** | `claim` | `on_hold` | `in_progress` |"),
     ("timer-not-started", "машина: «не может принять» не запускает реакцию при входе в «Новый» (RULE-51)", MACHINE,

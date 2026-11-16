@@ -2854,7 +2854,9 @@
         };
         const atMall = await menuAt("INC-1847");
         expect(atMall.includes(group.title) && !atMall.includes(lost.title), `меню при INC-1847: «${atMall.trim()}»`);
-        const office = fx.incidents.find((i) => i.state === "new" && (sourceOf(i.number).address || "").startsWith("Главный офис"));
+        // Инцидент Главного офиса — по почтовой части действующего адреса источника ($commentAddresses набора)
+        const officeAddress = fx.sourceGroups.find((g) => g.name === "Главный офис").address;
+        const office = fx.incidents.find((i) => i.state === "new" && (sourceOf(i.number).addressIm || sourceOf(i.number).address || "").startsWith(officeAddress));
         const atOffice = await menuAt(office.number);
         expect(!atOffice.includes(group.title) && !atOffice.includes(lost.title), `меню при ${office.number} (Главный офис): «${atOffice.trim()}»`);
         // Без права администратора схемы справочник без инцидента — только общие
