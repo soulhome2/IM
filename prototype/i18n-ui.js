@@ -137,6 +137,7 @@ window.IM_DICT_UI = {
     "удалённый пользователь ({id})": "deleted user ({id})",
     "удалённая группа ({id})": "deleted group ({id})",
     "группа ({id})": "group ({id})",
+    "пользователь ({id})": "user ({id})",
     "адресат ({id})": "addressee ({id})",
     "неизвестный адресат ({id})": "unknown addressee ({id})",
     "Правила": "Rules",

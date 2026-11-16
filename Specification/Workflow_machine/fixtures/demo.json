@@ -62,7 +62,8 @@
         "roles": [
           "Оператор ТЦ"
         ],
-        "agentState": "offline"
+        "agentState": "offline",
+        "stale": true
       },
       {
         "id": "orlova",

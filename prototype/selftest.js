@@ -4434,10 +4434,12 @@
           expect(shown.includes(want), `в «Уровнях» нет «${want}»: «${shown}»`);
         const alerts = cell(/^Получатель оповещений/).trim();
         expect(alerts === `пользователь ${me.name}`, `получатель оповещений: «${alerts}»`);
-        // Список групп не пришёл — группа не «удалённая», а «группа (id)»: запрос интерфейса отказывает
+        // Списки групп и людей поста не пришли — ни группа, ни человек не «удалённые», а «группа (id)», «пользователь (id)»:
+        // запросы интерфейса отказывают
         await click(document.querySelector('[data-close="modalAdmin"]'));
         const get = stand.get;
-        stand.get = (path, ...rest) => (path === "/operator/admin/duty-groups" ? Promise.reject(new Error("отказ")) : get.call(stand, path, ...rest));
+        const refused = ["/operator/admin/duty-groups", "/operator/admin/people"];
+        stand.get = (path, ...rest) => (refused.includes(path) ? Promise.reject(new Error("отказ")) : get.call(stand, path, ...rest));
         try {
           await click($("adminBtn"));
           await click($("adminTabs").querySelector('[data-admin-tab="timing"]'));
@@ -4447,6 +4449,7 @@
         }
         const blind = cell(/^Уровни/);
         expect(blind.includes(`группа (${group.id})`) && !/удалённая группа/.test(blind), `список групп не пришёл: «${blind}»`);
+        expect(blind.includes("пользователь (gone-7)") && !/удалённый пользователь/.test(blind), `список людей не пришёл: «${blind}»`);
       } finally {
         if (!$("modalAdmin").hidden) await click(document.querySelector('[data-close="modalAdmin"]'));
         await standReset({ fixture: "demo" });
