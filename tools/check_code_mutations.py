@@ -148,7 +148,7 @@ MUTATIONS = [
     ("card-ignores-access", "server.js", "      return ev && canSee(ev) ? ev : null;", "      return ev;", "api"),
     ("stream-leaks-hidden", "server.js", "      if (ev && !canSee(ev)) return;\n", "", "api"),
     ("tree-ignores-access", "server.js", ".filter((c) => c.isDevice && myDevices.has(c.id))", ".filter((c) => c.isDevice)", "api"),
-    ("counters-ignore-access", "server.js", "const list = visible({ scenarioGuid: (q || {}).scenarioGuid });", "const list = events;", "api"),
+    ("counters-ignore-access", "server.js", "const list = visible(narrowed(q));", "const list = events;", "api"),
     # Уровень, где принять может только тот, у кого инцидент уже есть, пропускается (RULE-93)
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "      at = runAt;\n      let facts = null;", "      at = null;\n      let facts = null;", "api"),
@@ -198,7 +198,7 @@ MUTATIONS = [
     ("external-effects-dropped", "server.js", "journalEntries: journalView(ev).slice(before), externalEffects, canceledTimerTrigger", "journalEntries: journalView(ev).slice(before), externalEffects: [], canceledTimerTrigger", "api"),
     ("queue-not-sorted", "server.js", "      return list.sort((a, b) => cmp(a, b) || byNumber(a, b));", "      return list;", "api"),
     ("queue-sort-always-open", "server.js", "return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;", "return s.options.includes(asked) ? asked : s.default;", "api"),
-    ("queue-filters-ignored", "server.js", 'if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;', "", "api"),
+    ("queue-filters-ignored", "server.js", 'if (q.priority != null && q.priority !== "" && !String(q.priority).split(",").some((v) => e.priority === Number(v))) return false;', "", "api"),
     ("strings-no-fallback", "server.js", "const strings = Object.assign({}, STRINGS.ru || {}, STRINGS[locale] || {});", "const strings = STRINGS[locale] || {};", "api"),
     ("ui-catalog-ignored", "app.js", "if (catalog[ru] != null) return icu(catalog[ru], vars || {});", "", "ui"),
     ("create-norm-from-occurred", "engine.js", 'const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");\n      return applied.ok', 'at = ev.occurredAt;\n      const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");\n      at = null;\n      return applied.ok', "api"),
@@ -373,7 +373,7 @@ MUTATIONS = [
     ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"), \"error\");", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
     ("ui-no-if-match", "app.js", "const ifMatch = (ev) => ({ \"If-Match\": `\"${ev.version}\"` });", "const ifMatch = () => ({});", "ui"),
-    ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue");', 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue", [...state.checked]);', "ui"),
+    ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");', 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)
     # Телефон: типы и порядок — под «Фильтры» с числом выбранных (BUG-50)
     ("ui-more-filters-no-count", "app.js", '$("eventsMoreN").hidden = !n;', '$("eventsMoreN").hidden = true;', "ui"),
@@ -386,7 +386,7 @@ MUTATIONS = [
     ("ui-schema-not-reloaded", "app.js", 'if (msg.type === "workflow.schema_published") {', "if (false) {", "ui"),
     ("schema-published-silent", "server.js", 'if (W !== before) emit("workflow.schema_published"', 'if (false) emit("workflow.schema_published"', "api"),
     # Цвет полоски очереди — из настройки приоритета, не свой в коде (§1, §4, BUG-39)
-    ("ui-priority-color-ignored", "app.js", 'data-color="${escapeHtml(PRIORITIES[e.priority].color)}"', 'data-color="red"', "ui"),
+    ("ui-priority-color-ignored", "app.js", '<div class="event-pri" data-color="${escapeHtml(PRIORITIES[e.priority].color)}"', '<div class="event-pri" data-color="red"', "ui"),
     # Приоритеты — настраиваемый справочник (§2.5, RULE-68)
     ("priority-coercion-off", "server.js", "spec.priority != null ? priorityLevel(spec.priority) : rule.priority", "spec.priority != null ? spec.priority : rule.priority", "api"),
     ("top-priority-fixed", "server.js", "const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);", "const topPriority = () => 100;", "api"),

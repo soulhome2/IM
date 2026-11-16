@@ -5,7 +5,7 @@
 
 Chrome без окна по протоколу DevTools — тот же, что у tools/shots.py. Основные экраны — очередь,
 карточки, формы, выборка, привязанные, настройки, меню — в светлой и тёмной теме, на 1440×900 и
-на телефоне 360×800. На каждом экране, только видимое:
+на телефоне 360×800; очередь — ещё на 1560, 1280 и 1024 (раскладка §7, §22). На каждом экране, только видимое:
 - пустой текст: бейдж, кнопка, вкладка без текста и без подписи; подстановка, оставшаяся пустой
   («Отложен · »);
 - контраст текста не ниже 4,5:1, крупного — 3:1 (WCAG), включая кнопки; недоступные не считаются;
@@ -35,6 +35,9 @@ import shots as S
 
 DESKTOP = S.DESKTOP
 PHONE = (360, 800)
+# Ширины раскладки очереди (§7, §22.1): шапка очереди и верхняя шапка меняются на 1560, 1280 и 1024
+LAYOUT_WIDTHS = [(1560, 900), (1280, 800), (1024, 768)]
+LAYOUT_SCREENS = ("очередь",)
 ROOT = Path(__file__).resolve().parent.parent
 CLAIM = ["#eventsList button[data-do=claim]"]
 
@@ -234,10 +237,12 @@ def main():
     b = S.Browser(args.chrome, ("--no-sandbox",) if os.environ.get("CI") else ())
     problems, broken = [], []
     try:
-        for size in (DESKTOP, PHONE):
+        for size in (DESKTOP, PHONE, *LAYOUT_WIDTHS):
             for theme in ("light", "dark"):
                 for name, prepare in SCREENS:
                     if args.only not in name:
+                        continue
+                    if size in LAYOUT_WIDTHS and name not in LAYOUT_SCREENS:
                         continue
                     where = f"{name} · {theme} · {size[0]}"
                     try:

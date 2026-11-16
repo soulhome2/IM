@@ -442,8 +442,8 @@
  {
   "name": "sort-reaction-ignores-running",
   "what": "очередь: идущая реакция не поднимает инцидент (§2.4)",
-  "find": "\"timerRuns(incident, 'reaction') ? 0 : 1\"",
-  "replace": "\"0\"",
+  "find": "\"reaction_deadline\": [\"timerRuns(incident, 'reaction') ? 0 : 1\"",
+  "replace": "\"reaction_deadline\": [\"0\"",
   "model": "не проверяет: сортировку очереди"
  },
  {
