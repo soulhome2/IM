@@ -346,7 +346,7 @@
   "workflow.filter.mine": "Mine",
   "workflow.filter.foreign": "Others",
   "workflow.filter.done": "Finished",
-  "workflow.filter.all": "All, with closed",
+  "workflow.filter.all": "All",
   "workflow.postStatus.connection": "No connection to the agent",
   "workflow.postStatus.disk": "Low disk space",
   "workflow.postStatus.sound_off": "Sound is off",

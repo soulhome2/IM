@@ -346,7 +346,7 @@
   "workflow.filter.mine": "Мои",
   "workflow.filter.foreign": "Чужие",
   "workflow.filter.done": "Завершённые",
-  "workflow.filter.all": "Все, с завершёнными",
+  "workflow.filter.all": "Все",
   "workflow.postStatus.connection": "Нет связи с агентом",
   "workflow.postStatus.disk": "Мало места на диске",
   "workflow.postStatus.sound_off": "Звук не включён",

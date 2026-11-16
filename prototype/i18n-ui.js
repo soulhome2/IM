@@ -212,7 +212,7 @@ window.IM_DICT_UI = {
     "Возобновить": "Resume",
     "Время до нарушения норматива закрытия": "Time left before the resolution target is breached",
     "Время до нарушения норматива реакции": "Time left before the reaction target is breached",
-    "Все инциденты": "All incidents",
+    "Все устройства": "All devices",
     "Выбрано {n} из {max}": "{n} of {max} selected",
     "Выбрано инцидентов: {n}": "Selected incidents: {n}",
     "Выбрать все": "Select all",

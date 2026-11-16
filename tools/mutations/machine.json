@@ -942,7 +942,7 @@
  },
  {
   "name": "layout-inbox-hidden-unknown",
-  "what": "раскладка: в hiddenWith блока фильтр, которого нет в queueFilters — при «Все, с завершёнными» блок остаётся (§7)",
+  "what": "раскладка: в hiddenWith блока фильтр, которого нет в queueFilters — при «Все» блок остаётся (§7)",
   "find": "\"hiddenWith\": [\"inbox\", \"done\", \"all\"]",
   "replace": "\"hiddenWith\": [\"inbox\", \"done\", \"closed\"]",
   "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"

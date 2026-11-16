@@ -2746,7 +2746,7 @@
         <div class="node-content">
           <span class="toggle-icon material-symbols-outlined"></span>
           <span class="material-symbols-outlined">folder_open</span>
-          <span class="node-text">${te("Все инциденты")}</span>
+          <span class="node-text">${te("Все устройства")}</span>
           ${filterButtons("all")}
           <span class="tree-ev ${crit ? "crit" : ""}">${open}</span>
         </div>
@@ -5166,7 +5166,7 @@
     await loadFilter();
   }
 
-  const filterNodeName = () => (filt.node ? t(filt.node.name) : t("Все инциденты"));
+  const filterNodeName = () => (filt.node ? t(filt.node.name) : t("Все устройства"));
 
   async function loadFilter() {
     try {

@@ -4802,7 +4802,7 @@
         expect(pop.hidden, "меню не закрылось");
         expect(!$("modalGrouping").hidden, "окно «Выделить по фильтру» не открылось");
         const intro = $("groupingIntro").textContent;
-        expect(intro.startsWith("«Все инциденты»"), `окно не для выбранного узла: «${intro}»`);
+        expect(intro.startsWith("«Все устройства»"), `окно не для выбранного узла: «${intro}»`);
         return intro;
       } finally {
         if (!$("modalGrouping").hidden) await click(document.querySelector('[data-close="modalGrouping"]'));
