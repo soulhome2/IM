@@ -1928,8 +1928,7 @@
     }
     dropSelection();
     // Своё действие — для бледной строки (BUG-121): ответ приходит раньше событий потока
-    noteIncidents(res.succeeded);
-    res.succeeded.forEach((e) => noteMove(e.guid, id, null, true));
+    noteOwn(res.succeeded);
     const done = res.succeeded.map((e) => ({ id: e.guid }));
     const copy = bulkCopy(id, done.length);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
@@ -1994,8 +1993,7 @@
     }
     state.selectedId = ev.guid;
     // Своё действие — для бледной строки (BUG-121): ответ приходит раньше события потока
-    if (res.incident) noteIncidents([res.incident]);
-    noteMove(ev.guid, id, null, true);
+    noteOwn([res.incident]);
     if (TOASTS[id]) toast(TOASTS[id](res.incident));
     if (state.checked.has(ev.guid)) dropSelection();
     store.selection = null;
@@ -3026,25 +3024,46 @@
     return Object.assign(out, { rows: list.rows, held: out.held + list.newAbove.length });
   }
   // Ушедшая строка — бледная и без кнопок, пока курсор не ушёл (решение 7); вместо кнопок — почему ушла (BUG-121)
-  const goneRow = (e) => (e.gone ? Object.assign({}, e, { actions: [], goneWhy: goneWhy(e) }) : e);
-  // Последний переход инцидента, о котором знает клиент: событие потока или ответ на своё действие — кто и каким
-  // переходом. По нему и последней строке инцидента бледная строка говорит, почему ушла (§22.1, BUG-121)
+  const goneRow = (inBlock) => (e) => (e.gone ? Object.assign({}, e, { actions: [], goneWhy: goneWhy(e, inBlock) }) : e);
+  // Последний переход инцидента, о котором знает клиент: событие потока или ответ на своё действие — кто и моё ли.
+  // По нему и последней строке инцидента бледная строка говорит, почему ушла (§22.1, BUG-121)
   const lastMove = new Map();
-  function noteMove(guid, tid, actor, mine) {
+  function noteMove(guid, actor, mine) {
     lastMove.delete(guid);
-    lastMove.set(guid, { tid, actor, mine });
+    lastMove.set(guid, { actor, mine });
     if (lastMove.size > 1000) lastMove.delete(lastMove.keys().next().value);
   }
-  // Почему строка ушла: закрыт (вами, кем, автоматически), объединён, принят, скрыт фильтром; не знаем — «Ушёл из списка»
-  function goneWhy(e) {
+  // Ответ на своё действие: строка и «моё». Поток уже сказал о более новой версии (чужой перехват раньше ответа) —
+  // опоздавший ответ её не затирает. Поток и чтения очереди пишут всегда: они идут по порядку
+  function noteOwn(items) {
+    const n = (v) => (v == null || v === "" ? NaN : Number(v));
+    (items || []).forEach((e) => {
+      if (!e || !e.guid) return;
+      const known = incCache.get(e.guid);
+      if (known && n(e.version) < n(known.version)) return;
+      noteIncidents([e]);
+      noteMove(e.guid, null, true);
+    });
+  }
+  // Почему строка ушла — по данным, а не по именам переходов (правил клиент не держит): e — строка, как она на экране,
+  // inc — последняя известная. Закрыт (вами, кем, автоматически), объединён, новый владелец — принят, новый адресат
+  // не я — передан; строка блока — ушла из блока (блок фильтрами не сужается, §7); не проходит фильтр — скрыт
+  // фильтром; не знаем — «Ушёл из списка»
+  function goneWhy(e, inBlock) {
     const inc = incCache.get(e.guid) || e;
     const mv = lastMove.get(e.guid) || {};
+    const me = store.session && store.session.operator.guid;
+    const idOf = (ref) => (ref && ref.id) || null;
     if (isDone(inc)) return mv.mine ? t("Закрыт вами") : mv.actor ? t("Закрыт — {who}", { who: actorName(mv.actor) }) : t("Закрыт");
     if (inc.linkedTo) {
       const main = incCache.get(inc.linkedTo);
       return main ? t("Объединён с {id}", { id: main.number }) : t("Объединён с другим инцидентом");
     }
-    if (["claim", "accept", "takeover"].includes(mv.tid)) return mv.mine ? t("Принят вами") : t("Принят — {who}", { who: actorName(mv.actor || inc.owner) });
+    const owner = idOf(inc.owner);
+    if (owner && owner !== idOf(e.owner)) return owner === me ? t("Принят вами") : t("Принят — {who}", { who: actorName(inc.owner) });
+    const addressee = idOf(inc.addressee);
+    if (addressee && addressee !== idOf(e.addressee) && addressee !== me) return t("Передан — {who}", { who: actorName(inc.addressee) });
+    if (inBlock) return t("Ушёл из блока");
     if (hiddenBy(inc, filterChoice()).length) return t("Скрыт фильтром");
     return t("Ушёл из списка");
   }
@@ -3139,7 +3158,7 @@
     $("newRows").innerHTML = v.held
       ? `<button type="button" class="btn primary small" data-new-rows>${te("↑ {n, plural, one {# новый} few {# новых} other {# новых}} выше — показать", { n: v.held })}</button>`
       : "";
-    $("eventsList").innerHTML = renderInboxBlock(v.block.map(goneRow), v.more) + (v.rows.map(goneRow).map(eventRowHtml).join("") || none);
+    $("eventsList").innerHTML = renderInboxBlock(v.block.map(goneRow(true)), v.more) + (v.rows.map(goneRow(false)).map(eventRowHtml).join("") || none);
     watchFresh();
   }
 
@@ -6054,7 +6073,7 @@
     // Строка из потока собрана для меня (filters — для читающего): по ней — что прячет звучащее (§22.3)
     if (msg.incident) noteIncidents([msg.incident]);
     // Кто и каким переходом — для бледной строки, если инцидент из-за него ушёл из списка (§22.1, BUG-121)
-    if (msg.incidentGuid && tid) noteMove(msg.incidentGuid, tid, msg.actor, mine);
+    if (msg.incidentGuid && tid) noteMove(msg.incidentGuid, msg.actor, mine);
     // Чужое или автоматическое событие: строка, которая из-за него появится в очереди, — новая, её подсветить (§22.3)
     if (!mine && msg.incidentGuid) arrived.add(msg.incidentGuid);
     // Звук решается раньше выхода по своему переходу: моё действие снимает повтор (§21.2)

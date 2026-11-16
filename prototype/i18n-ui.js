@@ -51,6 +51,8 @@ window.IM_DICT_UI = {
     "Объединён с другим инцидентом": "Merged into another incident",
     "Принят вами": "Accepted by you",
     "Принят — {who}": "Accepted — {who}",
+    "Передан — {who}": "Handed over — {who}",
+    "Ушёл из блока": "Left the block",
     "Скрыт фильтром": "Hidden by the filter",
     "Ушёл из списка": "Left the list",
     "{what} — «{desc}», до {until}": "{what} — “{desc}”, until {until}",

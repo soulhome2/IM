@@ -5402,6 +5402,58 @@
       expect(!list.querySelector(`[data-id="${CSS.escape(target)}"]`), "курсор ушёл, а закрытая строка осталась");
     });
 
+    await step("Бледная строка: своё закрытие — «Закрыт вами»; строка блока «Мне на принятие», которую я отклонил, — «Ушёл из блока», без меток и таймера (§22.1, BUG-121)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      const list = $("eventsList");
+      const rows = () => [...list.querySelectorAll("article.event")];
+      const items = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+      const at = rows().findIndex((r, i) => i > 0 && i < rows().length - 1 && (items.find((e) => e.guid === r.dataset.id) || {}).state === "new");
+      expect(at > 0, "в списке нет нового инцидента между строками");
+      const target = rows()[at].dataset.id;
+      rows()[at + 1].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      try {
+        // Своё действие служебной операцией: поток о своём переходе очередь не перечитывает — перечитывает смена фильтра
+        await standClaim(stand, target);
+        const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(target)}`);
+        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(target)}/transitions/close`, { formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, { "If-Match": card.headers.etag || card.headers.ETag });
+        expect(close.status === 200, `своё закрытие: ${close.status} ${close.body && close.body.code}`);
+        await wait(200);
+        await setFilter("open");
+        await wait(300);
+        const row = list.querySelector(`[data-id="${CSS.escape(target)}"]`);
+        const why = row && row.querySelector("[data-gone-why]");
+        expect(row && row.classList.contains("gone") && why && why.textContent.trim() === "Закрыт вами", `своё закрытие: ${row ? row.className : "строки нет"}, «${why ? why.textContent.trim() : "нет"}»`);
+      } finally {
+        list.dispatchEvent(new MouseEvent("mouseleave"));
+      }
+      await wait(200);
+      // Блок: курсор над ним держит весь блок; строку блока я отклонил — она ушла из блока (может быть ниже, в списке)
+      const blockRow = list.querySelector(".inbox-row");
+      expect(blockRow, "блок «Мне на принятие» пуст");
+      const guid = blockRow.dataset.id;
+      expect(blockRow.querySelector(".badge, [data-due]"), "у строки блока до ухода нет состояния или таймера");
+      blockRow.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      try {
+        const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
+        const rejected = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/reject`, { formValues: { comment: "тест" }, surface: "queue" }, { "If-Match": card.headers.etag || card.headers.ETag });
+        expect(rejected.status === 200, `отклонить строку блока: ${rejected.status} ${rejected.body && rejected.body.code}`);
+        await wait(200);
+        await setFilter("open");
+        await wait(300);
+        const row = list.querySelector(`.inbox-row[data-id="${CSS.escape(guid)}"]`);
+        const why = row && row.querySelector("[data-gone-why]");
+        expect(row && row.classList.contains("gone") && why && why.textContent.trim() === "Ушёл из блока", `строка блока: ${row ? row.className : "нет"}, «${why ? why.textContent.trim() : "нет"}»`);
+        const stale = row.querySelectorAll(".badge, .chip.lvl, [data-due], .event-act, [data-row-sound]");
+        expect(!stale.length, `на бледной строке блока устаревшее: ${[...stale].map((x) => x.className).join(", ")}`);
+      } finally {
+        list.dispatchEvent(new MouseEvent("mouseleave"));
+      }
+    });
+
     await step("Новые строки: курсор над списком — новая строка не сдвигает список, «↑ 1 новый»; курсор ушёл — строка на месте и подсвечена (§22.1, §22.3)", async () => {
       // Демо-данные заново: Критические прошлых шагов заняли бы всю первую страницу
       await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
