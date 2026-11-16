@@ -5910,8 +5910,11 @@
     const groups = adminState.data.duty;
     const group = kind === "user" ? null : (groups || []).find((g) => g.id === id);
     if (group) return named("группа {name}", group.name);
-    const name = kind === "group" ? id : personName(id);
-    if (name !== id) return named("пользователь {name}", name);
+    // Человек — вошедший или из «кому передать»; группы того же списка — не люди
+    const target = targetById(id);
+    const self = store.session && id === store.session.operator.guid ? store.session.operator.name : null;
+    const name = kind === "group" ? null : self || (target && target.kind !== "duty_group" ? target.name : null);
+    if (name) return named("пользователь {name}", name);
     if (kind === "user") return te("удалённый пользователь ({id})", { id });
     if (!groups) return te(kind === "group" ? "группа ({id})" : "адресат ({id})", { id });
     return te(kind === "group" ? "удалённая группа ({id})" : "неизвестный адресат ({id})", { id });

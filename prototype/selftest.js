@@ -4343,6 +4343,19 @@
           expect(shown.includes(want), `в «Уровнях» нет «${want}»: «${shown}»`);
         const alerts = cell(/^Получатель оповещений/).trim();
         expect(alerts === `пользователь ${me.name}`, `получатель оповещений: «${alerts}»`);
+        // Список групп не пришёл — группа не «удалённая», а «группа (id)»: запрос интерфейса отказывает
+        await click(document.querySelector('[data-close="modalAdmin"]'));
+        const get = stand.get;
+        stand.get = (path, ...rest) => (path === "/operator/admin/duty-groups" ? Promise.reject(new Error("отказ")) : get.call(stand, path, ...rest));
+        try {
+          await click($("adminBtn"));
+          await click($("adminTabs").querySelector('[data-admin-tab="timing"]'));
+          await wait(200);
+        } finally {
+          stand.get = get;
+        }
+        const blind = cell(/^Уровни/);
+        expect(blind.includes(`группа (${group.id})`) && !/удалённая группа/.test(blind), `список групп не пришёл: «${blind}»`);
       } finally {
         if (!$("modalAdmin").hidden) await click(document.querySelector('[data-close="modalAdmin"]'));
         await standReset({ fixture: "demo" });
