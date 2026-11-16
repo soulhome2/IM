@@ -2068,13 +2068,13 @@
         },
       ],
       // Люди поста (BUG-124): все, кого знает МИ, и я тоже — по ним настройки называют адресата по имени.
-      // В прототипе давно не заходивших нет
+      // Давно не заходивший — stale в наборе
       [
         "GET",
         "/operator/admin/people",
         () => {
           if (!can("incident:schema:admin")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_schema_admin"]);
-          return { status: 200, body: OPERATORS.map((o) => ({ id: o.id, name: o.name, stale: false })) };
+          return { status: 200, body: OPERATORS.map((o) => ({ id: o.id, name: o.name, stale: Boolean(o.stale) })) };
         },
       ],
       [
