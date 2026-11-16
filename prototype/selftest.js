@@ -8,6 +8,8 @@
    После упавшего шага прототип возвращается в очередь и освобождает лимит активных,
    чтобы независимые шаги дальше не падали следом. */
 (() => {
+  // Что видел оператор в карточке или строке (§14.1, RULE-142) — тело запроса перехода служебным запросом стенда
+  const seenBody = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", journalSeen: c.journalSeq });
   // Страница, открытая самопроверкой в узкой рамке: сообщает, шире ли она экрана, сколько места
   // над очередью занимают шапка и фильтры и работает ли кнопка «Фильтры» (BUG-50)
   if (new URLSearchParams(location.search).has("widthcheck")) {
@@ -1763,7 +1765,7 @@
       const sys = W.reasonCatalogs.hold.items.filter((r) => r.setBy === "system");
       const act = async (guid, tr, formValues) => {
         const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
-        return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${tr}`, { formValues, surface: "card" }, { "If-Match": card.headers.etag });
+        return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${tr}`, Object.assign({ formValues, surface: "card" }, seenBody(card.body)));
       };
       try {
         // Пустые справочники: машина задаёт только устройство, пунктов заводит администратор поста
@@ -2242,16 +2244,19 @@
       expect(line(["disk", "sound_off"], false) === "sound_off+0", `диск у оператора: ${line(["disk", "sound_off"], false)}`);
       expect(line(["disk", "sound_off"], true) === "disk+1", `диск у администратора: ${line(["disk", "sound_off"], true)}`);
       expect(line([], true) === "—+0", "без состояний строка пуста");
-      const err = (code) => ({ status: 409, problem: { code } });
+      // Отказ 412 INCIDENT_CHANGED (RULE-142): что изменилось — details.changed, кто теперь — current, без второго запроса
+      // Ключ текста — как у сервера: «уже ведёт» (changed.taken) — только когда адресат теперь другой и он владелец
+      const keyOf = (changed) => (changed === "addressee" ? "workflow.error.changed.taken" : `workflow.error.changed.${changed}`);
+      const err = (code, changed, current, key = keyOf(changed)) => ({ status: 412, problem: { code, messageKey: key, details: { changed }, current } });
       const petrova = { owner: { id: "petrova", name: "Петрова Е. А." } };
-      // Видел инцидент без владельца; перечитанный — у другого человека
-      const late = (id, code, fresh, before) => ui.lateText(id, err(code), before || { owner: null }, fresh, "me");
-      expect(late("claim", "VERSION_CONFLICT", petrova) === "Уже взял Петрова Е. А.", `опоздал со «Взять»: ${late("claim", "VERSION_CONFLICT", petrova)}`);
-      expect(late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova) === "Уже принял Петрова Е. А.", `опоздал с «Принять»: ${late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova)}`);
-      expect(late("claim", "VERSION_CONFLICT", { owner: { id: "me" } }) === null && late("claim", "GUARD_FAILED", petrova) === null && late("claim", "VERSION_CONFLICT", { owner: null }) === null, "«Уже взял» — не только когда инцидент у другого");
-      // Владелец не сменился (был Петрова и остался) — обычная ошибка, не «опоздал»
-      expect(late("claim", "VERSION_CONFLICT", petrova, petrova) === null, "«Уже взял» без смены владельца");
-      expect(late("claim", "VERSION_CONFLICT", petrova, { owner: { id: "sidorov" } }) === "Уже взял Петрова Е. А.", "смена владельца с Сидорова на Петрову — не «Уже взял»");
+      const late = (id, code, changed, current, key) => ui.lateText(id, err(code, changed, current, key), "me");
+      expect(late("claim", "INCIDENT_CHANGED", "addressee", petrova) === "Уже взял Петрова Е. А.", `опоздал со «Взять»: ${late("claim", "INCIDENT_CHANGED", "addressee", petrova)}`);
+      expect(late("accept", "INCIDENT_CHANGED", "addressee", petrova) === "Уже принял Петрова Е. А.", `опоздал с «Принять»: ${late("accept", "INCIDENT_CHANGED", "addressee", petrova)}`);
+      expect(late("claim", "INCIDENT_CHANGED", "addressee", { owner: { id: "me" } }) === null && late("claim", "GUARD_FAILED", "addressee", petrova) === null && late("claim", "INCIDENT_CHANGED", "addressee", { owner: null }) === null, "«Уже взял» — не только когда инцидент у другого");
+      // Изменилось не адресат (новое событие, состояние) — обычная ошибка с текстом сервера, не «опоздал»
+      expect(late("claim", "INCIDENT_CHANGED", "news", petrova) === null && late("claim", "INCIDENT_CHANGED", "state", petrova) === null, "«Уже взял» без смены адресата");
+      // Передан человеку, который ещё не принял, — не «опоздал»: текст сервера «…передан» (RULE-142, A1)
+      expect(late("claim", "INCIDENT_CHANGED", "addressee", petrova, "workflow.error.changed.addressed") === null, "«Уже взял» о переданном, но не принятом");
       return "граница по якорю; connection+2, диск только администратору; «Уже взял Петрова Е. А.»";
     });
 
@@ -2476,10 +2481,10 @@
       await click(document.querySelector('[data-close="modalAdmin"]'));
     });
 
-    // Взять новое в работу служебным запросом стенда — с версией записи, как клиент
+    // Взять новое в работу служебным запросом стенда — с тем, что видно в карточке, как клиент
     async function standClaim(stand, guid) {
       const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
-      const res = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": card.headers.ETag || card.headers.etag });
+      const res = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenBody(card.body)));
       expect(res.status === 200, `не взялся: ${res.status}`);
     }
 
@@ -3122,10 +3127,10 @@
       return toast.textContent;
     });
 
-    // Запрос оператора стенда с версией из карточки (If-Match)
+    // Запрос оператора стенда с тем, что видно в карточке (§14.1, RULE-142)
     async function standAct(guid, transitionId, formValues, surface) {
       const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
-      return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${transitionId}`, { formValues: formValues || {}, surface: surface || "card" }, { "If-Match": card.headers.etag });
+      return stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/${transitionId}`, Object.assign({ formValues: formValues || {}, surface: surface || "card" }, seenBody(card.body)));
     }
     // Переход от имени Петровой — служебной операцией стенда (§17)
     const petrovaAct = (guid, transitionId, formValues) =>
@@ -3193,7 +3198,8 @@
         expect(note.status === 200, `комментарий Петровой: ${note.status} ${JSON.stringify(note.body)}`);
         const after = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(fresh.guid)}`);
         expect((after.headers.etag || after.headers.ETag) === etag, `версия изменилась: ${etag} → ${after.headers.etag || after.headers.ETag}`);
-        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(fresh.guid)}/transitions/close`, { formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, { "If-Match": etag });
+        // Свой (owner) взгляд — после чужого комментария: комментарий — новое событие, его владелец видит в карточке
+        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(fresh.guid)}/transitions/close`, Object.assign({ formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, seenBody(after.body)));
         expect(close.status === 200, `закрытие владельца после чужого комментария: ${close.status} ${close.body && close.body.code}`);
         return `версия ${etag}`;
       } finally {
@@ -4178,7 +4184,7 @@
       return `в строке ${shown} с, у сервера ${left} с`;
     });
 
-    await step("Устаревшая выборка: отмеченные ушли по эскалации — массовая передача их не уводит и называет причину (expectedVersions, BUG-84)", async () => {
+    await step("Устаревшая выборка: отмеченные ушли по эскалации — массовая передача их не уводит и называет причину (expected, BUG-84, RULE-142)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       await standReset({ fixture: "demo" });
       await wait(300);
@@ -4210,7 +4216,7 @@
         await wait(200);
         text = ($("toasts").lastElementChild || {}).textContent || "";
         const after0 = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
-        expect(/уже изменён/.test(text), `уведомление: «${text}»; до: ${before.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}; после: ${after0.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}`);
+        expect(/Инцидент уже/.test(text), `уведомление: «${text}»; до: ${before.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}; после: ${after0.map((c) => c.owner && c.owner.id + "/" + c.version + "/" + c.state)}`);
         const after = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
         expect(after.every((c, i) => JSON.stringify(c.owner) === JSON.stringify(before[i].owner) && c.transferCount === before[i].transferCount), "изменённые после отметки переданы");
       } finally {
@@ -4221,7 +4227,7 @@
       return text;
     });
 
-    await step("Выборка после изменения: отметил заново — действие проходит; после отказа «уже изменён» — повтор проходит (BUG-106)", async () => {
+    await step("Выборка после изменения: отметил заново — действие проходит; после отказа «Инцидент уже …» — повтор проходит (BUG-106, RULE-142)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const card = (g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`);
       const tick = async (ids) => {
@@ -4270,17 +4276,93 @@
           } else {
             await escalate();
             const first = await transfer();
-            expect(/уже изменён/.test(first), `первое нажатие: «${first}»`);
+            expect(/Инцидент уже/.test(first), `первое нажатие: «${first}»`);
           }
           const before = await Promise.all(ids.map(card));
           const text = await transfer();
           const after = await Promise.all(ids.map(card));
-          expect(!/уже изменён/.test(text), `${part}: «${text}»`);
+          expect(!/Инцидент уже/.test(text), `${part}: «${text}»`);
           expect(after.every((c, i) => c.transferCount === before[i].transferCount + 1), `${part}: переданы не оба — ${text}`);
           out.push(`${part}: ${text}`);
         }
       } finally {
         if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+      return out.join("; ");
+    });
+
+    await step("Опоздал (§14.1, §22.6, RULE-142): коллега взял, пока строка не обновилась, — «Уже взял <имя>», по потоку «Взять» гаснет; чужой комментарий при закрытии — «Пришло новое событие — проверьте»", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      await standReset({ fixture: "demo" });
+      await wait(300);
+      if (mode() === "work") await click($("backToQueue"));
+      await setFilter("open");
+      // Чтения интерфейса задержаны: событие потока пришло, а список и карточка ещё прежние — оператор жмёт по ним
+      const get = stand.get;
+      let release = () => {};
+      const hold = () => {
+        const gate = new Promise((resolve) => (release = resolve));
+        stand.get = (path, params) => gate.then(() => get(path, params));
+      };
+      const free = async () => {
+        stand.get = get;
+        release();
+        await wait(300);
+      };
+      const lastToast = () => ($("toasts").lastElementChild || {}).textContent || "";
+      const petrova = (g, tr, formValues) => stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(g)}/transitions/${tr}`, { formValues: formValues || {}, surface: "card" });
+      const out = [];
+      try {
+        // У Петровой лимит активных — один, и он занят INC-1846: она возвращает его в очередь
+        const busy = (window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1846") || {}).guid;
+        const back = await petrova(busy, "release", { comment: "back" });
+        expect(back.status === 200, `Петрова не вернула INC-1846: ${back.status}`);
+        await wait(300);
+        const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => button(r, "claim")).map((r) => r.dataset.id);
+        hold();
+        // Первый новый, который Петрова может взять (доступ к объекту, лимит), второй — для закрытия
+        let g = null;
+        let refused = "";
+        for (const id of rows) {
+          const r = await petrova(id, "claim");
+          if (r.status === 200) {
+            g = id;
+            break;
+          }
+          refused = `${r.status} ${(r.body && (r.body.message || r.body.code)) || ""}`;
+        }
+        const g2 = rows.find((id) => id !== g);
+        expect(g && g2, `Петрова не взяла ни одного из ${rows.length}: ${refused}`);
+        await wait(100);
+        const b = button($("eventsList"), "claim", g);
+        expect(b, "строка обновилась раньше нажатия");
+        await click(b);
+        const late = lastToast();
+        expect(/Уже взял Петрова/.test(late), `опоздал: «${late}»`);
+        await free();
+        expect(!button($("eventsList"), "claim", g), "после потока у взятого коллегой осталась «Взять»");
+        out.push(late);
+        // Закрытие: после показа карточки Петрова оставила комментарий — закрытие останавливается
+        await click(button($("eventsList"), "claim", g2));
+        expect(mode() === "work", "карточка не открылась");
+        hold();
+        expect((await petrova(g2, "comment", { comment: "check camera 3" })).status === 200, "Петрова не оставила комментарий");
+        await wait(100);
+        await click(button(root(), "close"));
+        await setField("resultId", "false_alarm");
+        await setField("causeId", "animal");
+        await confirmDialog(NOTE);
+        const news = lastToast();
+        expect(/Пришло новое событие/.test(news), `закрытие при чужом комментарии: «${news}»`);
+        await free();
+        expect((await get(`/operator/incidents/${encodeURIComponent(g2)}`)).state === "in_progress", "закрылся, не видя комментария");
+        out.push(news);
+      } finally {
+        if (stand.get !== get) await free();
+        if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
+        if (mode() === "work") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await wait(300);
       }
@@ -4867,11 +4949,11 @@
       // Два своих в работе — без лимита активных; после шага набор — как был
       await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
       await wait(400);
-      // Переход запросом API — с версией инцидента в If-Match (§14.1)
+      // Переход запросом API — с тем, что видно в карточке (§14.1, RULE-142)
       const act = async (g, id, formValues) => {
         const path = `/operator/incidents/${encodeURIComponent(g)}`;
-        const version = (await stand.raw("GET", path)).body.version;
-        const res = await stand.raw("POST", `${path}/transitions/${id}`, { formValues, surface: "queue" }, { "If-Match": `"${version}"` });
+        const seen = seenBody((await stand.raw("GET", path)).body);
+        const res = await stand.raw("POST", `${path}/transitions/${id}`, Object.assign({ formValues, surface: "queue" }, seen));
         expect(res.status === 200, `${id} ${g}: ${res.status} ${JSON.stringify(res.body).slice(0, 200)}`);
       };
       try {
@@ -4911,8 +4993,8 @@
         await setFilter("open");
         g = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find((b) => !off(b)).dataset.ev;
         const path = `/operator/incidents/${encodeURIComponent(g)}`;
-        const version = (await stand.raw("GET", path)).body.version;
-        const claimed = await stand.raw("POST", `${path}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": `"${version}"` });
+        const seen = seenBody((await stand.raw("GET", path)).body);
+        const claimed = await stand.raw("POST", `${path}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seen));
         expect(claimed.status === 200, `взять: ${claimed.status}`);
         await setFilter("all");
         await setFilter("open");
@@ -4930,6 +5012,56 @@
         await wait();
         const now = (await stand.raw("GET", path)).body;
         expect(now.state === "on_hold", `состояние после «Отложить»: ${now.state}; ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+        return now.number;
+      } finally {
+        if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await wait();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
+    await step("Одно отмеченное не на странице, после отметки его отложили в другой вкладке — «Вернуть в очередь» панели не уводит его: сверяется снимок отметки; повтор после отказа проходит (§14.1, BUG-84, BUG-106, RULE-142)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      const stand = window.IM_SELFTEST_API;
+      let g = null;
+      try {
+        await setFilter("open");
+        g = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find((b) => !off(b)).dataset.ev;
+        const path = `/operator/incidents/${encodeURIComponent(g)}`;
+        const claimed = await stand.raw("POST", `${path}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenBody((await stand.raw("GET", path)).body)));
+        expect(claimed.status === 200, `взять: ${claimed.status}`);
+        await setFilter("all");
+        await setFilter("open");
+        await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        const next = $("eventsPager").querySelector('[data-page="2"]');
+        expect(next, "в «Открытых» одна страница");
+        await click(next);
+        expect(!$("eventsList").querySelector(`[data-check="${g}"]`), "отмеченный — и на второй странице");
+        // После отметки инцидент отложили в другой вкладке: карточка, прочитанная перед отправкой, — уже отложенная,
+        // а «Вернуть в очередь» доступно и из «Отложен»
+        const held = await stand.raw("POST", `${path}/transitions/hold`, Object.assign({ formValues: { reasonId: "third_party", comment: "тест" }, surface: "card" }, seenBody((await stand.raw("GET", path)).body)));
+        expect(held.status === 200, `отложить в другой вкладке: ${held.status}`);
+        await wait();
+        const b = $("selBar").querySelector('[data-sel-do="release"]');
+        expect(b && !off(b), "в панели выборки нет «Вернуть в очередь»");
+        await click(b);
+        await wait();
+        if (!$("modalDialog").hidden) await confirmDialog(NOTE);
+        await wait();
+        const now = (await stand.raw("GET", path)).body;
+        expect(now.state === "on_hold", `после «Вернуть в очередь» по устаревшей отметке: ${now.state}`);
+        // Причину оператор увидел — повтор идёт по нынешнему снимку и проходит, а не снова 412 (BUG-106, RULE-142)
+        const again = $("selBar").querySelector('[data-sel-do="release"]');
+        expect(again && !off(again), "после отказа в панели выборки нет «Вернуть в очередь»");
+        await click(again);
+        await wait();
+        if (!$("modalDialog").hidden) await confirmDialog(NOTE);
+        await wait();
+        const after = (await stand.raw("GET", path)).body;
+        expect(after.state !== "on_hold", `повтор после отказа: ${after.state}; ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
         return now.number;
       } finally {
         if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -5477,7 +5609,7 @@
       try {
         window.dispatchEvent(new Event("im-sound-restore"));
         await wait(20);
-        const took = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": card.headers.etag });
+        const took = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(inc.guid)}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenBody(card.body)));
         expect(took.status === 200, `«Взять»: ${took.status}`);
         await wait(150);
       } finally {
@@ -5558,7 +5690,7 @@
         // Своё действие служебной операцией: поток о своём переходе очередь не перечитывает — перечитывает смена фильтра
         await standClaim(stand, target);
         const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(target)}`);
-        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(target)}/transitions/close`, { formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, { "If-Match": card.headers.etag || card.headers.ETag });
+        const close = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(target)}/transitions/close`, Object.assign({ formValues: { resultId: "false_alarm", causeId: "animal" }, surface: "card" }, seenBody(card.body)));
         expect(close.status === 200, `своё закрытие: ${close.status} ${close.body && close.body.code}`);
         await wait(200);
         await setFilter("open");
@@ -5578,7 +5710,7 @@
       blockRow.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
       try {
         const card = await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guid)}`);
-        const rejected = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/reject`, { formValues: { comment: "тест" }, surface: "queue" }, { "If-Match": card.headers.etag || card.headers.ETag });
+        const rejected = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(guid)}/transitions/reject`, Object.assign({ formValues: { comment: "тест" }, surface: "queue" }, seenBody(card.body)));
         expect(rejected.status === 200, `отклонить строку блока: ${rejected.status} ${rejected.body && rejected.body.code}`);
         await wait(200);
         await setFilter("open");

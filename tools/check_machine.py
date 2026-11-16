@@ -1609,8 +1609,9 @@ def check_declared_fields(w, o, err):
     """Поля машины, которые исполнитель не читает, сверяются с тем, что исполняется (ARCH-11): иначе разработчик
     не отличит закон от пояснения.
     - requiredOnTransition справочника — ровно те переходы, у формы которых обязательное поле из него;
-    - concurrency: у ручного перехода версия записи обязательна — If-Match в контракте, у автоматических её нет;
-      onTimerConflict — окно после дедлайна машины (invariants.manualWinsOverTimer);
+    - concurrency.expects: ручной переход сверяет состояние и адресата (state, addressee), запись только в журнал и
+      «Отсоединить» — ничего, news — только у ручного перехода в closed; в контракте у перехода — поля expectedState,
+      expectedAddressee, journalSeen (§14.1, RULE-142); onTimerConflict — окно после дедлайна машины (invariants.manualWinsOverTimer);
     - requiredStepSet перехода — то, что проверяют его условия: byCloseResult — closeResultAllowed, набор —
       requiredStepsFilled с ним, none — ни того ни другого."""
     forms = {f["id"]: f for f in w["forms"]}
@@ -1634,27 +1635,42 @@ def check_declared_fields(w, o, err):
         got = sorted(cat.get("requiredOnTransition", []))
         if need != got:
             err.append(f"справочник {cid}: requiredOnTransition {got}, а обязательное поле из него — в форме {need} (ARCH-11)")
-    path = o["paths"]["/operator/incidents/{incidentGuid}/transitions/{transitionId}"]["post"]
-    refs = [p.get("$ref", "").split("/")[-1] for p in path.get("parameters", [])]
-    if_match = "IfMatch" in refs and o["components"]["parameters"]["IfMatch"].get("required")
+    req = o["components"]["schemas"]["TransitionRequest"].get("properties", {})
     window = bool((w.get("invariants", {}).get("manualWinsOverTimer") or {}).get("graceSec") is not None)
-    # Ручные переходы со своими маршрутами — объединение (POST …/merge) и «Отсоединить» (DELETE …/linked/…): версию
-    # записи они пока не принимают (BUG-84), так и записано у них в concurrency
-    own_route = {t["id"] for t in trs if (t.get("bulk") or {}).get("mode") == "merge" or t["id"] == "detach"}
+    # «Отсоединить» — своим маршрутом DELETE …/linked/… без тела: сверять нечего, так и записано у него в concurrency
+    news = set((((w.get("invariants") or {}).get("optimisticLocking") or {}).get("journalNews") or {}).get("kinds") or [])
     for t in trs:
         c = t.get("concurrency")
         if c is None:
             continue
         manual = t["trigger"] == "manual"
-        # Запись только в журнал (bumpsVersion: false, ТЗ-18): версия не растёт — и If-Match не нужен; так можно
+        # Запись только в журнал (bumpsVersion: false, ТЗ-18): версия не растёт — и сверять нечего; так можно
         # только переходу без смены состояния
         journal_only = c.get("bumpsVersion") is False
         if journal_only and t.get("to"):
             err.append(f"переход {t['id']}: concurrency.bumpsVersion false у перехода со сменой состояния — версия записи обязана расти (ТЗ-18)")
-        if c.get("expectedVersion") != (manual and t["id"] not in own_route and not journal_only):
-            err.append(f"переход {t['id']}: concurrency.expectedVersion {c.get('expectedVersion')} — версия записи обязательна у ручного перехода через POST …/transitions, у автоматического её нет (ARCH-11)")
-        if manual and c.get("expectedVersion") and not if_match:
-            err.append(f"переход {t['id']}: версия записи обязательна, а в контракте у перехода нет обязательного If-Match (ARCH-11)")
+        if "expectedVersion" in c:
+            err.append(f"переход {t['id']}: concurrency.expectedVersion — номер версии действие оператора не сверяет, нужен concurrency.expects (§14.1, RULE-142)")
+        exp = c.get("expects")
+        silent = journal_only or t["id"] == "detach"
+        if not isinstance(exp, list) or not set(exp) <= {"state", "addressee", "news"}:
+            err.append(f"переход {t['id']}: concurrency.expects {exp} — список из state, addressee, news (§14.1, RULE-142)")
+            continue
+        if silent and exp:
+            err.append(f"переход {t['id']}: concurrency.expects {exp} у записи только в журнал или «Отсоединить» — сверять нечего, чужой комментарий не мешает владельцу (ТЗ-18, RULE-142)")
+        if manual and not silent and not {"state", "addressee"} <= set(exp):
+            err.append(f"переход {t['id']}: concurrency.expects {exp} — ручной переход сверяет состояние и адресата, которых видел оператор (§14.1, RULE-142)")
+        if "news" in exp and t.get("to") != "closed":
+            err.append(f"переход {t['id']}: concurrency.expects news не у закрытия — новые события останавливают только закрытие (RULE-142)")
+        if manual and t.get("to") == "closed" and "news" not in exp:
+            err.append(f"переход {t['id']}: закрытие без concurrency.expects news — пришедшее после показа событие закрылось бы непрочитанным (RULE-142)")
+        if "news" in exp and not news:
+            err.append(f"переход {t['id']}: concurrency.expects news без invariants.optimisticLocking.journalNews.kinds (RULE-142)")
+        if manual and exp and t["id"] != "merge":
+            need = {"state": "expectedState", "addressee": "expectedAddressee", "news": "journalSeen"}
+            missing = [need[k] for k in exp if need[k] not in req]
+            if missing:
+                err.append(f"переход {t['id']}: сверяет {exp}, а в контракте TransitionRequest нет {missing} (§14.1, RULE-142)")
         if c.get("onTimerConflict") == "manual_wins" and not window:
             err.append(f"переход {t['id']}: onTimerConflict manual_wins без invariants.manualWinsOverTimer (ARCH-11)")
     for t in trs:
@@ -2685,8 +2701,8 @@ OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
     ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
      '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
-    ("comment-bumps-version", "машина: комментарий требует версию записи — чужой комментарий даёт владельцу конфликт (ТЗ-18)", MACHINE,
-     '"concurrency": { "expectedVersion": false, "bumpsVersion": false,', '"concurrency": { "expectedVersion": false,', "concurrency.expectedVersion False"),
+    ("comment-bumps-version", "машина: комментарий сверяет состояние и адресата — чужой комментарий даёт владельцу конфликт (ТЗ-18, RULE-142)", MACHINE,
+     '"concurrency": { "expects": [], "bumpsVersion": false,', '"concurrency": { "expects": ["state", "addressee"], "bumpsVersion": false,', "у записи только в журнал"),
     ("rule-event-type-only", "набор: у условия правила только тип события, без устройства и типа устройства (§14.5)", FIXTURE,
      '"eventTypeId": "glass",\n          "deviceTypeId": "microphone"', '"eventTypeId": "glass"', "без устройства и типа устройства"),
     ("base-rule-uncovered", "набор: базовое правило пожара не покрывает камеры — источник одного из пожаров набора (§14.5)", FIXTURE,

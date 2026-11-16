@@ -1180,7 +1180,10 @@ window.IM_WORKFLOW = {
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": null,
@@ -1263,7 +1266,10 @@ window.IM_WORKFLOW = {
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": null,
@@ -1355,7 +1361,10 @@ window.IM_WORKFLOW = {
       "to": "new",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "reject",
@@ -1423,7 +1432,10 @@ window.IM_WORKFLOW = {
       "to": "on_hold",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "hold",
@@ -1507,7 +1519,10 @@ window.IM_WORKFLOW = {
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": null,
@@ -1587,7 +1602,10 @@ window.IM_WORKFLOW = {
       "to": "new",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "release",
@@ -1680,7 +1698,10 @@ window.IM_WORKFLOW = {
       "to": "pending_acceptance",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "transfer",
@@ -1839,7 +1860,10 @@ window.IM_WORKFLOW = {
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "takeover",
@@ -1969,7 +1993,12 @@ window.IM_WORKFLOW = {
       "to": "closed",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee",
+          "news"
+        ],
+        "$comment": "RULE-142. Закрытие сверяет ещё и новые события: запись журнала после journalSeen (invariants.optimisticLocking.journalNews) — чужой комментарий, сосед закрыт, итог макроса, смена приоритета — останавливает его: «Пришло новое событие — проверьте»",
         "onTimerConflict": "manual_wins"
       },
       "form": "close",
@@ -2152,7 +2181,10 @@ window.IM_WORKFLOW = {
       "to": "in_progress",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true,
+        "expects": [
+          "state",
+          "addressee"
+        ],
         "onTimerConflict": "manual_wins"
       },
       "form": "reopen",
@@ -2312,9 +2344,9 @@ window.IM_WORKFLOW = {
       "to": null,
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": false,
+        "expects": [],
         "bumpsVersion": false,
-        "$comment": "ТЗ-18, решение 2026-11-14. Запись только в журнал: версия инцидента и момент последнего перехода (changedAt) не меняются, If-Match не нужен — чужой комментарий не даёт владельцу конфликта версии. Окно после дедлайна не отменяет: comment — в continuesOn таймеров reaction, resolution, hold"
+        "$comment": "ТЗ-18, решение 2026-11-14. Запись только в журнал: версия инцидента и момент последнего перехода (changedAt) не меняются, сверять нечего (expects пуст, RULE-142): комментарий ничего не решает за владельца. Окно после дедлайна не отменяет: comment — в continuesOn таймеров reaction, resolution, hold"
       },
       "form": "comment",
       "requiredStepSet": "none",
@@ -2365,7 +2397,7 @@ window.IM_WORKFLOW = {
       "id": "change_priority",
       "labelKey": "workflow.transition.change_priority",
       "hintKey": "workflow.transition.change_priority.hint",
-      "$comment": "§2.5, §4 (правило 8), §6.3, ТЗ-13. Ручная смена приоритета — переход без смены состояния (to: null). Любой видимый незакрытый инцидент, кроме привязанного: у группы один срок и приоритет её ведёт основной (§11.4, решение координатора 2026-11-14); владельцем быть не нужно. Меняет поле priority, которое у сервера ставится при создании и иначе не меняется, — этот переход его меняет явно, и ставит «замок» priorityManual: автоматика приоритет больше не трогает, переоткрытие (reopen) приоритет не меняет и ручной сохраняет. Ненаступившие сроки реакции и закрытия сдвигаются на разницу нормативов уровней (renormTimer); у основного с привязанными срок группы не продлевается. Меняет данные, которые видит владелец, — версия растёт, If-Match нужен. В окне после дедлайна срабатывание не отменяет: change_priority — в continuesOn таймеров.",
+      "$comment": "§2.5, §4 (правило 8), §6.3, ТЗ-13. Ручная смена приоритета — переход без смены состояния (to: null). Любой видимый незакрытый инцидент, кроме привязанного: у группы один срок и приоритет её ведёт основной (§11.4, решение координатора 2026-11-14); владельцем быть не нужно. Меняет поле priority, которое у сервера ставится при создании и иначе не меняется, — этот переход его меняет явно, и ставит «замок» priorityManual: автоматика приоритет больше не трогает, переоткрытие (reopen) приоритет не меняет и ручной сохраняет. Ненаступившие сроки реакции и закрытия сдвигаются на разницу нормативов уровней (renormTimer); у основного с привязанными срок группы не продлевается. Версия растёт; сверяет, как и другие ручные, состояние и адресата (concurrency.expects, RULE-142) — их смена приоритета не меняет, действию владельца не мешает, а закрытие остановит как новое событие (journalNews). В окне после дедлайна срабатывание не отменяет: change_priority — в continuesOn таймеров.",
       "from": [
         "new",
         "pending_acceptance",
@@ -2375,7 +2407,10 @@ window.IM_WORKFLOW = {
       "to": null,
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": true
+        "expects": [
+          "state",
+          "addressee"
+        ]
       },
       "form": "change_priority",
       "requiredStepSet": "none",
@@ -3643,7 +3678,11 @@ window.IM_WORKFLOW = {
       "to": "linked",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": false,
+        "expects": [
+          "state",
+          "addressee"
+        ],
+        "$comment": "RULE-142. Своим маршрутом POST …/merge: снимок отмеченных — expected (guid → state, addressee, journalSeq) из ответа выборки; изменился у одного — весь запрос 412",
         "onTimerConflict": "manual_wins"
       },
       "form": null,
@@ -3768,7 +3807,8 @@ window.IM_WORKFLOW = {
       "to": "new",
       "trigger": "manual",
       "concurrency": {
-        "expectedVersion": false,
+        "expects": [],
+        "$comment": "RULE-142. Своим маршрутом DELETE …/linked/…, без тела: отсоединение ничего не решает за оператора — сверять нечего",
         "onTimerConflict": "manual_wins"
       },
       "form": null,
@@ -8105,8 +8145,19 @@ window.IM_WORKFLOW = {
     "$comment": "§10.1. Проверяются сервером на каждом переходе. actorSeesIncident — оператор видит инцидент и действует над ним, только если у него есть доступ к объекту (§5): невидимого нет в очереди, поиске, карточке и потоке событий, запрос к нему — 404; это не условие перехода — кнопки недоступного действия нет, потому что нет самого инцидента. readOnlyByAgentState — в состояниях оператора с readOnly (перерыв, вышел) доступен только просмотр: переходы отклоняет условие agentReady (§10.1, правило 2).",
     "atomicServerSideTransition": true,
     "optimisticLocking": {
-      "field": "version",
-      "header": "If-Match"
+      "$comment": "§14.1, RULE-142. Действие оператора сверяет не номер версии (он растёт от всего: эскалации, записи о нарушении, чужого комментария), а то, на чём основано решение, — concurrency.expects перехода: state — состояние, addressee — адресат (определение addressee; \"\" — ничей), news — новые события после journalSeen. Сверка — под блокировкой, в той же транзакции, что и запись. Не совпало — 412 INCIDENT_CHANGED с тем, что изменилось; не прислано — 428. journalNews — какие записи журнала новое событие: после journalSeen (seq), не свои, вида из kinds; записи таймеров и системы (kind system) — нет: состояние и адресата они не меняют, а то, что меняет, поймает сверка. templates — записи, которые новое событие при любом виде: «сосед закрыт ложной тревогой» (logSiblings) пишет система, но это новость для того, кто закрывает соседа",
+      "by": "expects",
+      "journalNews": {
+        "kinds": [
+          "transition",
+          "macro",
+          "external"
+        ],
+        "ownExcluded": true,
+        "templates": [
+          "workflow.journal.sibling_closed"
+        ]
+      }
     },
     "readOnlyByAgentState": true,
     "transferToSelfForbidden": true,

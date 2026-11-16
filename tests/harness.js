@@ -65,6 +65,15 @@
     return res;
   }
 
+  // Что видел оператор в карточке или строке очереди (§14.1, RULE-142): тело перехода — expectedState,
+  // expectedAddressee ("" — ничей), journalSeen
+  const seenOf = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", journalSeen: c.journalSeq });
+  // Ответ на шаг: владелец и answeredAt шага, каким его видел оператор (null — без ответа)
+  const answerSeenOf = (c, stepId) => {
+    const was = c.scenario && c.scenario.result && (c.scenario.result.state || {})[stepId];
+    return { expectedOwner: (c.owner && c.owner.id) || "", seenAnswer: (was && was.answeredAt) || null };
+  };
+
   async function makeEnv(opts) {
     const reset = await raw("POST", "/test/reset", {
       fixture: "demo",
@@ -122,30 +131,46 @@
         return found.guid;
       },
       session: () => env.ok("GET", "/operator/session"),
-      // Версия записи для If-Match (§14.1) — из ETag свежего чтения карточки, как у клиента,
-      // который только что её открыл
+      // Версия записи (ETag) свежего чтения карточки: действие оператора её не сверяет (§14.1, RULE-142), её читают
+      // тесты кэша и ETag
       async etag(id) {
         const res = await raw("GET", `/operator/incidents/${enc(id)}`);
-        // Нет инцидента — версии нет: запрос уйдёт без If-Match, сервер ответит 404
         if (res.status === 404) return null;
         if (res.status !== 200) throw new Error(`GET карточки ${id} → ${res.status}`);
         if (!res.headers.etag) throw new Error(`GET карточки ${id}: нет заголовка ETag`);
         return res.headers.etag;
       },
-      // Переход. ifMatch: не задан — версия свежего чтения; null — запрос без If-Match
-      async act(id, transition, formValues, surface, expectedState, ifMatch) {
-        const version = ifMatch === undefined ? await env.etag(id) : ifMatch;
-        return raw(
-          "POST",
-          `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`,
-          { formValues: formValues || {}, surface: surface || "card", expectedState },
-          version === null ? {} : { "If-Match": version }
-        );
+      // Что видел оператор (§14.1, RULE-142) — из свежего чтения карточки, как у клиента, который только что её открыл.
+      // Нет инцидента — ничего: сервер ответит 404
+      async seen(id) {
+        const res = await raw("GET", `/operator/incidents/${enc(id)}`);
+        if (res.status === 404) return null;
+        if (res.status !== 200) throw new Error(`GET карточки ${id} → ${res.status}`);
+        return res.body;
       },
-      // Ответ на шаг сценария ({ stepId, value | skip }) — с той же версией записи, что и переход
-      async answer(id, body, ifMatch) {
-        const version = ifMatch === undefined ? await env.etag(id) : ifMatch;
-        return raw("POST", `/operator/incidents/${enc(id)}/scenario/answer`, body, version === null ? {} : { "If-Match": version });
+      // Переход. seen: не задан — что видно при свежем чтении (expectedState, expectedAddressee, journalSeen); null —
+      // ничего не присылать; объект — поверх свежего чтения: state, addressee, journalSeen (undefined — поле не
+      // посылается), ifMatch — заголовок If-Match (сервер его не смотрит)
+      async act(id, transition, formValues, surface, expectedState, seen) {
+        // Всё, что видел, задано — карточку не читать (её чтение может и не пройти)
+        const given = seen && ["state", "addressee", "journalSeen"].every((k) => k in seen);
+        const card = seen === null || given ? null : await env.seen(id);
+        const body = Object.assign({ formValues: formValues || {}, surface: surface || "card" }, card ? seenOf(card) : {});
+        if (expectedState !== undefined) body.expectedState = expectedState;
+        const o = seen || {};
+        [["state", "expectedState"], ["addressee", "expectedAddressee"], ["journalSeen", "journalSeen"]].forEach(([k, f]) => {
+          if (!(k in o)) return;
+          if (o[k] === undefined) delete body[f];
+          else body[f] = o[k];
+        });
+        return raw("POST", `/operator/incidents/${enc(id)}/transitions/${enc(transition)}`, body, o.ifMatch ? { "If-Match": o.ifMatch } : {});
+      },
+      // Ответ на шаг сценария ({ stepId, value | skip }): владелец и ответ шага, которые видел оператор (expectedOwner,
+      // seenAnswer, RULE-142), — из свежего чтения, если их нет в body; seen === null — не присылать
+      async answer(id, body, seen) {
+        const card = seen === null ? null : await env.seen(id);
+        const sent = Object.assign({}, card ? answerSeenOf(card, body.stepId) : {}, body);
+        return raw("POST", `/operator/incidents/${enc(id)}/scenario/answer`, sent);
       },
       // Ответ на текущий шаг прохождения — первый вариант или то, что задано (variant — какой по счёту)
       async answerCurrent(id, variant) {
@@ -362,5 +387,5 @@
   const declared = new Set();
   const loaded = (name) => declared.add(name);
 
-  window.IMTest = { test, loaded, run, makeEnv, formFor, answerFor, actionOf, assert, enc, external: Boolean(apiBase), baseUrl };
+  window.IMTest = { test, loaded, run, makeEnv, formFor, answerFor, actionOf, assert, enc, seenOf, answerSeenOf, external: Boolean(apiBase), baseUrl };
 })();

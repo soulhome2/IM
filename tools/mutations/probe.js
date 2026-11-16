@@ -23,6 +23,8 @@
   const anyBtn = (scope, id, ev) => [...scope.querySelectorAll(`[data-do="${id}"]`)].find((b) => !ev || b.dataset.ev === ev) || null;
   const field = (n) => $("dialogFields").querySelector(`[data-field="${n}"]`);
   const mode = () => $("workspace").dataset.mode;
+  // Что видел оператор (§14.1, RULE-142): переход шлёт состояние, адресата и последнюю запись журнала из карточки
+  const seenOf = (card) => ({ expectedState: card.state, expectedAddressee: (card.addressee && card.addressee.id) || "", journalSeen: card.journalSeq || 0 });
   const root = () => $("scenarioRoot");
   const row = (id) => $("eventsList").querySelector(`[data-id="${id}"]`);
   // Инцидент по номеру из эталонного набора: guid — UUID, на экране — номер
@@ -596,7 +598,7 @@
       await stand.raw("POST", "/test/reset", { fixture: "demo" });
       const guid = window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1847").guid;
       const before = await stand.raw("GET", `/operator/incidents/${guid}`);
-      await stand.raw("POST", `/operator/incidents/${guid}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      await stand.raw("POST", `/operator/incidents/${guid}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenOf(before.body)));
       const card = await stand.raw("GET", `/operator/incidents/${guid}`);
       const close = card.body && (card.body.actions || []).find((a) => a.id === "close");
       const dup = close && close.fieldOptions ? close.fieldOptions.resultId.options.find((o) => o.id === "duplicate") : null;
@@ -622,8 +624,8 @@
       await stand.raw("POST", "/test/reset", { fixture: "demo" });
       const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
       const before = await stand.raw("GET", `/operator/incidents/${fire}`);
-      const claimed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
-      const closed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/close`, { formValues: { resultId: "drill", comment: "проба" }, surface: "card" }, { "If-Match": `"${claimed.body.incident.version}"` });
+      const claimed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenOf(before.body)));
+      const closed = await stand.raw("POST", `/operator/incidents/${fire}/transitions/close`, Object.assign({ formValues: { resultId: "drill", comment: "проба" }, surface: "card" }, seenOf(claimed.body.incident)));
       const card = await stand.raw("GET", `/operator/incidents/${med}`);
       const notes = card.body && card.body.journal ? card.body.journal.filter((j) => j.templateKey === "workflow.journal.sibling_closed").length : null;
       return [notes === 1, `закрыт «Плановой проверкой» (${closed.status}) — записей о соседе у INC-1853: ${notes === null ? card.status : notes}`];
@@ -640,8 +642,8 @@
       const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
       await stand.raw("POST", `/test/operators/petrova/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "card" });
       const before = await stand.raw("GET", `/operator/incidents/${med}`);
-      const claimed = await stand.raw("POST", `/operator/incidents/${med}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
-      await stand.raw("POST", `/operator/incidents/${med}/transitions/hold`, { formValues: { reasonId: "third_party", comment: "проба" }, surface: "card" }, { "If-Match": `"${claimed.body.incident.version}"` });
+      const claimed = await stand.raw("POST", `/operator/incidents/${med}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenOf(before.body)));
+      await stand.raw("POST", `/operator/incidents/${med}/transitions/hold`, Object.assign({ formValues: { reasonId: "third_party", comment: "проба" }, surface: "card" }, seenOf(claimed.body.incident)));
       const sel = await stand.raw("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
       const close = sel.body && sel.body.actions ? sel.body.actions.find((a) => a.id === "close") : null;
       return [Boolean(close) && close.enabled === false, `«Закрыть без обработки» на выборке [чужой пожар, мой отложенный медпункт]: ${close ? (close.enabled ? "доступно" : "недоступно") : sel.status}`];
@@ -657,7 +659,7 @@
       await stand.raw("POST", "/test/reset", { fixture: "demo", workflowPatch: { reasonCatalogs: { close_result } } });
       const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
       const before = await stand.raw("GET", `/operator/incidents/${fire}`);
-      await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": before.headers.etag });
+      await stand.raw("POST", `/operator/incidents/${fire}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenOf(before.body)));
       const sel = await stand.raw("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [fire, med] });
       const close = sel.body && sel.body.actions ? sel.body.actions.find((a) => a.id === "close") : null;
       const scenario = close && close.formNote ? close.formNote.vars.scenario : null;
@@ -674,7 +676,8 @@
       const [fire, med] = ["INC-1847", "INC-1853"].map((n) => window.IM_FIXTURE.incidents.find((i) => i.number === n).guid);
       const made = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", deviceIds: ["20000000-0002-4000-8000-000000000005"], ruleGuid: "80000000-0000-4000-8000-000000000009" });
       const p = made.body.guid;
-      await stand.raw("POST", `/operator/incidents/${p}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": made.headers.etag });
+      const shown = await stand.raw("GET", `/operator/incidents/${p}`);
+      await stand.raw("POST", `/operator/incidents/${p}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenOf(shown.body)));
       const merged = await stand.raw("POST", "/operator/incidents/merge", { incidentGuids: [p, med] });
       await stand.raw("POST", `/test/operators/petrova/incidents/${fire}/transitions/claim`, { formValues: {}, surface: "card" });
       const got = [];

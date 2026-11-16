@@ -101,38 +101,176 @@
     assert.eq(second2.body.guard, "withinActiveLimit", "какое условие не выполнено");
   });
 
-  test("Устаревшее состояние в запросе — конфликт версии 412 и актуальная карточка (§10.1, правило 1)", async () => {
+  test("Устаревшее состояние в запросе — 412 INCIDENT_CHANGED и актуальная карточка (§10.1, правило 1, §14.1)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     const conflict = await env.act(inc.guid, "claim", {}, "queue", "on_hold");
-    assert.status(conflict, 412, "VERSION_CONFLICT");
+    assert.status(conflict, 412, "INCIDENT_CHANGED");
+    assert.eq(conflict.body.details && conflict.body.details.changed, "state", "что изменилось");
     assert.eq(conflict.body.current && conflict.body.current.state, "new", "в ответе — актуальное состояние");
     assert.eq((await env.card(inc.guid)).state, "new", "состояние не изменилось");
   });
 
-  test("Версия записи (§14.1): без If-Match — 428, со старой версией — 412 и актуальная карточка", async () => {
+  test("Что видел оператор (§14.1, RULE-142): без состояния или адресата — 428; номер версии и If-Match не сверяются", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
-    const first = await env.etag(inc.guid);
-    assert.eq(first, `"${inc.version}"`, "ETag карточки — версия из очереди в кавычках");
-    assert.status(await env.act(inc.guid, "claim", {}, "queue", undefined, null), 428, "PRECONDITION_REQUIRED", "переход без If-Match");
-    const claimed = await env.act(inc.guid, "claim", {}, "queue", undefined, first);
-    assert.status(claimed, 200, null, "взять с версией свежего чтения");
+    assert.eq(await env.etag(inc.guid), `"${inc.version}"`, "ETag карточки — версия из очереди в кавычках");
+    assert.status(await env.act(inc.guid, "claim", {}, "queue", undefined, null), 428, "PRECONDITION_REQUIRED", "переход без того, что видел");
+    const noAddressee = await env.act(inc.guid, "claim", {}, "queue", undefined, { addressee: undefined });
+    assert.status(noAddressee, 428, "PRECONDITION_REQUIRED", "переход без адресата");
+    assert.eq(noAddressee.body.messageKey, "workflow.error.expected_required", "текст — что не прислано");
+    const claimed = await env.act(inc.guid, "claim", {}, "queue", undefined, { ifMatch: '"0"' });
+    assert.status(claimed, 200, null, "взять: чужой If-Match не мешает");
     assert.eq(claimed.headers.etag, `"${claimed.body.incident.version}"`, "новая версия — в ETag ответа");
-    assert.ok(claimed.headers.etag !== first, "переход меняет версию");
-    const stale = await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, first);
-    assert.status(stale, 412, "VERSION_CONFLICT", "переход со старой версией");
-    assert.eq(stale.body.current && stale.body.current.state, "in_progress", "в ответе — актуальная карточка");
-    assert.eq((await env.card(inc.guid)).state, "in_progress", "состояние не изменилось");
-    // Ответы сценария меняют версию: следующий запрос идёт с той, что пришла в их ETag
+    // Ответ на шаг: владелец и ответ шага, которые видел оператор
     const card = await env.card(inc.guid);
     const step1 = { stepId: card.scenario.result.currentStepId, value: ["confirmed"] };
-    assert.status(await env.answer(inc.guid, step1, null), 428, "PRECONDITION_REQUIRED", "ответы без If-Match");
-    const saved = await env.answer(inc.guid, step1, claimed.headers.etag);
-    assert.status(saved, 200, null, "ответы с версией после взятия");
-    assert.ok(saved.headers.etag && saved.headers.etag !== claimed.headers.etag, "ответы меняют версию");
-    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, claimed.headers.etag), 412, "VERSION_CONFLICT", "версия до ответов");
-    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, saved.headers.etag), 200, null, "версия из ответа на ответы");
+    assert.status(await env.answer(inc.guid, step1, null), 428, "PRECONDITION_REQUIRED", "ответ без того, что видел");
+    assert.status(await env.answer(inc.guid, step1), 200, null, "ответ");
+    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }, "card", undefined, { ifMatch: `"${inc.version}"` }), 200, null, "отказаться: версия до ответа не мешает");
+  });
+
+  // Стенд, где старший оператор (Петрова) может менять приоритет: её действие меняет версию, но не состояние и адресата
+  const seniorPriority = () => {
+    const fixture = JSON.parse(JSON.stringify(window.IM_FIXTURE));
+    fixture.roles.find((r) => r.name === "Старший оператор").permissions.push("incident:priority");
+    return standWith({ fixture });
+  };
+
+  test("Изменение, не касающееся решения, не мешает действию: смена приоритета коллегой — «Взять» проходит (§14.1, RULE-142)", async () => {
+    const env = await seniorPriority();
+    const inc = await newFire(env);
+    const before = await env.card(inc.guid);
+    const prio = await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/change_priority`, { formValues: { priority: String(LEVELS[1]), comment: "тест" }, surface: "card" });
+    assert.status(prio, 200, null, "Петрова меняет приоритет");
+    assert.ok((await env.card(inc.guid)).version !== before.version, "версия выросла");
+    const res = await env.act(inc.guid, "claim", {}, "queue", undefined, { state: before.state, addressee: (before.addressee && before.addressee.id) || "", journalSeen: before.journalSeq, ifMatch: `"${before.version}"` });
+    assert.status(res, 200, null, "взять по карточке до смены приоритета");
+    assert.eq(res.body.incident.owner && res.body.incident.owner.id, ME, "взял я");
+  });
+
+  test("Ответ на шаг (§14.1, RULE-142): запись о нарушении не мешает; шаг уже ответили — 409 STEP_CHANGED; перехватили — 412", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const seen = await env.card(inc.guid);
+    const stepId = seen.scenario.result.currentStepId;
+    const was = IMTest.answerSeenOf(seen, stepId);
+    // Нарушение норматива закрытия: версия растёт, владелец и шаг — те же
+    await env.advance(W.timers.find((t) => t.id === "resolution").byPriority[TOP] + GRACE + 1);
+    const after = await env.card(inc.guid);
+    assert.ok(after.version !== seen.version && after.state === "in_progress", `после нарушения версия выросла, инцидент у меня: ${after.state}`);
+    const body = Object.assign({ stepId, value: ["confirmed"] }, was);
+    assert.status(await env.answer(inc.guid, body), 200, null, "ответ по карточке до нарушения");
+    // Тот же ответ ещё раз (двойное нажатие, другая вкладка): шаг уже ответили после показа
+    const again = await env.answer(inc.guid, body);
+    assert.status(again, 409, "STEP_CHANGED", "повтор с прежним seenAnswer");
+    assert.ok(again.body.current && again.body.current.result.state[stepId], "в current — сценарий с ответом");
+    // Перехватили — владелец другой: 412 с карточкой, а не 403
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/takeover`, { formValues: { comment: "тест" }, surface: "card" }), 200, null, "Петрова перехватывает");
+    const next = (await env.card(inc.guid)).scenario.result.currentStepId;
+    const taken = await env.answer(inc.guid, Object.assign({ stepId: next, value: null, skip: true }, { expectedOwner: ME, seenAnswer: null }));
+    assert.status(taken, 412, "INCIDENT_CHANGED", "ответ после перехвата");
+    assert.eq(taken.body.messageKey, "workflow.error.changed.taken", "текст — у кого инцидент");
+  });
+
+  test("Взял другой — 412 INCIDENT_CHANGED: «Инцидент уже ведёт …», в current — его владение (§14.1, §22.6, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const before = await env.card(inc.guid);
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }), 200, null, "Петрова берёт");
+    const res = await env.act(inc.guid, "claim", {}, "queue", undefined, { state: before.state, addressee: "", journalSeen: before.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "взять взятый");
+    assert.eq(res.body.details && res.body.details.changed, "addressee", "изменился адресат");
+    assert.eq(res.body.messageKey, "workflow.error.changed.taken", "ключ текста");
+    assert.eq(res.body.current && res.body.current.owner && res.body.current.owner.id, "petrova", "в current — владение Петровой");
+    assert.ok(res.body.message.includes(res.body.current.owner.name), `текст называет взявшего: ${res.body.message}`);
+  });
+
+  test("Закрыл коллега — 412 про состояние «Закрыт», а не «взял»: закрытый — всегда состояние (§14.1, §22.6, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const before = await env.card(inc.guid);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт");
+    assert.status(await as("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "Петрова закрывает");
+    const res = await env.act(inc.guid, "claim", {}, "queue", undefined, { state: before.state, addressee: "", journalSeen: before.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "взять закрытый");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["state", "workflow.error.changed.state"], "изменилось состояние");
+  });
+
+  test("Передан человеку, который ещё не принял, — «Инцидент уже передан: …», а не «ведёт» (§14.1, §22.6, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const first = W.escalation.levels[0].target;
+    const second = W.escalation.levels[1].target;
+    const sent = await env.act(inc.guid, "transfer", { targetId: first, comment: "тест" }, "queue");
+    assert.status(sent, 200, null, `передать ${first}`);
+    const seen = await env.card(inc.guid);
+    await env.advance(Math.ceil((Date.parse(sent.body.incident.timer.dueAt) - env.now) / 1000) + GRACE + 1);
+    const now = await env.card(inc.guid);
+    assert.eq([now.state, now.addressee && now.addressee.id], ["pending_acceptance", second], "эскалация передала следующему уровню, он не принял");
+    const res = await env.act(inc.guid, "claim", {}, "card", undefined, { state: seen.state, addressee: first, journalSeen: seen.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "действие по карточке до эскалации");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["addressee", "workflow.error.changed.addressed"], "передан, а не взят");
+    assert.ok(res.body.message.includes(now.addressee.name), `текст называет адресата: ${res.body.message}`);
+  });
+
+  test("Потолок эскалации, затем «Отклонить» по прежней карточке — проходит: состояние и адресат те же (§14.1, RULE-142, стенд 2026-11-16)", async () => {
+    const levels = [{ level: 1, targetKind: "user", target: ME, reactionSec: 120 }];
+    const env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels, maxLevel: 1 }) }) });
+    const inc = await newFire(env);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт");
+    assert.status(await as("transfer", { targetId: ME, comment: "тест" }), 200, null, "Петрова передаёт мне");
+    const seen = await env.card(inc.guid);
+    assert.eq([seen.state, seen.addressee && seen.addressee.id], ["pending_acceptance", ME], "ждёт моего принятия");
+    const fired = (await env.advance(Math.ceil((Date.parse(seen.timer.dueAt) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    assert.eq(fired, ["escalation_ceiling"], "сработал потолок эскалации");
+    const after = await env.card(inc.guid);
+    assert.ok(after.version !== seen.version && after.state === seen.state, `версия выросла, состояние то же: ${after.state}`);
+    const res = await env.act(inc.guid, "reject", { comment: "не моё" }, "card", undefined, { state: seen.state, addressee: ME, journalSeen: seen.journalSeq, ifMatch: `"${seen.version}"` });
+    assert.status(res, 200, null, "«Отклонить» по карточке до потолка");
+    assert.eq(res.body.incident.state, "new", "отклонён");
+  });
+
+  test("Закрытие: новое событие после показа — 412 «Пришло новое событие — проверьте»; запись таймера о нарушении — не мешает (§14.1, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const close = { resultId: "false_alarm", causeId: "animal", comment: "тест" };
+    const seen = await env.card(inc.guid);
+    // Чужой комментарий после показа карточки
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/comment`, { formValues: { comment: "посмотрите камеру 3" }, surface: "card" }), 200, null, "Петрова пишет комментарий");
+    const res = await env.act(inc.guid, "close", close, "card", undefined, { journalSeen: seen.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "закрыть, не видя комментария");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["news", "workflow.error.changed.news"], "новое событие");
+    assert.ok(res.body.current.journalSeq > seen.journalSeq, "в current — журнал с новой записью");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "не закрыт");
+    assert.status(await env.act(inc.guid, "close", close, "card", undefined, { journalSeen: undefined }), 428, "PRECONDITION_REQUIRED", "закрытие без journalSeen");
+    // Свои записи и записи таймеров новым событием не считаются: нарушение норматива закрытия — только запись
+    const mine = await env.card(inc.guid);
+    assert.status(await env.act(inc.guid, "comment", { comment: "своё" }), 200, null, "свой комментарий");
+    const resolution = W.timers.find((t) => t.id === "resolution");
+    await env.advance(resolution.byPriority[TOP] + GRACE + 1);
+    const after = await env.card(inc.guid);
+    assert.ok(after.journalSeq > mine.journalSeq + 1 && after.state === "in_progress", `после — запись о нарушении, инцидент у меня: ${after.state}`);
+    assert.status(await env.act(inc.guid, "close", close, "card", undefined, { journalSeen: mine.journalSeq }), 200, null, "закрыть: свой комментарий и нарушение — не новое событие");
+  });
+
+  test("Закрытие: «сосед закрыт ложной тревогой» после показа — новое событие, хоть запись и системная (§6.1, §14.1, RULE-142)", async () => {
+    const env = await makeEnv();
+    const [fire, med] = [await env.guidOf("INC-1847"), await env.guidOf("INC-1853")];
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять медпункт");
+    const seen = await env.card(med);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(fire)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт пожар");
+    assert.status(await as("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "Петрова закрывает пожар ложной тревогой");
+    const after = await env.card(med);
+    assert.ok(after.journal.some((j) => j.templateKey === "workflow.journal.sibling_closed"), "у медпункта — запись о соседе");
+    const res = await env.act(med, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card", undefined, { journalSeen: seen.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "закрыть, не видя записи о соседе");
+    assert.eq(res.body.details && res.body.details.changed, "news", "новое событие");
   });
 
   test("Переход не из этого состояния — 409 TRANSITION_NOT_ALLOWED_FROM_STATE", async () => {
@@ -1731,7 +1869,7 @@
       patch(fixture.people.operators.find((o) => o.id === "petrova"));
       const api = (await standWith({ fixture })).api;
       const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
-      const claim = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, { expectedState: "new", surface: "queue" }, { "If-Match": `"${inc.version}"` });
+      const claim = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/claim`, Object.assign({ surface: "queue" }, IMTest.seenOf(inc)));
       assert.status(claim, 200, null, `${why}: взять`);
       const got = [];
       const stop = api.subscribe((m) => got.push(m));
@@ -1778,7 +1916,7 @@
     fixture.people.operators.find((o) => o.id === "petrova").agentState = "not_ready";
     const api2 = (await standWith({ fixture })).api;
     const inc2 = (await api2.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new");
-    const res = await api2.raw("POST", `/operator/incidents/${enc(inc2.guid)}/transitions/transfer`, { expectedState: "new", surface: "queue", formValues: { targetId: "grp-leads", comment: "тест" } }, { "If-Match": `"${inc2.version}"` });
+    const res = await api2.raw("POST", `/operator/incidents/${enc(inc2.guid)}/transitions/transfer`, Object.assign({ surface: "queue", formValues: { targetId: "grp-leads", comment: "тест" } }, IMTest.seenOf(inc2)));
     assert.status(res, 200, null, "передать группе старших операторов");
     const c2 = await api2.get(`/operator/incidents/${enc(inc2.guid)}`);
     assert.ok(!c2.journal.some((j) => j.templateKey === W.alerts.noRecipientLog), "записи «оповещение не отправлено» нет");
@@ -1911,8 +2049,7 @@
       const fire = (await api.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find(
         (e) => e.state === "new" && e.eventType.id === "fire" && e.priority === TOP
       );
-      const etag = (await api.raw("GET", `/operator/incidents/${enc(fire.guid)}`)).headers.etag;
-      const claimed = await api.raw("POST", `/operator/incidents/${enc(fire.guid)}/transitions/claim`, { formValues: {}, surface: "queue" }, { "If-Match": etag });
+      const claimed = await api.raw("POST", `/operator/incidents/${enc(fire.guid)}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, IMTest.seenOf(fire)));
       assert.status(claimed, 200, null, "взять");
       // Оператор на месте: часы шагами короче idleHoldSec, перед каждым — heartbeat. Ровно до
       // истечения норматива критического пожара: дальше по времени пошла бы уже реакция уровня (RULE-41)
@@ -3069,8 +3206,8 @@
     const card = await env.card(med);
     assert.eq(appended.length, 1, "тому, кто видит соседа, — одно событие journal.appended");
     assert.eq([appended[0].incident.version, appended[0].actor && appended[0].actor.id], [card.version, "me"], "в событии — новая версия соседа и кто закрыл");
-    // Версия из события — актуальная: действие по ней проходит
-    assert.status(await env.act(med, "claim", {}, "queue", undefined, `"${appended[0].incident.version}"`), 200, null, "взять INC-1853 по версии из события");
+    // Запись о соседе — не то, на чём основано «Взять» (RULE-142): действие по карточке до неё проходит
+    assert.status(await env.act(med, "claim", {}, "queue", undefined, { state: before.state, addressee: "", journalSeen: before.journalSeq, ifMatch: `"${before.version}"` }), 200, null, "взять INC-1853 по карточке до записи о соседе");
   });
 
   // «Массовый сбой» на выборке: закрывается только сценарий основного выборки (§11.1, §11.3, ARCH-15, В8)
@@ -3135,7 +3272,7 @@
     const close = sel.actions.find((a) => a.id === "close");
     assert.eq(close.enabled, true, `«Закрыть без обработки» на выборке доступно: ${close.reason}`);
     assert.eq([close.formNote && close.formNote.vars.n, close.formNote && close.formNote.vars.skipped], [1, 1], "закроется 1, пропущен 1");
-    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expectedVersions: sel.versions }));
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expected: sel.expected, expectedScenario: sel.actions.find((a) => a.id === "close").scopeScenarioGuid }));
     assert.status(res, 200, null, "массовый сбой на выборке");
     assert.eq(res.body.succeeded.map((e) => e.number), ["INC-1853"], "закрыт мой медпункт");
     assert.eq((res.body.skipped || []).map((s) => [s.number, s.reasonKey]), [["INC-1847", "workflow.error.selection.other_scenario"]], "пожар Петровой пропущен — другой сценарий");
@@ -3160,14 +3297,14 @@
     const medTitle = window.IM_FIXTURE.scenarios.rows.find((r) => r.guid === KEYS.medical).name;
     const v = close.formNote && close.formNote.vars;
     assert.eq(v && [v.scenario, v.n, v.skipped], [medTitle, 1, 1], "закроется медпункт, пожар пропущен");
-    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expectedVersions: sel.versions }));
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expected: sel.expected, expectedScenario: sel.actions.find((a) => a.id === "close").scopeScenarioGuid }));
     assert.status(res, 200, null, "массовый сбой на выборке");
     assert.eq(res.body.succeeded.map((e) => e.number), ["INC-1853"], "закрыт медпункт");
     assert.eq((res.body.skipped || []).map((s) => [s.number, s.reasonKey]), [["INC-1847", "workflow.error.selection.other_scenario"]], "мой пожар пропущен — другой сценарий");
     assert.eq((await env.card(fire)).state, "in_progress", "INC-1847 — у меня в работе");
   });
 
-  test("Массовый сбой по устаревшей выборке: основной ушёл к коллеге после отметки — действие отклоняется целиком, другой сценарий не закрыт (§11.1, BUG-84, ARCH-15)", async () => {
+  test("Массовый сбой по устаревшей выборке: основной ушёл к коллеге после отметки — действие отклоняется целиком, другой сценарий не закрыт (§11.1, BUG-84, ARCH-15, RULE-142)", async () => {
     const env = await makeEnv();
     // Пожар INC-1851 (новый, появился раньше) — основной выборки, медпункт INC-1853 (новый) — другой сценарий
     const fire = await env.guidOf("INC-1851");
@@ -3178,8 +3315,9 @@
     // После отметки пожар ушёл к коллеге: новым он больше не основной — по нынешним отмеченным основным стал бы медпункт
     assert.status(await env.act(fire, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "INC-1851 — Петровой");
     const medBefore = await env.card(med);
-    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expectedVersions: sel.versions }));
-    assert.status(res, 412, "VERSION_CONFLICT", "выборка устарела — массовый сбой не выполняется");
+    const res = await env.call("POST", "/operator/incidents/transitions/close/bulk", Object.assign(massClose([fire, med]), { expected: sel.expected, expectedScenario: sel.actions.find((a) => a.id === "close").scopeScenarioGuid }));
+    assert.status(res, 412, "INCIDENT_CHANGED", "основной сменился — массовый сбой не выполняется");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["primary", "workflow.error.changed.primary"], "что изменилось");
     const medAfter = await env.card(med);
     assert.eq([medAfter.state, medAfter.version], ["new", medBefore.version], "INC-1853 — новый, версия прежняя");
     assert.eq((await env.card(fire)).state, "pending_acceptance", "INC-1851 — у коллеги, не закрыт");
@@ -3293,26 +3431,24 @@
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 409, "TRANSITION_NOT_ALLOWED_FROM_STATE", "«Взять» после окна");
   });
 
-  test("Действие после окна, но до такта планировщика, нарушение не стирает: сервер догоняет таймеры перед запросом (§14.3, BUG-82, ARCH-10)", async () => {
+  test("Действие после окна, но до такта планировщика, нарушение не стирает: сервер догоняет таймеры перед запросом (§14.3, BUG-82, ARCH-10, RULE-142)", async () => {
     // Часы — за окно после дедлайна без такта планировщика (runScheduler: false), затем действие оператора
-    // с версией, прочитанной до этого. Переход по таймеру меняет версию: запрос — 412, в актуальной карточке —
-    // нарушение, как если бы такт успел раньше; повтор с новой версией выполняется
+    // по карточке, прочитанной до этого. Запись о нарушении состояние и адресата не меняет: действие выполняется
+    // (RULE-142), нарушение — в журнале, как если бы такт успел раньше
     const past = async (env, due) => {
       const left = Math.ceil((due - env.now) / 1000);
       await env.advance(left - 1);
       assert.status(await env.call("POST", "/test/clock", { advanceSec: GRACE + 2, runScheduler: false }), 200, null, "часы без такта");
     };
-    const actAfter = async (env, guid, transition, form, surface, kind) => {
-      const stale = await env.act(guid, transition, form, surface);
-      assert.status(stale, 412, "VERSION_CONFLICT", "версия до такта");
-      assert.eq(stale.body.current.breaches.map((b) => b.kind), [kind], "в актуальной карточке — нарушение");
-      return env.act(guid, transition, form, surface);
+    const actAfter = async (env, guid, transition, form, surface) => {
+      const seen = await env.card(guid);
+      return env.act(guid, transition, form, surface, undefined, { state: seen.state, addressee: (seen.addressee && seen.addressee.id) || "", journalSeen: seen.journalSeq, ifMatch: `"${seen.version}"` });
     };
     // Реакция при выключенной автоэскалации: «Взять» после окна — нарушение реакции на момент дедлайна
     let env = await makeEnv({ workflowPatch: { escalation: Object.assign({}, W.escalation, { enabled: false }) } });
     const inc = await newFire(env);
     await past(env, Date.parse(inc.timer.dueAt));
-    let res = await actAfter(env, inc.guid, "claim", {}, "queue", "reaction");
+    let res = await actAfter(env, inc.guid, "claim", {}, "queue");
     assert.status(res, 200, null, "«Взять» после окна");
     let c = res.body.incident;
     assert.eq([c.state, res.body.canceledTimerTrigger, c.breaches.map((b) => b.kind)], ["in_progress", null, ["reaction"]], "взят, нарушение реакции записано");
@@ -3324,7 +3460,7 @@
     assert.status(claimed, 200, null, "взять");
     const due = Date.parse(claimed.body.incident.timer.dueAt);
     await past(env, due);
-    res = await actAfter(env, fire.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card", "resolution");
+    res = await actAfter(env, fire.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card");
     assert.status(res, 200, null, "«Закрыть» после окна");
     c = res.body.incident;
     assert.eq([c.state, c.breaches.map((b) => b.kind)], ["closed", ["resolution"]], "закрыт, нарушение закрытия записано");
@@ -4324,20 +4460,32 @@
     }
   });
 
-  test("Устаревшая выборка не уводит то, что изменилось после отметки: массовое действие — в failed с VERSION_CONFLICT, объединение — 412 (expectedVersions, BUG-84)", async () => {
+  test("Устаревшая выборка не уводит то, что изменилось после отметки: массовое действие — в failed с INCIDENT_CHANGED, объединение — 412 (expected, BUG-84, RULE-142)", async () => {
     const env = await makeEnv();
     const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [await env.guidOf("INC-1838"), await env.guidOf("INC-1851")] });
-    assert.eq(Object.keys(sel.versions).sort(), sel.incidentGuids.slice().sort(), "у выборки — версии отмеченных");
+    assert.eq(Object.keys(sel.expected).sort(), sel.incidentGuids.slice().sort(), "у выборки — что видно у отмеченных");
     // После отметки инциденты ушли по автоэскалации к Петровой
     const reaction = W.timers.find((t) => t.id === "reaction");
     await env.advance(Math.max(...reaction.overrides.map((o) => o.sec), reaction.defaultSec) + GRACE + 1);
     const moved = await Promise.all(sel.incidentGuids.map((g) => env.card(g)));
-    assert.ok(moved.every((c) => c.version !== sel.versions[c.guid]), "после отметки инциденты изменились");
-    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: sel.incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, expectedVersions: sel.versions });
-    assert.eq([bulk.status, bulk.body.succeeded.length, bulk.body.failed.map((f) => f.problem.code)], [200, 0, ["VERSION_CONFLICT", "VERSION_CONFLICT"]], "массовая передача — ни один не уведён");
+    assert.ok(moved.every((c) => c.addressee && c.addressee.id !== sel.expected[c.guid].addressee), "после отметки у инцидентов другой адресат");
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: sel.incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, expected: sel.expected });
+    assert.eq([bulk.status, bulk.body.succeeded.length, bulk.body.failed.map((f) => f.problem.code)], [200, 0, ["INCIDENT_CHANGED", "INCIDENT_CHANGED"]], "массовая передача — ни один не уведён");
+    assert.eq(bulk.body.failed.map((f) => f.problem.details && f.problem.details.changed), ["addressee", "addressee"], "изменился адресат");
     for (const c of moved) assert.eq((await env.card(c.guid)).owner, c.owner, `${c.number}: у прежнего адресата`);
-    const merge = await env.call("POST", "/operator/incidents/merge", { incidentGuids: sel.incidentGuids, expectedVersions: sel.versions });
-    assert.status(merge, 412, "VERSION_CONFLICT", "объединение по устаревшей выборке");
+    const merge = await env.call("POST", "/operator/incidents/merge", { incidentGuids: sel.incidentGuids, expected: sel.expected });
+    assert.status(merge, 412, "INCIDENT_CHANGED", "объединение по устаревшей выборке");
+  });
+
+  test("Выборка: после отметки у одного сменился приоритет — массовая передача проходит у всех (§14.1, RULE-142)", async () => {
+    const env = await seniorPriority();
+    const sel = await env.ok("POST", "/operator/incidents/selection", { mode: "explicit", incidentGuids: [await env.guidOf("INC-1838"), await env.guidOf("INC-1851")] });
+    const [first] = sel.incidentGuids;
+    const was = await env.card(first);
+    const other = LEVELS.find((l) => l !== was.priority);
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(first)}/transitions/change_priority`, { formValues: { priority: String(other), comment: "тест" }, surface: "card" }), 200, null, "Петрова меняет приоритет");
+    const bulk = await env.call("POST", "/operator/incidents/transitions/transfer/bulk", { incidentGuids: sel.incidentGuids, formValues: { targetId: "sidorov", comment: "тест" }, expected: sel.expected });
+    assert.eq([bulk.status, bulk.body.succeeded.length, bulk.body.failed.length], [200, 2, 0], `передано обоим: ${JSON.stringify(bulk.body.failed)}`);
   });
 
   test("Массовое действие: передача выборки — каждому, кому доступно; результат по каждому", async () => {
@@ -4687,8 +4835,7 @@
     const inc = (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && siteOf(e) !== "Торговый центр");
     const targets = (await api.get("/operator/transfer-targets", { incidentGuid: inc.guid })).map((t) => t.id);
     assert.ok(targets.includes("grp-tc") && !targets.includes("kuznetsov"), `группа есть, Кузнецова нет: ${targets}`);
-    const etag = (await api.raw("GET", `/operator/incidents/${enc(inc.guid)}`)).headers.etag;
-    const res = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/transfer`, { formValues: { targetId: "grp-tc", comment: "тест" }, surface: "queue" }, { "If-Match": etag });
+    const res = await api.raw("POST", `/operator/incidents/${enc(inc.guid)}/transitions/transfer`, Object.assign({ formValues: { targetId: "grp-tc", comment: "тест" }, surface: "queue" }, IMTest.seenOf(inc)));
     assert.status(res, 200, null, "передача группе со смешанным доступом");
   });
 
@@ -5007,7 +5154,7 @@
     const env = await standWith({ workflow: withFailingGuard("transfer", `incident.number == '${broken.number}'`) });
 
     // Один инцидент: ошибка сервера, а не «условие не выполнено» и не обрыв запроса (CEL.md, PROC-44 в3)
-    internalError(await env.act(broken.guid, "transfer", form, "queue", undefined, "*"), "маршрут перехода");
+    internalError(await env.act(broken.guid, "transfer", form, "queue", undefined, { state: broken.state, addressee: (broken.addressee && broken.addressee.id) || "", journalSeen: broken.journalSeq }), "маршрут перехода");
     internalError(await env.call("GET", `/operator/incidents/${enc(broken.guid)}/actions`), "/actions");
 
     // Выборка: строка в failed, остальные выполняются, ответ целый — как runSelection сервера
@@ -5050,7 +5197,7 @@
     const inc = await newFire(env);
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
     const send = async (comment) =>
-      env.call("POST", `/operator/incidents/${enc(inc.guid)}/transitions/hold`, { formValues: { reasonId: "third_party", comment }, surface: "card", idempotencyKey: "after-500" }, { "If-Match": await env.etag(inc.guid) });
+      env.call("POST", `/operator/incidents/${enc(inc.guid)}/transitions/hold`, Object.assign({ formValues: { reasonId: "third_party", comment }, surface: "card", idempotencyKey: "after-500" }, IMTest.seenOf(await env.card(inc.guid))));
     internalError(await send("сбой"), "первый раз");
     assert.eq((await env.card(inc.guid)).state, "in_progress", "не выполнено");
     const retry = await send("тест");
@@ -5146,7 +5293,7 @@
     const journal = async () => (await env.ok("GET", `/operator/incidents/${enc(foreign)}/journal`)).items.length;
     const before = await journal();
     const send = async () =>
-      env.call("POST", `/operator/incidents/${enc(foreign)}/transitions/claim`, { formValues: {}, surface: "queue", idempotencyKey: "claim-foreign-once" }, { "If-Match": await env.etag(foreign) });
+      env.call("POST", `/operator/incidents/${enc(foreign)}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue", idempotencyKey: "claim-foreign-once" }, IMTest.seenOf(await env.card(foreign))));
     const first = await send();
     assert.status(first, 409, null, "первый раз");
     const again = await send();
@@ -5174,7 +5321,7 @@
     const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire").slice(0, 2).map((e) => e.guid);
     assert.status(await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires }), 200, null, "первое объединение");
     const res = await env.call("POST", "/operator/incidents/merge", { incidentGuids: fires });
-    assert.status(res, 422, null, "второй раз — те же инциденты, без expectedVersions");
+    assert.status(res, 422, null, "второй раз — те же инциденты, без expected");
     const b = res.body || {};
     assert.ok(typeof b.code === "string" && typeof b.message === "string" && typeof b.messageKey === "string", `тело — Problem: ${JSON.stringify(b)}`);
   });
@@ -5204,8 +5351,8 @@
     }
   }
   const actWithKey = async (api, guid, transition, formValues, key) => {
-    const etag = (await api.raw("GET", `/operator/incidents/${enc(guid)}`)).headers.etag;
-    return api.raw("POST", `/operator/incidents/${enc(guid)}/transitions/${enc(transition)}`, { formValues, surface: "card", idempotencyKey: key }, { "If-Match": etag });
+    const seen = IMTest.seenOf((await api.raw("GET", `/operator/incidents/${enc(guid)}`)).body);
+    return api.raw("POST", `/operator/incidents/${enc(guid)}/transitions/${enc(transition)}`, Object.assign({ formValues, surface: "card", idempotencyKey: key }, seen));
   };
   const freshFire = async (api) => (await api.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items.find((e) => e.state === "new" && e.eventType.id === "fire");
 
