@@ -1092,6 +1092,8 @@
         const fireChip = fireRow.querySelector("[data-siblings]");
         fireChip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
         await wait(300);
+        // Курсор ушёл со списка: иначе список заморожен под ним до конца прогона (§22.1)
+        $("eventsList").dispatchEvent(new MouseEvent("mouseleave"));
         expect(/INC-1853 — Медпомощь при пожаре · Новое/.test(fireChip.title), `подсказка чипа INC-1847: «${fireChip.title}»`);
         const medRow = await rowOnPages(med);
         expect(medRow, "INC-1853 нет в «Открытых»");
@@ -2112,7 +2114,7 @@
       const cfg = window.IM_WORKFLOW.display.inboxBlock;
       expect(JSON.stringify(UI.priorityLetters(["Критический", "Красный", "Высокий"])) === JSON.stringify(["Кри", "Кра", "В"]), `буквы приоритетов: ${UI.priorityLetters(["Критический", "Красный", "Высокий"])}`);
       expect([1600, 1400, 1100, 800].map(UI.headLayout).join() === "full,more,compact,phone", "раскладка шапки по ширине");
-      const stateN = (id) => Number(([...$("eventFilter").options].find((o) => o.value === id) || { textContent: "" }).textContent.match(/(\d+)$/)?.[1]);
+      const stateN = (id) => Number(([...$("eventFilter").options].find((o) => o.value === id) || { textContent: "" }).textContent.match(/(\d+)(?: \+\d+)?$/)?.[1]);
       const priBtns = () => [...$("priorityButtons").querySelectorAll("[data-pri]")];
       const priN = () => priBtns().map((b) => (b.querySelector(".n") ? Number(b.querySelector(".n").textContent) : null));
       const blockIds = () => [...$("eventsList").querySelectorAll(".inbox-row")].map((r) => r.dataset.id);
@@ -2181,6 +2183,30 @@
         }
         await setFilter("open");
       }
+    });
+
+    await step("Новые строки и скрытое фильтром: freezeAbove держит всё выше курсора, hiddenBy — что прячет строку (§22.1, §22.3)", async () => {
+      const ui = window.IM_SELFTEST_UI;
+      const r = (guid, extra) => Object.assign({ guid }, extra || {});
+      const ids = (rows) => rows.map((x) => x.guid + (x.gone ? "*" : "")).join(",");
+      // b ушла, n пришла выше якоря c, e — ниже; a обновилась на месте
+      const f = ui.freezeAbove([r("a"), r("b"), r("c"), r("d")], [r("n"), r("a", { v: 2 }), r("c"), r("d"), r("e")], "c");
+      expect(ids(f.rows) === "a,b*,c,d,e" && ids(f.newAbove) === "n", `заморозка: ${ids(f.rows)} / новые ${ids(f.newAbove)}`);
+      expect(f.rows[0].v === 2, "строка выше курсора не обновилась на месте");
+      const free = ui.freezeAbove([r("a"), r("b")], [r("n"), r("a")], null);
+      expect(ids(free.rows) === "n,a" && !free.newAbove.length, `без курсора: ${ids(free.rows)}`);
+      const below = ui.freezeAbove([r("a"), r("b")], [r("a"), r("n"), r("b")], "a");
+      expect(ids(below.rows) === "a,n,b" && !below.newAbove.length, `новая ниже курсора встаёт сразу: ${ids(below.rows)}`);
+      const inc = { filters: ["open"], priority: 100, eventType: { guid: "T" }, sourceDeviceTypeId: "camera" };
+      const q = (extra) => Object.assign({ filter: "open", priorities: [], eventTypes: [], deviceTypes: [], scenarios: [], groupId: "all", search: "", blockFilter: null }, extra);
+      const why = (i, extra) => ui.hiddenBy(i, q(extra)).join(",");
+      expect(why(inc, {}) === "", `ничего не прячет: ${why(inc, {})}`);
+      expect(why(inc, { filter: "mine" }) === "filter", `«Мои»: ${why(inc, { filter: "mine" })}`);
+      expect(why(inc, { priorities: [75] }) === "priority" && why(inc, { priorities: [75, 100] }) === "", "приоритеты");
+      expect(why(inc, { eventTypes: ["U"], deviceTypes: ["door"] }) === "eventType,deviceType", `типы: ${why(inc, { eventTypes: ["U"], deviceTypes: ["door"] })}`);
+      expect(why(inc, { scenarios: ["S"], groupId: "G", search: "x" }) === "scenario,node,search", "сценарий, узел и поиск — могут прятать");
+      expect(why(Object.assign({}, inc, { filters: ["open", "inbox"] }), { filter: "mine", priorities: [75], blockFilter: "inbox" }) === "", "инцидент блока фильтрами не прячется");
+      return "заморозка, сброс, hiddenBy";
     });
 
     await step("Перерыв и возврат с перерыва", async () => {
@@ -4970,6 +4996,92 @@
       }
       expect(a !== b && [a, b].includes("alert"), `значок не мигает: ${a} → ${b}`);
       return `${a} → ${b}`;
+    }, SOUND_FIRST);
+
+    await step("Новые строки: курсор над списком — новая строка не сдвигает список, «↑ 1 новый»; курсор ушёл — строка на месте и подсвечена (§22.1, §22.3)", async () => {
+      // Демо-данные заново: Критические прошлых шагов заняли бы всю первую страницу
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      await setFilter("open");
+      const list = $("eventsList");
+      const rows = () => [...list.querySelectorAll("article.event")];
+      const at = (el) => el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+      expect(rows().length >= 2, `в списке ${rows().length} строк`);
+      // Курсор — над строкой ниже Критических: новый Критический сервер ставит выше неё
+      const crit = (await window.IM_SELFTEST_API.get("/operator/reference/priorities")).find((p) => p.value === 100);
+      const anchor = rows().find((x) => (x.querySelector(".pri-name") || {}).textContent !== crit.name.ru);
+      expect(anchor, "в списке нет строки ниже Критических");
+      const guid = anchor.dataset.id;
+      const above = rows().slice(0, rows().indexOf(anchor) + 1).map((x) => x.dataset.id);
+      const y = at(anchor);
+      anchor.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      let inc;
+      try {
+        inc = await soundIncident(100);
+        await wait(150);
+        const now = rows().map((x) => x.dataset.id);
+        const row = list.querySelector(`[data-id="${CSS.escape(guid)}"]`);
+        expect(now.slice(0, above.length).join() === above.join(), `строки выше курсора сдвинулись: ${now.slice(0, above.length).join()} вместо ${above.join()}`);
+        expect(row && Math.abs(at(row) - y) < 1, `строка под курсором сдвинулась: ${row ? at(row) : "нет"} вместо ${y}`);
+        const banner = list.querySelector("[data-new-rows]");
+        expect(banner && /↑\s*1\s/.test(banner.textContent), `«↑ 1 новый»: ${banner ? banner.textContent : "нет"}`);
+      } finally {
+        list.dispatchEvent(new MouseEvent("mouseleave"));
+      }
+      await wait(200);
+      const row = list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`);
+      expect(row && !list.querySelector("[data-new-rows]"), `после ухода курсора: строки ${row ? "есть" : "нет"}, «↑ новых» ${list.querySelector("[data-new-rows]") ? "есть" : "нет"}`);
+      // Подсветка — с того момента, как строка показалась в видимой части списка, а не с прихода (§22.3)
+      const box = list.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      if (r.bottom <= box.top || r.top >= box.bottom) {
+        expect(!row.classList.contains("fresh"), "строка за прокруткой уже подсвечена");
+        row.scrollIntoView({ block: "nearest" });
+        // Событие прокрутки браузер шлёт в кадре отрисовки, а его в headless с виртуальным временем нет
+        list.dispatchEvent(new Event("scroll"));
+        await wait(100);
+      }
+      expect(list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`).classList.contains("fresh"), "новая строка не подсвечена");
+      const ring = soundLine("ring");
+      expect(ring && !ring.querySelector("[data-sound-hidden]"), "строка видна, а в «Звучит» — «скрыт фильтром»");
+      await click(ring.querySelector("[data-sound-silence]"));
+      return `${inc.number} — над ${guid}`;
+    }, SOUND_FIRST);
+
+    await step("Скрыт фильтром: «Мои» + новый Критический — «скрыт фильтром · Показать», «+1» на «Открытые» и Критическом; «Показать» — строка видна (§22.3)", async () => {
+      const ring0 = soundLine("ring");
+      if (ring0) await click(ring0.querySelector("[data-sound-silence]"));
+      await setFilter("mine");
+      // «+N» — все спрятанные звучавшие, которых ещё не видели: считаем прибавку от нового
+      const openBtn = () => $("stateButtons").querySelector('[data-state="open"]');
+      const openMark = () => {
+        const opt = [...$("eventFilter").options].find((o) => o.value === "open");
+        const m = openBtn() ? ((openBtn().querySelector(".plus") || {}).textContent || "") : (opt.textContent.match(/\+\d+$/) || [""])[0];
+        return Number(m.replace("+", "")) || 0;
+      };
+      const priMark = (p) => Number((($("priorityButtons").querySelector(`[data-pri="${p}"] .plus`) || {}).textContent || "").replace("+", "")) || 0;
+      const was = { open: openMark(), pri: priMark(100) };
+      const inc = await soundIncident(100);
+      await wait(150);
+      try {
+        const ring = soundLine("ring");
+        expect(ring && ring.querySelector("[data-sound-hidden]") && ring.querySelector(`[data-sound-show="${inc.guid}"]`), `строка «Звучит»: ${ring ? ring.textContent : "нет"}`);
+        // На узком окне «Открытые» — пункт списка состояний, на широком — кнопка
+        expect(openMark() === was.open + 1, `«+1» на «Открытые»: +${openMark()}, до было +${was.open}`);
+        expect(priMark(inc.priority) === was.pri + 1, `«+1» на приоритете: +${priMark(inc.priority)}, до было +${was.pri}`);
+        await click(ring.querySelector("[data-sound-show]"));
+        await wait(200);
+        const row = $("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`);
+        expect($("eventFilter").value === "open" && row, `после «Показать»: состояние ${$("eventFilter").value}, строки ${row ? "есть" : "нет"}`);
+        const after = soundLine("ring");
+        expect(!(after && after.querySelector("[data-sound-hidden]")), "после «Показать» — всё ещё «скрыт фильтром»");
+        expect(openMark() <= was.open && priMark(inc.priority) <= was.pri, `после «Показать» «+1» осталась: +${openMark()}, +${priMark(inc.priority)}`);
+        return inc.number;
+      } finally {
+        const ring = soundLine("ring");
+        if (ring) await click(ring.querySelector("[data-sound-silence]"));
+        await setFilter("open");
+      }
     }, SOUND_FIRST);
 
     await step("Звук: громкость в меню не ниже порога схемы, «Проверить звук» играет с ней (§21.4)", async () => {

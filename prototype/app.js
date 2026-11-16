@@ -907,8 +907,126 @@
     if (withPriorities) out.priority = q.priority;
     return out;
   }
-  if (selftestRun) window.IM_SELFTEST_UI = { get priorityLetters() { return priorityLetters; }, get headLayout() { return headLayout; } };
+  if (selftestRun)
+    window.IM_SELFTEST_UI = {
+      get priorityLetters() { return priorityLetters; },
+      get headLayout() { return headLayout; },
+      get freezeAbove() { return freezeAbove; },
+      get hiddenBy() { return hiddenBy; },
+    };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
+
+  /* ===== Новые строки и скрытое фильтром (§22.1, §22.3) ===== */
+
+  // Заморозка выше курсора: shown — строки на экране, next — ответ сервера, anchorGuid — строка под курсором.
+  // Она и всё выше неё — на своих местах: есть у сервера — с новыми данными, ушла — та же строка с gone (бледная,
+  // без кнопок, решение 7). Новые строки, которые сервер ставит выше якоря, копятся в newAbove; ниже якоря — как
+  // прислал сервер. Якоря нет на экране — заморозки нет
+  function freezeAbove(shown, next, anchorGuid) {
+    const at = anchorGuid == null ? -1 : shown.findIndex((r) => r.guid === anchorGuid);
+    if (at === -1) return { rows: next.slice(), newAbove: [] };
+    const pos = new Map(next.map((r, i) => [r.guid, i]));
+    const top = shown.slice(0, at + 1).map((r) => (pos.has(r.guid) ? next[pos.get(r.guid)] : Object.assign({}, r, { gone: true })));
+    const kept = new Set(top.map((r) => r.guid));
+    const was = new Set(shown.map((r) => r.guid));
+    // Граница в новом порядке — самая нижняя из замороженных строк, которая ещё есть у сервера
+    const edge = top.reduce((m, r) => (r.gone ? m : Math.max(m, pos.get(r.guid))), -1);
+    const newAbove = [];
+    const below = [];
+    next.forEach((r, i) => {
+      if (kept.has(r.guid)) return;
+      if (!was.has(r.guid) && i < edge) newAbove.push(r);
+      else below.push(r);
+    });
+    return { rows: top.concat(below), newAbove };
+  }
+
+  // Что прячет строку инцидента от оператора (§22.3): incident — IncidentSummary (filters — фильтры машины, которые он
+  // проходит для читающего), q — выбор оператора. Блок «Мне на принятие» фильтрами не сужается (§7): инцидент его
+  // фильтра при видимом блоке не спрятан. Сценарий, узел дерева и поиск строка не несёт — клиент их не проверяет
+  // (решение 6 плана 87в): заданы — значит могут прятать (UNSURE)
+  const UNSURE = ["scenario", "node", "search"];
+  function hiddenBy(incident, q) {
+    const filters = incident.filters || [];
+    if (q.blockFilter && filters.includes(q.blockFilter)) return [];
+    const out = [];
+    if (!filters.includes(q.filter)) out.push("filter");
+    if (q.priorities.length && !q.priorities.includes(incident.priority)) out.push("priority");
+    if (q.eventTypes.length && !q.eventTypes.includes(incident.eventType && incident.eventType.guid)) out.push("eventType");
+    if (q.deviceTypes.length && !q.deviceTypes.includes(incident.sourceDeviceTypeId)) out.push("deviceType");
+    if (q.scenarios.length) out.push("scenario");
+    if (q.groupId && q.groupId !== "all") out.push("node");
+    if (q.search) out.push("search");
+    return out;
+  }
+  const filterChoice = () => ({
+    filter: state.filter,
+    priorities: state.priorities,
+    eventTypes: state.eventTypes,
+    deviceTypes: state.deviceTypes,
+    scenarios: state.scenarios,
+    groupId: state.groupId,
+    search: state.search,
+    blockFilter: blockShown() ? inboxCfg().filter : null,
+  });
+  // Последние известные строки инцидентов — из потока и ответов очереди: по ним — что прячет звучащее
+  const incCache = new Map();
+  function noteIncidents(items) {
+    items.forEach((e) => e && e.guid && incCache.set(e.guid, e));
+    if (incCache.size > 1000) [...incCache.keys()].slice(0, incCache.size - 1000).forEach((k) => incCache.delete(k));
+  }
+  // Строка спрятана: её нет ни в списке, ни в блоке, и что-то из выбора оператора может её прятать. Нет ничего —
+  // она просто на другой странице
+  function hiddenNow(guid) {
+    const inc = incCache.get(guid);
+    if (!inc || queueItem(guid)) return false;
+    return hiddenBy(inc, filterChoice()).length > 0;
+  }
+  // Кнопка состояния, на которой «+1» (§22.3): первый фильтр машины, где инцидент есть («Открытые»)
+  const markFilter = (inc) => (WORKFLOW.queueFilters.find((f) => (inc.filters || []).includes(f.id)) || {}).id || null;
+  // Звучащие, спрятанные фильтром, которых оператор ещё не видел: «+1» на кнопках, пока строка не показалась
+  const unseen = new Set();
+  function noteUnseen() {
+    // Звук не включён — ничего не звучит, и «Звучит» нет (§21.5)
+    if (!soundOn() || !soundOut().ready()) return;
+    snd.state.sounding.forEach((s) => hiddenNow(s.guid) && unseen.add(s.guid));
+    // Ушёл из «Открытых» (взяли, закрыли) — внимания больше не ждёт
+    const first = WORKFLOW.queueFilters[0].id;
+    [...unseen].forEach((g) => !(incCache.get(g) && (incCache.get(g).filters || []).includes(first)) && unseen.delete(g));
+  }
+  const unseenOf = (pred) => [...unseen].filter((g) => incCache.get(g) && pred(incCache.get(g))).length;
+
+  // «Показать» у звучащего скрытого (§22.3): состояние — «Открытые», а если там его нет — фильтр, где он есть;
+  // мешающие приоритеты, типы — долой; сценарий, поиск и узел — только если без них строки всё равно нет
+  // (решение 6); затем очередь на странице инцидента и прокрутка к строке. «Сбросить фильтры» (§7) — другое: узел не трогает
+  async function showHidden(guid) {
+    const inc = incCache.get(guid);
+    if (!inc) return;
+    const why = hiddenBy(inc, filterChoice());
+    const fs = WORKFLOW.queueFilters;
+    const filters = inc.filters || [];
+    const filter = filters.includes(fs[0].id) ? fs[0].id : ([...fs].reverse().find((f) => filters.includes(f.id)) || fs[0]).id;
+    Object.assign(state, { filter, tbOpen: null, stateMenu: false });
+    if (why.includes("priority")) state.priorities = [];
+    if (why.includes("eventType")) state.eventTypes = [];
+    if (why.includes("deviceType")) state.deviceTypes = [];
+    const load = async () => {
+      Object.assign(state, { selectedId: guid, page: 1, focus: false, jump: true });
+      dropSelection();
+      renderTypeLists();
+      await reload();
+      while (loading) await loading;
+    };
+    await load();
+    if (!queueItem(guid) && (state.scenarios.length || state.search || state.groupId !== "all")) {
+      Object.assign(state, { scenarios: [], search: "", groupId: "all", tbQ: {} });
+      $("eventSearch").value = "";
+      await load();
+    }
+    const row = $("eventsList").querySelector(`[data-id="${CSS.escape(guid)}"]`);
+    if (row) row.scrollIntoView({ block: "nearest" });
+    else toast(t("{id} скрыт фильтром очереди", { id: inc.number }));
+  }
 
   // Всё, что видно на экране, — заново с сервера: сессия, страница очереди, счётчики, дерево,
   // карточка выбранного. Запросы во время загрузки не теряются: загрузка повторится один раз
@@ -945,6 +1063,7 @@
         page = await api.get("/operator/incidents", queueQuery());
       }
       noteServerTime(page.items);
+      noteIncidents(page.items.concat(block.items));
       Object.assign(store, { session, page, counters, tree, stateCounts, priCounts, block });
       soundSession();
       state.page = page.page;
@@ -2423,7 +2542,10 @@
     $("eventsToolbar").classList.toggle("narrow", layout === "compact" || layout === "phone");
     const cfg = inboxCfg();
     const counted = (f) => f.counted !== false && store.stateCounts[f.id] != null;
-    const num = (f) => (counted(f) ? `<b class="n">${store.stateCounts[f.id]}</b>` : "");
+    // «+N» — звучащие, спрятанные фильтром, которых ещё не видели (§22.3)
+    const plusOf = (f) => unseenOf((inc) => markFilter(inc) === f.id);
+    const plus = (n) => (n ? `<b class="plus">+${n}</b>` : "");
+    const num = (f) => (counted(f) ? `<b class="n">${store.stateCounts[f.id]}</b>` : "") + plus(plusOf(f));
     const btn = (f) => {
       const hot = cfg && f.id === cfg.filter && counted(f) && store.stateCounts[f.id] > 0;
       return `<button type="button" class="state-btn ${hot ? "hot" : ""}" data-state="${escapeHtml(f.id)}" aria-pressed="${state.filter === f.id}">${escapeHtml(lbl(f))}${num(f)}</button>`;
@@ -2447,7 +2569,7 @@
     // Список состояний: на широком окне скрыт, но хранит выбор
     const select = $("eventFilter");
     if (select.options.length !== fs.length) select.innerHTML = fs.map((f) => `<option value="${escapeHtml(f.id)}"></option>`).join("");
-    fs.forEach((f, i) => (select.options[i].textContent = counted(f) ? `${lbl(f)} ${store.stateCounts[f.id]}` : lbl(f)));
+    fs.forEach((f, i) => (select.options[i].textContent = (counted(f) ? `${lbl(f)} ${store.stateCounts[f.id]}` : lbl(f)) + (plusOf(f) ? ` +${plusOf(f)}` : "")));
     select.value = state.filter;
 
     // Приоритеты: уровни справочника, цвета и названия оттуда; выбранный — рамка своего цвета и галочка
@@ -2458,7 +2580,8 @@
         const on = state.priorities.includes(p.value);
         const n = store.priCounts ? store.priCounts[String(p.value)] || 0 : null;
         const aria = n == null ? names[i] : t("{name}: {n}", { name: names[i], n });
-        return `<button type="button" class="pri-btn ${n === 0 && !on ? "zero" : ""}" data-pri="${p.value}" data-color="${escapeHtml(p.color)}" aria-pressed="${on}" title="${escapeHtml(inLang(p.description) || names[i])}" aria-label="${escapeHtml(aria)}"><span class="pri-tick material-symbols-outlined" aria-hidden="true">check</span>${escapeHtml(label[i])}${n == null ? "" : `<b class="n">${n}</b>`}</button>`;
+        const more = unseenOf((inc) => inc.priority === p.value);
+        return `<button type="button" class="pri-btn ${n === 0 && !on && !more ? "zero" : ""}" data-pri="${p.value}" data-color="${escapeHtml(p.color)}" aria-pressed="${on}" title="${escapeHtml(inLang(p.description) || names[i])}" aria-label="${escapeHtml(aria)}"><span class="pri-tick material-symbols-outlined" aria-hidden="true">check</span>${escapeHtml(label[i])}${n == null ? "" : `<b class="n">${n}</b>`}${plus(more)}</button>`;
       })
       .join("");
   }
@@ -2484,7 +2607,7 @@
     const acts = queueActions(e).filter((a) => a.id === "accept" || a.id === "reject");
     const left = view && view.running ? `<span class="inbox-left ${view.leftMs < 60000 ? "urgent" : ""}" data-due="${view.due}">${te("осталось")} <b class="sla-t">${fmtSla(view.leftMs)}</b></span>` : "";
     return `
-    <article class="inbox-row ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
+    <article class="inbox-row ${state.selectedId === e.guid ? "selected" : ""} ${e.gone ? "gone" : ""} ${freshCls(e.guid)}" data-id="${escapeHtml(e.guid)}">
       <div class="inbox-pri" data-color="${escapeHtml(pri.color)}" aria-hidden="true"></div>
       <div class="inbox-main">
         <div class="inbox-top">
@@ -2501,17 +2624,98 @@
         .join("")}</div>
     </article>`;
   }
-  function renderInboxBlock() {
+  function renderInboxBlock(rows, more) {
     if (!blockShown()) return "";
     const cfg = inboxCfg();
     const name = lbl(WORKFLOW.queueFilters.find((f) => f.id === cfg.filter));
-    const { items, total } = store.block;
-    if (!items.length) return `<section class="inbox-block empty" aria-label="${escapeHtml(name)}">${te("{name}: ничего нет", { name })}</section>`;
-    const more = total - items.length;
-    return `<section class="inbox-block" aria-label="${escapeHtml(name)}">${items.map(inboxRowHtml).join("")}${
-      more > 0 ? `<button type="button" class="inbox-more" data-inbox-all>${te("ещё {n} → показать все в «{name}»", { n: more, name })}</button>` : ""
+    if (!rows.length) return `<section class="inbox-block empty" aria-label="${escapeHtml(name)}">${te("{name}: ничего нет", { name })}</section>`;
+    return `<section class="inbox-block" aria-label="${escapeHtml(name)}">${rows.map(inboxRowHtml).join("")}${
+      more != null ? `<button type="button" class="inbox-more" data-inbox-all>${te("ещё {n} → показать все в «{name}»", { n: more, name })}</button>` : ""
     }</section>`;
   }
+
+  // Курсор над очередью (§22.1): над строкой списка — выше неё ничего не двигается; над блоком — блок целиком;
+  // в промежутке без строки — весь список (так ничто под курсором точно не сдвинется)
+  const hover = { over: false, guid: null, inBlock: false };
+  // Что на экране: ключ выборки, строки списка и блока, была ли «ещё N» — с этим сравнивается новый ответ
+  const view = { key: null, rows: null, block: null, more: false, guids: new Set() };
+  const viewKey = () => JSON.stringify(Object.assign({}, queueQuery(), { focusGuid: null }));
+  // Заморозить всё показанное: обновить на месте, новое — придержать
+  function freezeAll(shown, next) {
+    const r = shown.length ? freezeAbove(shown, next, shown[shown.length - 1].guid) : { rows: next, newAbove: [] };
+    return { rows: r.rows.slice(0, shown.length), held: r.newAbove.length + r.rows.length - shown.length };
+  }
+  function queueView(key) {
+    const live = { rows: store.page.items, block: store.block.items, more: store.block.total > store.block.items.length ? store.block.total - store.block.items.length : null, held: 0 };
+    if (!hover.over || !view.rows || view.key !== key) return live;
+    const blk = freezeAll(view.block, store.block.items);
+    const visible = blk.rows.filter((r) => !r.gone).length;
+    const out = { block: blk.rows, more: view.more ? Math.max(0, store.block.total - visible) : null, held: blk.held };
+    if (hover.inBlock) return Object.assign(out, { rows: store.page.items });
+    const anchor = view.rows.some((r) => r.guid === hover.guid) ? hover.guid : view.rows.length ? view.rows[view.rows.length - 1].guid : null;
+    const list = freezeAbove(view.rows, store.page.items, anchor);
+    return Object.assign(out, { rows: list.rows, held: out.held + list.newAbove.length });
+  }
+  // Ушедшая строка — бледная и без кнопок, пока курсор не ушёл (решение 7)
+  const goneRow = (e) => (e.gone ? Object.assign({}, e, { actions: [] }) : e);
+
+  // Подсветка новой строки (§22.3): display.freshRowSec с того момента, как строка показалась в видимой части списка.
+  // Новая — пришла после загрузки событием потока (не моим действием, не сменой фильтра или страницы).
+  // fresh: guid → когда снять подсветку (0 — ещё не показалась)
+  const arrived = new Set();
+  const fresh = new Map();
+  const freshMs = () => ((WORKFLOW.display && WORKFLOW.display.freshRowSec) || 0) * 1000;
+  let freshSeen = null;
+  function litFresh(el) {
+    const guid = el.dataset.id;
+    if (fresh.get(guid) !== 0) return;
+    fresh.set(guid, Date.now() + freshMs());
+    el.classList.add("fresh");
+    setTimeout(() => {
+      fresh.delete(guid);
+      const row = $("eventsList").querySelector(`[data-id="${CSS.escape(guid)}"]`);
+      if (row) row.classList.remove("fresh");
+    }, freshMs());
+  }
+  // Ждущие строки в видимой части списка — подсветить сейчас. Зовётся после отрисовки и на прокрутке списка;
+  // IntersectionObserver — ещё и на смену размеров панелей
+  function checkFresh() {
+    const list = $("eventsList");
+    const waiting = [...list.querySelectorAll("[data-id]")].filter((el) => fresh.get(el.dataset.id) === 0);
+    if (!waiting.length) return [];
+    // Видимая часть — окно, урезанное всеми прокручиваемыми предками строки (на узком окне прокручивается не список)
+    let top = 0;
+    let bottom = window.innerHeight;
+    for (let p = list; p && p !== document.documentElement; p = p.parentElement) {
+      if (getComputedStyle(p).overflowY === "visible") continue;
+      const r = p.getBoundingClientRect();
+      top = Math.max(top, r.top);
+      bottom = Math.min(bottom, r.bottom);
+    }
+    const inView = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.height > 0 && r.bottom > top && r.top < bottom;
+    };
+    waiting.filter(inView).forEach(litFresh);
+    return waiting.filter((el) => fresh.get(el.dataset.id) === 0);
+  }
+  function watchFresh() {
+    const waiting = checkFresh();
+    if (!("IntersectionObserver" in window)) return;
+    if (!freshSeen)
+      freshSeen = new IntersectionObserver(
+        (entries) =>
+          entries.forEach((en) => {
+            if (!en.isIntersecting) return;
+            freshSeen.unobserve(en.target);
+            litFresh(en.target);
+          }),
+        { root: null }
+      );
+    freshSeen.disconnect();
+    waiting.forEach((el) => freshSeen.observe(el));
+  }
+  const freshCls = (guid) => (fresh.get(guid) > Date.now() ? "fresh" : "");
 
   function renderEvents() {
     // Панель выборки зависит от отметок — перерисовывается вместе с очередью
@@ -2528,7 +2732,27 @@
     const none = filtersOn()
       ? `<div class="empty">${te("По фильтрам ничего нет")} · <button type="button" class="btn ghost small" data-reset-filters>${te("Сбросить фильтры")}</button></div>`
       : `<div class="empty">${te("Ничего нет")}</div>`;
-    $("eventsList").innerHTML = renderInboxBlock() + (items.map(eventRowHtml).join("") || none);
+    const key = viewKey();
+    const v = queueView(key);
+    // Строки, которых на экране этой же выборки не было и которые принёс поток, — новые: подсветить, как покажутся
+    const shown = v.rows.concat(v.block);
+    if (view.key === key && freshMs())
+      shown.forEach((e) => !view.guids.has(e.guid) && arrived.has(e.guid) && !e.gone && !fresh.has(e.guid) && fresh.set(e.guid, 0));
+    if (view.key !== key || arrived.size > 500) arrived.clear();
+    shown.forEach((e) => arrived.delete(e.guid));
+    // Ждавшая показа строка ушла с экрана (другая страница, фильтр) — подсвечивать нечего
+    const onScreen = new Set(shown.map((e) => e.guid));
+    [...fresh].forEach(([g, until]) => until === 0 && !onScreen.has(g) && fresh.delete(g));
+    Object.assign(view, { key, rows: v.rows, block: v.block, more: v.more != null, guids: new Set(shown.map((e) => e.guid)) });
+    // Строку увидели — «+1» на кнопках снимается (§22.3)
+    const before = unseen.size;
+    shown.forEach((e) => unseen.delete(e.guid));
+    const banner = v.held
+      ? `<div class="new-rows"><button type="button" class="btn primary small" data-new-rows>${te("↑ {n, plural, one {# новый} few {# новых} other {# новых}} — показать", { n: v.held })}</button></div>`
+      : "";
+    $("eventsList").innerHTML = banner + renderInboxBlock(v.block.map(goneRow), v.more) + (v.rows.map(goneRow).map(eventRowHtml).join("") || none);
+    watchFresh();
+    if (unseen.size !== before) renderQueueHead();
   }
 
   // Источник в строке очереди (§7, план 87а): «устройство · адрес» под типом события, длинный адрес — многоточием,
@@ -2550,9 +2774,9 @@
     const open = queueActions(e).find((a) => a.style === "icon");
     const acts = queueActions(e).filter((a) => a.style !== "icon");
     const title = `<strong>${te(e.eventType.name)}</strong>`;
-    const pickable = bulkEligible(e);
+    const pickable = !e.gone && bulkEligible(e);
     return `
-    <article class="event ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
+    <article class="event ${state.selectedId === e.guid ? "selected" : ""} ${e.gone ? "gone" : ""} ${freshCls(e.guid)}" data-id="${escapeHtml(e.guid)}">
       <input class="pick" type="checkbox" data-check="${escapeHtml(e.guid)}" aria-label="${te("Выбрать {id}", {
         id: e.number,
       })}" ${state.checked.has(e.guid) ? "checked" : ""} ${pickable ? "" : "disabled"} />
@@ -3797,7 +4021,28 @@
       const chip = e.target.closest("[data-siblings]");
       if (chip) siblingTip(chip);
     });
+    // Курсор над очередью (§22.1): какая строка под ним; ушёл — блок и список перестраиваются
+    const aim = (e) => {
+      hover.over = true;
+      const row = e.target.closest && e.target.closest("article[data-id]");
+      hover.inBlock = Boolean(e.target.closest && e.target.closest(".inbox-block"));
+      if (row) hover.guid = row.dataset.id;
+      else if (!hover.inBlock) hover.guid = null;
+    };
+    $("eventsList").addEventListener("mouseover", aim);
+    $("eventsList").addEventListener("mousemove", aim);
+    // Прокрутка списка или страницы — ждущие показа новые строки могли показаться (§22.3)
+    document.addEventListener("scroll", () => fresh.size && checkFresh(), { capture: true, passive: true });
+    $("eventsList").addEventListener("mouseleave", () => {
+      Object.assign(hover, { over: false, guid: null, inBlock: false });
+      if (state.mode === "queue") renderEvents();
+    });
     $("eventsList").addEventListener("click", async (e) => {
+      // «↑ N новых — показать»: придержанные строки встают на место (§22.3)
+      if (e.target.closest("[data-new-rows]")) {
+        view.rows = null;
+        return void renderEvents();
+      }
       if (e.target.closest("[data-reset-filters]")) return void resetFilters();
       // «ещё N → показать все»: состояние переключается на фильтр блока
       if (e.target.closest("[data-inbox-all]")) {
@@ -4841,6 +5086,7 @@
       return;
     }
     if (run !== soundRestoring || !soundOn()) return;
+    noteIncidents(queue);
     let next = IMSound.restoreSound(queue, soundCtx());
     // События, пришедшие за время чтения, — поверх прочитанного, без звука: их звук уже сыграл на приходе.
     // Иначе взятый за это время инцидент вернулся бы в повтор из устаревшей очереди
@@ -4945,6 +5191,7 @@
   function renderSound() {
     syncTitle();
     if (!soundOn()) return;
+    noteUnseen();
     const ready = soundOut().ready();
     const important = onlyImportant();
     const icon = !ready ? "🔇" : important ? "🔉" : "🔊";
@@ -4965,8 +5212,12 @@
       const what = top.kind === "personal" ? te("лично вам") : asData(priorityName(top.priority));
       const link = (text) => `<button type="button" class="link-btn" data-sound-go="${escapeHtml(top.guid)}" data-sound-number="${escapeHtml(top.number)}">${text}</button>`;
       const body = n > 1 ? `${te("Звучит:")} ${link(`${n} (${what})`)}` : `${te("Звучит:")} ${what}, ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
+      // Строку звучащего спрятал фильтр — «скрыт фильтром · Показать» (§21.4, §22.3)
+      const hid = hiddenNow(top.guid)
+        ? ` · <span class="sound-hidden" data-sound-hidden>${te("скрыт фильтром")}</span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button>`
+        : "";
       parts.push(
-        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
+        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body}${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
       );
     }
     if (important)
@@ -5055,6 +5306,8 @@
         return soundUpdate();
       }
       if (e.target.closest("[data-sound-back]")) return setOnlyImportant(false);
+      const show = e.target.closest("[data-sound-show]");
+      if (show) return void showHidden(show.dataset.soundShow);
       const go = e.target.closest("[data-sound-go]");
       if (go) soundGo(go.dataset.soundGo, go.dataset.soundNumber);
     });
@@ -5351,6 +5604,10 @@
     const id = msg.incident ? msg.incident.number : msg.incidentGuid;
     const who = (ref) => actorName(ref);
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
+    // Строка из потока собрана для меня (filters — для читающего): по ней — что прячет звучащее (§22.3)
+    if (msg.incident) noteIncidents([msg.incident]);
+    // Чужое или автоматическое событие: строка, которая из-за него появится в очереди, — новая, её подсветить (§22.3)
+    if (!mine && msg.incidentGuid) arrived.add(msg.incidentGuid);
     // Звук решается раньше выхода по своему переходу: моё действие снимает повтор (§21.2)
     soundOnEvent(msg);
     // Свой переход — без уведомления. О закрытом мной соседе сервер мне и не пишет — даже когда я в дежурной группе-адресате
