@@ -2742,7 +2742,7 @@ MUTATIONS = [
      '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "external", "fn": "notifySiblings"',
      '{ "kind": "transactional", "fn": "returnToQueue" },\n        { "kind": "transactional", "fn": "notifySiblings"', "в реестре external"),
     ("contract-401-code", "контракт: в Problem.code нет UNAUTHENTICATED (решение 2026-10-29)", OPENAPI,
-     '"AUDIT_EXPORT_TOO_LARGE",\n              "UNAUTHENTICATED",', '"AUDIT_EXPORT_TOO_LARGE",', "UNAUTHENTICATED"),
+     '"PASSWORD_CHECK_UNAVAILABLE",\n              "UNAUTHENTICATED",', '"PASSWORD_CHECK_UNAVAILABLE",', "UNAUTHENTICATED"),
     ("contract-400-no-code", "контракт: ответ BadRequest не называет код (решение 2026-10-29)", OPENAPI,
      "Код `BAD_REQUEST`, ключ текста", "Ключ текста", "BAD_REQUEST"),
     ("retention-audit-short", "машина: срок хранения аудита 100 дней — меньше года (§14.11, план 71)", MACHINE,
