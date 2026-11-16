@@ -336,7 +336,7 @@ a { color: var(--text); text-decoration: none; }
 
 /* Строка состояния поста (§22.4) — в середине шапки, одной строкой: длинный текст обрезается, высоту шапки не меняет (§22.1) */
 .topbar-cluster { min-width: 0; }
-/* Места мало — сначала сжимается текст «Звучит», потом текст пункта поста. От пункта всегда остаются значок, цвет, кнопки
+/* Места мало — текст «Звучит» и текст пункта поста сжимаются поровну. От пункта всегда остаются значок, цвет, кнопки
    и «+N» (min-width: auto — по ним), «Тихо» не сжимается */
 .post-status { flex: 0 1 auto; min-width: 0; margin: 0 auto; display: flex; overflow: hidden; }
 .post-status[hidden] { display: none; }
@@ -366,8 +366,9 @@ a { color: var(--text); text-decoration: none; }
 .post-item.tight .post-text { display: none; }
 .post-item.tight .more-short { display: inline; }
 /* Замер минимума (fitHead): без текста, с короткими метками */
+/* Текст — нулевой ширины, а не display: none: промежуток после него остаётся в замере */
 .topbar .fit-min .post-text,
-.topbar .fit-min .sound-text,
+.topbar .fit-min .sound-text { display: block; width: 0; min-width: 0; padding: 0; flex: 0 0 0; }
 .topbar .fit-min .more-long,
 .topbar .fit-min .hid-long { display: none; }
 .topbar .fit-min .more-short,
@@ -376,14 +377,20 @@ a { color: var(--text); text-decoration: none; }
 .post-item .btn.small,
 .sound-line .btn.small { flex-shrink: 0; padding: 2px 10px; }
 /* Звук (§21.4): строка «Звучит … · Тихо» в шапке — пока что-то звучит; одной строкой, высоту шапки не меняет */
-.sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex: 0 100 auto; flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
+.sound-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; flex: 0 1 auto; flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
 .post-status:not([hidden]) + .sound-bar { margin-left: 0; }
-/* Окно уже 1280: строке поста нужно место в середине шапки — название продукта остаётся знаком */
-@media (max-width: 1279px) {
+/* Окно уже 1440: строке поста и «Звучит» нужно место в середине шапки — название продукта остаётся знаком */
+@media (max-width: 1439px) {
   .brand { min-width: 0; }
   .brand-text { display: none; }
-  /* Звучит — часам места нет: строке поста и «Звучит» нужны их минимумы (§22.4) */
-  .topbar:has(.sound-line.ring) .clock { display: none; }
+}
+@media (max-width: 1279px) {
+  /* Часам места нет: строке поста и «Звучит» нужны их минимумы (§22.4); скрыты всегда, а не на время тревоги — иначе
+     кнопки шапки прыгали бы в её начале и конце */
+  .clock { display: none; }
+  /* Язык — только значок, как на телефоне: список лежит поверх значка невидимым */
+  .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
+  .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }
 }
 .sound-bar:empty { display: none; }
 .sound-bar .sound-bar-menu { display: none; }
@@ -405,7 +412,8 @@ a { color: var(--text); text-decoration: none; }
 .sound-line.warn { border-color: var(--warn); color: var(--warn-text); }
 .sound-line.ring { border-color: var(--danger-border); background: var(--danger-bg); color: var(--crit-text); }
 .sound-line .sound-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.sound-line .sound-hid { flex-shrink: 0; white-space: nowrap; }
+.sound-line .sound-hid,
+.sound-line [data-sound-go] { flex-shrink: 0; white-space: nowrap; }
 .sound-line .hid-short,
 .sound-line.tight .hid-long { display: none; }
 .sound-line.tight .hid-short { display: inline; }

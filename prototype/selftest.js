@@ -5083,7 +5083,9 @@
       expect(/data-sound-back/.test(oneHtml) && /и ещё 1/.test(twoHtml), `нет пунктов: ${oneHtml.slice(0, 80)} / ${twoHtml.slice(0, 80)}`);
       const longText = "Идут плановые работы: Камера 12 на складе готовой продукции — «замена датчика дыма в зоне погрузки», до 14:00.";
       const ring =
-        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: <button type="button" class="link-btn">3 (Критический)</button></span><span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">скрыт фильтром</span><span class="hid-short">скрыт</span></span> · <button type="button" class="link-btn" data-sound-show>Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
+        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: Критический,</span> <button type="button" class="link-btn" data-sound-go>INC-2210</button><span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">скрыт фильтром</span><span class="hid-short">скрыт</span></span> · <button type="button" class="link-btn" data-sound-show>Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
+      // Без «скрыт фильтром»: номер звучащего — тоже на виду
+      const ringPlain = ring.replace(/<span class="sound-hid">.*?<\/button><\/span>/, "");
       const bar = document.querySelector(".topbar").cloneNode(true);
       bar.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       bar.querySelector(".post-status").setAttribute("hidden", "");
@@ -5115,7 +5117,7 @@
             ps.hidden = !post;
             if (post && long) ps.querySelector(".post-text").textContent = longText;
             sb.querySelectorAll(".sound-line").forEach((el) => el.remove());
-            if (ringOn) sb.insertAdjacentHTML("beforeend", ring);
+            if (ringOn) sb.insertAdjacentHTML("beforeend", ringOn === "plain" ? ringPlain : ring);
             window.IM_SELFTEST_UI.fitHead(doc);
             return h();
           };
@@ -5127,15 +5129,23 @@
           const empty = set("", false, false);
           const got = { one: set(oneHtml, false, false), two: set(twoHtml, false, false), long: set(twoHtml, true, false), ring: set("", false, true) };
           // Пункт поста при «Звучит»: значок виден, кнопки пункта — в рамке строки поста, «Тихо» и «Показать» — в рамке «Звучит»
-          for (const [name, html] of [["one", oneHtml], ["two", twoHtml]]) {
-            got[`${name}+ring`] = set(html, true, true);
+          for (const [name, html, kind] of [["one", oneHtml, true], ["two", twoHtml, true], ["one-plain", oneHtml, "plain"], ["two-plain", twoHtml, "plain"]]) {
+            got[`${name}+ring`] = set(html, true, kind);
+            const go = sb.querySelector("[data-sound-go]");
+            expect(inside(go, sb) && rect(go).width >= 30, `${width} px, ${name}: номер звучащего не виден (${Math.round(rect(go).width)} px)`);
             const item = ps.querySelector(".post-item");
             const seen = Math.min(rect(item).right, rect(ps).right) - Math.max(rect(item).left, rect(ps).left);
             expect(seen >= 24, `${width} px, ${name} при «Звучит»: от пункта поста видно ${Math.round(seen)} px`);
             const icon = item.querySelector('[aria-hidden="true"]');
             expect(inside(icon, ps), `${width} px, ${name}: значок пункта обрезан`);
             item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(inside(b, ps), `${width} px, ${name}: кнопка пункта «${b.textContent.trim()}» вне строки поста`));
-            expect(inside(sb.querySelector("[data-sound-silence]"), sb) && inside(sb.querySelector("[data-sound-show]"), sb), `${width} px, ${name}: «Тихо» или «Показать» обрезаны`);
+            const show = sb.querySelector("[data-sound-show]");
+            expect(inside(sb.querySelector("[data-sound-silence]"), sb) && (!show || inside(show, sb)), `${width} px, ${name}: «Тихо» или «Показать» обрезаны`);
+            const quiet = rect(sb.querySelector("[data-sound-silence]"));
+            const line = rect(sb.querySelector(".sound-line"));
+            expect(quiet.right <= line.right + 0.5 && quiet.left >= line.left, `${width} px, ${name}: «Тихо» за рамкой «Звучит»: ${Math.round(quiet.left)}–${Math.round(quiet.right)} в ${Math.round(line.left)}–${Math.round(line.right)}`);
+            const pill = rect(item);
+            item.querySelectorAll("button.btn, .post-more").forEach((b) => expect(rect(b).right <= pill.right + 0.5, `${width} px, ${name}: кнопка «${b.textContent.trim()}» за рамкой пункта`));
             const actions = doc.querySelector(".topbar-actions");
             expect(rect(ps).right <= rect(sb).left + 1 && rect(sb).right <= rect(actions).left + 1, `${width} px, ${name}: строки заходят друг на друга или на кнопки шапки`);
             expect(item.title.length > 0, `${width} px, ${name}: у пункта нет подсказки с полным текстом`);

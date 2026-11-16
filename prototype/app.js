@@ -5582,14 +5582,15 @@
       const n = snd.state.sounding.length;
       const what = top.kind === "personal" ? te("лично вам") : asData(priorityName(top.priority));
       const link = (text) => `<button type="button" class="link-btn" data-sound-go="${escapeHtml(top.guid)}" data-sound-number="${escapeHtml(top.number)}">${text}</button>`;
-      const body = n > 1 ? `${te("Звучит:")} ${link(`${n} (${what})`)}` : `${te("Звучит:")} ${what}, ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
+      // Ссылка на звучащий — вне сжимаемого текста: номер виден и в тесной шапке (§21.4)
+      const body = n > 1 ? `<span class="sound-text">${te("Звучит:")}</span> ${link(`${n} (${what})`)}` : `<span class="sound-text">${te("Звучит:")} ${what},</span> ${link(`<span data-i18n-skip>${escapeHtml(top.number)}</span>`)}`;
       // Строку звучащего спрятал фильтр — «скрыт фильтром · Показать» (§21.4, §22.3)
       // Места мало — сначала сжимается текст «Звучит» (многоточие), метка — короче «скрыт» (fitHead), «Показать» и «Тихо» на месте
       const hid = hiddenNow(top.guid)
         ? `<span class="sound-hid"> · <span class="sound-hidden" data-sound-hidden><span class="hid-long">${te("скрыт фильтром")}</span><span class="hid-short">${te("скрыт")}</span></span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button></span>`
         : "";
       parts.push(
-        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">${body}</span>${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
+        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body}${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
       );
     }
     $("soundBar").innerHTML = parts.join("");
