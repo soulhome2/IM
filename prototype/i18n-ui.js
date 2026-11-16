@@ -239,7 +239,7 @@ window.IM_DICT_UI = {
     "Ничего нет": "Nothing here",
     "Сбросить фильтры": "Reset filters",
     "По фильтрам ничего нет": "Nothing matches the filters",
-    "↑ {n, plural, one {# новый} few {# новых} other {# новых}} — показать": "↑ {n, plural, one {# new} other {# new}} — show",
+    "↑ {n, plural, one {# новый} few {# новых} other {# новых}} выше — показать": "↑ {n, plural, one {# new} other {# new}} above — show",
     "ещё {n} → показать все в «{name}»": "{n} more → show all in “{name}”",
     "{name}: ничего нет": "{name}: nothing",
     "осталось": "left",

@@ -3135,10 +3135,11 @@
     const onScreen = new Set(shown.map((e) => e.guid));
     [...fresh].forEach(([g, until]) => until === 0 && !onScreen.has(g) && fresh.delete(g));
     Object.assign(view, { key, rows: v.rows, block: v.block, more: v.more != null, guids: new Set(shown.map((e) => e.guid)) });
-    const banner = v.held
-      ? `<div class="new-rows"><button type="button" class="btn primary small" data-new-rows>${te("↑ {n, plural, one {# новый} few {# новых} other {# новых}} — показать", { n: v.held })}</button></div>`
+    // «↑ N новых выше»: в своей полосе над списком (#newRows), а не поверх строк (BUG-122)
+    $("newRows").innerHTML = v.held
+      ? `<button type="button" class="btn primary small" data-new-rows>${te("↑ {n, plural, one {# новый} few {# новых} other {# новых}} выше — показать", { n: v.held })}</button>`
       : "";
-    $("eventsList").innerHTML = banner + renderInboxBlock(v.block.map(goneRow), v.more) + (v.rows.map(goneRow).map(eventRowHtml).join("") || none);
+    $("eventsList").innerHTML = renderInboxBlock(v.block.map(goneRow), v.more) + (v.rows.map(goneRow).map(eventRowHtml).join("") || none);
     watchFresh();
   }
 
@@ -4434,16 +4435,22 @@
     $("eventsList").addEventListener("mousemove", aim);
     // Прокрутка списка или страницы — ждущие показа новые строки могли показаться (§22.3)
     document.addEventListener("scroll", () => fresh.size && checkFresh(), { capture: true, passive: true });
-    $("eventsList").addEventListener("mouseleave", () => {
+    // Полоса «↑ N новых выше» (#newRows) — над списком: переход курсора между ней и списком список не отпускает,
+    // иначе кнопка пропадала бы, пока к ней ведут курсор (BUG-122)
+    const leaveQueue = (e) => {
+      if (e.relatedTarget && ($("eventsList").contains(e.relatedTarget) || $("newRows").contains(e.relatedTarget))) return;
       Object.assign(hover, { over: false, guid: null, inBlock: false });
       if (state.mode === "queue") renderEvents();
+    };
+    $("eventsList").addEventListener("mouseleave", leaveQueue);
+    $("newRows").addEventListener("mouseleave", leaveQueue);
+    // «↑ N новых выше — показать»: придержанные строки встают на место (§22.3)
+    $("newRows").addEventListener("click", (e) => {
+      if (!e.target.closest("[data-new-rows]")) return;
+      view.rows = null;
+      renderEvents();
     });
     $("eventsList").addEventListener("click", async (e) => {
-      // «↑ N новых — показать»: придержанные строки встают на место (§22.3)
-      if (e.target.closest("[data-new-rows]")) {
-        view.rows = null;
-        return void renderEvents();
-      }
       if (e.target.closest("[data-reset-filters]")) return void resetFilters();
       // «ещё N → показать все»: состояние переключается на фильтр блока
       if (e.target.closest("[data-inbox-all]")) {

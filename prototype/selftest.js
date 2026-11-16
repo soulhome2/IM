@@ -5427,14 +5427,14 @@
         const row = list.querySelector(`[data-id="${CSS.escape(guid)}"]`);
         expect(now.slice(0, above.length).join() === above.join(), `строки выше курсора сдвинулись: ${now.slice(0, above.length).join()} вместо ${above.join()}`);
         expect(row && Math.abs(at(row) - y) < 1, `строка под курсором сдвинулась: ${row ? at(row) : "нет"} вместо ${y}`);
-        const banner = list.querySelector("[data-new-rows]");
+        const banner = document.querySelector("[data-new-rows]");
         expect(banner && /↑\s*1\s/.test(banner.textContent), `«↑ 1 новый»: ${banner ? banner.textContent : "нет"}`);
       } finally {
         list.dispatchEvent(new MouseEvent("mouseleave"));
       }
       await wait(200);
       const row = list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`);
-      expect(row && !list.querySelector("[data-new-rows]"), `после ухода курсора: строки ${row ? "есть" : "нет"}, «↑ новых» ${list.querySelector("[data-new-rows]") ? "есть" : "нет"}`);
+      expect(row && !document.querySelector("[data-new-rows]"), `после ухода курсора: строки ${row ? "есть" : "нет"}, «↑ новых» ${document.querySelector("[data-new-rows]") ? "есть" : "нет"}`);
       // Подсветка — с того момента, как строка показалась в видимой части списка, а не с прихода (§22.3)
       const box = list.getBoundingClientRect();
       const r = row.getBoundingClientRect();
@@ -5449,6 +5449,66 @@
       expect(ringOn() && rowSoundOf(inc.guid), "новый Критический на виду: значок не звенит или у строки нет значка динамика");
       await click(quietBtn());
       return `${inc.number} — над ${guid}`;
+    }, SOUND_FIRST);
+
+    await step("«↑ N новых выше — показать» — своё место над списком: не перекрывает ни одной строки на широкой и узкой панели, компактная, по центру; курсор на кнопке список не отпускает, щелчок — строки на местах (§22.1, §22.3, BUG-122)", async () => {
+      if (quietBtn()) await click(quietBtn());
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      await setFilter("open");
+      const list = $("eventsList");
+      const panel = list.closest("section");
+      const rows = () => [...list.querySelectorAll("article.event, .inbox-row")];
+      const crit = (await window.IM_SELFTEST_API.get("/operator/reference/priorities")).find((p) => p.value === 100);
+      const anchor = [...list.querySelectorAll("article.event")].find((x) => (x.querySelector(".pri-name") || {}).textContent !== crit.name.ru);
+      expect(anchor, "в списке нет строки ниже Критических");
+      anchor.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      // Видимая часть строки — внутри окна списка: строка, ушедшая прокруткой вверх, под кнопкой не считается
+      const cross = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      const seen = (el) => {
+        const r = el.getBoundingClientRect(), v = list.getBoundingClientRect();
+        const c = { left: Math.max(r.left, v.left), right: Math.min(r.right, v.right), top: Math.max(r.top, v.top), bottom: Math.min(r.bottom, v.bottom) };
+        return c.right > c.left && c.bottom > c.top ? c : null;
+      };
+      const check = (where) => {
+        const btn = document.querySelector("[data-new-rows]");
+        expect(btn, `${where}: кнопки «↑ новых» нет`);
+        const b = btn.getBoundingClientRect(), l = list.getBoundingClientRect();
+        const hit = rows().filter((x) => { const c = seen(x); return c && cross(b, c); });
+        expect(!hit.length, `${where}: кнопка перекрывает строки ${hit.map((x) => x.dataset.id || x.className).join(", ")}`);
+        expect(b.width < l.width * 0.8, `${where}: кнопка во всю ширину — ${Math.round(b.width)} из ${Math.round(l.width)} px`);
+        expect(Math.abs((b.left + b.right) / 2 - (l.left + l.right) / 2) < 3, `${where}: кнопка не по центру списка`);
+        expect(b.right <= l.right + 1 && b.left >= l.left - 1, `${where}: кнопка за краем списка`);
+      };
+      const width = panel.style.width;
+      let inc;
+      try {
+        inc = await soundIncident(100);
+        await wait(150);
+        const btn = document.querySelector("[data-new-rows]");
+        check("широкая");
+        list.scrollTop = 60;
+        await wait(50);
+        check("широкая, список прокручен");
+        list.scrollTop = 0;
+        panel.style.width = "340px";
+        await wait(50);
+        check("узкая (340 px)");
+        expect(btn && /^↑ 1 новый выше — показать$/.test(btn.textContent.trim()), `текст кнопки: «${btn ? btn.textContent.trim() : "нет"}»`);
+        // Курсор с списка на кнопку — список не отпущен: кнопка на месте, новой строки выше курсора нет
+        list.dispatchEvent(new MouseEvent("mouseleave", { relatedTarget: btn }));
+        await wait(100);
+        const still = document.querySelector("[data-new-rows]");
+        expect(still && !list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`), `курсор перешёл на кнопку — список отпущен: кнопка ${still ? "есть" : "нет"}`);
+        await click(still);
+        await wait(150);
+        expect(list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`) && !document.querySelector("[data-new-rows]"), "после щелчка по кнопке: новой строки нет или кнопка осталась");
+        return `${inc.number}`;
+      } finally {
+        panel.style.width = width;
+        list.dispatchEvent(new MouseEvent("mouseleave"));
+        if (quietBtn()) await click(quietBtn());
+      }
     }, SOUND_FIRST);
 
     await step("Скрыт фильтром: «Мои» + новый Критический — значок звенит, на кнопках только числа, без «+N»; щелчок по значку — строка видна (§22.3)", async () => {
