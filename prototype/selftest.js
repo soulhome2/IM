@@ -2302,6 +2302,15 @@
         expect(rect(list).height <= innerHeight / 3 + 1, `список выше трети экрана: ${Math.round(rect(list).height)} px`);
         await click(b.querySelector(".toast-text"));
         expect(list.hidden, "второе нажатие не убрало список");
+        // Щелчок в списке его не закрывает, мимо — закрывает; Esc — тоже
+        await click(b.querySelector(".toast-text"));
+        await click(list);
+        expect(!list.hidden, "щелчок в списке его закрыл");
+        await click(document.querySelector(".brand"));
+        expect(list.hidden, "щелчок мимо не закрыл список");
+        await click(b.querySelector(".toast-text"));
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        expect(list.hidden, "Esc не закрыл список");
         // Итог при висящей ошибке — поверх неё на время, затем ошибка возвращается
         const done = "Итог самопроверки: обработано";
         ui.toast(done);

@@ -897,6 +897,11 @@
     list.innerHTML = lines.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
     list.hidden = false;
   }
+  // Открытый список закрывают щелчок мимо плашки и списка и Esc (onKey) — как в интерфейсе стенда
+  document.addEventListener("click", (e) => {
+    const list = $("toastList");
+    if (list && !list.hidden && !e.target.closest(".toast-slot")) toggleToastList(null);
+  });
   function closeErrors() {
     toasts.errors = [];
     $("toasts").querySelectorAll(".toast.error").forEach((x) => x.remove());
@@ -5429,6 +5434,8 @@
   // ничего не открыто — карточку, как «К очереди» (§13, RULE-87, RULE-91)
   function onKey(e) {
     if (e.key !== "Escape") return;
+    // Список ошибок под плашкой итога (§22.6) — первым: он поверх всего
+    if (!$("toastList").hidden) return toggleToastList(null);
     const openMenu = closeMenus();
     if (openMenu) return openMenu.querySelector("[aria-haspopup]").focus();
     if (state.dialog) return closeDialog();
