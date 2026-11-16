@@ -2146,6 +2146,15 @@
         await click(priBtns().find((b) => Number(b.dataset.pri) === other));
         await wait(200);
         expect(pressed().length === 2, `второй приоритет заменил первый: ${pressed()}`);
+        // «По фильтру…» (§11.2) берёт узел и состояние, без приоритетов и без блока: приоритеты шапки его не сужают
+        const filterCount = async () => {
+          await click(document.querySelector('.tree-all [data-filter="select"]'));
+          await wait(300);
+          const n = Number(($("groupingConfirm").textContent.match(/\d+/) || [NaN])[0]);
+          await click(document.querySelector('[data-close="modalGrouping"]'));
+          return n;
+        };
+        const byFilterNarrow = await filterCount();
         // «Мне на принятие» выбрано — блока нет: список и есть эти инциденты
         await setFilter(cfg.filter);
         await wait(200);
@@ -2164,6 +2173,7 @@
         await wait(300);
         expect($("eventFilter").value === "open" && !pressed().length && $("eventSearch").value === "", `после сброса: ${$("eventFilter").value}, приоритетов ${pressed().length}, поиск «${$("eventSearch").value}»`);
         expect(blockIds().join() === ids0.join(), "после сброса блок другой");
+        expect((await filterCount()) === byFilterNarrow, `«По фильтру…» зависит от приоритетов шапки: ${byFilterNarrow}`);
         return `блок ${ids0.length} из ${inbox.total}, приоритет ${pick}`;
       } finally {
         if (pressed().length) {
@@ -4952,8 +4962,12 @@
       expect(titleN() > 0, `непринятых нет: «${document.title}»`);
       expect(link && link.dataset.blink === "on", `значок вкладки: ${link ? link.dataset.blink : "нет"}`);
       const a = link.dataset.state;
-      await wait(1100);
-      const b = link.dataset.state;
+      // Смену ждём опросом с пределом: период мигания 1 с, шаг ожидания и загрузка страницы его сдвигают
+      let b = a;
+      for (let waited = 0; waited < 2500 && b === a; waited += 100) {
+        await wait(100);
+        b = link.dataset.state;
+      }
       expect(a !== b && [a, b].includes("alert"), `значок не мигает: ${a} → ${b}`);
       return `${a} → ${b}`;
     }, SOUND_FIRST);
