@@ -954,6 +954,8 @@
         mediaKinds: ev.media === "video" ? ["video"] : ev.media === "map" ? ["map"] : ["video", "map"],
         schemaVersion: W.schema.version,
         version: String(ev.version),
+        // Последний номер записи журнала (seq): его клиент присылает в journalSeen у закрытия (§14.1, RULE-142)
+        journalSeq: ev.log.length,
         actions: actionsFor(ev, surface || "queue"),
       };
     }
@@ -983,9 +985,11 @@
     function journalView(ev) {
       return ev.log.map((entry, i) => ({
         guid: uuid(7, i, ev.id.slice(-12)),
+        // Порядковый номер записи инцидента (§14.1, RULE-142): растёт с каждой записью, и у записанных задним числом
+        seq: i + 1,
         at: iso(entry.at),
         actor: actorRef(entry.whoId, entry.who),
-        kind: entry.kind || (entry.whoId === "dispatcher" || entry.whoId === "system" || (!entry.whoId && entry.who) ? "system" : "transition"),
+        kind: entryKind(entry),
         templateKey: entry.k,
         vars: entry.v || {},
         text: render(entry.k, entry.v),
@@ -1123,7 +1127,7 @@
         body: {
           count: matched.length,
           incidentGuids: (max == null ? matched : matched.slice(0, max)).map((e) => e.id),
-          versions: versionsOf(max == null ? matched : matched.slice(0, max)),
+          expected: snapshotOf(max == null ? matched : matched.slice(0, max)),
           truncated: max != null && matched.length > max,
           scenarioGuid,
           excluded,
@@ -1512,25 +1516,46 @@
     const touch = (list) => list.forEach((e) => (e.version += 1));
     // Меняет ли переход версию записи (concurrency машины): нет — только запись в журнал
     const bumps = (tr) => !tr || !tr.concurrency || tr.concurrency.bumpsVersion !== false;
-    // Нужна ли версия записи в запросе: expectedVersion: false — If-Match не проверяется
-    const needsVersion = (id) => {
-      const tr = engine.transition(id);
-      return !tr || !tr.concurrency || tr.concurrency.expectedVersion !== false;
-    };
-    // Версии отобранных — их клиент пришлёт в expectedVersions (BUG-84)
-    const versionsOf = (list) => Object.fromEntries(list.map((e) => [e.id, String(e.version)]));
-
-    // Версия записи для оптимистичной блокировки (§14.1): ETag — поле version в кавычках.
-    // Запрос, меняющий инцидент, несёт её в If-Match: нет заголовка — 428, версия старая — 412
+    // Версия записи (§14.1): ETag карточки — поле version в кавычках. Её читают GET и кэш клиента; действие оператора
+    // её не сверяет (RULE-142): номер растёт от всего — от эскалации, записи о нарушении, чужого комментария
     const etag = (ev) => `"${ev.version}"`;
-    function versionProblem(ev, headers) {
-      const sent = headers["if-match"];
-      if (!sent) return problem(428, "PRECONDITION_REQUIRED", ["workflow.error.precondition_required"]);
-      const versions = sent.split(",").map((v) => v.trim().replace(/^W\//, ""));
-      if (versions.includes("*") || versions.includes(etag(ev))) return null;
-      return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
-    }
 
+    // Что видел оператор (§14.1, RULE-142): переход сверяет то, на чём основано решение, — concurrency.expects машины:
+    // состояние, адресата (определение addressee: владелец, а пока группа не приняла — группа; "" — ничей) и у закрытия
+    // новые записи журнала после journalSeen. Совпало — переход выполняется при любой версии
+    const expectsOf = (tr) => (tr && tr.concurrency && tr.concurrency.expects) || [];
+    const addresseeOf = (ev) => engine.addressee(ev) || "";
+    // Вид записи журнала: таймеров и системы — system, остальные — transition, если не задан свой (macro, external)
+    const entryKind = (entry) => entry.kind || (entry.whoId === "dispatcher" || entry.whoId === "system" || (!entry.whoId && entry.who) ? "system" : "transition");
+    // Новое событие для закрытия (journalNews машины): запись после journalSeen, не своя и вида из списка машины —
+    // записи таймеров и системы о нарушении и потолке состояние и адресата не меняют, их не считаем
+    const NEWS = (W.invariants.optimisticLocking || {}).journalNews || { kinds: [] };
+    const newsSince = (ev, seen) => ev.log.slice(Math.max(0, Number(seen) || 0)).some((e) => !(NEWS.ownExcluded && e.whoId === ME) && NEWS.kinds.includes(entryKind(e)));
+    // Снимок строки для выборки: что сверит массовое действие и объединение (expected)
+    const seenOf = (ev) => ({ state: ev.state, addressee: addresseeOf(ev), journalSeq: ev.log.length });
+    const snapshotOf = (list) => Object.fromEntries(list.map((e) => [e.id, seenOf(e)]));
+    // Что изменилось из того, что видел оператор: addressee | state | news; совпало всё — null. Не присланное не сверяется
+    function changedOf(ev, expects, seen) {
+      const s = seen || {};
+      if (expects.includes("addressee") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return "addressee";
+      if (expects.includes("state") && s.state != null && s.state !== ev.state) return "state";
+      if (expects.includes("news") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return "news";
+      return null;
+    }
+    // Отказ 412 INCIDENT_CHANGED: текст называет, что изменилось (§22.6) — уже у другого человека, у группы, в общей
+    // очереди, другое состояние (закрыт — всегда так), новое событие, сменился основной выборки
+    function changedProblem(ev, what) {
+      const who = addresseeOf(ev);
+      let why;
+      if (what === "news") why = ["workflow.error.changed.news"];
+      else if (what === "primary") why = ["workflow.error.changed.primary"];
+      else if (what === "state" || isDone(ev)) why = ["workflow.error.changed.state", { state: [STATES[ev.state].labelKey] }];
+      else if (!who) why = ["workflow.error.changed.queue"];
+      else why = [GROUPS.some((g) => g.id === who) ? "workflow.error.changed.addressed" : "workflow.error.changed.taken", { who: actorRef(who).name }];
+      return problem(412, "INCIDENT_CHANGED", why, { details: { changed: what }, current: card(ev) });
+    }
+    // Клиент обязан сказать, что видел: не прислал — 428 (§14.1)
+    const expectedRequired = () => problem(428, "PRECONDITION_REQUIRED", ["workflow.error.expected_required"]);
 
     // Переход — одно событие потока (§9, RULE-60): какой, чем вызван и что было → стало. Что сказать
     // наблюдателям, клиент берёт из машины (ui.observerNotice), а не из имени перехода
@@ -1589,11 +1614,6 @@
       return { status: 200, body: view(), view };
     }
 
-    // Отмеченный изменился после отметки (expectedVersions, §14.1, BUG-84): версия строки очереди не та, что прислал
-    // клиент. Нет guid в словаре — не сверяется
-    const changedSince = (ev, expected) => Boolean(expected) && expected[ev.id] != null && String(expected[ev.id]) !== String(ev.version);
-    const conflict = (ev, extra) => problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], extra);
-
     // Основной при объединении (§11) — mergePrimary машины. Ни одного подходящего — null. Выборка — по возрастанию
     // номера, а не в порядке отметки: у совсем равных основной — меньший номер, как в модели Quint
     const pickPrimary = (list) => engine.mergePrimary([...list].sort(byNumber));
@@ -1601,9 +1621,11 @@
     function mergeIncidents(guids, expected) {
       const list = guids.map(find).filter(Boolean);
       if (list.length !== guids.length) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-      // Объединение — всё или ничего: хоть один изменился после отметки — не выполняется (BUG-84)
-      const stale = list.find((e) => changedSince(e, expected));
-      if (stale) return conflict(stale, { current: card(stale) });
+      // Объединение — всё или ничего: у отмеченного после отметки другое состояние или адресат — не выполняется
+      // (expected, §14.1, RULE-142); нет guid в снимке — не сверяется
+      const expects = expectsOf(W.transitions.find((t) => t.bulk && t.bulk.mode === "merge"));
+      const stale = list.map((e) => [e, changedOf(e, expects, (expected || {})[e.id])]).find(([, what]) => what);
+      if (stale) return changedProblem(stale[0], stale[1]);
       if (!list.length) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.merge.too_few"]);
       // Лимит выборки — как у массовых действий (§11, BUG-83); null — без ограничения
       if (tooLarge(list)) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_large", { n: W.limits.maxBulk }]);
@@ -1700,7 +1722,10 @@
             navigate: tr.ui.navigate || null,
             bulkAllowed: Boolean(mode.allowed),
           },
-          ok && tr.form && mode.mode === "each_allowed" ? sharedForm(tr, scope, list.length) : {}
+          ok && tr.form && mode.mode === "each_allowed" ? sharedForm(tr, scope, list.length) : {},
+          // Сценарий основного выборки (bulk.scope): его клиент присылает в expectedScenario — основной сменился, действие
+          // не выполняется (§11.1, RULE-142)
+          scope.primary ? { scopeScenarioGuid: scenarioKey(scope.primary) } : {}
         );
       });
     }
@@ -1754,7 +1779,7 @@
       const truncated = body.mode !== "explicit" && max != null && list.length > max;
       if (truncated) list = list.slice(0, max);
       // Ничего не подошло — и действий нет (BUG-98)
-      return { status: 200, body: { incidentGuids: list.map((e) => e.id), versions: versionsOf(list), truncated, actions: list.length ? selectionActions(list) : [] } };
+      return { status: 200, body: { incidentGuids: list.map((e) => e.id), expected: snapshotOf(list), truncated, actions: list.length ? selectionActions(list) : [] } };
     }
 
     const ROUTES = [
@@ -1840,11 +1865,13 @@
           if (bulkTr && guids.length > 1 && guids.length < bulkTr.bulk.minItems) return problem(422, "BULK_SELECTION_INVALID", ["workflow.error.selection_too_small", { n: bulkTr.bulk.minItems }]);
           // Нет такого или он вне доступа — для оператора одно и то же: NOT_FOUND
           const failed = guids.filter((g) => !find(g)).map((g) => ({ incidentGuid: g, problem: problem(404, "NOT_FOUND", ["workflow.error.not_found"]).body }));
-          // У действия с bulk.scope основной выбирается заново, по нынешним отмеченным: изменился после отметки хоть один —
-          // основной мог смениться, и закрылся бы не тот сценарий, что назвала форма. Выборка устарела — не выполняется
-          // целиком, 412, как у объединения (BUG-84, §11.1, ARCH-15): оператор открывает форму заново
-          const outdated = bulkTr && bulkTr.bulk.scope ? list.find((e) => changedSince(e, body.expectedVersions)) : null;
-          if (outdated) return conflict(outdated, { current: card(outdated) });
+          // У действия с bulk.scope основной выбирается заново, по нынешним отмеченным: его сценарий — не тот, что назвала
+          // форма (expectedScenario), — закрылся бы не тот сценарий. Не выполняется целиком, 412 INCIDENT_CHANGED
+          // «основной сменился» (§11.1, ARCH-15, RULE-142): оператор открывает форму заново
+          if (bulkTr && bulkTr.bulk.scope && body.expectedScenario != null) {
+            const now = bulkScope(bulkTr, list).primary;
+            if (!now || scenarioKey(now) !== body.expectedScenario) return changedProblem(now || list[0], "primary");
+          }
           let navigate = null;
           const done = [];
           // Только те, кого действие касается (bulk.scope машины, §11.1, ARCH-15) — сервер проверяет сам, а не верит
@@ -1853,8 +1880,15 @@
           const scope = bulkScope(bulkTr, list);
           const skipped = scope.skipped.map((ev) => ({ incidentGuid: ev.id, number: ev.number, reasonKey: bulkTr.bulk.skippedReasonKey }));
           scope.list.forEach((ev) => {
-            // Изменился после отметки — не трогается: устаревшая выборка не перебивает сделанное после неё (BUG-84)
-            if (changedSince(ev, body.expectedVersions)) return failed.push({ incidentGuid: ev.id, problem: conflict(ev).body });
+            // После отметки другое состояние или адресат (у закрытия — и новое событие) — не трогается: устаревшая
+            // выборка не перебивает сделанное после неё (expected, §14.1, RULE-142). Эскалация без смены адресата не мешает
+            const what = changedOf(ev, expectsOf(bulkTr), (body.expected || {})[ev.id]);
+            if (what) {
+              // Строке failed — Problem без карточки: актуальное клиент получит потоком и выборкой
+              const problemBody = Object.assign({}, changedProblem(ev, what).body);
+              delete problemBody.current;
+              return failed.push({ incidentGuid: ev.id, problem: problemBody });
+            }
             // Сбой вычисления — строка failed, остальные выполняются: выборка частично успешна
             let r;
             try {
@@ -1902,13 +1936,18 @@
       [
         "POST",
         "/operator/incidents/{incidentGuid}/transitions/{transitionId}",
-        (p, q, body, headers) => {
+        (p, q, body) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
-          const stale = needsVersion(p.transitionId) ? versionProblem(ev, headers) : null;
-          if (stale) return stale;
-          if (body && body.expectedState && body.expectedState !== ev.state) {
-            return problem(412, "VERSION_CONFLICT", ["workflow.error.version_conflict", { state: [STATES[ev.state].labelKey] }], { current: card(ev) });
+          // Сверка того, что видел оператор (concurrency.expects, §14.1, RULE-142): не прислал — 428, изменилось — 412.
+          // If-Match не проверяется. Переход объединения — только своим маршрутом: здесь 404 из runTransition
+          const tr = engine.transition(p.transitionId);
+          const expects = tr && !(tr.bulk && tr.bulk.mode === "merge") ? expectsOf(tr) : [];
+          const b = body || {};
+          if (expects.length) {
+            if (b.expectedState == null || b.expectedAddressee == null || (expects.includes("news") && b.journalSeen == null)) return expectedRequired();
+            const what = changedOf(ev, expects, { state: b.expectedState, addressee: b.expectedAddressee, journalSeq: b.journalSeen });
+            if (what) return changedProblem(ev, what);
           }
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);
           if (res.status !== 200) return res;
@@ -1916,7 +1955,7 @@
           return Object.assign(reply(), { again: reply });
         },
       ],
-      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.expectedVersions)],
+      ["POST", "/operator/incidents/merge", (p, q, body) => mergeIncidents((body && body.incidentGuids) || [], body && body.expected)],
       [
         "DELETE",
         "/operator/incidents/{incidentGuid}/linked/{linkedGuid}",
@@ -1979,13 +2018,22 @@
       [
         "POST",
         "/operator/incidents/{incidentGuid}/scenario/answer",
-        (p, q, body, headers) => {
+        (p, q, body) => {
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // Отвечает только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
+          // Что видел оператор (§14.1, RULE-142): владельца и ответ этого шага. Не прислал — 428. Владелец другой —
+          // 412, как у перехода; шаг ответили после показа (другая вкладка, двойное нажатие) — 409 STEP_CHANGED
+          // с актуальным сценарием. Версия не сверяется: запись о нарушении или соседе ответу не мешает
+          const b = body || {};
+          if (b.expectedOwner == null || !("seenAnswer" in b)) return expectedRequired();
+          if (String(b.expectedOwner) !== (ev.owner || "")) return changedProblem(ev, "addressee");
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
-          const stale = versionProblem(ev, headers);
-          if (stale) return stale;
+          const was = (ev.run.state || {})[b.stepId];
+          if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {
+            const step = scriptOf(ev).steps.find((x) => x.id === b.stepId);
+            return problem(409, "STEP_CHANGED", ["workflow.error.scenario.step_changed", { step: step ? stepName(step) : b.stepId, who: was && was.by ? actorRef(was.by).name : "" }], { current: scenarioView(ev) });
+          }
           const res = answerStep(ev, ME, engine, body || {});
           if (!res.ok) return answerProblem(ev, body || {}, res.error);
           touch([ev]);

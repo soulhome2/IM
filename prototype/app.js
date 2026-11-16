@@ -889,15 +889,15 @@
     box.appendChild(el);
     while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
   }
-  // Опоздал (§8.1, §22.6): действие не прошло, потому что инцидент уже у другого — мягкое «Уже принял / взял {who}».
-  // before — инцидент, каким его видел оператор, fresh — перечитанный. Только если владелец сменился и новый — не я;
-  // иначе — обычная ошибка
-  const LATE_CODES = ["VERSION_CONFLICT", "TRANSITION_NOT_ALLOWED_FROM_STATE"];
-  function lateText(transitionId, err, before, fresh, meGuid) {
-    const code = err && err.problem && err.problem.code;
-    if (!LATE_CODES.includes(code) || !fresh || !fresh.owner || fresh.owner.id === meGuid) return null;
-    if (before && before.owner && before.owner.id === fresh.owner.id) return null;
-    return t(transitionId === "accept" ? "Уже принял {who}" : "Уже взял {who}", { who: actorName(fresh.owner) });
+  // Опоздал (§8.1, §22.6, RULE-142): действие не прошло, потому что инцидент уже у другого человека — мягкое
+  // «Уже принял / взял {who}». Что изменилось — details.changed отказа 412 INCIDENT_CHANGED, кто теперь — его current
+  // (без второго запроса). Сменился не адресат или новый владелец — я — обычная ошибка с текстом сервера
+  function lateText(transitionId, err, meGuid) {
+    const p = err && err.problem;
+    if (!p || p.code !== "INCIDENT_CHANGED" || !p.details || p.details.changed !== "addressee") return null;
+    const now = p.current;
+    if (!now || !now.owner || now.owner.id === meGuid) return null;
+    return t(transitionId === "accept" ? "Уже принял {who}" : "Уже взял {who}", { who: actorName(now.owner) });
   }
 
   /* ===== Колокольчик — журнал оповещений (§22.5) ===== */
@@ -1694,19 +1694,26 @@
     renderStatus();
   }
 
-  // Версия записи, которую видел оператор (§14.1): изменился инцидент с тех пор — сервер ответит 412
-  const ifMatch = (ev) => ({ "If-Match": `"${ev.version}"` });
+  // Что видел оператор (§14.1, RULE-142): состояние, адресат ("" — ничей) и последний номер записи журнала. Сервер
+  // сверяет их, а не номер версии: эскалация без смены адресата и запись о нарушении действию не мешают
+  const seenOf = (ev) => ({ expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 });
+  // Ответ на шаг: владелец и ответ шага, каким его видел оператор (null — без ответа): ответ из другой вкладки
+  // или второе нажатие сервер не перепишет молча — 409 STEP_CHANGED
+  const answerSeenOf = (ev, stepId) => {
+    const was = ev.scenario && ev.scenario.result && (ev.scenario.result.state || {})[stepId];
+    return { expectedOwner: (ev.owner && ev.owner.id) || "", seenAnswer: (was && was.answeredAt) || null };
+  };
 
   // Ответ на шаг — серверу (POST …/scenario/answer); пустой необязательный шаг — пропуск. Что дальше — решает сервер
   async function submitStep(ev, step) {
     const d = draftOf(ev, step.id);
     const value = valueOf(ev, step);
-    const body = { stepId: step.id };
+    const body = Object.assign({ stepId: step.id }, answerSeenOf(ev, step.id));
     if (step.type === "Message") body.value = null;
     else if (!filled(step, value) && !stepRequired(step)) body.skip = true;
     else Object.assign(body, { value }, d && d.attachments ? { attachments: d.attachments } : {});
     try {
-      ev.scenario = await api.post(`${incPath(ev.guid)}/scenario/answer`, body, ifMatch(ev));
+      ev.scenario = await api.post(`${incPath(ev.guid)}/scenario/answer`, body);
       state.drafts.delete(draftKey(ev, step.id));
     } catch (err) {
       toast(problemText(err), "error");
@@ -1828,28 +1835,31 @@
   async function updateSelection() {
     if (!state.checked.size) {
       store.selection = null;
-      checkedVersions.clear();
+      checkedSeen.clear();
       return;
     }
     store.selection = await api.post("/operator/incidents/selection", { mode: "explicit", incidentGuids: [...state.checked] });
-    // Версия — на момент отметки: у отмеченного раньше не обновляется (BUG-84)
-    [...checkedVersions.keys()].forEach((g) => state.checked.has(g) || checkedVersions.delete(g));
-    Object.entries(store.selection.versions || {}).forEach(([g, v]) => checkedVersions.has(g) || checkedVersions.set(g, v));
+    // Что видел — на момент отметки: у отмеченного раньше не обновляется (BUG-84)
+    [...checkedSeen.keys()].forEach((g) => state.checked.has(g) || checkedSeen.delete(g));
+    Object.entries(store.selection.expected || {}).forEach(([g, v]) => checkedSeen.has(g) || checkedSeen.set(g, v));
   }
-  // Версии отмеченных на момент отметки — серверу в expectedVersions: изменённое после отметки он не тронет (§14.1, BUG-84)
-  const checkedVersions = new Map();
-  // Снять выборку — вместе с версиями: отмеченный снова получит версию на момент новой отметки (BUG-106)
+  // Что видел оператор у отмеченных на момент отметки (состояние, адресат, номер записи журнала) — серверу в expected:
+  // изменённое после отметки он не тронет (§14.1, BUG-84, RULE-142)
+  const checkedSeen = new Map();
+  // Снять выборку — вместе со снимком: отмеченный снова получит его на момент новой отметки (BUG-106)
   function dropSelection() {
     state.checked.clear();
     store.selection = null;
-    checkedVersions.clear();
+    checkedSeen.clear();
   }
-  // Новая выборка вместо прежней — тоже новая отметка: версии заново (BUG-106)
+  // Новая выборка вместо прежней — тоже новая отметка: снимок заново (BUG-106)
   function selectOnly(guids) {
     state.checked = new Set(guids);
-    checkedVersions.clear();
+    checkedSeen.clear();
   }
-  const expectedVersions = (guids) => Object.fromEntries(guids.filter((g) => checkedVersions.has(g)).map((g) => [g, checkedVersions.get(g)]));
+  const expectedOf = (guids) => Object.fromEntries(guids.filter((g) => checkedSeen.has(g)).map((g) => [g, checkedSeen.get(g)]));
+  // Сценарий основного, который назвала форма действия с bulk.scope (§11.1, RULE-142): основной сменился — 412
+  const scopeScenarioOf = (id) => ((store.selection && store.selection.actions) || []).map((a) => (a.id === id ? a.scopeScenarioGuid : null)).find(Boolean);
   // Ключ повтора — новый на каждое действие: повтор того же запроса сервер не выполнит дважды (BUG-84)
   const newKey = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -1906,13 +1916,14 @@
   async function runBulk(id, guids, form, surface) {
     let res;
     try {
-      res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface, expectedVersions: expectedVersions(guids), idempotencyKey: newKey() });
+      const scope = scopeScenarioOf(id);
+      res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, Object.assign({ incidentGuids: guids, formValues: form || {}, surface, expected: expectedOf(guids), idempotencyKey: newKey() }, scope ? { expectedScenario: scope } : {}));
     } catch (err) {
       toast(problemText(err), "error");
-      // Выборка устарела, а действие с bulk.scope выполняется только по свежей (412, §11.1, BUG-84): причину оператор
-      // увидел, повтор — по нынешним версиям и с новым пояснением формы (BUG-106)
-      if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
-        checkedVersions.clear();
+      // Основной выборки сменился, а действие с bulk.scope выполняется только по нему (412, §11.1, RULE-142): причину
+      // оператор увидел, повтор — по нынешнему снимку и с новым пояснением формы (BUG-106)
+      if (err && err.problem && err.problem.code === "INCIDENT_CHANGED") {
+        checkedSeen.clear();
         await updateSelection();
       }
       return false;
@@ -1921,8 +1932,8 @@
       const why = res.failed.length ? failureText(res.failed) : t("Действие недоступно");
       // Пропущенные другого сценария — названы и здесь: им ничего не сделано (§11.1, ARCH-15)
       toast(skippedText(res.skipped) ? `${why} ${skippedText(res.skipped)}` : why, "error");
-      // Причину оператор увидел: у изменённых после отметки версия — нынешняя, повтор — его решение (BUG-106)
-      res.failed.filter((f) => f.problem.code === "VERSION_CONFLICT").forEach((f) => checkedVersions.delete(f.incidentGuid));
+      // Причину оператор увидел: у изменённых после отметки снимок — нынешний, повтор — его решение (BUG-106)
+      res.failed.filter((f) => f.problem.code === "INCIDENT_CHANGED").forEach((f) => checkedSeen.delete(f.incidentGuid));
       await updateSelection();
       return false;
     }
@@ -1982,11 +1993,14 @@
     if (!ev) return false;
     let res;
     try {
-      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface, idempotencyKey: newKey() }, ifMatch(ev));
+      res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, Object.assign(seenOf(ev), { formValues: form || {}, surface, idempotencyKey: newKey() }));
     } catch (err) {
+      // Изменилось то, что видел оператор (412 INCIDENT_CHANGED, RULE-142): карточка — из ответа, без второго запроса
+      const current = err && err.problem && err.problem.code === "INCIDENT_CHANGED" ? err.problem.current : null;
+      if (current && store.card && store.card.guid === current.guid) store.card = current;
       // Опоздал — инцидент уже у другого: мягкое «Уже взял Петров», уходит само (§8.1, §22.6); иначе — ошибка до «✕»
-      const fresh = LATE_CODES.includes(err && err.problem && err.problem.code) ? await api.get(incPath(ev.guid)).catch(() => null) : null;
-      const late = lateText(id, err, ev, fresh, store.session && store.session.operator.guid);
+      // с текстом сервера: что изменилось («Пришло новое событие — проверьте»)
+      const late = lateText(id, err, store.session && store.session.operator.guid);
       if (late) toast(late, "late");
       else toast(problemText(err), "error");
       await reload();
@@ -5160,12 +5174,12 @@
     const n = state.checked.size;
     let res;
     try {
-      res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked], expectedVersions: expectedVersions([...state.checked]), idempotencyKey: newKey() });
+      res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked], expected: expectedOf([...state.checked]), idempotencyKey: newKey() });
     } catch (err) {
       toast(problemText(err), "error");
-      // Изменились после отметки: причину оператор увидел, повтор — по нынешним версиям (BUG-106)
-      if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
-        checkedVersions.clear();
+      // Изменились после отметки: причину оператор увидел, повтор — по нынешнему снимку (BUG-106)
+      if (err && err.problem && err.problem.code === "INCIDENT_CHANGED") {
+        checkedSeen.clear();
         await updateSelection();
       }
       return;

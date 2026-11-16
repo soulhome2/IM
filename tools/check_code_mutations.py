@@ -75,12 +75,16 @@ MUTATIONS = [
     ("agent-move-from-shown", "server.js", "const from = session.agentState;", "const from = sessionView().agentState;", "api"),
     # Автоэскалация — только тому, кто может принять сейчас: вышедшему — если в его группе кто-то на месте (RULE-100)
     ("scenario-always-editable", "engine.js", "const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);", "const canEditScenario = (ev) => Boolean(ev);", "api"),
-    ("version-conflict-ignored", "server.js", "if (body && body.expectedState && body.expectedState !== ev.state) {", "if (false) {", "api"),
+    ("expected-state-unchecked", "server.js", "if (expects.includes(\"state\") && s.state != null && s.state !== ev.state) return \"state\";", "if (false) return \"state\";", "api"),
+    ("expected-addressee-unchecked", "server.js", "if (expects.includes(\"addressee\") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return \"addressee\";", "if (false) return \"addressee\";", "api"),
+    ("close-news-unchecked", "server.js", "if (expects.includes(\"news\") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return \"news\";", "if (false) return \"news\";", "api"),
+    ("news-counts-timers", "server.js", "NEWS.kinds.includes(entryKind(e))", "true", "api"),
+    ("step-seen-unchecked", "server.js", "if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {", "if (false) {", "api"),
     ("version-not-bumped", "server.js", "const touch = (list) => list.forEach((e) => (e.version += 1));", "const touch = () => {};", "api"),
     ("device-type-filter-ignored", "server.js", "if (q.deviceTypeId && q.deviceTypeId !== \"all\") {", "if (false) {", "api"),
     ("focus-page-missing", "server.js", "      const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;\n      const found", "      const focusPage = null;\n      const found", "api"),
-    ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.read_only\"]);\n          const stale", "const stale", "api"),
-    ("if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          if (body", "if (body", "api"),
+    ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.read_only\"]);\n          const was", "const was", "api"),
+    ("expected-required-skipped", "server.js", "if (b.expectedState == null || b.expectedAddressee == null || (expects.includes(\"news\") && b.journalSeen == null)) return expectedRequired();", "", "api"),
     # Машина сценариев и стык (§14.5, ARCH-06): исполнитель scenario.js и его вызовы в сервере
     ("answer-off-path-accepted", "scenario.js", 'if (i < 0) return { ok: false, error: "not_on_path" };\n', "", "api"),
     ("answer-editable-ignored", "scenario.js", 'if (!isCurrent && step.revisitable === false) return { ok: false, error: "not_editable" };\n', "", "api"),
@@ -117,9 +121,9 @@ MUTATIONS = [
     ("draft-kept-on-leave", "app.js", "    state.drafts.delete(draftKey(ev, path[cursorOf(ev)]));\n", "", "ui"),
     ("required-steps-code-lost", "server.js", "const code = (g.errorCodes || {})[check.why && check.why[0]] || g.errorCode || \"GUARD_FAILED\";", "const code = g.errorCode || \"GUARD_FAILED\";", "api"),
     ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),
-    ("answers-if-match-ignored", "server.js", "const stale = versionProblem(ev, headers);\n          if (stale) return stale;\n          const res = answerStep", "const res = answerStep", "api"),
-    ("if-match-optional", "server.js", "if (!sent) return problem(428,", "if (!sent) return null;\n      if (false) return problem(428,", "api"),
-    ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev) } }", "{ status: 200, body: card(ev) }", "api"),
+    ("step-owner-unchecked", "server.js", "if (String(b.expectedOwner) !== (ev.owner || \"\")) return changedProblem(ev, \"addressee\");", "", "api"),
+    ("answer-expected-required-skipped", "server.js", "if (b.expectedOwner == null || !(\"seenAnswer\" in b)) return expectedRequired();", "", "api"),
+    ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev), \"Cache-Control\": \"no-store\" } }", "{ status: 200, body: card(ev), headers: { \"Cache-Control\": \"no-store\" } }", "api"),
     ("targets-include-self", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = field ? field.options : targets();", "api"),
     ("targets-ignore-form", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = targets().filter((o) => !engine.isSelf(o.id));", "api"),
     ("hold-timer-hidden", "server.js", "holdTimer: holdTimerState(ev),", "holdTimer: null,", "api"),
@@ -185,7 +189,7 @@ MUTATIONS = [
     # «Массовый сбой» на выборке (§11.1, ARCH-15): маршрут bulk верит панели — scope не применяется, закрываются все отмеченные;
     # выборка устарела, а действие со scope всё равно выполняется по новому основному
     ("bulk-scope-route-dropped", "server.js", "const scope = bulkScope(bulkTr, list);", "const scope = { list, skipped: [] };", "api"),
-    ("bulk-scope-stale-unchecked", "server.js", "if (outdated) return conflict(outdated, { current: card(outdated) });", "", "api"),
+    ("bulk-scope-primary-unchecked", "server.js", "if (!now || scenarioKey(now) !== body.expectedScenario) return changedProblem(now || list[0], \"primary\");", "", "api"),
     # Ложная тревога у соседа (§6.1, ARCH-15): событие потока адресату соседа не доставляется; исполнитель теряет, о каком
     # инциденте уведомление; интерфейс его не показывает. Закрывший его не получает (решение 2026-10-29) — это в машине
     ("sibling-notice-not-delivered", "server.js", 'if (about && recipients.includes(ME)) emit("incident.sibling_closed"', 'if (false) emit("incident.sibling_closed"', "api"),
@@ -318,9 +322,9 @@ MUTATIONS = [
     ("test-file-load-error", "../tests/api-junction.js", "/* Тесты API стыка машины инцидента", "}\n/* Тесты API стыка машины инцидента", "api"),
     # Ключ повтора и версии отмеченных (BUG-84)
     ("idempotency-off", "server.js", "if (idem && answered.has(idem)) {", "if (false) {", "api"),
-    ("bulk-versions-unchecked", "server.js", "if (changedSince(ev, body.expectedVersions)) return failed.push(", "if (false) return failed.push(", "api"),
-    ("merge-versions-unchecked", "server.js", "const stale = list.find((e) => changedSince(e, expected));", "const stale = null;", "api"),
-    ("ui-bulk-no-versions", "app.js", "surface, expectedVersions: expectedVersions(guids), idempotencyKey", "surface, idempotencyKey", "ui"),
+    ("bulk-expected-unchecked", "server.js", "const what = changedOf(ev, expectsOf(bulkTr), (body.expected || {})[ev.id]);", "const what = null;", "api"),
+    ("merge-expected-unchecked", "server.js", "const stale = list.map((e) => [e, changedOf(e, expects, (expected || {})[e.id])]).find(([, what]) => what);", "const stale = null;", "api"),
+    ("ui-bulk-no-expected", "app.js", "surface, expected: expectedOf(guids), idempotencyKey", "surface, idempotencyKey", "ui"),
     # Догон в общем порядке по времени (ARCH-13)
     ("tick-per-incident-since-now", "engine.js", "s.since.has(key) ? s.since.get(key) : s.lastRun != null ? s.lastRun : ctx.now()", "ctx.now()", "api"),
     # Отсчёт — по времени сервера (BUG-103)
@@ -372,7 +376,7 @@ MUTATIONS = [
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),
     ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"), \"error\");", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
-    ("ui-no-if-match", "app.js", "const ifMatch = (ev) => ({ \"If-Match\": `\"${ev.version}\"` });", "const ifMatch = () => ({});", "ui"),
+    ("ui-no-expected", "app.js", "const seenOf = (ev) => ({ expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || \"\", journalSeen: ev.journalSeq || 0 });", "const seenOf = () => ({});", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");', 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)
     # Телефон: типы и порядок — под «Фильтры» с числом выбранных (BUG-50)
@@ -417,8 +421,8 @@ MUTATIONS = [
     ("jsonlogic-plus-allowed", "scenario.js", '"missing", "missing_some"]);', '"missing", "missing_some", "+"]);', "scenario"),
     # Карточку увели — уведомление с причиной (BUG-86)
     # Выборка (BUG-106): снятые отметки забывают версии; после отказа «уже изменён» повтор — по нынешней версии
-    ("ui-versions-kept-on-drop", "app.js", "    checkedVersions.clear();\n  }\n  // Новая выборка", "  }\n  // Новая выборка", "ui"),
-    ("ui-conflict-no-refresh", "app.js", '.forEach((f) => checkedVersions.delete(f.incidentGuid));', ".forEach(() => {});", "ui"),
+    ("ui-seen-kept-on-drop", "app.js", "    checkedSeen.clear();\n  }\n  // Новая выборка", "  }\n  // Новая выборка", "ui"),
+    ("ui-conflict-no-refresh", "app.js", ".forEach((f) => checkedSeen.delete(f.incidentGuid));", ".forEach(() => {});", "ui"),
     ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
