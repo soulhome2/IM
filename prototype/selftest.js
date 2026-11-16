@@ -186,7 +186,10 @@
 
   // ?selftest&failfast — после первого падения остальные шаги не выполняются (PROC-17: мутации кода)
   const FAILFAST = new URLSearchParams(location.search).has("failfast");
+  // Начало шага — записи колокольчика раньше него к шагу не относятся: журнал живёт дольше шага (§22.5)
+  let stepAt = 0;
   async function step(name, fn, after) {
+    stepAt = Date.now();
     if (FAILFAST && results.some((r) => !r.ok)) {
       status[name] = "skip";
       results.push({ ok: true, skipped: true, name, note: "пропущен: failfast" });
@@ -305,7 +308,9 @@
 
   function findText(cyr) {
     const skip = (el) =>
-      el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts") ||
+      // Записи колокольчика — на языке, на котором записаны (§22.5); панель закрыта — их не видно
+      el.closest("[data-i18n-skip], script, style, #selftest-report, #toasts, #bellList") ||
+      (el.closest("#bellPanel") && $("bellPanel").hidden) ||
       (el.closest("#modalDialog") && $("modalDialog").hidden) ||
       (el.closest("#adminTable, #adminTabs, #adminNote") && $("modalAdmin").hidden) ||
       (el.closest("#panelScenario") && mode() !== "work");
@@ -1253,8 +1258,11 @@
       expect(field("targetId").value === "" && input.placeholder === "Выберите адресата", `без прошлой передачи в поле «${field("targetId").value || input.placeholder}»`);
       await confirmDialog(NOTE);
       expect(!$("modalDialog").hidden, "«Передать» без адресата закрыла форму");
-      const warn = $("toasts").lastElementChild;
-      expect(warn && warn.textContent.includes("Заполните поле «Кому передать»"), `уведомление: «${warn ? warn.textContent : "нет"}»`);
+      // Не всплывает (§22.6): подсказка у самого поля и aria-invalid
+      const warn = $("dialogFields").querySelector('[data-field-error="targetId"]');
+      expect(warn && !warn.hidden && warn.textContent.includes("Заполните поле «Кому передать»"), `подсказка у поля: «${warn ? warn.textContent : "нет"}»`);
+      expect($("dialogFields").querySelector('[data-target-input="targetId"]').getAttribute("aria-invalid") === "true", "у пустого поля нет aria-invalid");
+      expect(![...$("toasts").children].some((x) => /Заполните поле/.test(x.textContent)), "«Заполните поле» всплыло сообщением");
       await click(input);
       await click($("dialogFields").querySelector('[data-target-pick="sidorov"]'));
       await confirmDialog(NOTE);
@@ -2209,6 +2217,57 @@
       return "заморозка, сброс, hiddenBy";
     });
 
+    await step("Раскладка: граница заморозки — по якорю в новом порядке; строка поста — серьёзное и «и ещё N», диск — только администратору; «Уже взял {who}» (§22.1, §22.4, §22.6)", async () => {
+      const ui = window.IM_SELFTEST_UI;
+      const r = (guid) => ({ guid });
+      const ids = (rows) => rows.map((x) => x.guid + (x.gone ? "*" : "")).join(",");
+      // a (выше якоря b) сервер увёл в самый низ: новая n под якорем — не «новая выше», встаёт сразу
+      const moved = ui.freezeAbove([r("a"), r("b"), r("c")], [r("b"), r("c"), r("n"), r("a")], "b");
+      expect(ids(moved.rows) === "a,b,c,n" && !moved.newAbove.length, `строка выше якоря ушла вниз: ${ids(moved.rows)} / новые ${ids(moved.newAbove)}`);
+      // Якорь ушёл: граница — ближайшая замороженная над ним, что ещё есть
+      const gone = ui.freezeAbove([r("a"), r("b"), r("c")], [r("n"), r("a"), r("m"), r("c")], "b");
+      expect(ids(gone.rows) === "a,b*,m,c" && ids(gone.newAbove) === "n", `якорь ушёл: ${ids(gone.rows)} / новые ${ids(gone.newAbove)}`);
+      const defs = window.IM_WORKFLOW.display.postStatus;
+      expect(defs.map((d) => d.id).join() === "connection,disk,sound_off,maintenance,only_important", `порядок пунктов машины: ${defs.map((d) => d.id).join()}`);
+      const line = (active, admin) => {
+        const x = ui.postStatusLine(active, defs, admin);
+        return `${x.top ? x.top.id : "—"}+${x.more}`;
+      };
+      expect(line(["only_important", "maintenance", "connection"], false) === "connection+2", `три состояния: ${line(["only_important", "maintenance", "connection"], false)}`);
+      expect(line(["maintenance", "only_important"], false) === "maintenance+1", `работы и «Только важное»: ${line(["maintenance", "only_important"], false)}`);
+      expect(line(["disk", "sound_off"], false) === "sound_off+0", `диск у оператора: ${line(["disk", "sound_off"], false)}`);
+      expect(line(["disk", "sound_off"], true) === "disk+1", `диск у администратора: ${line(["disk", "sound_off"], true)}`);
+      expect(line([], true) === "—+0", "без состояний строка пуста");
+      const err = (code) => ({ status: 409, problem: { code } });
+      const petrova = { owner: { id: "petrova", name: "Петрова Е. А." } };
+      const late = (id, code, fresh) => ui.lateText(id, err(code), fresh, "me");
+      expect(late("claim", "VERSION_CONFLICT", petrova) === "Уже взял Петрова Е. А.", `опоздал со «Взять»: ${late("claim", "VERSION_CONFLICT", petrova)}`);
+      expect(late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova) === "Уже принял Петрова Е. А.", `опоздал с «Принять»: ${late("accept", "TRANSITION_NOT_ALLOWED_FROM_STATE", petrova)}`);
+      expect(late("claim", "VERSION_CONFLICT", { owner: { id: "me" } }) === null && late("claim", "GUARD_FAILED", petrova) === null && late("claim", "VERSION_CONFLICT", { owner: null }) === null, "«Уже взял» — не только когда инцидент у другого");
+      return "граница по якорю; connection+2, диск только администратору; «Уже взял Петрова Е. А.»";
+    });
+
+    await step("Сообщения о моих действиях — внизу слева: итог уходит сам, ошибка висит до «✕» (§22.6)", async () => {
+      const ui = window.IM_SELFTEST_UI;
+      const done = `Итог самопроверки ${Date.now()}`;
+      const fail = `Ошибка самопроверки ${Date.now()}`;
+      ui.toast(done);
+      ui.toast(fail, "error");
+      const find = (text) => [...$("toasts").children].find((x) => x.textContent === text);
+      const a = find(done);
+      const b = find(fail);
+      expect(a && b, "сообщения не появились");
+      const box = a.getBoundingClientRect();
+      expect(box.left < innerWidth / 2 && box.bottom > innerHeight / 2, `итог не внизу слева: left ${Math.round(box.left)}, bottom ${Math.round(box.bottom)} при окне ${innerWidth}×${innerHeight}`);
+      expect(a.dataset.kind === "done" && !a.querySelector(".toast-close") && b.dataset.kind === "error" && b.querySelector(".toast-close"), "у итога есть «✕» или у ошибки её нет");
+      await wait(3500);
+      expect(!find(done), "итог не ушёл сам за 3,2 с");
+      expect(find(fail), "ошибка ушла сама — должна висеть до «✕»");
+      await click(b.querySelector(".toast-close"));
+      expect(!find(fail), "«✕» не закрыл ошибку");
+      return "итог — 3,2 с, ошибка — до «✕»";
+    });
+
     await step("Перерыв и возврат с перерыва", async () => {
       await click($("breakBtn"));
       expect(field("reasonId"), "перерыв не спросил причину");
@@ -2640,6 +2699,10 @@
     // операциями встроенного сервера (PROC-12)
     const stand = window.IM_SELFTEST_API;
     const toastWith = (re) => [...$("toasts").children].find((t) => re.test(t.textContent));
+    // Чужое и автоматическое — не всплывает, а запись в колокольчике (§22.2, §22.6): записи этого шага
+    const noticesNow = () => [...$("bellList").querySelectorAll("[data-notice]")].filter((li) => Number(li.dataset.at) >= stepAt);
+    const noticeWith = (re) => noticesNow().find((li) => re.test(li.textContent));
+    const noticeList = () => noticesNow().map((li) => li.textContent).join(" | ");
     async function claimFromQueue(accept) {
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("open");
@@ -2656,9 +2719,10 @@
       expect(mode() === "work", "карточка взятого инцидента не открылась");
       await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
       await wait(300);
-      const toast = toastWith(/вам больше не доступен/);
+      const toast = noticeWith(/вам больше не доступен/);
       try {
-        expect(toast && toast.textContent.includes(number), `нет уведомления о потере доступа к ${number}`);
+        expect(toast && toast.textContent.includes(number), `нет записи в колокольчике о потере доступа к ${number}`);
+        expect(!toastWith(/вам больше не доступен/), "потеря доступа всплыла сообщением, а не записью в колокольчике");
         expect(mode() === "queue", "карточка недоступного инцидента не закрылась");
       } finally {
         await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор"] });
@@ -2676,7 +2740,7 @@
         await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
         await stand.raw("POST", "/test/clock", { advanceSec: 240 });
         await wait(150);
-        toast = toastWith(new RegExp(`Оповещение: ${number} — Норматив закрытия нарушен`));
+        toast = noticeWith(new RegExp(`Оповещение: ${number} — Норматив закрытия нарушен`));
       }
       expect(toast, `нет уведомления об оповещении по ${number}`);
       return toast.textContent;
@@ -2695,7 +2759,7 @@
       const grace = (window.IM_WORKFLOW.invariants.manualWinsOverTimer || {}).graceSec || 0;
       await stand.raw("POST", "/test/clock", { advanceSec: norm + grace + 1 });
       await wait(200);
-      const toast = toastWith(new RegExp(`Автоэскалация ${number} → `));
+      const toast = noticeWith(new RegExp(`Автоэскалация ${number} → `));
       expect(toast, `нет уведомления об автоэскалации ${number}`);
       return toast.textContent;
     });
@@ -2846,7 +2910,7 @@
         await setFilter("inbox");
         expect($("eventsList").querySelector(`[data-id="${a.guid}"]`), `${a.number} нет в «Мне на принятие» участника группы`);
         // Уведомление участнику группы-адресата — как при передаче (ui.observerNotice перехода появления, newAddressee)
-        const notice = (n, g) => toastWith(new RegExp(`Новый ${n} — вашей группе «${groupName(g)}»`));
+        const notice = (n, g) => noticeWith(new RegExp(`Новый ${n} — вашей группе «${groupName(g)}»`));
         expect(notice(a.number, "grp-leads"), `участнику группы нет уведомления о ${a.number}`);
         out.push(`у группы ${a.number}, уведомление участнику`);
         // 2. «Группа реагирования»: все вышли из МИ — «Новое» в очереди, оповещение с названием группы
@@ -2855,7 +2919,7 @@
         const queued = b.journal.find((j) => j.templateKey === "workflow.journal.rule_group_cannot_accept");
         expect(journalOf(b).join() === "workflow.journal.rule_group_cannot_accept" && queued.vars.ruleGroupName === groupName("grp-response"), `все вышли: журнал ${journalOf(b).join()}, группа «${queued && queued.vars.ruleGroupName}»`);
         // Получатель оповещений (alerts.target) — «Старшие операторы», я в ней: уведомление с номером и группой
-        const toast = toastWith(new RegExp(`Оповещение: ${b.number} — .*«${groupName("grp-response")}»`));
+        const toast = noticeWith(new RegExp(`Оповещение: ${b.number} — .*«${groupName("grp-response")}»`));
         expect(toast, `нет оповещения по ${b.number} с названием группы`);
         out.push(`все вышли — в очередь, «${toast.textContent}»`);
         // 3. Сидоров на перерыве, Гусев вышел: перерыв не мешает — у группы
@@ -2901,9 +2965,14 @@
           await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: open });
           await stand.raw("POST", "/test/clock", { advanceSec: 240 });
           await wait(150);
-          toast = toastWith(new RegExp(`${number}: карточка только для просмотра — ${what}`));
+          toast = noticeWith(new RegExp(`${number}: карточка только для просмотра — ${what}`));
         }
-        expect(toast, `нет уведомления с причиной у прежнего владельца ${number}`);
+        expect(toast, `нет записи в колокольчике с причиной у прежнего владельца ${number}`);
+        // Полоса в самой карточке (§22.7): «{что} — только просмотр», карточка открыта
+        await wait(200);
+        const bar = $("scenarioRoot").querySelector("[data-evicted]");
+        expect(mode() === "work" && bar && bar.textContent.includes(what) && /только просмотр/.test(bar.textContent), `полоса в карточке: «${bar ? bar.textContent.trim() : "нет"}», режим ${mode()}`);
+        expect(!toastWith(/карточка только для просмотра|только просмотр/), "увели карточку — всплыло сообщение");
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
@@ -2936,7 +3005,7 @@
         const s = (await stand.get(`/operator/incidents/${encodeURIComponent(med)}`)).state;
         expect(s === "pending_acceptance", `INC-1853 не ждёт принятия: ${s}`);
       }
-      const toasts = () => [...$("toasts").children].map((x) => x.textContent).join(" | ");
+      const toasts = noticeList;
       let toast = null;
       try {
         // Закрываю я: пожар INC-1847 у меня в работе, карточка открыта; я в группе-адресате медпункта — но уведомления мне нет
@@ -2956,7 +3025,7 @@
         await setField("causeId", "animal");
         await confirmDialog(NOTE);
         await wait(300);
-        expect(!toastWith(notice), `закрывшему — уведомление о своём закрытии: ${toasts()}`);
+        expect(!noticeWith(notice), `закрывшему — уведомление о своём закрытии: ${toasts()}`);
         if (mode() !== "queue") await click($("backToQueue"));
         // Закрывает Петрова: я — другой участник группы-адресата, уведомление мне есть. У неё уже есть инцидент в работе —
         // лимит активных самопроверки (1) снят
@@ -2967,7 +3036,7 @@
         const closed = await asPetrova("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" });
         expect(closed.status === 200, `Петрова не закрыла INC-1847: ${closed.status}`);
         await wait(300);
-        toast = toastWith(notice);
+        toast = noticeWith(notice);
         expect(toast, `нет уведомления о ложной тревоге соседа: ${toasts()}`);
       } finally {
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
@@ -3592,9 +3661,11 @@
       }
     });
 
-    // Полоса плановых работ над очередью и значок в дереве групп (ТЗ-21, §14.12, §19.1, решение 2026-11-15)
-    const mwBanner = () => $("maintBanner");
-    const mwShown = () => !mwBanner().hidden;
+    // Идут плановые работы — пункт строки состояния поста (§22.4) и значок в дереве групп (ТЗ-21, §14.12, §19.1).
+    // Полностью, со списком окон, — на вкладке «Система» колокольчика; в строке — если он самый серьёзный, иначе «и ещё N»
+    const mwBanner = () => $("bellStates").querySelector('[data-post-state="maintenance"]');
+    const mwShown = () => Boolean(mwBanner());
+    const mwInLine = () => Boolean($("postStatus").querySelector('[data-post-state="maintenance"], .post-more'));
     async function mwUntil(cond, what) {
       for (let i = 0; i < 40 && !cond(); i++) await wait(100);
       expect(cond(), what);
@@ -3603,22 +3674,22 @@
     const mwShop = "30000000-0000-4000-8000-000000000023"; // «Магазин 1» → «1-й этаж» → «Торговый центр»
     const mwTcFloor = "30000000-0000-4000-8000-000000000022";
 
-    await step("Полоса плановых работ: без окна её нет; идёт окно — над очередью объект, описание, конец и «тревоги не создаются», role=status (ТЗ-21)", async () => {
+    await step("Плановые работы: без окна пункта нет; идёт окно — в строке поста (или «и ещё N»), полностью — объект, описание, конец и «тревоги не создаются», role=status (ТЗ-21, §22.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       expect(window.IM_OPENAPI.paths["/operator/maintenance-windows/current"], "в контракте нет GET /operator/maintenance-windows/current");
       try {
         if (mode() !== "queue") await click($("backToQueue"));
         const now = await mwSetup();
         await wait(300);
-        expect(mwBanner(), "нет полосы плановых работ (#maintBanner)");
-        await mwUntil(() => !mwShown(), "полоса видна без идущего окна");
+        expect($("postStatus") && !$("maintBanner"), "нет строки состояния поста (#postStatus) или осталась полоса над очередью (#maintBanner)");
+        await mwUntil(() => !mwShown(), "пункт работ виден без идущего окна");
         const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour), description: "замена датчика" });
         expect(w.status === 201, `окно не создано: ${w.status}`);
-        await mwUntil(mwShown, "полоса не появилась при идущем окне");
+        await mwUntil(mwShown, "пункт работ не появился при идущем окне");
         const text = mwBanner().textContent;
-        expect(mwBanner().getAttribute("role") === "status", "у полосы нет role=status");
-        expect(/замена датчика/.test(text) && /не создаются/.test(text), `текст полосы: ${text}`);
-        expect(mwBanner().compareDocumentPosition($("eventsList")) & Node.DOCUMENT_POSITION_FOLLOWING, "полоса не над очередью");
+        expect($("postStatus").getAttribute("role") === "status", "у строки поста нет role=status");
+        expect(/замена датчика/.test(text) && /не создаются/.test(text), `текст пункта: ${text}`);
+        expect(mwInLine() && $("postStatus").closest(".topbar"), `в строке поста шапки нет работ и «и ещё N»: «${$("postStatus").textContent.trim()}»`);
         return text.replace(/\s+/g, " ").trim();
       } finally {
         await standReset({ fixture: "demo" });
@@ -3626,21 +3697,17 @@
       }
     });
 
-    await step("Полоса при mark — «тревоги приходят с пометкой»; два окна — «N окон», «Подробнее» раскрывает список (ТЗ-21)", async () => {
+    await step("Плановые работы при mark — «тревоги приходят с пометкой»; два окна — «N окон», на вкладке «Система» — список окон (ТЗ-21, §22.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ workflowPatch: { maintenance: { mode: "mark" } } });
         await wait(300);
         await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
-        await mwUntil(mwShown, "полоса не появилась");
+        await mwUntil(mwShown, "пункт работ не появился");
         expect(/с пометкой/.test(mwBanner().textContent), `текст режима mark: ${mwBanner().textContent}`);
         await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now), endsAt: mwIso(now + 2 * mwHour) });
         await mwUntil(() => /2 окна/.test(mwBanner().textContent), `два окна: ${mwBanner().textContent}`);
-        const list = $("maintBannerList");
-        expect(list && list.hidden, "список окон раскрыт сразу");
-        await click($("maintBannerMore"));
-        const shown = $("maintBannerList");
-        expect(!shown.hidden && shown.querySelectorAll("li").length === 2, "«Подробнее» не раскрыл список из двух окон");
+        expect(mwBanner().querySelectorAll(".maint-list li").length === 2, `на вкладке «Система» не два окна: ${mwBanner().textContent}`);
         return mwBanner().textContent.replace(/\s+/g, " ").trim();
       } finally {
         await standReset({ fixture: "demo" });
@@ -3648,17 +3715,19 @@
       }
     });
 
-    await step("Полоса исчезает после досрочного завершения окна (ТЗ-21)", async () => {
+    await step("Пункт работ уходит из строки поста после досрочного завершения окна, в колокольчике — «Плановые работы закончились» (ТЗ-21, §22.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup();
         await wait(300);
         const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
-        await mwUntil(mwShown, "полоса не появилась");
+        await mwUntil(mwShown, "пункт работ не появился");
         const end = await stand.raw("POST", `/operator/maintenance-windows/${w.body.id}/end`, {});
         expect(end.status === 200, `досрочное завершение: ${end.status}`);
-        await mwUntil(() => !mwShown(), "полоса не исчезла после досрочного завершения");
-        return "исчезла";
+        await mwUntil(() => !mwShown(), "пункт работ не ушёл после досрочного завершения");
+        const ended = noticeWith(/Плановые работы закончились/);
+        expect(ended && ended.dataset.kind === "system", `в колокольчике нет записи «Система» о конце работ: ${noticeList()}`);
+        return `ушёл; «${ended.textContent}»`;
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
@@ -3822,8 +3891,8 @@
         expect(closed.status === 200, `Петрова не закрыла INC-1851: ${closed.status}`);
         await wait(300);
         const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
-        toast = toastWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
-        expect(toast, `нет уведомления о закрытом привязанном соседе: ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+        toast = noticeWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
+        expect(toast, `нет уведомления о закрытом привязанном соседе: ${noticeList()}`);
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
@@ -3887,13 +3956,13 @@
         await claimFromQueue(() => true);
         await claimFromQueue(() => true);
         expect(mode() === "work", "карточка взятого инцидента не открылась");
-        const before = new Set($("toasts").children);
         await click($("signOutBtn"));
         await confirmDialog();
         await wait(300);
         expect(!$("signedOutBanner").hidden, "выход не выполнился");
-        const extra = [...$("toasts").children].find((x) => !before.has(x) && /карточка только для просмотра/.test(x.textContent));
+        const extra = noticeWith(/карточка только для просмотра/) || toastWith(/карточка только для просмотра/);
         expect(!extra, `после своего выхода: «${extra && extra.textContent}»`);
+        expect(!document.querySelector("[data-evicted]"), "после своего выхода — полоса «только просмотр»");
       } finally {
         if (!$("signedOutBanner").hidden) await click($("signInBtn"));
         await standReset({ fixture: "demo" });
@@ -4843,7 +4912,8 @@
       window.dispatchEvent(new Event("im-sound-tick"));
       await wait();
     };
-    const soundLine = (kind) => $("soundBar").querySelector(`[data-sound-line="${kind}"]`);
+    // «Звук не включён», «Только важное» — пункты строки поста (§22.4), «Звучит» — строка звука
+    const soundLine = (kind) => document.querySelector(`#postStatus [data-sound-line="${kind}"], #soundBar [data-sound-line="${kind}"]`);
     const DEV5 = "20000000-0002-4000-8000-000000000005";
     // Инцидент нужного приоритета от встроенного сервера: появление — событием потока incident.created
     async function soundIncident(priority) {
@@ -4898,6 +4968,161 @@
       expect(heard("double") === before + 1, `после «Вернуть» Высокий: ${heard("double") - before} сигналов`);
       return line.textContent.trim();
     }, SOUND_FIRST);
+
+    // Строка состояния поста (§22.4): «Нет связи» — признак активности не дошёл; «Только важное» — из меню звука
+    const postItem = () => $("postStatus").querySelector("[data-post-state]");
+    const realPost = window.IM_SELFTEST_API.post;
+    const heartbeatDown = (down) => {
+      const api = window.IM_SELFTEST_API;
+      api.post = down ? (path, body, headers) => (/\/session\/heartbeat$/.test(path) ? Promise.reject({ status: 0 }) : realPost(path, body, headers)) : realPost;
+      window.IM_SELFTEST_UI.heartbeat();
+      return wait();
+    };
+    async function onlyImportantOn() {
+      await click($("soundBtn"));
+      await click($("soundPop").querySelector("[data-sound-important]"));
+    }
+    async function postCleanup() {
+      await heartbeatDown(false);
+      const back = document.querySelector("#postStatus [data-sound-back], #bellStates [data-sound-back]");
+      if (back) await click(back);
+      if (!$("bellPanel").hidden) await click($("bellClose"));
+    }
+    const POST_STEP = "Строка поста: два состояния — видно серьёзное и «и ещё 1»; щелчок — колокольчик на «Система» с обоими и их кнопками; открыл — 0, начало и конец — записи «Система» (§22.4, §22.5)";
+    await step(POST_STEP, async () => {
+      try {
+        expect(!postItem(), `до начала в строке поста: «${$("postStatus").textContent.trim()}»`);
+        await onlyImportantOn();
+        expect(postItem() && postItem().dataset.postState === "only_important" && !$("postStatus").querySelector(".post-more"), `«Только важное» одно: «${$("postStatus").textContent.trim()}»`);
+        await heartbeatDown(true);
+        const text = $("postStatus").textContent.replace(/\s+/g, " ").trim();
+        expect(postItem().dataset.postState === "connection" && /Нет связи с агентом/.test(text) && /и ещё 1/.test(text), `два состояния: «${text}»`);
+        const unread = $("bellCount").hidden ? 0 : Number($("bellCount").textContent);
+        expect(unread >= 2 && noticeWith(/Нет связи с агентом/) && noticeWith(/Только важное до/), `начала состояний в колокольчике: ${noticeList()}, непрочитанных ${unread}`);
+        await click($("postStatus").querySelector("[data-post-open]"));
+        const tab = $("bellTabs").querySelector('[aria-selected="true"]');
+        expect(!$("bellPanel").hidden && tab && tab.dataset.bellTab === "system", `щелчок по строке: панель ${$("bellPanel").hidden ? "закрыта" : "открыта"}, вкладка ${tab && tab.dataset.bellTab}`);
+        const states = [...$("bellStates").querySelectorAll("[data-post-state]")].map((x) => x.dataset.postState).join();
+        expect(states === "connection,only_important" && $("bellStates").querySelector("[data-sound-back]"), `на «Система» идущие состояния: ${states}`);
+        expect($("bellCount").hidden, `открыл — число не 0: ${$("bellCount").textContent}`);
+        expect(noticeWith(/Нет связи с агентом/).classList.contains("unread"), "непрочитанное до открытия не выделено");
+        // Кнопка пункта — и на вкладке «Система»: «Вернуть» снимает «Только важное», в журнале — конец
+        await click($("bellStates").querySelector("[data-sound-back]"));
+        const ended = noticeWith(/«Только важное» закончилось/);
+        expect(ended && ended.dataset.kind === "system", `нет записи о конце «Только важного»: ${noticeList()}`);
+        await heartbeatDown(false);
+        expect(!postItem(), `после восстановления связи в строке: «${$("postStatus").textContent.trim()}»`);
+        const back = noticeWith(/Связь восстановлена/);
+        expect(back && back.dataset.kind === "system" && back.classList.contains("unread"), `нет записи «Связь восстановлена»: ${noticeList()}`);
+        expect($("bellCount").hidden, "пришедшее при открытой панели — не прочитано");
+        await click($("bellTabs").querySelector('[data-bell-tab="action"]'));
+        expect(!noticeWith(/Связь восстановлена/), "на вкладке «Нужно действие» — записи «Система»");
+        await click($("bellTabs").querySelector('[data-bell-tab="all"]'));
+        await click($("bellClose"));
+        expect($("bellPanel").hidden && !$("bellList").querySelector(".unread"), "после закрытия выделение осталось");
+        return text;
+      } finally {
+        await postCleanup();
+      }
+    }, SOUND_FIRST);
+
+    await step("Колокольчик: журнал в браузере — после перезагрузки записи на месте, ключ — организация и оператор, старше noticeKeepHours — выброшены, испорченный — пустой журнал (§22.5)", async () => {
+      const ui = window.IM_SELFTEST_UI;
+      const key = ui.noticeKey();
+      const me = window.IM_SELFTEST_API && (await window.IM_SELFTEST_API.get("/operator/session")).operator.guid;
+      expect(key === `im.notices.local.${me}`, `ключ журнала: ${key}`);
+      const saved = localStorage.getItem(key);
+      const list = JSON.parse(saved || "[]");
+      expect(list.some((n) => n.text === "Связь восстановлена" && n.kind === "system"), `в браузере нет записей: ${(saved || "").slice(0, 200)}`);
+      try {
+        const old = Date.now() - (window.IM_WORKFLOW.display.noticeKeepHours + 1) * 3600e3;
+        localStorage.setItem(key, JSON.stringify(list.concat([{ id: "old-1", at: old, text: "Запись старше срока <b>x</b>", kind: "info", read: false }])));
+        ui.noticeReload();
+        const all = [...$("bellList").querySelectorAll("[data-notice]")].map((li) => li.textContent);
+        expect(all.some((x) => /Связь восстановлена/.test(x)), `после перезагрузки журнала записей нет: ${all.join(" | ")}`);
+        expect(!all.some((x) => /старше срока/.test(x)), "запись старше noticeKeepHours осталась");
+        // Имена в записи — текстом, не разметкой
+        localStorage.setItem(key, JSON.stringify([{ id: "x-1", at: Date.now(), text: "Перехватил <img src=x onerror=alert(1)>", kind: "info", read: false }]));
+        ui.noticeReload();
+        const li = $("bellList").querySelector("[data-notice]");
+        expect(li && !li.querySelector("img") && /<img/.test(li.textContent), "текст записи попал в разметку");
+        expect($("bellCount").textContent === "1" && !$("bellCount").hidden, `число непрочитанных: ${$("bellCount").textContent}`);
+        localStorage.setItem(key, "{испорчено");
+        ui.noticeReload();
+        expect($("bellCount").hidden && $("bellList").querySelector(".notice-empty"), "испорченный журнал — не пустой");
+        // Другой оператор того же браузера свои записи не видит: ключ — свой
+        expect(!localStorage.getItem(`im.notices.local.petrova`) || !/Связь восстановлена/.test(localStorage.getItem(`im.notices.local.petrova`)), "записи оператора под чужим ключом");
+        return key;
+      } finally {
+        if (saved == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, saved);
+        ui.noticeReload();
+      }
+    }, POST_STEP);
+
+    await step("Шапка: строка поста и «Звучит» не меняют её высоту на 1560, 1280 и 1024 px (§22.1)", async () => {
+      // Разметка — с экрана: два состояния поста (и «и ещё 1»), длинный текст работ, самая длинная строка «Звучит»
+      let postHtml = "";
+      try {
+        await onlyImportantOn();
+        await heartbeatDown(true);
+        postHtml = $("postStatus").innerHTML;
+      } finally {
+        await postCleanup();
+      }
+      expect(/и ещё 1/.test(postHtml), `нет двух состояний: ${postHtml.slice(0, 120)}`);
+      const longText = "Идут плановые работы: Камера 12 на складе готовой продукции — «замена датчика дыма в зоне погрузки», до 14:00.";
+      const ring =
+        '<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">Звучит: <button type="button" class="link-btn">3 (Критический)</button> · <span class="sound-hidden">скрыт фильтром</span> · <button type="button" class="link-btn">Показать</button></span> <button type="button" class="btn small outline" data-sound-silence>Тихо</button></span>';
+      const bar = document.querySelector(".topbar").cloneNode(true);
+      bar.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+      bar.querySelector(".post-status").setAttribute("hidden", "");
+      bar.querySelector(".post-status").innerHTML = "";
+      bar.querySelectorAll(".sound-bar .sound-line").forEach((el) => el.remove());
+      const base = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
+      const out = [];
+      for (const width of [1560, 1280, 1024]) {
+        const frame = document.createElement("iframe");
+        frame.style.cssText = `position:fixed;left:-9999px;top:0;width:${width}px;height:300px;border:0`;
+        const loaded = new Promise((resolve) => {
+          frame.onload = resolve;
+          setTimeout(resolve, 5000);
+        });
+        frame.srcdoc = `<!DOCTYPE html><html lang="ru" data-theme="${document.documentElement.dataset.theme}"><head><meta charset="UTF-8"><base href="${base}"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="bridge.css"></head><body><div class="app">${bar.outerHTML}</div></body></html>`;
+        document.body.appendChild(frame);
+        await loaded;
+        try {
+          const doc = frame.contentDocument;
+          const top = doc.querySelector(".topbar");
+          const ps = doc.querySelector(".post-status");
+          const sb = doc.querySelector(".sound-bar");
+          const h = () => Math.round(top.getBoundingClientRect().height * 10) / 10;
+          const set = (post, long, ringOn) => {
+            ps.innerHTML = post ? postHtml : "";
+            ps.hidden = !post;
+            if (post && long) ps.querySelector(".post-text").textContent = longText;
+            sb.querySelectorAll(".sound-line").forEach((el) => el.remove());
+            if (ringOn) sb.insertAdjacentHTML("beforeend", ring);
+            return h();
+          };
+          const empty = set(false, false, false);
+          const got = { post: set(true, false, false), long: set(true, true, false), ring: set(false, false, true), both: set(true, true, true) };
+          const bad = Object.entries(got).filter(([, v]) => Math.abs(v - empty) > 0.5);
+          expect(empty > 0 && !bad.length, `${width} px: без пунктов ${empty} px, ${bad.map(([k, v]) => `${k} ${v} px`).join(", ")}`);
+          // «Тихо» не обрезан: строка звука важнее строки поста
+          const quiet = sb.querySelector("[data-sound-silence]").getBoundingClientRect();
+          const clip = sb.getBoundingClientRect();
+          expect(quiet.width > 0 && quiet.right <= clip.right + 1 && quiet.left >= clip.left - 1, `${width} px: «Тихо» обрезан строкой звука`);
+          // Ничего не уходит за правый край шапки
+          const over = [...top.querySelectorAll("*")].filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > width + 1).map((el) => el.className || el.tagName);
+          expect(!over.length, `${width} px: за краем шапки ${over.slice(0, 3).join(", ")}`);
+          out.push(`${width}: ${empty} px`);
+        } finally {
+          frame.remove();
+        }
+      }
+      return out.join("; ");
+    }, POST_STEP);
 
     await step("Звук: Критический — сирена, повтор каждые 15 с, «Тихо» глушит (§21.2, §21.4)", async () => {
       const before = heard("siren");

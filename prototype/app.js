@@ -639,7 +639,7 @@
     targets: [],
     card: null,
     selection: null,
-    // Идущие окна плановых работ, видимые оператору (ТЗ-21): полоса над очередью и значки дерева
+    // Идущие окна плановых работ, видимые оператору (ТЗ-21): пункт строки состояния поста и значки дерева
     maint: { windows: [], nextChangeAt: null },
   };
 
@@ -696,6 +696,8 @@
     activeCam: null,
     full: null,
     dialog: null,
+    // Мою открытую карточку увели (§22.7): инцидент → { who, what } — полоса «только просмотр» в карточке
+    evicted: {},
   };
 
   const $ = (id) => document.getElementById(id);
@@ -858,16 +860,297 @@
 
   function explainIfOff(btn) {
     if (btn.getAttribute("aria-disabled") !== "true") return false;
-    toast(btn.title || t("Действие недоступно"));
+    toast(btn.title || t("Действие недоступно"), "error");
     return true;
   }
 
-  function toast(text) {
+  // Короткое сообщение внизу слева (§22.6) — только об итоге моего действия: done — итог, уходит сам; late — опоздал
+  // («Уже взял Петров»), уходит сам; error — ошибка или отказ, висит до «✕». О чужих и автоматических событиях —
+  // не здесь, а в колокольчике (notice)
+  const TOAST_MAX = 5;
+  function toast(text, kind = "done") {
     const el = document.createElement("div");
-    el.className = "toast";
-    el.textContent = text;
-    $("toasts").appendChild(el);
-    setTimeout(() => el.remove(), 3200);
+    el.className = `toast ${kind}`;
+    el.dataset.kind = kind;
+    const msg = document.createElement("span");
+    msg.className = "toast-text";
+    msg.textContent = text;
+    el.appendChild(msg);
+    if (kind === "error") {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "toast-close";
+      x.title = t("Закрыть сообщение");
+      x.setAttribute("aria-label", x.title);
+      x.onclick = () => el.remove();
+      el.appendChild(x);
+    } else setTimeout(() => el.remove(), 3200);
+    const box = $("toasts");
+    box.appendChild(el);
+    while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
+  }
+  // Опоздал (§8.1, §22.6): действие не прошло, потому что инцидент уже у другого — мягкое «Уже принял / взял {who}».
+  // fresh — перечитанный инцидент; владелец — я или никто — обычная ошибка
+  const LATE_CODES = ["VERSION_CONFLICT", "TRANSITION_NOT_ALLOWED_FROM_STATE"];
+  function lateText(transitionId, err, fresh, meGuid) {
+    const code = err && err.problem && err.problem.code;
+    if (!LATE_CODES.includes(code) || !fresh || !fresh.owner || fresh.owner.id === meGuid) return null;
+    return t(transitionId === "accept" ? "Уже принял {who}" : "Уже взял {who}", { who: actorName(fresh.owner) });
+  }
+
+  /* ===== Колокольчик — журнал оповещений (§22.5) ===== */
+
+  // Хранит браузер рабочего места, отдельно для каждого оператора каждой организации; старше display.noticeKeepHours —
+  // выбрасывается; испорченная запись — пустой журнал. Организацию сессия не называет (она в токене): в прототипе —
+  // параметр ?customer=, иначе адрес сервера (?api=) или «local» (§17)
+  const NOTICE_KINDS = ["action", "system", "info"];
+  const NOTICE_MAX = 500;
+  const customerId = new URLSearchParams(location.search).get("customer") || apiBase || "local";
+  const bell = { key: null, list: [], pending: [], open: false, tab: "all", fresh: new Set(), seq: 0 };
+  const noticeKey = () => (store.session ? `im.notices.${customerId}.${store.session.operator.guid}` : null);
+  const keepMs = () => ((WORKFLOW && WORKFLOW.display && WORKFLOW.display.noticeKeepHours) || 12) * 3600e3;
+  const validNotice = (n) => n && typeof n === "object" && typeof n.text === "string" && typeof n.at === "number" && NOTICE_KINDS.includes(n.kind) && typeof n.id === "string";
+  function noticesPrune() {
+    const from = Date.now() - keepMs();
+    bell.list = bell.list.filter((n) => n.at >= from).slice(-NOTICE_MAX);
+  }
+  // Журнал текущего оператора: сменился ключ (вошёл другой) — читается свой
+  function noticeJournal() {
+    const key = noticeKey();
+    if (!key) return null;
+    if (bell.key !== key) {
+      bell.key = key;
+      bell.fresh.clear();
+      let list = [];
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+        list = Array.isArray(parsed) ? parsed.filter(validNotice) : [];
+      } catch (e) {
+        list = [];
+      }
+      bell.list = list;
+      noticesPrune();
+      bell.list.push(...bell.pending.splice(0));
+    }
+    return bell.list;
+  }
+  function noticesSave() {
+    if (!bell.key) return;
+    try {
+      localStorage.setItem(bell.key, JSON.stringify(bell.list));
+    } catch (e) {
+      /* хранилище недоступно — журнал до перезагрузки */
+    }
+  }
+  // Запись в колокольчик: kind — action (нужно действие), system (состояние поста), info (сведения); guid — к инциденту
+  function notice(text, opts) {
+    const o = opts || {};
+    const n = { id: `${Date.now().toString(36)}-${(bell.seq++).toString(36)}`, at: Date.now(), text: String(text), kind: NOTICE_KINDS.includes(o.kind) ? o.kind : "info", read: false };
+    if (o.guid) n.guid = o.guid;
+    if (o.number) n.number = o.number;
+    const list = noticeJournal();
+    if (!list) {
+      bell.pending.push(n);
+      return n;
+    }
+    list.push(n);
+    noticesPrune();
+    // Панель открыта — запись прочитана, выделена как новая
+    if (bell.open) {
+      n.read = true;
+      bell.fresh.add(n.id);
+    }
+    noticesSave();
+    renderBell();
+    return n;
+  }
+  const inBellTab = (n) => bell.tab === "all" || n.kind === bell.tab;
+  // Открыл панель — прочитано всё (§22.5): число на колокольчике — 0; непрочитанные до открытия выделены, пока панель открыта
+  function bellMarkRead() {
+    const list = noticeJournal() || [];
+    let changed = false;
+    list.forEach((n) => {
+      if (!n.read) {
+        n.read = true;
+        bell.fresh.add(n.id);
+        changed = true;
+      }
+    });
+    if (changed) noticesSave();
+  }
+  function openBell(tab) {
+    bell.open = true;
+    if (tab) bell.tab = tab;
+    noticeJournal();
+    noticesPrune();
+    bellMarkRead();
+    const panel = $("bellPanel");
+    const bar = document.querySelector(".topbar");
+    if (bar) panel.style.top = `${Math.round(bar.getBoundingClientRect().bottom)}px`;
+    renderBell();
+    panel.hidden = false;
+    $("bellBtn").setAttribute("aria-expanded", "true");
+    const first = panel.querySelector(`[data-bell-tab="${bell.tab}"]`);
+    if (first) first.focus();
+  }
+  function closeBell(focus) {
+    bell.open = false;
+    bell.fresh.clear();
+    $("bellPanel").hidden = true;
+    $("bellBtn").setAttribute("aria-expanded", "false");
+    renderBell();
+    if (focus) $("bellBtn").focus();
+  }
+  const BELL_TABS = [
+    ["all", "Все"],
+    ["action", "Нужно действие"],
+    ["system", "Система"],
+  ];
+  function renderBell() {
+    const btn = $("bellBtn");
+    if (!btn) return;
+    const list = noticeJournal() || bell.pending;
+    const unread = list.filter((n) => !n.read).length;
+    const count = $("bellCount");
+    count.textContent = String(unread);
+    count.hidden = !unread;
+    const label = unread ? t("Оповещения: непрочитанных {n}", { n: unread }) : t("Оповещения");
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    $("bellTabs").innerHTML = BELL_TABS.map(
+      ([id, name]) => `<button type="button" role="tab" class="bell-tab" data-bell-tab="${id}" aria-selected="${bell.tab === id}">${te(name)}</button>`
+    ).join("");
+    // Вкладка «Система»: сверху — идущие состояния поста полностью, с их кнопками (§22.4)
+    const states = postActive().map((p) => postItemHtml(p, true));
+    $("bellStates").innerHTML = states.join("");
+    $("bellStates").hidden = bell.tab !== "system" || !states.length;
+    // Список — заново, только если в нём что-то поменялось: строку поста перерисовывают часто
+    const sig = `${bell.key}|${bell.tab}|${LANG}|${list.length}|${list.length ? list[list.length - 1].id : ""}|${unread}|${bell.fresh.size}`;
+    if (sig === bell.drawn) return;
+    bell.drawn = sig;
+    const shown = [...list].reverse().filter(inBellTab);
+    const when = (at) => fmtTime(new Date(at).toISOString());
+    $("bellList").innerHTML = shown.length
+      ? shown
+          .map((n) => {
+            const text = n.guid ? `<button type="button" class="link-btn" data-notice-go="${escapeHtml(n.guid)}" data-number="${escapeHtml(n.number || "")}">${escapeHtml(n.text)}</button>` : escapeHtml(n.text);
+            return `<li class="notice ${n.kind}${bell.fresh.has(n.id) ? " unread" : ""}" data-notice="${escapeHtml(n.id)}" data-kind="${n.kind}" data-at="${n.at}"><time>${escapeHtml(when(n.at))}</time><span class="notice-text">${text}</span></li>`;
+          })
+          .join("")
+      : `<li class="notice-empty">${te("Записей нет")}</li>`;
+  }
+
+  function bindBell() {
+    $("bellBtn").addEventListener("click", () => (bell.open ? closeBell(false) : openBell()));
+    $("bellClose").addEventListener("click", () => closeBell(true));
+    $("bellPanel").addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-bell-tab]");
+      if (tab) {
+        bell.tab = tab.dataset.bellTab;
+        bellMarkRead();
+        renderBell();
+        const now = $("bellTabs").querySelector(`[data-bell-tab="${bell.tab}"]`);
+        if (now) now.focus();
+        return;
+      }
+      const go = e.target.closest("[data-notice-go]");
+      if (go) soundGo(go.dataset.noticeGo, go.dataset.number || go.textContent);
+    });
+    $("bellPanel").addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeBell(true);
+      }
+    });
+  }
+
+  /* ===== Строка состояния поста (§22.4) ===== */
+
+  // Связь: поток событий оборвался или признак активности не дошёл — «Нет связи с агентом»
+  const conn = { stream: true, heartbeat: true };
+  // Пункты — из машины (display.postStatus) по убыванию серьёзности; active — что длится сейчас. «Мало места на диске»
+  // (adminOnly) — только администратору, в «и ещё N» у оператора не входит. Видно самое серьёзное и «и ещё N»
+  function postStatusLine(active, defs, isAdmin) {
+    const list = (defs || []).filter((d) => active.includes(d.id) && (!d.adminOnly || isAdmin));
+    return { top: list[0] || null, more: Math.max(0, list.length - 1), all: list };
+  }
+  // Что длится сейчас. Источника «мало места на диске» в прототипе нет (§17)
+  function postNow() {
+    const out = [];
+    if (!conn.stream || !conn.heartbeat) out.push("connection");
+    if (soundOn() && !soundOut().ready()) out.push("sound_off");
+    if ((store.maint.windows || []).length) out.push("maintenance");
+    if (soundOn() && onlyImportant()) out.push("only_important");
+    return out;
+  }
+  const postDefs = () => (WORKFLOW && WORKFLOW.display && WORKFLOW.display.postStatus) || [];
+  const postActive = () => postStatusLine(postNow(), postDefs(), can("incident:schema:admin")).all;
+  const POST_ICON = { connection: "⚠", disk: "⚠", sound_off: "🔇", maintenance: "🛠", only_important: "🔉" };
+  const POST_CLASS = { connection: "danger", disk: "warn", sound_off: "warn", maintenance: "info", only_important: "info" };
+  // Конец состояния — запись в колокольчике (§22.4)
+  const POST_END = {
+    connection: "Связь восстановлена",
+    disk: "Место на диске освободилось",
+    sound_off: "Звук включён",
+    maintenance: "Плановые работы закончились",
+    only_important: "«Только важное» закончилось — звучит всё",
+  };
+  // Текст пункта в строке — коротко, простым текстом
+  function postShort(def) {
+    if (def.id === "maintenance") {
+      const ws = store.maint.windows || [];
+      const one = (w) => t("{what} — «{desc}», до {until}", { what: w.objectName, desc: w.description || "—", until: fmtUntil(w.endsAt) });
+      return ws.length === 1
+        ? t("Идут плановые работы: {one}.", { one: one(ws[0]) })
+        : t("Идут плановые работы: {n, plural, one {# окно} few {# окна} other {# окон}}, ближайшее закончится в {until}.", { n: ws.length, until: fmtUntil(ws[0].endsAt) });
+    }
+    if (def.id === "only_important") return t("Только важное до {time}", { time: onlyUntilText() });
+    return lbl(def);
+  }
+  // На вкладке «Система» — полностью (у работ — режим и список окон, §19.1), разметкой
+  function postText(def, full) {
+    if (!full || def.id !== "maintenance") return escapeHtml(postShort(def));
+    const ws = store.maint.windows || [];
+    const mark = (WORKFLOW.maintenance || {}).mode === "mark";
+    const tail = te(mark ? "Тревоги с этих устройств приходят с пометкой и низшим приоритетом." : "Тревоги с этих устройств не создаются.");
+    const item = (w) => te("{what} — «{desc}», с {from} до {until}", { what: w.objectName, desc: w.description || "—", from: fmtUntil(w.startsAt), until: fmtUntil(w.endsAt) });
+    return `${escapeHtml(postShort(def))} ${tail}<ul class="maint-list">${ws.map((w) => `<li>${item(w)}</li>`).join("")}</ul>`;
+  }
+  // Кнопки пункта остаются в нём (§22.4): «Включить звук» (§21.5), «Вернуть» у «Только важного» (§21.4)
+  function postButtons(def) {
+    if (def.id === "sound_off") return ` <button type="button" class="btn small primary" data-sound-enable>${te("Включить звук")}</button>`;
+    if (def.id === "only_important") return ` <button type="button" class="btn small ghost" data-sound-back>${te("Вернуть")}</button>`;
+    return "";
+  }
+  const POST_SOUND_LINE = { sound_off: "off", only_important: "important" };
+  // В строке текст — кнопка: щелчок открывает колокольчик на вкладке «Система» (§22.4); more — «и ещё N»
+  function postItemHtml(def, full, more) {
+    const line = POST_SOUND_LINE[def.id] ? ` data-sound-line="${POST_SOUND_LINE[def.id]}"` : "";
+    const icon = `<span aria-hidden="true">${POST_ICON[def.id] || "•"}</span>`;
+    const text = full ? `<span class="post-text">${postText(def, true)}</span>` : `<button type="button" class="post-text link-btn" data-post-open>${postText(def, false)}</button>`;
+    const tail = more ? ` <button type="button" class="link-btn post-more" data-post-open>${te("и ещё {n}", { n: more })}</button>` : "";
+    return `<div class="post-item ${POST_CLASS[def.id] || "info"}" data-post-state="${escapeHtml(def.id)}"${line}>${icon} ${text}${postButtons(def)}${tail}</div>`;
+  }
+  let postPrev = null;
+  function renderPost() {
+    const box = $("postStatus");
+    if (!box || !WORKFLOW) return;
+    const line = postStatusLine(postNow(), postDefs(), can("incident:schema:admin"));
+    box.innerHTML = line.top ? postItemHtml(line.top, false, line.more) : "";
+    box.hidden = !line.top;
+    // Начало и конец состояния — записи «Система» в колокольчике; то, что длилось при входе, — не начало
+    const now = new Set(line.all.map((d) => d.id));
+    if (store.session) {
+      if (postPrev) {
+        line.all.filter((d) => !postPrev.has(d.id)).forEach((d) => notice(postShort(d), { kind: "system" }));
+        postDefs()
+          .filter((d) => postPrev.has(d.id) && !now.has(d.id))
+          .forEach((d) => notice(POST_END[d.id] ? t(POST_END[d.id]) : t("{what} — закончилось", { what: lbl(d) }), { kind: "system" }));
+      }
+      postPrev = now;
+    }
+    // Вкладка «Система» — идущие состояния полностью, и при закрытой панели: её откроют щелчком по строке
+    renderBell();
   }
 
   /* ===== Загрузка с сервера ===== */
@@ -913,6 +1196,17 @@
       get headLayout() { return headLayout; },
       get freezeAbove() { return freezeAbove; },
       get hiddenBy() { return hiddenBy; },
+      get postStatusLine() { return postStatusLine; },
+      get lateText() { return lateText; },
+      conn,
+      heartbeat: () => heartbeat(true),
+      toast: (text, kind) => toast(text, kind),
+      // Журнал колокольчика — заново из браузера, как после перезагрузки страницы (§22.5)
+      noticeReload: () => {
+        bell.key = null;
+        renderBell();
+      },
+      noticeKey: () => noticeKey(),
     };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
 
@@ -929,8 +1223,10 @@
     const top = shown.slice(0, at + 1).map((r) => (pos.has(r.guid) ? next[pos.get(r.guid)] : Object.assign({}, r, { gone: true })));
     const kept = new Set(top.map((r) => r.guid));
     const was = new Set(shown.map((r) => r.guid));
-    // Граница в новом порядке — самая нижняя из замороженных строк, которая ещё есть у сервера
-    const edge = top.reduce((m, r) => (r.gone ? m : Math.max(m, pos.get(r.guid))), -1);
+    // Граница в новом порядке — место якорной строки у сервера (ушла — ближайшей над ней, что ещё есть), а не самая
+    // нижняя из замороженных: строка, которую сервер увёл ниже якоря, не делает новые строки под якорем «новыми выше»
+    let edge = -1;
+    for (let k = top.length - 1; k >= 0 && edge === -1; k--) if (!top[k].gone) edge = pos.get(top[k].guid);
     const newAbove = [];
     const below = [];
     next.forEach((r, i) => {
@@ -1084,7 +1380,7 @@
         if (row) row.scrollIntoView({ block: "nearest" });
       }
     })()
-      .catch((err) => toast(problemText(err)))
+      .catch((err) => toast(problemText(err), "error"))
       .finally(() => {
         loading = null;
         if (reloadAgain) {
@@ -1108,7 +1404,7 @@
   async function refreshMaintenance() {
     store.maint = await fetchMaintenance();
     scheduleMaintenance();
-    renderMaintBanner();
+    renderPost();
     renderGroups();
   }
 
@@ -1159,7 +1455,16 @@
     const open = state.selectedId || null;
     if (!always && open === lastOpen) return;
     lastOpen = open;
-    api.post("/operator/session/heartbeat", { openIncidentGuid: open }).catch(() => {});
+    // Не дошёл — «Нет связи с агентом» в строке поста, пока следующий не дойдёт (§22.4)
+    api
+      .post("/operator/session/heartbeat", { openIncidentGuid: open })
+      .then(() => setConn("heartbeat", true))
+      .catch(() => setConn("heartbeat", false));
+  }
+  function setConn(what, ok) {
+    if (conn[what] === ok) return;
+    conn[what] = ok;
+    renderPost();
   }
 
   // Выделенное событие: в карточке и для видео — полная карточка, в очереди — строка
@@ -1215,37 +1520,6 @@
     const d = new Date(value);
     if (new Date(serverNow()).toDateString() !== d.toDateString()) return fmtWhen(value);
     return d.toLocaleTimeString(locale, { hour12: false, hour: "2-digit", minute: "2-digit" });
-  }
-
-  // Полоса «Идут плановые работы» над очередью (ТЗ-21, §19.1): не модальная, role=status, не перекрывает очередь.
-  // Текст по режиму машины maintenance.mode: suppress — тревоги не создаются, mark — приходят с пометкой
-  function renderMaintBanner() {
-    const box = $("maintBanner");
-    if (!box) return;
-    const ws = store.maint.windows || [];
-    box.hidden = !ws.length;
-    if (!ws.length) {
-      state.maintOpen = false;
-      box.innerHTML = "";
-      return;
-    }
-    const mark = (WORKFLOW.maintenance || {}).mode === "mark";
-    const tail = te(mark ? "Тревоги с этих устройств приходят с пометкой и низшим приоритетом." : "Тревоги с этих устройств не создаются.");
-    const one = (w) => t("{what} — «{desc}», до {until}", { what: w.objectName, desc: w.description || "—", until: fmtUntil(w.endsAt) });
-    const head =
-      ws.length === 1
-        ? te("Идут плановые работы: {one}.", { one: one(ws[0]) })
-        : te("Идут плановые работы: {n, plural, one {# окно} few {# окна} other {# окон}}, ближайшее закончится в {until}.", { n: ws.length, until: fmtUntil(ws[0].endsAt) });
-    const item = (w) => te("{what} — «{desc}», с {from} до {until}", { what: w.objectName, desc: w.description || "—", from: fmtUntil(w.startsAt), until: fmtUntil(w.endsAt) });
-    const open = Boolean(state.maintOpen);
-    box.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">construction</span>
-      <span class="maint-text">${head} ${tail}</span>
-      <button type="button" class="btn ghost small" id="maintBannerMore" aria-expanded="${open}" aria-controls="maintBannerList">${te(open ? "Скрыть" : "Подробнее")}</button>
-      <ul class="maint-list" id="maintBannerList"${open ? "" : " hidden"}>${ws.map((w) => `<li>${item(w)}</li>`).join("")}</ul>`;
-    $("maintBannerMore").onclick = () => {
-      state.maintOpen = !open;
-      renderMaintBanner();
-    };
   }
 
   function fmtWhen(value) {
@@ -1383,7 +1657,7 @@
     try {
       ev.scenario = await api.put(`${incPath(ev.guid)}/scenario/cursor`, { stepId: path[index] });
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
     }
     renderScenario();
     renderStatus();
@@ -1404,7 +1678,7 @@
       ev.scenario = await api.post(`${incPath(ev.guid)}/scenario/answer`, body, ifMatch(ev));
       state.drafts.delete(draftKey(ev, step.id));
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
     }
     // Ответ меняет путь, доступность «Обработан», прогресс и версию записи — карточку заново
     await loadCard();
@@ -1603,7 +1877,7 @@
     try {
       res = await api.post(`/operator/incidents/transitions/${enc(id)}/bulk`, { incidentGuids: guids, formValues: form || {}, surface, expectedVersions: expectedVersions(guids), idempotencyKey: newKey() });
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
       // Выборка устарела, а действие с bulk.scope выполняется только по свежей (412, §11.1, BUG-84): причину оператор
       // увидел, повтор — по нынешним версиям и с новым пояснением формы (BUG-106)
       if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
@@ -1615,7 +1889,7 @@
     if (!res.succeeded.length) {
       const why = res.failed.length ? failureText(res.failed) : t("Действие недоступно");
       // Пропущенные другого сценария — названы и здесь: им ничего не сделано (§11.1, ARCH-15)
-      toast(skippedText(res.skipped) ? `${why} ${skippedText(res.skipped)}` : why);
+      toast(skippedText(res.skipped) ? `${why} ${skippedText(res.skipped)}` : why, "error");
       // Причину оператор увидел: у изменённых после отметки версия — нынешняя, повтор — его решение (BUG-106)
       res.failed.filter((f) => f.problem.code === "VERSION_CONFLICT").forEach((f) => checkedVersions.delete(f.incidentGuid));
       await updateSelection();
@@ -1627,7 +1901,7 @@
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
     // Не прошедшие — тоже в уведомлении: сколько и почему (§11, BUG-28)
     const failedText = res.failed.length ? `${okText} ${t("Не выполнено: {n}", { n: res.failed.length })}. ${failureText(res.failed)}` : okText;
-    toast(skippedText(res.skipped) ? `${failedText} ${skippedText(res.skipped)}` : failedText);
+    toast(skippedText(res.skipped) ? `${failedText} ${skippedText(res.skipped)}` : failedText, res.failed.length ? "error" : "done");
     state.selectedId = done[0].id;
     navigate(res.navigate);
     await reload();
@@ -1676,7 +1950,11 @@
     try {
       res = await api.post(`${incPath(ev.guid)}/transitions/${enc(id)}`, { expectedState: ev.state, formValues: form || {}, surface, idempotencyKey: newKey() }, ifMatch(ev));
     } catch (err) {
-      toast(problemText(err));
+      // Опоздал — инцидент уже у другого: мягкое «Уже взял Петров», уходит само (§8.1, §22.6); иначе — ошибка до «✕»
+      const fresh = LATE_CODES.includes(err && err.problem && err.problem.code) ? await api.get(incPath(ev.guid)).catch(() => null) : null;
+      const late = lateText(id, err, fresh, store.session && store.session.operator.guid);
+      if (late) toast(late, "late");
+      else toast(problemText(err), "error");
       await reload();
       return false;
     }
@@ -1861,6 +2139,33 @@
     )}"></textarea></label>`;
   }
 
+  // Подсказка у поля формы (§22.6): text — показать, пусто — снять
+  function fieldError(name, text) {
+    const box = $("dialogFields").querySelector(`[data-field-box="${name}"]`);
+    if (!box) return;
+    let hint = box.querySelector(`[data-field-error="${name}"]`);
+    if (!hint && text) {
+      hint = document.createElement("span");
+      hint.className = "field-error";
+      hint.dataset.fieldError = name;
+      hint.id = `field-error-${name}`;
+      box.appendChild(hint);
+    }
+    if (hint) {
+      hint.textContent = text || "";
+      hint.hidden = !text;
+    }
+    box.querySelectorAll(`[data-target-input="${name}"], [data-field="${name}"]:not([type='hidden']), [data-files="${name}"]`).forEach((el) => {
+      if (text) {
+        el.setAttribute("aria-invalid", "true");
+        el.setAttribute("aria-describedby", hint.id);
+      } else {
+        el.removeAttribute("aria-invalid");
+        el.removeAttribute("aria-describedby");
+      }
+    });
+  }
+
   function dialogValues() {
     const values = {};
     $("dialogFields")
@@ -1892,6 +2197,8 @@
     });
     open.form.fields.forEach((field) => {
       const visible = fieldVisible(field, values);
+      // Поле заполнили — подсказка «Заполните поле» у него уходит (§22.6)
+      if (values[field.name] && values[field.name].length !== 0) fieldError(field.name, "");
       const box = $("dialogFields").querySelector(`[data-field-box="${field.name}"]`);
       if (box) box.hidden = !visible;
       const label = $("dialogFields").querySelector(`[data-label-for="${field.name}"]`);
@@ -1940,7 +2247,7 @@
     if (!tr || !tr.form || !ev) return;
     let a = actionOf(ev, id);
     if (!a || !a.enabled) {
-      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }), "error");
       return;
     }
     const def = WORKFLOW.forms.find((f) => f.id === tr.form);
@@ -1949,7 +2256,7 @@
       try {
         card = await api.get(incPath(ev.guid));
       } catch (err) {
-        if (seq === dialogSeq) toast(problemText(err));
+        if (seq === dialogSeq) toast(problemText(err), "error");
         return;
       }
       // Пока шёл ответ, оператор нажал другую строку (побеждает последнее нажатие) или открылась другая форма
@@ -1957,7 +2264,7 @@
       if (seq !== dialogSeq || state.dialog) return;
       const fresh = actionOf(card, id);
       if (!fresh || !fresh.enabled) {
-        toast(actionWhy(fresh) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
+        toast(actionWhy(fresh) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }), "error");
         return;
       }
       a = fresh;
@@ -1995,8 +2302,9 @@
     });
     const missing = open.form.fields.find((f) => fieldVisible(f, values) && fieldRequired(f, values) && !values[f.name]);
     if (missing) {
-      toast(t("Заполните поле «{name}»", { name: lbl(missing) }));
+      // Не всплывает (§22.6): подсказка у самого поля — текст под полем и aria-invalid; правка поля её снимает
       const el = $("dialogFields").querySelector(`[data-target-input="${missing.name}"], [data-field="${missing.name}"]:not([type='hidden'])`);
+      fieldError(missing.name, t("Заполните поле «{name}»", { name: lbl(missing) }));
       if (el) el.focus();
       return;
     }
@@ -2047,7 +2355,7 @@
     }
     const a = actionOf(ev, id);
     if (!a || !a.enabled) {
-      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }));
+      toast(actionWhy(a) || t("Действие «{name}» недоступно в текущем состоянии", { name: lbl(tr) }), "error");
       return;
     }
     if (tr.form) return openDialog(id, ev, surface);
@@ -3096,8 +3404,20 @@
   }
   // Над шагами полосы прогресса нет: сколько пройдено, видно по самим шагам (RULE-90). Номер, состояние
   // и нормативы — в заголовке карточки (renderWorkHeader)
+  // Полоса «{что}: {кто} — только просмотр» (§22.7): пока карточка для меня только на просмотр; снова моя — полосы нет
+  function evictedBar(ev) {
+    const gone = state.evicted[ev.guid];
+    if (!gone) return "";
+    if (!ev.readOnly) {
+      delete state.evicted[ev.guid];
+      return "";
+    }
+    const text = gone.who ? te("{what}: {who} — только просмотр", { what: gone.what, who: gone.who }) : te("{what} — только просмотр", { what: gone.what });
+    return `<div class="evicted-bar" role="status" data-evicted="${escapeHtml(ev.guid)}"><span class="material-symbols-outlined" aria-hidden="true">visibility</span> ${text}</div>`;
+  }
+
   function renderIncidentHead(ev, acts) {
-    return `
+    return `${evictedBar(ev)}
       <div class="incident-head">
         <div class="incident-title">
           <h3>${te(ev.eventType.name)}</h3>
@@ -3549,7 +3869,8 @@
     renderVideo();
     renderMap();
     renderStatus();
-    renderMaintBanner();
+    // Идут плановые работы и другие состояния поста — строка в середине шапки (§22.4, ТЗ-21)
+    renderPost();
     $("breakBanner").hidden = !onBreak();
     $("signedOutBanner").hidden = !signedOut();
   }
@@ -3622,7 +3943,7 @@
     if (!ev) return;
     const a = actionOf(ev, navId);
     if (!a || !a.enabled) {
-      if (actionWhy(a)) toast(actionWhy(a));
+      if (actionWhy(a)) toast(actionWhy(a), "error");
       return;
     }
     state.selectedId = ev.guid;
@@ -3649,7 +3970,7 @@
   async function toggleBreak() {
     const notReady = WORKFLOW.session.states.find((s) => s.id === "not_ready");
     if (notReady.permission && !can(notReady.permission)) {
-      toast(t("Нет права уходить на перерыв"));
+      toast(t("Нет права уходить на перерыв"), "error");
       return;
     }
     if (!onBreak()) {
@@ -3660,7 +3981,7 @@
       await api.put("/operator/session/agent-state", { agentState: "ready" });
       toast(t("Перерыв окончен"));
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
     }
     await reload();
   }
@@ -3685,7 +4006,7 @@
       await api.put("/operator/session/agent-state", { agentState });
       toast(t(done));
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
     }
     if (agentState === "offline") {
       state.selectedId = null;
@@ -3699,7 +4020,7 @@
       await api.put("/operator/session/agent-state", { agentState: "not_ready", reasonId });
       toast(t("Перерыв. Переданное вам будет ждать в «Мне на принятие»"));
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
     }
     await reload();
   }
@@ -4054,7 +4375,7 @@
         const id = check.dataset.check;
         if (state.checked.has(id)) state.checked.delete(id);
         else if (LIMITS.maxBulk != null && state.checked.size >= LIMITS.maxBulk) {
-          toast(t("Не больше {max} инцидентов в выборке", { max: LIMITS.maxBulk }));
+          toast(t("Не больше {max} инцидентов в выборке", { max: LIMITS.maxBulk }), "error");
           return;
         } else state.checked.add(id);
         await updateSelection();
@@ -4186,7 +4507,7 @@
           const after = await api.del(`/operator/incidents/${enc(ev.guid)}/linked`);
           toast(t("Отсоединено: {n} — теперь «{state}»", { n: ev.linkedCount - after.linkedCount, state: detachedLabel() }));
         } catch (err) {
-          toast(problemText(err));
+          toast(problemText(err), "error");
         }
         await reload();
         return;
@@ -4198,7 +4519,7 @@
           await api.del(`/operator/incidents/${enc(ev.guid)}/linked/${enc(detach.dataset.detach)}`);
           toast(t("{id} отсоединён — теперь «{state}»", { id: detach.dataset.number, state: detachedLabel() }));
         } catch (err) {
-          toast(problemText(err));
+          toast(problemText(err), "error");
         }
         await reload();
         return;
@@ -4313,7 +4634,7 @@
           store.session = session;
           showForm({ id: "__signout__" }, signOutForm());
         })
-        .catch((err) => toast(problemText(err)));
+        .catch((err) => toast(problemText(err), "error"));
     });
     $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
     // Меню справки — по открытому инциденту: ссылки групп его источника (§7)
@@ -4463,7 +4784,7 @@
       if (e.target.closest("[data-sel-clear]")) return clearSelection();
       const b = e.target.closest("[data-sel-do]");
       if (!b) return;
-      if (b.getAttribute("aria-disabled") === "true") return toast(b.title);
+      if (b.getAttribute("aria-disabled") === "true") return toast(b.title, "error");
       selectionDo(b.dataset.selDo);
     });
     $("dialogFields").addEventListener("change", (e) => {
@@ -4479,6 +4800,8 @@
       if (combo && e.target.closest("[data-target-input]") && !state.dialog.combo.open) openTargetCombo(combo.dataset.targetCombo);
     });
     $("dialogFields").addEventListener("input", (e) => {
+      const typed = e.target.closest("textarea[data-field]");
+      if (typed && typed.value.trim()) fieldError(typed.dataset.field, "");
       const input = e.target.closest("[data-target-input]");
       if (!input) return;
       // Набранный текст — не выбор (BUG-43): набор снимает выбор, адресат — только щелчком или Enter
@@ -4518,11 +4841,11 @@
     try {
       res = await api.post("/operator/incidents/selection", Object.assign(queueQuery(), body));
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
       return;
     }
     if (!res.incidentGuids.length) {
-      toast(t("Нет инцидентов для выборки"));
+      toast(t("Нет инцидентов для выборки"), "error");
       return;
     }
     selectOnly(res.incidentGuids);
@@ -4646,7 +4969,7 @@
     const page = await api.get("/operator/incidents", { filter: "all", search: number, pageSize: 100 }).catch(() => null);
     const row = page && page.items.find((x) => x.guid === guid);
     if (!row) {
-      toast(t("{id} сейчас не открыть на просмотр", { id: number }));
+      toast(t("{id} сейчас не открыть на просмотр", { id: number }), "error");
       return;
     }
     await openCard("view", row);
@@ -4752,7 +5075,7 @@
     try {
       res = await api.post("/operator/incidents/merge", { incidentGuids: [...state.checked], expectedVersions: expectedVersions([...state.checked]), idempotencyKey: newKey() });
     } catch (err) {
-      toast(problemText(err));
+      toast(problemText(err), "error");
       // Изменились после отметки: причину оператор увидел, повтор — по нынешним версиям (BUG-106)
       if (err && err.problem && err.problem.code === "VERSION_CONFLICT") {
         checkedVersions.clear();
@@ -4810,7 +5133,7 @@
       });
     } catch (err) {
       $("modalGrouping").hidden = true;
-      toast(problemText(err));
+      toast(problemText(err), "error");
       return;
     }
     filt.scenario = filt.view.scenarioGuid;
@@ -5187,11 +5510,15 @@
     return new Date(snd.onlyUntil).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
   }
 
-  // Шапка: значок 🔊/🔉/🔇 и строки «Звук не включён», «Звучит … · Тихо», «Только важное до … · Вернуть» (§21.4, §21.5)
+  // Шапка: значок 🔊/🔉/🔇 и строка «Звучит … · Тихо» (§21.4); «Звук не включён · Включить звук» и «Только важное до … ·
+  // Вернуть» — пункты строки состояния поста (§21.5, §22.4)
   function renderSound() {
     syncTitle();
     if (!soundOn()) return;
+    // «+N» на кнопках шапки очереди — сразу, не со следующей загрузкой (§22.3)
+    const unseenWas = [...unseen].join();
     noteUnseen();
+    if ([...unseen].join() !== unseenWas) renderQueueHead();
     const ready = soundOut().ready();
     const important = onlyImportant();
     const icon = !ready ? "🔇" : important ? "🔉" : "🔊";
@@ -5202,10 +5529,6 @@
     $("soundBtn").dataset.sound = !ready ? "off" : important ? "important" : "on";
     // Значок меню звука в полосе — только на телефоне, где значка в шапке нет (styles.css)
     const parts = [`<button type="button" class="icon-btn sound-bar-menu" data-sound-menu title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span aria-hidden="true">${icon}</span></button>`];
-    if (!ready)
-      parts.push(
-        `<span class="sound-line warn" data-sound-line="off"><span aria-hidden="true">🔇</span> <span>${te("Звук не включён")}</span> <button type="button" class="btn small primary" data-sound-enable>${te("Включить звук")}</button></span>`
-      );
     const top = ready ? IMSound.topSounding(snd.state) : null;
     if (top) {
       const n = snd.state.sounding.length;
@@ -5217,15 +5540,12 @@
         ? ` · <span class="sound-hidden" data-sound-hidden>${te("скрыт фильтром")}</span> · <button type="button" class="link-btn" data-sound-show="${escapeHtml(top.guid)}">${te("Показать")}</button>`
         : "";
       parts.push(
-        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> ${body}${hid} <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
+        `<span class="sound-line ring" data-sound-line="ring"><span aria-hidden="true">🔊</span> <span class="sound-text">${body}${hid}</span> <button type="button" class="btn small outline" data-sound-silence>${te("Тихо")}</button></span>`
       );
     }
-    if (important)
-      parts.push(
-        `<span class="sound-line info" data-sound-line="important"><span aria-hidden="true">🔉</span> ${te("Только важное до {time}", { time: onlyUntilText() })} <button type="button" class="btn small ghost" data-sound-back>${te("Вернуть")}</button></span>`
-      );
     $("soundBar").innerHTML = parts.join("");
     if (!$("soundPop").hidden) renderSoundMenu();
+    renderPost();
   }
 
   // Меню звука (§21.4): громкость не ниже порога схемы, «Проверить звук», «Только важное», разрешение уведомлений
@@ -5292,7 +5612,8 @@
     };
     document.addEventListener("pointerdown", firstPress, true);
     document.addEventListener("keydown", firstPress, true);
-    $("soundBar").addEventListener("click", (e) => {
+    // Кнопки звука — в строке «Звучит», в строке состояния поста и на вкладке «Система» колокольчика (§22.4)
+    const soundClick = (e) => {
       if (e.target.closest("[data-sound-enable]")) return soundUnlock(true);
       // Значок меню в полосе звука на телефоне: то же меню, что у значка в шапке; щелчок не должен дойти до
       // «щелчок мимо меню закрывает»
@@ -5310,7 +5631,13 @@
       if (show) return void showHidden(show.dataset.soundShow);
       const go = e.target.closest("[data-sound-go]");
       if (go) soundGo(go.dataset.soundGo, go.dataset.soundNumber);
+    };
+    $("soundBar").addEventListener("click", soundClick);
+    $("postStatus").addEventListener("click", (e) => {
+      if (e.target.closest("[data-post-open]")) return openBell("system");
+      soundClick(e);
     });
+    $("bellStates").addEventListener("click", soundClick);
     $("soundBtn").addEventListener("click", () => {
       if (!$("soundPop").hidden) renderSoundMenu();
     });
@@ -5630,40 +5957,47 @@
         reload().then(() => soundRestore(true));
       });
     }
+    // Чужое и автоматическое — не всплывает (§22.2, §22.6): запись в колокольчике; нужно действие — «Нужно действие»
+    // (строка и так встанет в блок «Мне на принятие», §7), остальное — сведения
+    const ref = { guid: msg.incidentGuid, number: msg.incident ? msg.incident.number : null };
+    const kindOf = (p) => (p && p.addressedToMe ? "action" : "info");
     // Доступ к объекту пропал (§5): данных инцидента больше нет — только номер; карточка закрывается
     if (msg.type === "incident.access_lost") {
-      toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));
+      notice(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }), { kind: "info" });
       if (state.selectedId === msg.incidentGuid) {
         state.selectedId = null;
         return backToQueue();
       }
     } else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {
-      // Открытую карточку увели (§6.1, §6.2, §14.8): почему — подпись перехода из машины; своё действие — без
-      // уведомления. Переход, о котором всем, кто видит инцидент, и так скажет observerNotice, — без второго (BUG-105)
+      // Открытую карточку увели (§6.1, §6.2, §14.8, §22.7): почему — подпись перехода из машины; полоса в самой карточке
+      // «{что}: {кто} — только просмотр», запись — и в колокольчике. Переход, о котором всем, кто видит инцидент, и так
+      // скажет observerNotice, — без второй записи (BUG-105)
       const tr = transitionDef(tid);
-      const notice = tr && tr.ui && tr.ui.observerNotice;
-      if (!notice || notice.audience !== "observers") toast(t("{id}: карточка только для просмотра — {what}", { id, what: tr ? lbl(tr) : tid }));
+      const obs = tr && tr.ui && tr.ui.observerNotice;
+      const what = tr ? lbl(tr) : tid;
+      state.evicted[msg.incidentGuid] = { who: msg.actor ? who(msg.actor) : "", what };
+      if (!obs || obs.audience !== "observers") notice(t("{id}: карточка только для просмотра — {what}", { id, what }), Object.assign({ kind: "info" }, ref));
     } else if (msg.type === "incident.alert") {
       // Оповещение получателю оповещений (§9): что случилось — подпись перехода из машины
       // Группа правила не может принять (М1) — с названием группы (payload.groupName)
       const tr = transitionDef(tid);
       const what = tr ? lbl(tr) : tid;
       const group = msg.payload && msg.payload.groupName;
-      toast(group ? t("Оповещение: {id} — {what}: «{group}»", { id, what, group }) : t("Оповещение: {id} — {what}", { id, what }));
+      notice(group ? t("Оповещение: {id} — {what}: «{group}»", { id, what, group }) : t("Оповещение: {id} — {what}", { id, what }), Object.assign({ kind: kindOf(msg.payload) }, ref));
     } else if (msg.type === "incident.sibling_closed") {
       // Сосед того же события закрыт «Ложной тревогой» (§6.1, ARCH-15): адресату моего инцидента — какой и чем
       const p = msg.payload;
       const item = WORKFLOW.reasonCatalogs.close_result.items.find((i) => i.id === p.closeResultId);
-      toast(t("{n} того же события закрыт: {result}", { n: p.siblingNumber, result: item ? lbl(item) : p.closeResultId }));
+      notice(t("{n} того же события закрыт: {result}", { n: p.siblingNumber, result: item ? lbl(item) : p.closeResultId }), Object.assign({ kind: "info" }, ref));
     } else if (msg.type === "incident.transitioned" || (msg.type === "incident.created" && tid)) {
       // Что сказать о чужом или автоматическом переходе — в машине (ui.observerNotice, RULE-60, BUG-32):
       // observers — всем, кто видит инцидент; newAddressee — новому адресату, лично или его группе.
       // Появление (incident.created) — так же по переходу появления: у группы правила — как адресату передачи (§8.1, М1)
       const tr = transitionDef(tid);
-      const notice = tr && tr.ui && tr.ui.observerNotice;
+      const obs = tr && tr.ui && tr.ui.observerNotice;
       const p = msg.payload;
-      if (notice && (notice.audience === "observers" || (notice.audience === "newAddressee" && p.addressedToMe))) {
-        toast(t(notice.key, { id, who: who(msg.actor), addressee: who(p.addressee), previousOwner: who(p.owner && p.owner.from) }));
+      if (obs && (obs.audience === "observers" || (obs.audience === "newAddressee" && p.addressedToMe))) {
+        notice(t(obs.key, { id, who: who(msg.actor), addressee: who(p.addressee), previousOwner: who(p.owner && p.owner.from) }), Object.assign({ kind: kindOf(p) }, ref));
       }
     }
     reload();
@@ -5701,6 +6035,7 @@
     LANGS.forEach((l, i) => (CATALOGS[l.id] = catalogs[i].strings));
     collectStatic();
     bind();
+    bindBell();
     let savedTheme = "dark";
     let savedLang = "ru";
     try {
@@ -5720,7 +6055,14 @@
     bindSound();
     snd.agent = store.session ? store.session.agentState : null;
     await soundRestore();
-    api.subscribe(onServerEvent, () => reload().then(() => soundRestore()));
+    api.subscribe(
+      onServerEvent,
+      () => {
+        setConn("stream", true);
+        reload().then(() => soundRestore());
+      },
+      () => setConn("stream", false)
+    );
     renderHelpLinks();
   }
 

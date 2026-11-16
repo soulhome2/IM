@@ -27,11 +27,19 @@
         <button type="button" class="icon-btn" id="toggleMedia" aria-pressed="true">
           <span class="material-symbols-outlined">right_panel_close</span>
         </button>
-        <!-- Звук (§21.4, §21.5): «Звук не включён · Включить звук», «Звучит … · Тихо», «Только важное до … · Вернуть»; строит app.js -->
+        <!-- Строка состояния поста (§22.4): самое серьёзное из того, что длится, и «и ещё N»; пункты — из машины (display.postStatus),
+             щелчок — колокольчик на вкладке «Система»; строит app.js. Высоту шапки не меняет (§22.1) -->
+        <div class="post-status" id="postStatus" role="status" aria-live="polite" hidden></div>
+        <!-- Звук (§21.4): «Звучит … · Тихо»; строит app.js -->
         <div class="sound-bar" id="soundBar" role="status"></div>
       </div>
 
       <div class="topbar-actions">
+        <!-- Колокольчик — журнал оповещений (§22.5): число — непрочитанные, кружок серо-синий -->
+        <button type="button" class="icon-btn bell-btn" id="bellBtn" aria-expanded="false" aria-controls="bellPanel" title="Оповещения" aria-label="Оповещения">
+          <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
+          <em class="bell-n" id="bellCount" hidden>0</em>
+        </button>
         <div class="menu" id="soundMenu">
           <button type="button" class="icon-btn sound-btn" id="soundBtn" aria-haspopup="menu" aria-expanded="false"><span id="soundIcon" aria-hidden="true"></span></button>
           <!-- Меню звука (§21.4): громкость, «Проверить звук», «Только важное», разрешение уведомлений; строит app.js -->
@@ -185,8 +193,6 @@
             </div>
           </header>
           <div class="panel-b events-body">
-            <!-- Идут плановые работы (ТЗ-21, §19.1): не модальная полоса над очередью, сама появляется и исчезает -->
-            <div class="maint-banner" id="maintBanner" role="status" aria-live="polite" hidden></div>
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
             <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
             <!-- Шапка очереди (§7, план 87в): состояния и приоритеты кнопками с числами; на узком окне состояние — списком -->
@@ -525,6 +531,17 @@
     </div>
   </div>
 
+  <!-- Панель колокольчика (§22.5): справа, очередь не закрывает; вкладки «Все / Нужно действие / Система»; строит app.js -->
+  <aside class="bell-panel" id="bellPanel" aria-label="Оповещения" hidden>
+    <header class="bell-h">
+      <h2>Оповещения</h2>
+      <button type="button" class="icon-btn" id="bellClose" title="Закрыть" aria-label="Закрыть"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+    </header>
+    <div class="bell-tabs" id="bellTabs" role="tablist" aria-label="Оповещения"></div>
+    <div class="bell-states" id="bellStates" hidden></div>
+    <ul class="bell-list" id="bellList"></ul>
+  </aside>
+  <!-- Итог моего действия и ошибки (§22.6): внизу слева; итог уходит сам, ошибка — до «✕» -->
   <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
   <script src="i18n-data.js"></script>
   <script src="i18n-html.js"></script>

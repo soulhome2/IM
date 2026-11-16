@@ -153,8 +153,8 @@ MUTATIONS = [
     ("tick-array-order", "engine.js", "if (!next || c.moment < next.moment) next = c;", "if (!next) next = c;", "api"),
     ("tick-effects-at-now", "engine.js", "      at = runAt;\n      let facts = null;", "      at = null;\n      let facts = null;", "api"),
     ("admin-read-without-right", "server.js", "        \"/operator/admin/duty-groups\",\n        () => {\n          if (!can(\"incident:schema:admin\")) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.no_schema_admin\"]);", "        \"/operator/admin/duty-groups\",\n        () => {", "api"),
-    ("alert-toast-silent", "app.js", 'toast(t("Оповещение: {id} — {what}", { id, what: tr ? lbl(tr) : tid }));', "", "ui"),
-    ("access-lost-toast-silent", "app.js", 'toast(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }));', "", "ui"),
+    ("alert-toast-silent", "app.js", 'notice(group ? t("Оповещение: {id} — {what}: «{group}»", { id, what, group }) : t("Оповещение: {id} — {what}", { id, what }), Object.assign({ kind: kindOf(msg.payload) }, ref));', "", "ui"),
+    ("access-lost-toast-silent", "app.js", 'notice(t("{id} вам больше не доступен: изменились группы доступа", { id: msg.payload.number }), { kind: "info" });', "", "ui"),
     ("admin-values-raw", "app.js", "    if (values && typeof v === \"string\" && values[v]) return te(values[v]);\n", "", "ui"),
     ("colleagues-not-ticked", "server.js", "const peers = OPERATORS.filter((op) => op.id !== ME).map((op) => colleague(op.id));", "const peers = [];", "api"),
     ("colleague-always-ready", "server.js", "agentState: () => agentStateOf(id),", "agentState: () => \"ready\",", "api"),
@@ -190,7 +190,7 @@ MUTATIONS = [
     # инциденте уведомление; интерфейс его не показывает. Закрывший его не получает (решение 2026-10-29) — это в машине
     ("sibling-notice-not-delivered", "server.js", 'if (about && recipients.includes(ME)) emit("incident.sibling_closed"', 'if (false) emit("incident.sibling_closed"', "api"),
     ("sibling-notice-about-lost", "engine.js", "const about = a.about ? a.about.id : null;", "const about = null;", "api"),
-    ("ui-sibling-notice-hidden", "app.js", '      toast(t("{n} того же события закрыт: {result}"', '      if (false) toast(t("{n} того же события закрыт: {result}"', "ui"),
+    ("ui-sibling-notice-hidden", "app.js", '      notice(t("{n} того же события закрыт: {result}"', '      if (false) notice(t("{n} того же события закрыт: {result}"', "ui"),
     # Действие коллеги служебной операцией стенда (§17): от имени оператора стенда, а не коллеги
     ("test-colleague-acts-as-me", "server.js", "const actor = colleague(person.id);", "const actor = engine;", "api"),
     ("test-colleague-ignores-access", "server.js", "if (!ev || !hasAccess(person.id, ev)) return problem(404", "if (!ev) return problem(404", "api"),
@@ -202,7 +202,7 @@ MUTATIONS = [
     ("strings-no-fallback", "server.js", "const strings = Object.assign({}, STRINGS.ru || {}, STRINGS[locale] || {});", "const strings = STRINGS[locale] || {};", "api"),
     ("ui-catalog-ignored", "app.js", "if (catalog[ru] != null) return icu(catalog[ru], vars || {});", "", "ui"),
     ("create-norm-from-occurred", "engine.js", 'const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");\n      return applied.ok', 'at = ev.occurredAt;\n      const applied = applyEffects(tr, ev, {}, tr.actor || "dispatcher");\n      at = null;\n      return applied.ok', "api"),
-    ("ui-notice-ignored", "app.js", 'if (notice && (notice.audience === "observers" ||', 'if (false && (notice.audience === "observers" ||', "ui"),
+    ("ui-notice-ignored", "app.js", 'if (obs && (obs.audience === "observers" ||', 'if (false && (obs.audience === "observers" ||', "ui"),
     ("transition-facts-missing", "server.js", "state: { from: f.from.state || null, to: ev.state },", "state: { from: null, to: ev.state },", "api"),
     ("grace-ignored", "engine.js", "(agentOnly || c.moment + GRACE_MS > ctx.now())", "agentOnly", "api"),
     # Системный переход в окне после дедлайна (RULE-67): переход по таймеру — первым
@@ -370,7 +370,7 @@ MUTATIONS = [
     ("absence-no-reason", "server.js", 'render("workflow.label.absent.break", { reason: reason ? [reason.labelKey] : "" })', 'render("workflow.label.absent.break", { reason: "" })', "api"),
     ("last-transfer-target-forgotten", "server.js", "      if (targetField && formValues && formValues[targetField.name]) session.lastTransferTargetId = formValues[targetField.name];\n", "", "api"),
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),
-    ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"));", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
+    ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"), \"error\");", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
     ("ui-no-if-match", "app.js", "const ifMatch = (ev) => ({ \"If-Match\": `\"${ev.version}\"` });", "const ifMatch = () => ({});", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue");', 'trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue", [...state.checked]);', "ui"),

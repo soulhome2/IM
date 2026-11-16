@@ -30,11 +30,14 @@
           return { status: res.status, body: text ? (json ? JSON.parse(text) : text) : null, headers: got };
         });
       // onReconnect — поток переподключился после обрыва: пока он стоял, могло пропасть и то, что сервер не дошлёт
-      // по Last-Event-ID, — клиент перечитывает очередь и карточку (BUG-102)
-      const subscribe = (fn, onReconnect) => {
+      // по Last-Event-ID, — клиент перечитывает очередь и карточку (BUG-102). onDrop — поток оборвался: «Нет связи» (§22.4)
+      const subscribe = (fn, onReconnect, onDrop) => {
         const source = new EventSource(`${base}/operator/stream`, { withCredentials: true });
         let dropped = false;
-        source.onerror = () => (dropped = true);
+        source.onerror = () => {
+          if (!dropped && onDrop) onDrop();
+          dropped = true;
+        };
         source.onopen = () => {
           if (dropped && onReconnect) onReconnect();
           dropped = false;
