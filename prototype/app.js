@@ -1927,6 +1927,9 @@
       return false;
     }
     dropSelection();
+    // Своё действие — для бледной строки (BUG-121): ответ приходит раньше событий потока
+    noteIncidents(res.succeeded);
+    res.succeeded.forEach((e) => noteMove(e.guid, id, null, true));
     const done = res.succeeded.map((e) => ({ id: e.guid }));
     const copy = bulkCopy(id, done.length);
     const okText = copy && copy.toast ? copy.toast(form || {}) : t("Обработано: {n}", { n: done.length });
@@ -1990,6 +1993,9 @@
       return false;
     }
     state.selectedId = ev.guid;
+    // Своё действие — для бледной строки (BUG-121): ответ приходит раньше события потока
+    if (res.incident) noteIncidents([res.incident]);
+    noteMove(ev.guid, id, null, true);
     if (TOASTS[id]) toast(TOASTS[id](res.incident));
     if (state.checked.has(ev.guid)) dropSelection();
     store.selection = null;
@@ -2965,7 +2971,8 @@
   // Блок «Мне на принятие»: всё, что ждёт моего «Принять». Что в нём, сколько строк, в каком порядке — display.inboxBlock
   function inboxRowHtml(e) {
     const pri = PRIORITIES[e.priority];
-    const view = timerView(e.timer);
+    // Бледная строка: меток и таймера нет — они уже неправда (BUG-121)
+    const view = e.gone ? null : timerView(e.timer);
     const acts = queueActions(e).filter((a) => a.id === "accept" || a.id === "reject");
     const left = view && view.running ? `<span class="inbox-left ${view.leftMs < 60000 ? "urgent" : ""}" data-due="${view.due}">${te("осталось")} <b class="sla-t">${fmtSla(view.leftMs)}</b></span>` : "";
     return `
@@ -2973,9 +2980,9 @@
       <div class="inbox-pri" data-color="${escapeHtml(pri.color)}" aria-hidden="true"></div>
       <div class="inbox-main">
         <div class="inbox-top">
-          <span class="badge ${escapeHtml(e.badge.style)}">${escapeHtml(badgeView(e).text)}</span>
+          ${e.gone ? goneWhyHtml(e) : `<span class="badge ${escapeHtml(e.badge.style)}">${escapeHtml(badgeView(e).text)}</span>
           ${levelChip(e)}
-          ${rowSound(e)}<strong>${te(e.eventType.name)}</strong>
+          ${rowSound(e)}`}<strong>${te(e.eventType.name)}</strong>
           <span class="inbox-num">${escapeHtml(e.number)}</span>
         </div>
         ${sourceLine(e)}
@@ -3018,8 +3025,30 @@
     const list = freezeAbove(view.rows, store.page.items, anchor);
     return Object.assign(out, { rows: list.rows, held: out.held + list.newAbove.length });
   }
-  // Ушедшая строка — бледная и без кнопок, пока курсор не ушёл (решение 7)
-  const goneRow = (e) => (e.gone ? Object.assign({}, e, { actions: [] }) : e);
+  // Ушедшая строка — бледная и без кнопок, пока курсор не ушёл (решение 7); вместо кнопок — почему ушла (BUG-121)
+  const goneRow = (e) => (e.gone ? Object.assign({}, e, { actions: [], goneWhy: goneWhy(e) }) : e);
+  // Последний переход инцидента, о котором знает клиент: событие потока или ответ на своё действие — кто и каким
+  // переходом. По нему и последней строке инцидента бледная строка говорит, почему ушла (§22.1, BUG-121)
+  const lastMove = new Map();
+  function noteMove(guid, tid, actor, mine) {
+    lastMove.delete(guid);
+    lastMove.set(guid, { tid, actor, mine });
+    if (lastMove.size > 1000) lastMove.delete(lastMove.keys().next().value);
+  }
+  // Почему строка ушла: закрыт (вами, кем, автоматически), объединён, принят, скрыт фильтром; не знаем — «Ушёл из списка»
+  function goneWhy(e) {
+    const inc = incCache.get(e.guid) || e;
+    const mv = lastMove.get(e.guid) || {};
+    if (isDone(inc)) return mv.mine ? t("Закрыт вами") : mv.actor ? t("Закрыт — {who}", { who: actorName(mv.actor) }) : t("Закрыт");
+    if (inc.linkedTo) {
+      const main = incCache.get(inc.linkedTo);
+      return main ? t("Объединён с {id}", { id: main.number }) : t("Объединён с другим инцидентом");
+    }
+    if (["claim", "accept", "takeover"].includes(mv.tid)) return mv.mine ? t("Принят вами") : t("Принят — {who}", { who: actorName(mv.actor || inc.owner) });
+    if (hiddenBy(inc, filterChoice()).length) return t("Скрыт фильтром");
+    return t("Ушёл из списка");
+  }
+  const goneWhyHtml = (e) => `<span class="gone-why" data-gone-why>${escapeHtml(e.goneWhy)}</span>`;
 
   // Подсветка новой строки (§22.3): display.freshRowSec с того момента, как строка показалась в видимой части списка.
   // Новая — пришла после загрузки событием потока (не моим действием, не сменой фильтра или страницы).
@@ -3131,7 +3160,7 @@
     // название; остальные действия — колонкой справа (RULE-81)
     const open = queueActions(e).find((a) => a.style === "icon");
     const acts = queueActions(e).filter((a) => a.style !== "icon");
-    const title = `${rowSound(e)}<strong>${te(e.eventType.name)}</strong>`;
+    const title = `${e.gone ? "" : rowSound(e)}<strong>${te(e.eventType.name)}</strong>`;
     const pickable = !e.gone && bulkEligible(e);
     return `
     <article class="event ${state.selectedId === e.guid ? "selected" : ""} ${e.gone ? "gone" : ""} ${freshCls(e.guid)}" data-id="${escapeHtml(e.guid)}">
@@ -3165,11 +3194,16 @@
         }
         <div class="event-foot">
           <span class="pri-name" data-color="${escapeHtml(PRIORITIES[e.priority].color)}">${escapeHtml(inLang(PRIORITIES[e.priority].name))}</span>
-          <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
+          ${
+            // Бледная строка: вместо состояния, меток и таймеров — почему ушла; они уже неправда (BUG-121)
+            e.gone
+              ? goneWhyHtml(e)
+              : `<span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
           ${levelChip(e)}
           ${timerChip(e)}
           ${holdChip(e)}
-          ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}
+          ${prog.total ? `<span class="event-prog">${escapeHtml(scenarioTitle(e))}</span>` : ""}`
+          }
         </div>
       </div>
       <div class="event-acts">
@@ -6012,6 +6046,8 @@
     const mine = msg.actor && msg.actor.id === (store.session && store.session.operator.guid);
     // Строка из потока собрана для меня (filters — для читающего): по ней — что прячет звучащее (§22.3)
     if (msg.incident) noteIncidents([msg.incident]);
+    // Кто и каким переходом — для бледной строки, если инцидент из-за него ушёл из списка (§22.1, BUG-121)
+    if (msg.incidentGuid && tid) noteMove(msg.incidentGuid, tid, msg.actor, mine);
     // Чужое или автоматическое событие: строка, которая из-за него появится в очереди, — новая, её подсветить (§22.3)
     if (!mine && msg.incidentGuid) arrived.add(msg.incidentGuid);
     // Звук решается раньше выхода по своему переходу: моё действие снимает повтор (§21.2)

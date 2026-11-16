@@ -5365,6 +5365,43 @@
       return `${a} → ${b}`;
     }, SOUND_FIRST);
 
+    await step("Бледная строка: курсор над списком, инцидент выше закрыт — строка на месте, бледная, «Закрыт — Петрова М.», без состояния, меток, таймера и кнопок; курсор ушёл — строки нет (§22.1, BUG-121)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
+      await wait(400);
+      if (mode() !== "queue") await click($("backToQueue"));
+      await setFilter("open");
+      const list = $("eventsList");
+      const rows = () => [...list.querySelectorAll("article.event")];
+      // Выше строки под курсором — новый инцидент с таймером реакции: его закроем
+      const items = (await stand.get("/operator/incidents", { filter: "open", pageSize: 1000 })).items;
+      const at = rows().findIndex((r, i) => i > 0 && i < rows().length - 1 && (items.find((e) => e.guid === r.dataset.id) || {}).state === "new");
+      expect(at > 0, "в списке нет нового инцидента между строками");
+      const target = rows()[at].dataset.id;
+      const anchor = rows()[at + 1];
+      expect(rows()[at].querySelector("[data-timer], .badge"), "у строки до закрытия нет состояния или таймера");
+      anchor.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      try {
+        // Закрывает другой оператор: строка уходит по событию потока, причина — кто закрыл
+        expect((await petrovaAct(target, "claim")).status === 200, "Петрова не взяла инцидент");
+        const close = await petrovaAct(target, "close", { resultId: "false_alarm", causeId: "animal" });
+        expect(close.status === 200, `закрытие Петровой: ${close.status} ${close.body && close.body.code}`);
+        await wait(300);
+        const row = list.querySelector(`[data-id="${CSS.escape(target)}"]`);
+        expect(row && row.classList.contains("gone"), `закрытая строка выше курсора: ${row ? row.className : "нет"}`);
+        const why = row.querySelector("[data-gone-why]");
+        expect(why && why.textContent.trim() === "Закрыт — Петрова М.", `причина: «${why ? why.textContent.trim() : "нет"}»`);
+        const stale = row.querySelectorAll(".badge, .chip.lvl, [data-timer], [data-due], .event-act, [data-row-sound], .event-open");
+        expect(!stale.length, `на бледной строке устаревшее: ${[...stale].map((x) => x.className).join(", ")}`);
+        const pick = row.querySelector("input.pick");
+        expect(!pick || pick.disabled, "у бледной строки можно отметить флажок");
+      } finally {
+        list.dispatchEvent(new MouseEvent("mouseleave"));
+      }
+      await wait(200);
+      expect(!list.querySelector(`[data-id="${CSS.escape(target)}"]`), "курсор ушёл, а закрытая строка осталась");
+    });
+
     await step("Новые строки: курсор над списком — новая строка не сдвигает список, «↑ 1 новый»; курсор ушёл — строка на месте и подсвечена (§22.1, §22.3)", async () => {
       // Демо-данные заново: Критические прошлых шагов заняли бы всю первую страницу
       await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
