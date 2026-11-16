@@ -79,7 +79,9 @@
   window.addEventListener("error", (e) => errors.push(e.message || "ошибка JS"));
 
   const results = [];
-  const wait = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms));
+  // Встроенный сервер отвечает без задержки, а приложение не ждёт таймеров: паузы 40 мс после действия
+  // и 100 мс после сброса стенда хватает с запасом. Дольше ждут только шаги с таймерами (плашки, часы)
+  const wait = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
   const mode = () => $("workspace").dataset.mode;
   const root = () => $("scenarioRoot");
   const expect = (cond, msg) => {
@@ -678,7 +680,7 @@
       show.scenario = Object.assign(show.scenario, { id: fireGuid, version });
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: show.scenario.name, script: show }) } } });
-      await wait(300);
+      await wait(100);
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
@@ -722,7 +724,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -745,7 +747,7 @@
       script.steps.push(photo);
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: latest.name, script }) } } });
-      await wait(300);
+      await wait(100);
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
@@ -811,7 +813,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -832,7 +834,7 @@
       verdict.description = "Смотрите кадр целиком";
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo", fixturePatch: { scenarios: { rows: rows.concat({ guid: fireGuid, version, name: latest.name, script }) } } });
-      await wait(300);
+      await wait(100);
       try {
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
         const source = (await stand.get(`/operator/incidents/${encodeURIComponent(fire.guid)}`)).source.guid;
@@ -857,7 +859,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -866,7 +868,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo" });
-      await wait(300);
+      await wait(100);
       try {
         const inc = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.number === "INC-1839");
         expect(inc, "в наборе нет INC-1839");
@@ -916,7 +918,7 @@
         if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -925,7 +927,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       if (mode() !== "queue") await click($("backToQueue"));
       await standReset({ fixture: "demo" });
-      await wait(300);
+      await wait(100);
       try {
         const guid = guidOf("INC-1852");
         await openOwn(guid);
@@ -955,7 +957,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -980,7 +982,7 @@
         return `медпункт ${med} с, пожар ${fire} с`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1027,7 +1029,7 @@
         return `тревога ${b.alarmNumber}: ${b.incidents.map((c) => c.number).join(", ")}; медпункт 25 — первый; равенство — по guid`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1062,7 +1064,7 @@
         return "выключенное — не создаёт и не перекрывает; без поля — включено; набор и контракт на месте";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1080,7 +1082,7 @@
         return "удалённое правило — null, остальные на месте";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1102,7 +1104,7 @@
         // Подсказка чипа — номера и бейджи соседей, подгружается при наведении
         const fireChip = fireRow.querySelector("[data-siblings]");
         fireChip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-        await wait(300);
+        await wait(100);
         // Курсор ушёл со списка: иначе список заморожен под ним до конца прогона (§22.1)
         $("eventsList").dispatchEvent(new MouseEvent("mouseleave"));
         expect(/INC-1853 — Медпомощь при пожаре · Новое/.test(fireChip.title), `подсказка чипа INC-1847: «${fireChip.title}»`);
@@ -1135,7 +1137,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1189,7 +1191,7 @@
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1229,7 +1231,7 @@
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1686,7 +1688,7 @@
         const fx = window.IM_FIXTURE;
         const gone = Object.assign(JSON.parse(JSON.stringify(fx.incidents.find((i) => i.number === "INC-1837"))), { closeResult: "false_alarm", closeCause: "removed_cause", closeCauseLabel: "Сорока на датчике" });
         await standReset({ fixture: "demo", fixturePatch: { incidents: fx.incidents.map((i) => (i.number === "INC-1837" ? gone : i)) } });
-        await wait(300);
+        await wait(100);
         const old = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(gone.guid)}`)).body;
         expect(old.closeCauseLabel === "Сорока на датчике", `снимок удалённой причины: «${old.closeCauseLabel}»`);
         await setFilter("done");
@@ -1699,7 +1701,7 @@
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await setFilter("open");
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1753,7 +1755,7 @@
         expect(JSON.stringify(after) === JSON.stringify(want), `после сброса причины не из стартового набора: ${JSON.stringify(after)}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
       }
@@ -1770,7 +1772,7 @@
       try {
         // Пустые справочники: машина задаёт только устройство, пунктов заводит администратор поста
         await standReset({ fixture: "demo", workflowPatch: { reasonCatalogs: { false_alarm_cause: { items: [] }, hold: { items: sys } } } });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
         const b = button($("eventsList"), "claim");
@@ -1791,7 +1793,7 @@
         expect(card.state === "closed" && !card.closeCauseId, `ложная тревога без причины не закрылась: ${card.state}, ${card.closeCauseId}`);
         // Пункт есть — причина обязательна
         await standReset({ fixture: "demo", workflowPatch: { reasonCatalogs: { false_alarm_cause: { items: [{ id: "bird", labelKey: "workflow.form.close.field.causeId", setBy: "operator" }] } } } });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
         const b2 = button($("eventsList"), "claim");
@@ -1808,7 +1810,7 @@
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await setFilter("open");
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -1836,7 +1838,7 @@
       };
       try {
         await standReset({ fixture: "demo", workflowPatch: patch });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
         const b = button($("eventsList"), "claim");
@@ -1879,7 +1881,7 @@
         if (!$("modalAdmin").hidden) document.querySelector('[data-close="modalAdmin"]').click();
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         await setFilter("open");
       }
     });
@@ -1889,7 +1891,7 @@
       const put = (body) => stand.raw("PUT", "/operator/session/agent-state", body);
       try {
         await standReset({ fixture: "demo", workflowPatch: { session: { breakReasons: [] } } });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await click($("breakBtn"));
         expect(!$("modalDialog").hidden, "форма перерыва не открылась");
@@ -1901,7 +1903,7 @@
         await wait(200);
         expect($("breakBanner").hidden, "не вернулся с перерыва");
         await standReset({ fixture: "demo", workflowPatch: { session: { breakReasons: [{ id: "probe", labelKey: "workflow.session.state.not_ready" }] } } });
-        await wait(300);
+        await wait(100);
         const bad = await put({ agentState: "not_ready" });
         expect(bad.status === 422, `перерыв без причины при непустом списке: ${bad.status}`);
         const ok = await put({ agentState: "not_ready", reasonId: "probe" });
@@ -1909,7 +1911,7 @@
       } finally {
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
       }
@@ -2165,7 +2167,7 @@
         // «По фильтру…» (§11.2) берёт узел и состояние, без приоритетов и без блока: приоритеты шапки его не сужают
         const filterCount = async () => {
           await click(document.querySelector('.tree-all [data-filter="select"]'));
-          await wait(300);
+          await wait(100);
           const n = Number(($("groupingConfirm").textContent.match(/\d+/) || [NaN])[0]);
           await click(document.querySelector('[data-close="modalGrouping"]'));
           return n;
@@ -2182,11 +2184,11 @@
         // Пусто после фильтров — «Сбросить фильтры»: возвращает «Открытые», снимает приоритеты и поиск
         $("eventSearch").value = "нет-такого-инцидента-zz";
         $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
-        await wait(300);
+        await wait(100);
         const reset = $("eventsList").querySelector("[data-reset-filters]");
         expect(reset, "после фильтров пусто, а кнопки «Сбросить фильтры» нет");
         await click(reset);
-        await wait(300);
+        await wait(100);
         expect($("eventFilter").value === "open" && !pressed().length && $("eventSearch").value === "", `после сброса: ${$("eventFilter").value}, приоритетов ${pressed().length}, поиск «${$("eventSearch").value}»`);
         expect(blockIds().join() === ids0.join(), "после сброса блок другой");
         expect((await filterCount()) === byFilterNarrow, `«По фильтру…» зависит от приоритетов шапки: ${byFilterNarrow}`);
@@ -2469,7 +2471,7 @@
       const link = $("adminNote").querySelector('[data-admin-goto="system_status"]');
       expect(link && /Посмотреть состояние/.test(link.textContent), "на «Хранении» нет ссылки «Посмотреть состояние»");
       await click(link);
-      await wait(300);
+      await wait(100);
       const blocks = [...$("adminTable").querySelectorAll("[data-status-block]")].map((r) => r.dataset.statusBlock).join();
       expect(blocks === "database,retention,server", `блоки: ${blocks}`);
       expect(/общий для сервера/i.test($("adminTable").textContent), "размер базы не помечен «общий для сервера»");
@@ -2644,7 +2646,7 @@
         expect(!$("workspace").dataset.full && mode() === "work", "Esc при развёрнутом видео должен свернуть только видео");
         expect(document.activeElement === $("videoFull"), "после Esc фокус не вернулся на кнопку «Развернуть видео»");
         await pressKey("Escape");
-        await wait(300);
+        await wait(100);
         expect(mode() === "queue", "второй Esc не вернул к очереди");
         const card = await stand.get(`/operator/incidents/${id}`);
         expect(card.state === "in_progress" && card.owner && card.owner.id === "me", `Esc что-то поменял: ${card.state}, ${card.owner && card.owner.id}`);
@@ -2796,7 +2798,7 @@
       const number = await claimFromQueue((r) => !inMall(r.dataset.id) && !/Торговый центр/.test(r.textContent));
       expect(mode() === "work", "карточка взятого инцидента не открылась");
       await stand.raw("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] });
-      await wait(300);
+      await wait(100);
       const toast = noticeWith(/вам больше не доступен/);
       try {
         expect(toast && toast.textContent.includes(number), `нет записи в колокольчике о потере доступа к ${number}`);
@@ -2854,7 +2856,7 @@
       const search = async (text) => {
         $("eventSearch").value = text;
         $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
-        await wait(300);
+        await wait(100);
         return [...$("eventsList").querySelectorAll(".event")].map((r) => r.dataset.id);
       };
       const rowOf = async (n) => {
@@ -2971,10 +2973,10 @@
         people.operators.forEach((o) => Object.assign(o, (states || {})[o.id] || {}));
         const rule = Object.assign({}, fireRule, dutyGroupId ? { dutyGroupId } : {});
         await standReset({ fixture: "demo", fixturePatch: { people, rules: [rule] } });
-        await wait(300);
+        await wait(100);
         const res = await stand.raw("POST", "/test/events", { eventTypeId: "fire", deviceIds: [smoke1] });
         expect(res.status === 201 && res.body.created === 1, `событие: ${res.status}, создано ${res.body.created}`);
-        await wait(300);
+        await wait(100);
         return stand.get(`/operator/incidents/${encodeURIComponent(res.body.incidents[0].guid)}`);
       };
       const journalOf = (card) => card.journal.map((j) => j.templateKey).filter((k) => /^workflow\.journal\.(create|create_to_group|rule_group_cannot_accept)$/.test(k));
@@ -3032,7 +3034,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const esc = window.IM_WORKFLOW.escalation;
       await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { onResolutionOverdue: "escalate" }) } });
-      await wait(300);
+      await wait(100);
       let toast = null;
       try {
         const number = await claimFromQueue(() => true);
@@ -3055,7 +3057,7 @@
         expect(!toastWith(/карточка только для просмотра|только просмотр/), "увели карточку — всплыло сообщение");
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return toast.textContent;
     });
@@ -3090,7 +3092,7 @@
       try {
         // Закрываю я: пожар INC-1847 у меня в работе, карточка открыта; я в группе-адресате медпункта — но уведомления мне нет
         await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }) } });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
         const claim = await buttonOnPages("claim", fire);
@@ -3104,25 +3106,25 @@
         await setField("resultId", "false_alarm");
         await setField("causeId", "animal");
         await confirmDialog(NOTE);
-        await wait(300);
+        await wait(100);
         expect(!noticeWith(notice), `закрывшему — уведомление о своём закрытии: ${toasts()}`);
         if (mode() !== "queue") await click($("backToQueue"));
         // Закрывает Петрова: я — другой участник группы-адресата, уведомление мне есть. У неё уже есть инцидент в работе —
         // лимит активных самопроверки (1) снят
         await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }), limits: { maxActive: null } } });
-        await wait(300);
+        await wait(100);
         expect((await asPetrova("claim")).status === 200, "Петрова не взяла INC-1847");
         await medToLeads(null);
         const closed = await asPetrova("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" });
         expect(closed.status === 200, `Петрова не закрыла INC-1847: ${closed.status}`);
-        await wait(300);
+        await wait(100);
         toast = noticeWith(notice);
         expect(toast, `нет уведомления о ложной тревоге соседа: ${toasts()}`);
       } finally {
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return toast.textContent;
     });
@@ -3183,7 +3185,7 @@
         expect(denied.status === 403 && denied.body.code === "PERMISSION_DENIED", `без права incident:comment: ${denied.status} ${denied.body.code}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3204,7 +3206,7 @@
         return `версия ${etag}`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3224,7 +3226,7 @@
           await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
           await stand.raw("POST", "/test/clock", { advanceSec: Math.min(240, left) });
         }
-        await wait(300);
+        await wait(100);
         return stand.get(`/operator/incidents/${encodeURIComponent(guid)}`);
       }
       const chipOf = async (guid) => {
@@ -3233,7 +3235,7 @@
       };
       try {
         await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels }), limits: { maxActive: null } } });
-        await wait(300);
+        await wait(100);
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
         const fire = (await stand.get("/operator/incidents", { filter: "all", pageSize: 1000 })).items.find((e) => e.eventType.id === "fire");
@@ -3262,7 +3264,7 @@
         await click($("backToQueue"));
         // Уровень без названия — «Уровень N»
         await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels: [Object.assign({}, levels[0], { name: "  " }), l2] }), limits: { maxActive: null } } });
-        await wait(300);
+        await wait(100);
         await setFilter("open");
         const plain = await stand.raw("POST", "/test/incidents", { eventTypeId: "fire", priority: 25, deviceIds: [source] });
         const p1 = await overdue(plain.body.guid);
@@ -3273,7 +3275,7 @@
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3301,7 +3303,7 @@
         return card.state;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3328,7 +3330,7 @@
         expect(/shot\.png/.test($("dialogFields").textContent), "файл не прикрепился в форме");
         field("comment").value = NOTE;
         await click($("dialogConfirm"));
-        await wait(300);
+        await wait(100);
         expect($("modalDialog").hidden, "форма не закрылась");
         const card = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(closed.guid)}`)).body;
         const entry = card.journal.filter((j) => j.templateKey === "workflow.journal.comment").pop();
@@ -3340,7 +3342,7 @@
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await setFilter("open");
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3374,7 +3376,7 @@
         return e.text;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3393,7 +3395,7 @@
         return `место ${list.findIndex((e) => e.guid === low.guid) + 1} → ${at + 1}`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3406,7 +3408,7 @@
         expect(res.status === 403 && res.body.code === "PERMISSION_DENIED", `без права: ${res.status} ${res.body && res.body.code}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3420,7 +3422,7 @@
         expect((await prCard(inc.guid)).priority === inc.priority, "приоритет изменился");
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3434,7 +3436,7 @@
         expect((await prCard(inc.guid)).journal.length === before, "в журнале появилась запись");
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3452,7 +3454,7 @@
         return `${was.timer.dueAt} → ${res.body.incident.timer.dueAt}`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3473,7 +3475,7 @@
         expect(t.id === "reaction" && Math.abs(got - left) < 2000, `остаток реакции ${got} мс, был ${left}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3492,7 +3494,7 @@
         expect(again.body.incident.priority === low && again.body.incident.priorityManual === true, `после переоткрытия: ${again.body.incident.priority} ${again.body.incident.priorityManual}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3515,7 +3517,7 @@
         expect(res.status === 409 && res.body.code === "TRANSITION_NOT_ALLOWED_FROM_STATE", `у привязанного: ${res.status} ${res.body && res.body.code}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3529,7 +3531,7 @@
         expect(res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident.timer.dueAt}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3565,7 +3567,7 @@
         expect(res.status === 200 && res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident && res.body.incident.timer.dueAt}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3578,7 +3580,7 @@
         expect(res.status === 200 && res.body.incident.timer.dueAt === was.timer.dueAt, `срок группы ${was.timer.dueAt} → ${res.body.incident && res.body.incident.timer.dueAt}`);
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3600,7 +3602,7 @@
         await setField("priority", low);
         field("comment").value = NOTE;
         await click($("dialogConfirm"));
-        await wait(300);
+        await wait(100);
         expect($("modalDialog").hidden, "форма не закрылась");
         const card = await prCard(inc.guid);
         expect(card.priority === Number(low), `приоритет ${card.priority}`);
@@ -3612,7 +3614,7 @@
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await setFilter("open");
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3653,7 +3655,7 @@
         return `окно ${w.body.id}: подавлено; другое устройство — ${other.body.created} инц.`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3670,7 +3672,7 @@
         return `${inc.number}: приоритет ${inc.priority}`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3688,7 +3690,7 @@
         return "конец — вне, начало — в окне";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3703,7 +3705,7 @@
         return "подгруппа — в окне";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3730,7 +3732,7 @@
         return `день ${own}: в окне`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3744,7 +3746,7 @@
         return "окно не названо";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3769,7 +3771,7 @@
         return "завершено, событие — инцидент";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3790,7 +3792,7 @@
         return `${inc.number}: закрыт с окном`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3807,7 +3809,7 @@
         return `окон в наборе: ${list.body.length}`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3830,7 +3832,7 @@
       try {
         if (mode() !== "queue") await click($("backToQueue"));
         const now = await mwSetup();
-        await wait(300);
+        await wait(100);
         expect($("postStatus") && !$("maintBanner"), "нет строки состояния поста (#postStatus) или осталась полоса над очередью (#maintBanner)");
         await mwUntil(() => !mwShown(), "пункт работ виден без идущего окна");
         const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour), description: "замена датчика" });
@@ -3843,7 +3845,7 @@
         return text.replace(/\s+/g, " ").trim();
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3851,7 +3853,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ workflowPatch: { maintenance: { mode: "mark" } } });
-        await wait(300);
+        await wait(100);
         await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         await mwUntil(mwShown, "пункт работ не появился");
         expect(/с пометкой/.test(mwBanner().textContent), `текст режима mark: ${mwBanner().textContent}`);
@@ -3861,7 +3863,7 @@
         return mwBanner().textContent.replace(/\s+/g, " ").trim();
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3869,7 +3871,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup();
-        await wait(300);
+        await wait(100);
         const w = await mwCreate({ deviceGuid: mwSmoke, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         await mwUntil(mwShown, "пункт работ не появился");
         const end = await stand.raw("POST", `/operator/maintenance-windows/${w.body.id}/end`, {});
@@ -3880,7 +3882,7 @@
         return `ушёл; «${ended.textContent}»`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3888,7 +3890,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup();
-        await wait(300);
+        await wait(100);
         await mwCreate({ sourceGroupGuid: mwTcFloor, startsAt: mwIso(now), endsAt: mwIso(now + mwHour), description: "ремонт этажа" });
         await mwUntil(() => mwBadge(mwTcFloor), "нет значка у группы окна");
         expect(mwBadge(mwShop), "нет значка у подгруппы группы окна");
@@ -3897,7 +3899,7 @@
         return mwBadge(mwShop).title;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3905,7 +3907,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       try {
         const now = await mwSetup({ operatorRoles: ["Оператор ТЦ"] });
-        await wait(300);
+        await wait(100);
         const w = await mwCreate({ sourceGroupGuid: mwFloor, startsAt: mwIso(now), endsAt: mwIso(now + mwHour) });
         expect(w.status === 201, `окно: ${w.status}`);
         const cur = await stand.raw("GET", "/operator/maintenance-windows/current");
@@ -3915,7 +3917,7 @@
         return "не видно";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3941,7 +3943,7 @@
         return "прошлое — отказ, допуск 5 мин";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3965,7 +3967,7 @@
         return "серия идёт и между интервалами";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -3978,7 +3980,7 @@
         return w.body.timeZone;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -4003,7 +4005,7 @@
         return "повтор — в прежний инцидент";
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -4014,7 +4016,7 @@
         await click($("adminBtn"));
         await wait(200);
         await click(document.querySelector('[data-admin-tab="maintenance"]'));
-        await wait(300);
+        await wait(100);
         const text = $("adminTable").textContent;
         const first = window.IM_FIXTURE.maintenanceWindows[0];
         expect(text.includes(first.description), "в таблице нет окна набора");
@@ -4028,7 +4030,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Пожар INC-1847 привязан к INC-1851; его сосед медпункт INC-1853 — у меня в работе. INC-1851 закрывает Петрова «Ложной тревогой»
       await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
-      await wait(300);
+      await wait(100);
       let toast = null;
       try {
         const [a, b, c] = ["INC-1851", "INC-1847", "INC-1853"].map(guidOf);
@@ -4039,14 +4041,14 @@
         expect((await petrovaAct(a, "accept")).status === 200, "Петрова не приняла INC-1851");
         const closed = await petrovaAct(a, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" });
         expect(closed.status === 200, `Петрова не закрыла INC-1851: ${closed.status}`);
-        await wait(300);
+        await wait(100);
         const label = window.IM_STRINGS.ru["workflow.catalog.close_result.false_alarm"];
         toast = noticeWith(new RegExp(`INC-1847 того же события закрыт: ${label}`));
         expect(toast, `нет уведомления о закрытом привязанном соседе: ${noticeList()}`);
       } finally {
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return toast.textContent;
     });
@@ -4057,7 +4059,7 @@
       const incidents = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
       incidents.find((i) => i.number === "INC-1853").priority = 75;
       await standReset({ fixture: "demo", fixturePatch: { incidents }, workflowPatch: { limits: { maxActive: null } } });
-      await wait(300);
+      await wait(100);
       const state = async (number) => (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(guidOf(number))}`)).body.state;
       async function tick(number) {
         const first = $("eventsPager").querySelector('[data-page="1"]');
@@ -4092,7 +4094,7 @@
         if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
         if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return text;
     });
@@ -4101,14 +4103,14 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Два инцидента в работе: лимит активных самопроверки (1) снят
       await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
-      await wait(300);
+      await wait(100);
       try {
         await claimFromQueue(() => true);
         await claimFromQueue(() => true);
         expect(mode() === "work", "карточка взятого инцидента не открылась");
         await click($("signOutBtn"));
         await confirmDialog();
-        await wait(300);
+        await wait(100);
         expect(!$("signedOutBanner").hidden, "выход не выполнился");
         const extra = noticeWith(/карточка только для просмотра/) || toastWith(/карточка только для просмотра/);
         expect(!extra, `после своего выхода: «${extra && extra.textContent}»`);
@@ -4116,7 +4118,7 @@
       } finally {
         if (!$("signedOutBanner").hidden) await click($("signInBtn"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -4136,7 +4138,7 @@
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Свежий набор: INC-1843 ждёт моего принятия
       await standReset({ fixture: "demo" });
-      await wait(300);
+      await wait(100);
       if (mode() === "work") await click($("backToQueue"));
       await click($("breakBtn"));
       await confirmDialog();
@@ -4153,7 +4155,7 @@
       } finally {
         if (mode() === "work") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return note;
     });
@@ -4165,7 +4167,7 @@
       // Часы стенда — на 40 с вперёд от пульта: без поправки отсчёт был бы на 40 с больше
       await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
       await stand.raw("POST", "/test/clock", { advanceSec: 40 });
-      await wait(300);
+      await wait(100);
       await setFilter("open");
       const sec = (s) => s.split(":").reduce((m, x) => m * 60 + Number(x), 0);
       const row = [...$("eventsList").querySelectorAll(".event")].find((r) => {
@@ -4187,7 +4189,7 @@
     await step("Устаревшая выборка: отмеченные ушли по эскалации — массовая передача их не уводит и называет причину (expected, BUG-84, RULE-142)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       await standReset({ fixture: "demo" });
-      await wait(300);
+      await wait(100);
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("open");
       let text = "";
@@ -4204,7 +4206,7 @@
           await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
           await stand.raw("POST", "/test/clock", { advanceSec: 240 });
         }
-        await wait(300);
+        await wait(100);
         const before = await Promise.all(ids.map((g) => stand.get(`/operator/incidents/${encodeURIComponent(g)}`)));
         await click($("selBar").querySelector('[data-sel-do="transfer"]'));
         expect(!$("modalDialog").hidden, "форма передачи выборки не открылась");
@@ -4222,7 +4224,7 @@
       } finally {
         if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return text;
     });
@@ -4241,7 +4243,7 @@
           await stand.raw("POST", "/operator/session/heartbeat", { openIncidentGuid: null });
           await stand.raw("POST", "/test/clock", { advanceSec: 240 });
         }
-        await wait(300);
+        await wait(100);
       };
       const transfer = async () => {
         const before = new Set($("toasts").children);
@@ -4259,7 +4261,7 @@
       try {
         for (const part of ["отметил заново", "повтор после отказа"]) {
           await standReset({ fixture: "demo" });
-          await wait(300);
+          await wait(100);
           if (mode() === "work") await click($("backToQueue"));
           await setFilter("open");
           const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => r.querySelector('[data-do="claim"]') && r.querySelector("[data-check]")).slice(0, 2);
@@ -4288,7 +4290,7 @@
       } finally {
         if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return out.join("; ");
     });
@@ -4296,7 +4298,7 @@
     await step("Опоздал (§14.1, §22.6, RULE-142): коллега взял, пока строка не обновилась, — «Уже взял <имя>», по потоку «Взять» гаснет; чужой комментарий при закрытии — «Пришло новое событие — проверьте»", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       await standReset({ fixture: "demo" });
-      await wait(300);
+      await wait(100);
       if (mode() === "work") await click($("backToQueue"));
       await setFilter("open");
       // Чтения интерфейса задержаны: событие потока пришло, а список и карточка ещё прежние — оператор жмёт по ним
@@ -4309,7 +4311,7 @@
       const free = async () => {
         stand.get = get;
         release();
-        await wait(300);
+        await wait(100);
       };
       const lastToast = () => ($("toasts").lastElementChild || {}).textContent || "";
       const petrova = (g, tr, formValues) => stand.raw("POST", `/test/operators/petrova/incidents/${encodeURIComponent(g)}/transitions/${tr}`, { formValues: formValues || {}, surface: "card" });
@@ -4319,7 +4321,7 @@
         const busy = (window.IM_FIXTURE.incidents.find((i) => i.number === "INC-1846") || {}).guid;
         const back = await petrova(busy, "release", { comment: "back" });
         expect(back.status === 200, `Петрова не вернула INC-1846: ${back.status}`);
-        await wait(300);
+        await wait(100);
         const rows = [...$("eventsList").querySelectorAll(".event")].filter((r) => button(r, "claim")).map((r) => r.dataset.id);
         hold();
         // Первый новый, который Петрова может взять (доступ к объекту, лимит), второй — для закрытия
@@ -4364,7 +4366,7 @@
         if (!$("modalDialog").hidden) await click(document.querySelector('[data-close="modalDialog"]'));
         if (mode() === "work") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return out.join("; ");
     });
@@ -4376,7 +4378,7 @@
       people.operators.filter((o) => o.id !== window.IM_FIXTURE.operator).forEach((o) => (o.roles = ["Оператор ТЦ"]));
       people.dutyGroups.forEach((g) => (g.members = (g.members || []).filter((m) => m === window.IM_FIXTURE.operator)));
       await standReset({ fixture: "demo", fixturePatch: { people } });
-      await wait(300);
+      await wait(100);
       let why = "";
       try {
         if (mode() === "work") await click($("backToQueue"));
@@ -4401,7 +4403,7 @@
         );
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
       return why;
     });
@@ -4421,7 +4423,7 @@
       ];
       try {
         await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels, maxLevel: 4 }), alerts: { targetKind: "user", target: me.guid } } });
-        await wait(300);
+        await wait(100);
         await click($("adminBtn"));
         await click($("adminTabs").querySelector('[data-admin-tab="timing"]'));
         await wait(200);
@@ -4453,7 +4455,7 @@
       } finally {
         if (!$("modalAdmin").hidden) await click(document.querySelector('[data-close="modalAdmin"]'));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
       }
     });
 
@@ -4464,10 +4466,10 @@
       try {
         // Администратор запретил: стенд подменяет схему, клиент перечитывает её по workflow.schema_published
         await standReset({ fixture: "demo", workflowPatch: { queueSort: { operatorMayChange: false } } });
-        await wait(300);
+        await wait(100);
         expect(select.hidden, "администратор запретил менять порядок — список остался");
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         expect(!select.hidden, "разрешили менять порядок — список не появился: схема не перечитана");
         const options = [...select.options].map((o) => o.value);
         expect(JSON.stringify(options) === JSON.stringify(window.IM_WORKFLOW.queueSort.options), `варианты не из схемы: ${options.join(", ")}`);
@@ -4479,7 +4481,7 @@
         try {
           select.value = other;
           select.dispatchEvent(new Event("change"));
-          await wait(300);
+          await wait(100);
         } finally {
           stand.get = get;
         }
@@ -4488,7 +4490,7 @@
         return `порядков: ${options.length}, выбран «${select.selectedOptions[0].textContent}»`;
       } finally {
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         expect(!select.hidden, "вернули исходную схему — список пропал");
       }
     });
@@ -4748,7 +4750,7 @@
         first.focus();
         const id = first.dataset.id;
         await key(first, "Enter");
-        await wait(300);
+        await wait(100);
         const active = $("groupsList").querySelector(".tree-node.active");
         expect(active && active.dataset.id === id, "Enter не выбрал узел");
         expect(document.activeElement && document.activeElement.dataset.id === id, "после выбора фокус ушёл из дерева");
@@ -4765,7 +4767,7 @@
         const quiet = document.activeElement;
         expect(quiet.classList.contains("tree-node") && quiet.querySelector(":scope > .node-content .node-text").textContent === "Офис 2", "↓ из поиска — не на «Офис 2»");
         await key(quiet, "Enter");
-        await wait(300);
+        await wait(100);
         search.focus();
         await key(search, "Escape");
         const chosen = [...$("groupsList").querySelectorAll(".tree-node.active")].find((n) => n.getClientRects().length > 0);
@@ -5178,7 +5180,7 @@
         await setFilter("open");
         $("eventSearch").value = sought.number;
         $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
-        await wait(300);
+        await wait(100);
         const hitRow = $("eventsList").querySelector(`.event[data-id="${lead.guid}"]`);
         const note = hitRow && hitRow.querySelector(".event-found");
         expect(note && note.textContent.includes(sought.number) && $("eventsList").querySelectorAll(".event").length === 1, `поиск ${sought.number}: «${note ? note.textContent : "нет строки основного"}»`);
@@ -5189,7 +5191,7 @@
         await click($("backToQueue"));
         $("eventSearch").value = "";
         $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
-        await wait(300);
+        await wait(100);
         await setFilter("mine");
         await click($("eventsList").querySelector(`.event[data-id="${lead.guid}"] [data-do="open_card"], .event[data-id="${lead.guid}"] [data-do="resume"]`));
         expect(mode() === "work", "карточка основного не открылась");
@@ -5660,7 +5662,7 @@
         expect((await petrovaAct(target, "claim")).status === 200, "Петрова не взяла инцидент");
         const close = await petrovaAct(target, "close", { resultId: "false_alarm", causeId: "animal" });
         expect(close.status === 200, `закрытие Петровой: ${close.status} ${close.body && close.body.code}`);
-        await wait(300);
+        await wait(100);
         const row = list.querySelector(`[data-id="${CSS.escape(target)}"]`);
         expect(row && row.classList.contains("gone"), `закрытая строка выше курсора: ${row ? row.className : "нет"}`);
         const why = row.querySelector("[data-gone-why]");
@@ -5697,7 +5699,7 @@
         expect(close.status === 200, `своё закрытие: ${close.status} ${close.body && close.body.code}`);
         await wait(200);
         await setFilter("open");
-        await wait(300);
+        await wait(100);
         const row = list.querySelector(`[data-id="${CSS.escape(target)}"]`);
         const why = row && row.querySelector("[data-gone-why]");
         expect(row && row.classList.contains("gone") && why && why.textContent.trim() === "Закрыт вами", `своё закрытие: ${row ? row.className : "строки нет"}, «${why ? why.textContent.trim() : "нет"}»`);
@@ -5717,7 +5719,7 @@
         expect(rejected.status === 200, `отклонить строку блока: ${rejected.status} ${rejected.body && rejected.body.code}`);
         await wait(200);
         await setFilter("open");
-        await wait(300);
+        await wait(100);
         const row = list.querySelector(`.inbox-row[data-id="${CSS.escape(guid)}"]`);
         const why = row && row.querySelector("[data-gone-why]");
         expect(row && row.classList.contains("gone") && why && why.textContent.trim() === "Ушёл из блока", `строка блока: ${row ? row.className : "нет"}, «${why ? why.textContent.trim() : "нет"}»`);
@@ -5909,7 +5911,7 @@
         window.dispatchEvent(new Event("im-sound-output"));
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
-        await wait(300);
+        await wait(100);
         await setFilter("open");
       }
     }, SOUND_FIRST);
