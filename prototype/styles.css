@@ -902,6 +902,71 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .events-types .mselect { min-width: 0; position: relative; }
 /* Сценарий — во всю строку: названия длиннее типов (§19.2) */
 .events-types #scenarioFilter { grid-column: 1 / -1; }
+/* Шапка очереди (§7, план 87в): кнопки состояний и приоритетов с числами */
+.queue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px 0; min-width: 0; }
+.state-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.queue-head #eventFilter { display: none; min-width: 0; width: auto; }
+.state-btn, .pri-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--stroke-2); border-radius: 50px;
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.state-btn:hover, .pri-btn:hover { background: var(--accent-dim); }
+.state-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.state-btn .n, .pri-btn .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+.state-btn.hot:not([aria-pressed="true"]) { border-color: var(--crit); }
+.state-btn.hot:not([aria-pressed="true"]) .n { color: var(--crit-text); }
+.state-more { position: relative; }
+.state-more .material-symbols-outlined { font-size: 18px; }
+.state-menu { position: absolute; left: 0; top: 100%; z-index: 30; margin-top: 4px; display: grid; gap: 4px; padding: 6px; background: var(--panel); border: 1px solid var(--stroke-2); border-radius: 10px; box-shadow: 0 8px 24px var(--overlay); }
+.state-menu .state-btn { justify-content: space-between; border-radius: 8px; }
+/* Приоритеты — не переключатель: несколько сразу, выбранный — рамка своего цвета и галочка */
+.priority-buttons { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.pri-btn { --pc: var(--muted); }
+.pri-btn[data-color="red"] { --pc: var(--crit); }
+.pri-btn[data-color="amber"] { --pc: var(--warn); }
+.pri-btn[data-color="blue"] { --pc: var(--info); }
+.pri-btn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pc); }
+.pri-btn .pri-tick { display: none; font-size: 16px; color: var(--pc); }
+.pri-btn[aria-pressed="true"] { border: 2px solid var(--pc); padding: 4px 11px; font-weight: 600; }
+.pri-btn[aria-pressed="true"] .pri-tick { display: inline; }
+.pri-btn[aria-pressed="true"]::before { display: none; }
+.pri-btn.zero { color: var(--muted); }
+/* Название приоритета цветом — на строке, в блоке и в карточке рядом с полоской */
+.pri-name { font-size: 12px; font-weight: 600; color: var(--muted); }
+.pri-name[data-color="red"] { color: var(--crit-text); }
+.pri-name[data-color="amber"] { color: var(--warn-text); }
+.pri-name[data-color="blue"] { color: color-mix(in srgb, var(--info) 55%, var(--text)); }
+/* Блок «Мне на принятие» — сверху очереди; в списке эти инциденты не повторяются */
+.inbox-block { display: grid; gap: 6px; margin-bottom: 10px; padding: 8px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-dim); }
+.inbox-block.empty { color: var(--muted); font-size: 13px; background: transparent; border-color: var(--stroke-2); }
+.inbox-row { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--panel); cursor: pointer; }
+.inbox-row.selected { outline: 2px solid var(--accent); }
+.inbox-pri { width: 4px; border-radius: 4px; align-self: stretch; background: var(--muted); }
+.inbox-pri[data-color="red"] { background: var(--crit); }
+.inbox-pri[data-color="amber"] { background: var(--warn); }
+.inbox-pri[data-color="blue"] { background: var(--info); }
+.inbox-main { min-width: 0; display: grid; gap: 3px; }
+.inbox-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.inbox-num { color: var(--muted); font-size: 12px; }
+.inbox-meta { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.inbox-left { color: var(--warn-text); }
+.inbox-left.urgent { color: var(--crit-text); font-weight: 600; }
+.inbox-acts { display: flex; gap: 6px; }
+.inbox-more { justify-self: start; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; padding: 2px 4px; }
+.empty .btn { margin-left: 4px; }
+/* Узкое окно: типы, сценарий и порядок — под «⚙ Фильтры» (§7) */
+.events-toolbar.narrow .events-more { display: inline-flex; }
+.events-toolbar.narrow:not(.more-open) .events-types,
+.events-toolbar.narrow:not(.more-open) .events-sort { display: none; }
+.events-toolbar.narrow .events-types { grid-row: auto; }
+.events-toolbar.narrow .events-sort { grid-column: 1 / -1; grid-row: auto; max-width: none; }
+.queue-head[data-layout="compact"] #eventFilter,
+.queue-head[data-layout="phone"] #eventFilter { display: block; }
+.queue-head[data-layout="compact"] .state-buttons,
+.queue-head[data-layout="phone"] .state-buttons { order: 2; }
+.queue-head[data-layout="compact"] #eventFilter,
+.queue-head[data-layout="phone"] #eventFilter { order: 1; }
+.queue-head[data-layout="phone"] .priority-buttons { flex: 1 0 100%; flex-wrap: wrap; }
 /* Кнопка «Фильтры» — только на телефоне (BUG-50) */
 .events-more { display: none; position: relative; }
 .events-more-n { min-width: 18px; padding: 0 5px; border-radius: 50px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-style: normal; font-weight: 600; line-height: 18px; text-align: center; }
@@ -2266,7 +2331,6 @@ select.search-input { padding-right: 36px; }
      оставалось 70–90 px (BUG-94) */
   .events-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .events-toolbar select { min-width: 0; }
-  .events-toolbar .search-wrapper { grid-column: 1 / -1; grid-row: 2; }
   .events-more { display: inline-flex; }
   .events-types { grid-row: auto; }
   .events-toolbar .events-sort { grid-column: 1 / -1; grid-row: auto; max-width: none; }

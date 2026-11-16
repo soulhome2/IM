@@ -244,7 +244,7 @@ def capture(b, path, clip=None, pad=0, below=0, size=DESKTOP):
 
 # Подготовка экранов (селекторы — те же, что в самопроверке). Чужие — на первой странице «Чужих»
 FOREIGN = [("filter", "foreign")]
-TICK_THREE = [f"#eventsList .event:nth-child({i}) [data-check]" for i in (1, 2, 3)]
+TICK_THREE = [f"#eventsList article.event:nth-of-type({i}) [data-check]" for i in (1, 2, 3)]
 MERGE_FIRES = [
     "#groupsList .tree-all [data-filter='select']",
     # Среди пожаров — сосед INC-1853 со сценарием медпункта (ARCH-15): одним инцидентом берутся только пожары одного сценария

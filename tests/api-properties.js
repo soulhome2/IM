@@ -483,12 +483,29 @@
   test("Порядок блока priority_then_deadline принимается и при запрете выбора порядка, другие — нет (§7, RULE-62)", async () => {
     const lock = Object.assign({}, W.queueSort, { operatorMayChange: false });
     const order = async (env, sort) => (await env.call("GET", `/operator/incidents?filter=open&pageSize=200${sort ? `&sort=${sort}` : ""}`)).body.items.map((e) => e.guid).join();
-    const locked = await makeEnv({ workflowPatch: { queueSort: lock } });
-    const byBlock = Object.assign({}, lock, { default: W.display.inboxBlock.sort });
-    const reference = await makeEnv({ workflowPatch: { queueSort: byBlock } });
+    // На демо-данных у равных приоритетов норматив реакции идёт с одного момента, и «по сроку» совпадает с «старые выше».
+    // Тест не пустой, только если порядки различаются: у самого старого из двух инцидентов одного приоритета с
+    // нормативом реакции норматив начался позже — по сроку он последний, по возрасту первый
+    const FXI = JSON.parse(JSON.stringify(FX.incidents));
+    const withReaction = FXI.filter((i) => i.timers && i.timers.reaction).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+    const oldest = withReaction.find((i) => withReaction.filter((x) => x.priority === i.priority).length > 1);
+    assert.ok(oldest, "в демо-данных нет двух инцидентов одного приоритета с нормативом реакции");
+    oldest.timers.reaction.startedAt = new Date(Date.parse(oldest.timers.reaction.startedAt) + 600000).toISOString().replace(".000Z", "Z");
+    // Стенд один: каждый порядок снимается сразу после своего сброса, пока он не затёрт следующим
+    const data = { fixturePatch: { incidents: FXI } };
+    const locked = await makeEnv(Object.assign({ workflowPatch: { queueSort: lock } }, data));
     const base = await order(locked, "");
-    assert.eq(await order(locked, W.display.inboxBlock.sort), await order(reference, ""), "порядок блока не принят");
-    assert.eq(await order(locked, "reaction_deadline"), base, "чужой порядок принят при operatorMayChange: false");
+    const viaBlock = await order(locked, W.display.inboxBlock.sort);
+    const viaOther = await order(locked, "reaction_deadline");
+    const reference = await makeEnv(Object.assign({ workflowPatch: { queueSort: Object.assign({}, lock, { default: W.display.inboxBlock.sort }) } }, data));
+    const blockDefault = await order(reference, "");
+    const byDeadline = await makeEnv(Object.assign({ workflowPatch: { queueSort: Object.assign({}, lock, { default: "reaction_deadline" }) } }, data));
+    const deadlineDefault = await order(byDeadline, "");
+    // Иначе «принят» и «отклонён» нельзя отличить: порядок блока и «по нормативу реакции» — не порядок по умолчанию
+    assert.ok(blockDefault !== base, "порядок блока совпал с порядком по умолчанию — тест пустой");
+    assert.ok(deadlineDefault !== base, "reaction_deadline совпал с порядком по умолчанию — тест пустой");
+    assert.eq(viaBlock, blockDefault, "порядок блока не принят");
+    assert.eq(viaOther, base, "чужой порядок принят при operatorMayChange: false");
   });
 
   test("Шапка очереди на начальных демо-данных: числа состояний и приоритетов, список без блока, filters строки (§7)", async () => {

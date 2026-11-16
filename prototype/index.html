@@ -189,13 +189,18 @@
             <div class="maint-banner" id="maintBanner" role="status" aria-live="polite" hidden></div>
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
             <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
+            <!-- Шапка очереди (§7, план 87в): состояния и приоритеты кнопками с числами; на узком окне состояние — списком -->
+            <div class="queue-head" id="queueHead">
+              <div class="state-buttons" id="stateButtons" role="group" aria-label="Фильтр очереди"></div>
+              <!-- Фильтры по состоянию — из машины (queueFilters); виден на узком окне, на широком — кнопки -->
+              <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
+              <div class="priority-buttons" id="priorityButtons" role="group" aria-label="Приоритеты"></div>
+            </div>
             <div class="events-toolbar" id="eventsToolbar">
               <div class="search-wrapper">
                 <span class="material-symbols-outlined">search</span>
                 <input type="search" class="search-input" id="eventSearch" placeholder="Поиск по номеру, типу, устройству, адресу…" />
               </div>
-              <!-- Фильтры по состоянию — из машины (queueFilters) -->
-              <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
               <!-- Телефон: типы и порядок — под кнопкой «Фильтры» с числом выбранных типов (§7, BUG-50) -->
               <button type="button" class="btn ghost small events-more" id="eventsMoreBtn" aria-expanded="false" aria-controls="eventsTypes queueSortSelect" title="Фильтры по типам и порядок очереди">
                 <span class="material-symbols-outlined">tune</span>

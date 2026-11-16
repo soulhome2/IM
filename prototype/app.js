@@ -627,6 +627,11 @@
     session: null,
     page: { items: [], total: 0, page: 1, pageSize: PAGE_SIZE },
     counters: {},
+    // Числа кнопок шапки очереди (§7, план 87в): состояния — без своей группы кнопок, приоритеты — без выбранных
+    // приоритетов (null — у фильтра без счётчиков чисел нет); блок «Мне на принятие» — свой запрос
+    stateCounts: {},
+    priCounts: null,
+    block: { items: [], total: 0 },
     tree: [],
     eventTypes: [],
     scenarios: [],
@@ -656,6 +661,10 @@
     treeHit: 0,
     treeHitScroll: false,
     filter: "open",
+    // Выбранные уровни приоритета — числа справочника (§2.5); пусто — все
+    priorities: [],
+    // Меню «Ещё ▾» шапки очереди на окне 1280–1559
+    stateMenu: false,
     // Тип события и тип устройства — фильтры поверх выбранной группы (RULE-03)
     // Несколько значений сразу; пусто — все. tbOpen — какой из трёх списков раскрыт; сценарий — свой у каждого соседа по событию (§19.2)
     eventTypes: [],
@@ -871,11 +880,35 @@
       eventTypeGuid: state.eventTypes.length ? state.eventTypes.join(",") : null,
       scenarioGuid: state.scenarios.length ? state.scenarios.join(",") : null,
       deviceTypeId: state.deviceTypes.length ? state.deviceTypes.join(",") : null,
+      priority: state.priorities.join(",") || null,
+      // Строки блока «Мне на принятие» в списке не повторяются (§7)
+      exceptFilter: blockShown() ? inboxCfg().filter : null,
       page: state.page,
       pageSize: PAGE_SIZE,
       focusGuid: state.selectedId,
     };
   }
+
+  // Блок «Мне на принятие» (§7): какой фильтр, сколько строк, в каком порядке и когда его нет — из машины (display.inboxBlock)
+  const inboxCfg = () => (WORKFLOW.display || {}).inboxBlock || null;
+  const blockShown = () => {
+    const c = inboxCfg();
+    return Boolean(c) && !c.hiddenWith.includes(state.filter);
+  };
+  // У фильтра с counted: false чисел нет (§7): ни на его кнопке, ни на кнопках приоритетов
+  const filterCounted = (id) => {
+    const f = WORKFLOW.queueFilters.find((x) => x.id === id);
+    return Boolean(f) && f.counted !== false;
+  };
+  // Сужения для чисел кнопок — те же, что у списка, без filter, страницы и блока
+  function countersQuery(withPriorities) {
+    const q = queueQuery();
+    const out = { search: q.search, sourceGroupGuid: q.sourceGroupGuid, eventTypeGuid: q.eventTypeGuid, scenarioGuid: q.scenarioGuid, deviceTypeId: q.deviceTypeId };
+    if (withPriorities) out.priority = q.priority;
+    return out;
+  }
+  if (selftestRun) window.IM_SELFTEST_UI = { get priorityLetters() { return priorityLetters; }, get headLayout() { return headLayout; } };
+  const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
 
   // Всё, что видно на экране, — заново с сервера: сессия, страница очереди, счётчики, дерево,
   // карточка выбранного. Запросы во время загрузки не теряются: загрузка повторится один раз
@@ -891,12 +924,18 @@
       const jump = state.jump;
       state.focus = false;
       state.jump = false;
-      let [session, page, counters, tree, maint] = await Promise.all([
+      const cfg = inboxCfg();
+      let [session, page, counters, tree, maint, stateCounts, priCounts, block] = await Promise.all([
         api.get("/operator/session"),
         api.get("/operator/incidents", queueQuery()),
         api.get("/operator/incidents/counters"),
         api.get("/operator/reference/source-groups", { withCounters: true }),
         fetchMaintenance(),
+        // Числа состояний — без выбранного состояния, числа приоритетов — без выбранных приоритетов (§7)
+        api.get("/operator/incidents/counters", countersQuery(true)),
+        filterCounted(state.filter) ? api.get("/operator/incidents/counters/priorities", Object.assign({ filter: state.filter }, countersQuery(false))) : null,
+        // Блок — свой запрос: только его фильтр и порядок, остальные фильтры очереди его не прячут (§7)
+        blockShown() ? api.get("/operator/incidents", { filter: cfg.filter, sort: cfg.sort, pageSize: cfg.maxRows, page: 1 }) : { items: [], total: 0 },
       ]);
       store.maint = maint;
       scheduleMaintenance();
@@ -906,7 +945,7 @@
         page = await api.get("/operator/incidents", queueQuery());
       }
       noteServerTime(page.items);
-      Object.assign(store, { session, page, counters, tree });
+      Object.assign(store, { session, page, counters, tree, stateCounts, priCounts, block });
       soundSession();
       state.page = page.page;
       if (!state.openGroups.size && !state.treeSeen) {
@@ -915,7 +954,7 @@
       }
       // Если выбранное событие спрятал фильтр, поиск или другая группа, выделение
       // переходит на первое видимое: иначе видеомонитор и карта показывают чужую зону.
-      if (state.mode === "queue" && focus && page.focusPage == null) {
+      if (state.mode === "queue" && focus && page.focusPage == null && !block.items.some((e) => e.guid === state.selectedId)) {
         state.selectedId = page.items.length ? page.items[0].guid : null;
       }
       await loadCard();
@@ -1007,7 +1046,7 @@
   // Выделенное событие: в карточке и для видео — полная карточка, в очереди — строка
   function selected() {
     if (store.card && store.card.guid === state.selectedId) return store.card;
-    return store.page.items.find((e) => e.guid === state.selectedId) || null;
+    return queueItem(state.selectedId);
   }
 
   /* ===== Сценарий: сценарий и прохождение приходят в карточке (IncidentScenario, §14.5) =====
@@ -1429,7 +1468,7 @@
   function failureText(failed) {
     const main = failed.find((f) => f.problem.code !== "BULK_SELECTION_INVALID") || failed[0];
     const why = problemText({ problem: main.problem });
-    const ev = store.page.items.find((e) => e.guid === main.incidentGuid);
+    const ev = queueItem(main.incidentGuid);
     return ev ? `${ev.number}: ${why}` : why;
   }
 
@@ -2010,10 +2049,7 @@
 
   // Списки фильтров: по состоянию — из машины, типы событий и устройств — справочники сервера
   function renderTypeFilters() {
-    $("eventFilter").innerHTML = WORKFLOW.queueFilters
-      .map((f) => `<option value="${escapeHtml(f.id)}">${escapeHtml(lbl(f))}</option>`)
-      .join("");
-    $("eventFilter").value = state.filter;
+    renderQueueHead();
     renderTypeLists();
     renderQueueSort();
   }
@@ -2359,17 +2395,140 @@
   // Лимит выборки null — без ограничения (§11, RULE-69)
   const bulkEligible = (ev) => state.checked.has(ev.guid) || LIMITS.maxBulk == null || state.checked.size < LIMITS.maxBulk;
 
+  // ===== Шапка очереди и блок «Мне на принятие» (§7, план 87в): правило — в машине, здесь только вид =====
+
+  // Раскладка шапки по ширине окна (§7): full — всё подписано; more — редкие состояния в «Ещё ▾»;
+  // compact — состояние списком, приоритеты буквами; phone — приоритеты прокручиваемой строкой
+  function headLayout(width) {
+    return width >= 1560 ? "full" : width >= 1280 ? "more" : width >= 1024 ? "compact" : "phone";
+  }
+  // Первые три состояния машины (открытые, на принятие, мои) видны всегда, остальные уходят в «Ещё ▾»
+  const STATES_ALWAYS = 3;
+
+  // Буквы приоритета на узком окне: первая буква, а если у двух уровней первые совпали — столько, чтобы различить
+  function priorityLetters(names) {
+    const low = names.map((n) => n.toLowerCase());
+    return names.map((name, i) => {
+      for (let k = 1; k < name.length; k++) {
+        if (low.every((o, j) => j === i || o.slice(0, k) !== low[i].slice(0, k))) return name.slice(0, k);
+      }
+      return name;
+    });
+  }
+
+  function renderQueueHead() {
+    const layout = headLayout(window.innerWidth);
+    const head = $("queueHead");
+    head.dataset.layout = layout;
+    $("eventsToolbar").classList.toggle("narrow", layout === "compact" || layout === "phone");
+    const cfg = inboxCfg();
+    const counted = (f) => f.counted !== false && store.stateCounts[f.id] != null;
+    const num = (f) => (counted(f) ? `<b class="n">${store.stateCounts[f.id]}</b>` : "");
+    const btn = (f) => {
+      const hot = cfg && f.id === cfg.filter && counted(f) && store.stateCounts[f.id] > 0;
+      return `<button type="button" class="state-btn ${hot ? "hot" : ""}" data-state="${escapeHtml(f.id)}" aria-pressed="${state.filter === f.id}">${escapeHtml(lbl(f))}${num(f)}</button>`;
+    };
+    const fs = WORKFLOW.queueFilters;
+    let html;
+    if (layout === "full") html = fs.map(btn).join("");
+    else if (layout === "more") {
+      const rest = fs.slice(STATES_ALWAYS);
+      const on = rest.some((f) => f.id === state.filter);
+      html =
+        fs.slice(0, STATES_ALWAYS).map(btn).join("") +
+        `<span class="state-more"><button type="button" class="state-btn ${on ? "on" : ""}" data-state-more aria-haspopup="menu" aria-expanded="${state.stateMenu}" aria-pressed="${on}">${te("Ещё")}<span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>${
+          state.stateMenu ? `<div class="state-menu" role="menu">${rest.map(btn).join("")}</div>` : ""
+        }</span>`;
+    } else {
+      // Список «Открытые 14 ▾» — рядом; «Мне на принятие» с числом — отдельной кнопкой: видна всегда
+      html = cfg ? btn(fs.find((f) => f.id === cfg.filter)) : "";
+    }
+    $("stateButtons").innerHTML = html;
+    // Список состояний: на широком окне скрыт, но хранит выбор
+    const select = $("eventFilter");
+    if (select.options.length !== fs.length) select.innerHTML = fs.map((f) => `<option value="${escapeHtml(f.id)}"></option>`).join("");
+    fs.forEach((f, i) => (select.options[i].textContent = counted(f) ? `${lbl(f)} ${store.stateCounts[f.id]}` : lbl(f)));
+    select.value = state.filter;
+
+    // Приоритеты: уровни справочника, цвета и названия оттуда; выбранный — рамка своего цвета и галочка
+    const names = store.priorities.map((p) => inLang(p.name));
+    const label = layout === "compact" || layout === "phone" ? priorityLetters(names) : names;
+    $("priorityButtons").innerHTML = store.priorities
+      .map((p, i) => {
+        const on = state.priorities.includes(p.value);
+        const n = store.priCounts ? store.priCounts[String(p.value)] || 0 : null;
+        const aria = n == null ? names[i] : t("{name}: {n}", { name: names[i], n });
+        return `<button type="button" class="pri-btn ${n === 0 && !on ? "zero" : ""}" data-pri="${p.value}" data-color="${escapeHtml(p.color)}" aria-pressed="${on}" title="${escapeHtml(inLang(p.description) || names[i])}" aria-label="${escapeHtml(aria)}"><span class="pri-tick material-symbols-outlined" aria-hidden="true">check</span>${escapeHtml(label[i])}${n == null ? "" : `<b class="n">${n}</b>`}</button>`;
+      })
+      .join("");
+  }
+  window.matchMedia("(min-width: 1024px)").addEventListener("change", () => renderQueueHead());
+  window.matchMedia("(min-width: 1280px)").addEventListener("change", () => renderQueueHead());
+  window.matchMedia("(min-width: 1560px)").addEventListener("change", () => renderQueueHead());
+
+  // Сбросить фильтры (§7): «Открытые», приоритеты, типы, сценарий и поиск; узел дерева не меняется
+  function resetFilters() {
+    Object.assign(state, { filter: "open", priorities: [], eventTypes: [], scenarios: [], deviceTypes: [], search: "", tbOpen: null, tbQ: {} });
+    $("eventSearch").value = "";
+    renderTypeLists();
+    return requery();
+  }
+  // Что-то, кроме узла дерева, сужает список: тогда пустой список — «По фильтрам ничего нет»
+  const filtersOn = () =>
+    state.filter !== "open" || Boolean(state.priorities.length || state.eventTypes.length || state.scenarios.length || state.deviceTypes.length || state.search);
+
+  // Блок «Мне на принятие»: всё, что ждёт моего «Принять». Что в нём, сколько строк, в каком порядке — display.inboxBlock
+  function inboxRowHtml(e) {
+    const pri = PRIORITIES[e.priority];
+    const view = timerView(e.timer);
+    const acts = queueActions(e).filter((a) => a.id === "accept" || a.id === "reject");
+    const left = view && view.running ? `<span class="inbox-left ${view.leftMs < 60000 ? "urgent" : ""}" data-due="${view.due}">${te("осталось")} <b class="sla-t">${fmtSla(view.leftMs)}</b></span>` : "";
+    return `
+    <article class="inbox-row ${state.selectedId === e.guid ? "selected" : ""}" data-id="${escapeHtml(e.guid)}">
+      <div class="inbox-pri" data-color="${escapeHtml(pri.color)}" aria-hidden="true"></div>
+      <div class="inbox-main">
+        <div class="inbox-top">
+          <span class="badge ${escapeHtml(e.badge.style)}">${escapeHtml(badgeView(e).text)}</span>
+          ${e.escalationLevel ? `<span class="chip lvl" title="${te("Уровень эскалации")}">${te("ур. {lvl}", { lvl: e.escalationLevel })}</span>` : ""}
+          <strong>${te(e.eventType.name)}</strong>
+          <span class="inbox-num">${escapeHtml(e.number)}</span>
+        </div>
+        ${sourceLine(e)}
+        <div class="inbox-meta"><span class="pri-name" data-color="${escapeHtml(pri.color)}">${escapeHtml(inLang(pri.name))}</span>${left}</div>
+      </div>
+      <div class="inbox-acts">${acts
+        .map((a) => `<button type="button" class="btn ${a.style} event-act" data-do="${a.id}" data-ev="${escapeHtml(e.guid)}" title="${escapeHtml(a.hint)}" ${a.disabled ? 'aria-disabled="true"' : ""}>${escapeHtml(a.label)}</button>`)
+        .join("")}</div>
+    </article>`;
+  }
+  function renderInboxBlock() {
+    if (!blockShown()) return "";
+    const cfg = inboxCfg();
+    const name = lbl(WORKFLOW.queueFilters.find((f) => f.id === cfg.filter));
+    const { items, total } = store.block;
+    if (!items.length) return `<section class="inbox-block empty" aria-label="${escapeHtml(name)}">${te("{name}: ничего нет", { name })}</section>`;
+    const more = total - items.length;
+    return `<section class="inbox-block" aria-label="${escapeHtml(name)}">${items.map(inboxRowHtml).join("")}${
+      more > 0 ? `<button type="button" class="inbox-more" data-inbox-all>${te("ещё {n} → показать все в «{name}»", { n: more, name })}</button>` : ""
+    }</section>`;
+  }
+
   function renderEvents() {
     // Панель выборки зависит от отметок — перерисовывается вместе с очередью
     renderSelectionBar();
     const { items, total } = store.page;
     $("eventsCount").textContent = String(total);
+    // «Снять» — только когда что-то отмечено (§7)
     $("clearSelectionBtn").disabled = state.checked.size === 0;
+    $("clearSelectionBtn").hidden = state.checked.size === 0;
     $("selectAllBtn").disabled = !items.some((e) => !isDone(e));
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const start = (state.page - 1) * PAGE_SIZE;
     renderPager(total, pages, start, items.length);
-    $("eventsList").innerHTML = items.map(eventRowHtml).join("") || `<div class="empty">${te("Нет инцидентов в текущем фильтре")}</div>`;
+    const none = filtersOn()
+      ? `<div class="empty">${te("По фильтрам ничего нет")} · <button type="button" class="btn ghost small" data-reset-filters>${te("Сбросить фильтры")}</button></div>`
+      : `<div class="empty">${te("Ничего нет")}</div>`;
+    $("eventsList").innerHTML = renderInboxBlock() + (items.map(eventRowHtml).join("") || none);
   }
 
   // Источник в строке очереди (§7, план 87а): «устройство · адрес» под типом события, длинный адрес — многоточием,
@@ -2423,6 +2582,7 @@
             : ""
         }
         <div class="event-foot">
+          <span class="pri-name" data-color="${escapeHtml(PRIORITIES[e.priority].color)}">${escapeHtml(inLang(PRIORITIES[e.priority].name))}</span>
           <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
           ${
             e.escalationLevel
@@ -2460,6 +2620,7 @@
       <span class="work-num">${escapeHtml(ev.number)}</span>
       <span class="badge ${badge.cls}">${escapeHtml(badge.text)}</span>
       ${ev.escalationLevel ? `<span class="chip lvl">${te("ур. {lvl}", { lvl: ev.escalationLevel })}</span>` : ""}
+      ${PRIORITIES[ev.priority] ? `<span class="pri-name" data-color="${escapeHtml(PRIORITIES[ev.priority].color)}">${escapeHtml(inLang(PRIORITIES[ev.priority].name))}</span>` : ""}
       ${timerChip(ev, "sla")}
       ${holdChip(ev, "sla")}
       ${linkedChip(ev)}`;
@@ -3153,6 +3314,7 @@
     renderTopbar();
     renderSound();
     renderGroups();
+    renderQueueHead();
     if (state.mode === "queue") {
       renderEvents();
     } else {
@@ -3475,6 +3637,33 @@
       state.filter = e.target.value;
       requery();
     });
+    // Кнопки состояний: переключатель, выбрана всегда одна
+    $("stateButtons").addEventListener("click", (e) => {
+      if (e.target.closest("[data-state-more]")) {
+        state.stateMenu = !state.stateMenu;
+        return renderQueueHead();
+      }
+      const b = e.target.closest("[data-state]");
+      if (!b) return;
+      state.stateMenu = false;
+      if (state.filter === b.dataset.state) return renderQueueHead();
+      state.filter = b.dataset.state;
+      requery();
+    });
+    document.addEventListener("click", (e) => {
+      if (state.stateMenu && !e.target.closest(".state-more")) {
+        state.stateMenu = false;
+        renderQueueHead();
+      }
+    });
+    // Кнопки приоритетов: несколько сразу, повторный щелчок снимает; ни одна — все
+    $("priorityButtons").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-pri]");
+      if (!b) return;
+      const v = Number(b.dataset.pri);
+      state.priorities = state.priorities.includes(v) ? state.priorities.filter((x) => x !== v) : state.priorities.concat(v);
+      requery();
+    });
     $("eventsMoreBtn").addEventListener("click", () => {
       state.moreFilters = !state.moreFilters;
       renderMoreFilters();
@@ -3609,6 +3798,12 @@
       if (chip) siblingTip(chip);
     });
     $("eventsList").addEventListener("click", async (e) => {
+      if (e.target.closest("[data-reset-filters]")) return void resetFilters();
+      // «ещё N → показать все»: состояние переключается на фильтр блока
+      if (e.target.closest("[data-inbox-all]")) {
+        state.filter = inboxCfg().filter;
+        return void requery();
+      }
       const check = e.target.closest("[data-check]");
       if (check) {
         const id = check.dataset.check;
@@ -3624,7 +3819,7 @@
       const act = e.target.closest("[data-do]");
       if (act && explainIfOff(act)) return;
       if (act) {
-        trigger(act.dataset.do, store.page.items.find((x) => x.guid === act.dataset.ev), "queue");
+        trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");
         return;
       }
       const row = e.target.closest("[data-id]");
@@ -4299,7 +4494,7 @@
     const first = [...state.checked][0];
     const act = ((store.selection && store.selection.actions) || []).find((a) => a.id === id) || null;
     const row =
-      store.page.items.find((e) => state.checked.has(e.guid)) ||
+      [...store.page.items, ...store.block.items].find((e) => state.checked.has(e.guid)) ||
       (state.checked.size === 1 ? await api.get(`/operator/incidents/${enc(first)}`) : { guid: first });
     const ev = Object.assign({}, row, { actions: act ? [act] : [] });
     trigger(id, ev, "queue", [...state.checked]);

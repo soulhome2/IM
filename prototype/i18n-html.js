@@ -74,6 +74,7 @@ window.IM_DICT_HTML = {
     "По фильтру…": "By filter…",
     "Окно «Выделить по фильтру» для выбранного узла дерева": "«Select by filter» for the chosen tree node",
     "Выборка инцидентов": "Incident selection",
+    "Приоритеты": "Priorities",
     "Обработка": "Handling",
     "ОВД «Северное» · дежурная часть": "Severnoye police station · duty desk",
     "Огнетушитель": "Fire extinguisher",

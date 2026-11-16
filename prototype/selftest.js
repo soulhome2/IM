@@ -2065,6 +2065,9 @@
         await wait();
       };
       const field = () => $("deviceTypeFilter").querySelector("[data-tb-toggle]");
+      // На узком окне (<1280, §7) типы — под «Фильтры»: поле скрыто, фокус в него не встанет
+      const opened = !$("eventsTypes").offsetHeight;
+      if (opened) await click($("eventsMoreBtn"));
       await setFilter("all");
       try {
         await click(field());
@@ -2097,6 +2100,75 @@
         const clear = $("deviceTypeFilter").querySelector("[data-tb-clear]");
         if (clear) await click(clear);
         await click($("eventsList"));
+        await setFilter("open");
+        if (opened && $("eventsTypes").offsetHeight) await click($("eventsMoreBtn"));
+      }
+    });
+
+    await step("Шапка очереди: числа без своей группы, блок «Мне на принятие» не прячется фильтрами и не повторяется в списке (§7, план 87в)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand && window.IM_SELFTEST_UI, "нет служебных операций стенда в режиме самопроверки");
+      const UI = window.IM_SELFTEST_UI;
+      const cfg = window.IM_WORKFLOW.display.inboxBlock;
+      expect(JSON.stringify(UI.priorityLetters(["Критический", "Красный", "Высокий"])) === JSON.stringify(["Кри", "Кра", "В"]), `буквы приоритетов: ${UI.priorityLetters(["Критический", "Красный", "Высокий"])}`);
+      expect([1600, 1400, 1100, 800].map(UI.headLayout).join() === "full,more,compact,phone", "раскладка шапки по ширине");
+      const stateN = (id) => Number(([...$("eventFilter").options].find((o) => o.value === id) || { textContent: "" }).textContent.match(/(\d+)$/)?.[1]);
+      const priBtns = () => [...$("priorityButtons").querySelectorAll("[data-pri]")];
+      const priN = () => priBtns().map((b) => (b.querySelector(".n") ? Number(b.querySelector(".n").textContent) : null));
+      const blockIds = () => [...$("eventsList").querySelectorAll(".inbox-row")].map((r) => r.dataset.id);
+      const pressed = () => priBtns().filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => Number(b.dataset.pri));
+      if (mode() !== "queue") await click($("backToQueue"));
+      try {
+        await setFilter("open");
+        await wait(200);
+        const inbox = await stand.get("/operator/incidents", { filter: cfg.filter, sort: cfg.sort, pageSize: cfg.maxRows });
+        const ids0 = blockIds();
+        expect(ids0.join() === inbox.items.map((e) => e.guid).join(), `блок: ${ids0.length} строк, сервер: ${inbox.items.length}`);
+        expect(inbox.total === 0 ? $("eventsList").querySelector(".inbox-block.empty") : true, "пустой блок — без строки «ничего нет»");
+        const listIds = [...$("eventsList").querySelectorAll(".event")].map((r) => r.dataset.id);
+        expect(!ids0.some((g) => listIds.includes(g)), "строка блока повторяется в списке");
+        expect($("clearSelectionBtn").hidden, "«Снять» виден, а ничего не отмечено");
+        // Приоритет, которого нет у строк блока: блок фильтром не прячется, числа остальных приоритетов не обнуляются
+        const rowPri = new Set(inbox.items.map((e) => e.priority));
+        const levels = priBtns().map((b) => Number(b.dataset.pri));
+        const pick = levels.find((v) => !rowPri.has(v)) ?? levels[0];
+        const before = priN();
+        const openBefore = stateN("open");
+        await click(priBtns().find((b) => Number(b.dataset.pri) === pick));
+        await wait(200);
+        expect(pressed().join() === String(pick), `выбранные приоритеты: ${pressed()}`);
+        expect(priN().join() === before.join(), `числа приоритетов изменились от своего выбора: ${before} → ${priN()}`);
+        const narrowed = await stand.get("/operator/incidents/counters", { priority: String(pick) });
+        expect(stateN("open") === narrowed.open && stateN("open") <= openBefore, `«Открытые»: ${stateN("open")}, сервер: ${narrowed.open}`);
+        expect(blockIds().join() === ids0.join(), "блок спрятан или изменён фильтром по приоритету");
+        // Второй уровень — рядом с первым, а не вместо него
+        const other = levels.find((v) => v !== pick);
+        await click(priBtns().find((b) => Number(b.dataset.pri) === other));
+        await wait(200);
+        expect(pressed().length === 2, `второй приоритет заменил первый: ${pressed()}`);
+        // «Мне на принятие» выбрано — блока нет: список и есть эти инциденты
+        await setFilter(cfg.filter);
+        await wait(200);
+        expect(!$("eventsList").querySelector(".inbox-block"), "блок виден, когда выбрано «Мне на принятие»");
+        // Фильтр без счётчиков: чисел на кнопках приоритетов нет
+        await setFilter("done");
+        await wait(200);
+        expect(priN().every((n) => n == null) && !$("eventsList").querySelector(".inbox-block"), "у «Завершённых» есть числа приоритетов или блок");
+        // Пусто после фильтров — «Сбросить фильтры»: возвращает «Открытые», снимает приоритеты и поиск
+        $("eventSearch").value = "нет-такого-инцидента-zz";
+        $("eventSearch").dispatchEvent(new Event("input", { bubbles: true }));
+        await wait(300);
+        const reset = $("eventsList").querySelector("[data-reset-filters]");
+        expect(reset, "после фильтров пусто, а кнопки «Сбросить фильтры» нет");
+        await click(reset);
+        await wait(300);
+        expect($("eventFilter").value === "open" && !pressed().length && $("eventSearch").value === "", `после сброса: ${$("eventFilter").value}, приоритетов ${pressed().length}, поиск «${$("eventSearch").value}»`);
+        expect(blockIds().join() === ids0.join(), "после сброса блок другой");
+        return `блок ${ids0.length} из ${inbox.total}, приоритет ${pick}`;
+      } finally {
+        if (pressed().length) {
+          for (const b of priBtns().filter((x) => x.getAttribute("aria-pressed") === "true")) await click(b);
+        }
         await setFilter("open");
       }
     });
@@ -3388,15 +3460,19 @@
         const iso = d.getUTCDay() || 7; // ISO: понедельник 1 … воскресенье 7
         const hm = (ms) => new Date(ms).toISOString().slice(11, 16);
         const rec = (days) => ({ days, startTime: hm(now - 30 * 60000), endTime: hm(now + 30 * 60000) });
+        // Окно «сегодняшнего дня» — день его начала (§14.12): рядом с полночью (23:30–00:30 UTC) окно идёт через неё, и
+        // сейчас — в окне, начатом вчера. Тест от времени суток не зависит: день окна, накрывающего now, считается по часам
+        const { startTime, endTime } = rec([]);
+        const own = endTime <= startTime && hm(now) < endTime ? (iso + 5) % 7 + 1 : iso;
         const series = { startsAt: mwIso(now), endsAt: mwIso(now + 30 * 24 * mwHour) };
-        const other = await mwCreate(Object.assign({ deviceGuid: mwSmoke, recurrence: rec([1, 2, 3, 4, 5, 6, 7].filter((x) => x !== iso)) }, series));
+        const other = await mwCreate(Object.assign({ deviceGuid: mwSmoke, recurrence: rec([1, 2, 3, 4, 5, 6, 7].filter((x) => x !== own)) }, series));
         expect(other.status === 201, `повтор не создан: ${other.status} ${JSON.stringify(other.body)}`);
         const miss = await mwFire(7);
         expect(miss.body.created >= 1 && !miss.body.maintenance, "окно других дней недели подавило событие");
-        await mwCreate(Object.assign({ deviceGuid: mwSmoke, recurrence: rec([iso]) }, series));
+        await mwCreate(Object.assign({ deviceGuid: mwSmoke, recurrence: rec([own]) }, series));
         const hit = await mwFire(8);
         expect(hit.body.created === 0 && hit.body.maintenance, "окно сегодняшнего дня не подавило событие");
-        return `день ${iso}: в окне`;
+        return `день ${own}: в окне`;
       } finally {
         await standReset({ fixture: "demo" });
         await wait(300);
