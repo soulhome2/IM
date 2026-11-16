@@ -5503,11 +5503,9 @@
       return `${inc.number} — над ${guid}`;
     }, SOUND_FIRST);
 
-    await step("«↑ N новых выше — показать» — своё место над списком: не перекрывает ни одной строки на широкой и узкой панели, компактная, по центру; курсор на кнопке список не отпускает, щелчок — строки на местах (§22.1, §22.3, BUG-122)", async () => {
+    // Набор — после шага выше (сброс там же): лишний сброс стоит секунд бюджета CI
+    await step("«↑ N новых выше — показать» — своё место над списком: не перекрывает ни одной строки на широкой и узкой панели, компактная, по центру; путь курсора строка → блок → кнопка список не отпускает, щелчок — строки на местах (§22.1, §22.3, BUG-122)", async () => {
       if (quietBtn()) await click(quietBtn());
-      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: null } } });
-      await wait(400);
-      await setFilter("open");
       const list = $("eventsList");
       const panel = list.closest("section");
       const rows = () => [...list.querySelectorAll("article.event, .inbox-row")];
@@ -5531,13 +5529,21 @@
         expect(b.width < l.width * 0.8, `${where}: кнопка во всю ширину — ${Math.round(b.width)} из ${Math.round(l.width)} px`);
         expect(Math.abs((b.left + b.right) / 2 - (l.left + l.right) / 2) < 3, `${where}: кнопка не по центру списка`);
         expect(b.right <= l.right + 1 && b.left >= l.left - 1, `${where}: кнопка за краем списка`);
+        const st = $("newRows").getBoundingClientRect();
+        expect(b.top >= st.top - 1 && b.bottom <= st.bottom + 1, `${where}: кнопка не помещается в свою полосу — ${Math.round(b.height)} px при полосе ${Math.round(st.height)}`);
       };
       const width = panel.style.width;
       let inc;
       try {
+        // Путь к кнопке — через блок «Мне на принятие»: заморозка, начатая на строке списка, держится и над блоком
+        const blockRow = list.querySelector(".inbox-block .inbox-row");
+        expect(blockRow, "блок «Мне на принятие» пуст — путь через блок не проверить");
+        blockRow.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
         inc = await soundIncident(100);
         await wait(150);
         const btn = document.querySelector("[data-new-rows]");
+        expect(btn && !list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`), `курсор над блоком — список отпущен: «${btn ? btn.textContent.trim() : "кнопки нет"}», ${inc.number} ${list.querySelector(`[data-id="${CSS.escape(inc.guid)}"]`) ? "в списке" : "не в списке"}`);
+        expect(/^↑ 1 новый выше — показать$/.test(btn.textContent.trim()), `текст кнопки: «${btn.textContent.trim()}»`);
         check("широкая");
         list.scrollTop = 60;
         await wait(50);
@@ -5546,8 +5552,7 @@
         panel.style.width = "340px";
         await wait(50);
         check("узкая (340 px)");
-        expect(btn && /^↑ 1 новый выше — показать$/.test(btn.textContent.trim()), `текст кнопки: «${btn ? btn.textContent.trim() : "нет"}»`);
-        // Курсор с списка на кнопку — список не отпущен: кнопка на месте, новой строки выше курсора нет
+        // С блока на кнопку — список не отпущен
         list.dispatchEvent(new MouseEvent("mouseleave", { relatedTarget: btn }));
         await wait(100);
         const still = document.querySelector("[data-new-rows]");

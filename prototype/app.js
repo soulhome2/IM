@@ -3003,7 +3003,8 @@
 
   // Курсор над очередью (§22.1): над строкой списка — выше неё ничего не двигается; над блоком — блок целиком;
   // в промежутке без строки — весь список (так ничто под курсором точно не сдвинется)
-  const hover = { over: false, guid: null, inBlock: false };
+  // list — курсор уже был над строкой списка: тогда список держится и над блоком, по пути к «↑ N новых выше» (BUG-122)
+  const hover = { over: false, guid: null, inBlock: false, list: false };
   // Что на экране: ключ выборки, строки списка и блока, была ли «ещё N» — с этим сравнивается новый ответ
   const view = { key: null, rows: null, block: null, more: false, guids: new Set() };
   const viewKey = () => JSON.stringify(Object.assign({}, queueQuery(), { focusGuid: null }));
@@ -3018,7 +3019,7 @@
     const blk = freezeAll(view.block, store.block.items);
     const visible = blk.rows.filter((r) => !r.gone).length;
     const out = { block: blk.rows, more: view.more ? Math.max(0, store.block.total - visible) : null, held: blk.held };
-    if (hover.inBlock) return Object.assign(out, { rows: store.page.items });
+    if (hover.inBlock && !hover.list) return Object.assign(out, { rows: store.page.items });
     const anchor = view.rows.some((r) => r.guid === hover.guid) ? hover.guid : view.rows.length ? view.rows[view.rows.length - 1].guid : null;
     const list = freezeAbove(view.rows, store.page.items, anchor);
     return Object.assign(out, { rows: list.rows, held: out.held + list.newAbove.length });
@@ -4447,8 +4448,10 @@
       hover.over = true;
       const row = e.target.closest && e.target.closest("article[data-id]");
       hover.inBlock = Boolean(e.target.closest && e.target.closest(".inbox-block"));
-      if (row) hover.guid = row.dataset.id;
-      else if (!hover.inBlock) hover.guid = null;
+      // Над блоком якорь списка не меняется: список, остановленный на своей строке, держится по ней (BUG-122)
+      if (hover.inBlock) return;
+      hover.guid = row ? row.dataset.id : null;
+      if (row) hover.list = true;
     };
     $("eventsList").addEventListener("mouseover", aim);
     $("eventsList").addEventListener("mousemove", aim);
@@ -4458,7 +4461,7 @@
     // иначе кнопка пропадала бы, пока к ней ведут курсор (BUG-122)
     const leaveQueue = (e) => {
       if (e.relatedTarget && ($("eventsList").contains(e.relatedTarget) || $("newRows").contains(e.relatedTarget))) return;
-      Object.assign(hover, { over: false, guid: null, inBlock: false });
+      Object.assign(hover, { over: false, guid: null, inBlock: false, list: false });
       if (state.mode === "queue") renderEvents();
     };
     $("eventsList").addEventListener("mouseleave", leaveQueue);

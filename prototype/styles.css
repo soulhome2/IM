@@ -996,8 +996,8 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 /* Новые строки и скрытое фильтром (§22.1, §22.3): «↑ N новых выше» — своя полоса над списком постоянной высоты:
    кнопка не закрывает строк, а её появление ничего не сдвигает (BUG-122); ушедшая строка под курсором — бледная и
    без кнопок; новая — подсвечена display.freshRowSec */
-.new-rows { flex-shrink: 0; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: center; background: var(--bg); }
-.new-rows .btn { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.new-rows { flex-shrink: 0; height: 28px; padding: 0 10px; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.new-rows .btn { padding: 3px 12px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event.gone, .inbox-row.gone { opacity: 0.5; }
 /* Почему ушла (BUG-121): на месте состояния и меток, текстом — не меткой */
 .gone-why { font-size: 12px; font-weight: 600; color: var(--text); }
