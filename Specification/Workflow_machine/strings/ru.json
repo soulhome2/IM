@@ -136,7 +136,7 @@
   "workflow.form.transfer.bulk.confirm": "Передать {n}",
   "workflow.form.close.bulk.title": "Закрыть без обработки {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}",
   "workflow.form.close.bulk.note": "{n, plural, one {Будет закрыт # инцидент} few {Будут закрыты # инцидента} other {Будут закрыты # инцидентов}} без сценария. Одна причина на всю выборку.",
-  "workflow.form.close.bulk.note.scenario": "Закроются инциденты сценария «{scenario}»: {n} из {total}. Других сценариев — {skipped}, они останутся открытыми",
+  "workflow.form.close.bulk.note.scenario": "Закроются инциденты сценария «{scenario}»: {n} из {total}. Других сценариев — {skipped}: они останутся открытыми, чтобы закрытие по одной службе не задело тревоги другой. Их можно закрыть отдельно — отметьте по фильтру сценария",
   "workflow.form.close.bulk.confirm": "Закрыть {n}",
   "workflow.form.hold.bulk.title": "Отложить {n, plural, one {# инцидент} few {# инцидента} other {# инцидентов}}",
   "workflow.form.hold.bulk.note": "{n, plural, one {Будет отложен # инцидент} few {Будут отложены # инцидента} other {Будут отложены # инцидентов}}. Одна причина на всех.",
