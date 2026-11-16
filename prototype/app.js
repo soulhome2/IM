@@ -5905,8 +5905,8 @@
   const word = (key) => (PRIORITIES[key] ? asData(inLang(PRIORITIES[key].name)) : te((WORKFLOW.adminSettings.valueLabels || {})[key] || key));
   // Адресат уровня и получатель оповещений (§8.3, §9) — вид и имя: «пользователь Петрова», «группа Дежурный ЦОД»;
   // название уровня бывает похоже на группу, а адресат — человек (BUG-124). Вид — targetKind; нет вида — сначала группа.
-  // Не нашёлся — «удалённый …» с id, но только если его список прочитан: список групп не пришёл — «группа (id)».
-  // Имя — данные, не переводится
+  // Люди — из «Людей поста» (все, кто заходил, и я, и давно не заходившие). Не нашёлся — «удалённый …» с id, но только
+  // если его список прочитан: список не пришёл — «группа (id)», «пользователь (id)». Имя — данные, не переводится
   function personName(id) {
     if (store.session && id === store.session.operator.guid) return store.session.operator.name;
     const target = targetById(id);
@@ -5915,15 +5915,13 @@
   const named = (ru, name) => te(ru, { name: "\u0001" }).replace("\u0001", asData(name));
   function addressee(id, kind) {
     const groups = adminState.data.duty;
+    const people = adminState.data.people;
     const group = kind === "user" ? null : (groups || []).find((g) => g.id === id);
     if (group) return named("группа {name}", group.name);
-    // Человек — вошедший или из «кому передать»; группы того же списка — не люди
-    const target = targetById(id);
-    const self = store.session && id === store.session.operator.guid ? store.session.operator.name : null;
-    const name = kind === "group" ? null : self || (target && target.kind !== "duty_group" ? target.name : null);
-    if (name) return named("пользователь {name}", name);
-    if (kind === "user") return te("удалённый пользователь ({id})", { id });
-    if (!groups) return te(kind === "group" ? "группа ({id})" : "адресат ({id})", { id });
+    const person = kind === "group" ? null : (people || []).find((p) => p.id === id);
+    if (person) return named("пользователь {name}", person.name);
+    if (kind === "user") return te(people ? "удалённый пользователь ({id})" : "пользователь ({id})", { id });
+    if (!groups || !people) return te(kind === "group" ? "группа ({id})" : "адресат ({id})", { id });
     return te(kind === "group" ? "удалённая группа ({id})" : "неизвестный адресат ({id})", { id });
   }
   // nullKey — подпись пустого значения у строки настроек, например «без ограничения» (RULE-69)
@@ -5983,8 +5981,11 @@
   // Названия и имена — данные, они не переводятся (§14.9)
   const asData = (text) => `<span data-i18n-skip>${escapeHtml(text)}</span>`;
   async function openAdmin() {
-    // Список групп не пришёл — null: адресат-группа тогда не «удалённая» (BUG-124)
-    adminState.data.duty = await api.get("/operator/admin/duty-groups").catch(() => null);
+    // Список групп или людей поста не пришёл — null: адресат тогда не «удалённый» (BUG-124)
+    [adminState.data.duty, adminState.data.people] = await Promise.all([
+      api.get("/operator/admin/duty-groups").catch(() => null),
+      api.get("/operator/admin/people").catch(() => null),
+    ]);
     adminState.tab = adminState.tab || WORKFLOW.adminSettings.tabs[0].id;
     $("modalAdmin").hidden = false;
     await renderAdmin();

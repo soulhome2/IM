@@ -2138,6 +2138,37 @@
         }
       }
     },
+    "/operator/admin/people": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "listPostPeople",
+        "summary": "Люди поста",
+        "description": "§8.3, §9. Все люди поста, которых знает МИ: кто хоть раз заходил, включая текущего пользователя, отключённых и ушедших. По этому списку настройки поста называют адресата уровня эскалации и получателя оповещений по имени (BUG-124). Кто ни разу не заходил, в списке нет — настройки показывают его как удалённого пользователя с id. Это не список «кому передать»: доступность, права и доступ к объектам не проверяются. Право `incident:schema:admin`, без него — `403 PERMISSION_DENIED`.",
+        "responses": {
+          "200": {
+            "description": "Люди поста",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PostPerson"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/admin/camera-links": {
       "get": {
         "tags": [
@@ -9484,6 +9515,28 @@
               "type": "string"
             },
             "description": "Состав сейчас: по ролям и отдельным людям"
+          }
+        }
+      },
+      "PostPerson": {
+        "type": "object",
+        "description": "Человек поста (BUG-124): id — тот же, что у адресата в настройках поста (`escalation.levels[].target`, `alerts.target`).",
+        "required": [
+          "id",
+          "name",
+          "stale"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Имя, как его последний раз прислало облако; не переводится (§14.9)"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "Давно не заходил (дольше срока, после которого человека нет в списке «кому передать»): отключён, ушёл или просто давно не работал"
           }
         }
       },

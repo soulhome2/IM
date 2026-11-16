@@ -1496,6 +1496,18 @@
     assert.status(await noAdmin.call("GET", "/operator/admin/duty-groups"), 403, "PERMISSION_DENIED", "дежурные группы без права");
   });
 
+  test("Люди поста (BUG-124): все люди набора с именами, я — тоже; без права incident:schema:admin — 403", async () => {
+    const env = await makeEnv();
+    const people = await env.ok("GET", "/operator/admin/people");
+    const fx = window.IM_FIXTURE;
+    assert.eq(people.map((p) => [p.id, p.name]), fx.people.operators.map((o) => [o.id, o.name]), "люди — из набора, с именами");
+    assert.ok(people.some((p) => p.id === ME), "вошедший — в списке, в отличие от «кому передать»");
+    assert.ok(people.every((p) => p.stale === false), "в наборе нет давно не заходивших");
+    const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
+    const noAdmin = await makeEnv({ permissions: all });
+    assert.status(await noAdmin.call("GET", "/operator/admin/people"), 403, "PERMISSION_DENIED", "люди поста без права");
+  });
+
   // Аудит (§12.4, план 71): журнал действий во встроенном сервере, журнал настроек пуст (§17)
   const AUDIT = "/operator/admin/audit";
   test("Аудит (§12.4): страницы журнала действий по курсору — без пропусков и повторов при одном времени; settings — пуст, запись — 404; usage — ok", async () => {
