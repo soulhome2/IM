@@ -75,7 +75,11 @@ MUTATIONS = [
     ("agent-move-from-shown", "server.js", "const from = session.agentState;", "const from = sessionView().agentState;", "api"),
     # Автоэскалация — только тому, кто может принять сейчас: вышедшему — если в его группе кто-то на месте (RULE-100)
     ("scenario-always-editable", "engine.js", "const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);", "const canEditScenario = (ev) => Boolean(ev);", "api"),
-    ("expected-state-unchecked", "server.js", "if (expects.includes(\"state\") && s.state != null && s.state !== ev.state) return \"state\";", "if (false) return \"state\";", "api"),
+    ("expected-state-unchecked", "server.js", "const stateChanged = expects.includes(\"state\") && s.state != null && s.state !== ev.state;", "const stateChanged = false;", "api"),
+    # Закрытый коллегой — «состояние», а не «уже ведёт» (RULE-142, A1 ревью)
+    ("closed-as-addressee", "server.js", "if (stateChanged && isDone(ev)) return \"state\";", "", "api"),
+    # Передан человеку, который ещё не принял, — «передан», а не «уже ведёт»
+    ("addressed-as-taken", "server.js", "STATES[ev.state].owner === \"operator\" ?", "true ?", "api"),
     ("expected-addressee-unchecked", "server.js", "if (expects.includes(\"addressee\") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return \"addressee\";", "if (false) return \"addressee\";", "api"),
     ("close-news-unchecked", "server.js", "if (expects.includes(\"news\") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return \"news\";", "if (false) return \"news\";", "api"),
     ("news-counts-timers", "server.js", "NEWS.kinds.includes(entryKind(e))", "true", "api"),
@@ -280,7 +284,7 @@ MUTATIONS = [
     ("window-mark-kept-on-failure", "engine.js", "if (canceled) ev.firedTimers = canceled.firedBefore;", "", "api"),
     ("merge-two-transactions", "engine.js", "const applied = applySteps(steps, ME);", "const applied = applySteps(steps.slice(0, 1), ME); if (applied.ok && steps[1]) { const r2 = applySteps(steps.slice(1), ME); if (!r2.ok) return r2; applied.steps.push(r2.steps[0]); }", "api"),
     ("agent-state-same-applied", "server.js", "if (to === from) return { status: 200, body: { session: sessionView(), affectedIncidents: [] } };", "", "api"),
-    ("bulk-form-from-card", "app.js", "const ev = Object.assign({}, row, { actions: act ? [act] : [] });", "const ev = row.actions ? row : await api.get(`/operator/incidents/${enc(first)}`);", "ui"),
+    ("bulk-form-from-card", "app.js", "const ev = Object.assign({}, row, { actions: act ? [act] : [] }, mark ? { seenAtMark: mark } : {});", "const ev = row.actions ? row : await api.get(`/operator/incidents/${enc(first)}`);", "ui"),
     ("selection-form-first-only", "server.js", "          .filter((o) => others.every((x) => x.options.some((y) => y.id === o.id)))\n", "", "api"),
     ("blocking-ignores-units", "server.js", "const blocking = events.find((e) => active.has(e.id));", "const blocking = null;", "api"),
     ("counters-always", "server.js", 'body: treeView(TREE, q.withCounters === "true")', "body: treeView(TREE, true)", "api"),
@@ -376,7 +380,9 @@ MUTATIONS = [
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),
     ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"), \"error\");", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
-    ("ui-no-expected", "app.js", "const seenOf = (ev) => ({ expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || \"\", journalSeen: ev.journalSeq || 0 });", "const seenOf = () => ({});", "ui"),
+    ("ui-no-expected", "app.js", "  const seenOf = (ev) =>\n    ev.seenAtMark", "  const seenOf = () => ({});\n  const seenOfUnused = (ev) =>\n    ev.seenAtMark", "ui"),
+    # Один отмеченный не на странице — шлётся снимок на момент отметки, а не перечитанная карточка (RULE-142, A2)
+    ("ui-mark-snapshot-ignored", "app.js", "    ev.seenAtMark\n      ? {", "    false\n      ? {", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");', 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)
     # Телефон: типы и порядок — под «Фильтры» с числом выбранных (BUG-50)

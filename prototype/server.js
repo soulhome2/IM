@@ -1530,20 +1530,26 @@
     // Новое событие для закрытия (journalNews машины): запись после journalSeen, не своя и вида из списка машины —
     // записи таймеров и системы о нарушении и потолке состояние и адресата не меняют, их не считаем
     const NEWS = (W.invariants.optimisticLocking || {}).journalNews || { kinds: [] };
-    const newsSince = (ev, seen) => ev.log.slice(Math.max(0, Number(seen) || 0)).some((e) => !(NEWS.ownExcluded && e.whoId === ME) && NEWS.kinds.includes(entryKind(e)));
+    // Запись из templates — новое событие при любом виде: «сосед закрыт ложной тревогой» пишет система (logSiblings)
+    const isNews = (e) => NEWS.kinds.includes(entryKind(e)) || (NEWS.templates || []).includes(e.k);
+    const newsSince = (ev, seen) => ev.log.slice(Math.max(0, Number(seen) || 0)).some((e) => !(NEWS.ownExcluded && e.whoId === ME) && isNews(e));
     // Снимок строки для выборки: что сверит массовое действие и объединение (expected)
     const seenOf = (ev) => ({ state: ev.state, addressee: addresseeOf(ev), journalSeq: ev.log.length });
     const snapshotOf = (list) => Object.fromEntries(list.map((e) => [e.id, seenOf(e)]));
-    // Что изменилось из того, что видел оператор: addressee | state | news; совпало всё — null. Не присланное не сверяется
+    // Что изменилось из того, что видел оператор: addressee | state | news; совпало всё — null. Не присланное не сверяется.
+    // Закрытый теперь — всегда state: закрывший коллега сменил и адресата, а оператору важнее, что инцидент закрыт
     function changedOf(ev, expects, seen) {
       const s = seen || {};
+      const stateChanged = expects.includes("state") && s.state != null && s.state !== ev.state;
+      if (stateChanged && isDone(ev)) return "state";
       if (expects.includes("addressee") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return "addressee";
-      if (expects.includes("state") && s.state != null && s.state !== ev.state) return "state";
+      if (stateChanged) return "state";
       if (expects.includes("news") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return "news";
       return null;
     }
-    // Отказ 412 INCIDENT_CHANGED: текст называет, что изменилось (§22.6) — уже у другого человека, у группы, в общей
-    // очереди, другое состояние (закрыт — всегда так), новое событие, сменился основной выборки
+    // Отказ 412 INCIDENT_CHANGED: текст называет, что изменилось (§22.6) — уже ведёт другой человек (он владелец), передан
+    // человеку, который ещё не принял, или группе, в общей очереди, другое состояние (закрыт — всегда так), новое событие,
+    // сменился основной выборки
     function changedProblem(ev, what) {
       const who = addresseeOf(ev);
       let why;
@@ -1551,7 +1557,8 @@
       else if (what === "primary") why = ["workflow.error.changed.primary"];
       else if (what === "state" || isDone(ev)) why = ["workflow.error.changed.state", { state: [STATES[ev.state].labelKey] }];
       else if (!who) why = ["workflow.error.changed.queue"];
-      else why = [GROUPS.some((g) => g.id === who) ? "workflow.error.changed.addressed" : "workflow.error.changed.taken", { who: actorRef(who).name }];
+      // Ведёт — состояние, где адресат — сам оператор (owner: operator машины); ждёт принятия (transfer_target) — передан
+      else why = [STATES[ev.state].owner === "operator" ? "workflow.error.changed.taken" : "workflow.error.changed.addressed", { who: actorRef(who).name }];
       return problem(412, "INCIDENT_CHANGED", why, { details: { changed: what }, current: card(ev) });
     }
     // Клиент обязан сказать, что видел: не прислал — 428 (§14.1)
@@ -2032,7 +2039,11 @@
           const was = (ev.run.state || {})[b.stepId];
           if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {
             const step = scriptOf(ev).steps.find((x) => x.id === b.stepId);
-            return problem(409, "STEP_CHANGED", ["workflow.error.scenario.step_changed", { step: step ? stepName(step) : b.stepId, who: was && was.by ? actorRef(was.by).name : "" }], { current: scenarioView(ev) });
+            // Кто ответил — по имени; автор без имени (ответ системы, нет в справочнике) — нейтральный текст без пустого «{who}»
+            const who = was && was.by ? actorRef(was.by).name : "";
+            const name = step ? stepName(step) : b.stepId;
+            const why = who ? ["workflow.error.scenario.step_changed", { step: name, who }] : ["workflow.error.scenario.step_changed_anon", { step: name }];
+            return problem(409, "STEP_CHANGED", why, { current: scenarioView(ev) });
           }
           const res = answerStep(ev, ME, engine, body || {});
           if (!res.ok) return answerProblem(ev, body || {}, res.error);

@@ -2245,14 +2245,18 @@
       expect(line(["disk", "sound_off"], true) === "disk+1", `диск у администратора: ${line(["disk", "sound_off"], true)}`);
       expect(line([], true) === "—+0", "без состояний строка пуста");
       // Отказ 412 INCIDENT_CHANGED (RULE-142): что изменилось — details.changed, кто теперь — current, без второго запроса
-      const err = (code, changed, current) => ({ status: 412, problem: { code, details: { changed }, current } });
+      // Ключ текста — как у сервера: «уже ведёт» (changed.taken) — только когда адресат теперь другой и он владелец
+      const keyOf = (changed) => (changed === "addressee" ? "workflow.error.changed.taken" : `workflow.error.changed.${changed}`);
+      const err = (code, changed, current, key = keyOf(changed)) => ({ status: 412, problem: { code, messageKey: key, details: { changed }, current } });
       const petrova = { owner: { id: "petrova", name: "Петрова Е. А." } };
-      const late = (id, code, changed, current) => ui.lateText(id, err(code, changed, current), "me");
+      const late = (id, code, changed, current, key) => ui.lateText(id, err(code, changed, current, key), "me");
       expect(late("claim", "INCIDENT_CHANGED", "addressee", petrova) === "Уже взял Петрова Е. А.", `опоздал со «Взять»: ${late("claim", "INCIDENT_CHANGED", "addressee", petrova)}`);
       expect(late("accept", "INCIDENT_CHANGED", "addressee", petrova) === "Уже принял Петрова Е. А.", `опоздал с «Принять»: ${late("accept", "INCIDENT_CHANGED", "addressee", petrova)}`);
       expect(late("claim", "INCIDENT_CHANGED", "addressee", { owner: { id: "me" } }) === null && late("claim", "GUARD_FAILED", "addressee", petrova) === null && late("claim", "INCIDENT_CHANGED", "addressee", { owner: null }) === null, "«Уже взял» — не только когда инцидент у другого");
       // Изменилось не адресат (новое событие, состояние) — обычная ошибка с текстом сервера, не «опоздал»
       expect(late("claim", "INCIDENT_CHANGED", "news", petrova) === null && late("claim", "INCIDENT_CHANGED", "state", petrova) === null, "«Уже взял» без смены адресата");
+      // Передан человеку, который ещё не принял, — не «опоздал»: текст сервера «…передан» (RULE-142, A1)
+      expect(late("claim", "INCIDENT_CHANGED", "addressee", petrova, "workflow.error.changed.addressed") === null, "«Уже взял» о переданном, но не принятом");
       return "граница по якорю; connection+2, диск только администратору; «Уже взял Петрова Е. А.»";
     });
 
@@ -4895,6 +4899,47 @@
         await wait();
         const now = (await stand.raw("GET", path)).body;
         expect(now.state === "on_hold", `состояние после «Отложить»: ${now.state}; ${[...$("toasts").children].map((x) => x.textContent).join(" | ")}`);
+        return now.number;
+      } finally {
+        if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await wait();
+        if (!$("clearSelectionBtn").disabled) await click($("clearSelectionBtn"));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
+    await step("Одно отмеченное не на странице, после отметки его отложили в другой вкладке — «Вернуть в очередь» панели не уводит его: сверяется снимок отметки (§14.1, BUG-84, RULE-142)", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
+      const stand = window.IM_SELFTEST_API;
+      let g = null;
+      try {
+        await setFilter("open");
+        g = [...$("eventsList").querySelectorAll('[data-do="claim"]')].find((b) => !off(b)).dataset.ev;
+        const path = `/operator/incidents/${encodeURIComponent(g)}`;
+        const claimed = await stand.raw("POST", `${path}/transitions/claim`, Object.assign({ formValues: {}, surface: "queue" }, seenBody((await stand.raw("GET", path)).body)));
+        expect(claimed.status === 200, `взять: ${claimed.status}`);
+        await setFilter("all");
+        await setFilter("open");
+        await click($("eventsList").querySelector(`[data-check="${g}"]`));
+        const next = $("eventsPager").querySelector('[data-page="2"]');
+        expect(next, "в «Открытых» одна страница");
+        await click(next);
+        expect(!$("eventsList").querySelector(`[data-check="${g}"]`), "отмеченный — и на второй странице");
+        // После отметки инцидент отложили в другой вкладке: карточка, прочитанная перед отправкой, — уже отложенная,
+        // а «Вернуть в очередь» доступно и из «Отложен»
+        const held = await stand.raw("POST", `${path}/transitions/hold`, Object.assign({ formValues: { reasonId: "third_party", comment: "тест" }, surface: "card" }, seenBody((await stand.raw("GET", path)).body)));
+        expect(held.status === 200, `отложить в другой вкладке: ${held.status}`);
+        await wait();
+        const b = $("selBar").querySelector('[data-sel-do="release"]');
+        expect(b && !off(b), "в панели выборки нет «Вернуть в очередь»");
+        await click(b);
+        await wait();
+        if (!$("modalDialog").hidden) await confirmDialog(NOTE);
+        await wait();
+        const now = (await stand.raw("GET", path)).body;
+        expect(now.state === "on_hold", `после «Вернуть в очередь» по устаревшей отметке: ${now.state}`);
         return now.number;
       } finally {
         if (!$("modalDialog").hidden) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

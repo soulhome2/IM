@@ -174,7 +174,7 @@
     assert.eq(taken.body.messageKey, "workflow.error.changed.taken", "текст — у кого инцидент");
   });
 
-  test("Взял другой — 412 INCIDENT_CHANGED: «Инцидент уже у …», в current — его владение (§14.1, §22.6, RULE-142)", async () => {
+  test("Взял другой — 412 INCIDENT_CHANGED: «Инцидент уже ведёт …», в current — его владение (§14.1, §22.6, RULE-142)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     const before = await env.card(inc.guid);
@@ -185,6 +185,53 @@
     assert.eq(res.body.messageKey, "workflow.error.changed.taken", "ключ текста");
     assert.eq(res.body.current && res.body.current.owner && res.body.current.owner.id, "petrova", "в current — владение Петровой");
     assert.ok(res.body.message.includes(res.body.current.owner.name), `текст называет взявшего: ${res.body.message}`);
+  });
+
+  test("Закрыл коллега — 412 про состояние «Закрыт», а не «взял»: состояние сверяется раньше адресата (§14.1, §22.6, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const before = await env.card(inc.guid);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт");
+    assert.status(await as("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "Петрова закрывает");
+    const res = await env.act(inc.guid, "claim", {}, "queue", undefined, { state: before.state, addressee: "", journalSeen: before.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "взять закрытый");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["state", "workflow.error.changed.state"], "изменилось состояние");
+  });
+
+  test("Передан человеку, который ещё не принял, — «Инцидент уже передан: …», а не «ведёт» (§14.1, §22.6, RULE-142)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    const first = W.escalation.levels[0].target;
+    const second = W.escalation.levels[1].target;
+    const sent = await env.act(inc.guid, "transfer", { targetId: first, comment: "тест" }, "queue");
+    assert.status(sent, 200, null, `передать ${first}`);
+    const seen = await env.card(inc.guid);
+    await env.advance(Math.ceil((Date.parse(sent.body.incident.timer.dueAt) - env.now) / 1000) + GRACE + 1);
+    const now = await env.card(inc.guid);
+    assert.eq([now.state, now.addressee && now.addressee.id], ["pending_acceptance", second], "эскалация передала следующему уровню, он не принял");
+    const res = await env.act(inc.guid, "claim", {}, "card", undefined, { state: seen.state, addressee: first, journalSeen: seen.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "действие по карточке до эскалации");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["addressee", "workflow.error.changed.addressed"], "передан, а не взят");
+    assert.ok(res.body.message.includes(now.addressee.name), `текст называет адресата: ${res.body.message}`);
+  });
+
+  test("Потолок эскалации, затем «Отклонить» по прежней карточке — проходит: состояние и адресат те же (§14.1, RULE-142, стенд 2026-11-16)", async () => {
+    const levels = [{ level: 1, targetKind: "user", target: ME, reactionSec: 120 }];
+    const env = await standWith({ workflow: Object.assign({}, W, { escalation: Object.assign({}, W.escalation, { levels, maxLevel: 1 }) }) });
+    const inc = await newFire(env);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт");
+    assert.status(await as("transfer", { targetId: ME, comment: "тест" }), 200, null, "Петрова передаёт мне");
+    const seen = await env.card(inc.guid);
+    assert.eq([seen.state, seen.addressee && seen.addressee.id], ["pending_acceptance", ME], "ждёт моего принятия");
+    const fired = (await env.advance(Math.ceil((Date.parse(seen.timer.dueAt) - env.now) / 1000) + GRACE + 1)).filter((f) => f.incidentGuid === inc.guid).map((f) => f.transitionId);
+    assert.eq(fired, ["escalation_ceiling"], "сработал потолок эскалации");
+    const after = await env.card(inc.guid);
+    assert.ok(after.version !== seen.version && after.state === seen.state, `версия выросла, состояние то же: ${after.state}`);
+    const res = await env.act(inc.guid, "reject", { comment: "не моё" }, "card", undefined, { state: seen.state, addressee: ME, journalSeen: seen.journalSeq, ifMatch: `"${seen.version}"` });
+    assert.status(res, 200, null, "«Отклонить» по карточке до потолка");
+    assert.eq(res.body.incident.state, "new", "отклонён");
   });
 
   test("Закрытие: новое событие после показа — 412 «Пришло новое событие — проверьте»; запись таймера о нарушении — не мешает (§14.1, RULE-142)", async () => {
@@ -209,6 +256,21 @@
     const after = await env.card(inc.guid);
     assert.ok(after.journalSeq > mine.journalSeq + 1 && after.state === "in_progress", `после — запись о нарушении, инцидент у меня: ${after.state}`);
     assert.status(await env.act(inc.guid, "close", close, "card", undefined, { journalSeen: mine.journalSeq }), 200, null, "закрыть: свой комментарий и нарушение — не новое событие");
+  });
+
+  test("Закрытие: «сосед закрыт ложной тревогой» после показа — новое событие, хоть запись и системная (§6.1, §14.1, RULE-142)", async () => {
+    const env = await makeEnv();
+    const [fire, med] = [await env.guidOf("INC-1847"), await env.guidOf("INC-1853")];
+    assert.status(await env.act(med, "claim", {}, "queue"), 200, null, "взять медпункт");
+    const seen = await env.card(med);
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(fire)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("claim", {}), 200, null, "Петрова берёт пожар");
+    assert.status(await as("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "Петрова закрывает пожар ложной тревогой");
+    const after = await env.card(med);
+    assert.ok(after.journal.some((j) => j.templateKey === "workflow.journal.sibling_closed"), "у медпункта — запись о соседе");
+    const res = await env.act(med, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }, "card", undefined, { journalSeen: seen.journalSeq });
+    assert.status(res, 412, "INCIDENT_CHANGED", "закрыть, не видя записи о соседе");
+    assert.eq(res.body.details && res.body.details.changed, "news", "новое событие");
   });
 
   test("Переход не из этого состояния — 409 TRANSITION_NOT_ALLOWED_FROM_STATE", async () => {

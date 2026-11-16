@@ -889,12 +889,13 @@
     box.appendChild(el);
     while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
   }
-  // Опоздал (§8.1, §22.6, RULE-142): действие не прошло, потому что инцидент уже у другого человека — мягкое
-  // «Уже принял / взял {who}». Что изменилось — details.changed отказа 412 INCIDENT_CHANGED, кто теперь — его current
-  // (без второго запроса). Сменился не адресат или новый владелец — я — обычная ошибка с текстом сервера
+  // Опоздал (§8.1, §22.6, RULE-142): действие не прошло, потому что инцидент уже ведёт другой человек — мягкое
+  // «Уже принял / взял {who}». Что изменилось — отказ 412 INCIDENT_CHANGED с ключом changed.taken (владелец сменился;
+  // закрытый — changed.state, переданный, но не принятый — changed.addressed), кто теперь — его current (без второго
+  // запроса). Иначе или новый владелец — я — обычная ошибка с текстом сервера
   function lateText(transitionId, err, meGuid) {
     const p = err && err.problem;
-    if (!p || p.code !== "INCIDENT_CHANGED" || !p.details || p.details.changed !== "addressee") return null;
+    if (!p || p.code !== "INCIDENT_CHANGED" || p.messageKey !== "workflow.error.changed.taken") return null;
     const now = p.current;
     if (!now || !now.owner || now.owner.id === meGuid) return null;
     return t(transitionId === "accept" ? "Уже принял {who}" : "Уже взял {who}", { who: actorName(now.owner) });
@@ -1696,7 +1697,11 @@
 
   // Что видел оператор (§14.1, RULE-142): состояние, адресат ("" — ничей) и последний номер записи журнала. Сервер
   // сверяет их, а не номер версии: эскалация без смены адресата и запись о нарушении действию не мешают
-  const seenOf = (ev) => ({ expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 });
+  // Одно отмеченное в выборке — снимок на момент отметки (seenAtMark), а не то, что прочитано перед отправкой (BUG-84)
+  const seenOf = (ev) =>
+    ev.seenAtMark
+      ? { expectedState: ev.seenAtMark.state, expectedAddressee: ev.seenAtMark.addressee || "", journalSeen: ev.seenAtMark.journalSeq || 0 }
+      : { expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 };
   // Ответ на шаг: владелец и ответ шага, каким его видел оператор (null — без ответа): ответ из другой вкладки
   // или второе нажатие сервер не перепишет молча — 409 STEP_CHANGED
   const answerSeenOf = (ev, stepId) => {
@@ -5159,13 +5164,15 @@
     if ((transitionDef(id).bulk || {}).mode === "merge") return takeAsOne();
     // Действие над всеми отмеченными: форма — одна на всех, её варианты — те, что подходят всей выборке, от сервера
     // (действие выборки, ARCH-08 в14); отмеченного может не быть на странице (BUG-78). Одно отмеченное — переход
-    // одиночный, ему нужны состояние и версия инцидента: нет на странице — с сервера
+    // одиночный: нет на странице — карточка с сервера для формы, а сверяется то, что оператор видел на момент отметки
+    // (снимок выборки, §14.1, RULE-142), — изменённое после отметки сервер не тронет
     const first = [...state.checked][0];
     const act = ((store.selection && store.selection.actions) || []).find((a) => a.id === id) || null;
     const row =
       [...store.page.items, ...store.block.items].find((e) => state.checked.has(e.guid)) ||
       (state.checked.size === 1 ? await api.get(`/operator/incidents/${enc(first)}`) : { guid: first });
-    const ev = Object.assign({}, row, { actions: act ? [act] : [] });
+    const mark = state.checked.size === 1 && checkedSeen.get(first);
+    const ev = Object.assign({}, row, { actions: act ? [act] : [] }, mark ? { seenAtMark: mark } : {});
     trigger(id, ev, "queue", [...state.checked]);
   }
 
