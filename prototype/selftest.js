@@ -5414,31 +5414,20 @@
       return `${inc.number} — над ${guid}`;
     }, SOUND_FIRST);
 
-    await step("Скрыт фильтром: «Мои» + новый Критический — значок звенит, «+1» на «Открытые» и Критическом; щелчок по значку — строка видна (§22.3)", async () => {
+    await step("Скрыт фильтром: «Мои» + новый Критический — значок звенит, на кнопках только числа, без «+N»; щелчок по значку — строка видна (§22.3)", async () => {
       if (quietBtn()) await click(quietBtn());
       await setFilter("mine");
-      // «+N» — все спрятанные звучавшие, которых ещё не видели: считаем прибавку от нового
-      const openBtn = () => $("stateButtons").querySelector('[data-state="open"]');
-      const openMark = () => {
-        const opt = [...$("eventFilter").options].find((o) => o.value === "open");
-        const m = openBtn() ? ((openBtn().querySelector(".plus") || {}).textContent || "") : (opt.textContent.match(/\+\d+$/) || [""])[0];
-        return Number(m.replace("+", "")) || 0;
-      };
-      const priMark = (p) => Number((($("priorityButtons").querySelector(`[data-pri="${p}"] .plus`) || {}).textContent || "").replace("+", "")) || 0;
-      const was = { open: openMark(), pri: priMark(100) };
       const inc = await soundIncident(100);
       await wait(150);
       try {
         expect(ringGuid() === inc.guid && !$("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`), `звенит ${ringGuid()}, ждали ${inc.guid} скрытым`);
-        // На узком окне «Открытые» — пункт списка состояний, на широком — кнопка
-        expect(openMark() === was.open + 1, `«+1» на «Открытые»: +${openMark()}, до было +${was.open}`);
-        expect(priMark(inc.priority) === was.pri + 1, `«+1» на приоритете: +${priMark(inc.priority)}, до было +${was.pri}`);
+        const marks = [...$("stateButtons").querySelectorAll("button"), ...$("priorityButtons").querySelectorAll("button"), ...$("eventFilter").options].filter((b) => /\+\d/.test(b.textContent));
+        expect(!marks.length, `«+N» на кнопках: ${marks.map((b) => b.textContent).join(", ")}`);
         await click($("soundBtn"));
         await wait(200);
         const row = $("eventsList").querySelector(`[data-id="${CSS.escape(inc.guid)}"]`);
         expect($("eventFilter").value === "open" && row && row.querySelector("[data-row-sound]"), `после щелчка по значку: состояние ${$("eventFilter").value}, строки ${row ? "есть" : "нет"}`);
         expect($("soundPop").hidden, "щелчок по звенящему значку открыл меню");
-        expect(openMark() <= was.open && priMark(inc.priority) <= was.pri, `после перехода «+1» осталась: +${openMark()}, +${priMark(inc.priority)}`);
         return inc.number;
       } finally {
         if (quietBtn()) await click(quietBtn());

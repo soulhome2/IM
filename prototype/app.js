@@ -1322,19 +1322,6 @@
     if (!inc || queueItem(guid)) return false;
     return hiddenBy(inc, filterChoice()).length > 0;
   }
-  // Кнопка состояния, на которой «+1» (§22.3): первый фильтр машины, где инцидент есть («Открытые»)
-  const markFilter = (inc) => (WORKFLOW.queueFilters.find((f) => (inc.filters || []).includes(f.id)) || {}).id || null;
-  // Звучащие, спрятанные фильтром, которых оператор ещё не видел: «+1» на кнопках, пока строка не показалась
-  const unseen = new Set();
-  function noteUnseen() {
-    // Звук не включён — ничего не звучит, и значок не звенит (§21.5)
-    if (!soundOn() || !soundOut().ready()) return;
-    snd.state.sounding.forEach((s) => hiddenNow(s.guid) && unseen.add(s.guid));
-    // Ушёл из «Открытых» (взяли, закрыли) — внимания больше не ждёт
-    const first = WORKFLOW.queueFilters[0].id;
-    [...unseen].forEach((g) => !(incCache.get(g) && (incCache.get(g).filters || []).includes(first)) && unseen.delete(g));
-  }
-  const unseenOf = (pred) => [...unseen].filter((g) => incCache.get(g) && pred(incCache.get(g))).length;
 
   // К звучащему скрытому — щелчок по звенящему значку (§22.3, прежнее «Показать»): состояние — «Открытые», а если там его нет — фильтр, где он есть;
   // мешающие приоритеты, типы — долой; сценарий, поиск и узел — только если без них строки всё равно нет
@@ -2894,10 +2881,8 @@
     $("eventsToolbar").classList.toggle("narrow", layout === "compact" || layout === "phone");
     const cfg = inboxCfg();
     const counted = (f) => f.counted !== false && store.stateCounts[f.id] != null;
-    // «+N» — звучащие, спрятанные фильтром, которых ещё не видели (§22.3)
-    const plusOf = (f) => unseenOf((inc) => markFilter(inc) === f.id);
-    const plus = (n) => (n ? `<b class="plus">+${n}</b>` : "");
-    const num = (f) => (counted(f) ? `<b class="n">${store.stateCounts[f.id]}</b>` : "") + plus(plusOf(f));
+    // На кнопках — только число; к скрытому звучащему ведёт звенящий значок звука (§22.3)
+    const num = (f) => (counted(f) ? `<b class="n">${store.stateCounts[f.id]}</b>` : "");
     const btn = (f) => {
       const hot = cfg && f.id === cfg.filter && counted(f) && store.stateCounts[f.id] > 0;
       return `<button type="button" class="state-btn ${hot ? "hot" : ""}" data-state="${escapeHtml(f.id)}" aria-pressed="${state.filter === f.id}">${escapeHtml(lbl(f))}${num(f)}</button>`;
@@ -2921,7 +2906,7 @@
     // Список состояний: на широком окне скрыт, но хранит выбор
     const select = $("eventFilter");
     if (select.options.length !== fs.length) select.innerHTML = fs.map((f) => `<option value="${escapeHtml(f.id)}"></option>`).join("");
-    fs.forEach((f, i) => (select.options[i].textContent = (counted(f) ? `${lbl(f)} ${store.stateCounts[f.id]}` : lbl(f)) + (plusOf(f) ? ` +${plusOf(f)}` : "")));
+    fs.forEach((f, i) => (select.options[i].textContent = (counted(f) ? `${lbl(f)} ${store.stateCounts[f.id]}` : lbl(f))));
     select.value = state.filter;
 
     // Приоритеты: уровни справочника, цвета и названия оттуда; выбранный — рамка своего цвета и галочка
@@ -2932,8 +2917,7 @@
         const on = state.priorities.includes(p.value);
         const n = store.priCounts ? store.priCounts[String(p.value)] || 0 : null;
         const aria = n == null ? names[i] : t("{name}: {n}", { name: names[i], n });
-        const more = unseenOf((inc) => inc.priority === p.value);
-        return `<button type="button" class="pri-btn ${n === 0 && !on && !more ? "zero" : ""}" data-pri="${p.value}" data-color="${escapeHtml(p.color)}" aria-pressed="${on}" title="${escapeHtml(inLang(p.description) || names[i])}" aria-label="${escapeHtml(aria)}"><span class="pri-tick material-symbols-outlined" aria-hidden="true">check</span>${escapeHtml(label[i])}${n == null ? "" : `<b class="n">${n}</b>`}${plus(more)}</button>`;
+        return `<button type="button" class="pri-btn ${n === 0 && !on ? "zero" : ""}" data-pri="${p.value}" data-color="${escapeHtml(p.color)}" aria-pressed="${on}" title="${escapeHtml(inLang(p.description) || names[i])}" aria-label="${escapeHtml(aria)}"><span class="pri-tick material-symbols-outlined" aria-hidden="true">check</span>${escapeHtml(label[i])}${n == null ? "" : `<b class="n">${n}</b>`}</button>`;
       })
       .join("");
   }
@@ -3122,15 +3106,11 @@
     const onScreen = new Set(shown.map((e) => e.guid));
     [...fresh].forEach(([g, until]) => until === 0 && !onScreen.has(g) && fresh.delete(g));
     Object.assign(view, { key, rows: v.rows, block: v.block, more: v.more != null, guids: new Set(shown.map((e) => e.guid)) });
-    // Строку увидели — «+1» на кнопках снимается (§22.3)
-    const before = unseen.size;
-    shown.forEach((e) => unseen.delete(e.guid));
     const banner = v.held
       ? `<div class="new-rows"><button type="button" class="btn primary small" data-new-rows>${te("↑ {n, plural, one {# новый} few {# новых} other {# новых}} — показать", { n: v.held })}</button></div>`
       : "";
     $("eventsList").innerHTML = banner + renderInboxBlock(v.block.map(goneRow), v.more) + (v.rows.map(goneRow).map(eventRowHtml).join("") || none);
     watchFresh();
-    if (unseen.size !== before) renderQueueHead();
   }
 
   // Источник в строке очереди (§7, план 87а): «устройство · адрес» под типом события, длинный адрес — многоточием,
@@ -5587,10 +5567,6 @@
   function renderSound() {
     syncTitle();
     if (!soundOn()) return;
-    // «+N» на кнопках шапки очереди — сразу, не со следующей загрузкой (§22.3)
-    const unseenWas = [...unseen].join();
-    noteUnseen();
-    if ([...unseen].join() !== unseenWas) renderQueueHead();
     const ready = soundOut().ready();
     const important = onlyImportant();
     const top = ready ? IMSound.topSounding(snd.state) : null;
