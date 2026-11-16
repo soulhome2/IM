@@ -2297,7 +2297,7 @@ def check_sound_cue(cue, where, ids, err, repeats=SOUND_REPEATS):
         err.append(f"звук: {where} — не объект «звук и повтор» (§21.7)")
         return
     for k in cue:
-        if not k.startswith("$") and k not in ("pattern", "repeat", "repeatSec"):
+        if not k.startswith("$comment") and k not in ("pattern", "repeat", "repeatSec"):
             err.append(f"звук: {where}.{k} — лишний ключ: у звука только pattern, repeat, repeatSec (§21.7)")
     if cue.get("pattern") not in ids:
         err.append(f"звук: {where}.pattern = {cue.get('pattern')!r} — не из каталога sound.patterns {sorted(ids)} (§21)")
@@ -2319,7 +2319,7 @@ def check_sound(w, err):
         err.append("звук: в машине нет раздела sound (§21.7)")
         return
     for k in s:
-        if not k.startswith("$") and k not in SOUND_KEYS:
+        if not k.startswith("$comment") and k not in SOUND_KEYS:
             err.append(f"звук: sound.{k} — лишний ключ (§21.7)")
     for k in sorted(SOUND_KEYS - set(s)):
         err.append(f"звук: нет sound.{k} (§21.7)")
@@ -2332,7 +2332,7 @@ def check_sound(w, err):
             if not isinstance(p, dict) or not p.get("id") or not str(p.get("labelKey", "")).startswith("workflow.sound.pattern."):
                 err.append(f"звук: sound.patterns — пункт без id или labelKey workflow.sound.pattern.*: {p}")
                 continue
-            if set(p) - {"id", "labelKey"} - {k for k in p if k.startswith("$")}:
+            if set(p) - {"id", "labelKey"} - {k for k in p if k.startswith("$comment")}:
                 err.append(f"звук: sound.patterns.{p['id']} — лишние ключи, у звука только id и labelKey (§21.7)")
             if p["id"] in ids:
                 err.append(f"звук: sound.patterns — звук {p['id']} повторяется")
@@ -2342,7 +2342,7 @@ def check_sound(w, err):
         err.append("звук: sound.byPriority — объект «уровень → звук» (§21.2)")
         by = {}
     for key, cue in by.items():
-        if key.startswith("$"):
+        if key.startswith("$comment"):
             continue
         if not SOUND_LEVEL.fullmatch(key):
             err.append(f"звук: sound.byPriority — ключ «{key}» не целое 0…100 без ведущих нулей (§21.7)")
@@ -2362,7 +2362,7 @@ def check_sound(w, err):
         err.append("звук: sound.busyHears — объект minPriority, personal, alert (§21.3)")
     else:
         for k in busy:
-            if not k.startswith("$") and k not in ("minPriority", "personal", "alert"):
+            if not k.startswith("$comment") and k not in ("minPriority", "personal", "alert"):
                 err.append(f"звук: sound.busyHears.{k} — лишний ключ (§21.7)")
         if "minPriority" not in busy or not (busy["minPriority"] is None or is_int(busy["minPriority"], 0, 100)):
             err.append(f"звук: sound.busyHears.minPriority = {busy.get('minPriority', '—')!r} — целое 0…100 или null (§21.3)")
@@ -2771,6 +2771,7 @@ MUTATIONS.append(machine_json_mutation("sound-pattern-unknown", "не из ка�
 MUTATIONS.append(machine_json_mutation("sound-level-key-decimal", "ключ «75.0»"))
 MUTATIONS.append(machine_json_mutation("sound-alert-until-taken", "sound.alert.repeat"))
 MUTATIONS.append(machine_json_mutation("sound-volume-floor-over", "volumeFloor = 101"))
+MUTATIONS.append(machine_json_mutation("sound-key-dollar-ref", "sound.byPriority.75.$ref"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-uncounted", "без счётчика"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-unknown", "inboxBlock.filter = 'inbox_mine'"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-sort-unknown", "inboxBlock.sort"))

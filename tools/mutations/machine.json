@@ -906,6 +906,13 @@
   "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
  },
  {
+  "name": "sound-key-dollar-ref",
+  "what": "звук: в строке sound.byPriority ключ «$ref» — сервер пропускает только $comment, остальные ключи на $ ошибка (§21.7)",
+  "find": "\"75\": { \"pattern\": \"double\"",
+  "replace": "\"75\": { \"$ref\": \"x\", \"pattern\": \"double\"",
+  "model": "вне модели: раздел sound решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_sound, §21.7)"
+ },
+ {
   "name": "sound-volume-floor-over",
   "what": "звук: нижний порог громкости 101 % (§21.4)",
   "find": "\"volumeFloor\": 30",
