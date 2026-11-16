@@ -89,8 +89,11 @@ def transition(who, inc, tid, form=None, op=None):
     body = {"surface": "card"}
     if form:
         body["formValues"] = form
+    # Что видел оператор (RULE-142): состояние, адресат и номер последней записи журнала из карточки/строки
+    body.update({"expectedState": inc.get("state"), "expectedAddressee": (inc.get("addressee") or {}).get("id") or "",
+                 "journalSeen": inc.get("journalSeq") or 0})
     code, js, _, rec = call(who, "POST", f"/operator/incidents/{inc['guid']}/transitions/{tid}", body,
-                            {"If-Match": '"%s"' % inc["version"]}, op=op or "transition:" + tid)
+                            op=op or "transition:" + tid)
     rec2 = {"who": who, "op": "outcome", "tid": tid, "inc": inc["guid"], "code": code,
             "from": inc.get("state"), "to": (js or {}).get("incident", {}).get("state") if code == 200 else None}
     log(rec2)
@@ -167,12 +170,12 @@ def work(who, other, inc, rnd, allow_transfer):
             CURRENT[who] = None
             return
     STOP.wait(rnd.uniform(0.5, 2))
-    code = transition(who, inc, "close", {"resultId": "false_alarm", "comment": "нагрузка: закрытие"})
+    code = transition(who, inc, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: закрытие"})
     if code == 412:  # версия ушла (эскалация, таймер) — перечитать и закрыть ещё раз
         fresh = card(who, inc["guid"])
         if fresh and fresh.get("state") == "in_progress":
             inc.update(fresh)
-            transition(who, inc, "close", {"resultId": "false_alarm", "comment": "нагрузка: закрытие"}, op="transition:close-retry")
+            transition(who, inc, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: закрытие"}, op="transition:close-retry")
     CURRENT[who] = None
 
 
@@ -230,7 +233,7 @@ def race():
 
             def fin(who, inc_view):
                 gate2.wait()
-                r2[who] = transition(who, inc_view, "close", {"resultId": "false_alarm", "comment": "нагрузка: гонка"},
+                r2[who] = transition(who, inc_view, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: гонка"},
                                      op="race:close")
 
             t1 = threading.Thread(target=fin, args=(w, inc))

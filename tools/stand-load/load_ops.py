@@ -231,8 +231,11 @@ def transition(op, inc, tid, form=None, opname=None):
     body = {"surface": "card"}
     if form:
         body["formValues"] = form
+    # Что видел оператор (RULE-142): состояние, адресат и номер последней записи журнала из карточки/строки
+    body.update({"expectedState": inc.get("state"), "expectedAddressee": (inc.get("addressee") or {}).get("id") or "",
+                 "journalSeen": inc.get("journalSeq") or 0})
     code, js = op.call("POST", f"/operator/incidents/{inc['guid']}/transitions/{tid}", body,
-                       {"If-Match": '"%s"' % inc["version"]}, op=opname or "transition:" + tid)
+                       op=opname or "transition:" + tid)
     log({"who": op.who, "op": "outcome", "tid": tid, "inc": inc["guid"], "code": code, "from": inc.get("state"),
          "to": (js or {}).get("incident", {}).get("state") if code == 200 and isinstance(js, dict) else None})
     if code == 200 and isinstance(js, dict) and js.get("incident"):
@@ -279,12 +282,12 @@ def work(op):
             op.current = None
             return
     pause(op)
-    code = transition(op, inc, "close", {"resultId": "false_alarm", "comment": "нагрузка: закрытие"})
+    code = transition(op, inc, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: закрытие"})
     if code == 412:
         fresh = card(op, inc["guid"], full=False)
         if fresh and fresh.get("state") == "in_progress":
             inc.update(fresh)
-            transition(op, inc, "close", {"resultId": "false_alarm", "comment": "нагрузка: закрытие"}, "transition:close-retry")
+            transition(op, inc, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: закрытие"}, "transition:close-retry")
     op.current = None
 
 
@@ -555,7 +558,7 @@ def race():
         log({"who": "race", "op": "race:verdict", "inc": row["guid"], "code": 0 if len(won) <= 1 else 1, "ms": 0,
              "codes": res, "wins": len(won)})
         for o, inc in won.values():
-            transition(o, inc, "close", {"resultId": "false_alarm", "comment": "нагрузка: гонка"}, "race:close")
+            transition(o, inc, "close", {"resultId": "false_alarm", "causeId": "equipment", "comment": "нагрузка: гонка"}, "race:close")
 
 
 def summary():
