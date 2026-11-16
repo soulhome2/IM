@@ -25,8 +25,8 @@ now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 for at, guid, inc in evs:
     dev = inc["devices"][0]
     body = {"guid": guid, "sourceUid": dev, "eventTypeUid": inc["eventType"]["id"],
-            "payload": {"occurredAt": now, "deviceName": names.get(dev, ""), "text": inc.get("location", ""),
-                        "site": inc.get("site", ""), "emulator": True}}
+            "payload": {"occurredAt": now, "deviceName": names.get(dev, ""), "text": inc.get("address") or "",
+                        "source": (inc.get("source") or {}).get("name", ""), "emulator": True}}
     c.request("POST", "/api/v1/im-agent/events", json.dumps(body), {"Content-Type": "application/json", "X-Dev-Agent": AGENT})
     r = c.getresponse(); raw = r.read()
     if r.status != 200:

@@ -36,8 +36,8 @@ def worker(p, start, q):
         dev = inc["devices"][0]
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         body = {"guid": guid, "sourceUid": dev, "eventTypeUid": inc["eventType"]["id"],
-                "payload": {"occurredAt": now, "deviceName": names.get(dev, ""), "text": inc.get("location", ""),
-                            "site": inc.get("site", ""), "emulator": True}}
+                "payload": {"occurredAt": now, "deviceName": names.get(dev, ""), "text": inc.get("address") or "",
+                            "source": (inc.get("source") or {}).get("name", ""), "emulator": True}}
         t0 = time.time()
         try:
             c.request("POST", "/api/v1/im-agent/events", json.dumps(body),
