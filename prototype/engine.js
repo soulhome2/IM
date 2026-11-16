@@ -193,6 +193,13 @@
 
     /* ===== Выполнение перехода (/transitions, §6) ===== */
 
+    function levelName(n) {
+      if (!n) return "";
+      const lvl = (W.escalation.levels || []).find((l) => l.level === n);
+      const name = lvl && typeof lvl.name === "string" ? lvl.name.trim() : "";
+      return name || ["workflow.escalation.level.unnamed", { n }];
+    }
+
     function vars(ev, form, extra) {
       const prog = ctx.progress(ev);
       const hold = catalogItem("hold", ev.holdReason);
@@ -204,6 +211,8 @@
           holdReasonLabel: hold ? [hold.labelKey] : "",
           targetName: ctx.actorName(addressee(ev)),
           escalationLevel: ev.escalationLevel,
+          // Название уровня (§8.3) — текст организации из машины; нет названия — «Уровень N» ключом каталога
+          escalationLevelName: levelName(ev.escalationLevel),
           closeResultLabel: journalResultLabel(ev),
           closeCauseLabel: ev.closeCauseLabel || "",
           filledSteps: prog.filled,

@@ -4050,17 +4050,19 @@ window.IM_WORKFLOW = {
     ]
   },
   "escalation": {
-    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3). Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно.",
+    "$comment": "§9. Настройки под правом incident:schema:admin. Адресат уровня — пользователь или дежурная группа (§8.3). Значения ниже — пример. Адресат-группа удобнее: её состав задают роли, и при смене людей схему менять не нужно. name — название уровня для оператора (§8.3, решение 2026-11-16): необязательная строка до 60 символов после обрезки пробелов, текст организации, не ключ и не переводится; пусто — «Уровень N» (ключ workflow.escalation.level.unnamed). Номер уровня — порядок шагов; клиент берёт название отсюда по escalationLevel инцидента.",
     "enabled": true,
     "levels": [
       {
         "level": 1,
+        "name": "Старшие операторы",
         "targetKind": "user",
         "target": "petrova",
         "reactionSec": 120
       },
       {
         "level": 2,
+        "name": "Дежурный ЦОД",
         "targetKind": "user",
         "target": "noc",
         "reactionSec": 90
@@ -4560,6 +4562,12 @@ window.IM_WORKFLOW = {
     },
     "workflow.guard.no_escalation_level": {
       "vars": []
+    },
+    "workflow.escalation.level.unnamed": {
+      "vars": [
+        "n"
+      ],
+      "$comment": "§8.3. Название уровня эскалации без name: «Уровень N» — подстановка {escalationLevelName} записи журнала и метка «Эскалация: …» у клиента"
     },
     "workflow.guard.owner_duty_group": {
       "vars": []

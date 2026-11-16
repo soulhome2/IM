@@ -91,7 +91,9 @@ def element(x, sec):
     if "key" in x and ("label" in x or "labelKey" in x):
         return f"`{x['key']}` — {x.get('label') or RU.get(x.get('labelKey'), x.get('labelKey'))}"
     if "level" in x:
-        return f"уровень {x['level']}: `{x.get('targetKind')}:{x.get('target')}`, реакция {duration(x.get('reactionSec'))}"
+        # Название уровня (§8.3) — текст организации; нет — «Уровень N» на экране
+        name = f" «{x['name'].strip()}»" if isinstance(x.get("name"), str) and x["name"].strip() else ""
+        return f"уровень {x['level']}{name}: `{x.get('targetKind')}:{x.get('target')}`, реакция {duration(x.get('reactionSec'))}"
     head = x.get("label") or RU.get(x.get("labelKey"), x.get("labelKey")) or x.get("id") or ""
     # Срок null у элемента справочника — без срока; у причины с deadlineFromIdle — из порогов молчания (holdSec, BUG-119)
     unset = "порог «в очередь» минус «отложить»" if x.get("deadlineFromIdle") else "без срока"

@@ -2124,8 +2124,10 @@ def check_fail_keys(w, err):
                 code = line.split("//")[0]
                 if literal.search(code) and not line.rstrip().endswith("// данные"):
                     err.append(f"{src}:{n}: текст для человека русской фразой, а не ключом каталога (DOC-28, RULE-66)")
-    # В машине русский текст — только в пояснениях для разработчика
-    doc = lambda path: path[-1] in ("why", "meaning") or any(isinstance(x, str) and x.startswith("$") for x in path)
+    # В машине русский текст — только в пояснениях для разработчика и в названиях уровней эскалации: это текст
+    # организации, как название дежурной группы, не ключ (§8.3, §14.9)
+    level_name = lambda path: len(path) == 4 and path[:2] == ("escalation", "levels") and path[3] == "name"
+    doc = lambda path: path[-1] in ("why", "meaning") or any(isinstance(x, str) and x.startswith("$") for x in path) or level_name(path)
     def walk(node, path):
         if isinstance(node, dict):
             for k, v in node.items():
@@ -2316,6 +2318,12 @@ def check_escalation_settings(w, o, err):
     for lvl in esc.get("levels") or []:
         if lvl.get("targetKind") not in ("user", "group") or not lvl.get("target"):
             err.append(f"эскалация: уровень {lvl.get('level')} — targetKind user или group и target — id (§8.3, ARCH-07 в7)")
+        # Название уровня (§8.3): необязательная строка до 60 символов после обрезки пробелов — то же проверяет сервер
+        if "name" in lvl and (not isinstance(lvl["name"], str) or len(lvl["name"].strip()) > LEVEL_NAME_MAX):
+            err.append(f"эскалация: уровень {lvl.get('level')} — name строкой не длиннее {LEVEL_NAME_MAX} символов (§8.3)")
+
+
+LEVEL_NAME_MAX = 60
 
 
 SOUND_KEYS = {"patterns", "byPriority", "personal", "alert", "busyHears", "muteMinutes", "volumeFloor"}
@@ -2820,6 +2828,7 @@ MUTATIONS.append(machine_json_mutation("sound-pattern-unknown", "не из ка�
 MUTATIONS.append(machine_json_mutation("sound-level-key-decimal", "ключ «75.0»"))
 MUTATIONS.append(machine_json_mutation("sound-alert-until-taken", "sound.alert.repeat"))
 MUTATIONS.append(machine_json_mutation("sound-volume-floor-over", "volumeFloor = 101"))
+MUTATIONS.append(machine_json_mutation("escalation-level-name-long", "name строкой не длиннее 60"))
 MUTATIONS.append(machine_json_mutation("sound-key-dollar-ref", "sound.byPriority.75.$ref"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-uncounted", "без счётчика"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-unknown", "inboxBlock.filter = 'inbox_mine'"))

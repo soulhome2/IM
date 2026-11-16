@@ -234,7 +234,7 @@ stateDiagram-v2
 
 | Где | Переменные |
 |---|---|
-| `appendLog` | `{comment}`, `{stepNumber}`, `{holdReasonLabel}`, `{targetName}` — адресат после перехода, `{escalationLevel}` — после перехода, `{closeResultLabel}`, `{filledSteps}`, `{totalSteps}`, `{previousOwnerName}` — адресат до перехода, `{escalationReason}` — текст по ключу `escalation.reasonKey`, `{ruleGroupName}` — название дежурной группы правила (`incident.ruleDutyGroup`, §8.1) на момент приёма — снимок, его же сервер хранит для «Почему?»; группы к моменту приёма нет (`isGroup` ложно, итог `queue`) — последнее известное название, а если его нет — id группы |
+| `appendLog` | `{comment}`, `{stepNumber}`, `{holdReasonLabel}`, `{targetName}` — адресат после перехода, `{escalationLevel}` — после перехода, `{escalationLevelName}` — название этого уровня (`escalation.levels[].name`, §8.3; нет названия — текст ключа `workflow.escalation.level.unnamed` с `{n}` = номер уровня, на языке записи), `{closeResultLabel}`, `{filledSteps}`, `{totalSteps}`, `{previousOwnerName}` — адресат до перехода, `{escalationReason}` — текст по ключу `escalation.reasonKey`, `{ruleGroupName}` — название дежурной группы правила (`incident.ruleDutyGroup`, §8.1) на момент приёма — снимок, его же сервер хранит для «Почему?»; группы к моменту приёма нет (`isGroup` ложно, итог `queue`) — последнее известное название, а если его нет — id группы |
 | `forms[].notes` | `{ownerName}` — адресат, `{filledSteps}`, `{totalSteps}` |
 | `badges` | `{ownerName}` — адресат, `{holdReasonLabel}`, `{closeResultLabel}` — подпись причины сбоя, если она выбрана, иначе результата |
 
