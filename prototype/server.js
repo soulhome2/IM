@@ -1282,6 +1282,8 @@
     function sortOf(q) {
       const s = W.queueSort;
       const asked = q.sort || session.preferences.queueSort;
+      // Порядок блока «Мне на принятие» принимается всегда, в обход operatorMayChange, — только он (§7)
+      if (q.sort && q.sort === W.display.inboxBlock.sort && s.keys[q.sort]) return q.sort;
       return s.operatorMayChange && s.options.includes(asked) ? asked : s.default;
     }
     const byNumber = (a, b) => a.number.localeCompare(b.number, undefined, { numeric: true });
@@ -1322,7 +1324,10 @@
         if (q.eventTypeGuid && q.eventTypeGuid !== "all" && !String(q.eventTypeGuid).split(",").includes(e.typeGuid)) return false;
         // Сценарий — свой у каждого инцидента: соседи по событию различаются только им (§19.2, ARCH-15)
         if (q.scenarioGuid && q.scenarioGuid !== "all" && !String(q.scenarioGuid).split(",").includes(e.scenarioGuid)) return false;
-        if (q.priority != null && q.priority !== "" && e.priority !== Number(q.priority)) return false;
+        // Приоритеты — список уровней через запятую
+        if (q.priority != null && q.priority !== "" && !String(q.priority).split(",").some((v) => e.priority === Number(v))) return false;
+        // Без строк одного из фильтров (блок «Мне на принятие» выбран отдельно, §7)
+        if (q.exceptFilter && filters.get(e).includes(q.exceptFilter)) return false;
         if (q.state && !String(q.state).split(",").includes(e.state)) return false;
         if (q.deviceTypeId && q.deviceTypeId !== "all") {
           const src = eventSource(e);
@@ -1350,14 +1355,33 @@
     }
 
 
+    // Сужения очереди, общие для списка и счётчиков: всё, кроме filter, page и порядка
+    function narrowed(q) {
+      const n = { scenarioGuid: q.scenarioGuid, sourceGroupGuid: q.sourceGroupGuid, eventTypeGuid: q.eventTypeGuid, deviceTypeId: q.deviceTypeId, search: q.search, priority: q.priority };
+      Object.keys(n).forEach((k) => (n[k] == null || n[k] === "") && delete n[k]);
+      return n;
+    }
+    const unknownFilter = (id) => id != null && id !== "" && !W.queueFilters.some((f) => f.id === id);
+
     function counters(q) {
       const out = {};
-      // Только сценарий сужает счётчики: остальные фильтры очереди — сами счётчики (§19.2)
-      const list = visible({ scenarioGuid: (q || {}).scenarioGuid });
+      // Числа состояний — по тем же сужениям, что список, кроме самого фильтра (§19.2, §7)
+      const list = visible(narrowed(q));
       const passed = list.map((e) => engine.queueFilters(e));
       // У фильтров с завершёнными (counted: false) счётчика нет: их число — total страницы списка (§7)
       W.queueFilters.filter((f) => f.counted !== false).forEach((f) => (out[f.id] = passed.filter((ids) => ids.includes(f.id)).length));
       return out;
+    }
+
+    // Числа приоритетов под фильтром: те же сужения, кроме самих приоритетов; нет ключа — 0
+    function priorityCounters(q) {
+      const f = W.queueFilters.find((x) => x.id === (q.filter || "open"));
+      if (!f || f.counted === false) return badRequest();
+      const out = {};
+      const n = narrowed(q);
+      delete n.priority;
+      visible(Object.assign(n, { filter: f.id })).forEach((e) => (out[String(e.priority)] = (out[String(e.priority)] || 0) + 1));
+      return { status: 200, body: out };
     }
 
     // Дерево групп — только группы, где есть доступные оператору устройства, и только они (§5)
@@ -1714,7 +1738,9 @@
     }
 
     function selection(body) {
-      const q = { filter: body.filter, search: body.search, sourceGroupGuid: body.sourceGroupGuid, eventTypeGuid: body.eventTypeGuid, scenarioGuid: body.scenarioGuid, deviceTypeId: body.deviceTypeId };
+      // priority в теле — массив уровней; в запросе очереди — список через запятую
+      const q = { filter: body.filter, exceptFilter: body.exceptFilter, search: body.search, sourceGroupGuid: body.sourceGroupGuid, eventTypeGuid: body.eventTypeGuid, scenarioGuid: body.scenarioGuid, deviceTypeId: body.deviceTypeId, priority: Array.isArray(body.priority) ? body.priority.join(",") : undefined };
+      if (unknownFilter(body.exceptFilter)) return badRequest();
       const max = W.limits.maxBulk;
       let list = [];
       // explicit — с отмеченными (minItems: 1 по контракту, BUG-98)
@@ -1792,8 +1818,9 @@
           return { status: 200, body: sessionView().preferences };
         },
       ],
-      ["GET", "/operator/incidents", (p, q) => ({ status: 200, body: page(q) })],
-      ["GET", "/operator/incidents/counters", (p, q) => ({ status: 200, body: counters({ scenarioGuid: q.scenarioGuid }) })],
+      ["GET", "/operator/incidents", (p, q) => (unknownFilter(q.exceptFilter) ? badRequest() : { status: 200, body: page(q) })],
+      ["GET", "/operator/incidents/counters", (p, q) => ({ status: 200, body: counters(q) })],
+      ["GET", "/operator/incidents/counters/priorities", (p, q) => priorityCounters(q)],
       ["POST", "/operator/incidents/selection", (p, q, body) => selection(body || {})],
       [
         "POST",

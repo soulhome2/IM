@@ -472,6 +472,25 @@
     assert.ok(!bad.length, bad.slice(0, 4).join("; "));
   });
 
+  test("Счётчики приоритетов и выборка: неизвестный идентификатор — 400 (§7, план 87в)", async () => {
+    const env = await makeEnv();
+    const a = await env.call("GET", "/operator/incidents/counters/priorities?filter=no_such_filter");
+    assert.status(a, 400, undefined, "неизвестный filter у счётчиков приоритетов");
+    const b = await env.call("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open", exceptFilter: "no_such_filter", candidateTransitionIds: [] });
+    assert.status(b, 400, undefined, "неизвестный exceptFilter в выборке");
+  });
+
+  test("Порядок блока priority_then_deadline принимается и при запрете выбора порядка, другие — нет (§7, RULE-62)", async () => {
+    const lock = Object.assign({}, W.queueSort, { operatorMayChange: false });
+    const order = async (env, sort) => (await env.call("GET", `/operator/incidents?filter=open&pageSize=200${sort ? `&sort=${sort}` : ""}`)).body.items.map((e) => e.guid).join();
+    const locked = await makeEnv({ workflowPatch: { queueSort: lock } });
+    const byBlock = Object.assign({}, lock, { default: W.display.inboxBlock.sort });
+    const reference = await makeEnv({ workflowPatch: { queueSort: byBlock } });
+    const base = await order(locked, "");
+    assert.eq(await order(locked, W.display.inboxBlock.sort), await order(reference, ""), "порядок блока не принят");
+    assert.eq(await order(locked, "reaction_deadline"), base, "чужой порядок принят при operatorMayChange: false");
+  });
+
   test("Шапка очереди на начальных демо-данных: числа состояний и приоритетов, список без блока, filters строки (§7)", async () => {
     const env = await makeEnv();
     const r = rng(87);
