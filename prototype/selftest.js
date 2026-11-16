@@ -4315,6 +4315,41 @@
       return why;
     });
 
+    await step("Настройки: адресат уровня и получатель оповещений — вид и имя, не номер (BUG-124)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const me = (await stand.get("/operator/session")).operator;
+      const other = (await stand.get("/operator/transfer-targets")).find((x) => x.kind !== "duty_group" && x.id !== me.guid);
+      const group = (await stand.get("/operator/admin/duty-groups"))[0];
+      const esc = window.IM_WORKFLOW.escalation;
+      const levels = [
+        { level: 1, targetKind: "user", target: me.guid, reactionSec: 120 },
+        { level: 2, targetKind: "user", target: other.id, reactionSec: 90 },
+        { level: 3, targetKind: "group", target: group.id, reactionSec: 90 },
+        { level: 4, targetKind: "user", target: "gone-7", reactionSec: 90 },
+      ];
+      try {
+        await standReset({ fixture: "demo", workflowPatch: { escalation: Object.assign({}, esc, { levels, maxLevel: 4 }), alerts: { targetKind: "user", target: me.guid } } });
+        await wait(300);
+        await click($("adminBtn"));
+        await click($("adminTabs").querySelector('[data-admin-tab="timing"]'));
+        await wait(200);
+        const cell = (re) => {
+          const row = [...$("adminTable").querySelectorAll("tr")].find((r) => r.cells.length === 2 && re.test(r.cells[0].textContent));
+          return row ? row.cells[1].innerText : "";
+        };
+        const shown = cell(/^Уровни/);
+        for (const want of [`пользователь ${me.name}`, `пользователь ${other.name}`, `группа ${group.name}`, "удалённый пользователь (gone-7)"])
+          expect(shown.includes(want), `в «Уровнях» нет «${want}»: «${shown}»`);
+        const alerts = cell(/^Получатель оповещений/).trim();
+        expect(alerts === `пользователь ${me.name}`, `получатель оповещений: «${alerts}»`);
+      } finally {
+        if (!$("modalAdmin").hidden) await click(document.querySelector('[data-close="modalAdmin"]'));
+        await standReset({ fixture: "demo" });
+        await wait(300);
+      }
+    });
+
     await step("Порядок очереди: список — по умолчанию есть, администратор может запретить, выбор сохраняется (§7, BUG-34)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const select = $("queueSortSelect");

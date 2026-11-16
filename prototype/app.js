@@ -5896,21 +5896,36 @@
   // Машинное значение — подписью из машины (adminSettings.valueLabels — ключи каталога, §14.9), иначе как есть
   // Ключ — число уровня приоритета (нормативы по приоритету, §4): его название из справочника
   const word = (key) => (PRIORITIES[key] ? asData(inLang(PRIORITIES[key].name)) : te((WORKFLOW.adminSettings.valueLabels || {})[key] || key));
+  // Адресат уровня и получатель оповещений (§8.3, §9) — вид и имя: «пользователь Петрова», «группа Дежурный ЦОД»;
+  // название уровня бывает похоже на группу, а адресат — человек (BUG-124). Вид — targetKind; нет вида — сначала группа.
+  // Не нашёлся — «удалённый …» с id, но только если его список прочитан: список групп не пришёл — «группа (id)».
+  // Имя — данные, не переводится
   function personName(id) {
     if (store.session && id === store.session.operator.guid) return store.session.operator.name;
-    const group = (adminState.data.duty || []).find((g) => g.id === id);
     const target = targetById(id);
-    return (group && group.name) || (target && target.name) || id;
+    return (target && target.name) || id;
+  }
+  const named = (ru, name) => te(ru, { name: "\u0001" }).replace("\u0001", asData(name));
+  function addressee(id, kind) {
+    const groups = adminState.data.duty;
+    const group = kind === "user" ? null : (groups || []).find((g) => g.id === id);
+    if (group) return named("группа {name}", group.name);
+    const name = kind === "group" ? id : personName(id);
+    if (name !== id) return named("пользователь {name}", name);
+    if (kind === "user") return te("удалённый пользователь ({id})", { id });
+    if (!groups) return te(kind === "group" ? "группа ({id})" : "адресат ({id})", { id });
+    return te(kind === "group" ? "удалённая группа ({id})" : "неизвестный адресат ({id})", { id });
   }
   // nullKey — подпись пустого значения у строки настроек, например «без ограничения» (RULE-69)
-  function fmtSetting(v, key, seconds, values, nullKey) {
+  // targetKind — вид адресата строки «target» (alerts.targetKind)
+  function fmtSetting(v, key, seconds, values, nullKey, targetKind) {
     const sec = seconds || /Sec$/.test(key);
     if (v == null) return nullKey ? te(nullKey) : "—";
     if (values && typeof v === "string" && values[v]) return te(values[v]);
     if (typeof v === "boolean") return te(v ? "да" : "нет");
     if (typeof v === "number") return /Min(utes)?$/.test(key) ? fmtDuration(v * 60) : sec ? fmtDuration(v) : String(v);
     // Адресат — id пользователя или дежурной группы (alerts.target, ARCH-07 в7)
-    if (typeof v === "string") return key === "target" ? asData(personName(v)) : te(v);
+    if (typeof v === "string") return key === "target" ? addressee(v, targetKind) : te(v);
     if (Array.isArray(v)) {
       if (!v.length) return te("нет");
       return v
@@ -5918,7 +5933,7 @@
           if (typeof x !== "object") return fmtSetting(x, key, sec);
           // Уровень эскалации (§8.3): номер, название (текст организации) — адресат и норматив
           if (x.level != null)
-            return `${te("Уровень {n}", { n: x.level })}${typeof x.name === "string" && x.name.trim() ? ` «${escapeHtml(t(x.name.trim()))}»` : ""}: ${asData(personName(String(x.target)))}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
+            return `${te("Уровень {n}", { n: x.level })}${typeof x.name === "string" && x.name.trim() ? ` «${escapeHtml(t(x.name.trim()))}»` : ""}: ${addressee(String(x.target), x.targetKind)}, ${te("реакция {time}", { time: fmtDuration(x.reactionSec) })}`;
           if (x.sec != null) return `${Object.entries(x).filter(([k]) => k !== "sec").map(([k, val]) => `${word(k)} = ${word(String(val))}`).join(", ")}: ${fmtDuration(x.sec)}`;
           // Срок null — без срока; у причины со сроком из порогов молчания (deadlineFromIdle, «Нет связи») — так и сказать (BUG-119)
           const limit = x.deadlineFromIdle ? ` (${te("порог «в очередь» минус «отложить»")})` : x.maxMinutes != null ? ` (${fmtDuration(x.maxMinutes * 60)})` : "maxMinutes" in x ? ` (${te("без срока")})` : "";
@@ -5958,7 +5973,8 @@
   // Названия и имена — данные, они не переводятся (§14.9)
   const asData = (text) => `<span data-i18n-skip>${escapeHtml(text)}</span>`;
   async function openAdmin() {
-    adminState.data.duty = await api.get("/operator/admin/duty-groups").catch(() => []);
+    // Список групп не пришёл — null: адресат-группа тогда не «удалённая» (BUG-124)
+    adminState.data.duty = await api.get("/operator/admin/duty-groups").catch(() => null);
     adminState.tab = adminState.tab || WORKFLOW.adminSettings.tabs[0].id;
     $("modalAdmin").hidden = false;
     await renderAdmin();
@@ -5984,7 +6000,7 @@
       const reasons = (path, v) => (Array.isArray(v) && /^(reasonCatalogs\.[^.]+\.items|session\.breakReasons)$/.test(path) ? v.slice().sort(byName((x) => (hasLbl(x, "label") ? lbl(x) : t(x.id)))) : v);
       const itemRow = (item) =>
         `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${
-          soundSetting(item.path) || fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey)
+          soundSetting(item.path) || fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey, settingAt(`${item.path}Kind`))
         }</td></tr>`;
       const groupHead = (g) => `<tr class="admin-group" data-admin-group="${g.id}"><th colspan="2">${escapeHtml(lbl(g))}<span class="what">${escapeHtml(`${t("Правила")}: ${g.rules}`)}</span></th></tr>`;
       const body = groups.length
