@@ -2544,8 +2544,9 @@
   });
 
   test("Порядок создания и номер тревоги — по точности победителя, а не по приоритету; сценарии одного правила — по его списку (§14.5, ARCH-15, решение 2026-10-28)", async () => {
-    // Медпункт с приоритетом ниже пожара: условие точнее (группа против только типа) — всё равно первый и номер тревоги
-    const env = await makeEnv({ fixturePatch: { rules: rulesWith({ [RULE(9)]: { priority: 25 } }) } });
+    // Медпункт с приоритетом ниже пожара и условием по самому датчику: точнее (устройство против типа устройства у
+    // базового пожара) — всё равно первый и номер тревоги. В наборе точность у обоих одна — тип устройства (§14.5)
+    const env = await makeEnv({ fixturePatch: { rules: rulesWith({ [RULE(9)]: { priority: 25, conditions: [{ eventTypeId: "fire", deviceGuid: S5 }] } }) } });
     const res = await env.call("POST", "/test/events", fireAt(S5));
     assert.status(res, 201, null, "событие с инцидентами");
     const order = res.body.incidents.map((c) => [c.number, scenarioOf(c), c.priority]);

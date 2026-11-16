@@ -543,8 +543,10 @@ CONDITION_FIELDS = ("eventTypeId", "deviceGuid", "deviceTypeId", "sourceGroupGui
 def check_rules(fx, err):
     """Правила-фильтры эталонного набора и события инцидентов (§14.5, ARCH-15). Правило — как incident_rules сервера
     МИ: guid и createdAt уникальны, createdAt не позже снимка; приоритет — число справочника (§2.5); сценарии есть
-    в scenarios.rows; условие — хоть одно поле, поля ссылаются на то, что есть в наборе. У каждого типа события
-    инцидентов — ровно одно базовое правило (одно условие, в нём только тип). У инцидента — событие, номер тревоги
+    в scenarios.rows; условие — хоть одно поле, поля ссылаются на то, что есть в наборе; тип события — только вместе
+    с устройством или типом устройства (§14.5: сервер иное не сохраняет). У каждого типа события инцидентов — ровно
+    одно базовое правило (условия — только тип события и тип устройства) и оно покрывает тип устройства-источника
+    каждого инцидента этого типа события. У инцидента — событие, номер тревоги
     и правило; у инцидентов одного события — один номер тревоги, одно устройство-источник, один тип и разные
     сценарии; номер тревоги — номер инцидента этого события, у которого номер тревоги свой; у разных событий —
     разные номера; сценарий инцидента — в сценариях его правила. Порядок создания и победителя §14.5 на снимке не сверяются:
@@ -583,6 +585,8 @@ def check_rules(fx, err):
         for c in r.get("conditions", []):
             if not any(c.get(k) for k in CONDITION_FIELDS):
                 err.append(f"{name} — условие без единого поля (§14.5)")
+            if c.get("eventTypeId") and not c.get("deviceGuid") and not c.get("deviceTypeId"):
+                err.append(f"{name} — условие с типом события «{c['eventTypeId']}» без устройства и типа устройства (§14.5)")
             for k, v in c.items():
                 if k not in known:
                     err.append(f"{name} — у условия неизвестное поле {k}")
@@ -590,10 +594,21 @@ def check_rules(fx, err):
                     err.append(f"{name} — условие {k} «{v}»: такого в наборе нет")
         if not r.get("conditions"):
             err.append(f"{name} — без условий")
+    dev_type = {d["id"]: d.get("type") for d in fx["devices"]}
+
+    def is_base(r, t):
+        conds = r.get("conditions", [])
+        return bool(r.get("scenarios")) and bool(conds) and all(c.get("eventTypeId") == t and set(c) <= {"eventTypeId", "deviceTypeId"} for c in conds)
+
     for t in sorted(event_types):
-        base = [r for r in rules if r.get("scenarios") and len(r.get("conditions", [])) == 1 and r["conditions"][0] == {"eventTypeId": t}]
+        base = [r for r in rules if is_base(r, t)]
         if len(base) != 1:
-            err.append(f"эталон: у типа события {t} базовых правил {len(base)}, а нужно одно — одно условие, в нём только тип (§14.5)")
+            err.append(f"эталон: у типа события {t} базовых правил {len(base)}, а нужно одно — условия только тип события и тип устройства (§14.5)")
+            continue
+        covered = {c.get("deviceTypeId") for c in base[0]["conditions"]}
+        sources = {dev_type.get(i["devices"][0]) for i in fx["incidents"] if i["eventType"]["id"] == t and i.get("devices")}
+        for d in sorted(sources - covered, key=str):
+            err.append(f"эталон: базовое правило «{base[0].get('name')}» не покрывает тип устройства {d} инцидентов типа события {t} (§14.5)")
     events = {}
     for inc in fx["incidents"]:
         where = f"эталон: {inc['number']}"
@@ -2627,6 +2642,10 @@ MUTATIONS = [
      '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
     ("comment-bumps-version", "машина: комментарий требует версию записи — чужой комментарий даёт владельцу конфликт (ТЗ-18)", MACHINE,
      '"concurrency": { "expectedVersion": false, "bumpsVersion": false,', '"concurrency": { "expectedVersion": false,', "concurrency.expectedVersion False"),
+    ("rule-event-type-only", "набор: у условия правила только тип события, без устройства и типа устройства (§14.5)", FIXTURE,
+     '"eventTypeId": "glass",\n          "deviceTypeId": "microphone"', '"eventTypeId": "glass"', "без устройства и типа устройства"),
+    ("base-rule-uncovered", "набор: базовое правило пожара не покрывает камеры — источник одного из пожаров набора (§14.5)", FIXTURE,
+     '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "camera"\n        }', '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "fire-detector"\n        }', "не покрывает тип устройства camera"),
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,

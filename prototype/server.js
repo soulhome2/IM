@@ -2591,9 +2591,10 @@
       return { eventGuid: event.guid, alarmNumber, created, incidents: created, maintenance };
     }
 
-    // Базовое правило типа события: одно условие, в нём только тип (эталонный набор, §14.5)
+    // Базовое правило типа события: условие с этим типом события без устройства и группы — тип события, может быть с
+    // типом устройства (§14.5: тип события — только вместе с устройством или типом устройства; эталонный набор)
     const baseRule = (typeId) =>
-      RULES.find((r) => (r.scenarios || []).length && r.conditions.length === 1 && Object.keys(r.conditions[0]).join() === "eventTypeId" && r.conditions[0].eventTypeId === typeId) || null;
+      RULES.find((r) => (r.scenarios || []).length && (r.conditions || []).some((c) => c.eventTypeId === typeId && !c.deviceGuid && !c.sourceGroupGuid)) || null;
     // Тестовый инцидент (POST /test/incidents): один инцидент в обход выбора — по правилу ruleGuid или базовому правилу
     // типа, первый сценарий правила. Приоритет — правила; priority в теле — подмена на прогон, приводится к уровню
     // справочника (§2.5). Каждый вызов — новое событие, номер тревоги — свой номер

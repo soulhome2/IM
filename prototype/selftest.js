@@ -1007,14 +1007,18 @@
         expect(again.status === 200 && again.body.created === 0 && again.body.alarmNumber === b.alarmNumber, `повтор: ${again.status}, создано ${again.body.created}`);
         expect(again.body.incidents.map((c) => c.guid).join() === b.incidents.map((c) => c.guid).join(), "повтор вернул не те инциденты");
         expect((await count()) === before + 2, "в очереди не два новых инцидента");
-        // Порядок — по точности победителя, а не по приоритету (решение 2026-10-28): медпункт с приоритетом 25 — всё равно первый
-        const rules = window.IM_FIXTURE.rules.map((r) => (r.guid === rule(9) ? Object.assign({}, r, { priority: 25 }) : r));
+        // Порядок — по точности победителя, а не по приоритету (решение 2026-10-28): медпункт с приоритетом 25 и условием
+        // по самому датчику (точнее типа устройства у базового пожара) — всё равно первый. В наборе точность у обоих одна —
+        // тип устройства (§14.5), там медпункт первый по приоритету
+        const rules = window.IM_FIXTURE.rules.map((r) =>
+          r.guid === rule(9) ? Object.assign({}, r, { priority: 25, conditions: [{ eventTypeId: "fire", deviceGuid: event.deviceIds[0] }] }) : r
+        );
         await standReset({ fixture: "demo", fixturePatch: { rules } });
         const low = (await stand.raw("POST", "/test/events", event)).body;
         const order = low.incidents.map((c) => `${c.scenario.scenarioGuid === keys.medical ? "медпункт" : "пожар"} ${c.priority}`).join(", ");
         expect(order === "медпункт 25, пожар 75" && low.alarmNumber === low.incidents[0].number, `порядок при медпункте 25: ${order}, тревога ${low.alarmNumber}`);
         // Правила равны во всём — решает guid (intake.ruleOrder машины), а не порядок строк набора
-        const tie = (tail, scenario) => ({ guid: rule(tail), name: `ничья ${tail}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [scenario], conditions: [{ eventTypeId: "fire" }] });
+        const tie = (tail, scenario) => ({ guid: rule(tail), name: `ничья ${tail}`, priority: 50, createdAt: "2026-09-01T09:00:00Z", scenarios: [scenario], conditions: [{ eventTypeId: "fire", deviceTypeId: "fire-detector" }] });
         await standReset({ fixture: "demo", fixturePatch: { rules: [tie("e", keys.fire), tie("d", keys.medical)] } });
         const tied = (await stand.raw("POST", "/test/events", event)).body;
         expect(tied.incidents.map((c) => c.ruleGuid).join() === [rule("d"), rule("e")].join(), `при равенстве правил первым — не меньший guid: ${tied.incidents.map((c) => c.ruleGuid).join(", ")}`);
