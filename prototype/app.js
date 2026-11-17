@@ -1788,9 +1788,12 @@
       ev.scenario = await api.post(`${incPath(ev.guid)}/scenario/answer`, body);
       state.drafts.delete(draftKey(ev, step.id));
     } catch (err) {
-      toast(problemText(err), "error");
+      // Опоздал — инцидент уже ведёт другой: мягкое «Уже взял Петров», уходит само, как у перехода (§14.1, §22.6)
+      const late = lateText("answer", err, store.session && store.session.operator.guid);
+      if (late) toast(late, "late");
+      else toast(problemText(err), "error");
     }
-    // Ответ меняет путь, доступность «Обработан», прогресс и версию записи — карточку заново
+    // Ответ меняет путь, доступность «Обработан», прогресс и журнал — карточку заново
     await loadCard();
     // Ответ завершил сценарий — карточка на шаге «Итог»: закрывает оператор, «Завершить инцидент» (§7)
     if (runDone(selected())) state.summaryOff.delete(ev.guid);
