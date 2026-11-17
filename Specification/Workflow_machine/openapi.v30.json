@@ -5556,7 +5556,7 @@
         }
       },
       "PreconditionRequired": {
-        "description": "Клиент не сказал, что видел оператор (§14.1, RULE-142): у перехода нет `expectedState` или `expectedAddressee` (у закрытия — ещё `journalSeen`), у ответа на шаг — `expectedOwner` или `seenAnswer`. Код `PRECONDITION_REQUIRED`, ключ `workflow.error.expected_required`. У `comment` сверять нечего — ничего присылать не нужно.",
+        "description": "Клиент не сказал, что видел оператор (§14.1, RULE-142): у перехода нет `expectedState` или `expectedAddressee` (у закрытия — ещё `journalSeen`), у ответа на шаг — `expectedOwner` или `seenAnswer`. Код `PRECONDITION_REQUIRED`, ключ `workflow.error.expected_required`. У `comment` и `detach` сверять нечего (`concurrency.expects` пуст) — ничего присылать не нужно.",
         "content": {
           "application/problem+json": {
             "schema": {
@@ -8521,7 +8521,7 @@
         "type": "object",
         "properties": {
           "expectedState": {
-            "description": "§10.1, §14.1. Состояние, которое видел оператор. Обязательно, кроме `comment` (`concurrency.expects` машины): нет — `428`, другое — `412 INCIDENT_CHANGED`.",
+            "description": "§10.1, §14.1. Состояние, которое видел оператор. Обязательно у переходов с непустым `concurrency.expects` машины — у всех ручных, кроме `comment` и `detach`: нет — `428`, другое — `412 INCIDENT_CHANGED`.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/StateId"
@@ -8582,7 +8582,7 @@
           },
           "expectedAddressee": {
             "type": "string",
-            "description": "§14.1, RULE-142. Адресат, которого видел оператор: `id` из `addressee` карточки или строки очереди (владелец, а пока группа не приняла — сама группа); `\"\"` — ничей. Обязательно, кроме `comment`: нет — `428`, другой — `412 INCIDENT_CHANGED` (`details.changed: addressee`). Эскалация без смены адресата, запись о нарушении, чужой комментарий действию не мешают."
+            "description": "§14.1, RULE-142. Адресат, которого видел оператор: `id` из `addressee` карточки или строки очереди (владелец, а пока группа не приняла — сама группа); `\"\"` — ничей. Обязательно у переходов с непустым `concurrency.expects` — у всех ручных, кроме `comment` и `detach`: нет — `428`, другой — `412 INCIDENT_CHANGED` (`details.changed: addressee`). Эскалация без смены адресата, запись о нарушении, чужой комментарий действию не мешают."
           },
           "journalSeen": {
             "type": "integer",

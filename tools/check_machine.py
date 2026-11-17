@@ -2110,9 +2110,15 @@ def check_strings(w, err):
         if key.startswith("workflow.") and key in langs["ru"] and sorted(spec.get("vars", [])) != args(langs["ru"][key]):
             err.append(f"каталог строк: {key} — подстановки в машине {sorted(spec.get('vars', []))}, а в ru {args(langs['ru'][key])} (§14.9)")
     # Типы событий потока (workflow.schema_published) — не ключи каталога
+    logged = {e["args"][0] for t in w["transitions"] for e in t["effects"] if e["fn"] == "appendLog"} | {w["alerts"]["noRecipientLog"]}
     for src in ("engine.js", "server.js"):
         with open(os.path.join(ROOT, "prototype", src), encoding="utf-8") as f:
-            used |= set(re.findall(r'(?<!emit\()"(workflow\.[\w.]+)"', f.read()))
+            found = set(re.findall(r'(?<!emit\()"(workflow\.[\w.]+)"', f.read()))
+        used |= found
+        # Тексты, которые пишет сервер вне переходов, — в реестре messages с подстановками (§14.9, RULE-66, PROC-94):
+        # по нему бэкенд знает ключ и его vars; каталог строк без реестра этого не говорит
+        for key in sorted(k for k in found if re.match(r"workflow\.(error|guard|journal)\.", k) and k not in w.get("messages", {}) and k not in logged):
+            err.append(f"реестр текстов: {src} пишет {key}, а в реестре messages машины его нет (§14.9, PROC-94)")
     for key in sorted(used - set(langs["ru"])):
         err.append(f"каталог строк: ключа {key} нет в strings/ru.json (§14.9)")
     for key in sorted(set(langs["ru"]) - used):
@@ -2699,6 +2705,8 @@ FIXTURE = "Specification/Workflow_machine/fixtures/demo.json"
 POST_DEFAULTS = "Specification/Workflow_machine/post-defaults.json"
 OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
+    ("messages-key-missing", "машина: ключа отказа RULE-142 нет в реестре messages — сервер его пишет, бэкенд не знает подстановок (§14.9, PROC-94)", MACHINE,
+     '    "workflow.error.changed.taken": { "vars": ["who"], "$comment": "RULE-142: инцидент ведёт другой человек (адресат — владелец)" },\n', '', "пишет workflow.error.changed.taken"),
     ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
      '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
     ("comment-bumps-version", "машина: комментарий сверяет состояние и адресата — чужой комментарий даёт владельцу конфликт (ТЗ-18, RULE-142)", MACHINE,

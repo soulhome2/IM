@@ -77,7 +77,7 @@ MUTATIONS = [
     ("scenario-always-editable", "engine.js", "const canEditScenario = (ev) => Boolean(ev) && !firstFail(ev, W.scenarioEdit.guards);", "const canEditScenario = (ev) => Boolean(ev);", "api"),
     ("expected-state-unchecked", "server.js", "const stateChanged = expects.includes(\"state\") && s.state != null && s.state !== ev.state;", "const stateChanged = false;", "api"),
     # Закрытый коллегой — «состояние», а не «уже ведёт» (RULE-142, A1 ревью)
-    ("closed-as-addressee", "server.js", "if (stateChanged && isDone(ev)) return \"state\";", "", "api"),
+    ("closed-as-addressee", "server.js", "const what = isDone(ev) && found !== \"news\" && found !== \"primary\" ? \"state\" : found;", "const what = found;", "api"),
     # Передан человеку, который ещё не принял, — «передан», а не «уже ведёт»
     ("addressed-as-taken", "server.js", "STATES[ev.state].owner === \"operator\" ?", "true ?", "api"),
     ("expected-addressee-unchecked", "server.js", "if (expects.includes(\"addressee\") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return \"addressee\";", "if (false) return \"addressee\";", "api"),

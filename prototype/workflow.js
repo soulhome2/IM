@@ -4699,7 +4699,42 @@ window.IM_WORKFLOW = {
     "workflow.error.version_conflict": {
       "vars": [
         "state"
-      ]
+      ],
+      "$comment": "RULE-142: действие оператора номер версии не сверяет — VERSION_CONFLICT остался у черновика схемы и у внутренней сверки версии сервера"
+    },
+    "workflow.error.changed.state": {
+      "vars": [
+        "state"
+      ],
+      "$comment": "RULE-142, §14.1: 412 INCIDENT_CHANGED, changed: state — другое состояние; закрытый теперь — всегда этот текст"
+    },
+    "workflow.error.changed.taken": {
+      "vars": [
+        "who"
+      ],
+      "$comment": "RULE-142: инцидент ведёт другой человек (адресат — владелец)"
+    },
+    "workflow.error.changed.addressed": {
+      "vars": [
+        "who"
+      ],
+      "$comment": "RULE-142: передан человеку или группе, ещё не принят"
+    },
+    "workflow.error.changed.queue": {
+      "vars": [],
+      "$comment": "RULE-142: адресата нет — вернулся в общую очередь"
+    },
+    "workflow.error.changed.news": {
+      "vars": [],
+      "$comment": "RULE-142: у закрытия — после journalSeen пришла запись журнала (invariants.optimisticLocking.journalNews)"
+    },
+    "workflow.error.changed.primary": {
+      "vars": [],
+      "$comment": "RULE-142, §11.1: у действия выборки с bulk.scope сменился сценарий основного"
+    },
+    "workflow.error.expected_required": {
+      "vars": [],
+      "$comment": "RULE-142: 428 PRECONDITION_REQUIRED — клиент не прислал, что видел оператор"
     },
     "workflow.error.changed.family": {
       "vars": [],
@@ -4745,6 +4780,19 @@ window.IM_WORKFLOW = {
     "workflow.error.scenario.not_on_path": {
       "vars": []
     },
+    "workflow.error.scenario.step_changed": {
+      "vars": [
+        "step",
+        "who"
+      ],
+      "$comment": "RULE-142: 409 STEP_CHANGED — шаг ответили после показа"
+    },
+    "workflow.error.scenario.step_changed_anon": {
+      "vars": [
+        "step"
+      ],
+      "$comment": "RULE-142: то же, автор ответа без имени"
+    },
     "workflow.error.scenario.not_editable": {
       "vars": []
     },
@@ -4755,6 +4803,17 @@ window.IM_WORKFLOW = {
     },
     "workflow.error.no_schema_admin": {
       "vars": []
+    },
+    "workflow.error.no_audit_access": {
+      "vars": []
+    },
+    "workflow.error.audit_export_too_large": {
+      "vars": []
+    },
+    "workflow.error.filter.bad": {
+      "vars": [
+        "name"
+      ]
     },
     "workflow.error.no_maintenance_edit": {
       "vars": []

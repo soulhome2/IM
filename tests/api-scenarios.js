@@ -181,6 +181,20 @@
     assert.eq(taken.body.messageKey, "workflow.error.changed.taken", "текст — у кого инцидент");
   });
 
+  test("Ответ на шаг закрытого коллегой — 412, changed: state, как у перехода: закрытый — всегда состояние (§14.1, RULE-142, BUG-125)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const seen = await env.card(inc.guid);
+    const stepId = seen.scenario.result.currentStepId;
+    const as = (tr, formValues) => env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/${tr}`, { formValues, surface: "card" });
+    assert.status(await as("takeover", { comment: "тест" }), 200, null, "Петрова перехватывает");
+    assert.status(await as("close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "Петрова закрывает");
+    const res = await env.answer(inc.guid, Object.assign({ stepId, value: ["confirmed"] }, IMTest.answerSeenOf(seen, stepId)));
+    assert.status(res, 412, "INCIDENT_CHANGED", "ответ на шаг закрытого");
+    assert.eq([res.body.details && res.body.details.changed, res.body.messageKey], ["state", "workflow.error.changed.state"], "что изменилось и текст");
+  });
+
   test("Взял другой — 412 INCIDENT_CHANGED: «Инцидент уже ведёт …», в current — его владение (§14.1, §22.6, RULE-142)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

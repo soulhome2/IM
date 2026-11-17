@@ -1537,11 +1537,10 @@
     const seenOf = (ev) => ({ state: ev.state, addressee: addresseeOf(ev), journalSeq: ev.log.length });
     const snapshotOf = (list) => Object.fromEntries(list.map((e) => [e.id, seenOf(e)]));
     // Что изменилось из того, что видел оператор: addressee | state | news; совпало всё — null. Не присланное не сверяется.
-    // Закрытый теперь — всегда state: закрывший коллега сменил и адресата, а оператору важнее, что инцидент закрыт
+    // Закрытый теперь — всегда state: это решает changedProblem, через неё идут все отказы
     function changedOf(ev, expects, seen) {
       const s = seen || {};
       const stateChanged = expects.includes("state") && s.state != null && s.state !== ev.state;
-      if (stateChanged && isDone(ev)) return "state";
       if (expects.includes("addressee") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return "addressee";
       if (stateChanged) return "state";
       if (expects.includes("news") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return "news";
@@ -1550,12 +1549,15 @@
     // Отказ 412 INCIDENT_CHANGED: текст называет, что изменилось (§22.6) — уже ведёт другой человек (он владелец), передан
     // человеку, который ещё не принял, или группе, в общей очереди, другое состояние (закрыт — всегда так), новое событие,
     // сменился основной выборки
-    function changedProblem(ev, what) {
+    function changedProblem(ev, found) {
       const who = addresseeOf(ev);
+      // Закрытый теперь — всегда state, кто бы ни звал (переход, выборка, объединение, ответ на шаг — BUG-125):
+      // закрывший коллега сменил и адресата, а оператору важнее, что инцидент закрыт
+      const what = isDone(ev) && found !== "news" && found !== "primary" ? "state" : found;
       let why;
       if (what === "news") why = ["workflow.error.changed.news"];
       else if (what === "primary") why = ["workflow.error.changed.primary"];
-      else if (what === "state" || isDone(ev)) why = ["workflow.error.changed.state", { state: [STATES[ev.state].labelKey] }];
+      else if (what === "state") why = ["workflow.error.changed.state", { state: [STATES[ev.state].labelKey] }];
       else if (!who) why = ["workflow.error.changed.queue"];
       // Ведёт — состояние, где адресат — сам оператор (owner: operator машины); ждёт принятия (transfer_target) — передан
       else why = [STATES[ev.state].owner === "operator" ? "workflow.error.changed.taken" : "workflow.error.changed.addressed", { who: actorRef(who).name }];
