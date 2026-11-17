@@ -1566,6 +1566,7 @@
     "workflow.error.field_invalid": { "vars": ["name"] },
     "workflow.error.unknown_action": { "vars": [] },
     "workflow.error.version_conflict": { "vars": ["state"] },
+    "workflow.error.changed.family": { "vars": [], "$comment": "RULE-142: семья инцидента сменилась, пока запрос ждал блокировку (объединили, отсоединили) — 412 INCIDENT_CHANGED, changed: state. Пишет только сервер стенда: в прототипе ожидания блокировки нет" },
     "workflow.error.selection_unavailable": { "vars": [] },
     "workflow.error.break_no_permission": { "vars": [] },
     "workflow.error.agent_state_not_allowed": { "vars": ["from", "to"] },

@@ -131,6 +131,7 @@
   "workflow.error.changed.state": "Инцидент уже в состоянии «{state}»",
   "workflow.error.changed.news": "Пришло новое событие — проверьте",
   "workflow.error.changed.primary": "Основной выборки сменился — проверьте форму",
+  "workflow.error.changed.family": "Связь инцидентов изменилась — проверьте",
   "workflow.error.scenario.step_changed": "Шаг «{step}» уже ответил {who} — проверьте",
   "workflow.error.scenario.step_changed_anon": "Шаг «{step}» уже ответили — проверьте",
   "workflow.error.selection_unavailable": "Для этой выборки действие недоступно",

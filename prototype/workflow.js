@@ -4701,6 +4701,10 @@ window.IM_WORKFLOW = {
         "state"
       ]
     },
+    "workflow.error.changed.family": {
+      "vars": [],
+      "$comment": "RULE-142: семья инцидента сменилась, пока запрос ждал блокировку (объединили, отсоединили) — 412 INCIDENT_CHANGED, changed: state. Пишет только сервер стенда: в прототипе ожидания блокировки нет"
+    },
     "workflow.error.selection_unavailable": {
       "vars": []
     },

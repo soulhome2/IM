@@ -131,6 +131,7 @@
   "workflow.error.changed.state": "The incident is already “{state}”",
   "workflow.error.changed.news": "A new event has arrived — check it",
   "workflow.error.changed.primary": "The main incident of the selection has changed — check the form",
+  "workflow.error.changed.family": "The incident links have changed — check",
   "workflow.error.scenario.step_changed": "Step “{step}” has already been answered by {who} — check it",
   "workflow.error.scenario.step_changed_anon": "Step “{step}” has already been answered — check it",
   "workflow.error.selection_unavailable": "This action is not available for the current selection",
