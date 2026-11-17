@@ -850,6 +850,53 @@
     assert.eq([taken.state, taken.acceptedAt, taken.acceptedBy], ["in_progress", null, null], "закрытый без взятия реакции не имеет и после нового взятия");
   });
 
+  test("Первое принятие ставят «Принять» и «Перехватить» из «Ожидает принятия»; перехват взятого первое принятие не меняет (§2.2, план 90)", async () => {
+    const env = await makeEnv();
+    const as = (who, guid, tr, formValues, surface) => env.call("POST", `/test/operators/${who}/incidents/${enc(guid)}/transitions/${tr}`, { formValues, surface: surface || "card" });
+    const [a, b] = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.acceptedAt === null);
+    assert.ok(a && b, "есть два новых пожара без принятия");
+    assert.status(await as("petrova", a.guid, "transfer", { targetId: ME, comment: "тест" }, "queue"), 200, null, "Петрова передаёт мне из очереди");
+    await env.advance(20);
+    const accepted = (await env.act(a.guid, "accept", {}, "queue")).body.incident;
+    assert.eq([accepted.state, accepted.acceptedBy && accepted.acceptedBy.id, Date.parse(accepted.acceptedAt)], ["in_progress", ME, env.now], "«Принять» — первое принятие");
+    assert.status(await env.act(b.guid, "transfer", { targetId: "petrova", comment: "тест" }, "queue"), 200, null, "передаю Петровой из очереди");
+    await env.advance(10);
+    const taken = (await env.act(b.guid, "takeover", { comment: "срочно" })).body.incident;
+    assert.eq([taken.state, taken.acceptedBy && taken.acceptedBy.id, Date.parse(taken.acceptedAt)], ["in_progress", ME, env.now], "«Перехватить» из «Ожидает принятия» — первое принятие");
+    // Взятый в наборе — с первым принятием (INC-1846: Петрова взяла в 11:56:54 снимка)
+    const foreign = await env.card(await env.guidOf("INC-1846"));
+    assert.eq(foreign.acceptedBy && foreign.acceptedBy.id, "petrova", "в наборе взятый Петровой — принят ею");
+    const over = (await env.act(foreign.guid, "takeover", { comment: "срочно" })).body.incident;
+    assert.eq([over.owner.id, over.acceptedBy.id, over.acceptedAt], [ME, "petrova", foreign.acceptedAt], "перехват в работе первое принятие не меняет");
+  });
+
+  test("«Возобновить» ставит первое принятие, только если его ещё нет (инцидент из данных до поля); есть — не меняет (§2.2, план 90)", async () => {
+    const incidents = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
+    const old = incidents.find((e) => e.number === "INC-1845");
+    assert.eq([old.state, old.owner, old.acceptedBy], ["on_hold", ME, ME], "INC-1845 — мой отложенный, принят мной");
+    Object.assign(old, { acceptedAt: null, acceptedBy: null });
+    const env = await makeEnv({ fixturePatch: { incidents } });
+    await env.advance(15);
+    const resumed = (await env.act(old.guid, "resume", {}, "card")).body.incident;
+    assert.eq([resumed.state, resumed.acceptedBy && resumed.acceptedBy.id, Date.parse(resumed.acceptedAt)], ["in_progress", ME, env.now], "без первого принятия — его ставит «Возобновить»");
+    const kept = await env.card(await env.guidOf("INC-1834"));
+    const again = (await env.act(kept.guid, "resume", {}, "card")).body.incident;
+    assert.eq([again.state, again.acceptedAt], ["in_progress", kept.acceptedAt], "есть — «Возобновить» не меняет");
+  });
+
+  test("Привязанный, закрытый вместе с основным, первого принятия не получает; основной получает его при «Взять в работу» (§2.2, §11, план 90)", async () => {
+    const env = await makeEnv();
+    const fires = (await env.all("open")).filter((e) => e.state === "new" && e.eventType.id === "fire" && e.scenarioTitle === FIRE_TITLE).sort((a, b) => b.priority - a.priority);
+    const merged = await env.call("POST", "/operator/incidents/merge", { incidentGuids: [fires[0].guid, fires[1].guid] });
+    assert.status(merged, 200, null, "взять как одно");
+    const primary = merged.body.incident;
+    const other = primary.guid === fires[0].guid ? fires[1] : fires[0];
+    assert.eq([primary.state, primary.acceptedBy && primary.acceptedBy.id], ["in_progress", ME], "основной — первое принятие");
+    assert.status(await env.act(primary.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест" }), 200, null, "закрыть основной");
+    const closed = await env.card(other.guid);
+    assert.eq([closed.state, closed.linkedTo, closed.acceptedAt, closed.acceptedBy], ["closed", primary.guid, null, null], "привязанный закрыт без первого принятия");
+  });
+
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */
 
   test("Передачи не расходуют цепочку автоэскалации и не продлевают реакцию: две передачи нового — не принят, уходит на уровень 1 (§8.3, RULE-76)", async () => {

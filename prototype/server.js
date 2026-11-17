@@ -713,6 +713,10 @@
         closeComment: inc.result,
         closedBy: inc.closedBy,
         closedAt: abs(inc.closedAt),
+        // Первое принятие (§2.2): кто и когда первым взял; закрытый без взятия — без реакции
+        acceptedAt: abs(inc.acceptedAt),
+        acceptedBy: inc.acceptedBy || null,
+        noReaction: Boolean(inc.noReaction),
         reactionDueAt: null,
         reactionLeftMs: null,
         resolutionDueAt: null,

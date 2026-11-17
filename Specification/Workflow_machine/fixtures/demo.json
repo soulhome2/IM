@@ -1793,6 +1793,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1849,6 +1851,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1904,6 +1908,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1960,6 +1966,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2018,6 +2026,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2076,6 +2086,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:56:54Z",
+      "acceptedBy": "petrova",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2183,6 +2195,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:54:50Z",
+      "acceptedBy": "sidorov",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2305,6 +2319,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:53:40Z",
+      "acceptedBy": "me",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2461,6 +2477,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:50:57Z",
+      "acceptedBy": "me",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2565,6 +2583,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:47:40Z",
+      "acceptedBy": "gusev",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2655,6 +2675,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:50:00Z",
+      "acceptedBy": "noc",
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2789,6 +2811,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2846,6 +2870,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2903,6 +2929,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:20:23Z",
+      "acceptedBy": "sidorov",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3007,6 +3035,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3063,6 +3093,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3120,6 +3152,8 @@
       "result": null,
       "closedBy": "me",
       "closedAt": "2026-10-03T11:02:54Z",
+      "acceptedAt": "2026-10-03T10:58:15Z",
+      "acceptedBy": "me",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3256,6 +3290,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T11:50:00Z",
+      "acceptedBy": "sidorov",
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3373,6 +3409,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3430,6 +3468,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T10:35:02Z",
+      "acceptedBy": "me",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3595,6 +3635,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3651,6 +3693,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": "2026-10-03T10:18:54Z",
+      "acceptedBy": "petrova",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3756,6 +3800,8 @@
       "result": "плановый тест",
       "closedBy": "sidorov",
       "closedAt": "2026-10-03T10:15:02Z",
+      "acceptedAt": "2026-10-03T10:10:05Z",
+      "acceptedBy": "sidorov",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3917,6 +3963,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3973,6 +4021,8 @@
       "result": null,
       "closedBy": "me",
       "closedAt": "2026-10-03T09:56:47Z",
+      "acceptedAt": "2026-10-03T09:54:10Z",
+      "acceptedBy": "me",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -4108,6 +4158,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -4164,6 +4216,8 @@
       "result": null,
       "closedBy": null,
       "closedAt": null,
+      "acceptedAt": null,
+      "acceptedBy": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -4221,6 +4275,8 @@
       "result": "Сработка от уборщика",
       "closedBy": "petrova",
       "closedAt": "2026-10-03T11:35:00Z",
+      "acceptedAt": "2026-10-03T09:28:30Z",
+      "acceptedBy": "petrova",
       "timers": {
         "reaction": null,
         "resolution": null,

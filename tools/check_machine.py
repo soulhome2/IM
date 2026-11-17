@@ -487,6 +487,14 @@ def check_fixture(w, err):
             err.append(f"{where}: нет причины {inc['closeCause']} в справочнике результата {inc['closeResult']}")
         when(inc["occurredAt"], f"{gid}.occurredAt")
         when(inc["closedAt"], f"{gid}.closedAt")
+        # Первое принятие (§2.2, план 90): кто и когда первым взял — человек; без взятия — оба пусты
+        when(inc.get("acceptedAt"), f"{gid}.acceptedAt")
+        if (inc.get("acceptedAt") is None) != (inc.get("acceptedBy") is None):
+            err.append(f"{where}: acceptedAt и acceptedBy — только вместе (§2.2)")
+        if inc.get("acceptedBy") is not None and inc["acceptedBy"] not in humans:
+            err.append(f"{where}: первым принял {inc['acceptedBy']} — не оператор (§2.2)")
+        if inc.get("acceptedAt") is not None and inc.get("noReaction"):
+            err.append(f"{where}: принятый не бывает без реакции — acceptedAt и noReaction вместе (§2.2)")
         for b in inc.get("breaches", []):
             when(b.get("at"), f"{gid}.breaches[].at")
         times = []
