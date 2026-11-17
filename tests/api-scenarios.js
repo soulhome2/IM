@@ -1769,6 +1769,23 @@
     assert.status(await adminExport.call("GET", `${AUDIT}/settings/export`), 200, null, "выгрузка журнала настроек администратору с audit:export");
   });
 
+  // Права аудита — не права оператора (§5, §12.4): очередь, карточки и справочники они не открывают, как на сервере
+  // (HasAnyMachinePermission); supervisor:view — право оператора, с ним очередь видна
+  test("Аудит (§5, §12.4): с одними правами аудита очередь, карточки и справочники пусты; с supervisor:view очередь видна", async () => {
+    const guid = (await (await makeEnv()).all("open"))[0].guid;
+    for (const permissions of [["audit:actions:view"], ["audit:actions:view", "audit:export"]]) {
+      const env = await makeEnv({ permissions });
+      const what = `с ${permissions.join(" и ")}`;
+      assert.eq(await env.all("all"), [], `очередь пуста ${what}`);
+      assert.eq(await env.ok("GET", "/operator/reference/source-groups"), [], `дерево устройств пусто ${what}`);
+      assert.eq(await env.ok("GET", "/operator/reference/scenarios"), [], `справочник сценариев пуст ${what}`);
+      assert.status(await env.call("GET", `/operator/incidents/${enc(guid)}`), 404, "NOT_FOUND", `карточки нет ${what}`);
+    }
+    const supervisor = await makeEnv({ permissions: ["audit:actions:view", "supervisor:view"] });
+    assert.ok((await supervisor.all("all")).length > 0, "с supervisor:view очередь не пуста");
+    assert.ok((await supervisor.ok("GET", "/operator/reference/source-groups")).length > 0, "с supervisor:view дерево устройств не пусто");
+  });
+
   test("Аудит (§12.4): выгрузка — CSV с BOM и «;»; 93 дня — 422 AUDIT_EXPORT_TOO_LARGE; выгрузка — запись audit_export с числом строк", async () => {
     const env = await makeEnv();
     await env.ok("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: W.session.breakReasons[0].id });

@@ -331,6 +331,10 @@
     let ALL_PERMISSIONS = W.permissions.map((p) => p.key);
     let PERMISSIONS = opts.permissions || ALL_PERMISSIONS;
     const can = (key) => PERMISSIONS.includes(key);
+    // Права аудита — не права оператора (§5, §12.4): у кого из прав машины только они, тот не видит ни одного инцидента
+    // и устройства — очередь, карточки и справочники пусты, как на сервере (HasAnyMachinePermission)
+    const AUDIT_ONLY = ["audit:actions:view", "audit:export"];
+    const operatorRights = () => W.permissions.some((p) => !AUDIT_ONLY.includes(p.key) && can(p.key));
 
     /* ===== Устройства и группы ===== */
 
@@ -383,6 +387,8 @@
       });
       return out;
     }
+    // Устройства вошедшего: по группам доступа его ролей, если у него есть права оператора
+    const myAccessibleDevices = (roles) => (operatorRights() ? accessibleDevices(roles) : new Set());
     const canSee = (ev) => myDevices.has(eventSource(ev));
     // Состав дежурной группы (§8.1): все, у кого есть одна из её ролей, плюс отдельные люди.
     // Считается на лету — роли меняются; порядок групп — порядок в наборе
@@ -663,7 +669,7 @@
         );
       TREE = tree(data.sourceGroups);
       const me = data.people.operators.find((o) => o.id === ME) || {};
-      myDevices = accessibleDevices(rolesOverride || me.roles || []);
+      myDevices = myAccessibleDevices(rolesOverride || me.roles || []);
       SCENARIO_ROWS = Object.fromEntries(data.scenarios.rows.map((r) => [rowKey(r.guid, r.version), r]));
       RULES = (data.rules || []).map((r) => Object.assign({}, r, { createdAt: Date.parse(r.createdAt) || 0 }));
       // Окна набора — тоже снимок: времена сдвигаются вместе с остальными
@@ -1428,8 +1434,10 @@
         });
     }
 
-    // Справочник сценариев для фильтра очереди: сценарии правил и открытых инцидентов, по названию (§19.2)
+    // Справочник сценариев для фильтра очереди: сценарии правил и открытых инцидентов, по названию (§19.2).
+    // Без прав оператора — пуст, как очередь
     function scenarioRefs() {
+      if (!operatorRights()) return [];
       const seen = new Map();
       const add = (guid) => {
         const name = scenarioName(guid);
@@ -2757,7 +2765,7 @@
             person.roles = (body && body.roles) || [];
             if (person.id === ME) {
               rolesOverride = person.roles;
-              myDevices = accessibleDevices(person.roles);
+              myDevices = myAccessibleDevices(person.roles);
             }
             const fired = runScheduler();
             return { status: 200, body: { operatorId: person.id, roles: person.roles, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
