@@ -173,7 +173,7 @@
         "incident:bulk",
         "incident:run_action",
         "incident:comment",
-        "agent:set_not_ready", "maintenance:edit"
+        "agent:set_not_ready", "maintenance:edit", "supervisor:view", "audit:actions:view", "audit:export"
       ]
     },
     {
