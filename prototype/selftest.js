@@ -3832,6 +3832,32 @@
       }
     });
 
+    // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
+    await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const W = window.IM_WORKFLOW;
+      const keys = W.permissions.map((p) => p.key);
+      expect(["supervisor:view", "audit:actions:view", "audit:export"].every((k) => keys.includes(k)), `в машине нет прав старшего и аудита: ${keys.join(", ")}`);
+      const code = async (path) => (await stand.raw("GET", path)).status;
+      try {
+        await standReset({ fixture: "demo", operatorPermissions: ["audit:actions:view"] });
+        const got = {
+          actions: await code("/operator/admin/audit/actions"),
+          settings: await code("/operator/admin/audit/settings"),
+          adminSettings: await code("/operator/admin/access-groups"),
+          export: await code("/operator/admin/audit/actions/export"),
+        };
+        expect(got.actions === 200 && got.settings === 403 && got.adminSettings === 403 && got.export === 403, `с одним audit:actions:view: ${JSON.stringify(got)}`);
+        await standReset({ fixture: "demo", operatorPermissions: ["audit:actions:view", "audit:export"] });
+        const exp = await code("/operator/admin/audit/actions/export");
+        expect(exp === 200, `выгрузка журнала действий с audit:export: ${exp}`);
+        return `журнал действий 200, журнал настроек ${got.settings}, настройки ${got.adminSettings}, выгрузка без права ${got.export}, с правом ${exp}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(100);
+      }
+    });
+
     // Идут плановые работы — пункт строки состояния поста (§22.4) и значок в дереве групп (ТЗ-21, §14.12, §19.1).
     // Полностью, со списком окон, — на вкладке «Система» колокольчика; в строке — если он самый серьёзный, иначе «и ещё N»
     const mwBanner = () => $("bellStates").querySelector('[data-post-state="maintenance"]');

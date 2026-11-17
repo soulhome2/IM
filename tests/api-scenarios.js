@@ -1730,7 +1730,7 @@
     assert.ok(levels.length > 0 && levels.every((p) => /^[0-9a-f-]{36}$/.test(p.guid)), "у уровня приоритета — guid для истории настроек");
   });
 
-  test("Аудит (§12.4): без права incident:schema:admin — 403; from позже to — 400; limit больше 500 — 400", async () => {
+  test("Аудит (§12.4): без права incident:schema:admin — журнал настроек 403; from позже to — 400; limit больше 500 — 400", async () => {
     const env = await makeEnv();
     const from = new Date(env.now).toISOString();
     const to = new Date(env.now - 86400000).toISOString();
@@ -1741,8 +1741,32 @@
     assert.status(await env.call("GET", `${AUDIT}/actions?from=${enc("вчера")}`), 400, "BAD_REQUEST", "from не разбирается");
     const all = W.permissions.map((p) => p.key).filter((k) => k !== "incident:schema:admin");
     const noAdmin = await makeEnv({ permissions: all });
-    for (const path of ["actions", "actions/export", "settings", "settings/export", "settings/1", "usage", "incidents", "objects", "people"])
+    for (const path of ["settings", "settings/export", "settings/1", "usage", "objects", "people?log=settings"])
       assert.status(await noAdmin.call("GET", `${AUDIT}/${path}`), 403, "PERMISSION_DENIED", `${path} без права`);
+  });
+
+  // Права аудита (§5, §12.4, план 90 часть Е): журнал действий — audit:actions:view, журнал настроек — incident:schema:admin,
+  // выгрузка — audit:export вместе с правом смотреть выгружаемый журнал
+  test("Аудит (§5, §12.4): с одним audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export", async () => {
+    const only = await makeEnv({ permissions: ["audit:actions:view"] });
+    for (const path of ["actions", "incidents", "people", "people?log=actions"])
+      assert.status(await only.call("GET", `${AUDIT}/${path}`), 200, null, `${path} с одним audit:actions:view`);
+    for (const path of ["settings", "settings/1", "objects", "people?log=settings", "usage", "actions/export", "settings/export"])
+      assert.status(await only.call("GET", `${AUDIT}/${path}`), 403, "PERMISSION_DENIED", `${path} с одним audit:actions:view`);
+    for (const path of ["/operator/admin/access-groups", "/operator/admin/duty-groups", "/operator/admin/people"])
+      assert.status(await only.call("GET", path), 403, "PERMISSION_DENIED", `настройки ${path} с одним audit:actions:view`);
+    const exporter = await makeEnv({ permissions: ["audit:actions:view", "audit:export"] });
+    assert.status(await exporter.call("GET", `${AUDIT}/actions/export`), 200, null, "выгрузка журнала действий с audit:export");
+    assert.status(await exporter.call("GET", `${AUDIT}/settings/export`), 403, "PERMISSION_DENIED", "выгрузка журнала настроек без права смотреть его");
+    const exportOnly = await makeEnv({ permissions: ["audit:export"] });
+    assert.status(await exportOnly.call("GET", `${AUDIT}/actions/export`), 403, "PERMISSION_DENIED", "выгрузка журнала действий без права смотреть его");
+    // incident:schema:admin прав журнала действий и выгрузки не даёт (§5)
+    const admin = await makeEnv({ permissions: ["incident:schema:admin"] });
+    assert.status(await admin.call("GET", `${AUDIT}/settings`), 200, null, "журнал настроек администратору");
+    for (const path of ["actions", "incidents", "people", "actions/export", "settings/export"])
+      assert.status(await admin.call("GET", `${AUDIT}/${path}`), 403, "PERMISSION_DENIED", `${path} с одним incident:schema:admin`);
+    const adminExport = await makeEnv({ permissions: ["incident:schema:admin", "audit:export"] });
+    assert.status(await adminExport.call("GET", `${AUDIT}/settings/export`), 200, null, "выгрузка журнала настроек администратору с audit:export");
   });
 
   test("Аудит (§12.4): выгрузка — CSV с BOM и «;»; 93 дня — 422 AUDIT_EXPORT_TOO_LARGE; выгрузка — запись audit_export с числом строк", async () => {

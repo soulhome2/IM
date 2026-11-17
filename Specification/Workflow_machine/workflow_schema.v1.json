@@ -159,6 +159,9 @@
     { "key": "incident:priority", "labelKey": "workflow.permission.incident.priority", "cloud": "incident_manager.incidents.priority.use" },
     { "key": "incident:schema:admin", "labelKey": "workflow.permission.incident.schema.admin", "cloud": "incident_manager.manage" },
     { "key": "maintenance:edit", "labelKey": "workflow.permission.maintenance.edit", "cloud": "incident_manager.maintenance.edit", "$comment": "§5, §14.12, ТЗ-21. Создавать, править, удалять и досрочно завершать окна плановых работ. У администратора и старшего смены; смотреть окна могут все, кто видит настройки или карточку. Не право перехода: его проверяют запросы /operator/maintenance-windows" },
+    { "key": "supervisor:view", "labelKey": "workflow.permission.supervisor.view", "cloud": "incident_manager.supervisor.view", "$comment": "§5. Смотреть экран старшего смены «Смена и статистика» целиком, с выгрузкой инцидентов в CSV. Не право перехода: его проверяют запросы экрана" },
+    { "key": "audit:actions:view", "labelKey": "workflow.permission.audit.actions.view", "cloud": "incident_manager.audit.view", "$comment": "§5, §12.4. Смотреть журнал действий: список действий, список по инцидентам, лента инцидента, люди для фильтра журнала действий. Все действия своей организации, без отбора по группам доступа. incident:schema:admin его не даёт. Не право перехода: его проверяют запросы /operator/admin/audit" },
+    { "key": "audit:export", "labelKey": "workflow.permission.audit.export", "cloud": "incident_manager.audit.export", "$comment": "§5, §12.4. Выгружать в файл журнал аудита — вместе с правом смотреть тот журнал, который выгружается: журнал действий — с audit:actions:view, журнал настроек — с incident:schema:admin. Не право перехода: его проверяют запросы выгрузки аудита" },
     { "key": "agent:set_not_ready", "labelKey": "workflow.permission.agent.set_not_ready", "cloud": "incident_manager.agent.not_ready.use" }
   ],
 

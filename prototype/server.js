@@ -226,8 +226,12 @@
     }
     const badRequest = () => problem(400, "BAD_REQUEST", ["workflow.error.bad_request"]);
     const noAudit = () => problem(403, "PERMISSION_DENIED", ["workflow.error.no_audit_access"]);
+    // Права аудита (§5, §12.4): журнал действий — audit:actions:view, журнал изменений настроек — im.audit.settings.view,
+    // его в первой версии даёт incident:schema:admin; выгрузка — audit:export вместе с правом смотреть выгружаемый журнал
+    const AUDIT_VIEW = { actions: "audit:actions:view", settings: "incident:schema:admin" };
+    const canAudit = (journal) => can(AUDIT_VIEW[journal]);
     function auditPage(journal, q) {
-      if (!can("incident:schema:admin")) return noAudit();
+      if (!canAudit(journal)) return noAudit();
       const period = auditPeriod(q);
       const limit = q.limit == null ? 100 : Number(q.limit);
       if (!period || auditIncident(q.incident) === null || !Number.isInteger(limit) || limit < 1 || limit > 500) return badRequest();
@@ -241,8 +245,8 @@
       return { status: 200, body: Object.assign({ items }, rows.length > limit ? { next: `${last.at}|${last.id}` } : {}) };
     }
     // Подсказка фильтра (§12.4): по одной на инцидент или объект — из самой новой записи, сначала новые; q — часть текста без учёта регистра
-    function auditSuggest(q, rows) {
-      if (!can("incident:schema:admin")) return noAudit();
+    function auditSuggest(journal, q, rows) {
+      if (!canAudit(journal)) return noAudit();
       const limit = q.limit == null ? 20 : Number(q.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 50) return badRequest();
       const part = String(q.q || "").toLowerCase();
@@ -291,7 +295,7 @@
       }
     };
     function auditExport(journal, q) {
-      if (!can("incident:schema:admin")) return noAudit();
+      if (!canAudit(journal) || !can("audit:export")) return noAudit();
       const period = auditPeriod(q);
       if (!period || auditIncident(q.incident) === null || (q.tz != null && !validZone(q.tz))) return badRequest();
       const tz = q.tz == null ? "UTC" : q.tz;
@@ -2159,27 +2163,27 @@
           return { status: 200, body: CAMERA_LINKS.map((l) => ({ guid: l.id, name: l.name, devices: l.devices.map(named), cameras: l.cameras.map(named) })) };
         },
       ],
-      // Аудит (§12.4): журнал действий и журнал настроек, по праву администратора (§5)
+      // Аудит (§12.4): журнал действий и журнал настроек, каждый по своему праву (§5)
       ["GET", "/operator/admin/audit/actions", (p, q) => auditPage("actions", auditQuery(q))],
       ["GET", "/operator/admin/audit/actions/export", (p, q) => auditExport("actions", auditQuery(q))],
       ["GET", "/operator/admin/audit/settings", (p, q) => auditPage("settings", auditQuery(q))],
       ["GET", "/operator/admin/audit/settings/export", (p, q) => auditExport("settings", auditQuery(q))],
-      ["GET", "/operator/admin/audit/incidents", (p, q) => auditSuggest({ q: q.q, limit: q.limit }, auditActions.filter((r) => r.incidentGuid && r.incidentNumber).map((r) => ({ key: r.incidentGuid, at: r.at, text: r.incidentNumber, item: { guid: r.incidentGuid, number: r.incidentNumber } })))],
+      ["GET", "/operator/admin/audit/incidents", (p, q) => auditSuggest("actions", { q: q.q, limit: q.limit }, auditActions.filter((r) => r.incidentGuid && r.incidentNumber).map((r) => ({ key: r.incidentGuid, at: r.at, text: r.incidentNumber, item: { guid: r.incidentGuid, number: r.incidentNumber } })))],
       [
         "GET",
         "/operator/admin/audit/people",
         (p, q) => {
           if (q.log != null && q.log !== "actions" && q.log !== "settings") return badRequest();
           const rows = q.log === "settings" ? settingsAudit.map((r) => ({ id: r.actorId, name: r.actorName, at: r.at })) : auditActions.filter((r) => r.personId).map((r) => ({ id: r.personId, name: r.personName, at: r.at }));
-          return auditSuggest({ q: q.q, limit: q.limit }, rows.map((r) => ({ key: r.id, at: r.at, text: r.name, item: { personId: r.id, personName: r.name } })));
+          return auditSuggest(q.log === "settings" ? "settings" : "actions", { q: q.q, limit: q.limit }, rows.map((r) => ({ key: r.id, at: r.at, text: r.name, item: { personId: r.id, personName: r.name } })));
         },
       ],
-      ["GET", "/operator/admin/audit/objects", (p, q) => auditSuggest({ q: q.q, limit: q.limit }, settingsAudit.filter((r) => q.objectType == null || r.objectType === q.objectType).map((r) => ({ key: `${r.objectType}|${r.objectId}`, at: r.at, text: r.objectName, item: { objectType: r.objectType, objectId: r.objectId, objectName: r.objectName } })))],
+      ["GET", "/operator/admin/audit/objects", (p, q) => auditSuggest("settings", { q: q.q, limit: q.limit }, settingsAudit.filter((r) => q.objectType == null || r.objectType === q.objectType).map((r) => ({ key: `${r.objectType}|${r.objectId}`, at: r.at, text: r.objectName, item: { objectType: r.objectType, objectId: r.objectId, objectName: r.objectName } })))],
       [
         "GET",
         "/operator/admin/audit/settings/{id}",
         (p) => {
-          if (!can("incident:schema:admin")) return noAudit();
+          if (!canAudit("settings")) return noAudit();
           const entry = settingsAudit.find((e) => e.id === p.id);
           return entry ? { status: 200, body: entry } : problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
         },
