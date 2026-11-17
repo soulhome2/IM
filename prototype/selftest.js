@@ -2403,7 +2403,7 @@
       // Звук (§21) — сразу после работы оператора
       const settingTabs = window.IM_WORKFLOW.adminSettings.tabs.filter((x) => x.items).map((x) => x.id);
       expect(settingTabs.join() === "timing,operator,sound,reasons,maintenance,storage", `вкладки с настройками: ${settingTabs.join(", ")}`);
-      const groupsOf = { timing: "norms,escalation", operator: "queue,limits,session,links", storage: "retention" };
+      const groupsOf = { timing: "norms,escalation", operator: "queue,limits,session,shift,links", storage: "retention" };
       for (const [id, want] of Object.entries(groupsOf)) {
         await click($("adminTabs").querySelector(`[data-admin-tab="${id}"]`));
         await wait(200);

@@ -955,6 +955,9 @@
         closeCauseLabel: ev.closeCauseLabel || null,
         closeResultLabel: ev.closeResult ? render(engine.closeResultLabel(ev)) : null,
         closedAt: iso(ev.closedAt),
+        // Первое принятие (§2.2, план 90): ставит эффект машины markAccepted, потом не меняется
+        acceptedAt: iso(ev.acceptedAt),
+        acceptedBy: actorRef(ev.acceptedBy),
         timer: timerState(ev),
         holdTimer: holdTimerState(ev),
         slaBreached: Boolean(ev.slaBreached),

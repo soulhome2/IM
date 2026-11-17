@@ -2537,6 +2537,31 @@ def check_admin_groups(tab, o, err):
             err.append(f"{where}, раздел «{g['id']}»: запроса {g['source']} нет в контракте")
 
 
+def check_shift(w, err):
+    """Смена поста (§20, §23.1, план 90): starts — от одного до четырёх времён «ЧЧ:ММ», по возрастанию, без повторов;
+    timeZone — известный пояс IANA; refreshSec — целое от 1. То же сервер проверяет при сохранении настроек поста"""
+    import re
+    from zoneinfo import ZoneInfo
+    sh = w.get("shift")
+    if not isinstance(sh, dict):
+        err.append("смена: нет раздела shift (§20)")
+        return
+    starts = sh.get("starts")
+    ok = isinstance(starts, list) and 1 <= len(starts) <= 4 and all(isinstance(x, str) and re.fullmatch(r"([01][0-9]|2[0-3]):[0-5][0-9]", x) for x in starts)
+    if not ok:
+        err.append(f"смена: shift.starts = {starts!r} — от одного до четырёх времён «ЧЧ:ММ» (§20)")
+    elif starts != sorted(set(starts)):
+        err.append(f"смена: shift.starts = {starts!r} — не по возрастанию или с повтором (§20)")
+    tz = sh.get("timeZone")
+    try:
+        ZoneInfo(tz)
+    except Exception:
+        err.append(f"смена: shift.timeZone = {tz!r} — не пояс IANA (§20)")
+    r = sh.get("refreshSec")
+    if not isinstance(r, int) or isinstance(r, bool) or r < 1:
+        err.append(f"смена: shift.refreshSec = {r!r} — целое от 1 (§23.2)")
+
+
 def check_admin_settings(w, o, err):
     """Перечень настроек администратора (RULE-44): пути существуют, запросы есть в контракте,
     каждый ключ разделов-настроек — в перечне или в notSettings с причиной."""
@@ -2695,6 +2720,7 @@ def collect():
     check_escalation_settings(w, o, err)
     check_sound(w, err)
     check_display(w, err)
+    check_shift(w, err)
     check_admin_settings(w, o, err)
     check_fixture(with_post_settings(w), err)
     check_rules(fixture_with_rows(), err)
@@ -2867,6 +2893,8 @@ MUTATIONS.append(machine_json_mutation("sound-volume-floor-over", "volumeFloor =
 MUTATIONS.append(machine_json_mutation("escalation-level-name-long", "name строкой не длиннее 60"))
 MUTATIONS.append(machine_json_mutation("sound-key-dollar-ref", "sound.byPriority.75.$ref"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-uncounted", "без счётчика"))
+MUTATIONS.append(machine_json_mutation("shift-starts-unsorted", "не по возрастанию"))
+MUTATIONS.append(machine_json_mutation("shift-time-zone-unknown", "не пояс IANA"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-filter-unknown", "inboxBlock.filter = 'inbox_mine'"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-sort-unknown", "inboxBlock.sort"))
 MUTATIONS.append(machine_json_mutation("layout-inbox-hidden-unknown", "hiddenWith — 'closed'"))

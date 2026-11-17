@@ -64,6 +64,10 @@
       "description": "§5, §8.1, §20 (RULE-44). Данные МИ, которые настраивает администратор (`incident:schema:admin`) и которых нет в схеме: группы доступа, дежурные группы. Здесь — чтение для экрана настроек; правка — вкладка администрирования бэкенда."
     },
     {
+      "name": "supervisor",
+      "description": "§23 (план 90). Экран старшего смены «Смена и статистика» — право `supervisor:view`."
+    },
+    {
       "name": "stream",
       "description": "§9, §14.3. Поток серверных событий: автоэскалация, срабатывание таймеров, чужие действия."
     },
@@ -3051,6 +3055,44 @@
         }
       }
     },
+    "/operator/supervisor/now": {
+      "get": {
+        "tags": [
+          "supervisor"
+        ],
+        "operationId": "getSupervisorNow",
+        "summary": "Смена и статистика: блок «Сейчас»",
+        "description": "§23.1, §23.2 (план 90). Блок «Сейчас» экрана «Смена и статистика»: текущая смена, сводка и строки операторов. Клиент запрашивает при открытии экрана и опросом раз в `shift.refreshSec` секунд машины, пока экран открыт: событий потока о смене состояния других операторов нет. Организация — из токена: чужую не запросить. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`), без него — `403 PERMISSION_DENIED`. Смена — по настройке поста `shift` (§20), одна для всех: от входа операторов не зависит",
+        "parameters": [
+          {
+            "name": "dutyGroup",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Фильтр по дежурной группе — id; нет — «Все». Остаются строки её участников, числа `present`, `onBreak`, `noLink`, `signedOut` — по оставшимся строкам; `unowned` и `overdue` не меняются. Такой группы нет — строк нет"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Блок «Сейчас»",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupervisorNow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/admin/audit/incidents": {
       "get": {
         "tags": [
@@ -5959,6 +6001,37 @@
             "type": "object",
             "additionalProperties": true
           },
+          "shift": {
+            "type": "object",
+            "description": "§20, §23.1 (план 90). Смена поста — для экрана «Смена и статистика»: `starts` — начала смен, времена суток «ЧЧ:ММ» в поясе `timeZone`, от одного до четырёх, по возрастанию, без повторов (иначе отказ при сохранении настроек поста); `timeZone` — пояс IANA (неизвестный — отказ при сохранении); пост хранит свой пояс, только если он отличается от пояса по умолчанию — пояса развёртывания (`IM_SHIFT_TIME_ZONE`), иначе машины. `refreshSec` — период опроса `GET /operator/supervisor/now`, пока экран открыт; не настройка поста",
+            "properties": {
+              "starts": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                },
+                "default": [
+                  "08:00",
+                  "20:00"
+                ]
+              },
+              "timeZone": {
+                "type": "string",
+                "default": "Europe/Moscow",
+                "example": "Europe/Moscow"
+              },
+              "refreshSec": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 30
+              }
+            },
+            "additionalProperties": true
+          },
           "scenarioEdit": {
             "type": "object",
             "description": "§10.4. Условия правки шагов сценария. Не выполнены — карточка на просмотр (IncidentCard.readOnly)",
@@ -7802,6 +7875,21 @@
             "format": "date-time",
             "description": "Только у закрытого: «Переоткрыть» снимает закрытие целиком — результат, причину сбоя, время, закрывшего и комментарий (RULE-103).",
             "nullable": true
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "§2.2, §23.2 (план 90). Первое принятие — когда инцидент впервые вошёл в работу («Взять», «Принять», «Перехватить», «Возобновить», «Взять в работу» на выборке — основной). Потом не меняется: «Вернуть в очередь», передача, перехват, «Переоткрыть» его не ставят и не снимают. Ещё не брали или закрыли без взятия (реакции у такого нет и не будет) — null. Для отчётов: реакция оператора — от `createdAt` до `acceptedAt`",
+            "nullable": true
+          },
+          "acceptedBy": {
+            "description": "§2.2, §23.2 (план 90). Кто первым принял — пара к `acceptedAt`; null, когда null `acceptedAt`",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ]
           },
           "timer": {
             "description": "Норматив, который сейчас ведёт инцидент. null — закрытый или привязанный: у привязанного своего срока нет, у группы один — срок основного (§11.4).",
@@ -13005,6 +13093,273 @@
             }
           }
         ]
+      },
+      "SupervisorNow": {
+        "type": "object",
+        "required": [
+          "at",
+          "shift",
+          "summary",
+          "operators"
+        ],
+        "description": "§23.2 (план 90). Блок «Сейчас» экрана «Смена и статистика»: кто на месте и чем занят, итоги текущей смены. Только своей организации",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда посчитано — «обновлено» над таблицей"
+          },
+          "shift": {
+            "$ref": "#/components/schemas/SupervisorShift"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SupervisorNowSummary"
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorNowRow"
+            },
+            "description": "Строки таблицы: люди организации с правом `incident:accept` — те же, кто может быть адресатом передачи (§8.1), без отбора по дежурным группам и группам доступа (решение 9 плана 90); с `dutyGroup` — только её участники. Порядок не задан: сортирует клиент"
+          }
+        },
+        "example": {
+          "at": "2026-11-18T10:15:30Z",
+          "shift": {
+            "from": "2026-11-18T05:00:00Z",
+            "to": "2026-11-18T17:00:00Z",
+            "timeZone": "Europe/Moscow"
+          },
+          "summary": {
+            "present": 2,
+            "onBreak": 1,
+            "noLink": 0,
+            "signedOut": 1,
+            "unowned": 5,
+            "overdue": 2
+          },
+          "operators": [
+            {
+              "person": {
+                "id": "ivanov",
+                "kind": "operator",
+                "name": "Иванов А. С."
+              },
+              "state": "busy",
+              "reasonId": null,
+              "reasonLabel": null,
+              "since": "2026-11-18T05:02:11Z",
+              "breakOverdue": null,
+              "dutyGroups": [
+                {
+                  "id": "grp-response",
+                  "name": "Группа реагирования"
+                }
+              ],
+              "inProgress": 2,
+              "onHold": 1,
+              "overdue": 1,
+              "closedThisShift": 7,
+              "medianReactionSec": 48
+            },
+            {
+              "person": {
+                "id": "orlova",
+                "kind": "operator",
+                "name": "Орлова Е. В."
+              },
+              "state": "not_ready",
+              "reasonId": "lunch",
+              "reasonLabel": "Обед",
+              "since": "2026-11-18T09:40:00Z",
+              "breakOverdue": null,
+              "dutyGroups": [],
+              "inProgress": 0,
+              "onHold": 0,
+              "overdue": 0,
+              "closedThisShift": 3,
+              "medianReactionSec": null
+            }
+          ]
+        }
+      },
+      "SupervisorShift": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "timeZone"
+        ],
+        "description": "§23.1. Текущая смена по настройке поста `shift` (§20): от последнего наступившего начала (входит в смену) до следующего (уже нет)",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало текущей смены — от него «закрыл за смену» и медиана реакции"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Следующее начало — конец текущей смены"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "Пояс смены (IANA): в нём экран показывает время. Пояс поста, а не задан — пояс по умолчанию (§20)",
+            "example": "Europe/Moscow"
+          }
+        }
+      },
+      "SupervisorNowSummary": {
+        "type": "object",
+        "required": [
+          "present",
+          "onBreak",
+          "noLink",
+          "signedOut",
+          "unowned",
+          "overdue"
+        ],
+        "description": "§23.2. Сводка над таблицей. Четыре числа состояний — по строкам ответа, вместе — все строки (с `dutyGroup` — только её участники); `unowned` и `overdue` — по инцидентам, видимым старшему, как в очереди (§5), `dutyGroup` их не меняет",
+        "properties": {
+          "present": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "На месте — строки «Готов» и «Занят»"
+          },
+          "onBreak": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "На перерыве"
+          },
+          "noLink": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Нет связи"
+          },
+          "signedOut": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Вышли или ещё не входили"
+          },
+          "unowned": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Ничьих в очереди: `new` и `pending_acceptance`, адресованные дежурной группе; адресованные лично человеку — не ничьи"
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Просрочено всего: открытые (`new`, `pending_acceptance`, `in_progress`, `on_hold`) с `slaBreached` или непустым `breaches`"
+          }
+        }
+      },
+      "SupervisorNowRow": {
+        "type": "object",
+        "required": [
+          "person",
+          "state",
+          "reasonId",
+          "reasonLabel",
+          "since",
+          "breakOverdue",
+          "dutyGroups",
+          "inProgress",
+          "onHold",
+          "overdue",
+          "closedThisShift",
+          "medianReactionSec"
+        ],
+        "description": "§23.2. Строка оператора. Числа — по всем его инцидентам, а не только по видимым старшему (решение 9 плана 90): номеров и содержания инцидентов нет",
+        "properties": {
+          "person": {
+            "description": "Оператор — имя, как в списке адресатов передачи (§8.1)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "not_ready",
+              "no_link",
+              "offline"
+            ],
+            "description": "`ready` — Готов, `busy` — Занят (есть свои в работе): оба — на месте; `not_ready` — Перерыв (и без связи); `no_link` — Нет связи: вошёл, не на перерыве, признак активности старше `session.idleHoldSec` (§12.3); `offline` — Вышел или ещё не входил"
+          },
+          "reasonId": {
+            "type": "string",
+            "description": "Причина перерыва — id из `session.breakReasons`; не перерыв или без причины — null",
+            "nullable": true
+          },
+          "reasonLabel": {
+            "type": "string",
+            "description": "Название причины перерыва, как в справочнике, на языке запроса; не перерыв или без причины — null",
+            "nullable": true
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "С какого времени: на месте — вход в МИ, возврат с перерыва или восстановление связи, что позже; перерыв — его начало; нет связи — последний признак активности; вышел — выход из МИ; ещё не входил — null",
+            "nullable": true
+          },
+          "breakOverdue": {
+            "type": "boolean",
+            "description": "Срок перерыва вышел. Пока у причин перерыва нет предельного срока (часть В плана 90) — null",
+            "nullable": true
+          },
+          "dutyGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorDutyGroupRef"
+            },
+            "description": "Дежурные группы, в которые он входит (§8.1), в порядке групп; ни в одной — пустой список"
+          },
+          "inProgress": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Его инцидентов в `in_progress`"
+          },
+          "onHold": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Его инцидентов в `on_hold`"
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Его в работе и отложенных с `slaBreached` или непустым `breaches`"
+          },
+          "closedThisShift": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Закрыл за смену: `closedBy` — он, `closedAt` не раньше `shift.from`. Переоткрытый после этого не считается; привязанные, закрытые вместе с основным, — один раз, по основному"
+          },
+          "medianReactionSec": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Медиана реакции за смену, с: по инцидентам, которые он принял первым (`acceptedBy` — он) с `acceptedAt` не раньше `shift.from`; реакция — от `createdAt` до `acceptedAt`. Привязанные не считаются, закрытые без взятия реакции не имеют. Нет таких — null",
+            "nullable": true
+          }
+        }
+      },
+      "SupervisorDutyGroupRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       }
     }
   }

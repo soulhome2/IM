@@ -241,6 +241,8 @@ class Doc:
             "copyPrimaryDeadline": lambda: f"{self.tm(a[0])} — остаток срока основного, на паузе",
             "notify": lambda: f"{'оповещение' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
+            "markAccepted": lambda: "первое принятие: `acceptedAt` — сейчас, `acceptedBy` — кто выполняет; только если `acceptedAt` пусто и нет `noReaction`",
+            "markNoReaction": lambda: "закрыт без взятия (`acceptedAt` пусто) — пометка `noReaction`: реакции у него нет и не будет",
             "logSiblings": lambda: "результат "
             + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0])
             + f" — открытым соседям запись «{RU.get(a[1], a[1])}»",

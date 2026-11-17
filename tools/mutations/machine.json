@@ -981,5 +981,47 @@
   "find": "{ \"id\": \"only_important\", \"labelKey\": \"workflow.postStatus.only_important\" }",
   "replace": "{ \"id\": \"connection\", \"labelKey\": \"workflow.postStatus.only_important\" }",
   "model": "вне модели: раздел display решает клиент, допустимые значения ловит статическая проверка tools/check_machine.py (check_display, §7, §22)"
+ },
+ {
+  "name": "accepted-overwritten",
+  "what": "первое принятие перезаписывается каждым входом в работу: повторное взятие после «Вернуть в очередь» меняет acceptedAt и acceptedBy (§2.2, план 90)",
+  "find": "\"if\": \"incident.acceptedAt == 0 && !incident.noReaction\"",
+  "replace": "\"if\": \"!incident.noReaction\"",
+  "model": "не проверяет: поля первого принятия — для отчётов, на переходы не влияют; инварианта о них в модели нет"
+ },
+ {
+  "name": "accepted-after-no-reaction",
+  "what": "закрытый без взятия получает первое принятие при новом взятии после «Переоткрыть» (§2.2, план 90)",
+  "find": "\"if\": \"incident.acceptedAt == 0 && !incident.noReaction\"",
+  "replace": "\"if\": \"incident.acceptedAt == 0\"",
+  "model": "не проверяет: поля первого принятия — для отчётов, на переходы не влияют; инварианта о них в модели нет"
+ },
+ {
+  "name": "no-reaction-never-set",
+  "what": "закрытие без взятия не ставит noReaction (§2.2, план 90)",
+  "find": "[{\"set\": \"incident.noReaction\", \"value\": \"true\"}]",
+  "replace": "[{\"set\": \"incident.noReaction\", \"value\": \"false\"}]",
+  "model": "не проверяет: поля первого принятия — для отчётов, на переходы не влияют; инварианта о них в модели нет"
+ },
+ {
+  "name": "accepted-by-nobody",
+  "what": "первое принятие не запоминает, кто принял (§2.2, план 90)",
+  "find": "{\"set\": \"incident.acceptedBy\", \"value\": \"actor\"}",
+  "replace": "{\"set\": \"incident.acceptedBy\", \"value\": \"''\"}",
+  "model": "не проверяет: поля первого принятия — для отчётов, на переходы не влияют; инварианта о них в модели нет"
+ },
+ {
+  "name": "shift-starts-unsorted",
+  "what": "смена: начала смен не по возрастанию — текущую смену не найти (§20, §23.1)",
+  "find": "\"starts\": [\"08:00\", \"20:00\"]",
+  "replace": "\"starts\": [\"20:00\", \"08:00\"]",
+  "model": "вне модели: смену модель не знает, допустимые значения ловит статическая проверка tools/check_machine.py (check_shift, §20)"
+ },
+ {
+  "name": "shift-time-zone-unknown",
+  "what": "смена: пояс смены — не пояс IANA (§20)",
+  "find": "\"timeZone\": \"Europe/Moscow\"",
+  "replace": "\"timeZone\": \"Moscow\"",
+  "model": "вне модели: смену модель не знает, допустимые значения ловит статическая проверка tools/check_machine.py (check_shift, §20)"
  }
 ]

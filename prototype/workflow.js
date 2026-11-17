@@ -1251,6 +1251,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "markAccepted"
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.claim"
@@ -1344,6 +1348,10 @@ window.IM_WORKFLOW = {
           "args": [
             "firstOpenStep"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "markAccepted"
         },
         {
           "kind": "transactional",
@@ -1587,6 +1595,10 @@ window.IM_WORKFLOW = {
           "args": [
             "firstOpenStep"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "markAccepted"
         },
         {
           "kind": "transactional",
@@ -1961,6 +1973,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "markAccepted"
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.takeover"
@@ -2128,6 +2144,10 @@ window.IM_WORKFLOW = {
           "args": [
             "hold"
           ]
+        },
+        {
+          "kind": "transactional",
+          "fn": "markNoReaction"
         },
         {
           "kind": "transactional",
@@ -3921,6 +3941,10 @@ window.IM_WORKFLOW = {
         },
         {
           "kind": "transactional",
+          "fn": "markNoReaction"
+        },
+        {
+          "kind": "transactional",
           "fn": "appendLog",
           "args": [
             "workflow.journal.close_linked"
@@ -4319,6 +4343,15 @@ window.IM_WORKFLOW = {
     "heartbeatSec": 30,
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
+  },
+  "shift": {
+    "$comment": "§20, §23.1 (решения 8, 13, 13а плана 90). Смена — отрезок времени поста для экрана «Смена и статистика»: от последнего наступившего начала до следующего, начало входит в смену. starts — начала смен, времена суток «ЧЧ:ММ» в поясе timeZone: от одного до четырёх, по возрастанию, без повторов (одно — смена длится сутки). timeZone — пояс IANA; пост хранит свой, только если он отличается от пояса по умолчанию: пояс развёртывания (переменная сервера IM_SHIFT_TIME_ZONE), иначе этот. Перевод часов — как у окон работ (§14.12, п. 3, disambiguation compatible). На переходы, права и состояние оператора смена не влияет. refreshSec — период опроса блока «Сейчас» (GET /operator/supervisor/now), пока экран открыт: событий о смене состояния других операторов в потоке нет (§23.2)",
+    "starts": [
+      "08:00",
+      "20:00"
+    ],
+    "timeZone": "Europe/Moscow",
+    "refreshSec": 30
   },
   "queueFilters": [
     {
@@ -4980,7 +5013,10 @@ window.IM_WORKFLOW = {
         "leftGroup": "LeftGroup",
         "scenario": "string",
         "eventGuid": "string",
-        "ruleDutyGroup": "string"
+        "ruleDutyGroup": "string",
+        "acceptedAt": "int",
+        "acceptedBy": "string",
+        "noReaction": "bool"
       },
       "Timer": {
         "due": "int",
@@ -5042,6 +5078,11 @@ window.IM_WORKFLOW = {
         "heartbeatSec": "int",
         "idleHoldSec": "int",
         "idleReleaseSec": "int"
+      },
+      "Shift": {
+        "starts": "list<string>",
+        "timeZone": "string",
+        "refreshSec": "int"
       },
       "Escalation": {
         "enabled": "bool",
@@ -5344,7 +5385,8 @@ window.IM_WORKFLOW = {
         "type": "map<string, CauseCatalog>",
         "from": "reasonCatalogs"
       },
-      "maintenance": "Maintenance"
+      "maintenance": "Maintenance",
+      "shift": "Shift"
     },
     "definitions": {
       "addressee": {
@@ -7510,6 +7552,48 @@ window.IM_WORKFLOW = {
         "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Наступивший у основного — отработанным и у него (RULE-50): нарушение группы ему допишется по окончании окна или уже записано, своего не будет (BUG-75). Перед clearLink"
       },
       {
+        "fn": "markAccepted",
+        "kind": "transactional",
+        "args": [],
+        "argTypes": {},
+        "do": [
+          {
+            "if": "incident.acceptedAt == 0 && !incident.noReaction",
+            "then": [
+              {
+                "set": "incident.acceptedAt",
+                "value": "now"
+              },
+              {
+                "set": "incident.acceptedBy",
+                "value": "actor"
+              }
+            ]
+          }
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§2.2, §23.2 (решение 12 плана 90). Первое принятие: при входе в in_progress — когда (accepted_at) и кто (accepted_by) первым взял инцидент в работу. Только если accepted_at пусто и нет пометки no_reaction: повторный вход в работу (после «Вернуть в очередь», передачи, перехвата) первое принятие не перезаписывает, закрытый без взятия его не получает никогда. У «Взять» (и «Взять в работу» на выборке — основной, grouping.takeWith), «Принять», «Перехватить», «Возобновить»; «Переоткрыть» — нет. На переходы не влияет — поле для отчётов: реакция оператора — от появления до accepted_at"
+      },
+      {
+        "fn": "markNoReaction",
+        "kind": "transactional",
+        "args": [],
+        "argTypes": {},
+        "do": [
+          {
+            "if": "incident.acceptedAt == 0",
+            "then": [
+              {
+                "set": "incident.noReaction",
+                "value": "true"
+              }
+            ]
+          }
+        ],
+        "extendsBaseRegistry": true,
+        "$comment": "§2.2 (решение 2026-11-17, план 90). Закрытый без взятия реакции не имеет: закрытие с пустым accepted_at — «Массовым сбоем» из очереди или привязанного вместе с основным — ставит no_reaction. Её ничто не снимает, в том числе «Переоткрыть»: после нового взятия accepted_at остаётся пустым (markAccepted). У всех входов в closed"
+      },
+      {
         "fn": "logSiblings",
         "kind": "transactional",
         "args": [
@@ -7735,6 +7819,7 @@ window.IM_WORKFLOW = {
       "sound",
       "limits",
       "session",
+      "shift",
       "queueSort",
       "retention",
       "maintenance"
@@ -7869,7 +7954,7 @@ window.IM_WORKFLOW = {
       {
         "id": "operator",
         "labelKey": "workflow.settings.tab.operator",
-        "rules": "§7, §10.2, §11, §12.3",
+        "rules": "§7, §10.2, §11, §12.3, §20",
         "groups": [
           {
             "id": "queue",
@@ -7885,6 +7970,11 @@ window.IM_WORKFLOW = {
             "id": "session",
             "labelKey": "workflow.settings.tab.session",
             "rules": "§12.3"
+          },
+          {
+            "id": "shift",
+            "labelKey": "workflow.settings.tab.shift",
+            "rules": "§20, §23.1"
           },
           {
             "id": "links",
@@ -7951,6 +8041,18 @@ window.IM_WORKFLOW = {
             "labelKey": "workflow.settings.session.idleReleaseSec",
             "whatKey": "workflow.settings.session.idleReleaseSec.what",
             "group": "session"
+          },
+          {
+            "path": "shift.starts",
+            "labelKey": "workflow.settings.shift.starts",
+            "whatKey": "workflow.settings.shift.starts.what",
+            "group": "shift"
+          },
+          {
+            "path": "shift.timeZone",
+            "labelKey": "workflow.settings.shift.timeZone",
+            "whatKey": "workflow.settings.shift.timeZone.what",
+            "group": "shift"
           }
         ]
       },
@@ -8219,6 +8321,10 @@ window.IM_WORKFLOW = {
       {
         "path": "maintenance.startSkewSec",
         "why": "допуск на расхождение часов — устройство проверки начала окна (§14.12), а не правило поста"
+      },
+      {
+        "path": "shift.refreshSec",
+        "why": "период опроса блока «Сейчас» — устройство экрана «Смена и статистика», а не правило поста (§23.2)"
       },
       {
         "path": "maintenance.markPriority",

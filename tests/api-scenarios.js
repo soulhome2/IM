@@ -827,6 +827,29 @@
     assert.eq([back.body.incident.timer.id, leftOf(back.body.incident)], ["reaction", norm], "реакция — полный норматив, а не остаток на момент закрытия");
   });
 
+  test("Первое принятие: acceptedAt и acceptedBy ставит первое взятие, повторное не перезаписывает; закрытый без взятия реакции не имеет (§2.2, план 90)", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.eq([inc.acceptedAt, inc.acceptedBy], [null, null], "новый — ещё не принят");
+    await env.advance(30);
+    const first = (await env.act(inc.guid, "claim", {}, "queue")).body.incident;
+    assert.ok(first.acceptedAt && first.acceptedBy && first.acceptedBy.id === first.owner.id, `первое взятие: ${first.acceptedAt}, ${JSON.stringify(first.acceptedBy)}`);
+    await env.advance(60);
+    assert.status(await env.act(inc.guid, "release", { comment: "не моё" }), 200, null, "вернуть в очередь");
+    await env.advance(60);
+    const again = (await env.act(inc.guid, "claim", {}, "queue")).body.incident;
+    assert.eq([again.acceptedAt, again.acceptedBy.id], [first.acceptedAt, first.acceptedBy.id], "повторное взятие первое принятие не перезаписывает");
+
+    const other = await env.find((e) => e.state === "new" && e.guid !== inc.guid && e.acceptedAt === null);
+    const cause = W.reasonCatalogs.mass_fault.items[0].id;
+    assert.status(await env.act(other.guid, "close", { resultId: "mass", causeId: cause, comment: "свет" }, "queue"), 200, null, "закрыть «Массовым сбоем» из очереди");
+    const reopened = (await env.act(other.guid, "reopen", { comment: "вернули" })).body.incident;
+    assert.eq([reopened.state, reopened.acceptedAt], ["in_progress", null], "«Переоткрыть» первое принятие не ставит");
+    assert.status(await env.act(other.guid, "release", { comment: "не моё" }), 200, null, "вернуть в очередь");
+    const taken = (await env.act(other.guid, "claim", {}, "queue")).body.incident;
+    assert.eq([taken.state, taken.acceptedAt, taken.acceptedBy], ["in_progress", null, null], "закрытый без взятия реакции не имеет и после нового взятия");
+  });
+
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */
 
   test("Передачи не расходуют цепочку автоэскалации и не продлевают реакцию: две передачи нового — не принят, уходит на уровень 1 (§8.3, RULE-76)", async () => {

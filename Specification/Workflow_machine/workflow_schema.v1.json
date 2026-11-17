@@ -525,6 +525,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+        { "kind": "transactional", "fn": "markAccepted" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.claim"] }
       ],
       "bulk": { "allowed": false },
@@ -552,6 +553,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+        { "kind": "transactional", "fn": "markAccepted" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
       ],
       "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
@@ -628,6 +630,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+        { "kind": "transactional", "fn": "markAccepted" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.resume"] }
       ],
       "bulk": { "allowed": false },
@@ -728,6 +731,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
         { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+        { "kind": "transactional", "fn": "markAccepted" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.takeover"] },
         { "kind": "transactional", "fn": "evictOpenCard", "args": ["previousOwner"] },
         { "kind": "external", "fn": "notify", "args": ["before.owner"] }
@@ -771,6 +775,7 @@
         { "kind": "transactional", "fn": "stopTimer", "args": ["reaction", true] },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "stopTimer", "args": ["hold"] },
+        { "kind": "transactional", "fn": "markNoReaction" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.close"] },
         { "kind": "transactional", "fn": "logSiblings", "args": [["false_alarm"], "workflow.journal.sibling_closed"] },
         { "kind": "transactional", "fn": "returnToQueue" },
@@ -1301,6 +1306,7 @@
         { "kind": "transactional", "fn": "copyCloseFromPrimary" },
         { "kind": "transactional", "fn": "pauseTimer", "args": ["resolution"] },
         { "kind": "transactional", "fn": "setFlag", "args": ["closedAt", "now"] },
+        { "kind": "transactional", "fn": "markNoReaction" },
         { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.close_linked"] },
         { "kind": "transactional", "fn": "logSiblings", "args": [["false_alarm"], "workflow.journal.sibling_closed"] },
         { "kind": "external", "fn": "notifySiblings", "args": [["false_alarm"]] },
@@ -1449,6 +1455,13 @@
     "heartbeatSec": 30,
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
+  },
+
+  "shift": {
+    "$comment": "§20, §23.1 (решения 8, 13, 13а плана 90). Смена — отрезок времени поста для экрана «Смена и статистика»: от последнего наступившего начала до следующего, начало входит в смену. starts — начала смен, времена суток «ЧЧ:ММ» в поясе timeZone: от одного до четырёх, по возрастанию, без повторов (одно — смена длится сутки). timeZone — пояс IANA; пост хранит свой, только если он отличается от пояса по умолчанию: пояс развёртывания (переменная сервера IM_SHIFT_TIME_ZONE), иначе этот. Перевод часов — как у окон работ (§14.12, п. 3, disambiguation compatible). На переходы, права и состояние оператора смена не влияет. refreshSec — период опроса блока «Сейчас» (GET /operator/supervisor/now), пока экран открыт: событий о смене состояния других операторов в потоке нет (§23.2)",
+    "starts": ["08:00", "20:00"],
+    "timeZone": "Europe/Moscow",
+    "refreshSec": 30
   },
 
   "queueFilters": [
@@ -1631,7 +1644,7 @@
   "cel": {
     "$comment": "Язык выражений машины (CEL.md, ARCH-07): смысл условий и эффектов — выражениями CEL в реестрах (expr, failKey, failVars, do) и здесь. types — типы значений, которые видят выражения; пусто — '' и 0, время — целые мс. world — факты мира: их даёт сервер, машина только читает. settings — разделы машины как константы выражений. definitions — общие понятия, вызываются как функции. Переезд по шагам: у слова без expr смысл — по README машины, «Язык значений».",
     "types": {
-      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "maintenanceWindowId": "string", "closeMaintenanceWindowId": "string", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string", "ruleDutyGroup": "string" },
+      "Incident": { "id": "string", "number": "string", "eventType": "string", "priority": "int", "occurredAt": "int", "state": "string", "owner": "string", "assignmentGroup": "string", "holdReasonId": "string", "escalationLevel": "int", "transferCount": "int", "closeResultId": "string", "closeCauseId": "string", "closeCauseLabel": "string", "result": "string", "closedBy": "string", "closedAt": "int", "slaBreached": "bool", "breaches": "list<Breach>", "priorityManual": "bool", "maintenanceWindowId": "string", "closeMaintenanceWindowId": "string", "timers": "map<string, Timer>", "linkedTo": "string", "linkedAt": "int", "leftGroup": "LeftGroup", "scenario": "string", "eventGuid": "string", "ruleDutyGroup": "string", "acceptedAt": "int", "acceptedBy": "string", "noReaction": "bool" },
       "Timer": { "due": "int", "paused": "bool", "left": "int", "fired": "int", "since": "int" },
       "Breach": { "kind": "string", "at": "int", "owner": "string" },
       "LeftGroup": { "primaryId": "string", "linkedAt": "int", "at": "int" },
@@ -1641,6 +1654,7 @@
       "SessionState": { "id": "string", "readOnly": "bool", "readOnlyReasonKey": "string" },
       "BreakReason": { "id": "string", "labelKey": "string" },
       "Session": { "states": "list<SessionState>", "breakReasons": "list<BreakReason>", "heartbeatSec": "int", "idleHoldSec": "int", "idleReleaseSec": "int" },
+      "Shift": { "starts": "list<string>", "timeZone": "string", "refreshSec": "int" },
       "Escalation": { "enabled": "bool", "levels": "list<Level>", "maxLevel": "int", "onResolutionOverdue": "string" },
       "Level": { "level": "int", "targetKind": "string", "target": "string", "reactionSec": "int" },
       "Alerts": { "targetKind": "string", "target": "string", "noRecipientLog": "string" },
@@ -1685,7 +1699,7 @@
       "groupMembersAt": { "params": { "p": "Incident", "at": "int" }, "returns": "list<Incident>", "ref": "incidents.filter(e, e.id != p.id && inGroupAt(e, p, at))", "$comment": "§11.4. Кто был в группе основного p в момент at (inGroupAt)" },
       "siblingsOf": { "params": { "x": "Incident" }, "returns": "list<Incident>", "ref": "incidents.filter(s, x.eventGuid != '' && s.eventGuid == x.eventGuid && s.id != x.id)", "$comment": "§14.5, ARCH-15. Соседи — инциденты того же события, кроме самого x: другие службы той же тревоги. Не привязка §11: у каждого свой владелец, сроки и закрытие" }
     },
-    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" }, "causeCatalogs": { "type": "map<string, CauseCatalog>", "from": "reasonCatalogs" }, "maintenance": "Maintenance" },
+    "settings": { "limits": "Limits", "session": "Session", "escalation": "Escalation", "alerts": "Alerts", "states": "list<State>", "closeResults": { "type": "list<CloseResultItem>", "from": "reasonCatalogs.close_result.items" }, "timerDefs": { "type": "list<TimerDef>", "from": "timers" }, "holdReasons": { "type": "list<HoldReason>", "from": "reasonCatalogs.hold.items" }, "causeCatalogs": { "type": "map<string, CauseCatalog>", "from": "reasonCatalogs" }, "maintenance": "Maintenance", "shift": "Shift" },
     "definitions": {
       "addressee": { "params": { "x": "Incident" }, "returns": "string", "expr": "x.owner != '' ? x.owner : x.assignmentGroup", "$comment": "§8.1. Адресат: владелец-человек, а пока группа не приняла — сама группа" },
       "unowned": { "params": { "x": "Incident" }, "returns": "bool", "expr": "x.owner == '' && x.assignmentGroup == ''" },
@@ -1842,6 +1856,8 @@
       { "fn": "copyCloseFromPrimary", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"if": "size(ps) > 0", "then": [{"set": "incident.closeResultId", "value": "ps[0].closeResultId"}, {"set": "incident.closeCauseId", "value": "ps[0].closeCauseId"}, {"set": "incident.closeCauseLabel", "value": "ps[0].closeCauseLabel"}, {"set": "incident.result", "value": "ps[0].result"}, {"set": "incident.closedBy", "value": "ps[0].closedBy"}, {"set": "incident.owner", "value": "ps[0].closedBy"}]}], "extendsBaseRegistry": true, "$comment": "§11, §2.1. Результат, причина, комментарий и закрывший — от основного; владелец закрытого — тот, кто закрыл основной (BUG-89)" },
       { "fn": "tightenPrimaryDeadline", "kind": "transactional", "args": ["timerId", "logKey"], "argTypes": {"timerId": "string", "logKey": "string"}, "do": [{"let": "ps", "value": "incidentById(form.primaryId)"}, {"if": "size(ps) > 0 && leftOf(incident, timerId, now) >= 0 && !spent(incident, timerId, now) && !spent(ps[0], timerId, now)", "then": [{"let": "t", "value": "ps[0].timers[timerId]"}, {"let": "left", "value": "leftOf(incident, timerId, now)"}, {"let": "was", "value": "t.due != 0 ? t.due - now : (t.paused ? t.left : timerSec(ps[0], timerId, '') * 1000)"}, {"if": "left < was", "then": [{"forEach": "p", "in": "ps", "do": [{"if": "t.due != 0", "then": [{"set": "p.timers[timerId].due", "value": "now + left"}], "else": [{"set": "p.timers[timerId].left", "value": "left"}, {"set": "p.timers[timerId].paused", "value": "true"}]}, {"world": "log", "args": {"incident": "p", "key": "logKey", "vars": "{'number': incident.number}", "once": "true"}}]}]}]}], "extendsBaseRegistry": true, "$comment": "§11.3, §11.4. Срок основного (form.primaryId) по таймеру из аргумента — самый ранний из своего и остатка привязываемого: у группы один срок. Идёт — сдвигается дедлайн, на паузе или ещё не запускался — остаток (основной новый — с полного норматива, его берёт grouping.takeWith). Уже нарушенный норматив привязываемого срок не сжимает: нарушение записано. Срок стал раньше — запись в журнал основного шаблоном из второго аргумента ({number} — чей срок стал сроком группы), одна на объединение (RULE-98). Перед pauseTimer того же таймера" },
       { "fn": "copyPrimaryDeadline", "kind": "transactional", "args": ["timerId"], "argTypes": {"timerId": "string"}, "do": [{"let": "ps", "value": "incidentById(incident.linkedTo)"}, {"if": "size(ps) > 0 && leftOf(ps[0], timerId, now) >= 0", "then": [{"set": "incident.timers[timerId].due", "value": "0"}, {"set": "incident.timers[timerId].left", "value": "leftOf(ps[0], timerId, now)"}, {"set": "incident.timers[timerId].paused", "value": "true"}, {"if": "leftOf(ps[0], timerId, now) == 0", "then": [{"set": "incident.timers[timerId].fired", "value": "spent(ps[0], timerId, now) ? ps[0].timers[timerId].fired : ps[0].timers[timerId].due"}]}]}], "extendsBaseRegistry": true, "$comment": "§11.4. Остаток срока основного (linked_to) по таймеру из аргумента — привязанному, на паузе: отсоединённый не получает своего прежнего срока. Наступивший у основного — отработанным и у него (RULE-50): нарушение группы ему допишется по окончании окна или уже записано, своего не будет (BUG-75). Перед clearLink" },
+      { "fn": "markAccepted", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"if": "incident.acceptedAt == 0 && !incident.noReaction", "then": [{"set": "incident.acceptedAt", "value": "now"}, {"set": "incident.acceptedBy", "value": "actor"}]}], "extendsBaseRegistry": true, "$comment": "§2.2, §23.2 (решение 12 плана 90). Первое принятие: при входе в in_progress — когда (accepted_at) и кто (accepted_by) первым взял инцидент в работу. Только если accepted_at пусто и нет пометки no_reaction: повторный вход в работу (после «Вернуть в очередь», передачи, перехвата) первое принятие не перезаписывает, закрытый без взятия его не получает никогда. У «Взять» (и «Взять в работу» на выборке — основной, grouping.takeWith), «Принять», «Перехватить», «Возобновить»; «Переоткрыть» — нет. На переходы не влияет — поле для отчётов: реакция оператора — от появления до accepted_at" },
+      { "fn": "markNoReaction", "kind": "transactional", "args": [], "argTypes": {}, "do": [{"if": "incident.acceptedAt == 0", "then": [{"set": "incident.noReaction", "value": "true"}]}], "extendsBaseRegistry": true, "$comment": "§2.2 (решение 2026-11-17, план 90). Закрытый без взятия реакции не имеет: закрытие с пустым accepted_at — «Массовым сбоем» из очереди или привязанного вместе с основным — ставит no_reaction. Её ничто не снимает, в том числе «Переоткрыть»: после нового взятия accepted_at остаётся пустым (markAccepted). У всех входов в closed" },
       { "fn": "logSiblings", "kind": "transactional", "args": ["results", "key"], "argTypes": {"results": "list<string>", "key": "string"}, "do": [{"if": "incident.closeResultId in results", "then": [{"forEach": "s", "in": "siblingsOf(incident).filter(x, !isDone(x))", "do": [{"world": "log", "args": {"incident": "s", "key": "key", "vars": "{'number': incident.number, 'result': closeResults.filter(i, i.id == incident.closeResultId).map(i, i.labelKey)}"}}, {"world": "touch", "args": {"incident": "s"}}]}]}], "extendsBaseRegistry": true, "$comment": "§6.1, §11.4, ARCH-15 (В9), RULE-139. Закрыт одним из результатов results — каждому открытому соседу (siblingsOf: инциденты того же события, другие службы; привязанному к другому основному — тоже) запись key в журнал ({number} — номер закрытого, {result} — подпись результата) и новая версия, как у нарушения группы. Результат — уже записанный в инцидент (closeResultId): у «Закрыть» — из формы, у close_linked — от основного. Закрытым соседям — ничего; соседи не закрываются: ложное для одной службы не значит ложное для другой. В транзакции перехода; уведомление тем, кто ведёт соседей, — отдельный эффект notifySiblings, после неё" },
       { "fn": "notify", "kind": "external", "args": ["whom", "alert"], "argTypes": {"whom": "expr<string>", "alert": "bool"}, "defaults": {"alert": false}, "do": [{"if": "whom != '' && whom != actor", "then": [{"world": "notify", "args": {"incident": "incident", "to": "whom", "recipients": "recipients(whom, incident)", "alert": "alert", "emptyLog": "alert ? alerts.noRecipientLog : ''"}}]}], "$comment": "§9, §14.2. Уведомление whom — человеку или дежурной группе: прежнему владельцу (before.owner), новому адресату (addressee(incident)), получателю оповещений (alerts.target). Себе и никому — не уведомляется (BUG-30). Получат — recipients. Второй аргумент — это оповещение: его задаёт переход, а не совпадение получателя с alerts.target — передача или автоэскалация на получателя оповещений остаётся обычным уведомлением. Оповещение, которое некому получить, — запись alerts.noRecipientLog в журнал" },
       { "fn": "externalCommand", "kind": "external", "args": ["command"], "argTypes": {"command": "string"}, "do": [{"world": "command", "args": {"incident": "incident", "command": "command"}}] },
@@ -1888,7 +1904,7 @@
 
   "adminSettings": {
     "$comment": "RULE-44. Что настраивает администратор (право incident:schema:admin) — вкладки будущей админки. Настройка — значение, которое подстраивают под площадку, не меняя логику переходов; переходы, состояния, формы и бейджи — модель, а не настройки. path — где значение в этой машине (у списка — по id элемента); source — запрос, которым читаются данные МИ, которых в схеме нет. Из раздела собирается SETTINGS.md (tools/build_workflow.py), по нему рисуется экран настроек прототипа; check_machine.py проверяет, что пути существуют и что каждый ключ разделов-настроек либо в перечне, либо в notSettings с причиной.",
-    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "sound", "limits", "session", "queueSort", "retention", "maintenance"],
+    "sections": ["timers", "reasonCatalogs", "escalation", "alerts", "sound", "limits", "session", "shift", "queueSort", "retention", "maintenance"],
     "valueLabels": {
       "$comment": "Подписи машинных значений в перечне настроек (BUG-26): условия уточнений нормативов, цвета приоритетов и повтор звука (§21.2, sound.*.repeat). Названия самих приоритетов — данные справочника (§2.5), не ключи. values у настройки — подписи значений её перечня.",
       "priority": "workflow.settings.word.priority",
@@ -1932,11 +1948,12 @@
       {
         "id": "operator",
         "labelKey": "workflow.settings.tab.operator",
-        "rules": "§7, §10.2, §11, §12.3",
+        "rules": "§7, §10.2, §11, §12.3, §20",
         "groups": [
           { "id": "queue", "labelKey": "workflow.settings.tab.queue", "rules": "§7" },
           { "id": "limits", "labelKey": "workflow.settings.tab.limits", "rules": "§10.2, §11" },
           { "id": "session", "labelKey": "workflow.settings.tab.session", "rules": "§12.3" },
+          { "id": "shift", "labelKey": "workflow.settings.tab.shift", "rules": "§20, §23.1" },
           { "id": "links", "labelKey": "workflow.settings.tab.links", "rules": "§7", "source": "GET /operator/reference/help-links", "whatKey": "workflow.settings.tab.links.what" }
         ],
         "items": [
@@ -1947,7 +1964,9 @@
           { "path": "limits.maxBulk", "labelKey": "workflow.settings.limits.maxBulk", "whatKey": "workflow.settings.limits.maxBulk.what", "nullKey": "workflow.settings.unlimited", "group": "limits" },
           { "path": "session.heartbeatSec", "labelKey": "workflow.settings.session.heartbeatSec", "whatKey": "workflow.settings.session.heartbeatSec.what", "group": "session" },
           { "path": "session.idleHoldSec", "labelKey": "workflow.settings.session.idleHoldSec", "whatKey": "workflow.settings.session.idleHoldSec.what", "group": "session" },
-          { "path": "session.idleReleaseSec", "labelKey": "workflow.settings.session.idleReleaseSec", "whatKey": "workflow.settings.session.idleReleaseSec.what", "group": "session" }
+          { "path": "session.idleReleaseSec", "labelKey": "workflow.settings.session.idleReleaseSec", "whatKey": "workflow.settings.session.idleReleaseSec.what", "group": "session" },
+          { "path": "shift.starts", "labelKey": "workflow.settings.shift.starts", "whatKey": "workflow.settings.shift.starts.what", "group": "shift" },
+          { "path": "shift.timeZone", "labelKey": "workflow.settings.shift.timeZone", "whatKey": "workflow.settings.shift.timeZone.what", "group": "shift" }
         ]
       },
       {
@@ -2067,6 +2086,7 @@
       { "path": "session.states", "why": "состояния оператора — модель (§12.1)" },
       { "path": "maintenance.modes", "why": "список режимов окна работ — модель: каждый режим исполняет сервер, администратор выбирает режим (maintenance.mode)" },
       { "path": "maintenance.startSkewSec", "why": "допуск на расхождение часов — устройство проверки начала окна (§14.12), а не правило поста" },
+      { "path": "shift.refreshSec", "why": "период опроса блока «Сейчас» — устройство экрана «Смена и статистика», а не правило поста (§23.2)" },
       { "path": "maintenance.markPriority", "why": "какой приоритет у помеченного инцидента — правило §14.12 (низший уровень справочника), а не настройка" }
     ]
   },

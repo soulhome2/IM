@@ -902,6 +902,7 @@ stateDiagram-v2
     { "kind": "transactional", "fn": "stopTimer", "args": ["reaction"] },
     { "kind": "transactional", "fn": "resumeTimer", "args": ["resolution"] },
     { "kind": "transactional", "fn": "setCursor", "args": ["firstOpenStep"] },
+    { "kind": "transactional", "fn": "markAccepted" },
     { "kind": "transactional", "fn": "appendLog", "args": ["workflow.journal.accept"] }
   ],
   "bulk": { "allowed": true, "mode": "each_allowed", "minItems": 2 },
