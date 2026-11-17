@@ -123,7 +123,6 @@
   "workflow.error.merge.too_few": "Tick at least one incident",
   "workflow.error.filter.bad": "Filter: unknown criterion “{name}”",
   "workflow.guard.merge_scenario": "The scenario differs from the primary's: only incidents of one scenario are taken as one",
-  "workflow.error.precondition_required": "No record version: request without If-Match",
   "workflow.error.version_conflict": "The incident has already changed: {state}",
   "workflow.error.expected_required": "The client did not send what the operator saw: state and addressee",
   "workflow.error.changed.taken": "{who} is already handling the incident",

@@ -4696,9 +4696,6 @@ window.IM_WORKFLOW = {
     "workflow.error.unknown_action": {
       "vars": []
     },
-    "workflow.error.precondition_required": {
-      "vars": []
-    },
     "workflow.error.version_conflict": {
       "vars": [
         "state"

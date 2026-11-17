@@ -123,7 +123,6 @@
   "workflow.error.merge.too_few": "Отметьте хотя бы один инцидент",
   "workflow.error.filter.bad": "Фильтр: неизвестный признак «{name}»",
   "workflow.guard.merge_scenario": "Сценарий другой, чем у основного: как одно берутся инциденты одного сценария",
-  "workflow.error.precondition_required": "Нет версии записи: запрос без If-Match",
   "workflow.error.version_conflict": "Инцидент уже изменён: {state}",
   "workflow.error.expected_required": "Клиент не прислал, что видел оператор: состояние и адресата",
   "workflow.error.changed.taken": "Инцидент уже ведёт {who}",

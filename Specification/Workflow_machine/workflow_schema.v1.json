@@ -1565,7 +1565,6 @@
     "workflow.error.field_required": { "vars": ["name"] },
     "workflow.error.field_invalid": { "vars": ["name"] },
     "workflow.error.unknown_action": { "vars": [] },
-    "workflow.error.precondition_required": { "vars": [] },
     "workflow.error.version_conflict": { "vars": ["state"] },
     "workflow.error.selection_unavailable": { "vars": [] },
     "workflow.error.break_no_permission": { "vars": [] },
