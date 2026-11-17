@@ -484,7 +484,12 @@
     const inc = (await mwFire(env)).body.incidents[0];
     assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взят");
     assert.eq((await env.act(inc.guid, "close", { resultId: "drill", maintenanceWindowId: far.body.id, comment: "работы" })).status, 422, "чужое окно");
-    const ok = await env.act(inc.guid, "close", { resultId: "drill", maintenanceWindowId: w.body.id, comment: "работы" });
+    // Поле окна видно только у «Плановой проверки»: своё окно в невидимом поле — тоже 422, а не записанная ссылка (ARCH-09)
+    const hidden = await env.act(inc.guid, "close", { resultId: "false_alarm", causeId: "animal", comment: "тест", maintenanceWindowId: w.body.id });
+    assert.status(hidden, 422, "FORM_FIELD_INVALID", "окно у «Ложной тревоги»");
+    assert.eq(hidden.body.messageVars, { name: ["workflow.form.close.field.maintenanceWindowId"] }, "отказ — по полю окна");
+    assert.eq((await env.card(inc.guid)).state, "in_progress", "не закрыт");
+    const ok =await env.act(inc.guid, "close", { resultId: "drill", maintenanceWindowId: w.body.id, comment: "работы" });
     assert.status(ok, 200, null, "закрыт");
     assert.eq(ok.body.incident.closeMaintenanceWindowId, w.body.id, "ссылка на окно");
     const re = await env.act(inc.guid, "reopen", { comment: "ещё раз" });

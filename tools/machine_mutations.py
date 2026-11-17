@@ -33,3 +33,12 @@ def workflow_js(find, replace):
         return n, None
     data = json.loads(text.replace(find, replace))
     return 1, build_workflow.render(data, "workflow_schema.v1.json", "IM_WORKFLOW", 2)
+
+
+def static_caught():
+    """Имена порч списка, которые ловит статическая проверка tools/check_machine.py --mutations: допустимые значения
+    разделов, которые решает клиент (звук, раскладка), и запреты системных переходов. Тесты API — не их судья: прогон
+    порч кода их пропускает, итог — у check_machine (его самопроверка падает, если порча не поймана)."""
+    import check_machine
+    names = {m["name"] for m in load()}
+    return {m[0] for m in check_machine.MUTATIONS if m[0] in names}

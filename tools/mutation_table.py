@@ -36,6 +36,8 @@ def cell(results, name):
 
 def main():
     quint, api = read("quint-catchers.json"), read("api-killers.json")
+    # Порчи, которые ловит статическая проверка: прогон порч кода их пропускает (machine_mutations.static_caught)
+    static = machine_mutations.static_caught()
     rows, counts = [], {"обе": 0, "только модель": 0, "только тесты API": 0, "никто": 0, "модель не проверяет (пометка)": 0, "не прогонялась": 0}
     for m in machine_mutations.load():
         q, a = quint.get(m["name"]), api.get(m["name"])
@@ -47,7 +49,8 @@ def main():
             counts["обе" if q and a else "только модель" if q else "только тесты API" if a else "никто"] += 1
         what = m["what"].replace("|", "\\|")
         model = f"_{m['model']}_" if m.get("model") else cell(quint, m["name"])
-        rows.append(f"| `{m['name']}` | {what} | {model} | {cell(api, m['name'])} |")
+        tests = "_статическая проверка tools/check_machine.py_" if m["name"] in static else cell(api, m["name"])
+        rows.append(f"| `{m['name']}` | {what} | {model} | {tests} |")
     text = "\n".join([
         "# Порчи машины — кто ловит",
         "",

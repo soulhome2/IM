@@ -435,8 +435,10 @@ MUTATIONS = [
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
-# из испорченной; судят тесты API
-MUTATIONS += [(m["name"], "workflow.js", m["find"], m["replace"], "api") for m in machine_mutations.load()]
+# из испорченной; судят тесты API. Порчи, которые ловит статическая проверка check_machine.py, — не здесь
+# (machine_mutations.static_caught): тестам API их ловить нечем, а прогон потратил бы на каждую полный набор тестов
+STATIC = machine_mutations.static_caught()
+MUTATIONS += [(m["name"], "workflow.js", m["find"], m["replace"], "api") for m in machine_mutations.load() if m["name"] not in STATIC]
 
 
 def place(mutation, code):
