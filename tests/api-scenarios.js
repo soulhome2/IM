@@ -111,17 +111,24 @@
     assert.eq((await env.card(inc.guid)).state, "new", "состояние не изменилось");
   });
 
-  test("Что видел оператор (§14.1, RULE-142): без состояния или адресата — 428; номер версии и If-Match не сверяются", async () => {
+  test("ETag карточки и ответа перехода — версия записи в кавычках: её читают кэш GET и тесты, действие не сверяет (§14.1, RULE-142)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);
     assert.eq(await env.etag(inc.guid), `"${inc.version}"`, "ETag карточки — версия из очереди в кавычках");
+    const claimed = await env.act(inc.guid, "claim", {}, "queue", undefined, { ifMatch: '"0"' });
+    assert.status(claimed, 200, null, "взять: чужой If-Match не мешает");
+    assert.eq(claimed.headers.etag, `"${claimed.body.incident.version}"`, "новая версия — в ETag ответа");
+  });
+
+  test("Что видел оператор (§14.1, RULE-142): без состояния или адресата — 428; номер версии и If-Match не сверяются", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
     assert.status(await env.act(inc.guid, "claim", {}, "queue", undefined, null), 428, "PRECONDITION_REQUIRED", "переход без того, что видел");
     const noAddressee = await env.act(inc.guid, "claim", {}, "queue", undefined, { addressee: undefined });
     assert.status(noAddressee, 428, "PRECONDITION_REQUIRED", "переход без адресата");
     assert.eq(noAddressee.body.messageKey, "workflow.error.expected_required", "текст — что не прислано");
     const claimed = await env.act(inc.guid, "claim", {}, "queue", undefined, { ifMatch: '"0"' });
     assert.status(claimed, 200, null, "взять: чужой If-Match не мешает");
-    assert.eq(claimed.headers.etag, `"${claimed.body.incident.version}"`, "новая версия — в ETag ответа");
     // Ответ на шаг: владелец и ответ шага, которые видел оператор
     const card = await env.card(inc.guid);
     const step1 = { stepId: card.scenario.result.currentStepId, value: ["confirmed"] };
