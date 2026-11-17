@@ -8812,7 +8812,7 @@
           "journalSeen": {
             "type": "integer",
             "minimum": 0,
-            "description": "§14.1, RULE-142. Последний номер записи журнала (`journalSeq` карточки на экране), который видел оператор. Сверяется у переходов с `news` в `concurrency.expects` — у закрытия: после него пришла запись журнала (`invariants.optimisticLocking.journalNews`: не своя, не таймеров и системы) — `412 INCIDENT_CHANGED`, `details.changed: news`, «Пришло новое событие — проверьте». У закрытия обязательно (нет — `428`), у остальных не читается."
+            "description": "§14.1, RULE-142. Последний номер записи журнала (`journalSeq` карточки на экране), который видел оператор. Сверяется у переходов с `news` в `concurrency.expects` — у закрытия: после него пришла запись журнала (`invariants.optimisticLocking.journalNews`: не своя, не таймеров и системы, не итог макроса или команды — RULE-144) — `412 INCIDENT_CHANGED`, `details.changed: news`, «Пришло новое событие — проверьте». У закрытия обязательно (нет — `428`), у остальных не читается."
           }
         }
       },

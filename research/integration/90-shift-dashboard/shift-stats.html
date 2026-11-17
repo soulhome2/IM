@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Смена и статистика — макет</title>
+<style>
+:root{
+  --bg:#f1f5f9;--panel:#fff;--panel-2:#f8fafc;--stroke:#f1f5f9;--stroke-2:#e2e8f0;
+  --text:#1e293b;--muted:#64748b;--faint:#94a3b8;--accent:#1976d2;--accent-dim:#e3f2fd;
+  --crit:#dc2626;--warn:#d97706;--warn-text:#b45309;--crit-text:#b91c1c;--ok:#16a34a;
+  --danger-bg:#fee2e2;--danger-border:#fecaca;--ok-bg:#dcfce7;--ok-text:#15803d;
+  --break-bg:#fff7ed;--break-border:#fed7aa;--break-text:#c2410c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 Inter,-apple-system,"Segoe UI",sans-serif;width:1440px}
+.top{display:flex;align-items:center;gap:24px;height:48px;padding:0 20px;background:#0f172a;color:#cbd5e1}
+.top b{color:#fff;font-size:14px}
+.top .nav span{margin-right:18px;opacity:.75}
+.top .nav span.on{opacity:1;color:#fff;border-bottom:2px solid #60a5fa;padding-bottom:13px}
+.top .me{margin-left:auto;font-size:12px}
+main{padding:16px 20px 24px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:18px;margin:0}
+h2{font-size:14px;margin:0;display:flex;align-items:center;gap:10px}
+h2 .sub{font-weight:400;color:var(--muted);font-size:12px}
+.card{background:var(--panel);border:1px solid var(--stroke-2);border-radius:8px;padding:14px 16px}
+.row{display:flex;gap:14px}
+.row>.card{flex:1;min-width:0}
+.head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.head .right{margin-left:auto;color:var(--muted);font-size:12px;display:flex;gap:10px;align-items:center}
+.btn{border:1px solid var(--stroke-2);background:var(--panel);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text)}
+.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+.alert{display:flex;align-items:center;gap:12px;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--crit-text);border-radius:8px;padding:9px 14px;font-weight:500}
+.alert .dot{width:8px;height:8px;border-radius:50%;background:var(--crit)}
+.alert .btn:first-of-type{margin-left:auto}
+.chips{display:flex;gap:8px;margin-bottom:10px}
+.chip{border-radius:999px;padding:3px 10px;font-size:12px;border:1px solid var(--stroke-2);background:var(--panel-2)}
+.chip b{margin-left:4px}
+.chip.ok{background:var(--ok-bg);border-color:#bbf7d0;color:var(--ok-text)}
+.chip.br{background:var(--break-bg);border-color:var(--break-border);color:var(--break-text)}
+.chip.off{color:var(--muted)}
+.chip.lost{background:var(--danger-bg);border-color:var(--danger-border);color:var(--crit-text)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--stroke-2);white-space:nowrap}
+th.s::after{content:" ↕";color:var(--faint)}
+th.sd::after{content:" ↓";color:var(--accent)}
+td{padding:7px 8px;border-bottom:1px solid var(--stroke)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.bad td{background:#fef2f2}
+.st{display:inline-flex;align-items:center;gap:6px;border-radius:4px;padding:1px 8px;font-size:12px}
+.st.ok{background:var(--ok-bg);color:var(--ok-text)}
+.st.br{background:var(--break-bg);color:var(--break-text)}
+.st.lost{background:var(--danger-bg);color:var(--crit-text)}
+.st.off{background:var(--panel-2);color:var(--muted)}
+.red{color:var(--crit-text);font-weight:600}
+.warnt{color:var(--warn-text);font-weight:600}
+.mut{color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.f{border:1px solid var(--stroke-2);border-radius:6px;padding:5px 10px;background:var(--panel);font-size:12px}
+.f span{color:var(--muted);margin-right:4px}
+.f::after{content:" ▾";color:var(--faint)}
+.seg{display:inline-flex;border:1px solid var(--stroke-2);border-radius:6px;overflow:hidden}
+.seg span{padding:5px 10px;font-size:12px;border-right:1px solid var(--stroke-2)}
+.seg span:last-child{border-right:0}
+.seg span.on{background:var(--accent-dim);color:var(--accent);font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.kpi{background:var(--panel);border:1px solid var(--stroke-2);border-radius:8px;padding:12px 14px}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi .v{font-size:24px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12px;margin-top:2px;color:var(--muted)}
+.kpi .d .up{color:var(--crit-text)} .kpi .d .dn{color:var(--ok-text)}
+.bars .b{display:grid;grid-template-columns:150px 1fr 70px;gap:10px;align-items:center;margin:7px 0}
+.bars .t{height:14px;background:var(--panel-2);border-radius:3px;overflow:hidden}
+.bars .t i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.bars .t i.g{background:#94a3b8}
+.bars .n{text-align:right;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.note{font-size:11px;color:var(--faint);margin-top:8px}
+.pct{display:inline-block;width:60px;height:6px;background:var(--panel-2);border-radius:3px;vertical-align:middle;margin-left:6px;overflow:hidden}
+.pct i{display:block;height:100%;background:#94a3b8}
+</style>
+</head>
+<body>
+<div class="top"><b>Incident Manager</b>
+  <div class="nav"><span>Очередь</span><span class="on">Смена и статистика</span><span>Журнал</span></div>
+  <div class="me">Старший смены · Иванова А. · <span style="color:#86efac">● Готов</span></div>
+</div>
+<main>
+  <div style="display:flex;align-items:baseline;gap:12px"><h1>Смена и статистика</h1><span class="mut">Пост «Центральный» · данные по инцидентам, которые вам видны</span></div>
+
+  <div class="alert"><span class="dot"></span>Петров С. на перерыве «Обход» 34 мин — срок 20 мин, превышен на 14 мин<button class="btn">Показать</button><button class="btn">Скрыть</button></div>
+
+  <!-- СЕЙЧАС -->
+  <div class="card">
+    <div class="head"><h2>Сейчас <span class="sub">смена 08:00–20:00</span></h2>
+      <div class="right">обновлено 14:32:05 · само раз в 15 с</div></div>
+    <div class="chips">
+      <span class="chip ok">На месте <b>5</b></span>
+      <span class="chip br">На перерыве <b>2</b></span>
+      <span class="chip lost">Нет связи <b>1</b></span>
+      <span class="chip off">Вышли <b>3</b></span>
+      <span class="chip">Ничьих в очереди <b>4</b></span>
+      <span class="chip" style="color:var(--crit-text)">Просрочено всего <b>3</b></span>
+    </div>
+    <table>
+      <tr><th class="s">Оператор</th><th class="s">Состояние</th><th class="sd">С</th><th class="s">Дежурные группы</th><th class="n s">В работе</th><th class="n s">Отложено</th><th class="n s">Просрочено</th><th class="n s">Закрыл за смену</th><th class="n s">Реакция, медиана</th></tr>
+      <tr class="bad"><td>Петров С.</td><td><span class="st br">Перерыв · Обход</span></td><td class="red">13:58 · 34 мин из 20</td><td>Периметр</td><td class="n">—</td><td class="n">2</td><td class="n red">1</td><td class="n">18</td><td class="n">0:41</td></tr>
+      <tr><td>Сидорова Е.</td><td><span class="st ok">Готов</span></td><td>08:02</td><td>Периметр, Склад</td><td class="n">3</td><td class="n">1</td><td class="n red">2</td><td class="n">27</td><td class="n">0:35</td></tr>
+      <tr><td>Ким Д.</td><td><span class="st ok">Готов</span></td><td>08:00</td><td>Офис</td><td class="n">2</td><td class="n">0</td><td class="n">0</td><td class="n">31</td><td class="n">0:28</td></tr>
+      <tr><td>Ахметов Р.</td><td><span class="st br">Перерыв · Обед</span></td><td class="warnt">14:05 · 27 мин из 60</td><td>Склад</td><td class="n">—</td><td class="n">1</td><td class="n">0</td><td class="n">22</td><td class="n">0:52</td></tr>
+      <tr><td>Орлова М.</td><td><span class="st lost">Нет связи</span></td><td>14:30 · 2 мин</td><td>Офис</td><td class="n">1</td><td class="n">0</td><td class="n">0</td><td class="n">15</td><td class="n">0:47</td></tr>
+      <tr><td>Гусев П.</td><td><span class="st ok">Готов</span></td><td>11:40</td><td>Периметр</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">9</td><td class="n">1:05</td></tr>
+      <tr><td class="mut">Лебедев О. и ещё 2</td><td><span class="st off">Вышли</span></td><td class="mut">—</td><td class="mut">—</td><td class="n mut">—</td><td class="n mut">—</td><td class="n mut">—</td><td class="n mut">12</td><td class="n mut">—</td></tr>
+    </table>
+  </div>
+
+  <!-- ЗА ПЕРИОД -->
+  <div class="card">
+    <div class="head"><h2>За период</h2>
+      <div class="right"><button class="btn">Обновить</button><button class="btn">Выгрузить CSV</button></div></div>
+    <div class="filters">
+      <div class="seg"><span>Смена</span><span>Сегодня</span><span class="on">7 дней</span><span>30 дней</span><span>Свой…</span></div>
+      <div class="f"><span>Дежурная группа:</span>все</div>
+      <div class="f"><span>Группа устройств:</span>все</div>
+      <div class="f"><span>Устройство:</span>все</div>
+      <div class="f"><span>Тип события:</span>все</div>
+      <div class="f"><span>Оператор:</span>все</div>
+      <div class="f"><span>Результат:</span>все</div>
+      <div class="f" style="background:var(--panel-2)"><span>Окна работ:</span>не считать</div>
+      <span class="mut" style="margin-left:auto;font-size:12px">10–17 ноября · хранится 90 дней</span>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="l">Инцидентов</div><div class="v">1 284</div><div class="d"><span class="up">▲ 6%</span> к прошлым 7 дням</div></div>
+    <div class="kpi"><div class="l">Ложных тревог</div><div class="v">61%</div><div class="d"><span class="dn">▼ 3 п.</span> · 783 шт.</div></div>
+    <div class="kpi"><div class="l">Реакция, медиана</div><div class="v">0:38</div><div class="d">среднее 1:12 · 90% до 2:40</div></div>
+    <div class="kpi"><div class="l">Закрытие, медиана</div><div class="v">4:15</div><div class="d">среднее 9:40 · 90% до 22:00</div></div>
+    <div class="kpi"><div class="l">С нарушениями</div><div class="v" style="color:var(--crit-text)">7,4%</div><div class="d">95 инцидентов</div></div>
+    <div class="kpi"><div class="l">Открыто сейчас</div><div class="v">14</div><div class="d">из них просрочено 3</div></div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div class="head"><h2>Инцидентов по дням</h2><div class="right legend"><span><i style="background:var(--accent)"></i>настоящие</span><span><i style="background:#94a3b8"></i>ложные</span><span><i style="background:var(--crit)"></i>с нарушениями</span></div></div>
+      <svg width="100%" height="230" viewBox="0 0 640 190" preserveAspectRatio="none">
+        <g stroke="#e2e8f0"><line x1="36" x2="636" y1="20" y2="20"/><line x1="36" x2="636" y1="70" y2="70"/><line x1="36" x2="636" y1="120" y2="120"/><line x1="36" x2="636" y1="170" y2="170"/></g>
+        <g fill="#94a3b8" font-size="11" text-anchor="end"><text x="30" y="24">240</text><text x="30" y="74">160</text><text x="30" y="124">80</text><text x="30" y="174">0</text></g>
+        <g id="bars"></g>
+        <g fill="#64748b" font-size="11" text-anchor="middle" id="xl"></g>
+      </svg>
+    </div>
+    <div class="card" style="flex:0 0 440px">
+      <div class="head"><h2>Результаты закрытия</h2></div>
+      <div class="bars">
+        <div class="b"><span>Ложная тревога</span><div class="t"><i class="g" style="width:100%"></i></div><span class="n">783</span></div>
+        <div class="b"><span>Обработано</span><div class="t"><i style="width:44%"></i></div><span class="n">341</span></div>
+        <div class="b"><span>Массовый сбой</span><div class="t"><i style="width:10%"></i></div><span class="n">78</span></div>
+        <div class="b"><span>Дубликат</span><div class="t"><i style="width:6%"></i></div><span class="n">48</span></div>
+        <div class="b"><span>Проверка</span><div class="t"><i style="width:3%"></i></div><span class="n">20</span></div>
+      </div>
+      <div class="head" style="margin:14px 0 6px"><h2 style="font-size:13px">Причины ложных</h2></div>
+      <div class="bars">
+        <div class="b"><span>Животные, насекомые</span><div class="t"><i class="g" style="width:100%"></i></div><span class="n">352</span></div>
+        <div class="b"><span>Погода</span><div class="t"><i class="g" style="width:61%"></i></div><span class="n">214</span></div>
+        <div class="b"><span>Неисправность</span><div class="t"><i class="g" style="width:42%"></i></div><span class="n">148</span></div>
+        <div class="b"><span>Другое</span><div class="t"><i class="g" style="width:20%"></i></div><span class="n">69</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div class="head"><h2>Устройства <span class="sub">10 с наибольшим числом инцидентов</span></h2><div class="right">клик — фильтр по устройству</div></div>
+      <table>
+        <tr><th class="s">Устройство</th><th class="s">Группа</th><th class="n sd">Инцидентов</th><th class="n s">Ложных</th><th class="n s">С нарушениями</th><th class="n s">Реакция</th></tr>
+        <tr><td>Камера 14 · Ворота-север</td><td>Периметр</td><td class="n">212</td><td class="n">89%<span class="pct"><i style="width:89%"></i></span></td><td class="n">9</td><td class="n">0:31</td></tr>
+        <tr><td>Датчик Д-07 · Забор-восток</td><td>Периметр</td><td class="n">165</td><td class="n">94%<span class="pct"><i style="width:94%"></i></span></td><td class="n">4</td><td class="n">0:29</td></tr>
+        <tr><td>Камера 3 · Склад, рампа</td><td>Склад</td><td class="n">97</td><td class="n">41%<span class="pct"><i style="width:41%"></i></span></td><td class="n red">14</td><td class="n">1:48</td></tr>
+        <tr><td>Камера 22 · Парковка</td><td>Офис</td><td class="n">74</td><td class="n">66%<span class="pct"><i style="width:66%"></i></span></td><td class="n">3</td><td class="n">0:44</td></tr>
+        <tr><td>СКУД · Вход 1</td><td>Офис</td><td class="n">58</td><td class="n">12%<span class="pct"><i style="width:12%"></i></span></td><td class="n">6</td><td class="n">0:52</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Дежурные группы</h2></div>
+      <table>
+        <tr><th class="s">Группа</th><th class="n sd">Инцидентов</th><th class="n s">Ложных</th><th class="n s">Реакция, мед.</th><th class="n s">Закрытие, мед.</th><th class="n s">Нарушения</th></tr>
+        <tr><td>Периметр</td><td class="n">684</td><td class="n">78%</td><td class="n">0:33</td><td class="n">2:50</td><td class="n">31</td></tr>
+        <tr><td>Склад</td><td class="n">342</td><td class="n">44%</td><td class="n">0:58</td><td class="n">7:20</td><td class="n red">46</td></tr>
+        <tr><td>Офис</td><td class="n">258</td><td class="n">39%</td><td class="n">0:41</td><td class="n">5:05</td><td class="n">18</td></tr>
+      </table>
+      <div class="head" style="margin:16px 0 8px"><h2>Нарушения по видам</h2></div>
+      <div class="bars">
+        <div class="b"><span>Реакция</span><div class="t"><i style="width:100%;background:var(--crit)"></i></div><span class="n">58</span></div>
+        <div class="b"><span>Закрытие</span><div class="t"><i style="width:55%;background:var(--crit)"></i></div><span class="n">32</span></div>
+        <div class="b"><span>Удержание</span><div class="t"><i style="width:16%;background:var(--crit)"></i></div><span class="n">9</span></div>
+      </div>
+      <div class="note">Объединённые инциденты считаются один раз, по основному. Время — от появления до первого принятия и до закрытия.</div>
+    </div>
+  </div>
+</main>
+<script>
+const d=[["10.11",182,112,12],["11.11",171,98,9],["12.11",205,131,17],["13.11",160,95,8],["14.11",193,120,15],["15.11",176,109,11],["16.11",197,118,23]];
+const g=document.getElementById('bars'),xl=document.getElementById('xl'),s=150/240,w=48,step=600/7;
+d.forEach(([l,t,f,b],i)=>{const x=36+step*i+(step-w)/2,hf=f*s,hr=(t-f)*s;
+g.innerHTML+=`<rect x="${x}" y="${170-hf}" width="${w}" height="${hf}" fill="#94a3b8" rx="2"/><rect x="${x}" y="${170-hf-hr}" width="${w}" height="${hr-1}" fill="#1976d2" rx="2"/><rect x="${x+w+3}" y="${170-b*s*3}" width="6" height="${b*s*3}" fill="#dc2626" rx="1"/>`;
+xl.innerHTML+=`<text x="${x+w/2}" y="186">${l}</text>`;});
+</script>
+</body>
+</html>

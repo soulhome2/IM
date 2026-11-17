@@ -1530,7 +1530,8 @@
     // новые записи журнала после journalSeen. Совпало — переход выполняется при любой версии
     const expectsOf = (tr) => (tr && tr.concurrency && tr.concurrency.expects) || [];
     const addresseeOf = (ev) => engine.addressee(ev) || "";
-    // Вид записи журнала: таймеров и системы — system, остальные — transition, если не задан свой (macro, external)
+    // Вид записи журнала: таймеров и системы — system, остальные — transition, если не задан свой (macro, external —
+    // итог макроса и команды: новым событием не считается, RULE-144)
     const entryKind = (entry) => entry.kind || (entry.whoId === "dispatcher" || entry.whoId === "system" || (!entry.whoId && entry.who) ? "system" : "transition");
     // Новое событие для закрытия (journalNews машины): запись после journalSeen, не своя и вида из списка машины —
     // записи таймеров и системы о нарушении и потолке состояние и адресата не меняют, их не считаем

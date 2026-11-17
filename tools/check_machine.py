@@ -1669,6 +1669,9 @@ def check_declared_fields(w, o, err):
             err.append(f"переход {t['id']}: concurrency.expects news не у закрытия — новые события останавливают только закрытие (RULE-142)")
         if manual and t.get("to") == "closed" and "news" not in exp:
             err.append(f"переход {t['id']}: закрытие без concurrency.expects news — пришедшее после показа событие закрылось бы непрочитанным (RULE-142)")
+        # Итог макроса и команды новым событием не считается, кто бы его ни записал (RULE-144, решение 2026-11-17)
+        if "news" in exp and news & {"macro", "external"}:
+            err.append(f"переход {t['id']}: journalNews.kinds {sorted(news)} — итог макроса и команды ({sorted(news & {'macro', 'external'})}) не новое событие (§14.1, RULE-144)")
         if "news" in exp and not news:
             err.append(f"переход {t['id']}: concurrency.expects news без invariants.optimisticLocking.journalNews.kinds (RULE-142)")
         if manual and exp and t["id"] != "merge":
@@ -2714,6 +2717,8 @@ MUTATIONS = [
      '    "workflow.error.changed.taken": { "vars": ["who"], "$comment": "RULE-142: инцидент ведёт другой человек (адресат — владелец)" },\n', '', "пишет workflow.error.changed.taken"),
     ("priority-expects-addressee", "машина: смена приоритета сверяет адресата, а не уровень — смены наперегонки затирают друг друга (RULE-143)", MACHINE,
      '"concurrency": { "expects": ["state", "priority"],', '"concurrency": { "expects": ["state", "addressee"],', "сверяет ['priority', 'state']"),
+    ("news-macro-kind", "машина: итог макроса — новое событие для закрытия, вопреки §14.1 (RULE-144)", MACHINE,
+     '"journalNews": { "kinds": ["transition"],', '"journalNews": { "kinds": ["transition", "macro"],', "не новое событие"),
     ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
      '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
     ("comment-bumps-version", "машина: комментарий сверяет состояние и адресата — чужой комментарий даёт владельцу конфликт (ТЗ-18, RULE-142)", MACHINE,
