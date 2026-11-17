@@ -6017,7 +6017,7 @@
 
   // Вкладка — только с правом supervisor:view (§23). Данные — GET /operator/supervisor/now: при открытии, по смене
   // фильтра и опросом раз в shift.refreshSec машины, пока экран открыт (§23.2). Блок «За период» — часть Б плана 90
-  const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, shownAt: 0 };
+  const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, shownAt: 0, loading: false, groupsKey: "", tableKey: "" };
   const shiftLocale = () => (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
   // Время на экране — в поясе смены (§23): часы и минуты, не сегодняшнее по поясу смены — с датой
   function shiftTime(value, tz, withSec) {
@@ -6079,7 +6079,6 @@
     });
   }
   function shiftRow(r, tz) {
-    const lasts = r.since && (r.state === "not_ready" || r.state === NO_LINK) ? ` · ${shiftLasts(serverNow() - Date.parse(r.since))}` : "";
     const groups = r.dutyGroups.map((g) => g.name).join(", ");
     // Подпись столбца у ячейки — для телефона: там строка таблицы — карточка, а заголовки — кнопки сортировки
     const at = (key) => `data-label="${te(SHIFT_COLS.find((c) => c.key === key).head)}"`;
@@ -6088,21 +6087,49 @@
       <td>${asData(r.person.name)}</td>
       <td><span class="badge shift-state ${r.state}">${te(shiftStateLabel(r.state))}</span></td>
       <td class="shift-reason">${escapeHtml(shiftReason(r) || "")}</td>
-      <td class="${r.state === "not_ready" || r.state === NO_LINK ? "shift-away" : ""}" ${at("since")}>${r.since ? escapeHtml(shiftTime(r.since, tz) + lasts) : "—"}</td>
+      ${shiftSinceCell(r, tz, at("since"))}
       <td class="shift-overdue-break" ${at("breakOverdue")}>${r.breakOverdue == null ? "" : te(r.breakOverdue ? "да" : "нет")}</td>
       <td ${at("groups")}>${groups ? asData(groups) : "—"}</td>
       ${n("inProgress", r.inProgress)}${n("onHold", r.onHold)}${n("overdue", r.overdue, true)}${n("closed", r.closedThisShift)}
       <td class="num" ${at("median")}>${shiftReaction(r.medianReactionSec)}</td>
     </tr>`;
   }
+  // «С какого времени» у перерыва и «нет связи» — с «сколько длится»; это единственный текст, что меняется между опросами
+  function shiftSinceText(since, state, tz) {
+    const away = state === "not_ready" || state === NO_LINK;
+    return shiftTime(since, tz) + (away ? ` · ${shiftLasts(serverNow() - Date.parse(since))}` : "");
+  }
+  function shiftSinceCell(r, tz, label) {
+    if (!r.since) return `<td ${label}>—</td>`;
+    const away = r.state === "not_ready" || r.state === NO_LINK;
+    return `<td class="${away ? "shift-away" : ""}" ${label}${away ? ` data-shift-tick="${r.state}"` : ""}>${escapeHtml(shiftSinceText(r.since, r.state, tz))}</td>`;
+  }
+  // Раз в 5 с — только «сколько длится»: таблица и список групп не перестраиваются, фокус и открытый список не теряются
+  function tickShift() {
+    const d = shiftState.data;
+    if (!shiftState.open || !d) return;
+    $("shiftTable").querySelectorAll("[data-shift-tick]").forEach((td) => {
+      const since = td.closest("tr").dataset.shiftSince;
+      td.textContent = shiftSinceText(since, td.dataset.shiftTick, d.shift.timeZone);
+    });
+  }
   function renderShift() {
     if (!shiftState.open) return;
     const d = shiftState.data;
-    $("shiftGroup").innerHTML = [`<option value="">${te("Все дежурные группы")}</option>`]
-      .concat(shiftState.groups.map((g) => `<option value="${escapeHtml(g.id)}" data-i18n-skip>${escapeHtml(g.name)}</option>`))
-      .join("");
-    $("shiftGroup").value = shiftState.group;
+    // Список групп — только когда он сам или язык сменились
+    const groupsKey = JSON.stringify([LANG, shiftState.groups]);
+    if (shiftState.groupsKey !== groupsKey) {
+      shiftState.groupsKey = groupsKey;
+      $("shiftGroup").innerHTML = [`<option value="">${te("Все дежурные группы")}</option>`]
+        .concat(shiftState.groups.map((g) => `<option value="${escapeHtml(g.id)}" data-i18n-skip>${escapeHtml(g.name)}</option>`))
+        .join("");
+    }
+    if ($("shiftGroup").value !== shiftState.group) $("shiftGroup").value = shiftState.group;
     $("shiftNote").textContent = shiftState.error || "";
+    // Таблица — только при новых данных, сортировке, раскрытии вышедших или смене языка
+    const tableKey = JSON.stringify([LANG, d && d.at, d && shiftState.group, shiftState.error, shiftState.sort, shiftState.outOpen]);
+    if (shiftState.tableKey === tableKey) return tickShift();
+    shiftState.tableKey = tableKey;
     if (!d) {
       $("shiftSpan").textContent = "";
       $("shiftUpdated").textContent = shiftState.error ? "" : t("Загрузка…");
@@ -6145,10 +6172,12 @@
     $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${here.map((r) => shiftRow(r, tz)).join("")}${tail}</tbody>`;
   }
   async function loadShift() {
+    if (shiftState.loading) return; // предыдущий запрос ещё не вернулся
     const group = shiftState.group;
+    shiftState.loading = true;
     try {
       const data = await api.get(`/operator/supervisor/now${group ? `?dutyGroup=${enc(group)}` : ""}`);
-      if (group !== shiftState.group) return; // пока ждали ответ, фильтр сменили
+      if (group !== shiftState.group) return void setTimeout(loadShift); // пока ждали ответ, фильтр сменили — спросить заново
       // Список групп фильтра — из ответа без фильтра: группы, в которые входит хоть один оператор
       if (!group) {
         const seen = new Map();
@@ -6158,6 +6187,8 @@
       Object.assign(shiftState, { data, error: null });
     } catch (err) {
       shiftState.error = problemText(err);
+    } finally {
+      shiftState.loading = false;
     }
     shiftState.shownAt = Date.now();
     renderShift();
@@ -6215,10 +6246,14 @@
         const key = sortBtn.dataset.shiftSort;
         shiftState.sort = key === shiftState.sort.key ? { key, dir: -shiftState.sort.dir } : { key, dir: 1 };
         renderShift();
+        const again = $("shiftTable").querySelector(`[data-shift-sort="${key}"]`); // таблица перестроена — фокус вернуть на ту же кнопку
+        if (again) again.focus();
       }
       if (e.target.closest("[data-shift-out]")) {
         shiftState.outOpen = !shiftState.outOpen;
         renderShift();
+        const again = $("shiftTable").querySelector("[data-shift-out]");
+        if (again) again.focus();
       }
     });
     // Нижняя навигация телефона: «Смена» — к экрану смены, разделы очереди — к очереди
@@ -6230,7 +6265,7 @@
     setInterval(() => {
       if (!shiftState.open) return;
       if (Date.now() - shiftState.shownAt >= WORKFLOW.shift.refreshSec * 1000) loadShift();
-      else renderShift();
+      else tickShift();
     }, 5000);
   }
 

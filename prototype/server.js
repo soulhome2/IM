@@ -642,7 +642,9 @@
       const delta = now() - Date.parse(data.capturedAt);
       const abs = (time) => (time == null ? null : Date.parse(time) + delta);
       // «С какого времени» состояние человека (§23.2) — тоже снимок: сдвигается вместе с остальными временами
-      OPERATORS = data.people.operators.map((o) => (o.stateSince ? Object.assign(o, { stateSince: abs(o.stateSince) }) : o));
+      OPERATORS = data.people.operators.map((o) =>
+        Object.assign(o, o.stateSince ? { stateSince: abs(o.stateSince) } : {}, o.lastSeenAt ? { lastSeenAt: abs(o.lastSeenAt) } : {})
+      );
       GROUPS = data.people.dutyGroups.map((g) => Object.assign({ group: true }, g));
       ACTORS = OPERATORS.concat(GROUPS, data.people.system.map((a) => Object.assign({ system: true }, a)));
       DEVICE_TYPES = Object.fromEntries(data.deviceTypes.map((t) => [t.id, { label: t.label }]));
@@ -780,9 +782,13 @@
         openIncidentGuid: null,
         preferences: JSON.parse(JSON.stringify(fixture.operatorPreferences || {})),
         lastTransferTargetId: null,
+        // Когда потеряна связь (§12.3); null — связь есть
+        linkLostAt: null,
       };
       SIM = opts.colleagues ? JSON.parse(JSON.stringify(opts.colleagues.SIM)) : { enabled: false };
       Object.keys(colleagueIdleSince).forEach((id) => delete colleagueIdleSince[id]);
+      // Последний признак активности коллеги из набора (§12.3): его сессия молчит с этого момента
+      OPERATORS.forEach((o) => o.id !== ME && o.lastSeenAt != null && (colleagueIdleSince[o.id] = o.lastSeenAt));
     }
 
     load(FIXTURE);
@@ -2429,12 +2435,13 @@
       moments.sort((a, b) => a - b);
       return { from: moments.filter((m) => m <= at).pop(), to: moments.find((m) => m > at), timeZone: tz };
     }
-    // С какого времени (§23.2): последняя запись входа, перерыва, возврата, выхода или восстановления связи в журнале
-    // действий (§12.4); до первой — время из набора (stateSince); не входил — null
-    // Виды этих записей — переходы состояния оператора машины (session.transitions) и восстановление связи
-    const SINCE_KINDS = W.session.transitions.map((t) => t.id).concat("link_restored");
-    function stateSinceOf(id) {
-      const last = auditActions.filter((r) => r.personId === id && SINCE_KINDS.includes(r.kind)).pop();
+    // С какого времени (§23.2): последняя запись журнала действий (§12.4) о входе в хранимое состояние stored — вид записи —
+    // переход состояния оператора машины в него (session.transitions: перерыв, возврат, вход, выход); на месте — ещё
+    // восстановление связи (§12.3). До первой такой записи — время из набора (stateSince); не входил — null
+    function stateSinceOf(id, stored) {
+      const kinds = W.session.transitions.filter((t) => t.to === stored).map((t) => t.id);
+      if (engine.onDuty(id)) kinds.push("link_restored");
+      const last = auditActions.filter((r) => r.personId === id && kinds.includes(r.kind)).pop();
       if (last) return Date.parse(last.at);
       return (OPERATORS.find((o) => o.id === id) || {}).stateSince || null;
     }
@@ -2443,16 +2450,17 @@
     // «Нет связи» — состояние строки SupervisorNowRow.state контракта, не причина удержания с тем же id
     const NO_LINK = "no_link"; // SupervisorNowRow.state
     function linkLostAt(id) {
-      if (id !== ME) return colleagueIdleSince[id] == null ? null : colleagueIdleSince[id];
-      return lastHeartbeat != null && now() - lastHeartbeat >= W.session.idleHoldSec * 1000 ? lastHeartbeat : null;
+      const seen = id === ME ? lastHeartbeat : colleagueIdleSince[id];
+      return seen != null && now() - seen >= W.session.idleHoldSec * 1000 ? seen : null;
     }
     // Состояние строки (§23.2): вышел и перерыв — хранимое; вошёл и молчит — «нет связи»; иначе хранимое или
     // производное «Занят» (session.states[].derived машины)
     function supervisorState(id) {
       const stored = agentStateOf(id);
-      const lost = stored === "offline" || stored === "not_ready" ? null : linkLostAt(id);
+      // Перерыв без связи — всё ещё перерыв, вышедший — вышел: «нет связи» — только у того, кто на месте (onDuty машины)
+      const lost = engine.onDuty(id) ? linkLostAt(id) : null;
       if (lost != null) return { state: NO_LINK, since: lost };
-      return { state: stored === "ready" ? engine.shownAgentState(stored, id) : stored, since: stateSinceOf(id) };
+      return { state: engine.shownAgentState(stored, id), since: stateSinceOf(id, stored) };
     }
     const breached = (e) => Boolean(e.slaBreached) || (e.breaches || []).length > 0;
     function median(xs) {
@@ -2497,7 +2505,7 @@
       const summary = { present: 0, onBreak: 0, noLink: 0, signedOut: 0 };
       operators.forEach((r) => (summary[SUMMARY_OF[r.state]] += 1));
       // Ничьих и просрочено всего — по инцидентам, видимым старшему, как в очереди (§5); фильтр их не меняет
-      const open = events.filter((e) => canSee(e) && ["new", "pending_acceptance", "in_progress", "on_hold"].includes(e.state));
+      const open = events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"));
       summary.unowned = open.filter((e) => e.state === "new" || (e.state === "pending_acceptance" && !e.owner && Boolean(e.assignmentGroup))).length;
       summary.overdue = open.filter(breached).length;
       return { status: 200, body: { at: iso(at), shift: { from: iso(shift.from), to: iso(shift.to), timeZone: shift.timeZone }, summary, operators } };
@@ -2839,7 +2847,8 @@
           (p, q, body) => {
             if (body.fixture && body.fixture !== "demo") return problem(404, "NOT_FOUND", ["workflow.error.test.no_fixture", { name: body.fixture }]);
             // Часы останавливаются: время в тестах идёт только по /test/clock
-            clock.frozenAt = body.freezeClock === false ? null : realNow() + clock.offset;
+            // Остановленные часы — с целой секунды: сдвиги /test/clock целые, и тест попадает ровно в границу смены (§23.1)
+            clock.frozenAt = body.freezeClock === false ? null : Math.floor((realNow() + clock.offset) / 1000) * 1000;
             // Изменения схемы и набора — только на этот прогон: следующий reset без них вернёт исходные
             const before = W;
             const prioritiesBefore = JSON.stringify(PRIORITIES);
@@ -2974,7 +2983,12 @@
         // тактами планировщика стёрло бы нарушение (BUG-82). Окно после дедлайна по-прежнему ждёт человека.
         // Сбой догона — 500: ничего не сделано, ключ не тратится (решение 212)
         if (acting) runScheduler();
-        // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит
+        // Действие оператора — признак активности (§12.3, BUG-76): кто действует, тот не молчит; связь была потеряна —
+        // запись «Связь восстановлена» в журнале действий (§12.4): от неё «с какого времени» на месте (§23.2)
+        if (acting && session.linkLostAt != null) {
+          session.linkLostAt = null;
+          audit(ME, "link_restored", {});
+        }
         if (acting) lastHeartbeat = now();
         res = route.fn(params, q, body || {}, lowerKeys(headers));
       } catch (err) {
@@ -3005,6 +3019,12 @@
 
     // Автоматические переходы машины по дедлайнам (§6.2): в продукте их выполняет сервер
     function runScheduler() {
+      // Потеря связи (§12.3): вошёл, а признака активности нет дольше idleHoldSec — запись «Потеря связи» в журнале
+      // действий в момент, когда порог пройден, один раз до восстановления
+      if (session.agentState !== "offline" && session.linkLostAt == null && lastHeartbeat != null && now() - lastHeartbeat >= W.session.idleHoldSec * 1000) {
+        session.linkLostAt = lastHeartbeat + W.session.idleHoldSec * 1000;
+        audit(ME, "link_lost", { at: iso(session.linkLostAt) });
+      }
       // Чьи инциденты были мои — владельцем или адресатом, лично или группой (ownership машины): если после
       // переходов такой инцидент мне не виден, сервер сообщает об этом (§5)
       const wasMine = new Set(events.filter((e) => !isDone(e) && ["owner", "target"].includes(engine.ownership(e))).map((e) => e.id));

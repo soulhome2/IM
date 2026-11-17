@@ -434,6 +434,16 @@ MUTATIONS = [
     ("ui-conflict-no-refresh", "app.js", ".forEach((f) => checkedSeen.delete(f.incidentGuid));", ".forEach(() => {});", "ui"),
     ("ui-evict-silent", "app.js", '} else if (msg.type === "incident.card_evicted" && !mine && state.selectedId === msg.incidentGuid) {', "} else if (false) {", "ui"),
     ("ui-priority-no-label", "app.js", 'role="img" aria-label="${te("Приоритет: {label}", {\n        label: inLang(PRIORITIES[e.priority].name),\n      })}"', "", "ui"),
+    # Блок «Сейчас» (§23, план 90): граница смены входит в новую смену; привязанные не считаются; перерыв без связи — перерыв;
+    # сводка — по видимым; реакция — за смену; просрочено в строке — только в работе и отложенные; связь вернулась — с её восстановления
+    ("shift-start-excluded", "server.js", "moments.filter((m) => m <= at).pop()", "moments.filter((m) => m < at).pop()", "api"),
+    ("shift-reaction-linked", "server.js", "e.acceptedAt >= shift.from && !e.linkedTo)", "e.acceptedAt >= shift.from)", "api"),
+    ("shift-closed-linked", "server.js", "e.closedAt >= shift.from && !e.linkedTo", "e.closedAt >= shift.from", "api"),
+    ("shift-no-link-on-break", "server.js", "const lost = engine.onDuty(id) ? linkLostAt(id) : null;", "const lost = linkLostAt(id);", "api"),
+    ("shift-summary-unseen", "server.js", 'events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"))', 'events.filter((e) => engine.inQueueFilter(e, "open"))', "api"),
+    ("shift-reaction-all-time", "server.js", " && e.acceptedAt >= shift.from", "", "api"),
+    ("shift-overdue-pending", "server.js", 'own("in_progress").concat(own("on_hold"))', 'own("in_progress").concat(own("on_hold"), own("pending_acceptance"))', "api"),
+    ("shift-link-restored-ignored", "server.js", 'if (engine.onDuty(id)) kinds.push("link_restored");', "", "api"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
 # из испорченной; судят тесты API. Порчи, которые ловит статическая проверка check_machine.py, — не здесь

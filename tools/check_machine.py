@@ -393,6 +393,10 @@ def check_fixture(w, err):
             err.append(f"эталон: у человека {o['id']} причина reasonId без перерыва (§12.1)")
         # С какого времени состояние (§23.2, план 90): момент снимка или раньше; у не входившего — нет
         when(o.get("stateSince"), f"people.operators[{o['id']}].stateSince")
+        # Последний признак активности коллеги (§12.3, §23.2): с него молчит сессия; у не вошедшего сессии нет
+        when(o.get("lastSeenAt"), f"people.operators[{o['id']}].lastSeenAt")
+        if o.get("lastSeenAt") and o.get("agentState") == "offline":
+            err.append(f"эталон: у вышедшего {o['id']} признак активности lastSeenAt — сессии нет (§12.3)")
         if not isinstance(o.get("roles"), list) or not o["roles"]:
             err.append(f"эталон: у оператора {o['id']} нет ролей (roles) — ему ничего не видно (§5)")
     for kind, value in entities:

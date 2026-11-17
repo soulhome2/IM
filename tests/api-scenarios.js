@@ -958,15 +958,20 @@
     await go(60);
     assert.status(await env.act(b.guid, "claim", {}, "queue"), 200, null, "взять через 60 с");
     assert.eq(mine(await supervisorNow(env)), [0, 50], "медиана реакции 40 и 60 с — 50 с");
+    const c = await fresh();
+    await go(20);
+    assert.status(await env.act(c.guid, "claim", {}, "queue"), 200, null, "взять через 20 с");
+    assert.eq(mine(await supervisorNow(env)), [0, 40], "медиана реакции 20, 40 и 60 с — середина, 40 с");
 
     await jump(nextMsk(at, 3, 0));
     const n0300 = await supervisorNow(env);
     assert.eq(span(n0300), [nightFrom, nightFrom + 12 * 3600e3, "Europe/Moscow"], "в 03:00 — ночная смена, начатая накануне в 20:00");
-    assert.eq(mine(n0300), [0, 50], "через полночь итоги смены те же");
+    assert.eq(mine(n0300), [0, 40], "через полночь итоги смены те же");
 
     const t0800 = nextMsk(at, 8, 0);
     await jump(t0800);
     const n0800 = await supervisorNow(env);
+    assert.eq(at, t0800, "часы стенда — ровно 08:00:00.000");
     assert.eq(span(n0800), [t0800, t0800 + 12 * 3600e3, "Europe/Moscow"], "ровно в 08:00 — уже дневная смена");
     assert.eq(mine(n0800), [0, null], "в начале смены итогов ещё нет");
   });
@@ -1014,6 +1019,13 @@
     const nums = (r) => [r.inProgress, r.onHold, r.overdue, r.closedThisShift, r.medianReactionSec];
     accepts.filter((id) => id !== ME).forEach((id) => assert.eq(nums(nowRow(narrow, id)), nums(nowRow(n, id)), `${id}: числа не зависят от того, что видит старший`));
     assert.ok(narrow.summary.unowned < s.unowned, `ничьих — по видимым старшему: ${narrow.summary.unowned} из ${s.unowned}`);
+    // Тот же INC-1843, но ждущий группу, — ничей: значит, ждущий человека не был посчитан
+    const incidents = JSON.parse(JSON.stringify(fx.incidents));
+    const inc1843 = incidents.find((e) => e.number === "INC-1843");
+    assert.eq([inc1843.state, inc1843.owner], ["pending_acceptance", ME], "INC-1843 в наборе ждёт принятия человеком");
+    Object.assign(inc1843, { owner: null, assignmentGroup: "grp-response" });
+    const toGroup = await makeEnv({ fixturePatch: { incidents } });
+    assert.eq((await supervisorNow(toGroup)).summary.unowned, s.unowned + 1, "INC-1843, ждущий группу, — ничей, ждущий человека — нет");
   });
 
   test("«Сейчас»: просрочено в строке — только в работе и отложенные, просрочено всего — открытые; свой перерыв и «нет связи» с какого времени; без права supervisor:view — 403 (§23.2, план 90)", async () => {
@@ -1045,9 +1057,63 @@
     assert.status(await env.call("POST", "/test/clock", { advanceSec: W.session.idleHoldSec + 5 }), 200, null, "молчит дольше idleHoldSec");
     const lost = await supervisorNow(env);
     assert.eq([nowRow(lost, ME).state, Date.parse(nowRow(lost, ME).since), lost.summary.noLink], ["no_link", seen, 1], "нет связи — с последнего признака активности");
+    // Связь вернулась: в журнале действий — потеря и восстановление, на месте — с восстановления (§12.3, §12.4, §23.2)
+    await env.heartbeat();
+    const restoredAt = Date.parse((await supervisorNow(env)).at);
+    const restored = await supervisorNow(env);
+    assert.eq([nowRow(restored, ME).state, Date.parse(nowRow(restored, ME).since), restored.summary.noLink], ["ready", restoredAt, 0], "связь вернулась — на месте с её восстановления, а не с возврата с перерыва");
+    const linkLog = async (kind) => (await env.ok("GET", `/operator/admin/audit/actions?person=${ME}&kind=${kind}`)).items.map((r) => Date.parse(r.at));
+    assert.eq([await linkLog("link_lost"), await linkLog("link_restored")], [[seen + W.session.idleHoldSec * 1000], [restoredAt]], "в журнале действий — потеря связи (по истечении idleHoldSec) и её восстановление");
+    // Перерыв без связи — всё ещё перерыв
+    assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "снова перерыв");
+    const break2 = Date.parse((await supervisorNow(env)).at);
+    assert.status(await env.call("POST", "/test/clock", { advanceSec: W.session.idleHoldSec + 5 }), 200, null, "на перерыве молчит дольше idleHoldSec");
+    const silent = await supervisorNow(env);
+    assert.eq([nowRow(silent, ME).state, Date.parse(nowRow(silent, ME).since), silent.summary.noLink, silent.summary.onBreak], ["not_ready", break2, 0, 2], "перерыв без связи — перерыв, не «нет связи»");
 
     const bare = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "supervisor:view") });
     assert.status(await bare.call("GET", "/operator/supervisor/now"), 403, "PERMISSION_DENIED", "без права — 403");
+  });
+
+  test("«Сейчас»: у коллеги «нет связи» — с его последнего признака активности, на перерыве — перерыв; привязанный и закрытый вместе с основным не считаются ни в «закрыл за смену», ни в медиане реакции (§12.3, §23.2, план 90)", async () => {
+    const fx = window.IM_FIXTURE;
+    // Смена — сутки, началась почти сутки назад: все времена набора — в ней, где бы ни шли часы
+    const at = Date.parse((await supervisorNow(await makeEnv())).at);
+    const msk = new Date(at + MSK + 600e3);
+    const start = `${String(msk.getUTCHours()).padStart(2, "0")}:${String(msk.getUTCMinutes()).padStart(2, "0")}`;
+    const shifted = (time) => at - (Date.parse(fx.capturedAt) - Date.parse(time));
+    const lastSeen = new Date(Date.parse(fx.capturedAt) - (W.session.idleHoldSec + 60) * 1000).toISOString();
+    const people = JSON.parse(JSON.stringify(fx.people));
+    people.operators.forEach((o) => ["gusev", "orlova"].includes(o.id) && (o.lastSeenAt = lastSeen));
+    const env = await makeEnv({ workflowPatch: { shift: { starts: [start] } }, fixturePatch: { people } });
+    const n = await supervisorNow(env);
+    assert.ok(Date.parse(n.at) - Date.parse(n.shift.from) > 23 * 3600e3, `смена — сутки: ${n.shift.from}–${n.shift.to}`);
+    const gusev = nowRow(n, "gusev");
+    assert.eq([gusev.state, Date.parse(gusev.since), n.summary.noLink], ["no_link", shifted(lastSeen), 1], "Гусев молчит дольше idleHoldSec — нет связи с последнего признака");
+    assert.eq([nowRow(n, "orlova").state, nowRow(n, "orlova").reasonId, n.summary.onBreak], ["not_ready", "lunch", 1], "Орлова молчит на обеде — всё ещё перерыв");
+    assert.eq(nowRow(n, "sidorov").state, "busy", "Сидоров без lastSeenAt — на связи: «Занят», свои в работе");
+
+    // Мои закрытые и принятые: INC-1837 — закрыл и принял я; привязанный к INC-1829 — уже не мой результат
+    const median = (xs) => {
+      const v = xs.slice().sort((a, b) => a - b);
+      return v.length ? (v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : null;
+    };
+    const expect = (incidents) => {
+      const own = incidents.filter((e) => !e.linkedGuid);
+      return [
+        own.filter((e) => e.state === "closed" && e.closedBy === ME).length,
+        median(own.filter((e) => e.acceptedBy === ME).map((e) => (Date.parse(e.acceptedAt) - Date.parse(e.occurredAt)) / 1000)),
+      ];
+    };
+    const mine = (x) => [nowRow(x, ME).closedThisShift, nowRow(x, ME).medianReactionSec];
+    assert.eq(mine(n), expect(fx.incidents), "мои закрытые и медиана — по набору");
+    const incidents = JSON.parse(JSON.stringify(fx.incidents));
+    const inc1837 = incidents.find((e) => e.number === "INC-1837");
+    assert.eq([inc1837.state, inc1837.closedBy, inc1837.acceptedBy], ["closed", ME, ME], "INC-1837 закрыл и принял я");
+    inc1837.linkedGuid = incidents.find((e) => e.number === "INC-1829").guid;
+    const linked = await supervisorNow(await makeEnv({ workflowPatch: { shift: { starts: [start] } }, fixturePatch: { incidents } }));
+    assert.eq(mine(linked), expect(incidents), "привязанный INC-1837 не считается ни в закрытых, ни в медиане");
+    assert.ok(mine(linked)[0] === mine(n)[0] - 1 && mine(linked)[1] !== mine(n)[1], `без INC-1837 — на одного закрытого меньше и другая медиана: ${mine(n)} → ${mine(linked)}`);
   });
 
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */

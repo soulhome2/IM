@@ -23,8 +23,9 @@
       <!-- Вкладки операторской части (§23, план 90): «Смена и статистика» — рядом с очередью, только с правом supervisor:view;
            без права вкладок нет. Строит видимость app.js -->
       <nav class="seg screen-tabs" id="screenTabs" role="tablist" aria-label="Разделы" hidden>
-        <button type="button" role="tab" data-screen="queue" class="active" aria-selected="true">Очередь</button>
-        <button type="button" role="tab" data-screen="shift" aria-selected="false" id="tabShift">Смена и статистика</button>
+        <!-- Окно уже 1240 px — вкладки значками, подпись — в title и aria-label; телефон — кнопка «Смена» внизу -->
+        <button type="button" role="tab" data-screen="queue" class="active" aria-selected="true" title="Очередь" aria-label="Очередь"><span class="material-symbols-outlined" aria-hidden="true">list_alt</span><span class="screen-tab-text">Очередь</span></button>
+        <button type="button" role="tab" data-screen="shift" aria-selected="false" id="tabShift" title="Смена и статистика" aria-label="Смена и статистика"><span class="material-symbols-outlined" aria-hidden="true">groups</span><span class="screen-tab-text">Смена и статистика</span></button>
       </nav>
 
       <div class="topbar-cluster">
@@ -345,7 +346,7 @@
         <span class="material-symbols-outlined">videocam</span>
         Видео и карта
       </button>
-      <!-- «Смена и статистика» на узком экране и телефоне (§23): вкладки шапки там не помещаются; только с правом supervisor:view -->
+      <!-- «Смена и статистика» на телефоне (§23): вкладок в шапке там нет; только с правом supervisor:view -->
       <button type="button" data-screen="shift" id="navShift" hidden>
         <span class="material-symbols-outlined">groups</span>
         Смена

@@ -3840,7 +3840,7 @@
       }
     });
 
-    // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
+    // Экран «Смена и статистика» (§23): вкладка, блок «Сейчас», сортировка и фильтр
     await step("Смена и статистика (§23, план 90): вкладка рядом с очередью по праву supervisor:view; «Сейчас» — смена, сводка, все операторы, по умолчанию по «С какого времени» сверху новые, вышедшие свёрнуты, сортировка по щелчку, фильтр по дежурной группе; без права вкладки нет", async () => {
       const fx = window.IM_FIXTURE;
       const shown = () => [...$("shiftTable").querySelectorAll("tbody tr[data-shift-person]")];
@@ -3878,6 +3878,13 @@
         await click($("shiftTable").querySelector('[data-shift-sort="name"]'));
         expect(names().join() === asc.slice().reverse().join(), `по имени обратно: ${names().join(", ")}`);
         expect(people()[people().length - 1] === "kuznetsov", "вышедший не остался в конце");
+        // Между опросами раз в 5 с меняется только «сколько длится»: таблица та же, фокус на кнопке сортировки остаётся
+        const sortBtn = $("shiftTable").querySelector('[data-shift-sort="name"]');
+        const row = $("shiftTable").querySelector('tr[data-shift-person="orlova"]');
+        expect(document.activeElement === sortBtn, "после сортировки фокус ушёл с кнопки столбца");
+        await wait(5200);
+        expect(row.isConnected && document.activeElement === sortBtn, "таблица перестроилась между опросами — фокус потерян");
+        expect(/· \d+ мин/.test(row.cells[3].textContent), `«сколько длится» у Орловой: «${row.cells[3].textContent}»`);
         // Фильтр по дежурной группе — участники группы
         const select = $("shiftGroup");
         select.value = "grp-response";
@@ -3902,6 +3909,7 @@
       }
     });
 
+    // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
     await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const W = window.IM_WORKFLOW;
