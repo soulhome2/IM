@@ -9,7 +9,7 @@
    чтобы независимые шаги дальше не падали следом. */
 (() => {
   // Что видел оператор в карточке или строке (§14.1, RULE-142) — тело запроса перехода служебным запросом стенда
-  const seenBody = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", journalSeen: c.journalSeq });
+  const seenBody = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", expectedPriority: c.priority, journalSeen: c.journalSeq });
   // Страница, открытая самопроверкой в узкой рамке: сообщает, шире ли она экрана, сколько места
   // над очередью занимают шапка и фильтры и работает ли кнопка «Фильтры» (BUG-50)
   if (new URLSearchParams(location.search).has("widthcheck")) {
@@ -3420,6 +3420,25 @@
         const res = await standAct(inc.guid, "change_priority", { priority: String(prLevels()[1]), comment: "  " });
         expect(res.status === 422, `без причины: ${res.status} ${res.body && res.body.code}`);
         expect((await prCard(inc.guid)).priority === inc.priority, "приоритет изменился");
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(100);
+      }
+    });
+
+    await step("Смена приоритета по устаревшему уровню — отказ 412 «Приоритет уже изменён», первая смена не затёрта (§14.1, RULE-143)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      try {
+        const inc = await prNewTop();
+        const seen = (await stand.raw("GET", `/operator/incidents/${encodeURIComponent(inc.guid)}`)).body;
+        const [first, second] = prLevels().filter((v) => v !== seen.priority);
+        expect((await standAct(inc.guid, "change_priority", { priority: String(first), comment: "x" })).status === 200, "первая смена не прошла");
+        // Вторая вкладка видела прежний уровень
+        const res = await stand.raw("POST", `/operator/incidents/${encodeURIComponent(inc.guid)}/transitions/change_priority`, Object.assign({ formValues: { priority: String(second), comment: "y" }, surface: "card" }, seenBody(seen)));
+        expect(res.status === 412 && res.body.details && res.body.details.changed === "priority", `устаревший уровень: ${res.status} ${res.body && res.body.details && res.body.details.changed}`);
+        expect(/^Приоритет уже изменён: /.test(res.body.message), `текст отказа: ${res.body.message}`);
+        expect((await prCard(inc.guid)).priority === first, "первая смена затёрта");
+        return res.body.message;
       } finally {
         await standReset({ fixture: "demo" });
         await wait(100);

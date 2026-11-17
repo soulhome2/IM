@@ -5546,7 +5546,7 @@
         }
       },
       "VersionConflict": {
-        "description": "Изменилось то, на чём основано решение оператора (§14.1, RULE-142): `412 INCIDENT_CHANGED`, в `details.changed` — что именно (`state`, `addressee`, `news`, `primary`), в `current` — актуальная карточка: клиент показывает её без второго запроса и называет, что изменилось. Закрытый теперь — всегда `changed: state` (закрывший коллега сменил и адресата). Текст — по первому совпавшему: другое состояние (и всегда закрытый) — `workflow.error.changed.state`, инцидент ведёт другой человек (состояние, где адресат — сам оператор) — `workflow.error.changed.taken` («Инцидент уже ведёт {who}»), передан человеку или группе и ещё не принят — `workflow.error.changed.addressed`, адресата нет — `workflow.error.changed.queue`, новое событие у закрытия — `workflow.error.changed.news` («Пришло новое событие — проверьте»), основной выборки сменился — `workflow.error.changed.primary`. У «Отсоединить» и у перехода, когда семья инцидента сменилась, пока запрос ждал блокировку (объединили, отсоединили), — тоже `INCIDENT_CHANGED`, `changed: state`; текст — `workflow.error.changed.family` («Связь инцидентов изменилась — проверьте»), а если инцидент теперь закрыт — `workflow.error.changed.state`.",
+        "description": "Изменилось то, на чём основано решение оператора (§14.1, RULE-142): `412 INCIDENT_CHANGED`, в `details.changed` — что именно (`state`, `addressee`, `priority`, `news`, `primary`), в `current` — актуальная карточка: клиент показывает её без второго запроса и называет, что изменилось. Закрытый теперь — всегда `changed: state` (закрывший коллега сменил и адресата). Текст — по первому совпавшему: другое состояние (и всегда закрытый) — `workflow.error.changed.state`, инцидент ведёт другой человек (состояние, где адресат — сам оператор) — `workflow.error.changed.taken` («Инцидент уже ведёт {who}»), передан человеку или группе и ещё не принят — `workflow.error.changed.addressed`, адресата нет — `workflow.error.changed.queue`, уровень у смены приоритета — `workflow.error.changed.priority` («Приоритет уже изменён: {priority}», RULE-143), новое событие у закрытия — `workflow.error.changed.news` («Пришло новое событие — проверьте»), основной выборки сменился — `workflow.error.changed.primary`. У «Отсоединить» и у перехода, когда семья инцидента сменилась, пока запрос ждал блокировку (объединили, отсоединили), — тоже `INCIDENT_CHANGED`, `changed: state`; текст — `workflow.error.changed.family` («Связь инцидентов изменилась — проверьте»), а если инцидент теперь закрыт — `workflow.error.changed.state`.",
         "content": {
           "application/problem+json": {
             "schema": {
@@ -5556,7 +5556,7 @@
         }
       },
       "PreconditionRequired": {
-        "description": "Клиент не сказал, что видел оператор (§14.1, RULE-142): у перехода нет `expectedState` или `expectedAddressee` (у закрытия — ещё `journalSeen`), у ответа на шаг — `expectedOwner` или `seenAnswer`. Код `PRECONDITION_REQUIRED`, ключ `workflow.error.expected_required`. У `comment` и `detach` сверять нечего (`concurrency.expects` пуст) — ничего присылать не нужно.",
+        "description": "Клиент не сказал, что видел оператор (§14.1, RULE-142): у перехода нет поля, которое требует его `concurrency.expects`: `expectedState`, `expectedAddressee`, у смены приоритета — `expectedPriority` вместо адресата, у закрытия — ещё `journalSeen`, у ответа на шаг — `expectedOwner` или `seenAnswer`. Код `PRECONDITION_REQUIRED`, ключ `workflow.error.expected_required`. У `comment` и `detach` сверять нечего (`concurrency.expects` пуст) — ничего присылать не нужно.",
         "content": {
           "application/problem+json": {
             "schema": {
@@ -5738,10 +5738,11 @@
                     "enum": [
                       "state",
                       "addressee",
+                      "priority",
                       "news",
                       "primary"
                     ],
-                    "description": "RULE-142. Что изменилось из того, что видел оператор: `state` — состояние, `addressee` — адресат, `news` — после `journalSeen` пришла запись журнала (только у закрытия), `primary` — у выборки с `bulk.scope` сменился сценарий основного"
+                    "description": "RULE-142. Что изменилось из того, что видел оператор: `state` — состояние, `addressee` — адресат, `priority` — уровень приоритета (только у смены приоритета, RULE-143), `news` — после `journalSeen` пришла запись журнала (только у закрытия), `primary` — у выборки с `bulk.scope` сменился сценарий основного"
                   }
                 },
                 "additionalProperties": true
@@ -6636,10 +6637,11 @@
                   "enum": [
                     "state",
                     "addressee",
+                    "priority",
                     "news"
                   ]
                 },
-                "description": "§14.1, RULE-142. Что сверяет переход из того, что видел оператор: `state` — `expectedState`, `addressee` — `expectedAddressee`, `news` — новые события после `journalSeen` (только у закрытия). Пусто — сверять нечего (`comment`, `detach`)."
+                "description": "§14.1, RULE-142. Что сверяет переход из того, что видел оператор: `state` — `expectedState`, `addressee` — `expectedAddressee`, `priority` — `expectedPriority` (у смены приоритета, RULE-143), `news` — новые события после `journalSeen` (только у закрытия). Пусто — сверять нечего (`comment`, `detach`)."
               }
             },
             "description": "Только у ручных переходов (`trigger: manual`): у автоматических кнопок и форм нет (DOC-19)."
@@ -8521,7 +8523,7 @@
         "type": "object",
         "properties": {
           "expectedState": {
-            "description": "§10.1, §14.1. Состояние, которое видел оператор. Обязательно у переходов с непустым `concurrency.expects` машины — у всех ручных, кроме `comment` и `detach`: нет — `428`, другое — `412 INCIDENT_CHANGED`.",
+            "description": "§10.1, §14.1. Состояние, которое видел оператор. Обязательно у переходов со `state` в `concurrency.expects` машины — у всех ручных, кроме `comment` и `detach`: нет — `428`, другое — `412 INCIDENT_CHANGED`.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/StateId"
@@ -8582,7 +8584,11 @@
           },
           "expectedAddressee": {
             "type": "string",
-            "description": "§14.1, RULE-142. Адресат, которого видел оператор: `id` из `addressee` карточки или строки очереди (владелец, а пока группа не приняла — сама группа); `\"\"` — ничей. Обязательно у переходов с непустым `concurrency.expects` — у всех ручных, кроме `comment` и `detach`: нет — `428`, другой — `412 INCIDENT_CHANGED` (`details.changed: addressee`). Эскалация без смены адресата, запись о нарушении, чужой комментарий действию не мешают."
+            "description": "§14.1, RULE-142. Адресат, которого видел оператор: `id` из `addressee` карточки или строки очереди (владелец, а пока группа не приняла — сама группа); `\"\"` — ничей. Обязательно у переходов с `addressee` в `concurrency.expects` — у всех ручных, кроме `comment`, `detach` и смены приоритета (она сверяет уровень, `expectedPriority`, RULE-143): нет — `428`, другой — `412 INCIDENT_CHANGED` (`details.changed: addressee`). Эскалация без смены адресата, запись о нарушении, чужой комментарий действию не мешают."
+          },
+          "expectedPriority": {
+            "type": "integer",
+            "description": "§2.5, §14.1, RULE-143. Уровень приоритета, который видел оператор (`priority` карточки или строки очереди). Сверяется у переходов с `priority` в `concurrency.expects` — у смены приоритета: там обязателен (нет — `428`), другой — `412 INCIDENT_CHANGED`, `details.changed: priority`, «Приоритет уже изменён: {уровень}». У остальных не читается."
           },
           "journalSeen": {
             "type": "integer",

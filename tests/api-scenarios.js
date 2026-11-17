@@ -156,6 +156,29 @@
     assert.eq(res.body.incident.owner && res.body.incident.owner.id, ME, "взял я");
   });
 
+  test("Смена приоритета сверяет уровень, а не адресата: две смены наперегонки — вторая 412 «Приоритет уже изменён»; перехватил коллега — не мешает; без expectedPriority — 428 (§14.1, RULE-143)", async () => {
+    const env = await seniorPriority();
+    const inc = await newFire(env);
+    const before = await env.card(inc.guid);
+    const others = LEVELS.filter((v) => v !== before.priority);
+    const stale = { state: before.state, addressee: (before.addressee && before.addressee.id) || "", priority: before.priority, journalSeen: before.journalSeq };
+    const prio = await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/change_priority`, { formValues: { priority: String(others[0]), comment: "тест" }, surface: "card" });
+    assert.status(prio, 200, null, "Петрова меняет приоритет");
+    const late = await env.act(inc.guid, "change_priority", { priority: String(others[1]), comment: "тест" }, "card", undefined, stale);
+    assert.status(late, 412, "INCIDENT_CHANGED", "смена по устаревшему уровню");
+    assert.eq([late.body.details && late.body.details.changed, late.body.messageKey], ["priority", "workflow.error.changed.priority"], "что изменилось и текст");
+    assert.eq((await env.card(inc.guid)).priority, others[0], "смена Петровой не затёрта");
+    // Перехватил коллега — состояние то же, адресат другой: смена приоритета проходит, адресата она не сверяет
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const seen = await env.card(inc.guid);
+    assert.status(await env.call("POST", `/test/operators/petrova/incidents/${enc(inc.guid)}/transitions/takeover`, { formValues: { comment: "тест" }, surface: "card" }), 200, null, "Петрова перехватывает");
+    const fresh = { state: seen.state, addressee: (seen.addressee && seen.addressee.id) || "", priority: seen.priority, journalSeen: seen.journalSeq };
+    const res = await env.act(inc.guid, "change_priority", { priority: String(others[1]), comment: "тест" }, "card", undefined, fresh);
+    assert.status(res, 200, null, "смена приоритета после перехвата коллегой");
+    const now = await env.card(inc.guid);
+    assert.status(await env.act(inc.guid, "change_priority", { priority: String(others[0]), comment: "тест" }, "card", undefined, { state: now.state, addressee: "", journalSeen: now.journalSeq, priority: undefined }), 428, "PRECONDITION_REQUIRED", "без expectedPriority");
+  });
+
   test("Ответ на шаг (§14.1, RULE-142): запись о нарушении не мешает; шаг уже ответили — 409 STEP_CHANGED; перехватили — 412", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

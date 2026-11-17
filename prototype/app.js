@@ -1765,10 +1765,14 @@
   // Что видел оператор (§14.1, RULE-142): состояние, адресат ("" — ничей) и последний номер записи журнала. Сервер
   // сверяет их, а не номер версии: эскалация без смены адресата и запись о нарушении действию не мешают
   // Одно отмеченное в выборке — снимок на момент отметки (seenAtMark), а не то, что прочитано перед отправкой (BUG-84)
+  // Уровень приоритета — для смены приоритета (RULE-143): она сверяет его, а не адресата; выборкой она не делается
   const seenOf = (ev) =>
-    ev.seenAtMark
-      ? { expectedState: ev.seenAtMark.state, expectedAddressee: ev.seenAtMark.addressee || "", journalSeen: ev.seenAtMark.journalSeq || 0 }
-      : { expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 };
+    Object.assign(
+      ev.seenAtMark
+        ? { expectedState: ev.seenAtMark.state, expectedAddressee: ev.seenAtMark.addressee || "", journalSeen: ev.seenAtMark.journalSeq || 0 }
+        : { expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 },
+      ev.priority != null ? { expectedPriority: ev.priority } : {}
+    );
   // Ответ на шаг: владелец и ответ шага, каким его видел оператор (null — без ответа): ответ из другой вкладки
   // или второе нажатие сервер не перепишет молча — 409 STEP_CHANGED
   const answerSeenOf = (ev, stepId) => {

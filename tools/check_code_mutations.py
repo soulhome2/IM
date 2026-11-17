@@ -81,6 +81,7 @@ MUTATIONS = [
     # Передан человеку, который ещё не принял, — «передан», а не «уже ведёт»
     ("addressed-as-taken", "server.js", "STATES[ev.state].owner === \"operator\" ?", "true ?", "api"),
     ("expected-addressee-unchecked", "server.js", "if (expects.includes(\"addressee\") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return \"addressee\";", "if (false) return \"addressee\";", "api"),
+    ("expected-priority-unchecked", "server.js", "if (expects.includes(\"priority\") && s.priority != null && Number(s.priority) !== ev.priority) return \"priority\";", "if (false) return \"priority\";", "api"),
     ("close-news-unchecked", "server.js", "if (expects.includes(\"news\") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return \"news\";", "if (false) return \"news\";", "api"),
     ("news-counts-timers", "server.js", "NEWS.kinds.includes(entryKind(e))", "true", "api"),
     ("step-seen-unchecked", "server.js", "if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {", "if (false) {", "api"),
@@ -88,7 +89,7 @@ MUTATIONS = [
     ("device-type-filter-ignored", "server.js", "if (q.deviceTypeId && q.deviceTypeId !== \"all\") {", "if (false) {", "api"),
     ("focus-page-missing", "server.js", "      const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;\n      const found", "      const focusPage = null;\n      const found", "api"),
     ("answers-by-anyone", "server.js", "if (!engine.canEditScenario(ev)) return problem(403, \"PERMISSION_DENIED\", [\"workflow.error.read_only\"]);\n          const was", "const was", "api"),
-    ("expected-required-skipped", "server.js", "if (b.expectedState == null || b.expectedAddressee == null || (expects.includes(\"news\") && b.journalSeen == null)) return expectedRequired();", "", "api"),
+    ("expected-required-skipped", "server.js", "if (expects.some((k) => b[field[k]] == null)) return expectedRequired();", "", "api"),
     # Машина сценариев и стык (§14.5, ARCH-06): исполнитель scenario.js и его вызовы в сервере
     ("answer-off-path-accepted", "scenario.js", 'if (i < 0) return { ok: false, error: "not_on_path" };\n', "", "api"),
     ("answer-editable-ignored", "scenario.js", 'if (!isCurrent && step.revisitable === false) return { ok: false, error: "not_editable" };\n', "", "api"),
@@ -380,11 +381,11 @@ MUTATIONS = [
     ("ui-selection-bar-only-enabled", "app.js", "a.kind === \"transition\" && a.bulkAllowed && a.visible)", "a.kind === \"transition\" && a.bulkAllowed && a.enabled)", "ui"),
     ("ui-disabled-not-explained", "app.js", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;\n    toast(btn.title || t(\"Действие недоступно\"), \"error\");", "if (btn.getAttribute(\"aria-disabled\") !== \"true\") return false;", "ui"),
     ("ui-placeholder-ignored", "app.js", "const fallback = hasLbl(field, \"placeholder\") ? (enabled.length === 1 ? enabled[0].id : \"\") : enabled[0] && enabled[0].id;", "const fallback = enabled[0] && enabled[0].id;", "ui"),
-    ("ui-no-expected", "app.js", "  const seenOf = (ev) =>\n    ev.seenAtMark", "  const seenOf = () => ({});\n  const seenOfUnused = (ev) =>\n    ev.seenAtMark", "ui"),
+    ("ui-no-expected", "app.js", "  const seenOf = (ev) =>\n    Object.assign(", "  const seenOf = () => ({});\n  const seenOfUnused = (ev) =>\n    Object.assign(", "ui"),
     # Один отмеченный не на странице — шлётся снимок на момент отметки, а не перечитанная карточка (RULE-142, A2)
     # После 412 снимок отметки забывается: повтор идёт по нынешнему, а не снова 412 (BUG-106, RULE-142)
     ("ui-mark-kept-after-412", "app.js", "      if (err && err.problem && err.problem.code === \"INCIDENT_CHANGED\") checkedSeen.delete(ev.guid);\n", "", "ui"),
-    ("ui-mark-snapshot-ignored", "app.js", "    ev.seenAtMark\n      ? {", "    false\n      ? {", "ui"),
+    ("ui-mark-snapshot-ignored", "app.js", "      ev.seenAtMark\n        ? {", "      false\n        ? {", "ui"),
     ("ui-row-acts-on-selection", "app.js", 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue");', 'trigger(act.dataset.do, queueItem(act.dataset.ev), "queue", [...state.checked]);', "ui"),
     # Порядок очереди и новая схема (§7, §14.10, BUG-34)
     # Телефон: типы и порядок — под «Фильтры» с числом выбранных (BUG-50)

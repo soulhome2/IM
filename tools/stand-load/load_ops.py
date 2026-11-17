@@ -231,9 +231,10 @@ def transition(op, inc, tid, form=None, opname=None):
     body = {"surface": "card"}
     if form:
         body["formValues"] = form
-    # Что видел оператор (RULE-142): состояние, адресат и номер последней записи журнала из карточки/строки
+    # Что видел оператор (RULE-142): состояние, адресат, уровень приоритета (смена приоритета сверяет его, RULE-143)
+    # и номер последней записи журнала из карточки/строки
     body.update({"expectedState": inc.get("state"), "expectedAddressee": (inc.get("addressee") or {}).get("id") or "",
-                 "journalSeen": inc.get("journalSeq") or 0})
+                 "expectedPriority": inc.get("priority"), "journalSeen": inc.get("journalSeq") or 0})
     code, js = op.call("POST", f"/operator/incidents/{inc['guid']}/transitions/{tid}", body,
                        op=opname or "transition:" + tid)
     log({"who": op.who, "op": "outcome", "tid": tid, "inc": inc["guid"], "code": code, "from": inc.get("state"),

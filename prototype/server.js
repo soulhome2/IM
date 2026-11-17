@@ -77,6 +77,11 @@
     let PRIORITIES = [];
     // Шкала приоритета из контракта (Priority: целое 0–100) — границы, а не уровни справочника
     const SCALE = { min: 0, max: 100 };
+    // Название уровня справочника на языке оператора (§2.5): текст отказа «Приоритет уже изменён» (RULE-143)
+    const priorityName = (value) => {
+      const p = PRIORITIES.find((x) => x.value === value);
+      return (p && p.name && (p.name[(session && session.preferences.locale) || "ru"] || p.name.ru)) || String(value);
+    };
     const topPriority = () => (PRIORITIES.length ? PRIORITIES[0].value : null);
     // Число → уровень справочника (подмена приоритета на стенде, §2.5): есть — как есть; нет — ближайший не выше;
     // ниже самого низкого или без числа — самый низкий. Инцидент не кажется срочнее, чем по настройке
@@ -1543,6 +1548,8 @@
       const stateChanged = expects.includes("state") && s.state != null && s.state !== ev.state;
       if (expects.includes("addressee") && s.addressee != null && String(s.addressee) !== addresseeOf(ev)) return "addressee";
       if (stateChanged) return "state";
+      // Смена приоритета сверяет уровень, который видел оператор (RULE-143): две смены наперегонки не затирают друг друга
+      if (expects.includes("priority") && s.priority != null && Number(s.priority) !== ev.priority) return "priority";
       if (expects.includes("news") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return "news";
       return null;
     }
@@ -1557,6 +1564,7 @@
       let why;
       if (what === "news") why = ["workflow.error.changed.news"];
       else if (what === "primary") why = ["workflow.error.changed.primary"];
+      else if (what === "priority") why = ["workflow.error.changed.priority", { priority: priorityName(ev.priority) }];
       else if (what === "state") why = ["workflow.error.changed.state", { state: [STATES[ev.state].labelKey] }];
       else if (!who) why = ["workflow.error.changed.queue"];
       // Ведёт — состояние, где адресат — сам оператор (owner: operator машины); ждёт принятия (transfer_target) — передан
@@ -1954,8 +1962,11 @@
           const expects = tr && !(tr.bulk && tr.bulk.mode === "merge") ? expectsOf(tr) : [];
           const b = body || {};
           if (expects.length) {
-            if (b.expectedState == null || b.expectedAddressee == null || (expects.includes("news") && b.journalSeen == null)) return expectedRequired();
-            const what = changedOf(ev, expects, { state: b.expectedState, addressee: b.expectedAddressee, journalSeq: b.journalSeen });
+            // Что обязан прислать клиент — по expects перехода: state → expectedState, addressee → expectedAddressee,
+            // priority → expectedPriority, news → journalSeen
+            const field = { state: "expectedState", addressee: "expectedAddressee", priority: "expectedPriority", news: "journalSeen" };
+            if (expects.some((k) => b[field[k]] == null)) return expectedRequired();
+            const what = changedOf(ev, expects, { state: b.expectedState, addressee: b.expectedAddressee, priority: b.expectedPriority, journalSeq: b.journalSeen });
             if (what) return changedProblem(ev, what);
           }
           const res = runTransition(p.transitionId, ev, (body && body.formValues) || {}, body && body.surface);

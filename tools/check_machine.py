@@ -1609,7 +1609,8 @@ def check_declared_fields(w, o, err):
     """Поля машины, которые исполнитель не читает, сверяются с тем, что исполняется (ARCH-11): иначе разработчик
     не отличит закон от пояснения.
     - requiredOnTransition справочника — ровно те переходы, у формы которых обязательное поле из него;
-    - concurrency.expects: ручной переход сверяет состояние и адресата (state, addressee), запись только в журнал и
+    - concurrency.expects: ручной переход сверяет состояние и адресата (state, addressee), смена приоритета — состояние
+      и уровень (state, priority, RULE-143), запись только в журнал и
       «Отсоединить» — ничего, news — только у ручного перехода в closed; в контракте у перехода — поля expectedState,
       expectedAddressee, journalSeen (§14.1, RULE-142); onTimerConflict — окно после дедлайна машины (invariants.manualWinsOverTimer);
     - requiredStepSet перехода — то, что проверяют его условия: byCloseResult — closeResultAllowed, набор —
@@ -1653,13 +1654,17 @@ def check_declared_fields(w, o, err):
             err.append(f"переход {t['id']}: concurrency.expectedVersion — номер версии действие оператора не сверяет, нужен concurrency.expects (§14.1, RULE-142)")
         exp = c.get("expects")
         silent = journal_only or t["id"] == "detach"
-        if not isinstance(exp, list) or not set(exp) <= {"state", "addressee", "news"}:
-            err.append(f"переход {t['id']}: concurrency.expects {exp} — список из state, addressee, news (§14.1, RULE-142)")
+        if not isinstance(exp, list) or not set(exp) <= {"state", "addressee", "priority", "news"}:
+            err.append(f"переход {t['id']}: concurrency.expects {exp} — список из state, addressee, priority, news (§14.1, RULE-142)")
             continue
         if silent and exp:
             err.append(f"переход {t['id']}: concurrency.expects {exp} у записи только в журнал или «Отсоединить» — сверять нечего, чужой комментарий не мешает владельцу (ТЗ-18, RULE-142)")
-        if manual and not silent and not {"state", "addressee"} <= set(exp):
-            err.append(f"переход {t['id']}: concurrency.expects {exp} — ручной переход сверяет состояние и адресата, которых видел оператор (§14.1, RULE-142)")
+        # Сверяется то, на чём основано решение: смена приоритета (условие priorityChanged) — уровень, а не адресата
+        # (RULE-143); остальные ручные — адресата
+        by_level = any(g["fn"] == "priorityChanged" for g in t.get("guards", []))
+        need_exp = {"state", "priority"} if by_level else {"state", "addressee"}
+        if manual and not silent and set(exp) & {"state", "addressee", "priority"} != need_exp:
+            err.append(f"переход {t['id']}: concurrency.expects {exp} — ручной переход сверяет {sorted(need_exp)}: то, на чём основано решение оператора (§14.1, RULE-142, RULE-143)")
         if "news" in exp and t.get("to") != "closed":
             err.append(f"переход {t['id']}: concurrency.expects news не у закрытия — новые события останавливают только закрытие (RULE-142)")
         if manual and t.get("to") == "closed" and "news" not in exp:
@@ -1667,7 +1672,7 @@ def check_declared_fields(w, o, err):
         if "news" in exp and not news:
             err.append(f"переход {t['id']}: concurrency.expects news без invariants.optimisticLocking.journalNews.kinds (RULE-142)")
         if manual and exp and t["id"] != "merge":
-            need = {"state": "expectedState", "addressee": "expectedAddressee", "news": "journalSeen"}
+            need = {"state": "expectedState", "addressee": "expectedAddressee", "priority": "expectedPriority", "news": "journalSeen"}
             missing = [need[k] for k in exp if need[k] not in req]
             if missing:
                 err.append(f"переход {t['id']}: сверяет {exp}, а в контракте TransitionRequest нет {missing} (§14.1, RULE-142)")
@@ -2707,6 +2712,8 @@ OPENAPI = "Specification/Workflow_machine/openapi.json"
 MUTATIONS = [
     ("messages-key-missing", "машина: ключа отказа RULE-142 нет в реестре messages — сервер его пишет, бэкенд не знает подстановок (§14.9, PROC-94)", MACHINE,
      '    "workflow.error.changed.taken": { "vars": ["who"], "$comment": "RULE-142: инцидент ведёт другой человек (адресат — владелец)" },\n', '', "пишет workflow.error.changed.taken"),
+    ("priority-expects-addressee", "машина: смена приоритета сверяет адресата, а не уровень — смены наперегонки затирают друг друга (RULE-143)", MACHINE,
+     '"concurrency": { "expects": ["state", "priority"],', '"concurrency": { "expects": ["state", "addressee"],', "сверяет ['priority', 'state']"),
     ("comment-any-of-field", "машина: requireAnyOf формы комментария ссылается на несуществующее поле (ТЗ-18)", MACHINE,
      '"requireAnyOf": { "fields": ["comment", "files"]', '"requireAnyOf": { "fields": ["comment", "file"]', "requireAnyOf ссылается на поле file"),
     ("comment-bumps-version", "машина: комментарий сверяет состояние и адресата — чужой комментарий даёт владельцу конфликт (ТЗ-18, RULE-142)", MACHINE,

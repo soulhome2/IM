@@ -66,8 +66,8 @@
   }
 
   // Что видел оператор в карточке или строке очереди (§14.1, RULE-142): тело перехода — expectedState,
-  // expectedAddressee ("" — ничей), journalSeen
-  const seenOf = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", journalSeen: c.journalSeq });
+  // expectedAddressee ("" — ничей), journalSeen; уровень приоритета — для смены приоритета (RULE-143)
+  const seenOf = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", expectedPriority: c.priority, journalSeen: c.journalSeq });
   // Ответ на шаг: владелец и answeredAt шага, каким его видел оператор (null — без ответа)
   const answerSeenOf = (c, stepId) => {
     const was = c.scenario && c.scenario.result && (c.scenario.result.state || {})[stepId];
@@ -158,7 +158,7 @@
         const body = Object.assign({ formValues: formValues || {}, surface: surface || "card" }, card ? seenOf(card) : {});
         if (expectedState !== undefined) body.expectedState = expectedState;
         const o = seen || {};
-        [["state", "expectedState"], ["addressee", "expectedAddressee"], ["journalSeen", "journalSeen"]].forEach(([k, f]) => {
+        [["state", "expectedState"], ["addressee", "expectedAddressee"], ["priority", "expectedPriority"], ["journalSeen", "journalSeen"]].forEach(([k, f]) => {
           if (!(k in o)) return;
           if (o[k] === undefined) delete body[f];
           else body[f] = o[k];
