@@ -16,7 +16,8 @@
         "roles": [
           "Оператор"
         ],
-        "agentState": "ready"
+        "agentState": "ready",
+        "stateSince": "2026-10-03T05:02:11Z"
       },
       {
         "id": "petrova",
@@ -26,7 +27,8 @@
           "Оператор",
           "Старший оператор"
         ],
-        "agentState": "ready"
+        "agentState": "ready",
+        "stateSince": "2026-10-03T05:00:40Z"
       },
       {
         "id": "sidorov",
@@ -35,7 +37,8 @@
         "roles": [
           "Оператор"
         ],
-        "agentState": "ready"
+        "agentState": "ready",
+        "stateSince": "2026-10-03T04:58:05Z"
       },
       {
         "id": "noc",
@@ -44,7 +47,8 @@
         "roles": [
           "Оператор"
         ],
-        "agentState": "ready"
+        "agentState": "ready",
+        "stateSince": "2026-10-02T21:00:00Z"
       },
       {
         "id": "gusev",
@@ -53,7 +57,8 @@
         "roles": [
           "Оператор"
         ],
-        "agentState": "ready"
+        "agentState": "ready",
+        "stateSince": "2026-10-03T08:40:00Z"
       },
       {
         "id": "kuznetsov",
@@ -73,7 +78,8 @@
           "Оператор"
         ],
         "agentState": "not_ready",
-        "reasonId": "lunch"
+        "reasonId": "lunch",
+        "stateSince": "2026-10-03T11:40:00Z"
       }
     ],
     "dutyGroups": [

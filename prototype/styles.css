@@ -2662,3 +2662,101 @@ select.search-input { padding-right: 36px; }
 .filter-add { margin-top: 8px; }
 .filter-add .material-symbols-outlined { font-size: 16px; }
 
+
+/* ===== Экран «Смена и статистика» (§23, план 90): вкладки рядом с очередью, блок «Сейчас» ===== */
+.screen-tabs { flex: 0 0 auto; }
+.screen-tabs[hidden],
+.workspace[hidden],
+.shift-screen[hidden],
+.mobile-nav button[hidden] { display: none; }
+.shift-screen {
+  grid-row: 3;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  background: var(--bg);
+  border-top: 1px solid var(--stroke);
+}
+.shift-card {
+  background: var(--panel);
+  border: 1px solid var(--stroke-2);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.shift-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.shift-h h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); }
+.shift-h .shift-group { width: auto; min-width: 200px; }
+.shift-updated { margin-left: auto; font-size: 12px; }
+.shift-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.shift-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 50px;
+  border: 1px solid var(--stroke-2);
+  font-size: 12px;
+  color: var(--text);
+}
+.shift-chip b { font-weight: 600; }
+.shift-chip.present { color: var(--ok-text); background: var(--ok-bg); border-color: var(--ok-border); }
+.shift-chip.not_ready { color: var(--break-text); background: var(--break-bg); border-color: var(--break-border); }
+.shift-chip.no_link,
+.shift-chip.overdue { color: var(--crit-text); background: var(--danger-bg); border-color: var(--danger-border); }
+.shift-chip.zero { color: var(--muted); background: transparent; border-color: var(--stroke-2); }
+.shift-table-wrap { overflow-x: auto; }
+.shift-table { min-width: 980px; }
+.shift-table th { white-space: nowrap; padding: 4px 6px; }
+.shift-table th.num,
+.shift-table td.num { text-align: right; }
+.shift-table td.late { color: var(--crit-text); font-weight: 600; }
+.shift-table td.shift-away { color: var(--warn-text); font-weight: 500; }
+.shift-sort {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.shift-sort.on,
+.shift-sort:hover { color: var(--text); }
+.badge.shift-state.ready,
+.badge.shift-state.busy { color: var(--ok-text); background: var(--ok-bg); }
+.badge.shift-state.not_ready { color: var(--break-text); background: var(--break-bg); }
+.badge.shift-state.no_link { color: var(--crit-text); background: var(--danger-bg); }
+.shift-out td { color: var(--muted); }
+.shift-out-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.shift-note:empty { display: none; }
+/* Ниже 1240 px внизу — навигация телефона и планшета с кнопкой «Смена»: вкладки в шапке не теснят строку поста и плашку */
+@media (max-width: 1240px) {
+  .screen-tabs { display: none; }
+}
+@media (max-width: 600px) {
+  /* Телефон: заголовки — ряд кнопок сортировки, строка оператора — карточка с подписями чисел */
+  .shift-table { min-width: 0; margin-top: 8px; }
+  .shift-table thead tr { display: flex; flex-wrap: wrap; gap: 2px 4px; }
+  .shift-table thead th { display: block; padding: 0; border: 0; }
+  .shift-table tbody,
+  .shift-table tbody tr { display: block; }
+  .shift-table tbody tr { padding: 8px 0; border-bottom: 1px solid var(--stroke); }
+  .shift-table tbody td { display: inline-block; padding: 2px 8px 2px 0; border: 0; }
+  .shift-table tbody td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-weight: 400; }
+  .shift-table tbody td.shift-reason:empty,
+  .shift-table tbody td.shift-overdue-break:empty,
+  .shift-table tbody .shift-out td.shift-wide { display: none; }
+  .shift-table tbody tr.shift-out td[colspan] { display: block; }
+  .shift-screen { padding: 12px; }
+  .shift-card { padding: 12px; }
+  .shift-h .shift-group { min-width: 0; flex: 1 1 100%; }
+  .shift-updated { margin-left: 0; }
+}

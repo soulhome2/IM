@@ -4072,6 +4072,9 @@
     renderStatus();
     // Идут плановые работы и другие состояния поста — строка в середине шапки (§22.4, ТЗ-21)
     renderPost();
+    // Экран «Смена и статистика» (§23): вкладки по праву, открытый экран — на новом языке и с новыми «сколько длится»
+    renderScreen();
+    renderShift();
     $("breakBanner").hidden = !onBreak();
     $("signedOutBanner").hidden = !signedOut();
   }
@@ -6010,6 +6013,227 @@
   const sourcePath = (tab) => tab.source.split(" ")[1];
   // Названия и имена — данные, они не переводятся (§14.9)
   const asData = (text) => `<span data-i18n-skip>${escapeHtml(text)}</span>`;
+  /* ===== Экран «Смена и статистика»: блок «Сейчас» (§23, план 90) ===== */
+
+  // Вкладка — только с правом supervisor:view (§23). Данные — GET /operator/supervisor/now: при открытии, по смене
+  // фильтра и опросом раз в shift.refreshSec машины, пока экран открыт (§23.2). Блок «За период» — часть Б плана 90
+  const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, shownAt: 0 };
+  const shiftLocale = () => (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
+  // Время на экране — в поясе смены (§23): часы и минуты, не сегодняшнее по поясу смены — с датой
+  function shiftTime(value, tz, withSec) {
+    const opts = { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" };
+    if (withSec) opts.second = "2-digit";
+    const day = (ms) => new Date(ms).toLocaleDateString("en-CA", { timeZone: tz });
+    if (day(Date.parse(value)) !== day(serverNow())) Object.assign(opts, { day: "2-digit", month: "2-digit" });
+    return new Date(value).toLocaleString(shiftLocale(), opts);
+  }
+  const shiftClock = (value, tz) => new Date(value).toLocaleTimeString(shiftLocale(), { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
+  // Сколько длится перерыв или сколько нет связи: минуты, от часа — часы и минуты
+  function shiftLasts(ms) {
+    const min = Math.max(0, Math.floor(ms / 60000));
+    return min < 60 ? t("{n} мин", { n: min }) : t("{h} ч {m} мин", { h: Math.floor(min / 60), m: min % 60 });
+  }
+  // Реакция — минуты и секунды
+  function shiftReaction(sec) {
+    if (sec == null) return "—";
+    const s = Math.round(sec);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  // Состояние строки: подписи — из машины (session.states); «Нет связи» — не состояние машины (§12.3, §23.2)
+  // «Нет связи» — состояние строки SupervisorNowRow.state контракта, не причина удержания с тем же id
+  const NO_LINK = "no_link"; // SupervisorNowRow.state
+  const SHIFT_STATES = ["ready", "busy", "not_ready", NO_LINK, "offline"];
+  function shiftStateLabel(id) {
+    const def = WORKFLOW.session.states.find((s) => s.id === id);
+    return def ? lbl(def) : t("Нет связи");
+  }
+  // Причина перерыва — по справочнику поста на языке интерфейса; нет в справочнике — как прислал сервер
+  function shiftReason(r) {
+    if (r.state !== "not_ready" || !r.reasonId) return null;
+    const def = (WORKFLOW.session.breakReasons || []).find((x) => x.id === r.reasonId);
+    return def ? lbl(def) : r.reasonLabel || r.reasonId;
+  }
+  // Столбцы таблицы (§23.2): все сортируются; text — по алфавиту без учёта регистра и «ё», остальные — по числу
+  const SHIFT_COLS = [
+    { key: "name", head: "Оператор", text: true, val: (r) => r.person.name },
+    { key: "state", head: "Состояние", val: (r) => SHIFT_STATES.indexOf(r.state) },
+    { key: "reason", head: "Причина", text: true, val: shiftReason },
+    { key: "since", head: "С какого времени", val: (r) => (r.since ? Date.parse(r.since) : null) },
+    { key: "breakOverdue", head: "Срок перерыва вышел", val: (r) => (r.breakOverdue == null ? null : Number(r.breakOverdue)) },
+    { key: "groups", head: "Дежурные группы", text: true, val: (r) => (r.dutyGroups.length ? r.dutyGroups.map((g) => g.name).join(", ") : null) },
+    { key: "inProgress", head: "В работе", num: true, val: (r) => r.inProgress },
+    { key: "onHold", head: "Отложено", num: true, val: (r) => r.onHold },
+    { key: "overdue", head: "Просрочено", num: true, val: (r) => r.overdue },
+    { key: "closed", head: "Закрыл за смену", num: true, val: (r) => r.closedThisShift },
+    { key: "median", head: "Медиана реакции", num: true, val: (r) => r.medianReactionSec },
+  ];
+  // Порядок строк: по выбранному столбцу, при равенстве — по имени; пустое значение — в конце при любом направлении
+  function shiftSorted(rows) {
+    const col = SHIFT_COLS.find((c) => c.key === shiftState.sort.key) || SHIFT_COLS[3];
+    const coll = new Intl.Collator(LANG, { sensitivity: "base", numeric: true });
+    const byName = (a, b) => coll.compare(a.person.name, b.person.name);
+    return rows.slice().sort((a, b) => {
+      const [x, y] = [col.val(a), col.val(b)];
+      if (x == null || y == null) return x == null && y == null ? byName(a, b) : x == null ? 1 : -1;
+      return (col.text ? coll.compare(x, y) : x - y) * shiftState.sort.dir || byName(a, b);
+    });
+  }
+  function shiftRow(r, tz) {
+    const lasts = r.since && (r.state === "not_ready" || r.state === NO_LINK) ? ` · ${shiftLasts(serverNow() - Date.parse(r.since))}` : "";
+    const groups = r.dutyGroups.map((g) => g.name).join(", ");
+    // Подпись столбца у ячейки — для телефона: там строка таблицы — карточка, а заголовки — кнопки сортировки
+    const at = (key) => `data-label="${te(SHIFT_COLS.find((c) => c.key === key).head)}"`;
+    const n = (key, v, late) => `<td class="num${late && v ? " late" : ""}" ${at(key)}>${v}</td>`;
+    return `<tr data-shift-person="${escapeHtml(r.person.id)}" data-shift-state="${r.state}" data-shift-since="${escapeHtml(r.since || "")}">
+      <td>${asData(r.person.name)}</td>
+      <td><span class="badge shift-state ${r.state}">${te(shiftStateLabel(r.state))}</span></td>
+      <td class="shift-reason">${escapeHtml(shiftReason(r) || "")}</td>
+      <td class="${r.state === "not_ready" || r.state === NO_LINK ? "shift-away" : ""}" ${at("since")}>${r.since ? escapeHtml(shiftTime(r.since, tz) + lasts) : "—"}</td>
+      <td class="shift-overdue-break" ${at("breakOverdue")}>${r.breakOverdue == null ? "" : te(r.breakOverdue ? "да" : "нет")}</td>
+      <td ${at("groups")}>${groups ? asData(groups) : "—"}</td>
+      ${n("inProgress", r.inProgress)}${n("onHold", r.onHold)}${n("overdue", r.overdue, true)}${n("closed", r.closedThisShift)}
+      <td class="num" ${at("median")}>${shiftReaction(r.medianReactionSec)}</td>
+    </tr>`;
+  }
+  function renderShift() {
+    if (!shiftState.open) return;
+    const d = shiftState.data;
+    $("shiftGroup").innerHTML = [`<option value="">${te("Все дежурные группы")}</option>`]
+      .concat(shiftState.groups.map((g) => `<option value="${escapeHtml(g.id)}" data-i18n-skip>${escapeHtml(g.name)}</option>`))
+      .join("");
+    $("shiftGroup").value = shiftState.group;
+    $("shiftNote").textContent = shiftState.error || "";
+    if (!d) {
+      $("shiftSpan").textContent = "";
+      $("shiftUpdated").textContent = shiftState.error ? "" : t("Загрузка…");
+      $("shiftSummary").innerHTML = "";
+      $("shiftTable").innerHTML = "";
+      return;
+    }
+    const tz = d.shift.timeZone;
+    $("shiftSpan").textContent = t("смена {from}–{to}", { from: shiftClock(d.shift.from, tz), to: shiftClock(d.shift.to, tz) });
+    $("shiftUpdated").textContent = t("обновлено {time} · само раз в {sec} с", { time: shiftTime(d.at, tz, true), sec: WORKFLOW.shift.refreshSec });
+    const s = d.summary;
+    const chip = (cls, label, v) => `<span class="shift-chip ${cls}${v ? "" : " zero"}" data-shift-sum="${cls}">${te(label)} <b>${v}</b></span>`;
+    $("shiftSummary").innerHTML = [
+      chip("present", "На месте", s.present),
+      chip("not_ready", "На перерыве", s.onBreak),
+      chip(NO_LINK, "Нет связи", s.noLink),
+      chip("offline", "Вышли", s.signedOut),
+      chip("unowned", "Ничьих в очереди", s.unowned),
+      chip("overdue", "Просрочено всего", s.overdue),
+    ].join("");
+    const sort = shiftState.sort;
+    const head = SHIFT_COLS.map((c) => {
+      const on = c.key === sort.key;
+      return `<th class="${c.num ? "num" : ""}" aria-sort="${on ? (sort.dir < 0 ? "descending" : "ascending") : "none"}"><button type="button" class="shift-sort${on ? " on" : ""}" data-shift-sort="${c.key}">${te(c.head)}<span aria-hidden="true">${on ? (sort.dir < 0 ? " ↓" : " ↑") : " ↕"}</span></button></th>`;
+    }).join("");
+    // Вышедшие — в конце; по умолчанию свёрнуты в одну строку: «Лебедев О. и ещё 2», закрыл за смену — сумма (§23.2)
+    const rows = shiftSorted(d.operators);
+    const here = rows.filter((r) => r.state !== "offline");
+    const out = rows.filter((r) => r.state === "offline");
+    let tail = "";
+    if (out.length && shiftState.outOpen) {
+      tail = out.map((r) => shiftRow(r, tz)).join("") + `<tr class="shift-out"><td colspan="${SHIFT_COLS.length}"><button type="button" class="btn ghost small" data-shift-out>${te("Свернуть вышедших")}</button></td></tr>`;
+    } else if (out.length) {
+      const who = out.length > 1 ? t("{name} и ещё {n}", { name: out[0].person.name, n: out.length - 1 }) : out[0].person.name;
+      const closed = out.reduce((sum, r) => sum + r.closedThisShift, 0);
+      tail = `<tr class="shift-out" data-shift-state="offline"><td><button type="button" class="shift-out-btn" data-shift-out data-i18n-skip title="${te("Показать вышедших")}">${escapeHtml(who)}</button></td>
+        <td><span class="badge shift-state offline">${te("Вышли")}</span></td><td class="shift-reason"></td><td class="shift-wide">—</td><td class="shift-overdue-break"></td><td class="shift-wide">—</td>
+        <td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num" data-label="${te("Закрыл за смену")}">${closed}</td><td class="num shift-wide">—</td></tr>`;
+    }
+    $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${here.map((r) => shiftRow(r, tz)).join("")}${tail}</tbody>`;
+  }
+  async function loadShift() {
+    const group = shiftState.group;
+    try {
+      const data = await api.get(`/operator/supervisor/now${group ? `?dutyGroup=${enc(group)}` : ""}`);
+      if (group !== shiftState.group) return; // пока ждали ответ, фильтр сменили
+      // Список групп фильтра — из ответа без фильтра: группы, в которые входит хоть один оператор
+      if (!group) {
+        const seen = new Map();
+        data.operators.forEach((r) => r.dutyGroups.forEach((g) => seen.set(g.id, g)));
+        shiftState.groups = [...seen.values()];
+      }
+      Object.assign(shiftState, { data, error: null });
+    } catch (err) {
+      shiftState.error = problemText(err);
+    }
+    shiftState.shownAt = Date.now();
+    renderShift();
+  }
+  // Какой экран открыт: очередь или «Смена и статистика»; без права — вкладок нет, открыта очередь
+  function renderScreen() {
+    const allowed = can("supervisor:view");
+    if (!allowed) shiftState.open = false;
+    $("screenTabs").hidden = !allowed;
+    $("screenTabs")
+      .querySelectorAll("[data-screen]")
+      .forEach((b) => {
+        const on = (b.dataset.screen === "shift") === shiftState.open;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-selected", String(on));
+      });
+    // Телефон: своя кнопка в нижней навигации; открыт экран смены — разделы очереди не выделены
+    $("navShift").hidden = !allowed;
+    $("mobileNav")
+      .querySelectorAll("button")
+      .forEach((b) => {
+        const on = b.dataset.screen === "shift" ? shiftState.open : !shiftState.open && b.dataset.view === state.mobileView;
+        b.classList.toggle("active", on);
+        if (on) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      });
+    $("workspace").hidden = shiftState.open;
+    $("shiftScreen").hidden = !shiftState.open;
+    document.body.dataset.screen = shiftState.open ? "shift" : "queue";
+  }
+  function showScreen(id) {
+    const open = id === "shift" && can("supervisor:view");
+    if (open === shiftState.open) return;
+    shiftState.open = open;
+    renderScreen();
+    if (open) {
+      renderShift();
+      loadShift();
+    }
+  }
+  function bindShift() {
+    $("screenTabs").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-screen]");
+      if (btn) showScreen(btn.dataset.screen);
+    });
+    $("shiftGroup").addEventListener("change", (e) => {
+      shiftState.group = e.target.value;
+      shiftState.data = null;
+      renderShift();
+      loadShift();
+    });
+    $("shiftTable").addEventListener("click", (e) => {
+      const sortBtn = e.target.closest("[data-shift-sort]");
+      if (sortBtn) {
+        const key = sortBtn.dataset.shiftSort;
+        shiftState.sort = key === shiftState.sort.key ? { key, dir: -shiftState.sort.dir } : { key, dir: 1 };
+        renderShift();
+      }
+      if (e.target.closest("[data-shift-out]")) {
+        shiftState.outOpen = !shiftState.outOpen;
+        renderShift();
+      }
+    });
+    // Нижняя навигация телефона: «Смена» — к экрану смены, разделы очереди — к очереди
+    $("mobileNav").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (btn) showScreen(btn.dataset.screen === "shift" ? "shift" : "queue");
+    });
+    // Опрос, пока экран открыт; между опросами — «сколько длится» по часам пульта
+    setInterval(() => {
+      if (!shiftState.open) return;
+      if (Date.now() - shiftState.shownAt >= WORKFLOW.shift.refreshSec * 1000) loadShift();
+      else renderShift();
+    }, 5000);
+  }
+
   async function openAdmin() {
     // Список групп или людей поста не пришёл — null: адресат тогда не «удалённый» (BUG-124)
     [adminState.data.duty, adminState.data.people] = await Promise.all([
@@ -6304,6 +6528,7 @@
     collectStatic();
     bind();
     bindBell();
+    bindShift();
     let savedTheme = "dark";
     let savedLang = "ru";
     try {

@@ -317,6 +317,7 @@
       (el.closest("#bellPanel") && $("bellPanel").hidden) ||
       (el.closest("#modalDialog") && $("modalDialog").hidden) ||
       (el.closest("#adminTable, #adminTabs, #adminNote") && $("modalAdmin").hidden) ||
+      (el.closest("#shiftScreen") && $("shiftScreen").hidden) ||
       (el.closest("#panelScenario") && mode() !== "work");
     const found = new Set();
     // Одна и та же строка для разных инцидентов и номеров считается один раз
@@ -359,6 +360,13 @@
         findRussian().forEach((s) => leftovers.add(s));
       }
       await click(document.querySelector('[data-close="modalAdmin"]'));
+    }
+    // Экран «Смена и статистика» (§23)
+    if (!$("screenTabs").hidden) {
+      await click($("tabShift"));
+      for (let i = 0; i < 40 && !$("shiftTable").querySelector("tbody tr"); i++) await wait(100);
+      findRussian().forEach((s) => leftovers.add(s));
+      await click($("screenTabs").querySelector('[data-screen="queue"]'));
     }
     await setFilter("open");
     select.value = original;
@@ -3833,6 +3841,67 @@
     });
 
     // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
+    await step("Смена и статистика (§23, план 90): вкладка рядом с очередью по праву supervisor:view; «Сейчас» — смена, сводка, все операторы, по умолчанию по «С какого времени» сверху новые, вышедшие свёрнуты, сортировка по щелчку, фильтр по дежурной группе; без права вкладки нет", async () => {
+      const fx = window.IM_FIXTURE;
+      const shown = () => [...$("shiftTable").querySelectorAll("tbody tr[data-shift-person]")];
+      const people = () => shown().map((r) => r.dataset.shiftPerson);
+      const until = async (cond, what) => {
+        for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+        expect(cond(), what);
+      };
+      try {
+        expect(!$("screenTabs").hidden, "вкладок «Очередь» и «Смена и статистика» нет при праве supervisor:view");
+        await click($("tabShift"));
+        await until(() => shown().length > 0, "таблица операторов не пришла");
+        expect($("workspace").hidden && !$("shiftScreen").hidden, "экран смены не открылся вместо очереди");
+        expect(/^смена \d\d:\d\d–\d\d:\d\d$/.test($("shiftSpan").textContent), `над таблицей — не смена: «${$("shiftSpan").textContent}»`);
+        expect(/обновлено .* само раз в 30 с/.test($("shiftUpdated").textContent), `время обновления: «${$("shiftUpdated").textContent}»`);
+        const sums = [...$("shiftSummary").querySelectorAll("[data-shift-sum]")].map((x) => x.dataset.shiftSum);
+        expect(sums.join() === "present,not_ready,no_link,offline,unowned,overdue", `сводка: ${sums.join(", ")}`);
+        // Все, кто может принять (решение 9): шесть на месте и на перерыве, вышедший Кузнецов — в свёрнутой строке
+        const here = fx.people.operators.filter((o) => o.agentState !== "offline").map((o) => o.id);
+        expect(people().slice().sort().join() === here.slice().sort().join(), `строки: ${people().join(", ")}`);
+        const since = shown().map((r) => Date.parse(r.dataset.shiftSince));
+        expect(since.every((v, i) => i === 0 || since[i - 1] >= v), "по умолчанию не по «С какого времени», сверху новые");
+        const orlova = $("shiftTable").querySelector('tr[data-shift-person="orlova"]');
+        expect(orlova.cells[1].textContent.trim() === "Перерыв" && orlova.cells[2].textContent.trim() === "Обед" && /· \d+ мин/.test(orlova.cells[3].textContent), `Орлова: «${orlova.textContent.replace(/\s+/g, " ").trim()}»`);
+        const out = $("shiftTable").querySelector("tr.shift-out [data-shift-out]");
+        expect(out && out.textContent.trim() === "Кузнецов И. П.", `свёрнутые вышедшие: «${out ? out.textContent.trim() : "нет строки"}»`);
+        await click(out);
+        expect(people().includes("kuznetsov") && people()[people().length - 1] === "kuznetsov", "вышедший не раскрылся в конце таблицы");
+        // Сортировка: щелчок — по столбцу, повторный — обратно
+        await click($("shiftTable").querySelector('[data-shift-sort="name"]'));
+        const coll = new Intl.Collator("ru", { sensitivity: "base" });
+        const names = () => shown().filter((r) => r.dataset.shiftState !== "offline").map((r) => r.cells[0].textContent.trim());
+        const asc = names();
+        expect(asc.every((v, i) => i === 0 || coll.compare(asc[i - 1], v) <= 0), `по имени: ${asc.join(", ")}`);
+        await click($("shiftTable").querySelector('[data-shift-sort="name"]'));
+        expect(names().join() === asc.slice().reverse().join(), `по имени обратно: ${names().join(", ")}`);
+        expect(people()[people().length - 1] === "kuznetsov", "вышедший не остался в конце");
+        // Фильтр по дежурной группе — участники группы
+        const select = $("shiftGroup");
+        select.value = "grp-response";
+        select.dispatchEvent(new Event("change"));
+        await until(() => people().length === 2, `фильтр «Группа реагирования»: ${people().join(", ")}`);
+        expect(people().sort().join() === "gusev,sidorov", `фильтр «Группа реагирования»: ${people().join(", ")}`);
+        select.value = "";
+        select.dispatchEvent(new Event("change"));
+        await until(() => people().length > 2, "фильтр не снялся");
+        await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        expect(!$("workspace").hidden && $("shiftScreen").hidden, "очередь не вернулась");
+        // Без права — вкладок нет
+        await standReset({ fixture: "demo", operatorPermissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "supervisor:view") });
+        await until(() => $("screenTabs").hidden, "без права supervisor:view вкладки остались");
+        expect($("navShift").hidden, "без права кнопка «Смена» на телефоне осталась");
+        return `строк ${here.length}, сводка ${sums.length} чисел`;
+      } finally {
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const W = window.IM_WORKFLOW;

@@ -146,5 +146,9 @@ window.IM_DICT_HTML = {
     "Сообщить старшему оператору, при открытом пламени или задымлении — вызвать пожарную охрану по <b>101</b>.": "Notify the senior operator; if there is open flame or smoke, call the fire service on <b>101</b>.",
     "Критический приоритет — реакция до <b>4 минут</b>.": "Critical priority — response within <b>4 minutes</b>.",
     "Высокий — до <b>7 минут</b>, средний — до <b>15 минут</b>.": "High — up to <b>7 minutes</b>, medium — up to <b>15 minutes</b>.",
+    "Смена и статистика": "Shift and statistics",
+    "Сейчас": "Now",
+    "Дежурная группа": "Duty group",
+    "Смена": "Shift",
   },
 };

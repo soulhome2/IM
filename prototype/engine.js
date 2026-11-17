@@ -905,8 +905,9 @@
 
     // Производное состояние оператора (session.states[].derived машины, §12, RULE-99): не хранится, показывается
     // вместо хранимого derived.of, когда его выражение истинно; смены состояния идут от хранимого
-    const shownAgentState = (stored) => {
-      const scope = { me: ME, actor: ME, incident: undefined, incidents: () => ctx.events().map(celIncident), form: {}, surface: "", now: now(), world: celWorld };
+    // who — чьё состояние: по умолчанию оператор исполнителя; блок «Сейчас» старшего — любого человека (§23.2)
+    const shownAgentState = (stored, who) => {
+      const scope = { me: who || ME, actor: who || ME, incident: undefined, incidents: () => ctx.events().map(celIncident), form: {}, surface: "", now: now(), world: celWorld };
       const d = W.session.states.find((s) => s.derived && s.derived.of === stored && ruleOf(`session.states.${s.id}.derived.expr`, scope));
       return d ? d.id : stored;
     };

@@ -641,7 +641,8 @@
       const data = JSON.parse(JSON.stringify(fixture));
       const delta = now() - Date.parse(data.capturedAt);
       const abs = (time) => (time == null ? null : Date.parse(time) + delta);
-      OPERATORS = data.people.operators;
+      // «С какого времени» состояние человека (§23.2) — тоже снимок: сдвигается вместе с остальными временами
+      OPERATORS = data.people.operators.map((o) => (o.stateSince ? Object.assign(o, { stateSince: abs(o.stateSince) }) : o));
       GROUPS = data.people.dutyGroups.map((g) => Object.assign({ group: true }, g));
       ACTORS = OPERATORS.concat(GROUPS, data.people.system.map((a) => Object.assign({ system: true }, a)));
       DEVICE_TYPES = Object.fromEntries(data.deviceTypes.map((t) => [t.id, { label: t.label }]));
@@ -2410,6 +2411,98 @@
       };
     }
 
+    /* ===== Смена и статистика: блок «Сейчас» (§23, план 90) ===== */
+
+    // Текущая смена (§23.1): от последнего наступившего начала (входит в смену) до следующего (уже нет). Начала и
+    // пояс — настройка поста shift машины; время суток → момент по правилам пояса на эту дату, как у окон работ (§14.12)
+    function currentShift(at) {
+      const tz = W.shift.timeZone;
+      const p = zoneParts(at, tz);
+      const moments = [];
+      [-1, 0, 1].forEach((k) => {
+        const day = new Date(Date.UTC(p.y, p.m - 1, p.d + k));
+        W.shift.starts.forEach((hhmm) => {
+          const [h, mi] = hhmm.split(":").map(Number);
+          moments.push(zonedMs(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), h, mi, tz));
+        });
+      });
+      moments.sort((a, b) => a - b);
+      return { from: moments.filter((m) => m <= at).pop(), to: moments.find((m) => m > at), timeZone: tz };
+    }
+    // С какого времени (§23.2): последняя запись входа, перерыва, возврата, выхода или восстановления связи в журнале
+    // действий (§12.4); до первой — время из набора (stateSince); не входил — null
+    // Виды этих записей — переходы состояния оператора машины (session.transitions) и восстановление связи
+    const SINCE_KINDS = W.session.transitions.map((t) => t.id).concat("link_restored");
+    function stateSinceOf(id) {
+      const last = auditActions.filter((r) => r.personId === id && SINCE_KINDS.includes(r.kind)).pop();
+      if (last) return Date.parse(last.at);
+      return (OPERATORS.find((o) => o.id === id) || {}).stateSince || null;
+    }
+    // Нет связи (§12.3): признак активности старше session.idleHoldSec — тот же порог, что у idle_hold. Возвращает
+    // время последнего признака или null
+    // «Нет связи» — состояние строки SupervisorNowRow.state контракта, не причина удержания с тем же id
+    const NO_LINK = "no_link"; // SupervisorNowRow.state
+    function linkLostAt(id) {
+      if (id !== ME) return colleagueIdleSince[id] == null ? null : colleagueIdleSince[id];
+      return lastHeartbeat != null && now() - lastHeartbeat >= W.session.idleHoldSec * 1000 ? lastHeartbeat : null;
+    }
+    // Состояние строки (§23.2): вышел и перерыв — хранимое; вошёл и молчит — «нет связи»; иначе хранимое или
+    // производное «Занят» (session.states[].derived машины)
+    function supervisorState(id) {
+      const stored = agentStateOf(id);
+      const lost = stored === "offline" || stored === "not_ready" ? null : linkLostAt(id);
+      if (lost != null) return { state: NO_LINK, since: lost };
+      return { state: stored === "ready" ? engine.shownAgentState(stored, id) : stored, since: stateSinceOf(id) };
+    }
+    const breached = (e) => Boolean(e.slaBreached) || (e.breaches || []).length > 0;
+    function median(xs) {
+      if (!xs.length) return null;
+      const s = xs.slice().sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    }
+    // Строка оператора (§23.2): числа — по всем его инцидентам, а не по видимым старшему (решение 9 плана 90).
+    // Привязанные — один раз, по основному: закрытые вместе с основным и в реакцию не идут
+    function supervisorRow(id, shift) {
+      const st = supervisorState(id);
+      const reason = st.state === "not_ready" ? W.session.breakReasons.find((r) => r.id === reasonOf(id)) : null;
+      const own = (state) => events.filter((e) => e.owner === id && e.state === state);
+      const reactions = events.filter((e) => e.acceptedBy === id && e.acceptedAt != null && e.acceptedAt >= shift.from && !e.linkedTo).map((e) => (e.acceptedAt - e.createdAt) / 1000);
+      return {
+        person: actorRef(id),
+        state: st.state,
+        reasonId: reason ? reason.id : null,
+        reasonLabel: reason ? render(reason.labelKey) : null,
+        since: iso(st.since),
+        // Срок перерыва — часть В плана 90: до неё столбец пуст
+        breakOverdue: null,
+        dutyGroups: GROUPS.filter((g) => membersOf(g).includes(id)).map((g) => ({ id: g.id, name: g.name })),
+        inProgress: own("in_progress").length,
+        onHold: own("on_hold").length,
+        overdue: own("in_progress").concat(own("on_hold")).filter(breached).length,
+        closedThisShift: events.filter((e) => isDone(e) && e.closedBy === id && e.closedAt != null && e.closedAt >= shift.from && !e.linkedTo).length,
+        medianReactionSec: median(reactions),
+      };
+    }
+    const SUMMARY_OF = { ready: "present", busy: "present", not_ready: "onBreak", [NO_LINK]: "noLink", offline: "signedOut" };
+    function supervisorNow(q) {
+      if (!can("supervisor:view")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_supervisor_view"]);
+      const at = now();
+      const shift = currentShift(at);
+      // Строки — люди с правом incident:accept, как адресаты передачи (§8.1); фильтр — участники дежурной группы,
+      // неизвестной группы — строк нет
+      const group = q.dutyGroup ? GROUPS.find((g) => g.id === q.dutyGroup) : null;
+      const people = OPERATORS.filter((o) => permsOf(o.id).includes("incident:accept")).filter((o) => !q.dutyGroup || (group && membersOf(group).includes(o.id)));
+      const operators = people.map((o) => supervisorRow(o.id, shift));
+      const summary = { present: 0, onBreak: 0, noLink: 0, signedOut: 0 };
+      operators.forEach((r) => (summary[SUMMARY_OF[r.state]] += 1));
+      // Ничьих и просрочено всего — по инцидентам, видимым старшему, как в очереди (§5); фильтр их не меняет
+      const open = events.filter((e) => canSee(e) && ["new", "pending_acceptance", "in_progress", "on_hold"].includes(e.state));
+      summary.unowned = open.filter((e) => e.state === "new" || (e.state === "pending_acceptance" && !e.owner && Boolean(e.assignmentGroup))).length;
+      summary.overdue = open.filter(breached).length;
+      return { status: 200, body: { at: iso(at), shift: { from: iso(shift.from), to: iso(shift.to), timeZone: shift.timeZone }, summary, operators } };
+    }
+
     function windowView(w) {
       return {
         id: w.id,
@@ -2489,6 +2582,8 @@
       return [
         ["GET", "/operator/maintenance-windows/current", () => ({ status: 200, body: maintenanceNow() })],
         ["GET", "/operator/admin/system-status", (p, q) => systemStatus(q)],
+        // Смена и статистика: блок «Сейчас» (§23.2, план 90)
+        ["GET", "/operator/supervisor/now", (p, q) => supervisorNow(q)],
         ["GET", "/operator/maintenance-windows", () => ({ status: 200, body: MAINT.slice().sort((a, b) => a.startsAt - b.startsAt).map(windowView) })],
         [
           "POST",

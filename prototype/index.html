@@ -20,6 +20,13 @@
         </div>
       </div>
 
+      <!-- Вкладки операторской части (§23, план 90): «Смена и статистика» — рядом с очередью, только с правом supervisor:view;
+           без права вкладок нет. Строит видимость app.js -->
+      <nav class="seg screen-tabs" id="screenTabs" role="tablist" aria-label="Разделы" hidden>
+        <button type="button" role="tab" data-screen="queue" class="active" aria-selected="true">Очередь</button>
+        <button type="button" role="tab" data-screen="shift" aria-selected="false" id="tabShift">Смена и статистика</button>
+      </nav>
+
       <div class="topbar-cluster">
         <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
           <span class="material-symbols-outlined">left_panel_close</span>
@@ -299,6 +306,24 @@
       </section>
     </main>
 
+    <!-- Экран «Смена и статистика» (§23, план 90): блок «Сейчас» — сводка, текущая смена, таблица операторов; опрос
+         GET /operator/supervisor/now раз в shift.refreshSec машины, пока экран открыт. Строит app.js -->
+    <main class="shift-screen" id="shiftScreen" hidden>
+      <section class="shift-card" id="shiftNow" aria-labelledby="shiftNowTitle">
+        <header class="shift-h">
+          <h2 id="shiftNowTitle">Сейчас</h2>
+          <span class="muted" id="shiftSpan"></span>
+          <select id="shiftGroup" class="search-input shift-group" aria-label="Дежурная группа"></select>
+          <span class="muted shift-updated" id="shiftUpdated"></span>
+        </header>
+        <div class="shift-summary" id="shiftSummary"></div>
+        <div class="shift-table-wrap">
+          <table class="doc-table shift-table" id="shiftTable"></table>
+        </div>
+        <p class="muted shift-note" id="shiftNote"></p>
+      </section>
+    </main>
+
     <footer class="statusbar">
       <span id="statusIncident">Очередь ожидает выбора инцидента</span>
       <span id="statusSteps"></span>
@@ -319,6 +344,11 @@
       <button type="button" data-view="media">
         <span class="material-symbols-outlined">videocam</span>
         Видео и карта
+      </button>
+      <!-- «Смена и статистика» на узком экране и телефоне (§23): вкладки шапки там не помещаются; только с правом supervisor:view -->
+      <button type="button" data-screen="shift" id="navShift" hidden>
+        <span class="material-symbols-outlined">groups</span>
+        Смена
       </button>
     </nav>
   </div>

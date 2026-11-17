@@ -391,6 +391,8 @@ def check_fixture(w, err):
             err.append(f"эталон: у человека {o['id']} на перерыве причина reasonId «{o.get('reasonId')}» — нет в session.breakReasons (§12.1)")
         if not needs_reason and o.get("reasonId") is not None:
             err.append(f"эталон: у человека {o['id']} причина reasonId без перерыва (§12.1)")
+        # С какого времени состояние (§23.2, план 90): момент снимка или раньше; у не входившего — нет
+        when(o.get("stateSince"), f"people.operators[{o['id']}].stateSince")
         if not isinstance(o.get("roles"), list) or not o["roles"]:
             err.append(f"эталон: у оператора {o['id']} нет ролей (roles) — ему ничего не видно (§5)")
     for kind, value in entities:
@@ -803,10 +805,19 @@ def check_literals(w, o, err):
     # Вид записи аудита (AuditAction.kind контракта, §12.4) — не значение справочника, хоть и совпадает по имени
     # («break» — и причина перерыва, и вид записи); исключение — только в строке записи аудита audit(…)
     audit_kinds = set(o["components"]["schemas"]["AuditAction"]["properties"]["kind"]["enum"])
+    # Состояние строки блока «Сейчас» (SupervisorNowRow.state контракта, §23.2) — тоже не значение справочника
+    # («no_link» — и причина удержания, и состояние строки); исключение — только в строке с пометкой SupervisorNowRow.state
+    row_states = set(o["components"]["schemas"]["SupervisorNowRow"]["properties"]["state"]["enum"])
     for name in ("app.js", "server.js", "engine.js"):
         with open(os.path.join(ROOT, "prototype", name), encoding="utf-8") as f:
             for n, line in enumerate(f, 1):
-                for found in sorted(i for i in ids if f'"{i}"' in line and not (i in audit_kinds and re.search(r"\baudit\(", line))):
+                for found in sorted(
+                    i
+                    for i in ids
+                    if f'"{i}"' in line
+                    and not (i in audit_kinds and re.search(r"\baudit\(", line))
+                    and not (i in row_states and "SupervisorNowRow.state" in line)
+                ):
                     err.append(f"{name}:{n}: значение справочника машины «{found}» в коде — нужное свойство берётся из машины")
 
 
