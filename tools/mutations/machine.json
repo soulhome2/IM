@@ -218,8 +218,8 @@
  },
  {
   "name": "form-cause-always-visible",
-  "what": "форма «Закрыть»: причина сбоя видна при любом результате (§7)",
-  "find": "\"visibleExpr\": \"form.resultId == 'mass'\"",
+  "what": "форма «Закрыть»: причина видна при любом результате, и у результата без справочника причин (§7, ТЗ-4)",
+  "find": "\"visibleExpr\": \"closeResults.exists(i, i.id == form.resultId && i.causeCatalog != '' && i.causeCatalog in causeCatalogs && size(causeCatalogs[i.causeCatalog].items) > 0)\"",
   "replace": "\"visibleExpr\": \"true\"",
   "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
  },
@@ -247,8 +247,8 @@
  {
   "name": "form-hold-offers-system",
   "what": "форма «Отложить» предлагает системные причины (§4, setBy)",
-  "find": "r.setBy != 'system'",
-  "replace": "true",
+  "find": "r.id == option && r.setBy != 'system'",
+  "replace": "r.id == option",
   "model": "не проверяет: варианты полей форм — модель проверяет только значения полей-списков, не что предлагает форма"
  },
  {

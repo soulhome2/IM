@@ -292,7 +292,7 @@ MUTATIONS = [
     ("group-settled-per-member", "server.js", "            if (r.status === 200) {\n              done.push(ev);", "            if (r.status === 200) {\n              settleGroups();\n              done.push(ev);", "api"),
     ("access-lost-not-sent", "server.js", "if (wasMine.has(id) && !canSee(ev)) {", "if (false) {", "api"),
     ("stream-id-repeats", "server.js", "const message = Object.assign({ id: String(++seq) }, body);", "const message = Object.assign({ id: String(seq) }, body);", "api"),
-    ("ui-field-rules-ignore-choice", "app.js", "return r.dependsOn ? r.byValue[values[r.dependsOn] || \"\"] || r.byValue[\"\"] : r;", "return r;", "ui"),
+    ("ui-field-rules-ignore-choice", "app.js", ": r.dependsOn ? r.byValue[values[r.dependsOn] || \"\"] || r.byValue[\"\"] : r;", ": r;", "ui"),
     ("ui-esc-keeps-modal", "app.js", "if (e.key !== \"Escape\") return;", "return;", "ui"),
     ("selection-reason-generic", "server.js", "if (!ok && !reason && failed && failed[1].why && (mode.allowed || list.length < 2)) {", "if (false) {", "api"),
     ("selection-reason-irrelevant-first", "server.js", "const failed = avail.find(([, a]) => !a.ok && !a.hidden) || avail.find(([, a]) => !a.ok);", "const failed = avail.find(([, a]) => !a.ok);", "api"),
@@ -419,7 +419,7 @@ MUTATIONS = [
     ("catchup-before-request-off", "server.js", "if (acting) runScheduler();", "if (false) runScheduler();", "api"),
     ("settle-after-request-off", "server.js", "if (runScheduler().length && res.again)", "if (false && res.again)", "api"),
     # Решение 212 плана этапа 6: сбой догона до маршрута — 500 внутри try, а не исключение мимо ответа
-    ("catchup-outside-try", "server.js", "      let res;\n      try {\n", "      let res;\n      if (acting) runScheduler();\n      try {\n", "api"),
+    ("catchup-outside-try", "server.js", "      let res;\n      try {\n        // Перед запросом оператора", "      let res;\n      if (acting) runScheduler();\n      try {\n        // Перед запросом оператора", "api"),
     # Порядок такта (§14.3, решение 212): при равном моменте — меньший номер, у одного инцидента — порядок машины;
     # один такт по всем людям, а не «сначала мои»
     ("tick-tie-higher-number", "engine.js", "[c.runAt, numberOf(c.ev),", "[c.runAt, -numberOf(c.ev),", "api"),
