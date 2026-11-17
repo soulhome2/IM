@@ -29,7 +29,7 @@
 
 ## Этап 1 — без решений
 
-- [ ] **RULE-145** [средний] Реестр текстов сервера `messages` без ключей RULE-142.
+- [x] **RULE-145** [средний] Реестр текстов сервера `messages` без ключей RULE-142.
 
   **Что видно.** В реестре `messages` машины ([workflow_schema.v1.json:1499](https://github.com/soulhome2/IM/blob/102d5df/Specification/Workflow_machine/workflow_schema.v1.json#L1499)) из ключей отказа RULE-142 есть только `workflow.error.changed.family`. В каталогах `strings/*.json` и в контракте есть все.
 
@@ -50,7 +50,9 @@
 
   **Готово, когда:** каждый `workflow.error.*`, который пишет встроенный сервер, есть в `messages`, и `vars` совпадают с подстановками текста; проверки зелёные.
 
-- [ ] **PROC-94** [низкий] Реестр `messages` ни с чем не сверяется. Делать после RULE-145, иначе проверка сразу красная.
+  Сделано: ключи — в `messages` машины. Сервер стенда не сверялся — отдельно. Коммит: `3facede`.
+
+- [x] **PROC-94** [низкий] Реестр `messages` ни с чем не сверяется. Делать после RULE-145, иначе проверка сразу красная.
 
   **Что видно.** RULE-145 прошёл `check_machine.py`, `check_i18n.py` и тесты API зелёным.
 
@@ -64,7 +66,9 @@
 
   **Готово, когда:** на `102d5df` проверка нашла бы RULE-145; порча поймана.
 
-- [ ] **BUG-125** [низкий] Ответ на шаг закрытого инцидента — `changed: addressee` вместо `state`.
+  Сделано: проверка в `check_strings` (`check_machine.py`) — ключи `workflow.error|guard|journal.*` из `server.js` и `engine.js` есть в `messages` или `appendLog`; подстановки с `vars` уже сверялись. На `102d5df` нашла 12 пропусков. Порча — `messages-key-missing` прямо в `check_machine.py`, а не в `machine.json`: модели Quint она не нужна. Коммит: `3facede`.
+
+- [x] **BUG-125** [низкий] Ответ на шаг закрытого инцидента — `changed: addressee` вместо `state`.
 
   **Что видно.** Я взял, Петрова перехватила и закрыла, я отвечаю на шаг: `412`, `details.changed: addressee`, текст «Инцидент уже в состоянии «Закрыто»». Переход в той же ситуации отвечает `changed: state`.
 
@@ -79,7 +83,9 @@
 
   **Готово, когда:** у всех путей отказа (переход, ответ на шаг, массовое, объединение) закрытый даёт `changed: state`; тест проходит.
 
-- [ ] **DOC-80** [низкий] Исключения из обязательных `expectedState` и `expectedAddressee` в контракте неполны.
+  Сделано: закрытый → `state` решает только `changedProblem`; проверка в `changedOf` была её повтором и убрана, порча `closed-as-addressee` перенесена на новое место. Сервер стенда не проверялся — отдельно. Коммит: `3facede`.
+
+- [x] **DOC-80** [низкий] Исключения из обязательных `expectedState` и `expectedAddressee` в контракте неполны.
 
   **Что видно.** Описания `expectedState`, `expectedAddressee` ([openapi.json:8746](https://github.com/soulhome2/IM/blob/102d5df/Specification/Workflow_machine/openapi.json#L8746)) и ответа `PreconditionRequired` называют исключением только `comment`. А у `detach` `expects` тоже пуст ([workflow_schema.v1.json:1269](https://github.com/soulhome2/IM/blob/102d5df/Specification/Workflow_machine/workflow_schema.v1.json#L1269)), и через `POST …/transitions/detach` сервер их не требует.
 
@@ -88,6 +94,8 @@
   **Где менять.** `openapi.json` (CRLF), сборка `openapi.v30.json`, `test_openapi30.py`.
 
   **Готово, когда:** контракт называет оба исключения; сборка и `test_openapi30.py` зелёные.
+
+  Коммит: `3facede`.
 
 ## Этап 2 — машина инцидента, после решений
 
