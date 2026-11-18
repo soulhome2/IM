@@ -23,7 +23,7 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
 .side div{padding:7px 18px;color:#334155}
 .side div.on{background:var(--accent-dim);color:var(--accent);font-weight:600;border-right:3px solid var(--accent)}
 .side .grp{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;padding-top:12px}
-.page{margin-left:200px;padding:18px 24px 90px}
+.page{margin-left:0;padding:18px 24px 90px}
 .hdr{display:flex;align-items:flex-start;gap:16px;margin-bottom:12px}
 .hdr h1{font-size:20px;margin:0 0 4px}
 .hdr .state{color:var(--muted);font-size:13px}
@@ -37,6 +37,14 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
 .tab{padding:9px 14px;color:var(--muted);position:relative}
 .tab.on{color:var(--accent);font-weight:600;border-bottom:2px solid var(--accent);margin-bottom:-1px}
 .tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--changed-border);margin-left:6px;vertical-align:middle}
+.wrap{display:flex;gap:20px;align-items:flex-start}
+.secs{width:250px;flex:none;background:#fff;border:1px solid var(--stroke-2);border-radius:8px;padding:6px 0}
+.secs div{padding:9px 16px;color:#334155;display:flex;align-items:center;gap:8px}
+.secs div.on{background:var(--accent-dim);color:var(--accent);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+.secs .dot{width:7px;height:7px;border-radius:50%;background:var(--changed-border);margin-left:auto}
+.secs .cnt{margin-left:auto;font-size:11px;color:#b45309}
+.content{flex:1;min-width:0}
+.content h2{font-size:15px;margin:2px 0 10px}
 .card{background:var(--panel);border:1px solid var(--stroke-2);border-radius:8px;padding:6px 0;margin-bottom:12px}
 .card h3{font-size:13px;margin:8px 16px 6px;color:#334155}
 .set{display:grid;grid-template-columns:300px 260px 1fr;gap:16px;align-items:center;padding:9px 16px;border-top:1px solid #f1f5f9}
@@ -47,7 +55,7 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
 .set.changed{background:var(--changed)}
 .set.changed .inp{border-color:var(--changed-border);box-shadow:0 0 0 2px #fde68a}
 .set .was{font-size:11px;color:#b45309;margin-top:3px}
-.bar{position:absolute;left:200px;right:0;bottom:0;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;gap:14px;padding:12px 24px}
+.bar{position:absolute;left:0;right:0;bottom:0;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;gap:14px;padding:12px 24px}
 .bar b{color:#fff}
 .bar .sp{margin-left:auto}
 .bar .btn{background:transparent;color:#e2e8f0;border-color:#475569}
@@ -62,24 +70,18 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
 </head>
 <body>
 
-<div class="caption">1. Без изменений <span>Общее — над вкладками и один раз. Карандаша и режима правки нет: поля сразу можно менять.</span></div>
+<div class="caption">1. Без изменений <span>Разделы — столбиком слева, общее (версия, «Версии», «История») — сверху, один раз. Карандаша и режима правки нет: поля сразу можно менять.</span></div>
 <div class="frame" style="height:560px">
   <div class="top"><b>Axxon Incident Manager</b><div class="nav"><span>Очередь</span><span>Смена и статистика</span><span class="on">Настройки</span><span>Журналы</span></div><div class="me">Администратор · cloud-admin</div></div>
-  <div class="side">
-    <div class="grp">Пост</div>
-    <div class="on">Настройки поста</div>
-    <div>Схема</div><div>Сценарии</div><div>Правила</div>
-    <div class="grp">Справочники</div>
-    <div>Приоритеты</div><div>Дежурные группы</div><div>Группы устройств</div>
-  </div>
   <div class="page">
     <div class="hdr">
       <div><h1>Настройки поста</h1><div class="state">Действует <b>версия 34</b> от 18.11, 19:47 · Иванов И.</div></div>
       <div class="acts"><span class="btn">Версии</span><span class="btn">История изменений</span></div>
     </div>
-    <div class="tabs">
-      <div class="tab">Сроки и эскалация</div><div class="tab on">Работа оператора</div><div class="tab">Звук</div><div class="tab">Причины</div><div class="tab">Плановые работы</div><div class="tab">Хранение и резервная копия</div>
-    </div>
+    <div class="wrap">
+      <div class="secs"><div>Сроки и эскалация</div><div class="on">Работа оператора</div><div>Звук</div><div>Причины</div><div>Плановые работы</div><div>Хранение и резервная копия</div></div>
+      <div class="content">
+      <h2>Работа оператора</h2>
     <div class="card">
       <h3>Смена</h3>
       <div class="set"><div class="name">Начала смен</div><div><span class="inp">08:00, 20:00</span></div><div class="what">От одного до четырёх времён суток</div></div>
@@ -90,28 +92,24 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
       <div class="set"><div class="name">Сколько инцидентов в работе у одного</div><div><span class="inp sm">5</span></div><div class="what">Больше взять нельзя</div></div>
       <div class="set"><div class="name">Окно переоткрытия, мин</div><div><span class="inp sm">30</span></div><div class="what">Сколько после закрытия можно переоткрыть</div></div>
     </div>
+      </div>
+    </div>
   </div>
-  <div class="note n-up" style="left:1150px;top:128px">Версия одна на все шесть вкладок — поэтому кнопки над вкладками</div>
+  <div class="note n-up" style="left:1150px;top:112px">Версия одна на все шесть разделов — поэтому кнопки сверху, над разделами</div>
 </div>
 
-<div class="caption">2. Есть изменения <span>Черновик сохраняется сам. Внизу — полоса с двумя действиями. На вкладках с правками — точка.</span></div>
+<div class="caption">2. Есть изменения <span>Черновик сохраняется сам. Внизу — полоса с двумя действиями. У разделов с правками — сколько изменено.</span></div>
 <div class="frame" style="height:600px">
   <div class="top"><b>Axxon Incident Manager</b><div class="nav"><span>Очередь</span><span>Смена и статистика</span><span class="on">Настройки</span><span>Журналы</span></div><div class="me">Администратор · cloud-admin</div></div>
-  <div class="side">
-    <div class="grp">Пост</div>
-    <div class="on">Настройки поста</div>
-    <div>Схема</div><div>Сценарии</div><div>Правила</div>
-    <div class="grp">Справочники</div>
-    <div>Приоритеты</div><div>Дежурные группы</div><div>Группы устройств</div>
-  </div>
   <div class="page">
     <div class="hdr">
       <div><h1>Настройки поста</h1><div class="state">Действует <b>версия 34</b> · <span class="draft">есть неопубликованные изменения</span></div></div>
       <div class="acts"><span class="btn">Версии</span><span class="btn">История изменений</span></div>
     </div>
-    <div class="tabs">
-      <div class="tab">Сроки и эскалация</div><div class="tab on">Работа оператора<span class="dot"></span></div><div class="tab">Звук</div><div class="tab">Причины<span class="dot"></span></div><div class="tab">Плановые работы</div><div class="tab">Хранение и резервная копия</div>
-    </div>
+    <div class="wrap">
+      <div class="secs"><div>Сроки и эскалация</div><div class="on">Работа оператора<span class="cnt">1 изм.</span></div><div>Звук</div><div>Причины<span class="cnt">1 изм.</span></div><div>Плановые работы</div><div>Хранение и резервная копия</div></div>
+      <div class="content">
+      <h2>Работа оператора</h2>
     <div class="card">
       <h3>Смена</h3>
       <div class="set changed"><div class="name">Начала смен</div><div><span class="inp">08:00, 16:00, 00:00</span><div class="was">было: 08:00, 20:00</div></div><div class="what">От одного до четырёх времён суток</div></div>
@@ -122,15 +120,17 @@ body{margin:0;background:#cbd5e1;color:var(--text);font:13px/1.4 Inter,-apple-sy
       <div class="set"><div class="name">Сколько инцидентов в работе у одного</div><div><span class="inp sm">5</span></div><div class="what">Больше взять нельзя</div></div>
       <div class="set"><div class="name">Окно переоткрытия, мин</div><div><span class="inp sm">30</span></div><div class="what">Сколько после закрытия можно переоткрыть</div></div>
     </div>
+      </div>
+    </div>
   </div>
   <div class="bar">
-    <span>Изменено <b>2 настройки</b> на вкладках «Работа оператора», «Причины»</span>
+    <span>Изменено <b>2 настройки</b> в разделах «Работа оператора», «Причины»</span>
     <span class="saved">черновик сохранён 19:52</span>
     <span class="sp"></span>
     <span class="btn">Отменить изменения</span>
     <span class="btn pri">Опубликовать…</span>
   </div>
-  <div class="note n-down" style="left:960px;top:470px">«Опубликовать» сначала проверяет весь набор; ошибка — переход к нужной вкладке и полю</div>
+  <div class="note n-down" style="left:960px;top:470px">«Опубликовать» сначала проверяет весь набор; ошибка — переход к нужному разделу и полю</div>
   <div class="note n-left" style="left:1010px;top:262px">Изменённое поле подсвечено, под ним — старое значение</div>
 </div>
 
