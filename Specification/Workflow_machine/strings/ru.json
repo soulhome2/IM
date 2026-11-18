@@ -217,7 +217,7 @@
   "workflow.error.no_supervisor_view": "Нет права смотреть экран «Смена и статистика»",
   "workflow.error.test.no_fixture": "Нет эталонного набора {name}",
   "workflow.error.test.no_operator": "Нет оператора {id}",
-  "workflow.error.test.workflow_patch": "Нужно workflowPatch — изменения схемы объектом",
+  "workflow.error.test.workflow_patch": "Нужно поле workflowPatch — объект с изменениями схемы",
   "workflow.error.test.clock_backwards": "Время назад не идёт",
   "workflow.error.test.clock_seconds": "Сдвиг часов — целое число секунд",
   "workflow.category.pending": "Ожидают",

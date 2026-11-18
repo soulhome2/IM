@@ -459,11 +459,15 @@ MUTATIONS = [
     ("break-not-in-tick", "server.js", "      breakTick();\n", "", "api"),
     ("break-post-everyone", "app.js", " && (!d.permission || Boolean(may && may(d.permission)))", "", "ui"),
     ("break-restore-own-row", "app.js", "r.breakOverdue === true && r.person.id !== meId()", "r.breakOverdue === true", "ui"),
-    ("break-catch-up-sounds", "app.js", 'if (r.play && !(brk.catchUp && r.play.kind === "break_overdue")) {', "if (r.play) {", "ui"),
+    ("break-catch-up-sounds", "app.js", '(brk.catchUp || brk.late.has((msg.payload || {}).personId))', "brk.late.has((msg.payload || {}).personId)", "ui"),
+    ("break-replay-known-sounds", "app.js", '(brk.catchUp || brk.late.has((msg.payload || {}).personId))', "brk.catchUp", "ui"),
+    ("break-reset-no-restore", "app.js", '    if (msg.type === "stream.reset") {\n      breakRestore();\n', '    if (msg.type === "stream.reset") {\n', "ui"),
     ("break-ended-no-notice", "app.js", '      if (!quiet) notice(breakText("ended", p.personId, was), { kind: "system" });\n', "", "ui"),
     ("break-restore-drops-pending", "app.js", "    brk.pending.forEach((m) => breakApply(next, m, true));\n", "", "ui"),
     ("break-many-as-one", "app.js", "      if (brk.late.size !== 1) return t(def.textKeys.many, { n: brk.late.size });\n", "", "ui"),
     ("break-shift-row-not-red", "app.js", '${r.breakOverdue ? \' class="shift-break-late"\' : ""}', "", "ui"),
+    ("break-colleague-no-right", "server.js", 'if (to !== from && target && target.permission && !permsOf(person.id).includes(target.permission)) return', "if (false) return", "api"),
+    ("test-workflow-same-version", "server.js", "            next.schema = Object.assign({}, next.schema, { version: W.schema.version + 1 });\n", "", "api"),
     ("break-reasons-no-limit-column", "app.js", "          fieldsTable(item, reasons(item.path, settingAt(item.path))) ||\n", "", "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается

@@ -1209,9 +1209,12 @@
 
     // Оповещение — только о людях из строк «Сейчас»: без incident:accept человека там нет
     const env2 = await makeEnv();
-    assert.status(await env2.call("PUT", "/test/operators/gusev/roles", { roles: [] }), 200, null, "у Гусева нет ролей — нет и incident:accept");
+    // Стенд — как собственный запрос коллеги: без права agent:set_not_ready на перерыв не уйти
+    assert.status(await env2.call("PUT", "/test/operators/sidorov/roles", { roles: [] }), 200, null, "у Сидорова нет ролей");
+    assert.status(await breakOf(env2, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 403, "PERMISSION_DENIED", "без права на перерыв — 403");
     await watchStream(env2, async (got) => {
       assert.status(await breakOf(env2, "gusev", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Гусев ушёл на обход");
+      assert.status(await env2.call("PUT", "/test/operators/gusev/roles", { roles: [] }), 200, null, "у Гусева забрали роли — нет и incident:accept");
       await env2.advance(PATROL_SEC() + 1);
       assert.status(await breakOf(env2, "gusev", { agentState: "ready" }), 200, null, "вернулся");
       await settle();
@@ -1269,7 +1272,10 @@
     await watchStream(env, async (got) => {
       assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход (20 мин)");
       const longer = W.session.breakReasons.map((r) => (r.id === "patrol" ? Object.assign({}, r, { maxMinutes: 60 }) : r));
-      assert.status(await env.call("PUT", "/test/workflow", { workflowPatch: { session: { breakReasons: longer } } }), 200, null, "администратор поменял срок «Обхода» на 60 мин");
+      const version = (await env.ok("GET", "/operator/workflow/active")).schema.version;
+      const saved = await env.call("PUT", "/test/workflow", { workflowPatch: { session: { breakReasons: longer } } });
+      assert.status(saved, 200, null, "администратор поменял срок «Обхода» на 60 мин");
+      assert.eq([saved.body.schemaVersion, (await env.ok("GET", "/operator/workflow/active")).schema.version], [version + 1, version + 1], "новые настройки — новая версия схемы");
       await env.advance(PATROL_SEC() + 1);
       await settle();
       assert.eq(overdueEvents(got, "sidorov").map((m) => m.payload.maxMinutes), [20], "срок — на начало перерыва: 20 мин, а не 60");
@@ -1288,6 +1294,28 @@
       const row = nowRow(await supervisorNow(env), "petrova");
       assert.eq([row.reasonId, row.reasonLabel, row.breakOverdue], [null, null, true], "причины в настройках нет — без причины, срок вышел");
       (await supervisorNow(env)).operators.forEach((r) => assert.eq(typeof r.breakOverdue, "boolean", `${r.person.id}: breakOverdue — true или false`));
+    });
+  });
+
+  test("Перерыв затянулся: потеря связи на перерыве его не прерывает; одно на перерыв — и после перезапуска сервиса (§12.2, §12.3, §14.3, план 90)", async () => {
+    const fx = window.IM_FIXTURE;
+    // Орлова в наборе на обеде (60 мин, с 20 мин до снимка) и молчит дольше idleHoldSec
+    const people = JSON.parse(JSON.stringify(fx.people));
+    const orlova = people.operators.find((o) => o.id === "orlova");
+    orlova.lastSeenAt = new Date(Date.parse(fx.capturedAt) - (W.session.idleHoldSec + 60) * 1000).toISOString();
+    const env = await makeEnv({ fixturePatch: { people } });
+    await watchStream(env, async (got) => {
+      await env.advance(40 * 60 + 1);
+      await settle();
+      assert.eq(overdueEvents(got, "orlova").length, 1, "без связи на обеде — оповещение по сроку");
+      const row = nowRow(await supervisorNow(env), "orlova");
+      assert.eq([row.state, row.breakOverdue], ["not_ready", true], "без связи — всё ещё перерыв, срок вышел");
+      await env.advance(W.session.idleHoldSec * 2);
+      await settle();
+      assert.eq(overdueEvents(got, "orlova").length, 1, "молчание дальше перерыв не прерывает: второго нет");
+      assert.status(await env.call("POST", "/test/clock", { advanceSec: 3600, serviceRestart: true }), 200, null, "сервис перезапущен после ушедшего оповещения");
+      await settle();
+      assert.eq([overdueEvents(got, "orlova").length, clearedEvents(got, "orlova").length], [1, 0], "после перезапуска — ни второго оповещения, ни снятия");
     });
   });
 

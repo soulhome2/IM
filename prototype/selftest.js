@@ -6147,6 +6147,18 @@
         const red = [...$("shiftTable").querySelectorAll("tr.shift-break-late")].map((tr) => tr.dataset.shiftPerson).sort().join();
         expect(red === "me,sidorov", `красные строки «Сейчас»: ${red || "нет"}`);
         await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        // stream.reset и досланное (на встроенном сервере их нет — через вход потока): пункт — по «Сейчас» заново;
+        // повтор оповещения о человеке, который уже в пункте, — досланное, без звука
+        const fake = (type, personId, extra) => ui.serverEvent({ id: "0", type, at: new Date().toISOString(), incidentGuid: null, actor: null, incident: null, payload: Object.assign({ personId }, extra) });
+        fake("supervisor.break_overdue_cleared", "sidorov");
+        await wait(100);
+        expect(!late(), `после снятия строка поста: «${post()}»`);
+        fake("stream.reset");
+        await wait(400);
+        expect(late() && post().includes(one) && heard(BELL) === bells + 1, `после stream.reset: «${post()}», колоколов ${heard(BELL) - bells}`);
+        fake("supervisor.break_overdue", "sidorov", { reasonId: "patrol", since: new Date().toISOString(), maxMinutes: 20 });
+        await wait(100);
+        expect(heard(BELL) === bells + 1, `досланное о том, кто уже в пункте, прозвучало: колоколов ${heard(BELL) - bells}`);
         // Переподключение: ответ «Сейчас» задержан, а поток дослал оповещение о Петровой — без звука, но в пункте
         let release = null;
         const gate = new Promise((resolve) => (release = resolve));

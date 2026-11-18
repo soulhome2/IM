@@ -217,7 +217,7 @@
   "workflow.error.no_supervisor_view": "No permission to view the Shift and statistics screen",
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
-  "workflow.error.test.workflow_patch": "workflowPatch is required — schema changes as an object",
+  "workflow.error.test.workflow_patch": "The workflowPatch field is required — an object with schema changes",
   "workflow.error.test.clock_backwards": "Time does not go backwards",
   "workflow.error.test.clock_seconds": "The clock shift is a whole number of seconds",
   "workflow.category.pending": "Waiting",

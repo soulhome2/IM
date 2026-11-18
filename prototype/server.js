@@ -2936,6 +2936,9 @@
             const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || String(id)];
             const move = W.session.transitions.find((t) => t.from.includes(from) && t.to === to);
             if (to !== from && !move) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
+            // Право — у состояния, куда переходит, как в собственном запросе (session.states[].permission)
+            const target = W.session.states.find((st) => st.id === to);
+            if (to !== from && target && target.permission && !permsOf(person.id).includes(target.permission)) return problem(403, "PERMISSION_DENIED", ["workflow.error.break_no_permission"]);
             if (to !== from && engine.agentReasonRequired(to) && !W.session.breakReasons.some((r) => r.id === b.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
             const tick = () => (b.runScheduler === false ? [] : runScheduler());
             const caught = tick();
@@ -2958,7 +2961,10 @@
             // Новые настройки посреди прогона, без сброса данных, — как публикация (§14.6): клиенты перечитывают схему.
             // Идущие перерывы — со сроком на своё начало (§12.2)
             if (!body || !body.workflowPatch || typeof body.workflowPatch !== "object" || Array.isArray(body.workflowPatch)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.workflow_patch"]);
-            useWorkflow(mergePatch(W, body.workflowPatch));
+            // Сохранение настроек — новая версия схемы, как у публикации
+            const next = mergePatch(W, body.workflowPatch);
+            next.schema = Object.assign({}, next.schema, { version: W.schema.version + 1 });
+            useWorkflow(next);
             emit("workflow.schema_published", null, null, { schemaVersion: W.schema.version });
             return { status: 200, body: { schemaVersion: W.schema.version } };
           },

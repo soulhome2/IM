@@ -1152,7 +1152,7 @@
   // supervisor.break_overdue и …_cleared; при открытии страницы, переподключении и stream.reset — по столбцу breakOverdue
   // блока «Сейчас» без dutyGroup (обо всех операторах), кроме своей строки, без звука. late: personId → { reasonId, since, name }
   const brk = { late: new Map(), pending: null, catchUp: false, restoring: 0 };
-  const breakDef = () => postDefs().find((d) => d.textKeys && d.textKeys.ended) || null;
+  const breakDef = () => postDefs().find((d) => d.id === "break_overdue") || null;
   const meId = () => (store.session ? store.session.operator.guid : null);
   // Причина — по reasonId из текущих настроек поста; её там нет — без причины (§12.2, «Подписи»)
   const breakReason = (id) => {
@@ -1405,6 +1405,8 @@
       noticeKey: () => noticeKey(),
       // Переподключение потока, как у EventSource после обрыва, и восстановление по «Сейчас» (§12.2)
       streamReconnected: () => streamReconnected(),
+      // Событие потока — как от сервера (stream.reset, повтор досланного: на встроенном сервере их нет)
+      serverEvent: (msg) => onServerEvent(msg),
       breakRestore: () => breakRestore(),
     };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
@@ -5686,8 +5688,10 @@
     if (snd.pending) snd.pending.push(msg);
     const r = IMSound.decideSound(snd.state, msg, soundCtx());
     snd.state = r.state;
-    // Досланное после переподключения о затянувшемся перерыве — без звука: «один раз» задним числом не играет (§12.2, §21.1)
-    if (r.play && !(brk.catchUp && r.play.kind === "break_overdue")) {
+    // Досланное после переподключения о затянувшемся перерыве — без звука: «один раз» задним числом не играет (§12.2, §21.1).
+    // Человек уже в пункте (восстановлен по «Сейчас») — событие досланное: сервер шлёт одно оповещение на перерыв
+    const replayed = r.play && r.play.kind === "break_overdue" && (brk.catchUp || brk.late.has((msg.payload || {}).personId));
+    if (r.play && !replayed) {
       soundPlayNow(r.play.cue.pattern);
       soundNotify(msg.incident);
     }
