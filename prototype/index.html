@@ -323,6 +323,47 @@
         </div>
         <p class="muted shift-note" id="shiftNote"></p>
       </section>
+      <!-- Блок «За период» (§23.3, §23.4, план 90, часть Б): GET /operator/supervisor/stats при открытии экрана, смене
+           периода или фильтра и кнопкой «Обновить», сам не опрашивается; «Выгрузить CSV» — stats.csv с теми же
+           параметрами. Строит app.js -->
+      <section class="shift-card stats-card" id="shiftPeriod" aria-labelledby="shiftPeriodTitle">
+        <header class="shift-h">
+          <h2 id="shiftPeriodTitle">За период</h2>
+          <span class="muted" id="statsSpan"></span>
+          <span class="muted shift-updated" id="statsComputed"></span>
+          <button type="button" class="btn ghost small" id="statsRefresh">Обновить</button>
+          <button type="button" class="btn ghost small" id="statsCsv">Выгрузить CSV</button>
+        </header>
+        <div class="stats-filters">
+          <div class="seg stats-periods" id="statsPeriods" role="group" aria-label="Период">
+            <button type="button" data-stats-period="shift" aria-pressed="false">Смена</button>
+            <button type="button" data-stats-period="today" aria-pressed="false">Сегодня</button>
+            <button type="button" data-stats-period="7d" aria-pressed="true" class="active">7 дней</button>
+            <button type="button" data-stats-period="30d" aria-pressed="false">30 дней</button>
+            <button type="button" data-stats-period="custom" aria-pressed="false">Свой…</button>
+          </div>
+          <span class="stats-custom" id="statsCustom" hidden>
+            <label>с <input type="date" id="statsFrom" class="search-input" /></label>
+            <label>по <input type="date" id="statsTo" class="search-input" /></label>
+          </span>
+          <select id="statsDutyGroup" class="search-input" data-stats-filter="dutyGroup" aria-label="Дежурная группа"></select>
+          <select id="statsSourceGroup" class="search-input" data-stats-filter="sourceGroup" aria-label="Группа устройств"></select>
+          <select id="statsSource" class="search-input" data-stats-filter="source" aria-label="Устройство"></select>
+          <select id="statsEventType" class="search-input" data-stats-filter="eventType" aria-label="Тип события"></select>
+          <select id="statsOperator" class="search-input" data-stats-filter="operator" aria-label="Оператор"></select>
+          <select id="statsResult" class="search-input" data-stats-filter="result" aria-label="Результат"></select>
+          <select id="statsMaintenance" class="search-input" data-stats-filter="maintenance" aria-label="Окна работ"></select>
+        </div>
+        <p class="muted shift-note stats-note" id="statsNote" role="status"></p>
+        <div class="stats-tiles" id="statsTiles"></div>
+        <div class="stats-grid">
+          <div class="stats-panel" id="statsChart"></div>
+          <div class="stats-panel" id="statsResults"></div>
+          <div class="stats-panel stats-full" id="statsDevices"></div>
+          <div class="stats-panel stats-full" id="statsDuty"></div>
+        </div>
+        <p class="muted stats-foot">Объединённые инциденты считаются один раз, по основному. Время — от появления до первого принятия и до закрытия.</p>
+      </section>
     </main>
 
     <footer class="statusbar">

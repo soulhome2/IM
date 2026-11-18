@@ -440,10 +440,28 @@ MUTATIONS = [
     ("shift-reaction-linked", "server.js", "e.acceptedAt >= shift.from && !e.linkedTo)", "e.acceptedAt >= shift.from)", "api"),
     ("shift-closed-linked", "server.js", "e.closedAt >= shift.from && !e.linkedTo", "e.closedAt >= shift.from", "api"),
     ("shift-no-link-on-break", "server.js", "const lost = engine.onDuty(id) ? linkLostAt(id) : null;", "const lost = linkLostAt(id);", "api"),
-    ("shift-summary-unseen", "server.js", 'events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"))', 'events.filter((e) => engine.inQueueFilter(e, "open"))', "api"),
+    ("shift-summary-unseen", "server.js", 'const visibleOpen = () => events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"));', 'const visibleOpen = () => events.filter((e) => engine.inQueueFilter(e, "open"));', "api"),
     ("shift-reaction-all-time", "server.js", " && e.acceptedAt >= shift.from", "", "api"),
     ("shift-overdue-pending", "server.js", 'own("in_progress").concat(own("on_hold"))', 'own("in_progress").concat(own("on_hold"), own("pending_acceptance"))', "api"),
     ("shift-link-restored-ignored", "server.js", 'if (engine.onDuty(id)) kinds.push("link_restored");', "", "api"),
+    # Блок «За период» и выгрузка в CSV (§23.3, §23.4, план 90, часть Б)
+    ("stats-linked-counted", "server.js", "e.closedAt < to && canSee(e) && !e.linkedTo);", "e.closedAt < to && canSee(e));", "api"),
+    ("stats-unseen", "server.js", "e.closedAt < to && canSee(e) && !e.linkedTo);", "e.closedAt < to && !e.linkedTo);", "api"),
+    ("stats-maintenance-counted", "server.js", '(q.maintenance === "include" || !e.maintenanceWindowId) &&', "", "api"),
+    ("stats-duty-none-ignored", "server.js", '(q.dutyGroup === "none" ? !e.acceptedGroup : e.acceptedGroup === q.dutyGroup)', "e.acceptedGroup === q.dutyGroup", "api"),
+    ("stats-percentile-no-interpolation", "server.js", "return s[lo] + (s[Math.ceil(k)] - s[lo]) * (k - lo);\n    }\n    const timeOf", "return s[lo];\n    }\n    const timeOf", "api"),
+    ("stats-retention-not-clipped", "server.js", "from: Math.max(from, keepFrom), to:", "from, to:", "api"),
+    ("stats-future-not-clipped", "server.js", "to: Math.min(to, at), fromClipped", "to, fromClipped", "api"),
+    ("stats-previous-before-retention", "server.js", "previous: prevFrom < keepFrom ? null : ", "previous: ", "api"),
+    ("stats-always-hourly", "server.js", "const hourly = to <= ", "const hourly = true || to <= ", "api"),
+    ("stats-duty-by-id", "server.js", "(a.name == null) - (b.name == null) || byLabel(a.name, b.name) || ", "", "api"),
+    ("stats-operators-filtered", "server.js", "const operators = [...new Set(closed.map(", "const operators = [...new Set(list.map(", "api"),
+    ("stats-cache-ignored", "server.js", "if (hit && period.at >= hit.at", "if (false && hit && period.at >= hit.at", "api"),
+    ("stats-accepted-group-hidden", "server.js", "acceptedGroup: actorRef(ev.acceptedGroup),", "acceptedGroup: null,", "api"),
+    ("stats-csv-no-bom", "server.js", 'const text = "\ufeff" + lines.map(', "const text = lines.map(", "api"),
+    ("stats-csv-utc", "server.js", "zoneIso(e.closedAt, tz),", 'zoneIso(e.closedAt, "UTC"),', "api"),
+    ("stats-csv-deleted-group-empty", "server.js", 'dutyName(e.acceptedGroup) || say("deleted_group")', 'dutyName(e.acceptedGroup) || ""', "api"),
+    ("stats-csv-not-audited", "server.js", 'audit(ME, "audit_export", { details: { journal: "supervisor_stats",', 'void ({ details: { journal: "supervisor_stats",', "api"),
     # Затянувшийся перерыв (§12.2, план 90, часть В)
     ("break-overdue-strict-boundary", "server.js", "now() >= b.since + b.maxMinutes * 60000", "now() > b.since + b.maxMinutes * 60000", "api"),
     ("break-overdue-every-tick", "server.js", "if (b.notified || !breakLate(id)) return;", "if (!breakLate(id)) return;", "api"),
@@ -474,6 +492,11 @@ MUTATIONS = [
     ("break-colleague-no-right", "server.js", 'if (to !== from && target && target.permission && !permsOf(person.id).includes(target.permission)) return', "if (false) return", "api"),
     ("test-workflow-same-version", "server.js", "            next.schema = Object.assign({}, next.schema, { version: W.schema.version + 1 });\n", "", "api"),
     ("break-reasons-no-limit-column", "app.js", "          fieldsTable(item, reasons(item.path, settingAt(item.path))) ||\n", "", "ui"),
+    # Блок «За период» (§23.3, §23.4, план 90, часть Б)
+    ("stats-ui-stale-after-filter", "app.js", "loading: false, version: statsState.version + 1 });", "loading: false, version: statsState.version });", "ui"),
+    ("stats-ui-device-click-no-filter", "app.js", "        statsState.filters.source = src.dataset.statsSource;\n", "", "ui"),
+    ("stats-ui-timeout-silent", "app.js", "      error = problemText(err);\n    }\n    if (seq !== statsState.seq) return;", "      error = null;\n    }\n    if (seq !== statsState.seq) return;", "ui"),
+    ("stats-ui-csv-name-ignored", "app.js", 'a.download = named ? named[1] : "supervisor-stats.csv";', 'a.download = "supervisor-stats.csv";', "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
 # из испорченной; судят тесты API. Порчи, которые ловит статическая проверка check_machine.py, — не здесь

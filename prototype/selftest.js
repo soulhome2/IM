@@ -3916,6 +3916,90 @@
       }
     });
 
+    // Блок «За период» (§23.3, §23.4, план 90, часть Б): период, фильтры, плитки, график, таблицы, выгрузка, 503
+    await step("Смена и статистика, «За период» (§23.3, §23.4, план 90): по умолчанию 7 дней по суткам и срок хранения; «Сегодня» — по часам; фильтр «Результат» — числа как у сервера; щелчок по устройству — фильтр «Устройство»; сортировка таблицы; «Выгрузить CSV» — файл с именем сервера и запись в журнале действий; 503 — текст «Подсчёт занял слишком долго…», «Обновить» остаётся", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const get = stand.get;
+      const until = async (cond, what) => {
+        for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+        expect(cond(), what);
+      };
+      const tile = (key) => $("statsTiles").querySelector(`[data-stats-tile="${key}"] b`);
+      const pick = async (id, value) => {
+        const sel = $(id);
+        sel.value = value;
+        sel.dispatchEvent(new Event("change"));
+        await wait(300);
+      };
+      try {
+        await click($("tabShift"));
+        await until(() => tile("incidents"), "плитки «За период» не пришли");
+        const keys = [...$("statsTiles").querySelectorAll("[data-stats-tile]")].map((x) => x.dataset.statsTile).join();
+        expect(keys === "incidents,false,reaction,resolution,breached,open", `плитки: ${keys}`);
+        const pressed = $("statsPeriods").querySelector('[aria-pressed="true"]');
+        expect(pressed && pressed.dataset.statsPeriod === "7d", "по умолчанию не «7 дней»");
+        expect(/хранится 90 дней$/.test($("statsSpan").textContent), `подпись периода: «${$("statsSpan").textContent}»`);
+        expect(/^посчитано в \d\d:\d\d$/.test($("statsComputed").textContent), `время подсчёта: «${$("statsComputed").textContent}»`);
+        const bars = () => $("statsChart").querySelector("[data-stats-granularity]");
+        expect(bars().dataset.statsGranularity === "day" && bars().querySelectorAll(".stats-bar").length === 7, "7 дней — не 7 столбиков по суткам");
+        const all = await get("/operator/supervisor/stats", { period: "7d" });
+        expect(tile("incidents").textContent === String(all.current.incidents), `«Инцидентов»: ${tile("incidents").textContent} вместо ${all.current.incidents}`);
+        await click($("statsPeriods").querySelector('[data-stats-period="today"]'));
+        await until(() => bars() && bars().dataset.statsGranularity === "hour", "«Сегодня» — не по часам");
+        // Фильтр «Результат»: числа — как у сервера с тем же фильтром
+        await pick("statsResult", "false_alarm");
+        const falseOnly = await get("/operator/supervisor/stats", { period: "today", result: "false_alarm" });
+        await until(() => tile("incidents").textContent === String(falseOnly.current.incidents), `с фильтром «Ложная тревога»: ${tile("incidents").textContent} вместо ${falseOnly.current.incidents}`);
+        await pick("statsResult", "");
+        // Щелчок по устройству — фильтр «Устройство» (решение 7)
+        await until(() => $("statsDevices").querySelector("[data-stats-source]"), "в таблице «Устройства» нет строк");
+        const dev = $("statsDevices").querySelector("[data-stats-source]");
+        const id = dev.dataset.statsSource;
+        await click(dev);
+        await until(() => $("statsSource").value === id, "щелчок по устройству не поставил фильтр");
+        await until(() => [...$("statsDevices").querySelectorAll("[data-stats-source]")].every((b) => b.dataset.statsSource === id), "после фильтра в таблице — другие устройства");
+        await pick("statsSource", "");
+        // Сортировка: щелчок — по столбцу, повторный — обратно; «Без группы» — последней при любой
+        const groupsOrder = () => [...$("statsDuty").querySelectorAll("tr[data-stats-duty]")].map((r) => r.dataset.statsDuty);
+        await click($("statsDuty").querySelector('[data-stats-sort="duty:group"]'));
+        const asc = groupsOrder();
+        await click($("statsDuty").querySelector('[data-stats-sort="duty:group"]'));
+        const desc = groupsOrder();
+        const named = (xs) => xs.filter((x) => x !== "none");
+        expect(named(desc).join() === named(asc).slice().reverse().join(), `сортировка по группе обратно: ${asc} → ${desc}`);
+        expect(!desc.includes("none") || desc[desc.length - 1] === "none", `«Без группы» не последней: ${desc}`);
+        // «Выгрузить CSV»: имя файла — из Content-Disposition, выгрузка — запись в журнале действий
+        const before = (await get("/operator/admin/audit/actions", { kind: "audit_export" })).items.length;
+        await click($("statsCsv"));
+        await until(() => $("statsCsv").dataset.file, "выгрузка не прошла");
+        expect(/^supervisor-stats-\d{4}-\d\d-\d\d_\d{4}-\d\d-\d\d\.csv$/.test($("statsCsv").dataset.file), `имя файла: ${$("statsCsv").dataset.file}`);
+        const log = (await get("/operator/admin/audit/actions", { kind: "audit_export" })).items;
+        expect(log.length === before + 1 && log[0].details.journal === "supervisor_stats" && String(log[0].details.rows) === $("statsCsv").dataset.rows, `журнал выгрузок: ${JSON.stringify(log[0] && log[0].details)}`);
+        // Подсчёт не уложился во время — 503 с ключом текста; кнопка «Обновить» остаётся и пересчитывает
+        stand.get = (path, params) =>
+          path === "/operator/supervisor/stats" ? Promise.reject({ status: 503, problem: { code: "SUPERVISOR_STATS_TIMEOUT", messageKey: "workflow.error.supervisor_stats_timeout", message: "" } }) : get(path, params);
+        await click($("statsRefresh"));
+        await until(() => $("statsNote").textContent === window.IM_STRINGS.ru["workflow.error.supervisor_stats_timeout"], `текст 503: «${$("statsNote").textContent}»`);
+        expect(!$("statsRefresh").hidden && !$("statsRefresh").disabled, "после 503 нет кнопки «Обновить»");
+        stand.get = get;
+        await click($("statsRefresh"));
+        await until(() => !$("statsNote").textContent && tile("incidents"), "«Обновить» после 503 не пересчитал");
+        return `за 7 дней ${all.current.incidents}, ложных сегодня ${falseOnly.current.incidents}`;
+      } finally {
+        stand.get = get;
+        // Блок — как по умолчанию: «7 дней», без фильтров
+        if (!$("shiftScreen").hidden) {
+          await pick("statsResult", "");
+          await pick("statsSource", "");
+          await click($("statsPeriods").querySelector('[data-stats-period="7d"]'));
+        }
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
     await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");

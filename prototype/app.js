@@ -4166,6 +4166,7 @@
     // Экран «Смена и статистика» (§23): вкладки по праву, открытый экран — на новом языке и с новыми «сколько длится»
     renderScreen();
     renderShift();
+    renderStats();
     $("breakBanner").hidden = !onBreak();
     $("signedOutBanner").hidden = !signedOut();
   }
@@ -6120,7 +6121,7 @@
   /* ===== Экран «Смена и статистика»: блок «Сейчас» (§23, план 90) ===== */
 
   // Вкладка — только с правом supervisor:view (§23). Данные — GET /operator/supervisor/now: при открытии, по смене
-  // фильтра и опросом раз в shift.refreshSec машины, пока экран открыт (§23.2). Блок «За период» — часть Б плана 90
+  // фильтра и опросом раз в shift.refreshSec машины, пока экран открыт (§23.2). Блок «За период» — ниже (§23.3)
   const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, shownAt: 0, loading: false, groupsKey: "", tableKey: "" };
   const shiftLocale = () => (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
   // Время на экране — в поясе смены (§23): часы и минуты, не сегодняшнее по поясу смены — с датой
@@ -6339,6 +6340,7 @@
     if (open) {
       renderShift();
       loadShift();
+      loadStats();
     }
   }
   function bindShift() {
@@ -6373,12 +6375,391 @@
       const btn = e.target.closest("button");
       if (btn) showScreen(btn.dataset.screen === "shift" ? "shift" : "queue");
     });
+    bindStats();
     // Опрос, пока экран открыт; между опросами — «сколько длится» по часам пульта
     setInterval(() => {
       if (!shiftState.open) return;
       if (Date.now() - shiftState.shownAt >= WORKFLOW.shift.refreshSec * 1000) loadShift();
       else tickShift();
     }, 5000);
+  }
+
+  /* ===== Экран «Смена и статистика»: блок «За период» (§23.3, §23.4, план 90, часть Б) ===== */
+
+  // Данные — GET /operator/supervisor/stats при открытии экрана, смене периода или фильтра и кнопкой «Обновить»; сам блок
+  // не опрашивается (§23.3). Фильтры действуют все сразу; «Выгрузить CSV» — stats.csv с теми же параметрами (§23.4)
+  const statsState = {
+    data: null,
+    error: null,
+    loading: false,
+    seq: 0,
+    version: 0,
+    period: "7d",
+    from: "",
+    to: "",
+    filters: {},
+    tree: null,
+    operators: new Map(),
+    sort: { devices: { key: "incidents", dir: -1 }, duty: { key: "incidents", dir: -1 } },
+    keys: {},
+  };
+  // Фильтры над плитками (§23.3): «все» или одно значение; параметр запроса — как у сервера
+  const STATS_SELECTS = [
+    { id: "statsDutyGroup", param: "dutyGroup", all: "Все дежурные группы" },
+    { id: "statsSourceGroup", param: "sourceGroup", all: "Все группы устройств" },
+    { id: "statsSource", param: "source", all: "Все устройства" },
+    { id: "statsEventType", param: "eventType", all: "Все типы событий" },
+    { id: "statsOperator", param: "operator", all: "Все операторы" },
+    { id: "statsResult", param: "result", all: "Все результаты" },
+  ];
+  const two = (n) => String(n).padStart(2, "0");
+  // Местная дата момента в поясе tz — «ГГГГ-ММ-ДД», как у поля даты
+  const zoneDate = (ms, tz) => new Date(ms).toLocaleDateString("en-CA", { timeZone: tz });
+  // Полночь даты «ГГГГ-ММ-ДД» в поясе tz → момент (по правилам пояса на эту дату)
+  function zoneMidnightOf(date, tz) {
+    const [y, m, d] = date.split("-").map(Number);
+    const local = Date.UTC(y, m - 1, d);
+    const offset = (ms) => {
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+      return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
+    };
+    const guess = local - offset(local);
+    return local - offset(guess);
+  }
+  const nextDate = (date) => new Date(Date.parse(`${date}T00:00:00Z`) + 864e5).toISOString().slice(0, 10);
+  // Параметры запроса: период — кнопкой или «Свой…» (даты «с» и «по» включительно, в поясе смены); null — даты не заданы
+  function statsParams() {
+    const p = Object.assign({}, statsState.filters);
+    if (statsState.period !== "custom") return Object.assign(p, { period: statsState.period });
+    const tz = (statsState.data && statsState.data.timeZone) || WORKFLOW.shift.timeZone;
+    if (!statsState.from || !statsState.to || statsState.from > statsState.to) return null;
+    return Object.assign(p, { from: new Date(zoneMidnightOf(statsState.from, tz)).toISOString(), to: new Date(zoneMidnightOf(nextDate(statsState.to), tz)).toISOString() });
+  }
+  async function loadStats() {
+    if (!shiftState.open) return;
+    const params = statsParams();
+    if (!params) return renderStats();
+    const seq = ++statsState.seq;
+    statsState.loading = true;
+    renderStats();
+    let data = null;
+    let error = null;
+    try {
+      if (!statsState.tree) statsState.tree = await api.get("/operator/reference/source-groups");
+      data = await api.get("/operator/supervisor/stats", params);
+    } catch (err) {
+      // 503 SUPERVISOR_STATS_TIMEOUT — текст сервера по ключу: «Подсчёт занял слишком долго…»; кнопка «Обновить» остаётся
+      error = problemText(err);
+    }
+    if (seq !== statsState.seq) return; // пока ждали, период или фильтр сменили — ответ уже не тот
+    // Номер ответа — в ключе перестройки: тот же подсчёт сервера (computedAt) с другими фильтрами — другие данные
+    Object.assign(statsState, { data, error, loading: false, version: statsState.version + 1 });
+    if (data) data.operators.forEach((o) => statsState.operators.set(o.id, o.name));
+    renderStats();
+  }
+  // Время (§23.3): «м:сс», от часа — «ч:мм:сс», доли секунды отбрасываются; нет значения — «—»
+  function statsDuration(sec) {
+    if (sec == null) return "—";
+    const s = Math.floor(sec);
+    const h = Math.floor(s / 3600);
+    return h ? `${h}:${two(Math.floor((s % 3600) / 60))}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+  }
+  // Округление до ближайшего, половина — от нуля (§23.3)
+  const roundAway = (x, digits) => {
+    const k = 10 ** (digits || 0);
+    return (Math.sign(x) * Math.round(Math.abs(x) * k)) / k;
+  };
+  const statsPct = (part, whole) => (whole ? `${new Intl.NumberFormat(shiftLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(roundAway((part / whole) * 100, 1))} %` : "—");
+  const arrow = (v) => (v > 0 ? "▲ " : v < 0 ? "▼ " : "");
+  // Изменение к прошлому периоду: «Инцидентов» — в целых процентах, «Ложных» — в целых п. по неокруглённым долям
+  function statsChange(d, kind) {
+    const prev = d.previous;
+    if (!prev || !prev.incidents) return "—";
+    const cur = d.current;
+    if (kind === "incidents") {
+      const v = roundAway(((cur.incidents - prev.incidents) / prev.incidents) * 100);
+      return `${arrow(v)}${Math.abs(v)} %`;
+    }
+    if (!cur.incidents) return "—";
+    const v = roundAway((cur.falseAlarms / cur.incidents - prev.falseAlarms / prev.incidents) * 100);
+    return `${arrow(v)}${t("{n} п.", { n: Math.abs(v) })}`;
+  }
+  // Подпись периода (§23.3): даты в поясе смены и срок хранения; начало подтянуто к хранению — «Данные с …»
+  function statsSpanText(d) {
+    const tz = d.timeZone;
+    const day = (ms) => new Date(ms).toLocaleDateString(shiftLocale(), { timeZone: tz, day: "numeric", month: "long" });
+    const from = Date.parse(d.from);
+    const to = Date.parse(d.to);
+    const last = to > from ? to - 1 : to;
+    const range = d.fromClipped
+      ? t("Данные с {time}", { time: new Date(from).toLocaleString(shiftLocale(), { timeZone: tz, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: false }) })
+      : zoneDate(from, tz) === zoneDate(last, tz)
+        ? day(from)
+        : `${day(from)} – ${day(last)}`;
+    return `${range} · ${t("хранится {n, plural, one {# день} few {# дня} many {# дней} other {# дня}}", { n: d.retentionDays })}`;
+  }
+  function statsTile(key, head, value, sub, cls) {
+    return `<div class="stats-tile${cls ? ` ${cls}` : ""}" data-stats-tile="${key}"><span class="stats-tile-h">${te(head)}</span><b>${escapeHtml(value)}</b><span class="stats-tile-sub">${escapeHtml(sub)}</span></div>`;
+  }
+  function statsTiles(d) {
+    const c = d.current;
+    const time = (x) => t("среднее {mean} · 90 % {p90}", { mean: statsDuration(x.mean), p90: statsDuration(x.p90) });
+    return [
+      statsTile("incidents", "Инцидентов", new Intl.NumberFormat(shiftLocale()).format(c.incidents), t("{change} к прошлому периоду", { change: statsChange(d, "incidents") })),
+      statsTile("false", "Ложных тревог", statsPct(c.falseAlarms, c.incidents), `${statsChange(d, "false")} · ${t("{n} шт.", { n: c.falseAlarms })}`),
+      statsTile("reaction", "Реакция, медиана", statsDuration(c.reaction.median), time(c.reaction)),
+      statsTile("resolution", "Закрытие, медиана", statsDuration(c.resolution.median), time(c.resolution)),
+      statsTile("breached", "С нарушениями", statsPct(c.breached, c.incidents), t("{n} шт.", { n: c.breached }), c.breached ? "late" : ""),
+      statsTile("open", "Открыто сейчас", String(d.open.open), t("из них просрочено {n}", { n: d.open.overdue })),
+    ].join("");
+  }
+  // График (§23.3): столбики по времени закрытия — не ложные и ложные одним столбиком, с нарушениями — рядом
+  function statsChart(d) {
+    const s = d.series;
+    const tz = d.timeZone;
+    const max = Math.max(1, ...s.buckets.map((b) => b.notFalse + b.falseAlarms), ...s.buckets.map((b) => b.breached));
+    const every = Math.max(1, Math.ceil(s.buckets.length / 12));
+    const label = (b) => (s.granularity === "hour" ? new Date(b.from).toLocaleTimeString(shiftLocale(), { timeZone: tz, hour: "2-digit", hour12: false }) : new Date(b.from).toLocaleDateString(shiftLocale(), { timeZone: tz, day: "2-digit", month: "2-digit" }));
+    const h = (n) => `${((n / max) * 100).toFixed(1)}%`;
+    const bars = s.buckets
+      .map((b, i) => {
+        const title = t("{when}: не ложных {a}, ложных {b}, с нарушениями {c}", { when: label(b), a: b.notFalse, b: b.falseAlarms, c: b.breached });
+        return `<div class="stats-bar" data-stats-bucket="${escapeHtml(b.from)}" title="${escapeHtml(title)}">
+          <div class="stats-col"><span class="stats-stack" style="height:${h(b.notFalse + b.falseAlarms)}"><span class="nf" style="flex-grow:${b.notFalse}"></span><span class="fa" style="flex-grow:${b.falseAlarms}"></span></span><span class="br" style="height:${h(b.breached)}"></span></div>
+          <span class="stats-bar-l">${i % every ? "" : escapeHtml(label(b))}</span></div>`;
+      })
+      .join("");
+    const legend = [["nf", "Не ложные"], ["fa", "Ложные"], ["br", "С нарушениями"]].map(([cls, text]) => `<span class="stats-key ${cls}">${te(text)}</span>`).join("");
+    return `<div class="stats-panel-h"><h3>${te(s.granularity === "hour" ? "Инцидентов по часам" : "Инцидентов по дням")}</h3><span class="stats-legend">${legend}</span></div>
+      <div class="stats-bars" data-stats-granularity="${s.granularity}">${bars || `<p class="muted">${te("Инцидентов нет")}</p>`}</div>`;
+  }
+  // Строки «название — полоса — число»: результаты, причины ложных, нарушения по видам
+  function statsList(rows, cls) {
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    return rows.length
+      ? `<div class="stats-list">${rows.map((r) => `<div class="stats-row"${r.attr || ""}><span class="stats-row-l">${r.html}</span><span class="stats-meter ${cls || ""}"><span style="width:${((r.count / max) * 100).toFixed(1)}%"></span></span><span class="num">${r.count}</span></div>`).join("")}</div>`
+      : `<p class="muted">${te("Инцидентов нет")}</p>`;
+  }
+  function statsResults(d) {
+    const results = d.results.map((r) => {
+      const def = WORKFLOW.reasonCatalogs.close_result.items.find((x) => x.id === r.resultId);
+      return { html: escapeHtml(def ? lbl(def) : r.label), count: r.count, attr: ` data-stats-result="${escapeHtml(r.resultId)}"` };
+    });
+    const causes = d.falseAlarmCauses.map((r) => {
+      const def = r.causeId && ((WORKFLOW.reasonCatalogs.false_alarm_cause || {}).items || []).find((x) => x.id === r.causeId);
+      return { html: r.causeId == null ? te("Без причины") : def ? escapeHtml(lbl(def)) : asData(r.label || r.causeId), count: r.count };
+    });
+    return `<h3>${te("Результаты закрытия")}</h3>${statsList(results, "acc")}<h3>${te("Причины ложных")}</h3>${statsList(causes)}`;
+  }
+  // Таблица с сортировкой по любому столбцу (§23.3, как «Сейчас»): text — по алфавиту, пустое — в конце; pin — строка
+  // «Без группы» последней при любой сортировке
+  function statsTable(name, cols, rows, opts) {
+    const sort = statsState.sort[name];
+    const col = cols.find((c) => c.key === sort.key) || cols[0];
+    const coll = new Intl.Collator(LANG, { sensitivity: "base", numeric: true });
+    const pin = (opts && opts.pin) || (() => false);
+    const sorted = rows.slice().sort((a, b) => {
+      if (pin(a) !== pin(b)) return pin(a) ? 1 : -1;
+      const [x, y] = [col.val(a), col.val(b)];
+      if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;
+      return (col.text ? coll.compare(x, y) : x - y) * sort.dir;
+    });
+    const head = cols
+      .map((c) => {
+        const on = c.key === sort.key;
+        return `<th class="${c.text ? "" : "num"}" aria-sort="${on ? (sort.dir < 0 ? "descending" : "ascending") : "none"}"><button type="button" class="shift-sort${on ? " on" : ""}" data-stats-sort="${name}:${c.key}">${te(c.head)}<span aria-hidden="true">${on ? (sort.dir < 0 ? " ↓" : " ↑") : " ↕"}</span></button></th>`;
+      })
+      .join("");
+    const body = sorted.map((r) => `<tr${opts.attr ? opts.attr(r) : ""}>${cols.map((c) => `<td class="${c.text ? "" : "num"}${c.cls ? ` ${c.cls(r)}` : ""}" data-label="${te(c.head)}">${c.cell(r)}</td>`).join("")}</tr>`).join("");
+    return rows.length ? `<div class="shift-table-wrap"><table class="doc-table stats-table" data-stats-table="${name}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` : `<p class="muted">${te("Инцидентов нет")}</p>`;
+  }
+  const share = (r) => (r.incidents ? r.falseAlarms / r.incidents : null);
+  function statsDevices(d) {
+    const cols = [
+      { key: "device", head: "Устройство", text: true, val: (r) => r.source.name, cell: (r) => `<button type="button" class="shift-out-btn" data-stats-source="${escapeHtml(r.source.id)}" data-i18n-skip title="${te("Отобрать по устройству")}">${escapeHtml(r.source.name)}</button>` },
+      { key: "groups", head: "Группа", text: true, val: (r) => (r.groups.length ? r.groups.map((g) => g.name).join(", ") : null), cell: (r) => (r.groups.length ? asData(r.groups.map((g) => g.name).join(", ")) : "—") },
+      { key: "incidents", head: "Инцидентов", val: (r) => r.incidents, cell: (r) => String(r.incidents) },
+      { key: "false", head: "Ложных", val: share, cell: (r) => escapeHtml(statsPct(r.falseAlarms, r.incidents)) },
+      { key: "breached", head: "С нарушениями", val: (r) => r.breached, cell: (r) => String(r.breached), cls: (r) => (r.breached ? "late" : "") },
+      { key: "reaction", head: "Реакция, медиана", val: (r) => r.medianReactionSec, cell: (r) => statsDuration(r.medianReactionSec) },
+    ];
+    return `<div class="stats-panel-h"><h3>${te("Устройства")}</h3><span class="muted">${te("10 с наибольшим числом инцидентов · щелчок — отбор по устройству")}</span></div>${statsTable("devices", cols, d.devices, {})}`;
+  }
+  function statsDutyName(r) {
+    if (r.groupId == null) return te("Без группы");
+    return r.name == null ? te("Удалённая группа") : asData(r.name);
+  }
+  function statsDuty(d) {
+    const cols = [
+      { key: "group", head: "Группа", text: true, val: (r) => (r.groupId == null ? null : r.name || t("Удалённая группа")), cell: statsDutyName },
+      { key: "incidents", head: "Инцидентов", val: (r) => r.incidents, cell: (r) => String(r.incidents) },
+      { key: "false", head: "Ложных", val: share, cell: (r) => escapeHtml(statsPct(r.falseAlarms, r.incidents)) },
+      { key: "reaction", head: "Реакция, медиана", val: (r) => r.medianReactionSec, cell: (r) => statsDuration(r.medianReactionSec) },
+      { key: "resolution", head: "Закрытие, медиана", val: (r) => r.medianResolutionSec, cell: (r) => statsDuration(r.medianResolutionSec) },
+      { key: "breached", head: "Нарушения", val: (r) => r.breached, cell: (r) => String(r.breached), cls: (r) => (r.breached ? "late" : "") },
+    ];
+    const kinds = { reaction: "Реакция", resolution: "Закрытие", hold: "Удержание" };
+    const breaches = d.breachesByKind.map((b) => ({ html: te(kinds[b.kind] || b.kind), count: b.incidents, attr: ` data-stats-breach="${b.kind}"` }));
+    return `<h3>${te("Дежурные группы")}</h3>${statsTable("duty", cols, d.dutyGroups, { pin: (r) => r.groupId == null, attr: (r) => ` data-stats-duty="${escapeHtml(r.groupId == null ? "none" : r.groupId)}"` })}
+      <h3>${te("Нарушения по видам")}</h3>${statsList(breaches, "crit")}`;
+  }
+  // Списки фильтров (§23.3): дежурные группы — нынешние по порядку групп и «Без группы»; группы устройств и устройства —
+  // доступные старшему; операторы — из ответа сервера (кто закрыл); результаты — справочник машины
+  function statsOptions() {
+    const coll = new Intl.Collator(LANG, { sensitivity: "base", numeric: true });
+    const groups = [];
+    const devices = new Map();
+    const walk = (nodes, depth) =>
+      nodes.forEach((n) => {
+        groups.push([n.guid, "  ".repeat(depth) + n.name, true]);
+        (n.devices || []).forEach((x) => devices.set(x.guid, x.name));
+        walk(n.children || [], depth + 1);
+      });
+    walk(statsState.tree || [], 0);
+    return {
+      dutyGroup: (store.targets || [])
+        .filter((x) => x.kind === "duty_group")
+        .map((g) => [g.id, g.name, true])
+        .concat([["none", t("Без группы")]]),
+      sourceGroup: groups,
+      source: [...devices].sort((a, b) => coll.compare(a[1], b[1])).map(([id, name]) => [id, name, true]),
+      eventType: (store.eventTypes || [])
+        .slice()
+        .sort((a, b) => coll.compare(a.name, b.name))
+        .map((x) => [x.id, x.name, true]),
+      operator: [...statsState.operators].sort((a, b) => coll.compare(a[1], b[1])).map(([id, name]) => [id, name, true]),
+      result: WORKFLOW.reasonCatalogs.close_result.items.map((r) => [r.id, lbl(r)]),
+    };
+  }
+  // Перестроить только изменившееся: списки, плитки и таблицы — по ключу; открытый список и фокус не теряются
+  function statsPut(id, key, html) {
+    if (statsState.keys[id] === key) return false;
+    statsState.keys[id] = key;
+    $(id).innerHTML = html;
+    return true;
+  }
+  function renderStats() {
+    if (!shiftState.open) return;
+    const d = statsState.data;
+    $("statsPeriods")
+      .querySelectorAll("[data-stats-period]")
+      .forEach((b) => {
+        const on = b.dataset.statsPeriod === statsState.period;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+    $("statsCustom").hidden = statsState.period !== "custom";
+    if ($("statsFrom").value !== statsState.from) $("statsFrom").value = statsState.from;
+    if ($("statsTo").value !== statsState.to) $("statsTo").value = statsState.to;
+    // Первый день «Свой…» — первые сутки пояса смены, которые начинаются не раньше начала хранения
+    if (d) {
+      const keep = serverNow() - d.retentionDays * 864e5;
+      const first = zoneDate(keep, d.timeZone);
+      const min = zoneMidnightOf(first, d.timeZone) >= keep ? first : nextDate(first);
+      const today = zoneDate(serverNow(), d.timeZone);
+      ["statsFrom", "statsTo"].forEach((id) => Object.assign($(id), { min, max: today }));
+    }
+    const options = statsOptions();
+    STATS_SELECTS.forEach((f) => {
+      const value = statsState.filters[f.param] || "";
+      const list = options[f.param].slice();
+      if (value && !list.some(([id]) => id === value)) list.push([value, value, true]); // выбранного больше нет — инцидентов нет
+      statsPut(f.id, JSON.stringify([LANG, list]), [`<option value="">${te(f.all)}</option>`].concat(list.map(([id, name, data]) => `<option value="${escapeHtml(id)}"${data ? " data-i18n-skip" : ""}>${escapeHtml(name)}</option>`)).join(""));
+      if ($(f.id).value !== value) $(f.id).value = value;
+    });
+    statsPut("statsMaintenance", LANG, `<option value="">${te("Окна работ: не считать")}</option><option value="include">${te("Окна работ: считать")}</option>`);
+    if ($("statsMaintenance").value !== (statsState.filters.maintenance || "")) $("statsMaintenance").value = statsState.filters.maintenance || "";
+    const badDates = statsState.period === "custom" && !statsParams();
+    $("statsNote").textContent = statsState.error || (badDates ? t("Выберите даты «с» и «по»: «с» не позже «по»") : statsState.loading && !d ? t("Загрузка…") : "");
+    $("statsSpan").textContent = d ? statsSpanText(d) : "";
+    $("statsComputed").textContent = d ? t("посчитано в {time}", { time: shiftClock(d.computedAt, d.timeZone) }) : "";
+    $("shiftPeriod").classList.toggle("stats-busy", statsState.loading);
+    const view = JSON.stringify([LANG, statsState.version, statsState.error, statsState.sort]);
+    if (!d) {
+      ["statsTiles", "statsChart", "statsResults", "statsDevices", "statsDuty"].forEach((id) => statsPut(id, view, ""));
+      return;
+    }
+    statsPut("statsTiles", view, statsTiles(d));
+    statsPut("statsChart", view, statsChart(d));
+    statsPut("statsResults", view, statsResults(d));
+    // Таблица перестроена по сортировке — фокус вернуть на ту же кнопку столбца
+    const had = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.statsSort : null;
+    statsPut("statsDevices", view, statsDevices(d));
+    statsPut("statsDuty", view, statsDuty(d));
+    const again = had ? $("shiftPeriod").querySelector(`[data-stats-sort="${had}"]`) : null;
+    if (again && document.activeElement !== again) again.focus();
+  }
+  // «Выгрузить CSV» (§23.4): те же период и фильтры; файл — как отдал сервер (UTF-8 с BOM, «;»)
+  async function exportStats() {
+    const params = statsParams();
+    if (!params) return renderStats();
+    try {
+      const query = Object.entries(params).map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
+      const res = await api.raw("GET", `/operator/supervisor/stats.csv?${query}`);
+      if (res.status >= 400) throw { status: res.status, problem: res.body };
+      const text = res.body;
+      const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      // Имя файла — из Content-Disposition сервера (§23.4)
+      const named = /filename="?([^";]+)"?/.exec(res.headers["content-disposition"] || "");
+      a.download = named ? named[1] : "supervisor-stats.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      // Сколько строк данных ушло — для самопроверки: файл в headless не сохраняется
+      Object.assign($("statsCsv").dataset, { rows: String(text.split("\r\n").length - 2), file: a.download });
+    } catch (err) {
+      toast(problemText(err), "error");
+    }
+  }
+  function bindStats() {
+    $("statsPeriods").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-stats-period]");
+      if (!btn) return;
+      statsState.period = btn.dataset.statsPeriod;
+      // «Свой…» — по умолчанию даты текущего периода: с его первого дня по сегодня
+      if (statsState.period === "custom" && !statsState.from) {
+        const tz = (statsState.data && statsState.data.timeZone) || WORKFLOW.shift.timeZone;
+        statsState.from = zoneDate(statsState.data ? Date.parse(statsState.data.from) : serverNow(), tz);
+        statsState.to = zoneDate(serverNow(), tz);
+      }
+      loadStats();
+    });
+    ["statsFrom", "statsTo"].forEach((id) =>
+      $(id).addEventListener("change", (e) => {
+        statsState[id === "statsFrom" ? "from" : "to"] = e.target.value;
+        loadStats();
+      })
+    );
+    STATS_SELECTS.concat({ id: "statsMaintenance", param: "maintenance" }).forEach((f) =>
+      $(f.id).addEventListener("change", (e) => {
+        if (e.target.value) statsState.filters[f.param] = e.target.value;
+        else delete statsState.filters[f.param];
+        loadStats();
+      })
+    );
+    $("statsRefresh").addEventListener("click", () => loadStats());
+    $("statsCsv").addEventListener("click", () => exportStats());
+    $("shiftPeriod").addEventListener("click", (e) => {
+      const sortBtn = e.target.closest("[data-stats-sort]");
+      if (sortBtn) {
+        const [name, key] = sortBtn.dataset.statsSort.split(":");
+        const cur = statsState.sort[name];
+        // Числа — сначала по убыванию, текст — по алфавиту
+        const text = ["device", "groups", "group"].includes(key);
+        statsState.sort[name] = key === cur.key ? { key, dir: -cur.dir } : { key, dir: text ? 1 : -1 };
+        sortBtn.focus();
+        return renderStats();
+      }
+      // Щелчок по устройству — фильтр «Устройство» на него, блок пересчитывается (решение 7)
+      const src = e.target.closest("[data-stats-source]");
+      if (src) {
+        statsState.filters.source = src.dataset.statsSource;
+        loadStats();
+      }
+    });
   }
 
   async function openAdmin() {

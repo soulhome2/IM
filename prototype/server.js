@@ -116,6 +116,8 @@
     const colleagueIdleSince = {};
     // Идущие перерывы людей (§12.2): начало, причина и срок на начало перерыва, ушло ли оповещение «перерыв затянулся»
     let breaks = {};
+    // Подсчёты блока «За период» (§23.3): запрос человека → время подсчёта и ответ; тот же запрос в течение минуты не считается заново
+    let statsCache = new Map();
     const PAGE_SIZE = 8;
     const MERGED_IN_SHOWN = 5;
 
@@ -799,6 +801,7 @@
       OPERATORS.forEach((o) => o.id !== ME && o.lastSeenAt != null && (colleagueIdleSince[o.id] = o.lastSeenAt));
       // Перерывы коллег из набора — с их начала (stateSince); срок — по настройкам на момент загрузки (§12.2)
       breaks = {};
+      statsCache = new Map();
       OPERATORS.forEach((o) => o.id !== ME && o.agentState === "not_ready" && breakStarted(o.id, o.reasonId, o.stateSince != null ? o.stateSince : now()));
     }
 
@@ -980,6 +983,8 @@
         // Первое принятие (§2.2, план 90): ставит эффект машины markAccepted, потом не меняется
         acceptedAt: iso(ev.acceptedAt),
         acceptedBy: actorRef(ev.acceptedBy),
+        // Дежурная группа до принятия (§2.2, решение 16 плана 90): ставят markAccepted и markNoReaction машины, потом не меняется
+        acceptedGroup: actorRef(ev.acceptedGroup),
         timer: timerState(ev),
         holdTimer: holdTimerState(ev),
         slaBreached: Boolean(ev.slaBreached),
@@ -2537,6 +2542,8 @@
         medianReactionSec: median(reactions),
       };
     }
+    // Открытые инциденты, видимые старшему, как в очереди (§5): сводка «Сейчас» и плитка «Открыто сейчас» (§23.2, §23.3)
+    const visibleOpen = () => events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"));
     const SUMMARY_OF = { ready: "present", busy: "present", not_ready: "onBreak", [NO_LINK]: "noLink", offline: "signedOut" };
     function supervisorNow(q) {
       if (!can("supervisor:view")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_supervisor_view"]);
@@ -2550,10 +2557,247 @@
       const summary = { present: 0, onBreak: 0, noLink: 0, signedOut: 0 };
       operators.forEach((r) => (summary[SUMMARY_OF[r.state]] += 1));
       // Ничьих и просрочено всего — по инцидентам, видимым старшему, как в очереди (§5); фильтр их не меняет
-      const open = events.filter((e) => canSee(e) && engine.inQueueFilter(e, "open"));
+      const open = visibleOpen();
       summary.unowned = open.filter((e) => e.state === "new" || (e.state === "pending_acceptance" && !e.owner && Boolean(e.assignmentGroup))).length;
       summary.overdue = open.filter(breached).length;
       return { status: 200, body: { at: iso(at), shift: { from: iso(shift.from), to: iso(shift.to), timeZone: shift.timeZone }, summary, operators } };
+    }
+
+    /* ===== Смена и статистика: блок «За период» и выгрузка в CSV (§23.3, §23.4, план 90, часть Б) ===== */
+
+    const STATS_PERIODS = { shift: null, today: 0, "7d": 6, "30d": 29 };
+    const STATS_FILTERS = ["dutyGroup", "sourceGroup", "source", "eventType", "operator", "result", "maintenance"];
+    const BREACH_KINDS = ["reaction", "resolution", "hold"];
+    // Момент времени ISO 8601 (RFC 3339) с поясом; иначе NaN — неверный запрос
+    const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/i;
+    const moment = (v) => (MOMENT.test(String(v)) ? Date.parse(v) : NaN);
+    // Полночь местной даты момента at в поясе tz, сдвинутой на shiftDays суток: по правилам пояса на эту дату (§23.3)
+    function zoneMidnight(at, tz, shiftDays) {
+      const p = zoneParts(at, tz);
+      return zonedMs(p.y, p.m, p.d + shiftDays, 0, 0, tz);
+    }
+    // Период запроса (§23.3): period или from и to, без них — 7d; обрезка — по началу хранения и «сейчас».
+    // Неверный запрос — null (400)
+    function statsPeriod(q) {
+      const at = now();
+      const tz = W.shift.timeZone;
+      const custom = q.from != null || q.to != null;
+      if (q.period != null && !(q.period in STATS_PERIODS)) return null;
+      if (q.maintenance != null && q.maintenance !== "include" && q.maintenance !== "exclude") return null;
+      if (custom && (q.from == null || q.to == null || q.period != null)) return null;
+      let from = moment(q.from);
+      let to = moment(q.to);
+      if (custom && (Number.isNaN(from) || Number.isNaN(to) || from > to)) return null;
+      if (!custom) {
+        const back = STATS_PERIODS[q.period || "7d"];
+        from = back == null ? currentShift(at).from : zoneMidnight(at, tz, -back);
+        to = at;
+      }
+      const keepFrom = at - W.retention.closedIncidentsDays * DAY_MS;
+      return { at, tz, keepFrom, from: Math.max(from, keepFrom), to: Math.min(to, at), fromClipped: from < keepFrom };
+    }
+    // Инциденты периода (§23.3): закрытые с closedAt в [from, to), видимые старшему, как в очереди (решение 3), без
+    // привязанных — объединённые один раз, по основному
+    const statsClosed = (from, to) => events.filter((e) => e.state === "closed" && e.closedAt != null && e.closedAt >= from && e.closedAt < to && canSee(e) && !e.linkedTo);
+    // Фильтры — все сразу; окна работ по умолчанию не считаются; несуществующее значение — инцидентов нет
+    function statsFilter(q) {
+      const inGroup = q.sourceGroup != null ? new Set(collectDeviceIds(findNode(TREE, q.sourceGroup))) : null;
+      return (e) =>
+        (q.maintenance === "include" || !e.maintenanceWindowId) &&
+        (q.dutyGroup == null || (q.dutyGroup === "none" ? !e.acceptedGroup : e.acceptedGroup === q.dutyGroup)) &&
+        (!inGroup || inGroup.has(eventSource(e))) &&
+        (q.source == null || eventSource(e) === q.source) &&
+        (q.eventType == null || e.typeId === q.eventType) &&
+        (q.operator == null || e.closedBy === q.operator) &&
+        (q.result == null || e.closeResult === q.result);
+    }
+    // Время (решение 4): реакция — от появления до первого принятия, у закрытого без взятия её нет; закрытие — до closedAt
+    const reactionOf = (e) => (e.acceptedAt != null && !e.noReaction ? (e.acceptedAt - e.createdAt) / 1000 : null);
+    const resolutionOf = (e) => (e.closedAt - e.createdAt) / 1000;
+    // Медиана и 90 % — как percentile_cont в PostgreSQL: место (n − 1) × p от нуля, между соседними — по прямой
+    function percentile(xs, p) {
+      if (!xs.length) return null;
+      const s = xs.slice().sort((a, b) => a - b);
+      const k = (s.length - 1) * p;
+      const lo = Math.floor(k);
+      return s[lo] + (s[Math.ceil(k)] - s[lo]) * (k - lo);
+    }
+    const timeOf = (xs) => ({ median: percentile(xs, 0.5), mean: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null, p90: percentile(xs, 0.9) });
+    const reactions = (list) => list.map(reactionOf).filter((x) => x != null);
+    // Закрыт «Ложной тревогой» — определение closedFalseAlarm машины: плитка, график, причины ложных
+    const isFalse = (e) => engine.closedFalseAlarm(e);
+    function statsTotals(list, from, to) {
+      return {
+        from: iso(from),
+        to: iso(to),
+        incidents: list.length,
+        falseAlarms: list.filter(isFalse).length,
+        breached: list.filter(breached).length,
+        reaction: timeOf(reactions(list)),
+        resolution: timeOf(list.map(resolutionOf)),
+      };
+    }
+    // Столбики (§23.3): по часам, если конец не позже того же местного времени через два дня после начала, иначе по
+    // суткам пояса смены; первый и последний — неполные. Часы — настоящие: граница — следующий целый час по поясу
+    function statsSeries(list, from, to, tz) {
+      const p = zoneParts(from, tz);
+      const hourly = to <= zonedMs(p.y, p.m, p.d + 2, p.h, p.mi, tz) + (from % 60000);
+      const next = (t) => {
+        if (!hourly) return zoneMidnight(t, tz, 1);
+        const x = zoneParts(t, tz);
+        return t - ((x.mi * 60 + x.s) * 1000 + (t % 1000)) + 3600000;
+      };
+      const buckets = [];
+      for (let b = from; b < to; ) {
+        const e = Math.min(next(b), to);
+        const inside = list.filter((x) => x.closedAt >= b && x.closedAt < e);
+        buckets.push({ from: iso(b), to: iso(e), notFalse: inside.filter((x) => !isFalse(x)).length, falseAlarms: inside.filter(isFalse).length, breached: inside.filter(breached).length });
+        b = e;
+      }
+      return { granularity: hourly ? "hour" : "day", buckets };
+    }
+    const statsLocale = () => (session && session.preferences.locale) || "ru";
+    const byLabel = (a, b) => (a == null ? 1 : b == null ? -1 : a.localeCompare(b, statsLocale(), { sensitivity: "base", numeric: true }));
+    // Название результата — по его labelKey в справочнике результатов, а не подпись по причине (labelByCause)
+    function resultName(id) {
+      const item = W.reasonCatalogs.close_result.items.find((i) => i.id === id);
+      return item ? render(item.labelKey) : id;
+    }
+    // Причина закрытия (§23.3): название из справочника результата на языке запроса; нет в справочнике — снимок
+    function causeName(e) {
+      if (!e.massCause) return null;
+      const result = W.reasonCatalogs.close_result.items.find((i) => i.id === e.closeResult);
+      const catalog = result && result.causeCatalog ? W.reasonCatalogs[result.causeCatalog] : null;
+      const item = catalog ? catalog.items.find((i) => i.id === e.massCause) : null;
+      return item ? render(item.labelKey) : e.closeCauseLabel || null;
+    }
+    // Группы устройств, в которые устройство входит напрямую, по названию
+    function deviceGroups(id) {
+      const out = [];
+      const walk = (nodes) => nodes.filter((n) => !n.isDevice).forEach((n) => ((n.children || []).some((c) => c.isDevice && c.id === id) && out.push(n), walk(n.children || [])));
+      walk(TREE);
+      return out.sort((a, b) => byLabel(a.name, b.name)).map((n) => ({ id: n.id, name: n.name }));
+    }
+    const groupsBy = (list, keyOf) => {
+      const m = new Map();
+      list.forEach((e) => {
+        const k = keyOf(e);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(e);
+      });
+      return [...m.entries()];
+    };
+    const dutyName = (id) => (GROUPS.find((g) => g.id === id) || {}).name || null;
+    function statsBody(keep, period) {
+      const { at, tz, keepFrom, from, to, fromClipped } = period;
+      const closed = statsClosed(from, to);
+      const list = closed.filter(keep);
+      const length = Math.max(0, to - from);
+      const prevFrom = from - length;
+      const open = visibleOpen();
+      const results = groupsBy(list, (e) => e.closeResult)
+        .map(([id, xs]) => ({ resultId: id, label: resultName(id), count: xs.length }))
+        .sort((a, b) => b.count - a.count || byLabel(a.label, b.label));
+      const causes = groupsBy(list.filter(isFalse), (e) => e.massCause || null)
+        .map(([id, xs]) => ({ causeId: id, label: id ? causeName(xs[0]) : null, count: xs.length }))
+        .sort((a, b) => b.count - a.count || byLabel(a.label, b.label));
+      const devices = groupsBy(list, eventSource)
+        .map(([id, xs]) => ({ source: { id, name: deviceSpec(id).name }, groups: deviceGroups(id), incidents: xs.length, falseAlarms: xs.filter(isFalse).length, breached: xs.filter(breached).length, medianReactionSec: percentile(reactions(xs), 0.5) }))
+        .sort((a, b) => b.incidents - a.incidents || byLabel(a.source.name, b.source.name))
+        .slice(0, 10);
+      // Дежурные группы — по группе до принятия (решение 16): при равенстве — по названию, удалённые — по id после
+      // названных; «Без группы» — последней
+      const duty = groupsBy(list, (e) => e.acceptedGroup || null)
+        .map(([id, xs]) => ({ groupId: id, name: id ? dutyName(id) : null, incidents: xs.length, falseAlarms: xs.filter(isFalse).length, breached: xs.filter(breached).length, medianReactionSec: percentile(reactions(xs), 0.5), medianResolutionSec: percentile(xs.map(resolutionOf), 0.5) }))
+        .sort((a, b) => (a.groupId == null) - (b.groupId == null) || b.incidents - a.incidents || (a.name == null) - (b.name == null) || byLabel(a.name, b.name) || (a.groupId < b.groupId ? -1 : 1));
+      // Список фильтра «Оператор»: кто закрыл хоть один инцидент периода из видимых, без остальных фильтров, по имени
+      const operators = [...new Set(closed.map((e) => e.closedBy).filter(Boolean))]
+        .map((id) => actorRef(id))
+        .filter((r) => r.kind === "operator")
+        .sort((a, b) => byLabel(String(a.name), String(b.name)));
+      return {
+        retentionDays: W.retention.closedIncidentsDays,
+        timeZone: tz,
+        from: iso(from),
+        to: iso(to),
+        fromClipped,
+        computedAt: iso(at),
+        current: statsTotals(list, from, to),
+        // Прошлый период — того же размера сразу перед текущим; начало раньше хранения — сравнения нет
+        previous: prevFrom < keepFrom ? null : statsTotals(statsClosed(prevFrom, from).filter(keep), prevFrom, from),
+        open: { open: open.length, overdue: open.filter(breached).length },
+        series: statsSeries(list, from, to, tz),
+        results,
+        falseAlarmCauses: causes,
+        devices,
+        dutyGroups: duty,
+        breachesByKind: BREACH_KINDS.map((kind) => ({ kind, incidents: list.filter((e) => (e.breaches || []).some((b) => b.kind === kind)).length })),
+        operators,
+      };
+    }
+    // Тот же запрос того же человека в течение минуты заново не считается — прежний подсчёт с прежним computedAt
+    const STATS_CACHE_MS = 60000;
+    function supervisorStats(q) {
+      if (!can("supervisor:view")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_supervisor_view"]);
+      const period = statsPeriod(q);
+      if (!period) return badRequest();
+      const key = JSON.stringify([ME, Object.entries(q).sort()]);
+      const hit = statsCache.get(key);
+      if (hit && period.at >= hit.at && period.at - hit.at < STATS_CACHE_MS) return { status: 200, body: JSON.parse(JSON.stringify(hit.body)) };
+      const body = statsBody(statsFilter(q), period);
+      statsCache.set(key, { at: period.at, body });
+      return { status: 200, body: JSON.parse(JSON.stringify(body)) };
+    }
+    // Время в CSV (§23.4): ISO 8601 до секунды с поясом смены — 2026-11-17T14:32:05+03:00
+    function zoneIso(ms, tz) {
+      const p = zoneParts(ms, tz);
+      const off = Math.round(zoneOffset(ms, tz) / 60000);
+      const two = (n) => String(n).padStart(2, "0");
+      const hm = `${two(Math.floor(Math.abs(off) / 60))}:${two(Math.abs(off) % 60)}`;
+      return `${p.y}-${two(p.m)}-${two(p.d)}T${two(p.h)}:${two(p.mi)}:${two(p.s)}${off < 0 ? "-" : "+"}${hm}`;
+    }
+    const STATS_CSV = ["number", "created", "accepted", "closed", "device", "device_groups", "event_type", "duty_group", "operator", "result", "cause", "reaction_sec", "resolution_sec", "breaches", "maintenance"];
+    // «Выгрузить CSV» (§23.4): инциденты блока построчно — по времени закрытия, при равенстве по номеру; подписи — из
+    // каталога строк на языке выгружающего; запись audit_export в журнал действий — в конце, с числом строк
+    function supervisorStatsCsv(q) {
+      if (!can("supervisor:view")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_supervisor_view"]);
+      const period = statsPeriod(q);
+      if (!period) return badRequest();
+      const { tz, from, to } = period;
+      const rows = statsClosed(from, to)
+        .filter(statsFilter(q))
+        .sort((a, b) => a.closedAt - b.closedAt || numberOf(a.number) - numberOf(b.number));
+      const say = (k) => render(`workflow.supervisor.csv.${k}`);
+      const secs = (v) => (v == null ? "" : String(Math.floor(v)));
+      const line = (e) => {
+        const src = eventSource(e);
+        const kinds = BREACH_KINDS.filter((kind) => (e.breaches || []).some((b) => b.kind === kind));
+        return [
+          e.number,
+          zoneIso(e.createdAt, tz),
+          e.acceptedAt != null && !e.noReaction ? zoneIso(e.acceptedAt, tz) : "",
+          zoneIso(e.closedAt, tz),
+          src ? deviceSpec(src).name : "",
+          src ? deviceGroups(src).map((g) => g.name).join(", ") : "",
+          e.type,
+          e.acceptedGroup ? dutyName(e.acceptedGroup) || say("deleted_group") : "",
+          e.closedBy ? String(actorRef(e.closedBy).name) : "",
+          resultName(e.closeResult),
+          causeName(e) || "",
+          secs(reactionOf(e)),
+          secs(resolutionOf(e)),
+          kinds.map((kind) => say(`breach.${kind}`)).join(", "),
+          say(e.maintenanceWindowId ? "yes" : "no"),
+        ];
+      };
+      const lines = [STATS_CSV.map((c) => say(`column.${c}`))].concat(rows.map(line));
+      const text = "﻿" + lines.map((cells) => cells.map(csvCell).join(";")).join("\r\n") + "\r\n";
+      const filters = Object.fromEntries(STATS_FILTERS.filter((k) => q[k] != null).map((k) => [k, q[k]]));
+      audit(ME, "audit_export", { details: { journal: "supervisor_stats", filters, from: iso(from), to: iso(to), rows: rows.length } });
+      // Имя файла (§23.4): день начала и последний день периода в поясе смены — конец периода в него не входит
+      const day = (ms) => zoneIso(ms, tz).slice(0, 10);
+      const name = `supervisor-stats-${day(from)}_${day(to > from ? to - 1 : to)}.csv`;
+      return { status: 200, body: text, headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename=${name}` } };
     }
 
     function windowView(w) {
@@ -2637,6 +2881,9 @@
         ["GET", "/operator/admin/system-status", (p, q) => systemStatus(q)],
         // Смена и статистика: блок «Сейчас» (§23.2, план 90)
         ["GET", "/operator/supervisor/now", (p, q) => supervisorNow(q)],
+        // Блок «За период» и его выгрузка в CSV (§23.3, §23.4, план 90, часть Б)
+        ["GET", "/operator/supervisor/stats", (p, q) => supervisorStats(q)],
+        ["GET", "/operator/supervisor/stats.csv", (p, q) => supervisorStatsCsv(q)],
         ["GET", "/operator/maintenance-windows", () => ({ status: 200, body: MAINT.slice().sort((a, b) => a.startsAt - b.startsAt).map(windowView) })],
         [
           "POST",
