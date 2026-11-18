@@ -45,7 +45,7 @@ module im {
 
   type SessionState = { id: str, readOnly: bool, readOnlyReasonKey: str }
 
-  type BreakReason = { id: str, labelKey: str }
+  type BreakReason = { id: str, labelKey: str, maxMinutes: List[int] }
 
   type Session = { states: List[SessionState], breakReasons: List[BreakReason], heartbeatSec: int, idleHoldSec: int, idleReleaseSec: int }
 
@@ -95,7 +95,7 @@ module im {
 
   pure val MACHINE_SETTINGS: Settings = {
     limits: { maxActive: 0, maxOnHold: 5, maxBulk: 0, reopenWindowMin: 1440, reopenResolutionSec: 0, commentMaxLength: 2000, commentMaxFiles: 5, attachmentMaxBytes: 10485760, attachmentTypes: ["image/jpeg", "image/png", "application/pdf"] },
-    session: { states: [{ id: "ready", readOnly: false, readOnlyReasonKey: "" }, { id: "busy", readOnly: false, readOnlyReasonKey: "" }, { id: "not_ready", readOnly: true, readOnlyReasonKey: "workflow.session.readonly.not_ready" }, { id: "offline", readOnly: true, readOnlyReasonKey: "workflow.session.readonly.offline" }], breakReasons: [{ id: "lunch", labelKey: "workflow.session.break.lunch" }, { id: "briefing", labelKey: "workflow.session.break.briefing" }, { id: "patrol", labelKey: "workflow.session.break.patrol" }], heartbeatSec: 30, idleHoldSec: 300, idleReleaseSec: 1200 },
+    session: { states: [{ id: "ready", readOnly: false, readOnlyReasonKey: "" }, { id: "busy", readOnly: false, readOnlyReasonKey: "" }, { id: "not_ready", readOnly: true, readOnlyReasonKey: "workflow.session.readonly.not_ready" }, { id: "offline", readOnly: true, readOnlyReasonKey: "workflow.session.readonly.offline" }], breakReasons: [{ id: "lunch", labelKey: "workflow.session.break.lunch", maxMinutes: [60] }, { id: "briefing", labelKey: "workflow.session.break.briefing", maxMinutes: [30] }, { id: "patrol", labelKey: "workflow.session.break.patrol", maxMinutes: [20] }], heartbeatSec: 30, idleHoldSec: 300, idleReleaseSec: 1200 },
     escalation: { enabled: true, levels: [{ level: 1, targetKind: "user", target: "petrova", reactionSec: 120 }, { level: 2, targetKind: "user", target: "noc", reactionSec: 90 }], maxLevel: 2, onResolutionOverdue: "alert" },
     alerts: { targetKind: "group", target: "grp-leads", noRecipientLog: "workflow.journal.alert_no_recipient" },
     states: [{ id: "new", category: "pending" }, { id: "pending_acceptance", category: "pending" }, { id: "in_progress", category: "active" }, { id: "on_hold", category: "active" }, { id: "closed", category: "done" }, { id: "linked", category: "linked" }],

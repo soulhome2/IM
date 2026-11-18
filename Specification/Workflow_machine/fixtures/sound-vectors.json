@@ -1,5 +1,5 @@
 {
- "$comment": "Векторы функции решения звука (§21 правил, план 87б): источник, правится руками, ожидания — по правилам. Прогон и формат — tools/sound_vectors.mjs; реализации — prototype/sound.js (IMSound) и конфигуратор src/operator/sound/decide.ts. settings — раздел sound машины без $comment, у вектора settings — JSON Merge Patch поверх него. Поля события, которые функция не читает (transitionId и др.), опущены; имена состояний в payload.state — условные: сравниваются только на равенство.",
+ "$comment": "Векторы функции решения звука (§21 правил, план 87б): источник, правится руками, ожидания — по правилам. Прогон и формат — tools/sound_vectors.mjs; реализации — prototype/sound.js (IMSound) и конфигуратор src/operator/sound/decide.ts. settings — раздел sound машины без $comment, у вектора settings — JSON Merge Patch поверх него. Поля события, которые функция не читает (transitionId и др.), опущены; имена состояний в payload.state — условные: сравниваются только на равенство. События supervisor.* (перерыв затянулся, §12.2) — не об инцидентах: incident, incidentGuid, actor — null; звук «перерыв затянулся» — Sounding с kind break_overdue, guid, number и priority — null. Что событие приходит только старшему смены (supervisor:view), решает сервер — в векторах этого нет: функция решения прав не знает.",
  "format": 1,
  "settings": {
   "patterns": [
@@ -6381,6 +6381,556 @@
        "a0000000-0000-4000-8000-000000000001",
        "d0000000-0000-4000-8000-000000000004"
       ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: старший «Готов» — «Колокол» один раз, без повтора",
+   "rules": "12.2, 21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: старший «Занят» слышит, хотя busyHears.alert — нет",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: старший на перерыве слышит",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "not_ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: старший «Вышел» (смотрит экран, не входя) слышит",
+   "rules": "21.3",
+   "ctx": {
+    "agentState": "offline",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      },
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: «Только важное» не глушит, оповещение §9 при нём молчит",
+   "rules": "21.4",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": 2000,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      }
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "incident.alert",
+      "incidentGuid": "e0000000-0000-4000-8000-000000000005",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "e0000000-0000-4000-8000-000000000005",
+       "number": "INC-1005",
+       "priority": 100,
+       "stateCategory": "active",
+       "ownership": "other",
+       "addressee": {
+        "id": "op-col",
+        "kind": "operator"
+       },
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "transitionId": "t"
+      }
+     },
+     "expect": {
+      "play": null
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-other",
+       "reasonId": "patrol",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 20
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1002
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: «Занят» и «Только важное» — всё равно слышит",
+   "rules": "21.3, 21.4",
+   "ctx": {
+    "agentState": "busy",
+    "meGuid": "op-me",
+    "onlyImportantUntil": 2000,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: о своём перерыве — ничего",
+   "rules": "12.2, 21.3",
+   "ctx": {
+    "agentState": "not_ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-me",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся: «без звука» у sound.alert — пункт без звука",
+   "rules": "12.2, 21.7",
+   "settings": {
+    "alert": {
+     "repeat": "none"
+    }
+   },
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "перерыв затянулся и закончился: повтор Критического не трогают, конец перерыва не звучит",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "incident.created",
+      "incidentGuid": "a0000000-0000-4000-8000-000000000001",
+      "actor": {
+       "id": null,
+       "kind": "system"
+      },
+      "incident": {
+       "guid": "a0000000-0000-4000-8000-000000000001",
+       "number": "INC-1001",
+       "priority": 100,
+       "stateCategory": "pending",
+       "ownership": "other",
+       "addressee": null,
+       "maintenanceWindowId": null
+      },
+      "payload": {
+       "trigger": "event",
+       "state": {
+        "from": null,
+        "to": "state-a"
+       },
+       "addressee": null,
+       "addressedToMe": false
+      }
+     },
+     "expect": {
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "supervisor.break_overdue",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col",
+       "reasonId": "lunch",
+       "since": "2026-11-18T09:00:00Z",
+       "maxMinutes": 60
+      }
+     },
+     "expect": {
+      "play": {
+       "guid": null,
+       "number": null,
+       "kind": "break_overdue",
+       "priority": null,
+       "cue": {
+        "pattern": "bell",
+        "repeat": "once"
+       },
+       "since": 1001
+      },
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ],
+      "top": "a0000000-0000-4000-8000-000000000001"
+     }
+    },
+    {
+     "now": 1002,
+     "event": {
+      "type": "supervisor.break_overdue_cleared",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [
+       {
+        "guid": "a0000000-0000-4000-8000-000000000001",
+        "number": "INC-1001",
+        "kind": "priority",
+        "priority": 100,
+        "cue": {
+         "pattern": "siren",
+         "repeat": "until_taken",
+         "repeatSec": 15
+        },
+        "since": 1000
+       }
+      ],
+      "attention": [
+       "a0000000-0000-4000-8000-000000000001"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "конец затянувшегося перерыва не звучит ни в каком состоянии",
+   "rules": "21.1",
+   "ctx": {
+    "agentState": "ready",
+    "meGuid": "op-me",
+    "onlyImportantUntil": null,
+    "now": 1000
+   },
+   "steps": [
+    {
+     "event": {
+      "type": "supervisor.break_overdue_cleared",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col"
+      }
+     },
+     "expect": {
+      "play": null,
+      "sounding": [],
+      "attention": []
+     }
+    },
+    {
+     "tick": {
+      "agentState": "offline"
+     },
+     "expect": {}
+    },
+    {
+     "now": 1001,
+     "event": {
+      "type": "supervisor.break_overdue_cleared",
+      "incidentGuid": null,
+      "actor": null,
+      "incident": null,
+      "payload": {
+       "personId": "op-col"
+      }
+     },
+     "expect": {
+      "play": null
      }
     }
    ]

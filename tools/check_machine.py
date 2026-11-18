@@ -2354,6 +2354,11 @@ def check_session_machine(w, err):
         for k in ("permission", "requiresReasonExpr"):
             if st.get(k) and s not in targets:
                 err.append(f"состояние оператора {s}: {k} — у состояния, куда нет смены, его никто не проверит")
+    # Срок перерыва (§12.2, план 90, часть В): у причины перерыва maxMinutes — целое 1…480 или нет поля; null и 0 —
+    # отказ, как при сохранении настроек поста. Причины поста — стартовый набор post-defaults.json (with_post_settings)
+    for r in with_post_settings(w)["session"].get("breakReasons", []):
+        if "maxMinutes" in r and not is_int(r["maxMinutes"], 1, 480):
+            err.append(f"причина перерыва {r.get('id')}: maxMinutes = {r['maxMinutes']!r} — целое от 1 до 480 или нет поля (§12.2)")
 
 
 def check_escalation_settings(w, o, err):
@@ -2484,7 +2489,8 @@ def check_sound(w, err):
 def check_display(w, err):
     """Раскладка экрана оператора (§7, §22): блок «Мне на принятие» — фильтр из queueFilters со счётчиком (без
     counted: false), порядок — из queueSort.keys, hiddenWith — id фильтров; maxRows, freshRowSec, noticeKeepHours —
-    целые от 1; у пунктов строки состояния поста postStatus — id без повторов"""
+    целые от 1; у пунктов строки состояния поста postStatus — id без повторов, порядок как в правилах §22.4, право
+    permission — из permissions (у break_overdue — supervisor:view)"""
     d = w.get("display") or {}
     filters = {f["id"]: f for f in w.get("queueFilters", [])}
     block = d.get("inboxBlock")
@@ -2517,6 +2523,25 @@ def check_display(w, err):
     else:
         for dup in duplicates([s.get("id") for s in status]):
             err.append(f"раскладка: в display.postStatus пункт {dup!r} повторяется (§22.4)")
+        # Видимость по праву (§22.4): permission — право из permissions, вместе с adminOnly не бывает
+        perms = {p["key"] for p in w.get("permissions", [])}
+        for s in status:
+            if "permission" in s and s["permission"] not in perms:
+                err.append(f"раскладка: у пункта строки поста {s.get('id')!r} право {s['permission']!r} — не из permissions (§22.4)")
+            if "permission" in s and s.get("adminOnly"):
+                err.append(f"раскладка: у пункта строки поста {s.get('id')!r} и adminOnly, и permission — видимость одна (§22.4)")
+        # «Перерыв затянулся» видит только старший смены — у кого supervisor:view (§12.2, §22.4)
+        brk = next((s for s in status if s.get("id") == "break_overdue"), None)
+        if brk is not None and brk.get("permission") != "supervisor:view":
+            err.append(f"раскладка: у пункта break_overdue permission {brk.get('permission')!r}, а видеть его должен только старший смены — supervisor:view (§22.4)")
+        # Порядок пунктов — как в правилах §22.4: «Пункты — из машины, `display.postStatus`, по убыванию серьёзности: … (`id`) → …»
+        with open(os.path.join(ROOT, "Specification", "State_rules", "States rules IM.md"), encoding="utf-8") as f:
+            line = next((x for x in f if "Пункты — из машины, `display.postStatus`" in x), "")
+        order = re.findall(r"\(`([a-z_]+)`", line)
+        if not order:
+            err.append("раскладка: в правилах §22.4 не найден порядок пунктов строки состояния поста")
+        elif [s.get("id") for s in status] != order:
+            err.append(f"раскладка: пункты display.postStatus {[s.get('id') for s in status]} — не в порядке правил §22.4 {order}")
 
 
 def check_admin_groups(tab, o, err):
@@ -2925,6 +2950,16 @@ MUTATIONS.append(machine_json_mutation("layout-inbox-max-rows-zero", "maxRows = 
 MUTATIONS.append(machine_json_mutation("layout-fresh-row-zero", "freshRowSec = 0"))
 MUTATIONS.append(machine_json_mutation("layout-notice-keep-zero", "noticeKeepHours = 0"))
 MUTATIONS.append(machine_json_mutation("layout-post-status-duplicate", "'connection' повторяется"))
+MUTATIONS.append(machine_json_mutation("layout-post-status-break-everyone", "только старший смены"))
+MUTATIONS += [
+    ("layout-post-status-order", "§22.4: «перерыв затянулся» в правилах — после плановых работ, а в машине — до них", RULES,
+     "→ перерыв затянулся (`break_overdue`, §12.2) → идут плановые работы (`maintenance`, §14.12) →",
+     "→ идут плановые работы (`maintenance`, §14.12) → перерыв затянулся (`break_overdue`, §12.2) →", "не в порядке правил §22.4"),
+    ("break-reason-max-minutes-zero", "стартовый набор: у «Обхода» срок перерыва 0 мин — перерыв затянулся бы сразу (§12.2)", POST_DEFAULTS,
+     '"workflow.session.break.patrol", "maxMinutes": 20}', '"workflow.session.break.patrol", "maxMinutes": 0}', "maxMinutes = 0"),
+    ("break-reason-max-minutes-over", "стартовый набор: у «Обеда» срок перерыва 481 мин — больше восьми часов (§12.2)", POST_DEFAULTS,
+     '"workflow.session.break.lunch", "maxMinutes": 60}', '"workflow.session.break.lunch", "maxMinutes": 481}', "maxMinutes = 481"),
+]
 
 
 def self_test():

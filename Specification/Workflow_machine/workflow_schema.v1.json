@@ -100,7 +100,7 @@
   },
 
   "display": {
-    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит",
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит; permission — пункт видят только люди с этим правом (§5), у остальных его нет и в «и ещё N» он не входит. textKeys — тексты пункта с подстановками, когда одной подписи labelKey мало: у break_overdue (перерыв затянулся, §12.2, §22.4) one — один затянувший с причиной, oneNoReason — без причины (причины нет или её уже нет в настройках поста), many — несколько, n — сколько; item, itemNoReason — строка каждого в панели колокольчика, since — начало перерыва; ended, endedNoReason — запись колокольчика «перерыв закончился» (§22.5), только если у клиента был пункт об этом перерыве. personName — из справочника людей (§8.1), reason — по reasonId из текущих настроек поста",
     "lateSec": 120,
     "inboxBlock": {
       "filter": "inbox",
@@ -114,6 +114,7 @@
       { "id": "connection", "labelKey": "workflow.postStatus.connection" },
       { "id": "disk", "labelKey": "workflow.postStatus.disk", "adminOnly": true },
       { "id": "sound_off", "labelKey": "workflow.postStatus.sound_off" },
+      { "id": "break_overdue", "labelKey": "workflow.postStatus.break_overdue", "permission": "supervisor:view", "textKeys": { "one": "workflow.postStatus.break_overdue.one", "oneNoReason": "workflow.postStatus.break_overdue.one_no_reason", "many": "workflow.postStatus.break_overdue.many", "item": "workflow.postStatus.break_overdue.item", "itemNoReason": "workflow.postStatus.break_overdue.item_no_reason", "ended": "workflow.postStatus.break_overdue.ended", "endedNoReason": "workflow.postStatus.break_overdue.ended_no_reason" }, "$comment": "§12.2, §22.4 (план 90, часть В). Перерыв оператора затянулся — только старшему смены (supervisor:view), о своём перерыве — нет. Держится, пока затянут хоть один перерыв: приходит событием потока supervisor.break_overdue, уходит по supervisor.break_overdue_cleared; после перезагрузки и переподключения — по столбцу breakOverdue блока «Сейчас» (GET /operator/supervisor/now), кроме своей строки, без звука" },
       { "id": "maintenance", "labelKey": "workflow.postStatus.maintenance" },
       { "id": "only_important", "labelKey": "workflow.postStatus.only_important" }
     ]
@@ -1383,7 +1384,7 @@
   },
 
   "sound": {
-    "$comment": "§21 «Звук» оператора. Звучать или нет, решает клиент по событиям потока (§14.10), этому разделу, состоянию оператора (§12) и «Только важному»; сервер звук не решает, он только проверяет раздел при публикации схемы (те же правила — tools/check_machine.py, check_sound). patterns — каталог встроенных звуков, модель: рецепт звука (тоны, ритм) — в коде клиента под тем же id, патч поста каталог не меняет (adminSettings.notSettings). Звук и повтор (SoundCue): pattern — id из patterns, repeat — none (без звука), once (один раз) или until_taken (пока инцидент ждёт взятия или моего ответа); repeatSec — шаг повтора, целое 5…300 с, обязателен при until_taken, при другом повторе допускается и не читается (слияние патча поста при until_taken → once оставляет шаг машины). byPriority — по числу уровня (§2.5): ключ — целое 0…100 без ведущих нулей; уровень без своей строки звучит как ближайший уровень ниже, ниже самой низкой строки — без звука. personal — «лично вам» (§21.1). alert — оповещение §9, повтор только none или once: инцидент оповещения получатель не берёт. busyHears — что слышит «Занят» (§21.3): minPriority — порог приоритета, null — по приоритету ничего; personal, alert — да или нет. muteMinutes — срок «Только важного», 1…60 мин; volumeFloor — нижний порог громкости, 0…100 % (§21.4).",
+    "$comment": "§21 «Звук» оператора. Звучать или нет, решает клиент по событиям потока (§14.10), этому разделу, состоянию оператора (§12) и «Только важному»; сервер звук не решает, он только проверяет раздел при публикации схемы (те же правила — tools/check_machine.py, check_sound). patterns — каталог встроенных звуков, модель: рецепт звука (тоны, ритм) — в коде клиента под тем же id, патч поста каталог не меняет (adminSettings.notSettings). Звук и повтор (SoundCue): pattern — id из patterns, repeat — none (без звука), once (один раз) или until_taken (пока инцидент ждёт взятия или моего ответа); repeatSec — шаг повтора, целое 5…300 с, обязателен при until_taken, при другом повторе допускается и не читается (слияние патча поста при until_taken → once оставляет шаг машины). byPriority — по числу уровня (§2.5): ключ — целое 0…100 без ведущих нулей; уровень без своей строки звучит как ближайший уровень ниже, ниже самой низкой строки — без звука. personal — «лично вам» (§21.1). alert — оповещение §9 и «перерыв затянулся» старшему смены (supervisor.break_overdue, §12.2), повтор только none или once: инцидент оповещения получатель не берёт. «Перерыв затянулся» — исключение из «кто слышит» (§21.3, решение 14 плана 90): старший слышит его в любом своём состоянии (ready, busy — что бы ни было в busyHears.alert, not_ready, offline) и при «Только важном»; о своём перерыве — ничего; supervisor.break_overdue_cleared не звучит. busyHears — что слышит «Занят» (§21.3): minPriority — порог приоритета, null — по приоритету ничего; personal, alert — да или нет («перерыв затянулся» от busyHears.alert не зависит). muteMinutes — срок «Только важного», 1…60 мин; volumeFloor — нижний порог громкости, 0…100 % (§21.4).",
     "patterns": [
       { "id": "siren", "labelKey": "workflow.sound.pattern.siren" },
       { "id": "alarm", "labelKey": "workflow.sound.pattern.alarm" },
@@ -1451,7 +1452,7 @@
       { "id": "sign_in", "from": ["offline"], "to": "ready" }
     ],
     "breakReasons": [],
-    "$commentBreakReasons": "Решение 2026-11-15: причин перерыва в машине нет — их заводит администратор поста. Список пуст — оператор уходит на перерыв без причины, поля нет; есть хоть одна — выбор обязателен (requiresReasonExpr у not_ready).",
+    "$commentBreakReasons": "Решение 2026-11-15: причин перерыва в машине нет — их заводит администратор поста. Список пуст — оператор уходит на перерыв без причины, поля нет; есть хоть одна — выбор обязателен (requiresReasonExpr у not_ready). Пункт — BreakReason: id, labelKey и необязательный maxMinutes — срок перерыва, целое 1…480 мин (§12.2, план 90, часть В); нет поля — срока нет, перерыв не затягивается. Срок берётся в момент начала перерыва; вышел, а оператор на перерыве, — оповещение старшему смены (supervisor.break_overdue, §14.10). Стартовый набор (post-defaults.json, §20): «Обед» 60, «Инструктаж» 30, «Обход» 20.",
     "heartbeatSec": 30,
     "idleHoldSec": 300,
     "idleReleaseSec": 1200
@@ -1654,7 +1655,7 @@
       "FormFile": { "id": "string", "fileName": "string", "mime": "string", "size": "int" },
       "Limits": { "maxActive": "int", "maxOnHold": "int", "maxBulk": "int", "reopenWindowMin": "int", "reopenResolutionSec": "int", "commentMaxLength": "int", "commentMaxFiles": "int", "attachmentMaxBytes": "int", "attachmentTypes": "list<string>" },
       "SessionState": { "id": "string", "readOnly": "bool", "readOnlyReasonKey": "string" },
-      "BreakReason": { "id": "string", "labelKey": "string" },
+      "BreakReason": { "id": "string", "labelKey": "string", "maxMinutes": "opt<int>" },
       "Session": { "states": "list<SessionState>", "breakReasons": "list<BreakReason>", "heartbeatSec": "int", "idleHoldSec": "int", "idleReleaseSec": "int" },
       "Shift": { "starts": "list<string>", "timeZone": "string", "refreshSec": "int" },
       "Escalation": { "enabled": "bool", "levels": "list<Level>", "maxLevel": "int", "onResolutionOverdue": "string" },
@@ -1994,7 +1995,7 @@
           { "path": "reasonCatalogs.hold.items", "labelKey": "workflow.settings.reasonCatalogs.hold.items", "whatKey": "workflow.settings.reasonCatalogs.hold.items.what" },
           { "path": "reasonCatalogs.mass_fault.items", "labelKey": "workflow.settings.reasonCatalogs.mass_fault.items", "whatKey": "workflow.settings.reasonCatalogs.mass_fault.items.what" },
           { "path": "reasonCatalogs.false_alarm_cause.items", "labelKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items", "whatKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items.what" },
-          { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what" }
+          { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what", "fields": [{ "name": "maxMinutes", "labelKey": "workflow.settings.session.breakReasons.maxMinutes", "hintKey": "workflow.settings.session.breakReasons.maxMinutes.hint", "placeholderKey": "workflow.settings.session.breakReasons.maxMinutes.placeholder" }] }
         ]
       },
       {

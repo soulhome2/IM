@@ -1023,5 +1023,12 @@
   "find": "\"timeZone\": \"Europe/Moscow\"",
   "replace": "\"timeZone\": \"Moscow\"",
   "model": "вне модели: смену модель не знает, допустимые значения ловит статическая проверка tools/check_machine.py (check_shift, §20)"
+ },
+ {
+  "name": "layout-post-status-break-everyone",
+  "what": "раскладка: «Перерыв затянулся» в строке поста видят все, а не только старший смены — оператор видит, кто из коллег задержался (§12.2, §22.4)",
+  "find": "\"labelKey\": \"workflow.postStatus.break_overdue\", \"permission\": \"supervisor:view\", ",
+  "replace": "\"labelKey\": \"workflow.postStatus.break_overdue\", ",
+  "model": "вне модели: раздел display решает клиент, видимость пункта ловит статическая проверка tools/check_machine.py (check_display, §22.4)"
  }
 ]

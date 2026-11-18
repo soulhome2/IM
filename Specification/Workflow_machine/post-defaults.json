@@ -1,9 +1,9 @@
 {
   "session": {
     "breakReasons": [
-      {"id": "lunch", "labelKey": "workflow.session.break.lunch"},
-      {"id": "briefing", "labelKey": "workflow.session.break.briefing"},
-      {"id": "patrol", "labelKey": "workflow.session.break.patrol"}
+      {"id": "lunch", "labelKey": "workflow.session.break.lunch", "maxMinutes": 60},
+      {"id": "briefing", "labelKey": "workflow.session.break.briefing", "maxMinutes": 30},
+      {"id": "patrol", "labelKey": "workflow.session.break.patrol", "maxMinutes": 20}
     ]
   },
   "reasonCatalogs": {

@@ -12,7 +12,9 @@
      attention — непринятые: повторяющиеся до взятия по приоритету в «Новом» без адресата и «лично вам» при любом
                  repeat (число в заголовке вкладки, §21.6). Зеркало очереди: от «Тихо», состояния оператора и автора события
                  не зависит, меняется, когда инцидент перестал или начал подходить.
-   Sounding = { guid, number, kind: 'priority'|'personal'|'alert', priority, cue: SoundCue, since }
+   Sounding = { guid, number, kind: 'priority'|'personal'|'alert'|'break_overdue', priority, cue: SoundCue, since }
+     break_overdue — «перерыв затянулся» старшему смены (supervisor.break_overdue, §12.2): не об инциденте, guid, number
+     и priority — null; звук sound.alert, один раз.
 
    Когда клиент зовёт restoreSound(текущая очередь, ctx) — повторы непринятых возобновляются без залпа, первый сигнал
    по расписанию (planRepeats): загрузка страницы, переподключение потока, stream.reset; возврат в «Готов» с перерыва
@@ -56,6 +58,8 @@
 
   // Слышит ли оператор звук этого вида сейчас (§21.3, §21.4)
   function hears(kind, cue, priority, ctx) {
+    // «Перерыв затянулся» старший слышит в любом своём состоянии и при «Только важном» (§21.3, решение 14 плана 90)
+    if (kind === "break_overdue") return true;
     const st = ctx.agentState;
     if (st !== "ready" && st !== "busy") return false;
     if (st === "busy") {
@@ -94,6 +98,15 @@
 
   function decideSound(state, event, ctx) {
     const settings = ctx.settings;
+    // Затянувшийся перерыв (§12.2): не об инциденте — повторы и внимание не трогает; о своём перерыве — ничего,
+    // конец перерыва (supervisor.break_overdue_cleared) не звучит (§21.1)
+    if (event.type === "supervisor.break_overdue" || event.type === "supervisor.break_overdue_cleared") {
+      const p = event.payload || {};
+      const cue = settings.alert;
+      const sounds = event.type === "supervisor.break_overdue" && p.personId !== ctx.meGuid && cue && cue.repeat !== "none" && hears("break_overdue", cue, null, ctx);
+      const play = sounds ? { guid: null, number: null, kind: "break_overdue", priority: null, cue, since: ctx.now } : null;
+      return { state: filterHeard({ sounding: state.sounding.slice(), attention: state.attention.slice() }, ctx), play };
+    }
     let snd = state.sounding.slice();
     let att = state.attention.slice();
     const inc = event.incident || null;
