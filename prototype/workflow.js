@@ -4865,6 +4865,9 @@ window.IM_WORKFLOW = {
     "workflow.error.no_audit_access": {
       "vars": []
     },
+    "workflow.error.no_audit_export": {
+      "vars": []
+    },
     "workflow.error.no_supervisor_view": {
       "vars": []
     },

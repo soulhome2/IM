@@ -6169,7 +6169,13 @@
         <td><span class="badge shift-state offline">${te("Вышли")}</span></td><td class="shift-reason"></td><td class="shift-wide">—</td><td class="shift-overdue-break"></td><td class="shift-wide">—</td>
         <td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num" data-label="${te("Закрыл за смену")}">${closed}</td><td class="num shift-wide">—</td></tr>`;
     }
+    // Фокус был на кнопке таблицы (сортировка, вышедшие) — после перестройки по новым данным вернуть его на ту же кнопку
+    const had = $("shiftTable").contains(document.activeElement) ? document.activeElement : null;
+    const sortKey = had && had.dataset.shiftSort;
+    const outBtn = had && had.hasAttribute("data-shift-out");
     $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${here.map((r) => shiftRow(r, tz)).join("")}${tail}</tbody>`;
+    const again = sortKey ? $("shiftTable").querySelector(`[data-shift-sort="${sortKey}"]`) : outBtn ? $("shiftTable").querySelector("[data-shift-out]") : null;
+    if (again) again.focus();
   }
   async function loadShift() {
     if (shiftState.loading) return; // предыдущий запрос ещё не вернулся

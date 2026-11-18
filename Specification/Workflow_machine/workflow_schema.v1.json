@@ -1607,6 +1607,7 @@
     "workflow.error.scenario.invalid_answer": { "vars": ["step"] },
     "workflow.error.no_schema_admin": { "vars": [] },
     "workflow.error.no_audit_access": { "vars": [] },
+    "workflow.error.no_audit_export": { "vars": [] },
     "workflow.error.no_supervisor_view": { "vars": [] },
     "workflow.error.audit_export_too_large": { "vars": [] },
     "workflow.error.filter.bad": { "vars": ["name"] },

@@ -2044,11 +2044,15 @@
       assert.status(await only.call("GET", `${AUDIT}/${path}`), 403, "PERMISSION_DENIED", `${path} с одним audit:actions:view`);
     for (const path of ["/operator/admin/access-groups", "/operator/admin/duty-groups", "/operator/admin/people"])
       assert.status(await only.call("GET", path), 403, "PERMISSION_DENIED", `настройки ${path} с одним audit:actions:view`);
+    const viewOnly = await only.call("GET", `${AUDIT}/actions/export`);
+    assert.eq([viewOnly.body.messageKey, viewOnly.body.message], ["workflow.error.no_audit_export", window.IM_STRINGS.ru["workflow.error.no_audit_export"]], "смотреть можно, выгружать нет — свой текст отказа");
     const exporter = await makeEnv({ permissions: ["audit:actions:view", "audit:export"] });
     assert.status(await exporter.call("GET", `${AUDIT}/actions/export`), 200, null, "выгрузка журнала действий с audit:export");
     assert.status(await exporter.call("GET", `${AUDIT}/settings/export`), 403, "PERMISSION_DENIED", "выгрузка журнала настроек без права смотреть его");
     const exportOnly = await makeEnv({ permissions: ["audit:export"] });
-    assert.status(await exportOnly.call("GET", `${AUDIT}/actions/export`), 403, "PERMISSION_DENIED", "выгрузка журнала действий без права смотреть его");
+    const noView = await exportOnly.call("GET", `${AUDIT}/actions/export`);
+    assert.status(noView, 403, "PERMISSION_DENIED", "выгрузка журнала действий без права смотреть его");
+    assert.eq(noView.body.messageKey, "workflow.error.no_audit_access", "без права смотреть — отказ «нет права смотреть аудит»");
     // incident:schema:admin прав журнала действий и выгрузки не даёт (§5)
     const admin = await makeEnv({ permissions: ["incident:schema:admin"] });
     assert.status(await admin.call("GET", `${AUDIT}/settings`), 200, null, "журнал настроек администратору");

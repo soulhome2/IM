@@ -295,7 +295,9 @@
       }
     };
     function auditExport(journal, q) {
-      if (!canAudit(journal) || !can("audit:export")) return noAudit();
+      if (!canAudit(journal)) return noAudit();
+      // Смотреть можно, выгружать — нет: свой текст отказа, чтобы человек понял, какого права не хватает
+      if (!can("audit:export")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_audit_export"]);
       const period = auditPeriod(q);
       if (!period || auditIncident(q.incident) === null || (q.tz != null && !validZone(q.tz))) return badRequest();
       const tz = q.tz == null ? "UTC" : q.tz;
