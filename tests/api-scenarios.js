@@ -6317,7 +6317,8 @@
 
     // Дни перевода часов за последний год: сутки не по 24 ч
     const turns = [];
-    for (let date = shiftDate(today, -2); turns.length < 2 && date > shiftDate(today, -370); date = shiftDate(date, -1)) {
+    // С третьего дня назад: неделя до date + 3 должна кончаться не позже сегодняшней полуночи — иначе её обрежет «сейчас»
+    for (let date = shiftDate(today, -3); turns.length < 2 && date > shiftDate(today, -370); date = shiftDate(date, -1)) {
       const len = midnight(shiftDate(date, 1)) - midnight(date);
       if (len !== 24 * H && !turns.some((x) => x.len === len)) turns.push({ date, len });
     }
