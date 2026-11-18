@@ -1185,7 +1185,7 @@
     });
   });
 
-  test("Перерыв затянулся: кому — только с правом supervisor:view; о своём перерыве — ничего, а своя строка в «Сейчас» — «да»; о человеке без incident:accept — нет (§12.2, §23.2, план 90)", async () => {
+  test("Перерыв затянулся: кому — только с правом supervisor:view; о своём перерыве — ничего, а своя строка в «Сейчас» — «да»; о человеке без incident:accept — оповещения нет, снятие — есть, и когда роль забрали после оповещения (§12.2, §23.2, план 90)", async () => {
     const bare = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "supervisor:view") });
     await watchStream(bare, async (got) => {
       assert.status(await breakOf(bare, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход");
@@ -1218,7 +1218,21 @@
       await env2.advance(PATROL_SEC() + 1);
       assert.status(await breakOf(env2, "gusev", { agentState: "ready" }), 200, null, "вернулся");
       await settle();
-      assert.eq([overdueEvents(got).length, clearedEvents(got).length], [0, 0], "о человеке без incident:accept — ничего");
+      // Снятие — без проверки incident:accept человека: лишнее снятие ничего не меняет (§12.2)
+      assert.eq([overdueEvents(got, "gusev").length, clearedEvents(got, "gusev").length], [0, 1], "о человеке без incident:accept — оповещения нет, снятие лишнее");
+    });
+
+    // Роль забрали после оповещения: вернулся — снятие приходит, пункт у старшего не висит (§12.2)
+    const env3 = await makeEnv();
+    await watchStream(env3, async (got) => {
+      assert.status(await breakOf(env3, "petrova", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Петрова ушла на обход");
+      await env3.advance(PATROL_SEC() + 1);
+      await settle();
+      assert.eq(overdueEvents(got, "petrova").length, 1, "срок вышел — оповещение о Петровой");
+      assert.status(await env3.call("PUT", "/test/operators/petrova/roles", { roles: [] }), 200, null, "у Петровой забрали роли — нет и incident:accept");
+      assert.status(await breakOf(env3, "petrova", { agentState: "ready" }), 200, null, "вернулась");
+      await settle();
+      assert.eq(clearedEvents(got, "petrova").length, 1, "роль забрали после оповещения — снятие всё равно приходит");
     });
   });
 

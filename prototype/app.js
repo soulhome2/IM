@@ -1161,7 +1161,8 @@
   };
   const breakName = (id, known) => {
     const target = targetById(id);
-    return (target && target.name) || known || id;
+    // Нет ни в справочнике, ни в «Сейчас» — «Оператор», не id: в продукте это GUID (§12.2, «Подписи»)
+    return (target && target.name) || known || t("Оператор");
   };
   // Один затянувший — по ключу текста с причиной или без; ended — запись колокольчика «перерыв закончился»
   function breakText(kind, id, b) {

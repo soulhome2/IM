@@ -2494,9 +2494,10 @@
     // Кому оповещение: в прототипе поток один — у оператора стенда. Ему — с правом supervisor:view, не о себе и только
     // о людях из строк «Сейчас» (с incident:accept); без отбора по группам (решение 9 плана 90)
     const breakAudience = (id) => can("supervisor:view") && id !== ME && permsOf(id).includes("incident:accept");
-    // Конец перерыва (вернулся или вышел из МИ): срок по времени вышел — снятие, даже если оповещение уйти не успело
+    // Конец перерыва (вернулся или вышел из МИ): срок по времени вышел — снятие, даже если оповещение уйти не успело.
+    // Без проверки incident:accept человека: его могли забрать во время перерыва, а лишнее снятие ничего не меняет (§12.2)
     function breakEnded(id) {
-      if (breakLate(id) && breakAudience(id)) emit("supervisor.break_overdue_cleared", null, null, { personId: id });
+      if (breakLate(id) && can("supervisor:view") && id !== ME) emit("supervisor.break_overdue_cleared", null, null, { personId: id });
       delete breaks[id];
     }
     // Такт планировщика (§14.3): срок вышел — оповещение, одно на перерыв; пропущенное за простой — при догоне

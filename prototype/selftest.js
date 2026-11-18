@@ -6219,6 +6219,12 @@
         expect(sidRow && sidRow.dataset.shiftState === "not_ready" && sidReason === "", `причина удалённой причины в «Сейчас»: «${sidReason}»`);
         stand.get = get;
         await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        // Человека нет ни в справочнике, ни в «Сейчас» — «Оператор», не id (§12.2, «Подписи»)
+        fake("supervisor.break_overdue", "ghost_person", { reasonId: "patrol", since: new Date().toISOString(), maxMinutes: 20 });
+        await wait(100);
+        expect(post().includes(`Перерыв затянулся: Оператор — ${patrol}`), `неизвестный человек в строке поста: «${post()}»`);
+        fake("supervisor.break_overdue_cleared", "ghost_person");
+        await wait(100);
 
         // Без права supervisor:view — ни пункта, ни звука. Причины перерыва в настройках — со сроком, пусто — «Без срока»
         const reasons = [{ id: "patrol", labelKey: "workflow.session.break.patrol", maxMinutes: 20 }, { id: "lunch", labelKey: "workflow.session.break.lunch" }];
