@@ -3117,6 +3117,142 @@
         }
       }
     },
+    "/operator/supervisor/stats": {
+      "get": {
+        "tags": [
+          "supervisor"
+        ],
+        "operationId": "getSupervisorStats",
+        "summary": "Смена и статистика: блок «За период»",
+        "description": "§23.3 (план 90). Статистика по инцидентам, закрытым в периоде: плитки с прошлым периодом той же длины, график по часам или дням, результаты закрытия, причины ложных, 10 устройств, дежурные группы, нарушения по видам и список операторов для фильтра. Клиент запрашивает при открытии блока, смене периода или фильтра и кнопкой «Обновить»; сам блок не опрашивается. Организация — из токена. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`), без него — `403 PERMISSION_DENIED`. Период — `period` или `from` и `to`; Фильтры действуют вместе (все сразу); значения, которого больше нет (удалили), — инцидентов нет, без ошибки. Фильтры не действуют на `open` (плитка «Открыто сейчас») и на список `operators`. `400 BAD_REQUEST` — только неверный запрос: неизвестный `period` или `maintenance`, время не по ISO 8601, `from` без `to` или `to` без `from`, `period` вместе с `from`/`to`, `from` позже `to`. Время подсчёта у сервера ограничено: не уложился — `503 SUPERVISOR_STATS_TIMEOUT`",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SupervisorStatsPeriod"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsFrom"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsTo"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsDutyGroup"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsSourceGroup"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsSource"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsEventType"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsOperator"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsResult"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsMaintenance"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Блок «За период»",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupervisorStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "description": "`SUPERVISOR_STATS_TIMEOUT` — подсчёт не уложился в предел времени сервера; ключ текста `workflow.error.supervisor_stats_timeout`. Экран пишет «Подсчёт занял слишком долго — сузьте период или фильтры» и оставляет кнопку «Обновить». Выгрузку `stats.csv` этот предел не ограничивает",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/supervisor/stats.csv": {
+      "get": {
+        "tags": [
+          "supervisor"
+        ],
+        "operationId": "exportSupervisorStats",
+        "summary": "Смена и статистика: выгрузка «За период» в CSV",
+        "description": "§23.4 (решение 10 плана 90). Кнопка «Выгрузить CSV» блока «За период»: инциденты построчно — те же, что посчитаны в `getSupervisorStats` с теми же параметрами: период и его обрезка по сроку хранения, фильтры, только видимые старшему, без привязанных, окна работ — по `maintenance`. Фильтры действуют вместе (все сразу); значения, которого больше нет (удалили), — инцидентов нет, без ошибки. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`); права аудита не нужны; без права — `403 PERMISSION_DENIED`. `400 BAD_REQUEST` — как у `getSupervisorStats`. Предела строк и предела времени подсчёта нет: всё в пределах срока хранения, сервер отдаёт файл потоком, не собирая его в памяти. Каждая выгрузка пишется в журнал действий записью `audit_export` (§12.4), как выгрузка аудита: кто, когда; `details` — `journal` = `supervisor_stats`, `from` и `to` после обрезки, `filters` — переданные фильтры, `rows` — сколько строк данных отдано. Запись делается в конце выгрузки, когда число строк известно. Выгрузка оборвалась — клиент закрыл соединение или сервер не дописал файл — запись всё равно делается, с `details.interrupted` = `true` и числом уже отданных строк; упал сам процесс сервера — записи нет. Запрос отклонён до начала выгрузки (`400`, `403`) — записи нет",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SupervisorStatsPeriod"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsFrom"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsTo"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsDutyGroup"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsSourceGroup"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsSource"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsEventType"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsOperator"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsResult"
+          },
+          {
+            "$ref": "#/components/parameters/SupervisorStatsMaintenance"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Файл CSV: UTF-8 с BOM, разделитель `;`, конец строки — CRLF. Первая строка — названия столбцов, дальше по строке на инцидент — по `closedAt`, от ранних к поздним, при равенстве — по номеру. Ячейка с `;`, кавычкой или переводом строки — в кавычках, кавычка внутри удваивается; ячейка, которая начинается с `=`, `+`, `-`, `@` (после пробелов) или с табуляции и перевода строки, пишется с `'` впереди, чтобы Excel не принял её за формулу. Язык — выгружающего (`preferences.locale`, §14.9), нет строк на его языке — русский: на нём названия столбцов, результаты, виды нарушений, «да» и «нет»; названия, которые вводят люди, — как введены. Время — ISO 8601 до секунды с поясом смены (`shift.timeZone`): `2026-11-17T14:32:05+03:00` — не как у выгрузки аудита. Столбцы по порядку (в скобках — по-английски): Номер (Number) — `INC-1847`; Появился (Created) — `createdAt`; Принят (Accepted) — `acceptedAt`, закрыт без взятия — пусто; Закрыт (Closed) — `closedAt`; Устройство (Device) — название источника; Группа устройств (Device groups) — группы, в которые оно сейчас входит напрямую, через запятую, по названию; Тип события (Event type) — название; Дежурная группа (Duty group) — дежурная группа до принятия (`acceptedGroup`): нынешнее название, удалена — «Удалённая группа» (Deleted group), нет — пусто; Оператор (Operator) — кто закрыл, имя как в журнале действий; Результат (Result) — название результата; Причина (Cause) — как в «Причинах ложных»: из справочника, нет в нём — снимок, причины нет — пусто; Реакция, с (Reaction, s) — целые секунды от появления до первого принятия, доли отбрасываются, нет принятия — пусто; Закрытие, с (Resolution, s) — целые секунды от появления до закрытия; Нарушения (Breaches) — виды через запятую в порядке «реакция, закрытие, удержание» (reaction, resolution, hold), каждый один раз, нет — пусто; В окне работ (In maintenance window) — «да» (yes), если есть `maintenance_window_id`, иначе «нет» (no)",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/operator/admin/audit/incidents": {
       "get": {
         "tags": [
@@ -5655,6 +5791,99 @@
         "schema": {
           "type": "string"
         }
+      },
+      "SupervisorStatsPeriod": {
+        "name": "period",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "shift",
+            "today",
+            "7d",
+            "30d"
+          ]
+        },
+        "description": "§23.3. Период: `shift` — от начала текущей смены (§23.1); `today` — от 00:00 сегодня; `7d` — сегодня и шесть дней перед ним, от 00:00 первого; `30d` — сегодня и 29 дней перед ним. Границы — в поясе смены (`shift.timeZone`, §20), полночь в день перевода часов — по правилам пояса на эту дату; конец — «сейчас». Вместе с `from` или `to` — `400 BAD_REQUEST`. Нет ни `period`, ни `from` и `to` — `7d`"
+      },
+      "SupervisorStatsFrom": {
+        "name": "from",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "§23.3. Начало своего периода («Свой…»), включительно — момент ISO 8601 (RFC 3339); только вместе с `to`. Раньше начала хранения закрытых (сейчас минус `retentionDays`) — период начинается с начала хранения, без ошибки (в ответе `fromClipped`)"
+      },
+      "SupervisorStatsTo": {
+        "name": "to",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "§23.3. Конец своего периода, не включительно: полуинтервал [`from`, `to`). Только вместе с `from`. Позже «сейчас» — период кончается «сейчас». `from` позже `to` — `400 BAD_REQUEST`; `from`, равный `to`, — пустой период. После обрезки `from` не раньше `to` (оба в будущем или оба раньше начала хранения) — тоже пустой период, без ошибки"
+      },
+      "SupervisorStatsDutyGroup": {
+        "name": "dutyGroup",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Дежурная группа до принятия (`acceptedGroup`, §2.2) — id; `none` — «Без группы»: инциденты, у которых её нет. Нет — все"
+      },
+      "SupervisorStatsSourceGroup": {
+        "name": "sourceGroup",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Группа устройств — id: устройство-источник в ней или во вложенных группах, как в дереве (§19.1). Нет — все"
+      },
+      "SupervisorStatsSource": {
+        "name": "source",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Устройство-источник — id. Нет — все"
+      },
+      "SupervisorStatsEventType": {
+        "name": "eventType",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Тип события инцидента — id (§19.2). Нет — все"
+      },
+      "SupervisorStatsOperator": {
+        "name": "operator",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Кто закрыл (`closed_by`) — id человека. Нет — все. Список для выбора — `operators` ответа `getSupervisorStats`"
+      },
+      "SupervisorStatsResult": {
+        "name": "result",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "§23.3. Результат закрытия — id (`close_result`, §2.2). Нет — все"
+      },
+      "SupervisorStatsMaintenance": {
+        "name": "maintenance",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "include",
+            "exclude"
+          ],
+          "default": "exclude"
+        },
+        "description": "§23.3, §14.12. Окна работ: `exclude` (по умолчанию) — без инцидентов, созданных в окне работ (`maintenance_window_id`); `include` — вместе с ними. Закрытие «Плановой проверкой» со ссылкой на окно инцидент в окно работ не ставит"
       }
     },
     "responses": {
@@ -5833,6 +6062,7 @@
               "PRIORITY_IN_USE",
               "DUTY_GROUP_IN_USE",
               "AUDIT_EXPORT_TOO_LARGE",
+              "SUPERVISOR_STATS_TIMEOUT",
               "BACKUP_INVALID",
               "BACKUP_STALE",
               "BACKUP_APPLY_FAILED",
@@ -8205,6 +8435,17 @@
               }
             ],
             "description": "§2.2, §23.2 (план 90). Кто первым принял — пара к `acceptedAt`; null, когда null `acceptedAt`"
+          },
+          "acceptedGroup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "§2.2, §23.3 (решение 16 плана 90). Дежурная группа до принятия: последняя группа, которой инцидент адресовали до первого принятия (в том числе отклонившая), а если ни одной — первая по порядку дежурная группа принявшего; у закрытого без взятия — так же, по закрывшему. Ставится один раз — вместе с `acceptedAt` или при закрытии без взятия — и потом не меняется: переоткрытие, повторное принятие, передача, возврат в очередь его не трогают. Не ставилось или группы не было — null. Для отчётов: дежурная группа в статистике «За период» (`getSupervisorStats`); `assignmentGroup` у закрытого всегда пуст. Сама последняя группа-адресат — данные сервера, в контракт не выходит"
           },
           "timer": {
             "anyOf": [
@@ -10669,7 +10910,7 @@
           "runScheduler": {
             "type": "boolean",
             "default": true,
-            "description": "false — планировщик не запускается ни до, ни после смены состояния: такт ещё не наступил. Так тест проверяет снятие «перерыв затянулся», когда оповещение уйти не успело (§12.2) Пока часы остановлены (`freezeClock`), планировщик стенда сам не запускается: такты — только от `/test/clock` и догон перед запросом, который что-то меняет."
+            "description": "false — планировщик не запускается ни до, ни после смены состояния: такт ещё не наступил. Так тест проверяет снятие «перерыв затянулся», когда оповещение уйти не успело (§12.2). Пока часы остановлены (`freezeClock`), планировщик стенда сам не запускается: такты — только от `/test/clock` и догон перед запросом, который что-то меняет."
           }
         }
       },
@@ -14071,6 +14312,622 @@
           "name": {
             "type": "string"
           }
+        }
+      },
+      "SupervisorStatsRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "description": "Устройство или группа устройств: id и нынешнее название"
+      },
+      "SupervisorStatsTime": {
+        "type": "object",
+        "required": [
+          "median",
+          "mean",
+          "p90"
+        ],
+        "description": "§23.3 (решение 4). Время, с, с долями: медиана, среднее и 90 %. Медиана и 90 % — как `percentile_cont` в PostgreSQL: значения по возрастанию, место (n − 1) × p от нуля, между соседними — по прямой. Значений нет — null у всех трёх. Экран пишет «м:сс» (от часа — «ч:мм:сс»), доли секунды отбрасывает",
+        "properties": {
+          "median": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "mean": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "p90": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "SupervisorStatsTotals": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "incidents",
+          "falseAlarms",
+          "breached",
+          "reaction",
+          "resolution"
+        ],
+        "description": "§23.3. Числа плиток периода: всё, кроме «Открыто сейчас». Доли и изменение к прошлому периоду считает экран из чисел: доля ложных — `falseAlarms` / `incidents`, изменение «Ложных тревог» в п. — по неокруглённым долям",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало периода, включительно"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец периода, не включительно"
+          },
+          "incidents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Плитка «Инцидентов»: сколько посчитано"
+          },
+          "falseAlarms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Плитка «Ложных тревог»: с результатом «Ложная тревога»"
+          },
+          "breached": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Плитка «С нарушениями»: с нарушением норматива — `slaBreached` или непустой `breaches` (§4); нарушения не стираются и после переоткрытия"
+          },
+          "reaction": {
+            "$ref": "#/components/schemas/SupervisorStatsTime",
+            "description": "Плитка «Реакция»: от появления (`createdAt`) до первого принятия (`acceptedAt`). Закрытые без взятия не входят"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/SupervisorStatsTime",
+            "description": "Плитка «Закрытие»: от появления до `closedAt` (у переоткрытого — до последнего закрытия)"
+          }
+        }
+      },
+      "SupervisorStatsOpen": {
+        "type": "object",
+        "required": [
+          "open",
+          "overdue"
+        ],
+        "description": "§23.3. Плитка «Открыто сейчас»: от периода и фильтров не зависит",
+        "properties": {
+          "open": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Открытые сейчас (`new`, `pending_acceptance`, `in_progress`, `on_hold`), видимые старшему"
+          },
+          "overdue": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Из них просрочено — по тому же определению, что `overdue` сводки «Сейчас» (`SupervisorNowSummary`, §23.2)"
+          }
+        }
+      },
+      "SupervisorStatsBucket": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "notFalse",
+          "falseAlarms",
+          "breached"
+        ],
+        "description": "§23.3. Столбик графика «Инцидентов по дням»: инциденты, закрытые в [`from`, `to`). Первый и последний столбик могут быть неполными",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notFalse": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "«Не ложные» — все результаты, кроме «Ложной тревоги»"
+          },
+          "falseAlarms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "«Ложные»"
+          },
+          "breached": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "«С нарушениями» — столбик рядом"
+          }
+        }
+      },
+      "SupervisorStatsSeries": {
+        "type": "object",
+        "required": [
+          "granularity",
+          "buckets"
+        ],
+        "description": "§23.3. График «Инцидентов по дням» — столбики по времени закрытия",
+        "properties": {
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "hour",
+              "day"
+            ],
+            "description": "`hour` — период не длиннее двух суток по календарю пояса смены (конец не позже того же местного времени через два дня после начала): столбики по целым часам пояса смены, первый — от начала периода до ближайшего целого часа; часы настоящие — в день перевода часов за двое суток 47 или 49 столбиков. Иначе `day` — по суткам пояса смены. Заголовок — «по часам» или «по дням»"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsBucket"
+            },
+            "description": "С первого по последний час или день периода по порядку; без инцидентов — нулевой столбик. Пустой период — пусто. Подпись столбика экран берёт из `from` в поясе `timeZone`"
+          }
+        }
+      },
+      "SupervisorStatsResult": {
+        "type": "object",
+        "required": [
+          "resultId",
+          "label",
+          "count"
+        ],
+        "description": "§23.3. Строка «Результатов закрытия»",
+        "properties": {
+          "resultId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "Название результата на языке запроса"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "SupervisorStatsCause": {
+        "type": "object",
+        "required": [
+          "causeId",
+          "label",
+          "count"
+        ],
+        "description": "§23.3. Строка «Причин ложных» — по `closeCauseId` закрытых «Ложной тревогой»",
+        "properties": {
+          "causeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null — «Без причины»: закрыты без причины (справочник был пуст)"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Название из справочника на языке запроса; причины в справочнике уже нет — снимок названия (`closeCauseLabel`); у «Без причины» — null, текст пишет экран"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "SupervisorStatsDevice": {
+        "type": "object",
+        "required": [
+          "source",
+          "groups",
+          "incidents",
+          "falseAlarms",
+          "breached",
+          "medianReactionSec"
+        ],
+        "description": "§23.3. Строка таблицы «Устройства». Щелчок по строке ставит фильтр `source` (решение 7)",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SupervisorStatsRef",
+            "description": "Устройство-источник"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsRef"
+            },
+            "description": "Группы устройств, в которые оно сейчас входит напрямую, по названию"
+          },
+          "incidents": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "falseAlarms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Доля ложных — `falseAlarms` / `incidents`, считает экран"
+          },
+          "breached": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "medianReactionSec": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Медиана реакции, с; значений нет — null"
+          }
+        }
+      },
+      "SupervisorStatsDutyGroup": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "name",
+          "incidents",
+          "falseAlarms",
+          "breached",
+          "medianReactionSec",
+          "medianResolutionSec"
+        ],
+        "description": "§23.3. Строка таблицы «Дежурные группы» — по дежурной группе до принятия (`acceptedGroup`, §2.2)",
+        "properties": {
+          "groupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null — строка «Без группы»: у инцидентов нет дежурной группы до принятия; фильтр для неё — `dutyGroup=none`"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Нынешнее название группы. null — группу удалили (экран пишет «Удалённая группа», своя строка у каждой удалённой) или это «Без группы»"
+          },
+          "incidents": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "falseAlarms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "breached": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "medianReactionSec": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "medianResolutionSec": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "SupervisorStatsBreachKind": {
+        "type": "object",
+        "required": [
+          "kind",
+          "incidents"
+        ],
+        "description": "§23.3. Строка «Нарушений по видам»: сколько инцидентов с нарушением этого вида; у инцидента с двумя видами — в обеих строках",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reaction",
+              "resolution",
+              "hold"
+            ]
+          },
+          "incidents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SupervisorStats": {
+        "type": "object",
+        "required": [
+          "retentionDays",
+          "timeZone",
+          "from",
+          "to",
+          "fromClipped",
+          "computedAt",
+          "current",
+          "previous",
+          "open",
+          "series",
+          "results",
+          "falseAlarmCauses",
+          "devices",
+          "dutyGroups",
+          "breachesByKind",
+          "operators"
+        ],
+        "description": "§23.3 (план 90). Блок «За период» экрана «Смена и статистика». Считаются закрытые в периоде (`closedAt` в [`from`, `to`)), только видимые старшему, как в очереди (§5 целиком, решение 3), без привязанных (`linkedTo` не пуст): объединённые — один раз, по основному; в окне работ — по фильтру `maintenance`",
+        "properties": {
+          "retentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Срок хранения закрытых, дней (`retention.closedIncidentsDays`, §14.11): старше в базе нет. Экран пишет рядом с периодом — «хранится 90 дней»; по нему же — первый день, который можно выбрать в «Свой…»: первые сутки пояса смены, которые начинаются не раньше «сейчас» минус срок"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "Пояс смены (IANA, `shift.timeZone`, §20): в нём границы периода, столбики и подписи времени"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Начало периода после обрезки по сроку хранения"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Конец периода после обрезки до «сейчас», не включительно. `from` не раньше `to` — период пуст: числа нулевые, время и списки пусты"
+          },
+          "fromClipped": {
+            "type": "boolean",
+            "description": "Начало подтянуто к началу хранения (`from` запроса или начало `30d` раньше него) — экран подписывает период «Данные с <from>»"
+          },
+          "computedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Когда посчитано — «посчитано в ЧЧ:ММ» над блоком. Тот же запрос того же человека в течение минуты сервер заново не считает и отдаёт прежний подсчёт с прежним `computedAt`"
+          },
+          "current": {
+            "$ref": "#/components/schemas/SupervisorStatsTotals"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupervisorStatsTotals"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Прошлый период — того же размера сразу перед текущим: [`from` − длина, `from`), длина — от `from` до `to` после обрезки; фильтры те же. Начало прошлого периода раньше начала хранения — null: сравнения нет. Экран показывает изменение у «Инцидентов» (в целых процентах) и «Ложных тревог» (в целых п.); в прошлом периоде инцидентов не было или null — «—»"
+          },
+          "open": {
+            "$ref": "#/components/schemas/SupervisorStatsOpen"
+          },
+          "series": {
+            "$ref": "#/components/schemas/SupervisorStatsSeries"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsResult"
+            },
+            "description": "«Результаты закрытия»: по убыванию числа, при равенстве — по названию; результата без инцидентов нет"
+          },
+          "falseAlarmCauses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsCause"
+            },
+            "description": "«Причины ложных»: по убыванию числа, при равенстве — по названию"
+          },
+          "devices": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsDevice"
+            },
+            "description": "«Устройства»: 10 устройств-источников с наибольшим числом инцидентов, при равенстве — по названию. Сортировку по столбцам делает экран"
+          },
+          "dutyGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsDutyGroup"
+            },
+            "description": "«Дежурные группы»: группы, у которых есть инциденты периода, по убыванию числа инцидентов; строка «Без группы» (`groupId` null) — последней. Сортировку по столбцам делает экран, «Без группы» — последней при любой"
+          },
+          "breachesByKind": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/SupervisorStatsBreachKind"
+            },
+            "description": "«Нарушения по видам» — всегда три строки: `reaction`, `resolution`, `hold`"
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActorRef"
+            },
+            "description": "Список фильтра «Оператор»: люди, которые закрыли (`closed_by`) хоть один инцидент периода из видимых старшему, без учёта остальных фильтров, по имени; закрыть мог и тот, у кого нет `incident:accept`, и тот, кто уже ушёл"
+          }
+        },
+        "example": {
+          "retentionDays": 90,
+          "timeZone": "Europe/Moscow",
+          "from": "2026-11-11T21:00:00Z",
+          "to": "2026-11-18T10:15:30Z",
+          "fromClipped": false,
+          "computedAt": "2026-11-18T10:15:30Z",
+          "current": {
+            "from": "2026-11-11T21:00:00Z",
+            "to": "2026-11-18T10:15:30Z",
+            "incidents": 412,
+            "falseAlarms": 251,
+            "breached": 30,
+            "reaction": {
+              "median": 48.5,
+              "mean": 71.2,
+              "p90": 164
+            },
+            "resolution": {
+              "median": 610,
+              "mean": 845.7,
+              "p90": 1920
+            }
+          },
+          "previous": {
+            "from": "2026-11-05T07:44:30Z",
+            "to": "2026-11-11T21:00:00Z",
+            "incidents": 389,
+            "falseAlarms": 240,
+            "breached": 41,
+            "reaction": {
+              "median": 52,
+              "mean": 80.1,
+              "p90": 190
+            },
+            "resolution": {
+              "median": 640,
+              "mean": 902.3,
+              "p90": 2050
+            }
+          },
+          "open": {
+            "open": 14,
+            "overdue": 2
+          },
+          "series": {
+            "granularity": "day",
+            "buckets": [
+              {
+                "from": "2026-11-11T21:00:00Z",
+                "to": "2026-11-12T21:00:00Z",
+                "notFalse": 22,
+                "falseAlarms": 37,
+                "breached": 4
+              },
+              {
+                "from": "2026-11-17T21:00:00Z",
+                "to": "2026-11-18T10:15:30Z",
+                "notFalse": 9,
+                "falseAlarms": 15,
+                "breached": 1
+              }
+            ]
+          },
+          "results": [
+            {
+              "resultId": "false_alarm",
+              "label": "Ложная тревога",
+              "count": 251
+            },
+            {
+              "resultId": "handled",
+              "label": "Обработан",
+              "count": 161
+            }
+          ],
+          "falseAlarmCauses": [
+            {
+              "causeId": "animal",
+              "label": "Животное",
+              "count": 120
+            },
+            {
+              "causeId": null,
+              "label": null,
+              "count": 131
+            }
+          ],
+          "devices": [
+            {
+              "source": {
+                "id": "cam-12",
+                "name": "Камера 12 — въезд"
+              },
+              "groups": [
+                {
+                  "id": "grp-gate",
+                  "name": "КПП"
+                }
+              ],
+              "incidents": 58,
+              "falseAlarms": 41,
+              "breached": 3,
+              "medianReactionSec": 39
+            }
+          ],
+          "dutyGroups": [
+            {
+              "groupId": "grp-response",
+              "name": "Группа реагирования",
+              "incidents": 300,
+              "falseAlarms": 180,
+              "breached": 20,
+              "medianReactionSec": 45,
+              "medianResolutionSec": 590
+            },
+            {
+              "groupId": null,
+              "name": null,
+              "incidents": 112,
+              "falseAlarms": 71,
+              "breached": 10,
+              "medianReactionSec": 60,
+              "medianResolutionSec": 700
+            }
+          ],
+          "breachesByKind": [
+            {
+              "kind": "reaction",
+              "incidents": 18
+            },
+            {
+              "kind": "resolution",
+              "incidents": 15
+            },
+            {
+              "kind": "hold",
+              "incidents": 2
+            }
+          ],
+          "operators": [
+            {
+              "id": "ivanov",
+              "kind": "operator",
+              "name": "Иванов А. С."
+            }
+          ]
         }
       }
     }

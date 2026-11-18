@@ -215,6 +215,7 @@
   "workflow.error.no_audit_access": "No permission to view the audit",
   "workflow.error.no_audit_export": "No permission to export the audit to a file",
   "workflow.error.no_supervisor_view": "No permission to view the Shift and statistics screen",
+  "workflow.error.supervisor_stats_timeout": "The calculation took too long — narrow the period or filters",
   "workflow.error.test.no_fixture": "No reference data set {name}",
   "workflow.error.test.no_operator": "No operator {id}",
   "workflow.error.test.workflow_patch": "The workflowPatch field is required — an object with schema changes",

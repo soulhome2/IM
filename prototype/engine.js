@@ -70,6 +70,7 @@
           linkedTo: ev.linkedTo, linkedAt: ev.linkedAt, leftGroup: ev.leftGroup, scenario: ctx.scenarioKey ? ctx.scenarioKey(ev) : null,
           eventGuid: ev.eventGuid, ruleDutyGroup: ev.ruleDutyGroup || "",
           acceptedAt: ev.acceptedAt, acceptedBy: ev.acceptedBy, noReaction: Boolean(ev.noReaction),
+          lastAssignedGroup: ev.lastAssignedGroup || "", acceptedGroup: ev.acceptedGroup || "",
         },
         ev
       );
@@ -317,6 +318,7 @@
         massCause: x.closeCauseId || null, closeCauseLabel: snapshot("closeCauseLabel", x.closeCauseLabel, ev.closeCauseLabel), closeComment: x.result || null, closedBy: x.closedBy || null, closedAt: o(x.closedAt) || null,
         maintenanceWindowId: x.maintenanceWindowId || null, closeMaintenanceWindowId: x.closeMaintenanceWindowId || null,
         acceptedAt: o(x.acceptedAt) || null, acceptedBy: x.acceptedBy || null, noReaction: Boolean(x.noReaction),
+        lastAssignedGroup: x.lastAssignedGroup || null, acceptedGroup: x.acceptedGroup || null,
         slaBreached: x.slaBreached, breaches: x.breaches.map((b) => ({ kind: b.kind, at: o(b.at), owner: b.owner || null })),
         linkedTo: x.linkedTo || null, linkedAt: o(x.linkedAt) || null,
         leftGroup: x.leftGroup.primaryId ? { primaryId: x.leftGroup.primaryId, linkedAt: o(x.leftGroup.linkedAt), at: o(x.leftGroup.at) } : null,

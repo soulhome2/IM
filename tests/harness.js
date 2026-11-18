@@ -276,6 +276,10 @@
   // Редактор схемы и правка справочника приоритетов — вне прототипа (§14.8, §2.5); журнал событий, статистика базы и резервная копия настроек (§12.5, §14.11, проект 75) — только сервер МИ
   const NOT_COVERED = /^(GET|POST|PUT|DELETE) \/operator\/workflow\/schemas|^(POST|PUT|DELETE) \/operator\/admin\/(priorities|help-links|duty-groups)|^GET \/operator\/admin\/audit\/incident-(groups|timeline)|^GET \/operator\/admin\/events|^GET \/operator\/admin\/database-stats$|^(GET|POST) \/operator\/admin\/backup(\/preview|\/apply)?$|^POST \/operator\/admin\/reset$|^GET \/operator\/incidents\/\{incidentGuid\}\/attachments\//;
 
+  // Операции, контракт которых уже есть, а встроенный сервер и тесты — в следующей задаче плана: блок «За период» экрана
+  // «Смена и статистика» и его выгрузка в CSV (§23.3, §23.4) — задача Б.3 плана 90; она убирает строку отсюда вместе с тестами
+  const PENDING = /^GET \/operator\/supervisor\/stats(\.csv)?$/;
+
   // Отчёт: строки в <pre id="apitest-log"> и в консоль, итог — атрибут data-apitest.
   // С ?report=/адрес — ещё и POST туда: так его забирает tools/check_loopback.py
   function finish(lines, summary, failed) {
@@ -371,12 +375,13 @@
         .filter((m) => ["get", "post", "put", "patch", "delete"].includes(m))
         .map((m) => `${m.toUpperCase()} ${path}`)
     );
-    const uncovered = ops.filter((op) => !called.has(op) && !NOT_COVERED.test(op));
+    const uncovered = ops.filter((op) => !called.has(op) && !NOT_COVERED.test(op) && !PENDING.test(op));
     if (uncovered.length) {
       failed += 1;
       lines.push(`FAIL  Каждая операция контракта покрыта тестами — без тестов: ${uncovered.join(", ")}`);
-    } else lines.push(`PASS  Каждая операция контракта покрыта тестами — ${ops.length - ops.filter((op) => NOT_COVERED.test(op)).length} операций`);
+    } else lines.push(`PASS  Каждая операция контракта покрыта тестами — ${ops.filter((op) => !NOT_COVERED.test(op) && !PENDING.test(op)).length} операций`);
     lines.push(`INFO  Не проверяются: ${ops.filter((op) => NOT_COVERED.test(op)).join(", ")} — редактор схемы, правка справочника приоритетов и аудит по инцидентам (группы, лента, их файлы), журнал событий, статистика базы и резервная копия настроек — делает сервер МИ, вне прототипа`);
+    if (ops.some((op) => PENDING.test(op))) lines.push(`INFO  Пока без тестов: ${ops.filter((op) => PENDING.test(op)).join(", ")} — встроенный сервер и тесты — задача Б.3 плана 90`);
     const total = tests.length + 3;
     const summary = failed ? `Тесты API: ${failed} из ${total} не прошли` : `Тесты API: все ${total} прошли`;
     finish(lines, summary, failed);

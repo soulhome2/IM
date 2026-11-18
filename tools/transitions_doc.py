@@ -211,7 +211,7 @@ class Doc:
         fn, a = e["fn"], e.get("args") or []
         phrases = {
             "setOwner": lambda: f"владелец: {self.target(a[0], 'человек')}",
-            "setAssignmentGroup": lambda: f"группа-адресат: {self.target(a[0], 'группа')}",
+            "setAssignmentGroup": lambda: f"группа-адресат: {self.target(a[0], 'группа')}" + ("" if a[0] == "''" else "; непустая — и в последнюю группу-адресат `lastAssignedGroup`"),
             "setHoldReason": lambda: "причина удержания: " + (self.value(a[0]) if str(a[0]).startswith("form.") else f"«{self.reasons.get(self.lit(a[0]), self.lit(a[0]))}»"),
             "clearHoldReason": lambda: "причина удержания очищается",
             "startTimer": lambda: f"запуск {self.tm(a[0])}"
@@ -241,8 +241,8 @@ class Doc:
             "copyPrimaryDeadline": lambda: f"{self.tm(a[0])} — остаток срока основного, на паузе",
             "notify": lambda: f"{'оповещение' if a[1:] and a[1] is True else 'уведомление'} {WHO.get(a[0], a[0])}",
             "externalCommand": lambda: f"внешняя команда `{a[0]}`",
-            "markAccepted": lambda: "первое принятие: `acceptedAt` — сейчас, `acceptedBy` — кто выполняет; только если `acceptedAt` пусто и нет `noReaction`",
-            "markNoReaction": lambda: "закрыт без взятия (`acceptedAt` пусто) — пометка `noReaction`: реакции у него нет и не будет",
+            "markAccepted": lambda: "первое принятие: `acceptedAt` — сейчас, `acceptedBy` — кто выполняет, `acceptedGroup` — последняя группа-адресат, иначе первая дежурная группа выполняющего; только если `acceptedAt` пусто и нет `noReaction`",
+            "markNoReaction": lambda: "закрыт без взятия (`acceptedAt` пусто) — пометка `noReaction`: реакции у него нет и не будет; `acceptedGroup` — последняя группа-адресат, иначе первая дежурная группа закрывшего, если пометки ещё не было",
             "logSiblings": lambda: "результат "
             + ", ".join(f"«{self.reasons.get(r, r)}»" for r in a[0])
             + f" — открытым соседям запись «{RU.get(a[1], a[1])}»",

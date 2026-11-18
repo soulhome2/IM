@@ -215,6 +215,7 @@
   "workflow.error.no_audit_access": "Нет права смотреть аудит",
   "workflow.error.no_audit_export": "Нет права выгружать аудит в файл",
   "workflow.error.no_supervisor_view": "Нет права смотреть экран «Смена и статистика»",
+  "workflow.error.supervisor_stats_timeout": "Подсчёт занял слишком долго — сузьте период или фильтры",
   "workflow.error.test.no_fixture": "Нет эталонного набора {name}",
   "workflow.error.test.no_operator": "Нет оператора {id}",
   "workflow.error.test.workflow_patch": "Нужно поле workflowPatch — объект с изменениями схемы",

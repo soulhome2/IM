@@ -999,8 +999,8 @@
  {
   "name": "no-reaction-never-set",
   "what": "закрытие без взятия не ставит noReaction (§2.2, план 90)",
-  "find": "[{\"set\": \"incident.noReaction\", \"value\": \"true\"}]",
-  "replace": "[{\"set\": \"incident.noReaction\", \"value\": \"false\"}]",
+  "find": "{\"set\": \"incident.noReaction\", \"value\": \"true\"}",
+  "replace": "{\"set\": \"incident.noReaction\", \"value\": \"false\"}",
   "model": "не проверяет: поля первого принятия — для отчётов, на переходы не влияют; инварианта о них в модели нет"
  },
  {

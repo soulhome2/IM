@@ -4889,6 +4889,10 @@ window.IM_WORKFLOW = {
     "workflow.error.audit_export_too_large": {
       "vars": []
     },
+    "workflow.error.supervisor_stats_timeout": {
+      "vars": [],
+      "$comment": "§23.3 (план 90): 503 SUPERVISOR_STATS_TIMEOUT — подсчёт блока «За период» не уложился в предел времени сервера"
+    },
     "workflow.error.filter.bad": {
       "vars": [
         "name"
@@ -5040,7 +5044,9 @@ window.IM_WORKFLOW = {
         "ruleDutyGroup": "string",
         "acceptedAt": "int",
         "acceptedBy": "string",
-        "noReaction": "bool"
+        "noReaction": "bool",
+        "lastAssignedGroup": "string",
+        "acceptedGroup": "string"
       },
       "Timer": {
         "due": "int",
@@ -6672,8 +6678,18 @@ window.IM_WORKFLOW = {
           {
             "set": "incident.assignmentGroup",
             "value": "group"
+          },
+          {
+            "if": "group != ''",
+            "then": [
+              {
+                "set": "incident.lastAssignedGroup",
+                "value": "group"
+              }
+            ]
           }
-        ]
+        ],
+        "$comment": "§8.1, §2.2 (решение 16 плана 90). Дежурная группа-адресат. Непустая группа пишется и в lastAssignedGroup — последнюю группу, которой адресовали инцидент: адресация из правила, передача группе, автоэскалация на группу, уход адресата в его группу. Очистка адреса ('') lastAssignedGroup не трогает: отклонившая группа — всё равно последняя, кому инцидент адресовали. По lastAssignedGroup первое принятие и закрытие без взятия ставят acceptedGroup"
       },
       {
         "fn": "setHoldReason",
@@ -7592,12 +7608,16 @@ window.IM_WORKFLOW = {
               {
                 "set": "incident.acceptedBy",
                 "value": "actor"
+              },
+              {
+                "set": "incident.acceptedGroup",
+                "value": "before.lastAssignedGroup != '' ? before.lastAssignedGroup : dutyGroupOf(actor)"
               }
             ]
           }
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§2.2, §23.2 (решение 12 плана 90). Первое принятие: при входе в in_progress — когда (accepted_at) и кто (accepted_by) первым взял инцидент в работу. Только если accepted_at пусто и нет пометки no_reaction: повторный вход в работу (после «Вернуть в очередь», передачи, перехвата) первое принятие не перезаписывает, закрытый без взятия его не получает никогда. У «Взять» (и «Взять в работу» на выборке — основной, grouping.takeWith), «Принять», «Перехватить», «Возобновить»; «Переоткрыть» — нет. На переходы не влияет — поле для отчётов: реакция оператора — от появления до accepted_at"
+        "$comment": "§2.2, §23.2 (решение 12 плана 90). Первое принятие: при входе в in_progress — когда (accepted_at) и кто (accepted_by) первым взял инцидент в работу, и дежурная группа до принятия (accepted_group, решение 16 плана 90): последняя группа-адресат до перехода (lastAssignedGroup), а если инцидент ни одной группе не адресовали — первая дежурная группа принявшего (dutyGroupOf); он ни в одной не состоит — пусто. Только если accepted_at пусто и нет пометки no_reaction: повторный вход в работу (после «Вернуть в очередь», передачи, перехвата) первое принятие не перезаписывает, закрытый без взятия его не получает никогда. У «Взять» (и «Взять в работу» на выборке — основной, grouping.takeWith), «Принять», «Перехватить», «Возобновить»; «Переоткрыть» — нет. На переходы не влияет — поле для отчётов: реакция оператора — от появления до accepted_at"
       },
       {
         "fn": "markNoReaction",
@@ -7609,6 +7629,15 @@ window.IM_WORKFLOW = {
             "if": "incident.acceptedAt == 0",
             "then": [
               {
+                "if": "!incident.noReaction",
+                "then": [
+                  {
+                    "set": "incident.acceptedGroup",
+                    "value": "before.lastAssignedGroup != '' ? before.lastAssignedGroup : dutyGroupOf(incident.closedBy)"
+                  }
+                ]
+              },
+              {
                 "set": "incident.noReaction",
                 "value": "true"
               }
@@ -7616,7 +7645,7 @@ window.IM_WORKFLOW = {
           }
         ],
         "extendsBaseRegistry": true,
-        "$comment": "§2.2 (решение 2026-11-17, план 90). Закрытый без взятия реакции не имеет: закрытие с пустым accepted_at — «Массовым сбоем» из очереди или привязанного вместе с основным — ставит no_reaction. Её ничто не снимает, в том числе «Переоткрыть»: после нового взятия accepted_at остаётся пустым (markAccepted). У всех входов в closed"
+        "$comment": "§2.2 (решение 2026-11-17, план 90). Закрытый без взятия реакции не имеет: закрытие с пустым accepted_at — «Массовым сбоем» из очереди или привязанного вместе с основным — ставит no_reaction. Её ничто не снимает, в том числе «Переоткрыть»: после нового взятия accepted_at остаётся пустым (markAccepted). У всех входов в closed. В тот же момент — дежурная группа до принятия (accepted_group, решение 16 плана 90): последняя группа-адресат до перехода (lastAssignedGroup), иначе первая дежурная группа закрывшего (closedBy: у «Закрыть» — выполняющий, у закрытия вместе с основным — закрывший основной); ставится один раз — повторное закрытие переоткрытого без взятия (no_reaction уже стоит) её не меняет"
       },
       {
         "fn": "logSiblings",
