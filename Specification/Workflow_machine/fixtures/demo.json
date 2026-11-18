@@ -3288,6 +3288,7 @@
       "state": "pending_acceptance",
       "owner": null,
       "assignmentGroup": "grp-leads",
+      "lastAssignedGroup": "grp-leads",
       "escalationLevel": 0,
       "transferCount": 1,
       "holdReason": null,

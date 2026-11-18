@@ -4893,6 +4893,73 @@ window.IM_WORKFLOW = {
       "vars": [],
       "$comment": "§23.3 (план 90): 503 SUPERVISOR_STATS_TIMEOUT — подсчёт блока «За период» не уложился в предел времени сервера"
     },
+    "workflow.supervisor.csv.column.number": {
+      "vars": [],
+      "$comment": "§23.4 (решение 10 плана 90): выгрузка «За период» в CSV — названия столбцов по порядку, на языке выгружающего"
+    },
+    "workflow.supervisor.csv.column.created": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.accepted": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.closed": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.device": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.device_groups": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.event_type": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.duty_group": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.operator": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.result": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.cause": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.reaction_sec": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.resolution_sec": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.breaches": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.column.maintenance": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.breach.reaction": {
+      "vars": [],
+      "$comment": "§23.4: столбец «Нарушения» — виды через запятую в порядке реакция, закрытие, удержание"
+    },
+    "workflow.supervisor.csv.breach.resolution": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.breach.hold": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.yes": {
+      "vars": [],
+      "$comment": "§23.4: столбец «В окне работ» — да или нет"
+    },
+    "workflow.supervisor.csv.no": {
+      "vars": []
+    },
+    "workflow.supervisor.csv.deleted_group": {
+      "vars": [],
+      "$comment": "§23.4: столбец «Дежурная группа» — дежурной группы до принятия больше нет"
+    },
     "workflow.error.filter.bad": {
       "vars": [
         "name"

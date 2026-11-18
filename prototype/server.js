@@ -711,6 +711,8 @@
         state: inc.state,
         owner: inc.owner,
         assignmentGroup: inc.assignmentGroup,
+        // Последняя группа-адресат (§2.2, решение 16 плана 90) — из набора, как есть: по ней первое принятие ставит acceptedGroup
+        lastAssignedGroup: inc.lastAssignedGroup || null,
         escalationLevel: inc.escalationLevel,
         transferCount: inc.transferCount || 0,
         holdReason: inc.holdReason,

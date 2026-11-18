@@ -284,8 +284,9 @@ def check_api(w, o, err):
 
 def check_fixture(w, err):
     """Эталонный набор fixtures/demo.json с файлами сценариев (tools/fixture.py): время — UTC и не позже снимка,
-    ссылки на людей, устройства, состояния, справочники и сценарии существуют, таймеры соответствуют состоянию."""
-    fx = fixture.load()
+    ссылки на людей, устройства, состояния, справочники и сценарии существуют, таймеры соответствуют состоянию.
+    Набор — через fixture_with_rows: так до этих проверок доходят и порчи MUTATIONS"""
+    fx = fixture_with_rows()
     utc = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
     captured = fx.get("capturedAt")
     if not captured or not utc.match(captured):
@@ -482,6 +483,11 @@ def check_fixture(w, err):
             err.append(f"{where}: владелец {inc['owner']} — не оператор (owner — только человек, §8.1)")
         if inc["assignmentGroup"] is not None and inc["assignmentGroup"] not in groups:
             err.append(f"{where}: неизвестная дежурная группа {inc['assignmentGroup']}")
+        # Последняя группа-адресат (§2.2, решение 16 плана 90): дежурная группа набора; адресован группе — она же
+        if inc.get("lastAssignedGroup") is not None and inc["lastAssignedGroup"] not in groups:
+            err.append(f"{where}: lastAssignedGroup {inc['lastAssignedGroup']} — не дежурная группа (§2.2)")
+        if inc["assignmentGroup"] is not None and inc.get("lastAssignedGroup") != inc["assignmentGroup"]:
+            err.append(f"{where}: адресован группе {inc['assignmentGroup']}, а lastAssignedGroup — {inc.get('lastAssignedGroup')} (§2.2)")
         if inc["closedBy"] is not None and inc["closedBy"] not in humans:
             err.append(f"{where}: закрыл неизвестный {inc['closedBy']}")
         if inc["holdReason"] is not None and inc["holdReason"] not in catalog("hold"):
@@ -2801,6 +2807,8 @@ MUTATIONS = [
      '"eventTypeId": "glass",\n          "deviceTypeId": "microphone"', '"eventTypeId": "glass"', "без устройства и типа устройства"),
     ("base-rule-uncovered", "набор: базовое правило пожара не покрывает камеры — источник одного из пожаров набора (§14.5)", FIXTURE,
      '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "camera"\n        }', '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "fire-detector"\n        }', "не покрывает тип устройства camera"),
+    ("fixture-last-assigned-missing", "набор: у INC-1836, адресованного группе «Старшие операторы», нет lastAssignedGroup (§2.2, решение 16 плана 90)", FIXTURE,
+     '"assignmentGroup": "grp-leads",\n      "lastAssignedGroup": "grp-leads",', '"assignmentGroup": "grp-leads",', "lastAssignedGroup — None"),
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,
