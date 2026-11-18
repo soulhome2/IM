@@ -984,7 +984,8 @@
         acceptedAt: iso(ev.acceptedAt),
         acceptedBy: actorRef(ev.acceptedBy),
         // Дежурная группа до принятия (§2.2, решение 16 плана 90): ставят markAccepted и markNoReaction машины, потом не меняется
-        acceptedGroup: actorRef(ev.acceptedGroup),
+        // Удалённая группа остаётся группой: kind — duty_group, название — её id, как в ленте
+        acceptedGroup: ev.acceptedGroup && !findActor(ev.acceptedGroup) ? { id: ev.acceptedGroup, kind: "duty_group", name: ev.acceptedGroup, role: "" } : actorRef(ev.acceptedGroup),
         timer: timerState(ev),
         holdTimer: holdTimerState(ev),
         slaBreached: Boolean(ev.slaBreached),
@@ -2657,7 +2658,7 @@
       return { granularity: hourly ? "hour" : "day", buckets };
     }
     const statsLocale = () => (session && session.preferences.locale) || "ru";
-    const byLabel = (a, b) => (a == null ? 1 : b == null ? -1 : a.localeCompare(b, statsLocale(), { sensitivity: "base", numeric: true }));
+    const byLabel = (a, b) => (a == null || b == null ? (a == null) - (b == null) : a.localeCompare(b, statsLocale(), { sensitivity: "base", numeric: true }));
     // Название результата — по его labelKey в справочнике результатов, а не подпись по причине (labelByCause)
     function resultName(id) {
       const item = W.reasonCatalogs.close_result.items.find((i) => i.id === id);
@@ -2709,7 +2710,7 @@
       // названных; «Без группы» — последней
       const duty = groupsBy(list, (e) => e.acceptedGroup || null)
         .map(([id, xs]) => ({ groupId: id, name: id ? dutyName(id) : null, incidents: xs.length, falseAlarms: xs.filter(isFalse).length, breached: xs.filter(breached).length, medianReactionSec: percentile(reactions(xs), 0.5), medianResolutionSec: percentile(xs.map(resolutionOf), 0.5) }))
-        .sort((a, b) => (a.groupId == null) - (b.groupId == null) || b.incidents - a.incidents || (a.name == null) - (b.name == null) || byLabel(a.name, b.name) || (a.groupId < b.groupId ? -1 : 1));
+        .sort((a, b) => (a.groupId == null) - (b.groupId == null) || b.incidents - a.incidents || (a.name == null) - (b.name == null) || byLabel(a.name, b.name) || (a.groupId < b.groupId ? -1 : a.groupId > b.groupId ? 1 : 0));
       // Список фильтра «Оператор»: кто закрыл хоть один инцидент периода из видимых, без остальных фильтров, по имени
       const operators = [...new Set(closed.map((e) => e.closedBy).filter(Boolean))]
         .map((id) => actorRef(id))

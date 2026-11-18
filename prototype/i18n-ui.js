@@ -476,7 +476,7 @@ window.IM_DICT_UI = {
     "Открыто сейчас": "Open now",
     "из них просрочено {n}": "of them overdue {n}",
     "{when}: не ложных {a}, ложных {b}, с нарушениями {c}": "{when}: genuine {a}, false {b}, with breaches {c}",
-    "Не ложные": "Genuine",
+    "Не ложные": "Not false",
     "Ложные": "False",
     "Инцидентов по часам": "Incidents by hour",
     "Инцидентов по дням": "Incidents by day",

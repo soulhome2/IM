@@ -3939,6 +3939,8 @@
         const pressed = $("statsPeriods").querySelector('[aria-pressed="true"]');
         expect(pressed && pressed.dataset.statsPeriod === "7d", "по умолчанию не «7 дней»");
         expect(/хранится 90 дней$/.test($("statsSpan").textContent), `подпись периода: «${$("statsSpan").textContent}»`);
+        // Один месяц — один раз: «11–17 ноября», а не «11 ноября – 17 ноября» (§23.3)
+        expect(!/^\d+ (\S+) – \d+ \1 /.test($("statsSpan").textContent), `подпись периода повторяет месяц: «${$("statsSpan").textContent}»`);
         expect(/^посчитано в \d\d:\d\d$/.test($("statsComputed").textContent), `время подсчёта: «${$("statsComputed").textContent}»`);
         const bars = () => $("statsChart").querySelector("[data-stats-granularity]");
         expect(bars().dataset.statsGranularity === "day" && bars().querySelectorAll(".stats-bar").length === 7, "7 дней — не 7 столбиков по суткам");
@@ -3946,17 +3948,25 @@
         expect(tile("incidents").textContent === String(all.current.incidents), `«Инцидентов»: ${tile("incidents").textContent} вместо ${all.current.incidents}`);
         await click($("statsPeriods").querySelector('[data-stats-period="today"]'));
         await until(() => bars() && bars().dataset.statsGranularity === "hour", "«Сегодня» — не по часам");
+        // Список «Оператор» — ровно operators последнего ответа (§23.3): закрывавшие за 7 дней, но не сегодня, уходят
+        const today = await get("/operator/supervisor/stats", { period: "today" });
+        const opIds = () => [...$("statsOperator").options].map((o) => o.value).filter(Boolean).join();
+        await until(() => opIds() === today.operators.map((o) => o.id).join(), `операторы «Сегодня»: ${opIds()} вместо ${today.operators.map((o) => o.id).join()}`);
         // Фильтр «Результат»: числа — как у сервера с тем же фильтром
         await pick("statsResult", "false_alarm");
         const falseOnly = await get("/operator/supervisor/stats", { period: "today", result: "false_alarm" });
         await until(() => tile("incidents").textContent === String(falseOnly.current.incidents), `с фильтром «Ложная тревога»: ${tile("incidents").textContent} вместо ${falseOnly.current.incidents}`);
         await pick("statsResult", "");
+        // Дальше — снова 7 дней: «Сегодня» сразу после полуночи пусто, и таблицам не из чего строиться
+        await click($("statsPeriods").querySelector('[data-stats-period="7d"]'));
+        await until(() => bars() && bars().dataset.statsGranularity === "day", "«7 дней» — не по суткам");
         // Щелчок по устройству — фильтр «Устройство» (решение 7)
         await until(() => $("statsDevices").querySelector("[data-stats-source]"), "в таблице «Устройства» нет строк");
-        const dev = $("statsDevices").querySelector("[data-stats-source]");
+        // Щелчок по строке, а не только по названию (§23.3): по ячейке «Инцидентов»
+        const dev = $("statsDevices").querySelector("tr[data-stats-source]");
         const id = dev.dataset.statsSource;
-        await click(dev);
-        await until(() => $("statsSource").value === id, "щелчок по устройству не поставил фильтр");
+        await click(dev.cells[2]);
+        await until(() => $("statsSource").value === id, "щелчок по строке устройства не поставил фильтр");
         await until(() => [...$("statsDevices").querySelectorAll("[data-stats-source]")].every((b) => b.dataset.statsSource === id), "после фильтра в таблице — другие устройства");
         await pick("statsSource", "");
         // Сортировка: щелчок — по столбцу, повторный — обратно; «Без группы» — последней при любой

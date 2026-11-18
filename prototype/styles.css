@@ -2790,6 +2790,9 @@ select.search-input { padding-right: 36px; }
 .stats-table th { padding: 4px 6px; vertical-align: bottom; }
 .stats-table .shift-sort { white-space: normal; text-align: inherit; }
 /* Имя датчика — ссылка-фильтр: цвет текста ссылки, а не заливки (контраст 4,5:1 и в тёмной теме) */
+/* Строка устройства — щелчок по ней ставит фильтр (§23.3); кнопка с названием — для клавиатуры */
+.stats-table tr[data-stats-source] { cursor: pointer; }
+.stats-table tr[data-stats-source]:hover td { background: var(--panel-2); }
 .stats-table .shift-out-btn { color: var(--accent-text, var(--accent)); text-decoration: underline; }
 .stats-table th.num,
 .stats-table td.num { text-align: right; }

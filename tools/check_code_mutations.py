@@ -457,9 +457,15 @@ MUTATIONS = [
     ("stats-duty-by-id", "server.js", "(a.name == null) - (b.name == null) || byLabel(a.name, b.name) || ", "", "api"),
     ("stats-operators-filtered", "server.js", "const operators = [...new Set(closed.map(", "const operators = [...new Set(list.map(", "api"),
     ("stats-cache-ignored", "server.js", "if (hit && period.at >= hit.at", "if (false && hit && period.at >= hit.at", "api"),
-    ("stats-accepted-group-hidden", "server.js", "acceptedGroup: actorRef(ev.acceptedGroup),", "acceptedGroup: null,", "api"),
+    ("stats-accepted-group-hidden", "server.js", ' role: "" } : actorRef(ev.acceptedGroup),', ' role: "" } : null,', "api"),
+    # Удалённая группа до принятия в карточке — kind operator, как у неизвестного человека (ревью Б.3, Minor 5)
+    ("stats-deleted-accepted-group-as-operator", "server.js", "acceptedGroup: ev.acceptedGroup && !findActor(ev.acceptedGroup) ?", "acceptedGroup: false ?", "api"),
     ("stats-csv-no-bom", "server.js", 'const text = "\ufeff" + lines.map(', "const text = lines.map(", "api"),
     ("stats-csv-utc", "server.js", "zoneIso(e.closedAt, tz),", 'zoneIso(e.closedAt, "UTC"),', "api"),
+    # Пояс смены — всегда Москва (по умолчанию): границы периода и сутки не по поясу поста (ревью Б.3, Important 3)
+    ("stats-zone-moscow", "server.js", "const tz = W.shift.timeZone;\n      const custom", 'const tz = "Europe/Moscow";\n      const custom', "api"),
+    # Две удалённые группы — в порядке появления, а не по groupId (ревью Б.3, Important 1)
+    ("stats-deleted-groups-unordered", "server.js", "(a == null || b == null ? (a == null) - (b == null) : a.localeCompare", "(a == null ? 1 : b == null ? -1 : a.localeCompare", "api"),
     ("stats-csv-deleted-group-empty", "server.js", 'dutyName(e.acceptedGroup) || say("deleted_group")', 'dutyName(e.acceptedGroup) || ""', "api"),
     ("stats-csv-not-audited", "server.js", 'audit(ME, "audit_export", { details: { journal: "supervisor_stats",', 'void ({ details: { journal: "supervisor_stats",', "api"),
     # Затянувшийся перерыв (§12.2, план 90, часть В)
@@ -496,6 +502,10 @@ MUTATIONS = [
     ("stats-ui-stale-after-filter", "app.js", "loading: false, version: statsState.version + 1 });", "loading: false, version: statsState.version });", "ui"),
     ("stats-ui-device-click-no-filter", "app.js", "        statsState.filters.source = src.dataset.statsSource;\n", "", "ui"),
     ("stats-ui-timeout-silent", "app.js", "      error = problemText(err);\n    }\n    if (seq !== statsState.seq) return;", "      error = null;\n    }\n    if (seq !== statsState.seq) return;", "ui"),
+    # Список «Оператор» копит людей прошлых периодов, а не берёт operators последнего ответа (ревью Б.3, Important 2)
+    ("stats-ui-operators-accumulate", "app.js", "operator: (statsState.data ? statsState.data.operators : []).map((o) => [o.id, o.name, true]),", "operator: [...statsState.names].map(([id, name]) => [id, name, true]),", "ui"),
+    # Щелчок по строке устройства, а не по названию, фильтр не ставит (§23.3)
+    ("stats-ui-device-row-not-clickable", "app.js", "{ attr: (r) => ` data-stats-source=\"${escapeHtml(r.source.id)}\"` }", "{}", "ui"),
     ("stats-ui-csv-name-ignored", "app.js", 'a.download = named ? named[1] : "supervisor-stats.csv";', 'a.download = "supervisor-stats.csv";', "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается

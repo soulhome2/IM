@@ -6260,6 +6260,98 @@
     assert.eq([blind.current.incidents, blind.operators, blind.devices], [0, [], []], "датчики главного офиса старшему не видны — их инцидентов нет");
   });
 
+  test("«За период»: старшему видна часть инцидентов — считаются только они: устройства, операторы, ряды (§23.3, решение 3 плана 90)", async () => {
+    const env = await makeEnv();
+    const start = env.now;
+    const MALL = "20000000-0002-4000-8000-000000000005"; // датчик «Торгового центра»
+    for (const device of [S1, S2, MALL]) {
+      const res = await env.call("POST", "/test/events", fireAt(device));
+      assert.status(res, 201, null, "новое событие");
+      const guid = res.body.incidents[0].guid;
+      await env.advance(10);
+      assert.status(await env.act(guid, "claim", {}, "queue"), 200, null, "взять");
+      assert.status(await env.act(guid, "close", { resultId: "drill", comment: "учения" }), 200, null, "закрыть");
+    }
+    await env.advance(1); // конец периода — «сейчас», не включая: закрытый в эту секунду ещё не в нём
+    const q = span(start, env.now + 864e5);
+    const all = await stats(env, q);
+    assert.eq(all.current.incidents, 3, "всем видно три");
+    assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "мне — только «Торговый центр»");
+    await env.advance(61);
+    const part = await stats(env, q);
+    assert.eq(
+      [part.current.incidents, part.devices.map((d) => [d.source.id, d.incidents]), part.operators.map((o) => o.id), part.series.buckets.reduce((n, b) => n + b.notFalse, 0)],
+      [1, [[MALL, 1]], [ME], 1],
+      "виден один инцидент «Торгового центра» — только он в числах, устройствах и ряде"
+    );
+    assert.eq(csvRows(await statsCsv(env, q)).length - 1, 1, "CSV — тоже только видимые");
+  });
+
+  test("«За период»: пояс смены не московский, с переводом часов — границы периода, сутки по 23 и 25 ч, 47 и 49 часовых столбиков, время и имя файла CSV — в нём (§23.3, §23.4, §14.9)", async () => {
+    const NY = "America/New_York";
+    // Срок хранения — с запасом: оба перевода часов (весенний и осенний) за последний год — в пределах хранения
+    const env = await makeEnv({ workflowPatch: { shift: { timeZone: NY }, retention: { closedIncidentsDays: 800 } } });
+    const H = 3600e3;
+    const offsetOf = (ms) => {
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: NY, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+      return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
+    };
+    const dayOf = (ms) => new Date(ms).toLocaleDateString("en-CA", { timeZone: NY });
+    const midnight = (date) => {
+      const local = Date.parse(`${date}T00:00:00Z`);
+      return local - offsetOf(local - offsetOf(local));
+    };
+    const shiftDate = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+    const zIso = (ms) => {
+      const off = offsetOf(ms) / 60000;
+      const hhmm = `${String(Math.floor(Math.abs(off) / 60)).padStart(2, "0")}:${String(Math.abs(off) % 60).padStart(2, "0")}`;
+      return new Date(Math.floor(ms / 1000) * 1000 + offsetOf(ms)).toISOString().slice(0, 19) + (off < 0 ? "-" : "+") + hhmm;
+    };
+    const at = env.now;
+    const today = dayOf(at);
+
+    const s = await stats(env, "");
+    assert.eq([s.timeZone, Date.parse(s.from)], [NY, midnight(shiftDate(today, -6))], "7 дней — от полуночи по Нью-Йорку, не по Москве");
+    assert.eq(s.series.buckets.slice(1).map((b) => Date.parse(b.from)), [-5, -4, -3, -2, -1, 0].map((n) => midnight(shiftDate(today, n))), "сутки — по полуночам пояса смены");
+    assert.eq(Date.parse((await stats(env, "period=today")).from), midnight(today), "«Сегодня» — с полуночи по Нью-Йорку");
+
+    // Дни перевода часов за последний год: сутки не по 24 ч
+    const turns = [];
+    for (let date = shiftDate(today, -2); turns.length < 2 && date > shiftDate(today, -370); date = shiftDate(date, -1)) {
+      const len = midnight(shiftDate(date, 1)) - midnight(date);
+      if (len !== 24 * H && !turns.some((x) => x.len === len)) turns.push({ date, len });
+    }
+    assert.eq(turns.map((x) => x.len).sort(), [23 * H, 25 * H], "за год — весенний (23 ч) и осенний (25 ч) переводы");
+    for (const { date, len } of turns) {
+      const from = midnight(shiftDate(date, -1));
+      const two = await stats(env, span(from, midnight(shiftDate(date, 1))));
+      const hours = len / H + 24;
+      assert.eq([two.series.granularity, two.series.buckets.length], ["hour", hours], `двое суток с переводом ${date} — ${hours} столбиков по часам`);
+      const week = await stats(env, span(midnight(shiftDate(date, -2)), midnight(shiftDate(date, 3))));
+      assert.eq(
+        week.series.buckets.map((b) => (Date.parse(b.to) - Date.parse(b.from)) / H),
+        [24, 24, len / H, 24, 24],
+        `сутки ${date} — ${len / H} ч`
+      );
+    }
+
+    // CSV: время со смещением пояса смены, имя файла — по его датам
+    const t0 = env.now;
+    const res = await env.call("POST", "/test/events", fireAt(S1));
+    assert.status(res, 201, null, "новое событие");
+    const guid = res.body.incidents[0].guid;
+    await env.advance(5);
+    assert.status(await env.act(guid, "claim", {}, "queue"), 200, null, "взять");
+    assert.status(await env.act(guid, "close", { resultId: "drill", comment: "учения" }), 200, null, "закрыть");
+    const closedAt = Date.parse((await env.card(guid)).closedAt);
+    await env.advance(1);
+    const csv = await statsCsv(env, span(t0, env.now + 1000));
+    const rows = csvRows(csv);
+    assert.eq(rows.length, 2, "одна строка");
+    assert.eq(rows[1].split(";")[CSV_COLS.indexOf("closed")], zIso(closedAt), "время закрытия — со смещением Нью-Йорка");
+    assert.eq(csv.headers["content-disposition"], `attachment; filename=supervisor-stats-${dayOf(t0)}_${dayOf(env.now - 1)}.csv`, "имя файла — даты по Нью-Йорку");
+  });
+
   test("«За период»: период — 7 дней по умолчанию, «Сегодня», «Смена», «30 дней», «Свой…» в поясе смены; обрезка по сроку хранения и «сейчас»; пустой период; по часам или по дням; прошлый период; подсчёт за минуту не повторяется; 400 и 403 (§23.3, решения 5 и 8 плана 90)", async () => {
     const env = await makeEnv();
     const at = env.now;
@@ -6400,6 +6492,20 @@
     const card = await env.card(await env.guidOf("INC-1837"));
     assert.eq([card.acceptedGroup && card.acceptedGroup.id, card.acceptedGroup && card.acceptedGroup.kind], ["grp-leads", "duty_group"], "acceptedGroup — в карточке");
     assert.eq((await env.card(await env.guidOf("INC-1829"))).acceptedGroup, null, "без группы — null");
+    const gone = (await env.card(await env.guidOf("INC-1826"))).acceptedGroup;
+    assert.eq([gone && gone.id, gone && gone.kind], ["grp-gone", "duty_group"], "удалённая группа в карточке — всё равно группа");
+    // Две удалённые с равным числом — по groupId, в каком бы порядке они ни встретились: обе раскладки
+    for (const [x, y] of [["grp-zz-gone", "grp-aa-gone"], ["grp-aa-gone", "grp-zz-gone"]]) {
+      const twoGone = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
+      const set2 = { "INC-1829": null, "INC-1831": x, "INC-1837": y, "INC-1826": null };
+      twoGone.forEach((i) => i.number in set2 && (i.acceptedGroup = set2[i.number]));
+      const env2 = await makeEnv({ fixturePatch: { incidents: twoGone } });
+      assert.eq(
+        (await stats(env2, "period=7d")).dutyGroups.map((g) => g.groupId),
+        ["grp-aa-gone", "grp-zz-gone", null],
+        `удалённые с равным числом — по groupId, «Без группы» — последней (INC-1831 — ${x})`
+      );
+    }
   });
 
   test("Дежурная группа до принятия: адресовали «Группе реагирования» — принявший из другой группы, отклонившая, закрытый без взятия получают её; не адресовали — первая группа принявшего или закрывшего; ставится один раз; привязанный — по закрывшему основной (§2.2, решение 16 плана 90)", async () => {

@@ -6399,7 +6399,8 @@
     to: "",
     filters: {},
     tree: null,
-    operators: new Map(),
+    // Имена операторов, встреченных в ответах: выбранный в фильтре, но не закрывавший в новом периоде, — по имени, а не по id
+    names: new Map(),
     sort: { devices: { key: "incidents", dir: -1 }, duty: { key: "incidents", dir: -1 } },
     keys: {},
   };
@@ -6427,11 +6428,13 @@
     return local - offset(guess);
   }
   const nextDate = (date) => new Date(Date.parse(`${date}T00:00:00Z`) + 864e5).toISOString().slice(0, 10);
+  // Пояс смены: из ответа «За период», до него — из ответа «Сейчас» (пост мог задать свой), в крайнем случае — машины
+  const statsZone = () => (statsState.data && statsState.data.timeZone) || (shiftState.data && shiftState.data.shift.timeZone) || WORKFLOW.shift.timeZone;
   // Параметры запроса: период — кнопкой или «Свой…» (даты «с» и «по» включительно, в поясе смены); null — даты не заданы
   function statsParams() {
     const p = Object.assign({}, statsState.filters);
     if (statsState.period !== "custom") return Object.assign(p, { period: statsState.period });
-    const tz = (statsState.data && statsState.data.timeZone) || WORKFLOW.shift.timeZone;
+    const tz = statsZone();
     if (!statsState.from || !statsState.to || statsState.from > statsState.to) return null;
     return Object.assign(p, { from: new Date(zoneMidnightOf(statsState.from, tz)).toISOString(), to: new Date(zoneMidnightOf(nextDate(statsState.to), tz)).toISOString() });
   }
@@ -6445,8 +6448,8 @@
     let data = null;
     let error = null;
     try {
-      if (!statsState.tree) statsState.tree = await api.get("/operator/reference/source-groups");
-      data = await api.get("/operator/supervisor/stats", params);
+      // Дерево групп устройств — с каждым подсчётом: после правки дерева списки фильтров не устаревают
+      [statsState.tree, data] = await Promise.all([api.get("/operator/reference/source-groups"), api.get("/operator/supervisor/stats", params)]);
     } catch (err) {
       // 503 SUPERVISOR_STATS_TIMEOUT — текст сервера по ключу: «Подсчёт занял слишком долго…»; кнопка «Обновить» остаётся
       error = problemText(err);
@@ -6454,7 +6457,7 @@
     if (seq !== statsState.seq) return; // пока ждали, период или фильтр сменили — ответ уже не тот
     // Номер ответа — в ключе перестройки: тот же подсчёт сервера (computedAt) с другими фильтрами — другие данные
     Object.assign(statsState, { data, error, loading: false, version: statsState.version + 1 });
-    if (data) data.operators.forEach((o) => statsState.operators.set(o.id, o.name));
+    if (data) data.operators.forEach((o) => statsState.names.set(o.id, o.name));
     renderStats();
   }
   // Время (§23.3): «м:сс», от часа — «ч:мм:сс», доли секунды отбрасываются; нет значения — «—»
@@ -6487,15 +6490,13 @@
   // Подпись периода (§23.3): даты в поясе смены и срок хранения; начало подтянуто к хранению — «Данные с …»
   function statsSpanText(d) {
     const tz = d.timeZone;
-    const day = (ms) => new Date(ms).toLocaleDateString(shiftLocale(), { timeZone: tz, day: "numeric", month: "long" });
+    const days = new Intl.DateTimeFormat(shiftLocale(), { timeZone: tz, day: "numeric", month: "long" });
     const from = Date.parse(d.from);
     const to = Date.parse(d.to);
     const last = to > from ? to - 1 : to;
     const range = d.fromClipped
       ? t("Данные с {time}", { time: new Date(from).toLocaleString(shiftLocale(), { timeZone: tz, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: false }) })
-      : zoneDate(from, tz) === zoneDate(last, tz)
-        ? day(from)
-        : `${day(from)} – ${day(last)}`;
+      : days.formatRange(from, Math.max(from, last)); // «11–17 ноября», «28 октября – 3 ноября»; один день — просто дата
     return `${range} · ${t("хранится {n, plural, one {# день} few {# дня} many {# дней} other {# дня}}", { n: d.retentionDays })}`;
   }
   function statsTile(key, head, value, sub, cls) {
@@ -6583,7 +6584,7 @@
       { key: "breached", head: "С нарушениями", val: (r) => r.breached, cell: (r) => String(r.breached), cls: (r) => (r.breached ? "late" : "") },
       { key: "reaction", head: "Реакция, медиана", val: (r) => r.medianReactionSec, cell: (r) => statsDuration(r.medianReactionSec) },
     ];
-    return `<div class="stats-panel-h"><h3>${te("Устройства")}</h3><span class="muted">${te("10 с наибольшим числом инцидентов · щелчок — отбор по устройству")}</span></div>${statsTable("devices", cols, d.devices, {})}`;
+    return `<div class="stats-panel-h"><h3>${te("Устройства")}</h3><span class="muted">${te("10 с наибольшим числом инцидентов · щелчок — отбор по устройству")}</span></div>${statsTable("devices", cols, d.devices, { attr: (r) => ` data-stats-source="${escapeHtml(r.source.id)}"` })}`;
   }
   function statsDutyName(r) {
     if (r.groupId == null) return te("Без группы");
@@ -6627,7 +6628,8 @@
         .slice()
         .sort((a, b) => coll.compare(a.name, b.name))
         .map((x) => [x.id, x.name, true]),
-      operator: [...statsState.operators].sort((a, b) => coll.compare(a[1], b[1])).map(([id, name]) => [id, name, true]),
+      // Операторы — ровно поле operators последнего ответа (§23.3): кто закрывал в этом периоде
+      operator: (statsState.data ? statsState.data.operators : []).map((o) => [o.id, o.name, true]),
       result: WORKFLOW.reasonCatalogs.close_result.items.map((r) => [r.id, lbl(r)]),
     };
   }
@@ -6663,7 +6665,7 @@
     STATS_SELECTS.forEach((f) => {
       const value = statsState.filters[f.param] || "";
       const list = options[f.param].slice();
-      if (value && !list.some(([id]) => id === value)) list.push([value, value, true]); // выбранного больше нет — инцидентов нет
+      if (value && !list.some(([id]) => id === value)) list.push([value, statsState.names.get(value) || value, true]); // выбранного больше нет — инцидентов нет
       statsPut(f.id, JSON.stringify([LANG, list]), [`<option value="">${te(f.all)}</option>`].concat(list.map(([id, name, data]) => `<option value="${escapeHtml(id)}"${data ? " data-i18n-skip" : ""}>${escapeHtml(name)}</option>`)).join(""));
       if ($(f.id).value !== value) $(f.id).value = value;
     });
@@ -6721,7 +6723,7 @@
       statsState.period = btn.dataset.statsPeriod;
       // «Свой…» — по умолчанию даты текущего периода: с его первого дня по сегодня
       if (statsState.period === "custom" && !statsState.from) {
-        const tz = (statsState.data && statsState.data.timeZone) || WORKFLOW.shift.timeZone;
+        const tz = statsZone();
         statsState.from = zoneDate(statsState.data ? Date.parse(statsState.data.from) : serverNow(), tz);
         statsState.to = zoneDate(serverNow(), tz);
       }
@@ -6753,7 +6755,7 @@
         sortBtn.focus();
         return renderStats();
       }
-      // Щелчок по устройству — фильтр «Устройство» на него, блок пересчитывается (решение 7)
+      // Щелчок по строке устройства (или кнопке с названием) — фильтр «Устройство» на него, блок пересчитывается (решение 7)
       const src = e.target.closest("[data-stats-source]");
       if (src) {
         statsState.filters.source = src.dataset.statsSource;
