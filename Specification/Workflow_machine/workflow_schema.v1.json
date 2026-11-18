@@ -100,7 +100,7 @@
   },
 
   "display": {
-    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит; permission — пункт видят только люди с этим правом (§5), у остальных его нет и в «и ещё N» он не входит. textKeys — тексты пункта с подстановками, когда одной подписи labelKey мало: у break_overdue (перерыв затянулся, §12.2, §22.4) one — один затянувший с причиной, oneNoReason — без причины (причины нет или её уже нет в настройках поста), many — несколько, n — сколько; item, itemNoReason — строка каждого в панели колокольчика, since — начало перерыва; ended, endedNoReason — запись колокольчика «перерыв закончился» (§22.5), только если у клиента был пункт об этом перерыве. personName — из справочника людей (§8.1), reason — по reasonId из текущих настроек поста",
+    "$comment": "ARCH-08 в9. Оформление, которое задаёт машина. lateSec — до нарушения норматива осталось меньше — отсчёт выделяется как «скоро нарушение». inboxBlock — блок «Мне на принятие» над очередью (§7): filter — какой фильтр queueFilters в блоке (без counted: false), maxRows — сколько строк, дальше «ещё N»; sort — ключ queueSort.keys, свой порядок блока, от queueSort.default и выбора оператора не зависит; hiddenWith — при каких выбранных фильтрах блока нет. freshRowSec — сколько секунд подсвечена новая строка с того момента, как она появилась в видимой части списка (§22.3). noticeKeepHours — сколько часов хранится журнал колокольчика (§22.5). postStatus — пункты строки состояния поста по убыванию серьёзности (§22.4); adminOnly — пункт видит только администратор, в «и ещё N» у оператора он не входит; permission — пункт видят только люди с этим правом (§5), у остальных его нет и в «и ещё N» он не входит. textKeys — тексты пункта с подстановками, когда одной подписи labelKey мало: у break_overdue (перерыв затянулся, §12.2, §22.4) one — один затянувший с причиной, oneNoReason — без причины (причины нет или её уже нет в настройках поста), many — несколько, n — сколько; item, itemNoReason — строка каждого в панели колокольчика, since — начало перерыва: часы и минуты в поясе компьютера, не сегодняшнее — с датой (§22.4); ended, endedNoReason — запись колокольчика «перерыв закончился» (§22.5), только если у клиента был пункт об этом перерыве. personName — из справочника людей (§8.1), reason — по reasonId из текущих настроек поста",
     "lateSec": 120,
     "inboxBlock": {
       "filter": "inbox",
@@ -228,7 +228,7 @@
       "field": "hold_reason",
       "requiredOnTransition": ["hold"],
       "items": [
-        { "id": "break", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 30, "setBy": "system", "$comment": "§12.2 (RULE-106). Срок перерыва: истёк — инцидент в очередь (break_hold_release), нарушения удержания нет" },
+        { "id": "break", "labelKey": "workflow.catalog.hold.break", "maxMinutes": 30, "setBy": "system", "$comment": "§12.2 (RULE-106). Срок удержания инцидентов на перерыве (не срок причины перерыва session.breakReasons[].maxMinutes, §12.2): истёк — инцидент в очередь (break_hold_release), нарушения удержания нет" },
         { "id": "no_link", "labelKey": "workflow.catalog.hold.no_link", "maxMinutes": null, "setBy": "system", "deadlineFromIdle": true, "$comment": "§4, правило 7; §12.3 (RULE-116, RULE-118, RULE-129, BUG-119). deadlineFromIdle: срок не в справочнике (maxMinutes — null), а из порогов молчания: порог возврата в очередь минус порог удержания (holdSec) — оператор молчит дальше, в очередь по молчанию (system_release_idle) в тот же момент; связь вернулась, а инцидент не возобновлён — по сроку (no_link_hold_release). Нарушения за обрыв связи нет" }
       ]
     },
@@ -1029,7 +1029,7 @@
     },
     {
       "id": "break_hold_release",
-      "$comment": "§4, правило 7; §12.2 (RULE-106). Срок перерыва истёк, а оператор не вернулся: отложенный «Перерыв оператора» уходит в очередь, как при долгом молчании, а не записывается нарушение удержания — перерыв по правилам, а инцидент не должен висеть у человека на обеде. Срок — maxMinutes причины break",
+      "$comment": "§4, правило 7; §12.2 (RULE-106). Срок удержания инцидентов на перерыве истёк, а оператор не вернулся: отложенный «Перерыв оператора» уходит в очередь, как при долгом молчании, а не записывается нарушение удержания — перерыв по правилам, а инцидент не должен висеть у человека на обеде. Срок — maxMinutes причины удержания break, а не срок причины перерыва (session.breakReasons[].maxMinutes, §12.2)",
       "labelKey": "workflow.transition.break_hold_release",
       "from": ["on_hold"],
       "to": "new",
@@ -1629,6 +1629,7 @@
     "workflow.error.bad_request": { "vars": [] },
     "workflow.error.test.no_fixture": { "vars": ["name"] },
     "workflow.error.test.no_operator": { "vars": ["id"] },
+    "workflow.error.test.workflow_patch": { "vars": [] },
     "workflow.error.test.clock_backwards": { "vars": [] },
     "workflow.error.test.clock_seconds": { "vars": [] },
     "workflow.error.test.bad_incident": { "vars": [] },
@@ -1995,7 +1996,7 @@
           { "path": "reasonCatalogs.hold.items", "labelKey": "workflow.settings.reasonCatalogs.hold.items", "whatKey": "workflow.settings.reasonCatalogs.hold.items.what" },
           { "path": "reasonCatalogs.mass_fault.items", "labelKey": "workflow.settings.reasonCatalogs.mass_fault.items", "whatKey": "workflow.settings.reasonCatalogs.mass_fault.items.what" },
           { "path": "reasonCatalogs.false_alarm_cause.items", "labelKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items", "whatKey": "workflow.settings.reasonCatalogs.false_alarm_cause.items.what" },
-          { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what", "fields": [{ "name": "maxMinutes", "labelKey": "workflow.settings.session.breakReasons.maxMinutes", "hintKey": "workflow.settings.session.breakReasons.maxMinutes.hint", "placeholderKey": "workflow.settings.session.breakReasons.maxMinutes.placeholder" }] }
+          { "path": "session.breakReasons", "labelKey": "workflow.settings.session.breakReasons", "whatKey": "workflow.settings.session.breakReasons.what", "fields": [{ "name": "maxMinutes", "labelKey": "workflow.settings.session.breakReasons.maxMinutes", "hintKey": "workflow.settings.session.breakReasons.maxMinutes.hint", "placeholderKey": "workflow.settings.session.breakReasons.maxMinutes.placeholder", "kind": "int", "min": 1, "max": 480 }] }
         ]
       },
       {

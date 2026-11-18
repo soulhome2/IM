@@ -989,8 +989,8 @@
     const orlova = nowRow(n, "orlova");
     assert.eq(
       [orlova.person.name, orlova.state, orlova.reasonId, orlova.reasonLabel, Date.parse(orlova.since), orlova.breakOverdue],
-      [person("orlova").name, "not_ready", "lunch", window.IM_STRINGS.ru["workflow.session.break.lunch"], shifted(person("orlova").stateSince), null],
-      "Орлова — на обеде, с какого времени — из набора"
+      [person("orlova").name, "not_ready", "lunch", window.IM_STRINGS.ru["workflow.session.break.lunch"], shifted(person("orlova").stateSince), false],
+      "Орлова — на обеде, с какого времени — из набора; срок обеда (60 мин) ещё не вышел"
     );
     assert.eq([nowRow(n, "kuznetsov").state, nowRow(n, "kuznetsov").since], ["offline", null], "Кузнецов не входил — «Вышел», без времени");
     assert.eq([nowRow(n, "petrova").state, Date.parse(nowRow(n, "petrova").since)], ["busy", shifted(person("petrova").stateSince)], "Петрова — «Занят»: есть свои в работе");
@@ -1114,6 +1114,181 @@
     const linked = await supervisorNow(await makeEnv({ workflowPatch: { shift: { starts: [start] } }, fixturePatch: { incidents } }));
     assert.eq(mine(linked), expect(incidents), "привязанный INC-1837 не считается ни в закрытых, ни в медиане");
     assert.ok(mine(linked)[0] === mine(n)[0] - 1 && mine(linked)[1] !== mine(n)[1], `без INC-1837 — на одного закрытого меньше и другая медиана: ${mine(n)} → ${mine(linked)}`);
+  });
+
+  /* ===== Затянувшийся перерыв (§12.2, §14.10, §22.4, §23.2, план 90, часть В) ===== */
+
+  // Коллега уходит на перерыв и возвращается (стенд); события потока у оператора стенда — по типу
+  const breakOf = (env, id, body) => env.call("PUT", `/test/operators/${id}/agent-state`, body);
+  // По человеку: Орлова в наборе на обеде (60 мин) — в долгих тестах её обед тоже затягивается
+  const overdueEvents = (got, id) => got.filter((m) => m.type === "supervisor.break_overdue" && (!id || m.payload.personId === id));
+  const clearedEvents = (got, id) => got.filter((m) => m.type === "supervisor.break_overdue_cleared" && (!id || m.payload.personId === id));
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const PATROL = () => W.session.breakReasons.find((r) => r.id === "patrol");
+  // Срок «Обхода» — из стартового набора (§20): 20 мин
+  const PATROL_SEC = () => PATROL().maxMinutes * 60;
+  async function watchStream(env, body) {
+    const got = [];
+    const stop = env.api.subscribe((m) => got.push(m));
+    try {
+      await body(got);
+    } finally {
+      stop();
+    }
+  }
+
+  test("Перерыв затянулся: «Обход» 20 мин — через 20 мин старшему supervisor.break_overdue один раз, без инцидента и автора; вернулся — supervisor.break_overdue_cleared; новый перерыв — новое оповещение; вышел из МИ — тоже снятие (§12.2, §14.10, план 90)", async () => {
+    assert.eq(PATROL().maxMinutes, 20, "у «Обхода» срок 20 мин — стартовый набор");
+    const env = await makeEnv();
+    await watchStream(env, async (got) => {
+      assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход");
+      const since = env.now;
+      assert.status(await breakOf(env, "petrova", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Петрова ушла на обход");
+      await env.advance(300);
+      assert.status(await breakOf(env, "petrova", { agentState: "ready" }), 200, null, "Петрова вернулась через 5 мин");
+      await env.advance(PATROL_SEC() - 301);
+      await settle();
+      assert.eq(overdueEvents(got).length, 0, "за секунду до срока оповещения нет");
+      assert.eq(nowRow(await supervisorNow(env), "sidorov").breakOverdue, false, "за секунду до срока — «нет»");
+      await env.advance(2);
+      await settle();
+      const sent = overdueEvents(got);
+      assert.eq(sent.length, 1, "срок вышел — одно оповещение");
+      assert.eq(
+        [sent[0].incidentGuid, sent[0].actor, sent[0].incident, sent[0].payload],
+        [null, null, null, { personId: "sidorov", reasonId: "patrol", since: new Date(since).toISOString(), maxMinutes: 20 }],
+        "о человеке: кто, причина, с какого времени, срок; инцидента и автора нет"
+      );
+      const late = nowRow(await supervisorNow(env), "sidorov");
+      assert.eq([late.state, late.breakOverdue], ["not_ready", true], "в «Сейчас» — срок вышел");
+      await env.advance(600);
+      await settle();
+      assert.eq(overdueEvents(got).length, 1, "второй раз за тот же перерыв — нет");
+      assert.eq(clearedEvents(got, "petrova").length, 0, "вернулась до срока — снятия нет: оповещения не было и быть не могло");
+
+      assert.status(await breakOf(env, "sidorov", { agentState: "ready" }), 200, null, "Сидоров вернулся");
+      await settle();
+      assert.eq(clearedEvents(got).map((m) => [m.incidentGuid, m.actor, m.incident, m.payload]), [[null, null, null, { personId: "sidorov" }]], "вернулся — снятие");
+      const back = nowRow(await supervisorNow(env), "sidorov");
+      assert.eq([back.state === "not_ready", back.breakOverdue], [false, false], "вернулся — не на перерыве, «нет»");
+
+      assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "снова на обход");
+      await env.advance(PATROL_SEC());
+      await settle();
+      assert.eq(overdueEvents(got, "sidorov").length, 2, "новый перерыв — свой срок и новое оповещение; ровно в срок — уже затянулся");
+      assert.status(await breakOf(env, "sidorov", { agentState: "offline" }), 200, null, "вышел из МИ с перерыва");
+      await settle();
+      assert.eq(clearedEvents(got, "sidorov").length, 2, "вышел из МИ — тоже снятие");
+      await env.advance(PATROL_SEC() + 60);
+      await settle();
+      assert.eq([overdueEvents(got, "sidorov").length, clearedEvents(got, "sidorov").length], [2, 2], "после конца перерыва — ничего");
+    });
+  });
+
+  test("Перерыв затянулся: кому — только с правом supervisor:view; о своём перерыве — ничего, а своя строка в «Сейчас» — «да»; о человеке без incident:accept — нет (§12.2, §23.2, план 90)", async () => {
+    const bare = await makeEnv({ permissions: W.permissions.map((p) => p.key).filter((k) => k !== "supervisor:view") });
+    await watchStream(bare, async (got) => {
+      assert.status(await breakOf(bare, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход");
+      await bare.advance(PATROL_SEC() + 1);
+      assert.status(await breakOf(bare, "sidorov", { agentState: "ready" }), 200, null, "вернулся");
+      await settle();
+      assert.eq([overdueEvents(got).length, clearedEvents(got).length], [0, 0], "без права supervisor:view — ни оповещения, ни снятия");
+    });
+
+    const env = await makeEnv();
+    await watchStream(env, async (got) => {
+      assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "старший сам ушёл на обход");
+      await env.advance(PATROL_SEC() + 1);
+      await settle();
+      assert.eq(overdueEvents(got).length, 0, "о своём перерыве — оповещения нет");
+      assert.eq(nowRow(await supervisorNow(env), ME).breakOverdue, true, "своя строка — «да»: это таблица, а не оповещение");
+      assert.status(await env.call("PUT", "/operator/session/agent-state", { agentState: "ready" }), 200, null, "вернулся");
+      await settle();
+      assert.eq(clearedEvents(got).length, 0, "о своём перерыве — и снятия нет");
+    });
+
+    // Оповещение — только о людях из строк «Сейчас»: без incident:accept человека там нет
+    const env2 = await makeEnv();
+    assert.status(await env2.call("PUT", "/test/operators/gusev/roles", { roles: [] }), 200, null, "у Гусева нет ролей — нет и incident:accept");
+    await watchStream(env2, async (got) => {
+      assert.status(await breakOf(env2, "gusev", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Гусев ушёл на обход");
+      await env2.advance(PATROL_SEC() + 1);
+      assert.status(await breakOf(env2, "gusev", { agentState: "ready" }), 200, null, "вернулся");
+      await settle();
+      assert.eq([overdueEvents(got).length, clearedEvents(got).length], [0, 0], "о человеке без incident:accept — ничего");
+    });
+  });
+
+  test("Перерыв затянулся: вернулся раньше такта планировщика — оповещения не было, а снятие приходит; после простоя сервиса — сразу после старта; перерыв из набора — с его начала (§12.2, §14.3, план 90)", async () => {
+    const env = await makeEnv();
+    const start = env.now;
+    await watchStream(env, async (got) => {
+      assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход");
+      assert.status(await env.call("POST", "/test/clock", { advanceSec: PATROL_SEC() + 1, runScheduler: false, serviceRestart: true }), 200, null, "срок вышел, такт не наступил");
+      const row = nowRow(await supervisorNow(env), "sidorov");
+      assert.eq(row.breakOverdue, true, "по времени срок вышел — «да» и до такта");
+      await settle();
+      assert.eq(overdueEvents(got).length, 0, "такта не было — оповещения нет");
+      assert.status(await breakOf(env, "sidorov", { agentState: "ready", runScheduler: false }), 200, null, "вернулся до такта");
+      await settle();
+      assert.eq([overdueEvents(got).length, clearedEvents(got).map((m) => m.payload)], [0, [{ personId: "sidorov" }]], "снятие — и без оповещения: срок по времени вышел");
+      await env.advance(60);
+      await settle();
+      assert.eq(overdueEvents(got, "sidorov").length, 0, "после возврата оповещение уже не уходит");
+
+      // Сервис лежал, срок вышел за время простоя: догон — сразу после старта
+      assert.status(await breakOf(env, "petrova", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Петрова ушла на обход");
+      assert.status(await env.call("POST", "/test/clock", { advanceSec: PATROL_SEC() + 300, serviceRestart: true }), 200, null, "сервис лежал дольше срока");
+      await settle();
+      assert.eq(overdueEvents(got, "petrova").length, 1, "после старта — сразу");
+      // Орлова в наборе на обеде (60 мин) с stateSince: перерыв идёт с него, срок — по настройкам на момент загрузки
+      const fx = window.IM_FIXTURE;
+      const orlova = fx.people.operators.find((o) => o.id === "orlova");
+      const shifted = Date.parse(orlova.stateSince) - Date.parse(fx.capturedAt) + start;
+      assert.eq(overdueEvents(got, "orlova").map((m) => [m.payload.reasonId, Date.parse(m.payload.since), m.payload.maxMinutes]), [["lunch", shifted, 60]], "перерыв из набора — с его начала");
+    });
+  });
+
+  test("Перерыв затянулся: причина без срока и перерыв без причины не затягиваются; срок и причина — на начало перерыва: смена срока и удаление причины идущий перерыв не меняют; breakOverdue — строго true/false (§12.2, §23.2, план 90)", async () => {
+    const noLimit = await makeEnv({ workflowPatch: { session: { breakReasons: [{ id: "patrol", labelKey: "workflow.session.break.patrol" }] } } });
+    await watchStream(noLimit, async (got) => {
+      assert.status(await breakOf(noLimit, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "обход без срока");
+      assert.status(await noLimit.call("POST", "/test/clock", { advanceSec: 480 * 60 + 1, serviceRestart: true }), 200, null, "прошло больше 8 часов");
+      await settle();
+      assert.eq([overdueEvents(got).length, nowRow(await supervisorNow(noLimit), "sidorov").breakOverdue], [0, false], "у причины без срока перерыв не затягивается");
+    });
+    const noReasons = await makeEnv({ workflowPatch: { session: { breakReasons: [] } } });
+    await watchStream(noReasons, async (got) => {
+      assert.status(await breakOf(noReasons, "sidorov", { agentState: "not_ready" }), 200, null, "перерыв без причины");
+      assert.status(await noReasons.call("POST", "/test/clock", { advanceSec: 480 * 60 + 1, serviceRestart: true }), 200, null, "прошло больше 8 часов");
+      await settle();
+      assert.eq([overdueEvents(got).length, nowRow(await supervisorNow(noReasons), "sidorov").breakOverdue], [0, false], "без причины перерыв не затягивается");
+    });
+
+    const env = await makeEnv();
+    await watchStream(env, async (got) => {
+      assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "Сидоров ушёл на обход (20 мин)");
+      const longer = W.session.breakReasons.map((r) => (r.id === "patrol" ? Object.assign({}, r, { maxMinutes: 60 }) : r));
+      assert.status(await env.call("PUT", "/test/workflow", { workflowPatch: { session: { breakReasons: longer } } }), 200, null, "администратор поменял срок «Обхода» на 60 мин");
+      await env.advance(PATROL_SEC() + 1);
+      await settle();
+      assert.eq(overdueEvents(got, "sidorov").map((m) => m.payload.maxMinutes), [20], "срок — на начало перерыва: 20 мин, а не 60");
+      assert.status(await breakOf(env, "sidorov", { agentState: "ready" }), 200, null, "вернулся");
+      assert.status(await breakOf(env, "sidorov", { agentState: "not_ready", reasonId: "patrol" }), 200, null, "новый перерыв — по новому сроку");
+      await env.advance(PATROL_SEC() + 1);
+      await settle();
+      assert.eq(overdueEvents(got, "sidorov").length, 1, "через 20 мин нового перерыва — ещё не затянулся: срок теперь 60");
+
+      assert.status(await breakOf(env, "petrova", { agentState: "not_ready", reasonId: "briefing" }), 200, null, "Петрова ушла на инструктаж (30 мин)");
+      const without = W.session.breakReasons.filter((r) => r.id !== "briefing");
+      assert.status(await env.call("PUT", "/test/workflow", { workflowPatch: { session: { breakReasons: without } } }), 200, null, "причину «Инструктаж» удалили");
+      await env.advance(30 * 60 + 1);
+      await settle();
+      assert.eq(overdueEvents(got, "petrova").map((m) => [m.payload.reasonId, m.payload.maxMinutes]), [["briefing", 30]], "у идущего перерыва срок остался");
+      const row = nowRow(await supervisorNow(env), "petrova");
+      assert.eq([row.reasonId, row.reasonLabel, row.breakOverdue], [null, null, true], "причины в настройках нет — без причины, срок вышел");
+      (await supervisorNow(env)).operators.forEach((r) => assert.eq(typeof r.breakOverdue, "boolean", `${r.person.id}: breakOverdue — true или false`));
+    });
   });
 
   /* ===== Передать (§8, RULE-19, RULE-20) ===== */

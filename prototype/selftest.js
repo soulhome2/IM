@@ -381,7 +381,11 @@
   async function standReset(extra) {
     const body = Object.assign({}, extra);
     body.workflowPatch = Object.assign({ limits: { maxActive: 1 } }, body.workflowPatch);
-    return window.IM_SELFTEST_API.raw("POST", "/test/reset", body);
+    const res = await window.IM_SELFTEST_API.raw("POST", "/test/reset", body);
+    // Сброс стенда — новые данные, как после перезагрузки страницы: затянувшиеся перерывы (Орлова в наборе на обеде,
+    // шаги двигают часы) — по «Сейчас» нового набора (§12.2)
+    if (window.IM_SELFTEST_UI && window.IM_SELFTEST_UI.breakRestore) await window.IM_SELFTEST_UI.breakRestore();
+    return res;
   }
 
   async function run() {
@@ -2244,11 +2248,14 @@
       const gone = ui.freezeAbove([r("a"), r("b"), r("c")], [r("n"), r("a"), r("m"), r("c")], "b");
       expect(ids(gone.rows) === "a,b*,m,c" && ids(gone.newAbove) === "n", `якорь ушёл: ${ids(gone.rows)} / новые ${ids(gone.newAbove)}`);
       const defs = window.IM_WORKFLOW.display.postStatus;
-      expect(defs.map((d) => d.id).join() === "connection,disk,sound_off,maintenance,only_important", `порядок пунктов машины: ${defs.map((d) => d.id).join()}`);
-      const line = (active, admin) => {
-        const x = ui.postStatusLine(active, defs, admin);
+      expect(defs.map((d) => d.id).join() === "connection,disk,sound_off,break_overdue,maintenance,only_important", `порядок пунктов машины: ${defs.map((d) => d.id).join()}`);
+      const line = (active, admin, perms) => {
+        const x = ui.postStatusLine(active, defs, admin, (key) => (perms || []).includes(key));
         return `${x.top ? x.top.id : "—"}+${x.more}`;
       };
+      // «Перерыв затянулся» — только с правом supervisor:view (§22.4): у остальных его нет и в «и ещё N» он не входит
+      expect(line(["break_overdue", "maintenance"], false, ["supervisor:view"]) === "break_overdue+1", `перерыв у старшего: ${line(["break_overdue", "maintenance"], false, ["supervisor:view"])}`);
+      expect(line(["break_overdue", "maintenance"], true) === "maintenance+0", `перерыв без права: ${line(["break_overdue", "maintenance"], true)}`);
       expect(line(["only_important", "maintenance", "connection"], false) === "connection+2", `три состояния: ${line(["only_important", "maintenance", "connection"], false)}`);
       expect(line(["maintenance", "only_important"], false) === "maintenance+1", `работы и «Только важное»: ${line(["maintenance", "only_important"], false)}`);
       expect(line(["disk", "sound_off"], false) === "sound_off+0", `диск у оператора: ${line(["disk", "sound_off"], false)}`);
@@ -6090,6 +6097,122 @@
         if (mode() !== "queue") await click($("backToQueue"));
         await standReset({ fixture: "demo" });
         await wait(100);
+        await setFilter("open");
+      }
+    }, SOUND_FIRST);
+
+    // Затянувшийся перерыв (§12.2, план 90, часть В). Стенд — без инцидентов: за 20 минут часов стенда звучали бы
+    // и оповещения о нарушениях нормативов — тот же «Колокол» (sound.alert)
+    await step("Перерыв затянулся: старшему — пункт строки поста и «Колокол» один раз; в колокольчике на «Система» — каждый, с причиной и с какого времени; перезагрузка — пункт по «Сейчас» без звука; переподключение — досланное без звука; вернулся — пункт ушёл, запись «перерыв закончился», без звука; без права — ничего; в настройках причин — срок (§12.2, §21.1, §22.4, §22.5)", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const ui = window.IM_SELFTEST_UI;
+      const ru = window.IM_STRINGS.ru;
+      const nameOf = (id) => window.IM_FIXTURE.people.operators.find((o) => o.id === id).name;
+      const BELL = window.IM_WORKFLOW.sound.alert.pattern;
+      const late = () => $("postStatus").querySelector('[data-post-state="break_overdue"]');
+      const post = () => $("postStatus").textContent.replace(/\s+/g, " ").trim();
+      const away = async (id, body) => expect((await stand.raw("PUT", `/test/operators/${id}/agent-state`, body)).status === 200, `${id}: ${JSON.stringify(body)} — не 200`);
+      const clock = (sec) => stand.raw("POST", "/test/clock", { advanceSec: sec, serviceRestart: true });
+      const patrol = ru["workflow.session.break.patrol"];
+      const briefing = ru["workflow.session.break.briefing"];
+      const get = stand.get;
+      // Вывод звука — запись (как в шагах звука выше): предыдущий шаг вернул настоящий
+      window.IMSound.output = soundOut;
+      fakeSound.ready = true;
+      window.dispatchEvent(new Event("im-sound-output"));
+      try {
+        await standReset({ fixture: "demo", fixturePatch: { incidents: [] } });
+        await wait(600);
+        await ui.breakRestore();
+        expect(!late(), `до перерывов в строке поста: «${post()}»`);
+        await away("sidorov", { agentState: "not_ready", reasonId: "patrol" });
+        await away("petrova", { agentState: "not_ready", reasonId: "briefing" });
+        // Старший сам на обходе: о своём перерыве — ничего, ни по событию, ни по «Сейчас»
+        expect((await stand.raw("PUT", "/operator/session/agent-state", { agentState: "not_ready", reasonId: "patrol" })).status === 200, "старший не ушёл на перерыв");
+        await clock(20 * 60 - 1);
+        await wait(300);
+        const bells = heard(BELL);
+        expect(!late(), `за секунду до срока: «${post()}»`);
+        await clock(2);
+        await wait(300);
+        const one = `Перерыв затянулся: ${nameOf("sidorov")} — ${patrol}`;
+        expect(late() && post().includes(one), `срок вышел — строка поста «${post()}», ждали «${one}»`);
+        expect(heard(BELL) === bells + 1, `срок вышел — «Колокол» ${heard(BELL) - bells} раз`);
+        // Перезагрузка страницы: пункт — по «Сейчас», без звука
+        await ui.breakRestore();
+        expect(late() && post().includes(one) && heard(BELL) === bells + 1, `после перезагрузки: «${post()}», колоколов ${heard(BELL) - bells}`);
+        // «Сейчас»: строки со сроком вышедшим — красные, своя тоже (§23.2)
+        await click($("screenTabs").querySelector('[data-screen="shift"]'));
+        await wait(400);
+        const red = [...$("shiftTable").querySelectorAll("tr.shift-break-late")].map((tr) => tr.dataset.shiftPerson).sort().join();
+        expect(red === "me,sidorov", `красные строки «Сейчас»: ${red || "нет"}`);
+        await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        // Переподключение: ответ «Сейчас» задержан, а поток дослал оповещение о Петровой — без звука, но в пункте
+        let release = null;
+        const gate = new Promise((resolve) => (release = resolve));
+        stand.get = (path, params) => {
+          const res = get(path, params);
+          return path === "/operator/supervisor/now" ? res.then((v) => gate.then(() => v)) : res;
+        };
+        const reconnected = ui.streamReconnected();
+        await wait(20);
+        await clock(10 * 60);
+        await wait(300);
+        expect(heard(BELL) === bells + 1, `досланное при переподключении прозвучало: колоколов ${heard(BELL) - bells}`);
+        stand.get = get;
+        release();
+        await reconnected;
+        await wait(300);
+        expect(late() && post().includes("Перерыв затянулся: 2"), `двое затянули: «${post()}»`);
+        // Колокольчик, «Система»: каждый — с причиной и с какого времени
+        await click($("postStatus").querySelector("[data-post-open]"));
+        const items = [...$("bellStates").querySelectorAll("[data-break-person]")];
+        expect(items.map((li) => li.dataset.breakPerson).sort().join() === "petrova,sidorov", `в колокольчике: ${items.map((li) => li.textContent).join(" | ")}`);
+        const sid = items.find((li) => li.dataset.breakPerson === "sidorov").textContent;
+        expect(sid.startsWith(`${nameOf("sidorov")}: перерыв затянулся (${patrol}, с `) && /\d\d:\d\d\)$/.test(sid), `строка Сидорова: «${sid}»`);
+        await click($("bellClose"));
+        // Сидоров вернулся: пункт — о Петровой, запись «перерыв закончился», снятие не звучит
+        await away("sidorov", { agentState: "ready" });
+        await wait(300);
+        const left = `Перерыв затянулся: ${nameOf("petrova")} — ${briefing}`;
+        expect(late() && post().includes(left), `после возврата Сидорова: «${post()}», ждали «${left}»`);
+        const ended = noticeWith(/перерыв закончился/);
+        expect(ended && ended.textContent.includes(`${nameOf("sidorov")}: перерыв закончился (${patrol})`) && ended.dataset.kind === "system", `запись о конце: ${noticeList()}`);
+        await away("petrova", { agentState: "offline" });
+        await wait(300);
+        expect(!late() && heard(BELL) === bells + 1, `все вернулись: «${post()}», колоколов ${heard(BELL) - bells}`);
+
+        // Без права supervisor:view — ни пункта, ни звука. Причины перерыва в настройках — со сроком, пусто — «Без срока»
+        const reasons = [{ id: "patrol", labelKey: "workflow.session.break.patrol", maxMinutes: 20 }, { id: "lunch", labelKey: "workflow.session.break.lunch" }];
+        await standReset({ fixture: "demo", fixturePatch: { incidents: [] }, workflowPatch: { session: { breakReasons: reasons } }, operatorPermissions: window.IM_WORKFLOW.permissions.map((p) => p.key).filter((k) => k !== "supervisor:view") });
+        await wait(600);
+        await ui.breakRestore();
+        await away("sidorov", { agentState: "not_ready", reasonId: "patrol" });
+        const quiet = heard(BELL);
+        await clock(20 * 60 + 1);
+        await wait(300);
+        expect(!late() && heard(BELL) === quiet, `без права: «${post()}», колоколов ${heard(BELL) - quiet}`);
+        await click($("adminBtn"));
+        await click($("adminTabs").querySelector('[data-admin-tab="reasons"]'));
+        await wait(300);
+        const head = $("adminTable").querySelector('[data-admin-field="maxMinutes"]');
+        const cell = (id) => {
+          const row = $("adminTable").querySelector(`[data-admin-row="${id}"]`);
+          return row ? row.cells[row.cells.length - 1].textContent.trim() : null;
+        };
+        expect(head && head.textContent.startsWith(ru["workflow.settings.session.breakReasons.maxMinutes"]), `столбец срока: «${head ? head.textContent : "нет"}»`);
+        expect(cell("patrol") === "20" && cell("lunch") === ru["workflow.settings.session.breakReasons.maxMinutes.placeholder"], `срок «Обхода» «${cell("patrol")}», «Обеда» «${cell("lunch")}»`);
+        await click(document.querySelector('[data-close="modalAdmin"]'));
+        return post() || "строка поста пуста";
+      } finally {
+        stand.get = get;
+        window.IMSound.output = window.IMSound.webAudio();
+        window.dispatchEvent(new Event("im-sound-output"));
+        if (!$("bellPanel").hidden) await click($("bellClose"));
+        if (!$("modalAdmin").hidden) await click(document.querySelector('[data-close="modalAdmin"]'));
+        await standReset({ fixture: "demo" });
+        await wait(600);
+        await ui.breakRestore();
         await setFilter("open");
       }
     }, SOUND_FIRST);

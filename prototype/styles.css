@@ -2711,6 +2711,9 @@ select.search-input { padding-right: 36px; }
 .shift-table td.num { text-align: right; }
 .shift-table td.late { color: var(--crit-text); font-weight: 600; }
 .shift-table td.shift-away { color: var(--warn-text); font-weight: 500; }
+/* Срок перерыва вышел (§23.2): строка красная — фон и «да» */
+.shift-table tbody tr.shift-break-late td { background: var(--danger-bg); }
+.shift-table tbody tr.shift-break-late td.shift-overdue-break { color: var(--crit-text); font-weight: 600; }
 .shift-sort {
   border: 0;
   background: transparent;

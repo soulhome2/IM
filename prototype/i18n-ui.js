@@ -151,6 +151,7 @@ window.IM_DICT_UI = {
     "Отдельно": "Individually",
     "Состав сейчас": "Members now",
     "Посмотреть состояние": "View status",
+    "Название": "Name",
     "Обновить": "Refresh",
     "демо": "demo",
     "нет данных": "no data",

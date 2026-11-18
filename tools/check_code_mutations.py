@@ -444,6 +444,27 @@ MUTATIONS = [
     ("shift-reaction-all-time", "server.js", " && e.acceptedAt >= shift.from", "", "api"),
     ("shift-overdue-pending", "server.js", 'own("in_progress").concat(own("on_hold"))', 'own("in_progress").concat(own("on_hold"), own("pending_acceptance"))', "api"),
     ("shift-link-restored-ignored", "server.js", 'if (engine.onDuty(id)) kinds.push("link_restored");', "", "api"),
+    # Затянувшийся перерыв (§12.2, план 90, часть В)
+    ("break-overdue-strict-boundary", "server.js", "now() >= b.since + b.maxMinutes * 60000", "now() > b.since + b.maxMinutes * 60000", "api"),
+    ("break-overdue-every-tick", "server.js", "if (b.notified || !breakLate(id)) return;", "if (!breakLate(id)) return;", "api"),
+    ("break-overdue-to-self", "server.js", 'can("supervisor:view") && id !== ME && permsOf(id)', 'can("supervisor:view") && permsOf(id)', "api"),
+    ("break-overdue-no-right", "server.js", 'const breakAudience = (id) => can("supervisor:view") && ', "const breakAudience = (id) => ", "api"),
+    ("break-overdue-any-person", "server.js", ' && permsOf(id).includes("incident:accept");\n    // Конец перерыва', ";\n    // Конец перерыва", "api"),
+    ("break-cleared-only-if-sent", "server.js", "if (breakLate(id) && breakAudience(id)) emit(", "if (breaks[id].notified && breakAudience(id)) emit(", "api"),
+    ("break-cleared-always", "server.js", "if (breakLate(id) && breakAudience(id)) emit(", "if (breakAudience(id)) emit(", "api"),
+    ("break-limit-from-current-settings", "server.js", "      const b = breaks[id];\n      return Boolean(b)", "      const b = breaks[id] && Object.assign({}, breaks[id], { maxMinutes: (W.session.breakReasons.find((r) => r.id === breaks[id].reasonId) || {}).maxMinutes });\n      return Boolean(b)", "api"),
+    ("break-now-null", "server.js", 'breakOverdue: st.state === "not_ready" && breakLate(id),', "breakOverdue: breakLate(id) || null,", "api"),
+    ("break-fixture-ignored", "server.js", '      OPERATORS.forEach((o) => o.id !== ME && o.agentState === "not_ready" && breakStarted(', '      OPERATORS.forEach((o) => false && breakStarted(', "api"),
+    ("break-own-not-started", "server.js", "            breakStarted(ME, session.reasonId, now());\n", "", "api"),
+    ("break-not-in-tick", "server.js", "      breakTick();\n", "", "api"),
+    ("break-post-everyone", "app.js", " && (!d.permission || Boolean(may && may(d.permission)))", "", "ui"),
+    ("break-restore-own-row", "app.js", "r.breakOverdue === true && r.person.id !== meId()", "r.breakOverdue === true", "ui"),
+    ("break-catch-up-sounds", "app.js", 'if (r.play && !(brk.catchUp && r.play.kind === "break_overdue")) {', "if (r.play) {", "ui"),
+    ("break-ended-no-notice", "app.js", '      if (!quiet) notice(breakText("ended", p.personId, was), { kind: "system" });\n', "", "ui"),
+    ("break-restore-drops-pending", "app.js", "    brk.pending.forEach((m) => breakApply(next, m, true));\n", "", "ui"),
+    ("break-many-as-one", "app.js", "      if (brk.late.size !== 1) return t(def.textKeys.many, { n: brk.late.size });\n", "", "ui"),
+    ("break-shift-row-not-red", "app.js", '${r.breakOverdue ? \' class="shift-break-late"\' : ""}', "", "ui"),
+    ("break-reasons-no-limit-column", "app.js", "          fieldsTable(item, reasons(item.path, settingAt(item.path))) ||\n", "", "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
 # из испорченной; судят тесты API. Порчи, которые ловит статическая проверка check_machine.py, — не здесь

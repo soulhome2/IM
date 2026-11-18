@@ -4,8 +4,9 @@
    (node tools/sound_vectors.mjs --check).
 
    Что звучит, решается только по полям события и инцидента из контракта (§14.10, §21.7): stateCategory, ownership,
-   addressee, maintenanceWindowId, payload.state.from/to (только «равно / не равно»), payload.addressedToMe, actor.id.
-   Имён состояний и переходов здесь нет.
+   addressee, maintenanceWindowId, payload.state.from/to (только «равно / не равно»), payload.addressedToMe, actor.id;
+   у событий о людях supervisor.break_overdue и supervisor.break_overdue_cleared — type и payload.personId, сравнение
+   с ctx.meGuid (о своём перерыве — тихо, §12.2). Имён состояний и переходов здесь нет.
 
    SoundState = { sounding: Sounding[], attention: guid[] }
      sounding  — что повторяется до взятия сейчас (снимает «Тихо», перерыв, взятие);

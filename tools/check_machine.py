@@ -1115,7 +1115,7 @@ def check_fixture_places(err):
 def check_doc_numbers(w, o, err):
     """Числа и версия правил в документах совпадают с машиной и контрактом (PROC-09). Фраза
     ищется по образцу; не нашлась — тоже ошибка, иначе проверка молча перестала бы работать."""
-    words = {"одна": 1, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6}
+    words = {"одна": 1, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8}
     ops = [op for item in o["paths"].values() for m, op in item.items() if m in ("get", "post", "put", "patch", "delete")]
     test_ops = sum(1 for op in ops if "test-support" in (op.get("tags") or []))
     manual = sum(1 for t in w["transitions"] if t["trigger"] == "manual")

@@ -3086,7 +3086,7 @@
         ],
         "operationId": "getSupervisorNow",
         "summary": "Смена и статистика: блок «Сейчас»",
-        "description": "§23.1, §23.2 (план 90). Блок «Сейчас» экрана «Смена и статистика»: текущая смена, сводка и строки операторов. Клиент запрашивает при открытии экрана и опросом раз в `shift.refreshSec` секунд машины, пока экран открыт: событий потока о смене состояния других операторов нет. Организация — из токена: чужую не запросить. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`), без него — `403 PERMISSION_DENIED`. Смена — по настройке поста `shift` (§20), одна для всех: от входа операторов не зависит. По столбцу `breakOverdue` клиент старшего восстанавливает пункт «перерыв затянулся» строки состояния поста (§12.2, §22.4) — на любом экране операторской части, не только на этом",
+        "description": "§23.1, §23.2 (план 90). Блок «Сейчас» экрана «Смена и статистика»: текущая смена, сводка и строки операторов. Клиент запрашивает при открытии экрана и опросом раз в `shift.refreshSec` секунд машины, пока экран открыт: событий потока о смене состояния других операторов нет. Организация — из токена: чужую не запросить. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`), без него — `403 PERMISSION_DENIED`. Смена — по настройке поста `shift` (§20), одна для всех: от входа операторов не зависит. По столбцу `breakOverdue` клиент старшего восстанавливает пункт «перерыв затянулся» строки состояния поста (§12.2, §22.4) — на любом экране операторской части, не только на этом. Для этого — запрос без `dutyGroup`: иначе затянувшиеся перерывы операторов других групп пропадут до нового события",
         "parameters": [
           {
             "name": "dutyGroup",
@@ -3482,6 +3482,100 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/test/operators/{operatorId}/agent-state": {
+      "put": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testSetOperatorAgentState",
+        "summary": "Тестовый стенд: человек уходит на перерыв, возвращается или выходит",
+        "description": "Состояние человека из набора, кроме оператора стенда, меняется посреди прогона — как его собственный запрос `PUT /operator/session/agent-state`: переход состояния оператора машины, причина перерыва, запись в журнал действий (§12.4). Сервер сначала выполняет наступившее по времени, потом то, что сработало от нового состояния: ушёл на перерыв — его инциденты в работе отложены (§12.2). Конец перерыва, у которого срок по времени вышел, — `supervisor.break_overdue_cleared` (§12.2). С `runScheduler: false` планировщик не запускается — такт ещё не наступил. В ответе — состояние и выполненные переходы.",
+        "parameters": [
+          {
+            "name": "operatorId",
+            "in": "path",
+            "required": true,
+            "description": "Идентификатор человека из набора, кроме оператора стенда, например `sidorov`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestAgentStateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Состояние изменено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestAgentStateResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`TRANSITION_NOT_ALLOWED_FROM_STATE` — из текущего состояния в это перейти нельзя (`workflow.error.agent_state_not_allowed`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/test/workflow": {
+      "put": {
+        "tags": [
+          "test-support"
+        ],
+        "operationId": "testPatchWorkflow",
+        "summary": "Тестовый стенд: сменить настройки посреди прогона",
+        "description": "Меняет схему этого прогона без сброса данных — как публикация новой версии настроек поста (§14.6): всем подписчикам потока уходит `workflow.schema_published`. Так тесты проверяют, что идущее не меняется от новых настроек: срок идущего перерыва — на его начало (§12.2).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestWorkflowRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Схема изменена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestWorkflowResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
           }
         }
       }
@@ -7095,7 +7189,7 @@
                       },
                       "fields": {
                         "type": "array",
-                        "description": "План 90, часть В. Поля пункта списка, которые администратор задаёт сверх названия: `name` — поле пункта, `labelKey`, `hintKey`, `placeholderKey` — ключи подписи, подсказки и текста пустого поля (§14.9). У причин перерыва — `maxMinutes`, срок перерыва (§12.2)",
+                        "description": "План 90, часть В. Поля пункта списка, которые администратор задаёт сверх названия: `name` — поле пункта, `labelKey`, `hintKey`, `placeholderKey` — ключи подписи, подсказки и текста пустого поля (§14.9). У причин перерыва — `maxMinutes`, срок перерыва (§12.2). `kind` — вид значения (`int` — целое), `min` и `max` — пределы; пустое поле — значения нет (у `maxMinutes` — срока нет)",
                         "items": {
                           "type": "object",
                           "required": [
@@ -7114,6 +7208,18 @@
                             },
                             "placeholderKey": {
                               "type": "string"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "int"
+                              ]
+                            },
+                            "min": {
+                              "type": "integer"
+                            },
+                            "max": {
+                              "type": "integer"
                             }
                           }
                         }
@@ -10535,6 +10641,103 @@
           }
         }
       },
+      "TestAgentStateRequest": {
+        "type": "object",
+        "required": [
+          "agentState"
+        ],
+        "properties": {
+          "agentState": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready",
+              "offline"
+            ],
+            "description": "Куда переходит человек — переходом состояния оператора машины (`session.transitions`), как его собственный запрос `PUT /operator/session/agent-state`"
+          },
+          "reasonId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Причина перерыва — id из `session.breakReasons`; для `not_ready` обязательна, если у поста есть причины"
+          },
+          "runScheduler": {
+            "type": "boolean",
+            "default": true,
+            "description": "false — планировщик не запускается ни до, ни после смены состояния: такт ещё не наступил. Так тест проверяет снятие «перерыв затянулся», когда оповещение уйти не успело (§12.2)"
+          }
+        }
+      },
+      "TestAgentStateResult": {
+        "type": "object",
+        "required": [
+          "operatorId",
+          "agentState",
+          "reasonId",
+          "fired"
+        ],
+        "properties": {
+          "operatorId": {
+            "type": "string"
+          },
+          "agentState": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready",
+              "offline"
+            ]
+          },
+          "reasonId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fired": {
+            "type": "array",
+            "description": "Автоматические переходы, которые выполнил планировщик (§6.2)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "incidentGuid": {
+                  "type": "string"
+                },
+                "transitionId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestWorkflowRequest": {
+        "type": "object",
+        "required": [
+          "workflowPatch"
+        ],
+        "properties": {
+          "workflowPatch": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Изменения текущей схемы — JSON Merge Patch (RFC 7396), как у `/test/reset`, но поверх схемы этого прогона и без сброса данных"
+          }
+        }
+      },
+      "TestWorkflowResult": {
+        "type": "object",
+        "required": [
+          "schemaVersion"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "description": "Версия схемы после изменения"
+          }
+        }
+      },
       "TestTransitionResult": {
         "type": "object",
         "required": [
@@ -13812,11 +14015,8 @@
             "description": "С какого времени: на месте — вход в МИ, возврат с перерыва или восстановление связи, что позже; перерыв — его начало; нет связи — последний признак активности; вышел — выход из МИ; ещё не входил — null"
           },
           "breakOverdue": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Срок перерыва вышел (§12.2, §23.2): `true` — оператор на перерыве, у перерыва есть срок (`maxMinutes` причины на начало перерыва) и с начала прошло не меньше этого срока — та же граница, что у `supervisor.break_overdue`. Иначе `false`: не на перерыве, перерыв без срока или срок ещё не вышел. По этому полю клиент старшего восстанавливает пункт `break_overdue` строки состояния поста (§22.4) при открытии страницы, после перезагрузки, переподключения потока и `stream.reset` — по всем строкам, кроме своей, без звука. `null` — переходное: сервер срок перерыва ещё не считает (встроенный сервер прототипа — до задачи В.3 плана 90); клиент читает его как `false`"
+            "type": "boolean",
+            "description": "Срок перерыва вышел (§12.2, §23.2): `true` — оператор на перерыве, у перерыва есть срок (`maxMinutes` причины на начало перерыва) и с начала прошло не меньше этого срока — та же граница, что у `supervisor.break_overdue`. Иначе `false`: не на перерыве, перерыв без срока или срок ещё не вышел. По этому полю клиент старшего восстанавливает пункт `break_overdue` строки состояния поста (§22.4) при открытии страницы, после перезагрузки, переподключения потока и `stream.reset` — по всем строкам, кроме своей, без звука. Для восстановления пункта клиент запрашивает блок без `dutyGroup`: оповещение — обо всех операторах организации, без отбора по группам (решение 9 плана 90)."
           },
           "dutyGroups": {
             "type": "array",

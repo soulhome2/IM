@@ -1139,24 +1139,96 @@
   // Связь: поток событий оборвался или признак активности не дошёл — «Нет связи с агентом»
   const conn = { stream: true, heartbeat: true };
   // Пункты — из машины (display.postStatus) по убыванию серьёзности; active — что длится сейчас. «Мало места на диске»
-  // (adminOnly) — только администратору, в «и ещё N» у оператора не входит. Видно самое серьёзное и «и ещё N»
-  function postStatusLine(active, defs, isAdmin) {
-    const list = (defs || []).filter((d) => active.includes(d.id) && (!d.adminOnly || isAdmin));
+  // (adminOnly) — только администратору; пункт с permission (например «перерыв затянулся» — supervisor:view) — только
+  // тем, у кого это право (may); у остальных его нет и в «и ещё N» он не входит. Видно самое серьёзное и «и ещё N»
+  function postStatusLine(active, defs, isAdmin, may) {
+    const list = (defs || []).filter((d) => active.includes(d.id) && (!d.adminOnly || isAdmin) && (!d.permission || Boolean(may && may(d.permission))));
     return { top: list[0] || null, more: Math.max(0, list.length - 1), all: list };
+  }
+
+  /* ===== Перерыв затянулся (§12.2, §22.4, §22.5, план 90, часть В) ===== */
+
+  // Только старшему смены (supervisor:view), о своём перерыве — ничего. Затянувшие — по событиям потока
+  // supervisor.break_overdue и …_cleared; при открытии страницы, переподключении и stream.reset — по столбцу breakOverdue
+  // блока «Сейчас» без dutyGroup (обо всех операторах), кроме своей строки, без звука. late: personId → { reasonId, since, name }
+  const brk = { late: new Map(), pending: null, catchUp: false, restoring: 0 };
+  const breakDef = () => postDefs().find((d) => d.textKeys && d.textKeys.ended) || null;
+  const meId = () => (store.session ? store.session.operator.guid : null);
+  // Причина — по reasonId из текущих настроек поста; её там нет — без причины (§12.2, «Подписи»)
+  const breakReason = (id) => {
+    const r = id ? (WORKFLOW.session.breakReasons || []).find((x) => x.id === id) : null;
+    return r ? lbl(r) : null;
+  };
+  const breakName = (id, known) => {
+    const target = targetById(id);
+    return (target && target.name) || known || id;
+  };
+  // Один затянувший — по ключу текста с причиной или без; ended — запись колокольчика «перерыв закончился»
+  function breakText(kind, id, b) {
+    const keys = (breakDef() || {}).textKeys || {};
+    const reason = breakReason(b.reasonId);
+    const vars = { personName: breakName(id, b.name), reason, since: fmtUntil(b.since) };
+    return t(reason ? keys[kind] : keys[`${kind}NoReason`], vars);
+  }
+  // Событие или его повтор поверх восстановленного: quiet — без записи в колокольчике (её уже сделало живое событие)
+  function breakApply(late, msg, quiet) {
+    const p = msg.payload || {};
+    if (!p.personId || p.personId === meId()) return;
+    if (msg.type === "supervisor.break_overdue") {
+      late.set(p.personId, { reasonId: p.reasonId || null, since: p.since, name: (late.get(p.personId) || {}).name });
+    } else if (late.has(p.personId)) {
+      // Запись «перерыв закончился» — только если у клиента был пункт об этом перерыве (§22.5)
+      const was = late.get(p.personId);
+      late.delete(p.personId);
+      if (!quiet) notice(breakText("ended", p.personId, was), { kind: "system" });
+    }
+  }
+  function breakOnEvent(msg) {
+    if (!can("supervisor:view")) return;
+    if (brk.pending) brk.pending.push(msg);
+    breakApply(brk.late, msg, false);
+    renderPost();
+  }
+  // Восстановление по «Сейчас» (§12.2, §23.2): события, пришедшие за время чтения, — поверх прочитанного
+  async function breakRestore() {
+    const run = ++brk.restoring;
+    if (!can("supervisor:view")) {
+      brk.late.clear();
+      renderPost();
+      return;
+    }
+    brk.pending = [];
+    let rows;
+    try {
+      rows = (await api.get("/operator/supervisor/now")).operators;
+    } catch (err) {
+      if (run === brk.restoring) brk.pending = null;
+      return;
+    }
+    if (run !== brk.restoring) return;
+    const next = new Map();
+    rows.filter((r) => r.breakOverdue === true && r.person.id !== meId()).forEach((r) => next.set(r.person.id, { reasonId: r.reasonId, since: r.since, name: r.person.name }));
+    brk.pending.forEach((m) => breakApply(next, m, true));
+    brk.pending = null;
+    // Перерыв, который клиент видел затянувшимся, кончился, пока поток стоял, — та же запись «перерыв закончился»
+    brk.late.forEach((b, id) => !next.has(id) && notice(breakText("ended", id, b), { kind: "system" }));
+    brk.late = next;
+    renderPost();
   }
   // Что длится сейчас. Источника «мало места на диске» в прототипе нет (§17)
   function postNow() {
     const out = [];
     if (!conn.stream || !conn.heartbeat) out.push("connection");
     if (soundOn() && !soundOut().ready()) out.push("sound_off");
+    if (brk.late.size && breakDef()) out.push(breakDef().id);
     if ((store.maint.windows || []).length) out.push("maintenance");
     if (soundOn() && onlyImportant()) out.push("only_important");
     return out;
   }
   const postDefs = () => (WORKFLOW && WORKFLOW.display && WORKFLOW.display.postStatus) || [];
-  const postActive = () => postStatusLine(postNow(), postDefs(), can("incident:schema:admin")).all;
-  const POST_ICON = { connection: "⚠", disk: "⚠", sound_off: "🔇", maintenance: "🛠", only_important: "🔉" };
-  const POST_CLASS = { connection: "danger", disk: "warn", sound_off: "warn", maintenance: "info", only_important: "info" };
+  const postActive = () => postStatusLine(postNow(), postDefs(), can("incident:schema:admin"), can).all;
+  const POST_ICON = { connection: "⚠", disk: "⚠", sound_off: "🔇", break_overdue: "⏱", maintenance: "🛠", only_important: "🔉" };
+  const POST_CLASS = { connection: "danger", disk: "warn", sound_off: "warn", break_overdue: "warn", maintenance: "info", only_important: "info" };
   // Конец состояния — запись в колокольчике (§22.4)
   const POST_END = {
     connection: "Связь восстановлена",
@@ -1175,10 +1247,21 @@
         : t("Идут плановые работы: {n, plural, one {# окно} few {# окна} other {# окон}}, ближайшее закончится в {until}.", { n: ws.length, until: fmtUntil(ws[0].endsAt) });
     }
     if (def.id === "only_important") return t("Только важное до {time}", { time: onlyUntilText() });
+    // Перерыв затянулся (§22.4): один — с именем и причиной, несколько — числом
+    if (def === breakDef()) {
+      if (brk.late.size !== 1) return t(def.textKeys.many, { n: brk.late.size });
+      const [id, b] = [...brk.late][0];
+      return breakText("one", id, b);
+    }
     return lbl(def);
   }
   // На вкладке «Система» — полностью (у работ — режим и список окон, §19.1), разметкой
   function postText(def, full) {
+    // В панели колокольчика — каждый затянувший, с причиной и с какого времени (§22.4)
+    if (full && def === breakDef()) {
+      const items = [...brk.late].map(([id, b]) => `<li data-break-person="${escapeHtml(id)}">${escapeHtml(breakText("item", id, b))}</li>`);
+      return `${escapeHtml(lbl(def))}<ul class="maint-list">${items.join("")}</ul>`;
+    }
     if (!full || def.id !== "maintenance") return escapeHtml(postShort(def));
     const ws = store.maint.windows || [];
     const mark = (WORKFLOW.maintenance || {}).mode === "mark";
@@ -1237,16 +1320,17 @@
   function renderPost() {
     const box = $("postStatus");
     if (!box || !WORKFLOW) return;
-    const line = postStatusLine(postNow(), postDefs(), can("incident:schema:admin"));
+    const line = postStatusLine(postNow(), postDefs(), can("incident:schema:admin"), can);
     box.innerHTML = line.top ? postItemHtml(line.top, false, line.more) : "";
     box.hidden = !line.top;
-    // Начало и конец состояния — записи «Система» в колокольчике; то, что длилось при входе, — не начало
-    const now = new Set(line.all.map((d) => d.id));
+    // Начало и конец состояния — записи «Система» в колокольчике; то, что длилось при входе, — не начало.
+    // У «перерыв затянулся» записи свои, по людям: только «перерыв закончился» (breakApply, §22.5)
+    const now = new Set(line.all.filter((d) => d !== breakDef()).map((d) => d.id));
     if (store.session) {
       if (postPrev) {
         line.all.filter((d) => !postPrev.has(d.id)).forEach((d) => notice(postShort(d), { kind: "system" }));
         postDefs()
-          .filter((d) => postPrev.has(d.id) && !now.has(d.id))
+          .filter((d) => d !== breakDef() && postPrev.has(d.id) && !now.has(d.id))
           .forEach((d) => {
             if (postAtEntry.delete(d.id)) return;
             notice(POST_END[d.id] ? t(POST_END[d.id]) : t("{what} — закончилось", { what: lbl(d) }), { kind: "system" });
@@ -1319,6 +1403,9 @@
         renderBell();
       },
       noticeKey: () => noticeKey(),
+      // Переподключение потока, как у EventSource после обрыва, и восстановление по «Сейчас» (§12.2)
+      streamReconnected: () => streamReconnected(),
+      breakRestore: () => breakRestore(),
     };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
 
@@ -5599,7 +5686,8 @@
     if (snd.pending) snd.pending.push(msg);
     const r = IMSound.decideSound(snd.state, msg, soundCtx());
     snd.state = r.state;
-    if (r.play) {
+    // Досланное после переподключения о затянувшемся перерыве — без звука: «один раз» задним числом не играет (§12.2, §21.1)
+    if (r.play && !(brk.catchUp && r.play.kind === "break_overdue")) {
       soundPlayNow(r.play.cue.pattern);
       soundNotify(msg.incident);
     }
@@ -5987,6 +6075,16 @@
       .map(([k, val]) => `${word(k)}: ${fmtSetting(val, k, sec)}`)
       .join("<br>");
   }
+  // Список с полями пункта (adminSettings…fields, план 90): название и столбец на поле — подпись, подсказка (пределы),
+  // пустое — текстом пустого поля. У причин перерыва — срок, мин: пусто — без срока (§12.2)
+  function fieldsTable(item, list) {
+    if (!item.fields || !item.fields.length || !Array.isArray(list)) return null;
+    if (!list.length) return te("нет");
+    const head = item.fields.map((f) => `<th data-admin-field="${escapeHtml(f.name)}">${escapeHtml(lbl(f))}${hasLbl(f, "hint") ? `<span class="what">${escapeHtml(lbl(f, "hint"))}</span>` : ""}</th>`).join("");
+    const cell = (f, x) => (x[f.name] == null ? `<td class="muted">${escapeHtml(lbl(f, "placeholder") || "—")}</td>` : `<td class="num">${escapeHtml(String(x[f.name]))}</td>`);
+    const rows = list.map((x) => `<tr data-admin-row="${escapeHtml(x.id)}"><td>${escapeHtml(hasLbl(x, "label") ? lbl(x) : t(x.id))}</td>${item.fields.map((f) => cell(f, x)).join("")}</tr>`).join("");
+    return `<table class="doc-table admin-fields"><thead><tr><th>${te("Название")}</th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
   // Звук схемы (§21.2): звук по уровням справочника — строкой на уровень, как его услышит оператор (уровень без своей
   // строки — как ближайший ниже, cueForPriority), и звук «лично вам» и оповещения; ▶ «Прослушать» играет звук
   function cueCells(cue) {
@@ -6059,7 +6157,7 @@
     { key: "state", head: "Состояние", val: (r) => SHIFT_STATES.indexOf(r.state) },
     { key: "reason", head: "Причина", text: true, val: shiftReason },
     { key: "since", head: "С какого времени", val: (r) => (r.since ? Date.parse(r.since) : null) },
-    { key: "breakOverdue", head: "Срок перерыва вышел", val: (r) => (r.breakOverdue == null ? null : Number(r.breakOverdue)) },
+    { key: "breakOverdue", head: "Срок перерыва вышел", val: (r) => Number(r.breakOverdue) },
     { key: "groups", head: "Дежурные группы", text: true, val: (r) => (r.dutyGroups.length ? r.dutyGroups.map((g) => g.name).join(", ") : null) },
     { key: "inProgress", head: "В работе", num: true, val: (r) => r.inProgress },
     { key: "onHold", head: "Отложено", num: true, val: (r) => r.onHold },
@@ -6083,12 +6181,13 @@
     // Подпись столбца у ячейки — для телефона: там строка таблицы — карточка, а заголовки — кнопки сортировки
     const at = (key) => `data-label="${te(SHIFT_COLS.find((c) => c.key === key).head)}"`;
     const n = (key, v, late) => `<td class="num${late && v ? " late" : ""}" ${at(key)}>${v}</td>`;
-    return `<tr data-shift-person="${escapeHtml(r.person.id)}" data-shift-state="${r.state}" data-shift-since="${escapeHtml(r.since || "")}">
+    // Срок перерыва вышел — строка красная, и своя: это таблица, а не оповещение (§23.2)
+    return `<tr data-shift-person="${escapeHtml(r.person.id)}" data-shift-state="${r.state}" data-shift-since="${escapeHtml(r.since || "")}"${r.breakOverdue ? ' class="shift-break-late"' : ""}>
       <td>${asData(r.person.name)}</td>
       <td><span class="badge shift-state ${r.state}">${te(shiftStateLabel(r.state))}</span></td>
       <td class="shift-reason">${escapeHtml(shiftReason(r) || "")}</td>
       ${shiftSinceCell(r, tz, at("since"))}
-      <td class="shift-overdue-break" ${at("breakOverdue")}>${r.breakOverdue == null ? "" : te(r.breakOverdue ? "да" : "нет")}</td>
+      <td class="shift-overdue-break" ${at("breakOverdue")}>${te(r.breakOverdue ? "да" : "нет")}</td>
       <td ${at("groups")}>${groups ? asData(groups) : "—"}</td>
       ${n("inProgress", r.inProgress)}${n("onHold", r.onHold)}${n("overdue", r.overdue, true)}${n("closed", r.closedThisShift)}
       <td class="num" ${at("median")}>${shiftReaction(r.medianReactionSec)}</td>
@@ -6306,7 +6405,9 @@
       const reasons = (path, v) => (Array.isArray(v) && /^(reasonCatalogs\.[^.]+\.items|session\.breakReasons)$/.test(path) ? v.slice().sort(byName((x) => (hasLbl(x, "label") ? lbl(x) : t(x.id)))) : v);
       const itemRow = (item) =>
         `<tr><td>${escapeHtml(lbl(item))}<span class="what">${escapeHtml(lbl(item, "what"))}</span></td><td>${
-          soundSetting(item.path) || fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey, settingAt(`${item.path}Kind`))
+          soundSetting(item.path) ||
+          fieldsTable(item, reasons(item.path, settingAt(item.path))) ||
+          fmtSetting(reasons(item.path, settingAt(item.path)), item.path.split(".").pop(), item.path.startsWith("timers."), item.values, item.nullKey, settingAt(`${item.path}Kind`))
         }</td></tr>`;
       const groupHead = (g) => `<tr class="admin-group" data-admin-group="${g.id}"><th colspan="2">${escapeHtml(lbl(g))}<span class="what">${escapeHtml(`${t("Правила")}: ${g.rules}`)}</span></th></tr>`;
       const body = groups.length
@@ -6456,6 +6557,14 @@
     if (ev) $("statusSla").textContent = statusTimerText(ev);
   }, 1000);
 
+  // Поток переподключился (BUG-102): перечитать очередь и затянувшиеся перерывы; досланное о перерыве — без звука (§12.2)
+  function streamReconnected() {
+    setConn("stream", true);
+    brk.catchUp = true;
+    breakRestore().finally(() => (brk.catchUp = false));
+    return reload().then(() => soundRestore());
+  }
+
   // Поток событий сервера: чужие действия и автоматические переходы — уведомление и обновление
   function onServerEvent(msg) {
     const tid = msg.payload && msg.payload.transitionId;
@@ -6474,9 +6583,14 @@
     // (§6.1, решение 2026-10-29)
     // Окна работ изменились (ТЗ-21): полоса и значки дерева — по перечитанному списку, и после своей правки
     if (msg.type === "maintenance.windows_changed") return refreshMaintenance();
+    // Перерыв затянулся и его конец (§12.2): пункт строки поста и запись в колокольчике
+    if (msg.type === "supervisor.break_overdue" || msg.type === "supervisor.break_overdue_cleared") return breakOnEvent(msg);
     if (mine && msg.type !== "incident.card_evicted") return;
     // История потока потеряна (Last-Event-ID нет у сервера): перечитать очередь, карточку и сессию (BUG-102)
-    if (msg.type === "stream.reset") return reload().then(() => soundRestore());
+    if (msg.type === "stream.reset") {
+      breakRestore();
+      return reload().then(() => soundRestore());
+    }
     // Изменился справочник приоритетов: полоски, подписи, метка дерева — по нему (§2.5)
     if (msg.type === "reference.priorities_changed") {
       return loadPriorities()
@@ -6589,14 +6703,9 @@
     bindSound();
     snd.agent = store.session ? store.session.agentState : null;
     await soundRestore();
-    api.subscribe(
-      onServerEvent,
-      () => {
-        setConn("stream", true);
-        reload().then(() => soundRestore());
-      },
-      () => setConn("stream", false)
-    );
+    api.subscribe(onServerEvent, streamReconnected, () => setConn("stream", false));
+    // Затянувшиеся перерывы — по «Сейчас» при открытии страницы и после перезагрузки (§12.2)
+    breakRestore();
     renderHelpLinks();
   }
 

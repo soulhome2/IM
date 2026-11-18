@@ -114,6 +114,8 @@
     // Эмулированные коллеги: исполнитель каждого и с какого момента его сессия не отвечает
     const colleagueEngines = {};
     const colleagueIdleSince = {};
+    // Идущие перерывы людей (§12.2): начало, причина и срок на начало перерыва, ушло ли оповещение «перерыв затянулся»
+    let breaks = {};
     const PAGE_SIZE = 8;
     const MERGED_IN_SHOWN = 5;
 
@@ -791,6 +793,9 @@
       Object.keys(colleagueIdleSince).forEach((id) => delete colleagueIdleSince[id]);
       // Последний признак активности коллеги из набора (§12.3): его сессия молчит с этого момента
       OPERATORS.forEach((o) => o.id !== ME && o.lastSeenAt != null && (colleagueIdleSince[o.id] = o.lastSeenAt));
+      // Перерывы коллег из набора — с их начала (stateSince); срок — по настройкам на момент загрузки (§12.2)
+      breaks = {};
+      OPERATORS.forEach((o) => o.id !== ME && o.agentState === "not_ready" && breakStarted(o.id, o.reasonId, o.stateSince != null ? o.stateSince : now()));
     }
 
     load(FIXTURE);
@@ -1849,9 +1854,12 @@
           if (engine.agentReasonRequired(to) && !W.session.breakReasons.some((r) => r.id === body.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
           // Вход, выход, перерыв и возврат — в журнал действий (§12.4)
           audit(ME, to === "not_ready" ? "break" : to === "offline" ? "sign_out" : from === "offline" ? "sign_in" : "back", to === "not_ready" ? { reasonId: body.reasonId || undefined } : {});
+          // Конец перерыва — снятие «перерыв затянулся» (§12.2): о своём перерыве оператору стенда ничего не приходит
+          if (from === "not_ready") breakEnded(ME);
           if (to === "not_ready") {
             session.agentState = "not_ready";
             session.reasonId = body.reasonId || session.reasonId || null;
+            breakStarted(ME, session.reasonId, now());
             // Системное откладывание своих инцидентов в работе выполняет машина (system_hold_break)
             const fired = runScheduler();
             emit("session.agent_state_changed", null, ME, { agentState: "not_ready" });
@@ -2471,6 +2479,36 @@
       const mid = Math.floor(s.length / 2);
       return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
     }
+    /* ===== Затянувшийся перерыв (§12.2, §14.10, план 90, часть В) ===== */
+
+    // Начало перерыва: срок — у причины в настройках сейчас; дальше смена срока и удаление причины его не меняют
+    function breakStarted(id, reasonId, since) {
+      const reason = W.session.breakReasons.find((r) => r.id === reasonId);
+      breaks[id] = { since, reasonId: reasonId || null, maxMinutes: reason && reason.maxMinutes != null ? reason.maxMinutes : null, notified: false };
+    }
+    // Срок по времени вышел: с начала перерыва прошло не меньше срока. Без срока перерыв не затягивается
+    function breakLate(id) {
+      const b = breaks[id];
+      return Boolean(b) && b.maxMinutes != null && now() >= b.since + b.maxMinutes * 60000;
+    }
+    // Кому оповещение: в прототипе поток один — у оператора стенда. Ему — с правом supervisor:view, не о себе и только
+    // о людях из строк «Сейчас» (с incident:accept); без отбора по группам (решение 9 плана 90)
+    const breakAudience = (id) => can("supervisor:view") && id !== ME && permsOf(id).includes("incident:accept");
+    // Конец перерыва (вернулся или вышел из МИ): срок по времени вышел — снятие, даже если оповещение уйти не успело
+    function breakEnded(id) {
+      if (breakLate(id) && breakAudience(id)) emit("supervisor.break_overdue_cleared", null, null, { personId: id });
+      delete breaks[id];
+    }
+    // Такт планировщика (§14.3): срок вышел — оповещение, одно на перерыв; пропущенное за простой — при догоне
+    function breakTick() {
+      Object.keys(breaks).forEach((id) => {
+        const b = breaks[id];
+        if (b.notified || !breakLate(id)) return;
+        b.notified = true;
+        if (breakAudience(id)) emit("supervisor.break_overdue", null, null, { personId: id, reasonId: b.reasonId, since: iso(b.since), maxMinutes: b.maxMinutes });
+      });
+    }
+
     // Строка оператора (§23.2): числа — по всем его инцидентам, а не по видимым старшему (решение 9 плана 90).
     // Привязанные — один раз, по основному: закрытые вместе с основным и в реакцию не идут
     function supervisorRow(id, shift) {
@@ -2484,8 +2522,8 @@
         reasonId: reason ? reason.id : null,
         reasonLabel: reason ? render(reason.labelKey) : null,
         since: iso(st.since),
-        // Срок перерыва — часть В плана 90: до неё столбец пуст
-        breakOverdue: null,
+        // Срок перерыва вышел (§23.2): на перерыве и с его начала прошло не меньше срока — граница оповещения
+        breakOverdue: st.state === "not_ready" && breakLate(id),
         dutyGroups: GROUPS.filter((g) => membersOf(g).includes(id)).map((g) => ({ id: g.id, name: g.name })),
         inProgress: own("in_progress").length,
         onHold: own("on_hold").length,
@@ -2885,6 +2923,47 @@
           },
         ],
         [
+          "PUT",
+          "/test/operators/{operatorId}/agent-state",
+          (p, q, body) => {
+            // Коллега уходит на перерыв, возвращается или выходит из МИ (§12.1) — как его собственный запрос: переход
+            // состояния оператора машины, сначала догон (BUG-82); runScheduler: false — такт ещё не наступил (§12.2)
+            const person = OPERATORS.find((o) => o.id === p.operatorId);
+            if (!person || person.id === ME) return problem(404, "NOT_FOUND", ["workflow.error.test.no_operator", { id: p.operatorId }]);
+            const b = body || {};
+            const from = person.agentState || "offline";
+            const to = b.agentState;
+            const label = (id) => [(W.session.states.find((s) => s.id === id) || {}).labelKey || String(id)];
+            const move = W.session.transitions.find((t) => t.from.includes(from) && t.to === to);
+            if (to !== from && !move) return problem(409, "TRANSITION_NOT_ALLOWED_FROM_STATE", ["workflow.error.agent_state_not_allowed", { from: label(from), to: label(to) }]);
+            if (to !== from && engine.agentReasonRequired(to) && !W.session.breakReasons.some((r) => r.id === b.reasonId)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.reason_required"]);
+            const tick = () => (b.runScheduler === false ? [] : runScheduler());
+            const caught = tick();
+            if (to !== from) {
+              audit(person.id, move.id, to === "not_ready" && b.reasonId ? { reasonId: b.reasonId } : {});
+              if (from === "not_ready") breakEnded(person.id);
+              person.agentState = to;
+              person.reasonId = to === "not_ready" ? b.reasonId || null : null;
+              if (to === "not_ready") breakStarted(person.id, person.reasonId, now());
+            }
+            // Системные переходы от нового состояния (ушёл на перерыв — его в работе отложены, §12.2)
+            const fired = caught.concat(tick());
+            return { status: 200, body: { operatorId: person.id, agentState: person.agentState, reasonId: person.reasonId || null, fired: fired.map((f) => ({ incidentGuid: f.id, transitionId: f.transition })) } };
+          },
+        ],
+        [
+          "PUT",
+          "/test/workflow",
+          (p, q, body) => {
+            // Новые настройки посреди прогона, без сброса данных, — как публикация (§14.6): клиенты перечитывают схему.
+            // Идущие перерывы — со сроком на своё начало (§12.2)
+            if (!body || !body.workflowPatch || typeof body.workflowPatch !== "object" || Array.isArray(body.workflowPatch)) return problem(422, "FORM_FIELD_REQUIRED", ["workflow.error.test.workflow_patch"]);
+            useWorkflow(mergePatch(W, body.workflowPatch));
+            emit("workflow.schema_published", null, null, { schemaVersion: W.schema.version });
+            return { status: 200, body: { schemaVersion: W.schema.version } };
+          },
+        ],
+        [
           "POST",
           "/test/operators/{operatorId}/incidents/{incidentGuid}/transitions/{transitionId}",
           (p, q, body) => {
@@ -3047,6 +3126,8 @@
         }
         emitTransition(ev, transition, tr.actor || "dispatcher", facts);
       });
+      // Затянувшиеся перерывы — тем же тактом (§12.2, §14.3)
+      breakTick();
       return fired;
     }
 
