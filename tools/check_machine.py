@@ -2256,6 +2256,17 @@ UNREAD_PARAMS = {
 }
 
 
+def check_component_names(o, err):
+    """Имена компонентов контракта не совпадают с именами схем: генератор кода сервера (oapi-codegen) делает из
+    параметров, ответов и тел запросов типы с тем же именем, и совпадение — «duplicate typename» (план 90, часть Б)"""
+    comps = o.get("components", {})
+    schemas = set(comps.get("schemas", {}))
+    for kind in ("parameters", "responses", "requestBodies", "headers"):
+        for name in comps.get(kind, {}):
+            if name in schemas:
+                err.append(f"openapi.json: components.{kind}.{name} — то же имя, что у схемы components.schemas.{name}: генератор кода сервера даст два типа с одним именем")
+
+
 def check_served(o, err):
     """Описано ли то, что делает сервер (ARCH-04). Параметры запросов: у каждого есть описание, и
     встроенный сервер читает его в своём маршруте (или в функции, куда передаёт параметры целиком);
@@ -2286,7 +2297,11 @@ def check_served(o, err):
             body = bodies.get((meth.upper(), path))
             for p in item.get("parameters", []) + op.get("parameters", []):
                 if "$ref" in p:
-                    p = o["components"]["parameters"][p["$ref"].split("/")[-1]]
+                    ref = p["$ref"]
+                    p = o["components"].get("parameters", {}).get(ref.split("/")[-1])
+                    if p is None:
+                        err.append(f"контракт: {meth.upper()} {path} — ссылка {ref} никуда не ведёт")
+                        continue
                 if p.get("in") != "query":
                     continue
                 if not str(p.get("description", "")).strip():
@@ -2754,6 +2769,7 @@ def collect():
     check_rules_example(w, err)
     check_doc_numbers(w, o, err)
     check_served(o, err)
+    check_component_names(o, err)
     err.extend(check_system_guards_local(w))
     check_fixture_journal(w, err)
     check_fixture_history(w, err)
@@ -2984,6 +3000,8 @@ MUTATIONS.append(machine_json_mutation("layout-notice-keep-zero", "noticeKeepHou
 MUTATIONS.append(machine_json_mutation("layout-post-status-duplicate", "'connection' повторяется"))
 MUTATIONS.append(machine_json_mutation("layout-post-status-break-everyone", "только старший смены"))
 MUTATIONS += [
+    ("param-name-as-schema", "контракт: компонент параметра «Результат» статистики назван как схема SupervisorStatsResult — сервер не соберётся (oapi-codegen, duplicate typename)", OPENAPI,
+     '"SupervisorStatsResultParam": {', '"SupervisorStatsResult": {', "то же имя, что у схемы"),
     ("layout-post-status-order", "§22.4: «перерыв затянулся» в правилах — после плановых работ, а в машине — до них", RULES,
      "→ перерыв затянулся (`break_overdue`, §12.2) → идут плановые работы (`maintenance`, §14.12) →",
      "→ идут плановые работы (`maintenance`, §14.12) → перерыв затянулся (`break_overdue`, §12.2) →", "не в порядке правил §22.4"),

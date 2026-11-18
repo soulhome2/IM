@@ -3103,34 +3103,34 @@
         "description": "§23.3 (план 90). Статистика по инцидентам, закрытым в периоде: плитки с прошлым периодом той же длины, график по часам или дням, результаты закрытия, причины ложных, 10 устройств, дежурные группы, нарушения по видам и список операторов для фильтра. Клиент запрашивает при открытии блока, смене периода или фильтра и кнопкой «Обновить»; сам блок не опрашивается. Организация — из токена. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`), без него — `403 PERMISSION_DENIED`. Период — `period` или `from` и `to`; фильтры действуют вместе (все сразу); значения, которого больше нет (удалили), — инцидентов нет, без ошибки. Фильтры не действуют на `open` (плитка «Открыто сейчас») и на список `operators`. `400 BAD_REQUEST` — только неверный запрос: неизвестный `period` или `maintenance`, время не по ISO 8601, `from` без `to` или `to` без `from`, `period` вместе с `from`/`to`, `from` позже `to`. Время подсчёта у сервера ограничено: не уложился — `503 SUPERVISOR_STATS_TIMEOUT`",
         "parameters": [
           {
-            "$ref": "#/components/parameters/SupervisorStatsPeriod"
+            "$ref": "#/components/parameters/SupervisorStatsPeriodParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsFrom"
+            "$ref": "#/components/parameters/SupervisorStatsFromParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsTo"
+            "$ref": "#/components/parameters/SupervisorStatsToParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsDutyGroup"
+            "$ref": "#/components/parameters/SupervisorStatsDutyGroupParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsSourceGroup"
+            "$ref": "#/components/parameters/SupervisorStatsSourceGroupParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsSource"
+            "$ref": "#/components/parameters/SupervisorStatsSourceParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsEventType"
+            "$ref": "#/components/parameters/SupervisorStatsEventTypeParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsOperator"
+            "$ref": "#/components/parameters/SupervisorStatsOperatorParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsResult"
+            "$ref": "#/components/parameters/SupervisorStatsResultParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsMaintenance"
+            "$ref": "#/components/parameters/SupervisorStatsMaintenanceParam"
           }
         ],
         "responses": {
@@ -3176,34 +3176,34 @@
         "description": "§23.4 (решение 10 плана 90). Кнопка «Выгрузить CSV» блока «За период»: инциденты построчно — те же, что посчитаны в `getSupervisorStats` с теми же параметрами: период и его обрезка по сроку хранения, фильтры, только видимые старшему, без привязанных, окна работ — по `maintenance`. Фильтры действуют вместе (все сразу); значения, которого больше нет (удалили), — инцидентов нет, без ошибки. Право `supervisor:view` (в облаке `incident_manager.supervisor.view`); права аудита не нужны; без права — `403 PERMISSION_DENIED`. `400 BAD_REQUEST` — как у `getSupervisorStats`. Предела строк и предела времени подсчёта нет: всё в пределах срока хранения, сервер отдаёт файл потоком, не собирая его в памяти. Каждая выгрузка пишется в журнал действий записью `audit_export` (§12.4), как выгрузка аудита: кто, когда; `details` — `journal` = `supervisor_stats`, `from` и `to` после обрезки, `filters` — переданные фильтры, `rows` — сколько строк данных отдано. Запись делается в конце выгрузки, когда число строк известно. Выгрузка оборвалась — клиент закрыл соединение или сервер не дописал файл — запись всё равно делается, с `details.interrupted` = `true` и числом уже отданных строк; упал сам процесс сервера — записи нет. Запрос отклонён до начала выгрузки (`400`, `403`) — записи нет",
         "parameters": [
           {
-            "$ref": "#/components/parameters/SupervisorStatsPeriod"
+            "$ref": "#/components/parameters/SupervisorStatsPeriodParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsFrom"
+            "$ref": "#/components/parameters/SupervisorStatsFromParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsTo"
+            "$ref": "#/components/parameters/SupervisorStatsToParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsDutyGroup"
+            "$ref": "#/components/parameters/SupervisorStatsDutyGroupParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsSourceGroup"
+            "$ref": "#/components/parameters/SupervisorStatsSourceGroupParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsSource"
+            "$ref": "#/components/parameters/SupervisorStatsSourceParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsEventType"
+            "$ref": "#/components/parameters/SupervisorStatsEventTypeParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsOperator"
+            "$ref": "#/components/parameters/SupervisorStatsOperatorParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsResult"
+            "$ref": "#/components/parameters/SupervisorStatsResultParam"
           },
           {
-            "$ref": "#/components/parameters/SupervisorStatsMaintenance"
+            "$ref": "#/components/parameters/SupervisorStatsMaintenanceParam"
           }
         ],
         "responses": {
@@ -5776,7 +5776,7 @@
           "type": "string"
         }
       },
-      "SupervisorStatsPeriod": {
+      "SupervisorStatsPeriodParam": {
         "name": "period",
         "in": "query",
         "schema": {
@@ -5790,7 +5790,7 @@
         },
         "description": "§23.3. Период: `shift` — от начала текущей смены (§23.1); `today` — от 00:00 сегодня; `7d` — сегодня и шесть дней перед ним, от 00:00 первого; `30d` — сегодня и 29 дней перед ним. Границы — в поясе смены (`shift.timeZone`, §20), полночь в день перевода часов — по правилам пояса на эту дату; конец — «сейчас». Вместе с `from` или `to` — `400 BAD_REQUEST`. Нет ни `period`, ни `from` и `to` — `7d`"
       },
-      "SupervisorStatsFrom": {
+      "SupervisorStatsFromParam": {
         "name": "from",
         "in": "query",
         "schema": {
@@ -5799,7 +5799,7 @@
         },
         "description": "§23.3. Начало своего периода («Свой…»), включительно — момент ISO 8601 (RFC 3339); только вместе с `to`. Раньше начала хранения закрытых (сейчас минус `retentionDays`) — период начинается с начала хранения, без ошибки (в ответе `fromClipped`)"
       },
-      "SupervisorStatsTo": {
+      "SupervisorStatsToParam": {
         "name": "to",
         "in": "query",
         "schema": {
@@ -5808,7 +5808,7 @@
         },
         "description": "§23.3. Конец своего периода, не включительно: полуинтервал [`from`, `to`). Только вместе с `from`. Позже «сейчас» — период кончается «сейчас». `from` позже `to` — `400 BAD_REQUEST`; `from`, равный `to`, — пустой период. После обрезки `from` не раньше `to` (оба в будущем или оба раньше начала хранения) — тоже пустой период, без ошибки"
       },
-      "SupervisorStatsDutyGroup": {
+      "SupervisorStatsDutyGroupParam": {
         "name": "dutyGroup",
         "in": "query",
         "schema": {
@@ -5816,7 +5816,7 @@
         },
         "description": "§23.3. Дежурная группа до принятия (`acceptedGroup`, §2.2) — id; `none` — «Без группы»: инциденты, у которых её нет. Нет — все"
       },
-      "SupervisorStatsSourceGroup": {
+      "SupervisorStatsSourceGroupParam": {
         "name": "sourceGroup",
         "in": "query",
         "schema": {
@@ -5824,7 +5824,7 @@
         },
         "description": "§23.3. Группа устройств — id: устройство-источник в ней или во вложенных группах, как в дереве (§19.1). Нет — все"
       },
-      "SupervisorStatsSource": {
+      "SupervisorStatsSourceParam": {
         "name": "source",
         "in": "query",
         "schema": {
@@ -5832,7 +5832,7 @@
         },
         "description": "§23.3. Устройство-источник — id. Нет — все"
       },
-      "SupervisorStatsEventType": {
+      "SupervisorStatsEventTypeParam": {
         "name": "eventType",
         "in": "query",
         "schema": {
@@ -5840,7 +5840,7 @@
         },
         "description": "§23.3. Тип события инцидента — id (§19.2). Нет — все"
       },
-      "SupervisorStatsOperator": {
+      "SupervisorStatsOperatorParam": {
         "name": "operator",
         "in": "query",
         "schema": {
@@ -5848,7 +5848,7 @@
         },
         "description": "§23.3. Кто закрыл (`closed_by`) — id человека. Нет — все. Список для выбора — `operators` ответа `getSupervisorStats`"
       },
-      "SupervisorStatsResult": {
+      "SupervisorStatsResultParam": {
         "name": "result",
         "in": "query",
         "schema": {
@@ -5856,7 +5856,7 @@
         },
         "description": "§23.3. Результат закрытия — id (`close_result`, §2.2). Нет — все"
       },
-      "SupervisorStatsMaintenance": {
+      "SupervisorStatsMaintenanceParam": {
         "name": "maintenance",
         "in": "query",
         "schema": {
