@@ -1801,6 +1801,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1859,6 +1860,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1916,6 +1918,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -1974,6 +1977,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2034,6 +2038,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2094,6 +2099,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:56:54Z",
       "acceptedBy": "petrova",
+      "acceptedGroup": null,
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2203,6 +2209,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:54:50Z",
       "acceptedBy": "sidorov",
+      "acceptedGroup": "grp-response",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2327,6 +2334,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:53:40Z",
       "acceptedBy": "me",
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2485,6 +2493,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:50:57Z",
       "acceptedBy": "me",
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2591,6 +2600,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:47:40Z",
       "acceptedBy": "gusev",
+      "acceptedGroup": "grp-response",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -2683,6 +2693,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:50:00Z",
       "acceptedBy": "noc",
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2819,6 +2830,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2878,6 +2890,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -2937,6 +2950,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:20:23Z",
       "acceptedBy": "sidorov",
+      "acceptedGroup": "grp-response",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3043,6 +3057,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3101,6 +3116,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3160,6 +3176,7 @@
       "closedAt": "2026-10-03T11:02:54Z",
       "acceptedAt": "2026-10-03T10:58:15Z",
       "acceptedBy": "me",
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3299,6 +3316,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:50:00Z",
       "acceptedBy": "sidorov",
+      "acceptedGroup": "grp-response",
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3418,6 +3436,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3477,6 +3496,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T10:35:02Z",
       "acceptedBy": "me",
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3644,6 +3664,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -3702,6 +3723,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T10:18:54Z",
       "acceptedBy": "petrova",
+      "acceptedGroup": null,
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3809,6 +3831,7 @@
       "closedAt": "2026-10-03T10:15:02Z",
       "acceptedAt": "2026-10-03T10:10:05Z",
       "acceptedBy": "sidorov",
+      "acceptedGroup": "grp-response",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -3972,6 +3995,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -4030,6 +4054,7 @@
       "closedAt": "2026-10-03T09:56:47Z",
       "acceptedAt": "2026-10-03T09:54:10Z",
       "acceptedBy": "me",
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": null,
@@ -4167,6 +4192,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -4225,6 +4251,7 @@
       "closedAt": null,
       "acceptedAt": null,
       "acceptedBy": null,
+      "acceptedGroup": null,
       "timers": {
         "reaction": {
           "startedAt": "2026-10-03T12:00:00Z"
@@ -4284,6 +4311,7 @@
       "closedAt": "2026-10-03T11:35:00Z",
       "acceptedAt": "2026-10-03T09:28:30Z",
       "acceptedBy": "petrova",
+      "acceptedGroup": null,
       "timers": {
         "reaction": null,
         "resolution": null,

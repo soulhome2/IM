@@ -507,6 +507,22 @@ def check_fixture(w, err):
             err.append(f"{where}: первым принял {inc['acceptedBy']} — не оператор (§2.2)")
         if inc.get("acceptedAt") is not None and inc.get("noReaction"):
             err.append(f"{where}: принятый не бывает без реакции — acceptedAt и noReaction вместе (§2.2)")
+        # Дежурная группа до принятия (§2.2, решение 16 плана 90) — как у машины: последняя группа-адресат по журналу
+        # до первого принятия (закрытия без взятия), иначе первая дежурная группа принявшего (закрывшего); не ставилась — null
+        moment = inc.get("acceptedAt") or (inc.get("closedAt") if inc.get("noReaction") else None)
+        if moment is None:
+            if inc.get("acceptedGroup") is not None:
+                err.append(f"{where}: acceptedGroup {inc['acceptedGroup']} у не принятого (§2.2)")
+        else:
+            by_name = {g["name"]: g["id"] for g in people["dutyGroups"]}
+            last = None
+            for j in inc["journal"]:
+                if j["at"] < moment and j["template"].rsplit(".", 1)[-1] in ("create_to_group", "transfer", "auto_escalate", "resolution_escalate", "addressee_signed_out_to_group"):
+                    last = by_name.get((j.get("vars") or {}).get("targetName")) or last
+            who = inc.get("acceptedBy") or inc.get("closedBy")
+            expected = last or next((g["id"] for g in people["dutyGroups"] if who in g.get("members", [])), None)
+            if inc.get("acceptedGroup") != expected:
+                err.append(f"{where}: acceptedGroup — {inc.get('acceptedGroup')}, а по журналу и группам — {expected} (§2.2)")
         for b in inc.get("breaches", []):
             when(b.get("at"), f"{gid}.breaches[].at")
         times = []
@@ -2809,6 +2825,8 @@ MUTATIONS = [
      '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "camera"\n        }', '        {\n          "eventTypeId": "fire",\n          "deviceTypeId": "fire-detector"\n        }', "не покрывает тип устройства camera"),
     ("fixture-last-assigned-missing", "набор: у INC-1836, адресованного группе «Старшие операторы», нет lastAssignedGroup (§2.2, решение 16 плана 90)", FIXTURE,
      '"assignmentGroup": "grp-leads",\n      "lastAssignedGroup": "grp-leads",', '"assignmentGroup": "grp-leads",', "lastAssignedGroup — None"),
+    ("fixture-accepted-group-wrong", "набор: у INC-1837, которого принял me из «Старших операторов», группа до принятия — «Группа реагирования» (§2.2, решение 16 плана 90)", FIXTURE,
+     '"acceptedAt": "2026-10-03T10:58:15Z",\n      "acceptedBy": "me",\n      "acceptedGroup": "grp-leads",', '"acceptedAt": "2026-10-03T10:58:15Z",\n      "acceptedBy": "me",\n      "acceptedGroup": "grp-response",', "а по журналу и группам — grp-leads"),
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,

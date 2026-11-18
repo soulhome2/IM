@@ -725,6 +725,8 @@
         // Первое принятие (§2.2): кто и когда первым взял; закрытый без взятия — без реакции
         acceptedAt: abs(inc.acceptedAt),
         acceptedBy: inc.acceptedBy || null,
+        // Дежурная группа до принятия (§2.2, решение 16 плана 90) — из набора, как есть
+        acceptedGroup: inc.acceptedGroup || null,
         noReaction: Boolean(inc.noReaction),
         reactionDueAt: null,
         reactionLeftMs: null,
