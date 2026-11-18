@@ -2099,7 +2099,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T11:56:54Z",
       "acceptedBy": "petrova",
-      "acceptedGroup": null,
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -3723,7 +3723,7 @@
       "closedAt": null,
       "acceptedAt": "2026-10-03T10:18:54Z",
       "acceptedBy": "petrova",
-      "acceptedGroup": null,
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": {
@@ -4311,7 +4311,7 @@
       "closedAt": "2026-10-03T11:35:00Z",
       "acceptedAt": "2026-10-03T09:28:30Z",
       "acceptedBy": "petrova",
-      "acceptedGroup": null,
+      "acceptedGroup": "grp-leads",
       "timers": {
         "reaction": null,
         "resolution": null,

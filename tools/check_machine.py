@@ -509,7 +509,9 @@ def check_fixture(w, err):
             err.append(f"{where}: принятый не бывает без реакции — acceptedAt и noReaction вместе (§2.2)")
         # Дежурная группа до принятия (§2.2, решение 16 плана 90) — как у машины: последняя группа-адресат по журналу
         # до первого принятия (закрытия без взятия), иначе первая дежурная группа принявшего (закрывшего); не ставилась — null
-        moment = inc.get("acceptedAt") or (inc.get("closedAt") if inc.get("noReaction") else None)
+        # Закрытый без взятия — по первому закрытию в журнале: переоткрытие и новое закрытие группу не меняют
+        first_close = next((j["at"] for j in inc["journal"] if j["template"].rsplit(".", 1)[-1] in ("close", "close_linked")), inc.get("closedAt"))
+        moment = inc.get("acceptedAt") or (first_close if inc.get("noReaction") else None)
         if moment is None:
             if inc.get("acceptedGroup") is not None:
                 err.append(f"{where}: acceptedGroup {inc['acceptedGroup']} у не принятого (§2.2)")
@@ -520,7 +522,9 @@ def check_fixture(w, err):
                 if j["at"] < moment and j["template"].rsplit(".", 1)[-1] in ("create_to_group", "transfer", "auto_escalate", "resolution_escalate", "addressee_signed_out_to_group"):
                     last = by_name.get((j.get("vars") or {}).get("targetName")) or last
             who = inc.get("acceptedBy") or inc.get("closedBy")
-            expected = last or next((g["id"] for g in people["dutyGroups"] if who in g.get("members", [])), None)
+            # Состав дежурной группы (§8.1) — как membersOf прототипа: люди с одной из её ролей и вписанные в members
+            person_roles = set(next((o.get("roles", []) for o in people["operators"] if o["id"] == who), []))
+            expected = last or next((g["id"] for g in people["dutyGroups"] if who in g.get("members", []) or person_roles & set(g.get("roles", []))), None)
             if inc.get("acceptedGroup") != expected:
                 err.append(f"{where}: acceptedGroup — {inc.get('acceptedGroup')}, а по журналу и группам — {expected} (§2.2)")
         for b in inc.get("breaches", []):
@@ -2827,6 +2831,8 @@ MUTATIONS = [
      '"assignmentGroup": "grp-leads",\n      "lastAssignedGroup": "grp-leads",', '"assignmentGroup": "grp-leads",', "lastAssignedGroup — None"),
     ("fixture-accepted-group-wrong", "набор: у INC-1837, которого принял me из «Старших операторов», группа до принятия — «Группа реагирования» (§2.2, решение 16 плана 90)", FIXTURE,
      '"acceptedAt": "2026-10-03T10:58:15Z",\n      "acceptedBy": "me",\n      "acceptedGroup": "grp-leads",', '"acceptedAt": "2026-10-03T10:58:15Z",\n      "acceptedBy": "me",\n      "acceptedGroup": "grp-response",', "а по журналу и группам — grp-leads"),
+    ("fixture-accepted-group-by-role", "набор: у INC-1846, которого приняла Петрова — «Старшие операторы» по роли, — группы до принятия нет (§2.2, §8.1)", FIXTURE,
+     '"acceptedAt": "2026-10-03T11:56:54Z",\n      "acceptedBy": "petrova",\n      "acceptedGroup": "grp-leads",', '"acceptedAt": "2026-10-03T11:56:54Z",\n      "acceptedBy": "petrova",\n      "acceptedGroup": null,', "acceptedGroup — None, а по журналу и группам — grp-leads"),
     ("sibling-scenario", "набор: у соседа INC-1853 — сценарий соседа INC-1847 (§14.5, ключ «событие + сценарий»)", FIXTURE,
      '"scenarioGuid": "60000000-0000-4000-8000-000000000009"', '"scenarioGuid": "60000000-0000-4000-8000-000000000002"', "сценари"),
     ("sibling-alarm", "набор: у соседа INC-1853 — другой номер тревоги (§14.5)", FIXTURE,
