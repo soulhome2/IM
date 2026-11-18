@@ -1325,12 +1325,13 @@
     box.hidden = !line.top;
     // Начало и конец состояния — записи «Система» в колокольчике; то, что длилось при входе, — не начало.
     // У «перерыв затянулся» записи свои, по людям: только «перерыв закончился» (breakApply, §22.5)
-    const now = new Set(line.all.filter((d) => d !== breakDef()).map((d) => d.id));
+    const own = (d) => d.id !== "break_overdue";
+    const now = new Set(line.all.filter(own).map((d) => d.id));
     if (store.session) {
       if (postPrev) {
-        line.all.filter((d) => !postPrev.has(d.id)).forEach((d) => notice(postShort(d), { kind: "system" }));
+        line.all.filter((d) => own(d) && !postPrev.has(d.id)).forEach((d) => notice(postShort(d), { kind: "system" }));
         postDefs()
-          .filter((d) => d !== breakDef() && postPrev.has(d.id) && !now.has(d.id))
+          .filter((d) => own(d) && postPrev.has(d.id) && !now.has(d.id))
           .forEach((d) => {
             if (postAtEntry.delete(d.id)) return;
             notice(POST_END[d.id] ? t(POST_END[d.id]) : t("{what} — закончилось", { what: lbl(d) }), { kind: "system" });
@@ -6149,11 +6150,12 @@
     const def = WORKFLOW.session.states.find((s) => s.id === id);
     return def ? lbl(def) : t("Нет связи");
   }
-  // Причина перерыва — по справочнику поста на языке интерфейса; нет в справочнике — как прислал сервер
+  // Причина перерыва — по справочнику поста на языке интерфейса; нет в справочнике — как прислал сервер,
+  // а без названия (причины в настройках уже нет) — пусто, как у перерыва без причины (§12.2, §23.2)
   function shiftReason(r) {
     if (r.state !== "not_ready" || !r.reasonId) return null;
     const def = (WORKFLOW.session.breakReasons || []).find((x) => x.id === r.reasonId);
-    return def ? lbl(def) : r.reasonLabel || r.reasonId;
+    return def ? lbl(def) : r.reasonLabel || null;
   }
   // Столбцы таблицы (§23.2): все сортируются; text — по алфавиту без учёта регистра и «ё», остальные — по числу
   const SHIFT_COLS = [

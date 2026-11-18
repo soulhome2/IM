@@ -6138,6 +6138,13 @@
         const one = `Перерыв затянулся: ${nameOf("sidorov")} — ${patrol}`;
         expect(late() && post().includes(one), `срок вышел — строка поста «${post()}», ждали «${one}»`);
         expect(heard(BELL) === bells + 1, `срок вышел — «Колокол» ${heard(BELL) - bells} раз`);
+        // В колокольчике о затянувшемся — только «перерыв закончился» (§22.5): строка поста перерисовывается — записи нет
+        const lateNotes = () => noticesNow().filter((li) => /перерыв затянулся/i.test(li.textContent)).length;
+        await clock(1);
+        await wait(300);
+        await clock(1);
+        await wait(300);
+        expect(lateNotes() === 0, `записи «Перерыв затянулся» в колокольчике: ${lateNotes()} — ${noticeList()}`);
         // Перезагрузка страницы: пункт — по «Сейчас», без звука
         await ui.breakRestore();
         expect(late() && post().includes(one) && heard(BELL) === bells + 1, `после перезагрузки: «${post()}», колоколов ${heard(BELL) - bells}`);
@@ -6193,6 +6200,25 @@
         await away("petrova", { agentState: "offline" });
         await wait(300);
         expect(!late() && heard(BELL) === bells + 1, `все вернулись: «${post()}», колоколов ${heard(BELL) - bells}`);
+        expect(lateNotes() === 0, `записи «Перерыв затянулся» в колокольчике к концу: ${lateNotes()} — ${noticeList()}`);
+        // Причины уже нет в настройках: сервер отдаёт её без названия (reasonLabel null) — столбец «Причина» в «Сейчас»
+        // пуст, а не id (§12.2, §23.2). Встроенный сервер и id не отдаёт — строку правим на входе
+        await away("sidorov", { agentState: "not_ready", reasonId: "patrol" });
+        stand.get = (path, params) => {
+          const res = get(path, params);
+          if (!path.startsWith("/operator/supervisor/now")) return res;
+          return res.then((v) => {
+            (v.operators || []).filter((r) => r.person.id === "sidorov").forEach((r) => Object.assign(r, { reasonId: "removed_reason", reasonLabel: null }));
+            return v;
+          });
+        };
+        await click($("screenTabs").querySelector('[data-screen="shift"]'));
+        await wait(400);
+        const sidRow = $("shiftTable").querySelector('tr[data-shift-person="sidorov"]');
+        const sidReason = sidRow ? sidRow.querySelector(".shift-reason").textContent.trim() : null;
+        expect(sidRow && sidRow.dataset.shiftState === "not_ready" && sidReason === "", `причина удалённой причины в «Сейчас»: «${sidReason}»`);
+        stand.get = get;
+        await click($("screenTabs").querySelector('[data-screen="queue"]'));
 
         // Без права supervisor:view — ни пункта, ни звука. Причины перерыва в настройках — со сроком, пусто — «Без срока»
         const reasons = [{ id: "patrol", labelKey: "workflow.session.break.patrol", maxMinutes: 20 }, { id: "lunch", labelKey: "workflow.session.break.lunch" }];

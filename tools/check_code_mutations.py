@@ -466,6 +466,8 @@ MUTATIONS = [
     ("break-restore-drops-pending", "app.js", "    brk.pending.forEach((m) => breakApply(next, m, true));\n", "", "ui"),
     ("break-many-as-one", "app.js", "      if (brk.late.size !== 1) return t(def.textKeys.many, { n: brk.late.size });\n", "", "ui"),
     ("break-shift-row-not-red", "app.js", '${r.breakOverdue ? \' class="shift-break-late"\' : ""}', "", "ui"),
+    ("shift-reason-gone-shows-id", "app.js", "r.reasonLabel || null;", "r.reasonLabel || r.reasonId;", "ui"),
+    ("break-overdue-in-bell", "app.js", "line.all.filter((d) => own(d) && !postPrev.has(d.id))", "line.all.filter((d) => !postPrev.has(d.id))", "ui"),
     ("break-colleague-no-right", "server.js", 'if (to !== from && target && target.permission && !permsOf(person.id).includes(target.permission)) return', "if (false) return", "api"),
     ("test-workflow-same-version", "server.js", "            next.schema = Object.assign({}, next.schema, { version: W.schema.version + 1 });\n", "", "api"),
     ("break-reasons-no-limit-column", "app.js", "          fieldsTable(item, reasons(item.path, settingAt(item.path))) ||\n", "", "ui"),
