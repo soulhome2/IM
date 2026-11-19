@@ -269,7 +269,7 @@ SHOTS = [
     ("state-toggle-rest", DESKTOP, False, [], None, "#toggleGroups", 8, 0),
     ("state-toggle-hover", DESKTOP, False, [], ("hover", "#toggleGroups"), "#toggleGroups", 8, 0),
     ("state-toggle-pressed", DESKTOP, False, [], ("press", "#toggleGroups"), "#toggleGroups", 8, 0),
-    ("state-theme-hover", DESKTOP, False, [], ("hover", "#themeToggle"), "#themeToggle", 8, 0),
+    ("state-theme-hover", DESKTOP, False, ["#userBtn"], ("hover", "#themeToggle"), "#themeToggle", 8, 0),
     ("state-card-hover", DESKTOP, False, [], ("hover", "#eventsList .event"), "#eventsList .event", 8, 0),
     ("state-card-hover-btn", DESKTOP, False, [], ("hover", "#eventsList .event .btn.primary"), "#eventsList .event", 8, 0),
     ("state-brand", DESKTOP, False, [], None, ".brand", 8, 0),

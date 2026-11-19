@@ -1279,12 +1279,18 @@
 
     function sessionView() {
       const me = findActor(ME);
-      return {
+      const mine = GROUPS.filter((g) => membersOf(g).includes(ME));
+      // Начало хранимого состояния (§22.8) — по журналу действий, как «с какого времени» экрана старшего (§23.2);
+      // у производного «Занят» — начало «Готов». Записей и времени в наборе нет — поля нет
+      const since = stateSinceOf(ME, session.agentState);
+      return Object.assign({
         operator: {
           guid: ME,
           name: me.name,
           role: me.role,
-          dutyGroupGuids: GROUPS.filter((g) => membersOf(g).includes(ME)).map((g) => g.id),
+          dutyGroupGuids: mine.map((g) => g.id),
+          // Названия дежурных групп — для меню пользователя (§22.8), в том же порядке
+          dutyGroups: mine.map((g) => ({ id: g.id, name: g.name })),
         },
         // Хранимое состояние, а вместо него производное — по выражению машины: «Занят», если есть свои в работе (derived, §12, RULE-99)
         agentState: engine.shownAgentState(session.agentState),
@@ -1296,7 +1302,7 @@
         lastTransferTargetId: session.lastTransferTargetId || null,
         workflowSchemaVersion: W.schema.version,
         permissionIssues: [],
-      };
+      }, since != null ? { agentStateSince: iso(since) } : {});
     }
 
     // Состояние человека (§12.1): у оператора стенда — из сессии, у остальных — из набора.

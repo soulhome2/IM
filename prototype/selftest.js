@@ -109,6 +109,9 @@
     await wait();
   }
 
+  // Вне приёма инцидентов (§22.9): рабочая область помечена состоянием — «not_ready» на перерыве, «offline» в «Вышел»
+  const away = () => $("workspace").dataset.away || "";
+
   // Поле формы перехода по имени из машины: resultId, causeId, comment, targetId…
   const field = (name) => $("dialogFields").querySelector(`[data-field="${name}"]`);
 
@@ -230,8 +233,8 @@
   async function recover() {
     try {
       if (mode() === "work") await click($("backToQueue"));
-      if (!$("breakBanner").hidden) await click($("breakBtn"));
-      if (!$("signedOutBanner").hidden) await click($("signInBtn"));
+      if (away() === "not_ready") await click($("readyBtn"));
+      if (away() === "offline") await click($("signInBtn"));
       for (let i = 0; i < 5; i++) {
         await setFilter("mine");
         const open = button($("eventsList"), "open_card");
@@ -1910,10 +1913,10 @@
         expect(!field("reasonId"), "при пустом списке причин поле причины есть");
         await click($("dialogConfirm"));
         await wait(200);
-        expect(!$("breakBanner").hidden, "без причин оператор не ушёл на перерыв");
-        await click($("breakBtn"));
+        expect(away() === "not_ready", "без причин оператор не ушёл на перерыв");
+        await click($("readyBtn"));
         await wait(200);
-        expect($("breakBanner").hidden, "не вернулся с перерыва");
+        expect(away() === "", "не вернулся с перерыва");
         await standReset({ fixture: "demo", workflowPatch: { session: { breakReasons: [{ id: "probe", labelKey: "workflow.session.state.not_ready" }] } } });
         await wait(100);
         const bad = await put({ agentState: "not_ready" });
@@ -1971,7 +1974,7 @@
       await setFilter("mine");
       const row = $("eventsList").querySelector(`[data-id="${freshId}"]`);
       const text = row ? row.textContent : "";
-      await click($("breakBtn"));
+      await click($("readyBtn"));
       expect(text.includes("Перерыв оператора"), `${freshId} не отложен с причиной «Перерыв оператора»`);
     }, "«К очереди» из своей карточки — инцидент остаётся в работе");
 
@@ -2367,9 +2370,9 @@
       await click($("breakBtn"));
       expect(field("reasonId"), "перерыв не спросил причину");
       await confirmDialog();
-      expect(!$("breakBanner").hidden, "плашка перерыва не появилась");
-      await click($("breakReturn"));
-      expect($("breakBanner").hidden, "кнопка на плашке не вернула с перерыва");
+      expect(away() === "not_ready" && !$("awayCard").hidden, "карточка перерыва не появилась");
+      await click($("awayAction"));
+      expect(away() === "" && $("awayCard").hidden, "кнопка на карточке не вернула с перерыва");
     });
 
     await step("Меню справки: общие ссылки и ссылка группы — только при инциденте её устройств (§7, RULE-49)", async () => {
@@ -2505,7 +2508,7 @@
       expect(res.status === 200, `не взялся: ${res.status}`);
     }
 
-    await step("Выход из МИ: подтверждение, дальше только просмотр, вход (§12.1)", async () => {
+    await step("«Закончить работу»: подтверждение, дальше только просмотр, «Начать работу» (§12.1)", async () => {
       // Инцидент в работе: подтверждение считает свои в работе (BUG-25)
       const stand = window.IM_SELFTEST_API;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
@@ -2518,12 +2521,12 @@
       expect(!$("modalDialog").hidden && /вернутся в очередь/.test($("dialogNote").textContent), "выход не спросил подтверждения");
       expect(mine >= 1 && $("dialogNote").textContent.includes(`: ${mine},`), `в подтверждении не ${mine} в работе: «${$("dialogNote").textContent}»`);
       await confirmDialog();
-      expect(!$("signedOutBanner").hidden, "плашка «Вы вышли» не появилась");
-      expect($("dutyBadge").textContent === "Вышел", `в шапке «${$("dutyBadge").textContent}» вместо «Вышел»`);
+      expect(away() === "offline" && !$("awayCard").hidden, "карточка «Вы не принимаете инциденты» не появилась");
+      expect($("stateName").textContent === "Вышел", `в шапке «${$("stateName").textContent}» вместо «Вышел»`);
       const claims = [...$("eventsList").querySelectorAll('[data-do="claim"]')];
       expect(claims.length && claims.every(off), "после выхода «Взять» доступно");
       await click($("signInBtn"));
-      expect($("signedOutBanner").hidden, "кнопка «Войти» не вернула в МИ");
+      expect(away() === "", "«Начать работу» не вернула к приёму инцидентов");
       expect([...$("eventsList").querySelectorAll('[data-do="claim"]')].some((b) => !off(b)), "после входа «Взять» недоступно");
     });
 
@@ -2636,7 +2639,7 @@
       expect(!$("modalDialog").hidden, "окно перерыва не открылось");
       await pressKey("Escape");
       expect($("modalDialog").hidden, "Esc не закрыл окно");
-      expect(mode() === "queue" && $("breakBanner").hidden, "Esc что-то сделал кроме закрытия окна");
+      expect(mode() === "queue" && away() === "", "Esc что-то сделал кроме закрытия окна");
     });
 
     await step("Esc в карточке: сначала закрывает форму, потом сворачивает развёрнутое видео, потом — карточку, как «К очереди»; инцидент остаётся моим (§13, RULE-87, RULE-91)", async () => {
@@ -4490,6 +4493,163 @@
       return text;
     });
 
+    // Шапка и притушенная область (план 95) — перед шагом, который начинает со сброса стенда: свои сбросы этих шагов
+    // не меняют данных, на которых стоят шаги выше
+    await step("Шапка (§22.8, план 95): имя и группы — из сессии, состояние — отдельный переключатель, в меню пользователя нет смены пользователя и выхода", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const ui = window.IM_SELFTEST_UI;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const fx = window.IM_FIXTURE;
+      const rect = (el) => el.getBoundingClientRect();
+      try {
+        const s = await stand.get("/operator/session");
+        // Контракт: дежурные группы названиями — в порядке dutyGroupGuids; начало состояния — из журнала или набора
+        expect(JSON.stringify(s.operator.dutyGroups.map((g) => g.id)) === JSON.stringify(s.operator.dutyGroupGuids), `dutyGroups ${JSON.stringify(s.operator.dutyGroups)} не по dutyGroupGuids`);
+        expect(s.operator.dutyGroups.every((g) => g.name === fx.people.dutyGroups.find((x) => x.id === g.id).name), "названия дежурных групп не из набора");
+        expect(Number.isFinite(Date.parse(s.agentStateSince)), `нет agentStateSince: ${s.agentStateSince}`);
+        expect($("userName").textContent === s.operator.name, `в шапке «${$("userName").textContent}», в сессии «${s.operator.name}»`);
+        // Другой пользователь облака — другое имя: шапка берёт его из сессии, а не из разметки
+        const ops = fx.people.operators.map((o) => (o.id === fx.operator ? Object.assign({}, o, { name: "Тест Оператор", role: "cloud-admin" }) : o));
+        await standReset({ fixture: "demo", fixturePatch: { people: { operators: ops } } });
+        await ui.reload();
+        await wait();
+        expect($("userName").textContent === "Тест Оператор", `после смены пользователя в шапке «${$("userName").textContent}»`);
+        expect($("userInitials").textContent === "ТО", `инициалы «${$("userInitials").textContent}»`);
+        expect(!$("userBtn").textContent.includes("cloud-admin") && !$("stateBtn").textContent.includes("cloud-admin"), "имя группы облака — в самой шапке");
+        await click($("userBtn"));
+        const pop = $("userMenu").querySelector(".menu-pop");
+        expect(!pop.hidden, "меню пользователя не открылось");
+        expect($("userPopName").textContent === "Тест Оператор" && !$("userRoleRow").hidden && $("userRole").textContent === "cloud-admin", `меню: «${$("userPopName").textContent}», группа в облаке «${$("userRole").textContent}»`);
+        const groups = s.operator.dutyGroups.map((g) => g.name).join(", ");
+        expect(!$("userDutyRow").hidden && $("userDuty").textContent === groups, `группы дежурства «${$("userDuty").textContent}», ожидались «${groups}»`);
+        // Ничего не переключает: нет смены пользователя, входа под другим, выхода из облака; язык и тема — есть
+        const words = pop.textContent.replace(/\s+/g, " ");
+        expect(!/сменить пользователя|войти как|выйти|выход|войти/i.test(words), `в меню пользователя: «${words}»`);
+        expect(pop.contains($("langSelect")) && pop.contains($("themeToggle")), "язык и тема не в меню пользователя");
+        expect(!pop.contains($("signOutBtn")) && !pop.contains($("breakBtn")), "состояние — в меню пользователя");
+        await click($("userBtn"));
+        // Дежурных групп нет — строки нет
+        const none = JSON.parse(JSON.stringify(fx.people.dutyGroups)).map((g) => Object.assign(g, { members: (g.members || []).filter((m) => m !== fx.operator), roles: [] }));
+        await standReset({ fixture: "demo", fixturePatch: { people: { operators: ops, dutyGroups: none } } });
+        await ui.reload();
+        await wait();
+        expect($("userDutyRow").hidden, `без дежурных групп строка есть: «${$("userDuty").textContent}»`);
+        // Порядок справа: состояние │ звук, колокольчик, справка │ пользователь │ часы
+        const pill = $("stateBtn");
+        expect(rect(pill).right <= rect($("bellBtn")).left && rect($("helpBtn")).right <= rect($("userBtn")).left, "порядок шапки: состояние, значки, пользователь");
+        expect(!$("userMenu").contains(pill), "состояние — внутри кнопки пользователя");
+        expect(["ready", "busy"].includes(pill.dataset.state) && $("stateName").textContent && $("stateTime").hidden, `таблетка: ${pill.dataset.state}, «${pill.textContent.trim()}»`);
+        await click(pill);
+        expect(!$("stateMenu").querySelector(".menu-pop").hidden, "меню состояния не открылось");
+        expect(!$("readyBtn").hidden && !$("breakBtn").hidden && !$("signOutBtn").hidden && $("signInBtn").hidden, "в «Готов» меню не «Готов, Перерыв, Закончить работу»");
+        expect($("readyBtn").getAttribute("aria-checked") === "true", "текущее «Готов» не отмечено");
+        await click(pill);
+        return `${s.operator.name}; группы: ${groups}`;
+      } finally {
+        document.body.click();
+        await standReset({ fixture: "demo" });
+        await window.IM_SELFTEST_UI.reload();
+        await wait();
+      }
+    });
+
+    await step("Вне приёма (§22.9): перерыв и «Вышел» — область притушена, карточка с кнопкой, свёртывание, экран смены не притушен, карточка инцидента на просмотр; сессия та же", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const ui = window.IM_SELFTEST_UI;
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      const W = window.IM_WORKFLOW;
+      const veil = (el) => getComputedStyle(el, "::after");
+      const alpha = (c) => {
+        const n = (c.match(/[\d.]+/g) || []).map(Number);
+        return n.length > 3 ? n[3] : 1;
+      };
+      const out = [];
+      try {
+        if (mode() !== "queue") await click($("backToQueue"));
+        await setFilter("open");
+        expect(away() === "" && veil($("stage")).content === "none", "в «Готов» область притушена");
+        // Перерыв с самым коротким сроком причины: таблетка — сколько идёт и срок
+        const reasons = (await stand.get("/operator/workflow/active")).session.breakReasons.filter((r) => r.maxMinutes != null);
+        const reason = reasons.sort((a, b) => a.maxMinutes - b.maxMinutes)[0];
+        await click($("stateBtn"));
+        await click($("breakBtn"));
+        if (reason && field("reasonId")) await setField("reasonId", reason.id);
+        await confirmDialog();
+        await wait(200);
+        expect(away() === "not_ready", "на перерыве область не притушена");
+        expect($("stateBtn").dataset.state === "not_ready" && !$("stateTime").hidden, `таблетка перерыва: ${$("stateBtn").dataset.state}, «${$("stateBtn").textContent.trim()}»`);
+        if (reason) expect($("stateTime").textContent === `0 / ${reason.maxMinutes} мин`, `время на таблетке: «${$("stateTime").textContent}»`);
+        expect(!$("awayCard").hidden && $("awayAction").textContent === "Вернуться с перерыва" && /^Вы на перерыве/.test($("awayTitle").textContent), `карточка перерыва: «${$("awayCard").textContent.trim()}»`);
+        expect(veil($("stage")).content !== "none" && veil($("panelGroups")).content !== "none", "очередь или группы не притушены");
+        expect(veil($("stage")).pointerEvents === "none", "пелена перехватывает щелчки");
+        expect(!$("workspace").contains($("stateBtn")) && veil(document.querySelector(".topbar")).content === "none", "шапка притушена");
+        const breakAlpha = alpha(veil($("stage")).backgroundColor);
+        // Читать можно: карточка инцидента открывается на просмотр, притушена тоже
+        const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
+        expect(view, "в очереди на перерыве нет «Открыть»");
+        await click(view);
+        expect(mode() === "work", "на перерыве карточка инцидента не открылась");
+        expect(away() === "not_ready" && veil($("stage")).content !== "none", "карточка инцидента не притушена");
+        await click($("backToQueue"));
+        // Срок прошёл — таблетка красная
+        if (reason) {
+          await stand.raw("POST", "/test/clock", { advanceSec: reason.maxMinutes * 60 + 5, runScheduler: false });
+          await ui.reload();
+          await wait();
+          expect($("stateBtn").dataset.state === "late", `перерыв дольше срока — таблетка ${$("stateBtn").dataset.state}`);
+          out.push(`срок ${reason.maxMinutes} мин: ${$("stateBtn").textContent.trim()}`);
+        }
+        // ✕ — полоса под шапкой, область притушена до возврата
+        await click($("awayClose"));
+        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "✕ не свернул карточку в полосу");
+        expect($("awayStripAction").textContent === "Вернуться с перерыва", `кнопка полосы: «${$("awayStripAction").textContent}»`);
+        await click($("awayStripAction"));
+        await wait(200);
+        expect(away() === "" && $("awayStrip").hidden && $("awayCard").hidden, "полоса не вернула с перерыва");
+        // «Закончить работу» — «Вышел», та же сессия облака: тот же человек, запросы проходят
+        const before = await stand.get("/operator/session");
+        await click($("stateBtn"));
+        await click($("signOutBtn"));
+        await wait(200);
+        expect(!$("modalDialog").hidden && $("dialogTitle").textContent.includes("Закончить работу"), `форма: «${$("dialogTitle").textContent}»`);
+        await confirmDialog();
+        await wait(200);
+        expect(away() === "offline" && $("stateName").textContent === "Вышел" && $("stateBtn").dataset.state === "offline", `после «Закончить работу»: ${away()}, «${$("stateName").textContent}»`);
+        const after = await stand.raw("GET", "/operator/session");
+        expect(after.status === 200 && after.body.operator.guid === before.operator.guid && after.body.operator.name === before.operator.name, `сессия после «Закончить работу»: ${after.status}, ${after.body.operator && after.body.operator.name}`);
+        expect($("userName").textContent === before.operator.name, "имя в шапке сменилось");
+        expect(!$("awayCard").hidden && $("awayAction").textContent === "Начать работу" && $("awayTitle").textContent === "Вы не принимаете инциденты", `карточка «Вышел»: «${$("awayCard").textContent.trim()}»`);
+        const offAlpha = alpha(veil($("stage")).backgroundColor);
+        expect(offAlpha < breakAlpha, `в «Вышел» пелена не слабее перерыва: ${offAlpha} ≥ ${breakAlpha}`);
+        await click($("stateBtn"));
+        expect($("readyBtn").hidden && $("breakBtn").hidden && $("signOutBtn").hidden && !$("signInBtn").hidden, "в «Вышел» меню не «Начать работу»");
+        await click($("stateBtn"));
+        // Экран «Смена и статистика» не притушивается никогда
+        if (!$("screenTabs").hidden) {
+          await click($("tabShift"));
+          await wait(200);
+          const shift = $("shiftScreen");
+          expect(!shift.hidden && veil(shift).content === "none" && getComputedStyle(shift).filter === "none", "экран смены притушен");
+          expect(!$("awayCard").getClientRects().length && $("awayStrip").hidden, "карточка «Вы не принимаете инциденты» на экране смены");
+          await click($("screenTabs").querySelector('[data-screen="queue"]'));
+          out.push("экран смены не притушен");
+        }
+        await click($("awayAction"));
+        await wait(200);
+        expect(away() === "" && $("awayCard").hidden, "«Начать работу» не вернула к приёму");
+        const back = await stand.get("/operator/session");
+        expect(back.operator.guid === before.operator.guid, "после «Начать работу» другой оператор");
+        return out.join("; ");
+      } finally {
+        if (!$("modalDialog").hidden) document.querySelector('[data-close="modalDialog"]').click();
+        if (mode() !== "queue") await click($("backToQueue"));
+        await standReset({ fixture: "demo" });
+        await ui.reload();
+        await wait(100);
+        await setFilter("open");
+      }
+    });
+
     await step("Свой выход с инцидентами в работе и открытой карточкой — ни одного «карточка только для просмотра» (BUG-105)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       // Два инцидента в работе: лимит активных самопроверки (1) снят
@@ -4502,12 +4662,12 @@
         await click($("signOutBtn"));
         await confirmDialog();
         await wait(100);
-        expect(!$("signedOutBanner").hidden, "выход не выполнился");
+        expect(away() === "offline", "выход не выполнился");
         const extra = noticeWith(/карточка только для просмотра/) || toastWith(/карточка только для просмотра/);
         expect(!extra, `после своего выхода: «${extra && extra.textContent}»`);
         expect(!document.querySelector("[data-evicted]"), "после своего выхода — полоса «только просмотр»");
       } finally {
-        if (!$("signedOutBanner").hidden) await click($("signInBtn"));
+        if (away() === "offline") await click($("signInBtn"));
         await standReset({ fixture: "demo" });
         await wait(100);
       }

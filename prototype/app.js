@@ -760,6 +760,8 @@
     btn.title = label;
     btn.setAttribute("aria-label", label);
     btn.setAttribute("aria-pressed", String(theme === "light"));
+    // Пункт «Тема» меню пользователя (§22.8) — какая сейчас
+    $("themeValue").textContent = label;
   }
 
   /* ===== Статичные тексты разметки =====
@@ -1393,6 +1395,8 @@
       get fitHead() { return fitHead; },
       conn,
       heartbeat: () => heartbeat(true),
+      // Перечитать сессию и очередь, как после перезагрузки страницы (сброс стенда с другим набором)
+      reload: () => reload(),
       toast: (text, kind) => toast(text, kind),
       skippedText: (skipped) => skippedText(skipped),
       // Время итога на плашке — короче для самопроверки; null — обычное
@@ -2539,7 +2543,7 @@
     const bulkIds = open.bulkIds;
     closeDialog();
     if (open.id === "__break__") return goOnBreak(values.reasonId);
-    if (open.id === "__signout__") return setPresence("offline", "Вы вышли из МИ");
+    if (open.id === "__signout__") return setPresence("offline", "Вы закончили работу");
     if (bulkIds && bulkIds.length > 1) return runBulk(open.id, bulkIds, values, open.surface);
     return runTransition(open.id, open.ev, values, open.surface);
   }
@@ -4178,8 +4182,7 @@
     renderScreen();
     renderShift();
     renderStats();
-    $("breakBanner").hidden = !onBreak();
-    $("signedOutBanner").hidden = !signedOut();
+    renderAway();
   }
 
   function syncToggle(btn, on, iconOn, iconOff, titleOn, titleOff) {
@@ -4220,15 +4223,149 @@
     syncToggle($("mapFull"), state.full === "map", "close_fullscreen", "open_in_full", t("Свернуть карту"), t("Развернуть карту на всю рабочую область"));
     $("videoFull").disabled = mode === "map";
     $("mapFull").disabled = mode === "video";
-    // Состояние оператора — отдельная машина состояний (§12.1): значение отдаёт сервер, подпись — машина
-    const agent = store.session ? store.session.agentState : "ready";
-    const agentDef = WORKFLOW.session.states.find((s) => s.id === agent) || {};
-    $("dutyBadge").textContent = agentDef.id ? lbl(agentDef) : t(agent);
-    $("dutyBadge").classList.toggle("off", Boolean(agentDef.readOnly));
-    $("breakBtnLabel").textContent = t(agent === "not_ready" ? "Вернуться с перерыва" : "Уйти на перерыв");
-    $("breakBtn").disabled = signedOut();
-    $("signOutBtn").hidden = signedOut();
+    renderAgentState();
+    renderUser();
     $("adminBtn").hidden = !can("incident:schema:admin");
+  }
+
+  /* ===== Шапка: состояние оператора и пользователь (§22.8, план 95) ===== */
+
+  // Состояние оператора — отдельная машина состояний (§12.1): значение отдаёт сервер, подпись — машина. Хранимое
+  // состояние за производным («Занят» — это «Готов» с инцидентами) — из derived.of машины
+  const agentDefOf = (id) => WORKFLOW.session.states.find((s) => s.id === id) || {};
+  const storedAgent = (id) => {
+    const def = agentDefOf(id);
+    return def.derived ? def.derived.of : id;
+  };
+  // Переход состояния оператора машины из хранимого состояния в to (session.transitions): есть — пункт меню доступен
+  const agentMove = (to) => {
+    const from = storedAgent(store.session ? store.session.agentState : "ready");
+    return WORKFLOW.session.transitions.find((x) => x.to === to && x.from.includes(from)) || null;
+  };
+  // Перерыв (§12.2): сколько идёт, в минутах, и срок причины — из машины (session.breakReasons[].maxMinutes по
+  // agentStateReasonId); начало — из сессии (agentStateSince). Срока нет — null
+  function breakClock() {
+    const s = store.session;
+    if (!s || !onBreak()) return null;
+    const since = Date.parse(s.agentStateSince || "");
+    const reason = WORKFLOW.session.breakReasons.find((r) => r.id === s.agentStateReasonId);
+    const max = reason && reason.maxMinutes != null ? reason.maxMinutes : null;
+    const min = Number.isFinite(since) ? Math.max(0, Math.floor((serverNow() - since) / 60000)) : null;
+    return { min, max, late: min != null && max != null && min >= max };
+  }
+
+  function renderAgentState() {
+    const agent = store.session ? store.session.agentState : "ready";
+    const def = agentDefOf(agent);
+    const clock = breakClock();
+    const btn = $("stateBtn");
+    // Цвет точки — по состоянию; перерыв дольше срока — красный (§22.8)
+    btn.dataset.state = clock && clock.late ? "late" : agent;
+    $("stateName").textContent = def.id ? lbl(def) : t(agent);
+    // Время — только на перерыве: сколько идёт и срок; без срока — только сколько идёт
+    const time = clock && clock.min != null ? (clock.max != null ? t("{n} / {max} мин", { n: clock.min, max: clock.max }) : t("{n} мин", { n: clock.min })) : "";
+    $("stateTime").textContent = time;
+    $("stateTime").hidden = !time;
+    btn.title = time ? `${lbl(def)} · ${time}` : def.id ? lbl(def) : "";
+    // Меню — переходы состояния оператора, доступные сейчас (§12.1): «Готов», «Перерыв», «Закончить работу»;
+    // в «Вышел» — только «Начать работу»
+    const out = signedOut();
+    const stored = storedAgent(agent);
+    [
+      ["readyBtn", "ready"],
+      ["breakBtn", "not_ready"],
+    ].forEach(([id, to]) => {
+      const item = $(id);
+      const current = stored === to;
+      item.hidden = out;
+      item.setAttribute("aria-checked", String(current));
+      item.classList.toggle("current", current);
+      item.disabled = !current && !agentMove(to);
+      $(`${id}Label`).textContent = lbl(agentDefOf(to));
+    });
+    // «Готов» на перерыве — это возврат с перерыва
+    $("readyBtnHint").textContent = onBreak() ? t("Вернуться с перерыва") : "";
+    $("stateSep").hidden = out;
+    $("signOutBtn").hidden = out || !agentMove("offline");
+    $("signInBtn").hidden = !out;
+  }
+
+  // Инициалы для кружка: первые буквы двух первых слов имени
+  const initials = (name) =>
+    String(name || "")
+      .split(/[\s.]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join("");
+
+  // Пользователь (§22.8): имя — из сессии (вход в облако), в меню — группа в облаке и дежурные группы названиями;
+  // дежурных групп нет — строки нет
+  function renderUser() {
+    const op = store.session ? store.session.operator : null;
+    const name = op ? t(op.name) : "";
+    $("userName").textContent = name;
+    $("userPopName").textContent = name;
+    $("userInitials").textContent = initials(name);
+    $("userPopInitials").textContent = initials(name);
+    $("userBtn").title = name;
+    const role = op && op.role ? t(op.role) : "";
+    $("userRole").textContent = role;
+    $("userRoleRow").hidden = !role;
+    const duty = op && op.dutyGroups ? op.dutyGroups.map((g) => t(g.name)) : [];
+    $("userDuty").textContent = duty.join(", ");
+    $("userDutyRow").hidden = !duty.length;
+  }
+
+  // Вне приёма инцидентов (§22.9): в состояниях только для просмотра (readOnly машины) рабочая область притушена,
+  // посередине — карточка с кнопкой возврата, свёрнутая — полоса под шапкой. Экран «Смена и статистика» не притушивается
+  function renderAway() {
+    const agent = store.session ? store.session.agentState : "ready";
+    const def = agentDefOf(agent);
+    const away = Boolean(def.readOnly);
+    if (!away) state.awayFolded = false;
+    $("workspace").dataset.away = away ? agent : "";
+    let title = "";
+    let text = "";
+    let action = "";
+    if (away && onBreak()) {
+      const clock = breakClock();
+      title =
+        clock && clock.min != null
+          ? clock.max != null
+            ? t("Вы на перерыве · {n} мин из {max}", { n: clock.min, max: clock.max })
+            : t("Вы на перерыве · {n} мин", { n: clock.min })
+          : t("Вы на перерыве");
+      const cfg = inboxCfg();
+      const f = cfg && WORKFLOW.queueFilters.find((x) => x.id === cfg.filter);
+      const n = cfg && store.stateCounts ? store.stateCounts[cfg.filter] : null;
+      text = !f
+        ? ""
+        : n != null
+          ? t("Переданное вам за это время ждёт в «{name}»: {n}.", { name: lbl(f), n })
+          : t("Переданное вам за это время ждёт в «{name}».", { name: lbl(f) });
+      action = t("Вернуться с перерыва");
+    } else if (away) {
+      title = t("Вы не принимаете инциденты");
+      text = t("Очередь доступна только на просмотр. Новые инциденты вам не назначаются.");
+      action = t("Начать работу");
+    }
+    const card = $("awayCard");
+    card.hidden = !away || state.awayFolded;
+    card.dataset.away = away ? agent : "";
+    $("awayTitle").textContent = title;
+    $("awayText").textContent = text;
+    $("awayText").hidden = !text;
+    $("awayAction").textContent = action;
+    $("awayStrip").hidden = !away || !state.awayFolded || shiftState.open;
+    $("awayStrip").dataset.away = away ? agent : "";
+    $("awayStripText").textContent = title;
+    $("awayStripAction").textContent = action;
+  }
+  // Кнопка карточки и полосы: с перерыва — возврат, из «Вышел» — «Начать работу»
+  function awayReturn() {
+    if (onBreak()) return toggleBreak();
+    if (signedOut()) return setPresence("ready", "Вы начали работу");
   }
 
   // При переходе к другому инциденту показываем камеру, ближайшую к источнику события.
@@ -4289,15 +4426,15 @@
     await reload();
   }
 
-  // Выход из МИ (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
+  // «Закончить работу» (§12.1): с подтверждением — свои в работе и отложенные сервер вернёт в очередь,
   // адресованные лично — дежурной группе или в очередь (owner_signed_out, addressee_signed_out_*).
   // Сколько вернётся — счётчики сессии от сервера (usage, §10.2): mineIn машины — свои в работе и отложенные,
   // те же, что в «Мои»; привязанные владельца не имеют и не считаются, единица лимита — один инцидент (BUG-25)
   const signOutForm = () => {
     return {
       id: "__signout__",
-      title: "Выйти из МИ",
-      confirmLabel: "Выйти",
+      title: "Закончить работу",
+      confirmLabel: "Закончить работу",
       style: "danger",
       note: sessionNote("offline", { active: store.session.usage.activeCount, held: store.session.usage.onHoldCount }),
       fields: [],
@@ -4930,12 +5067,21 @@
       [...$("videoMode").children].forEach((b) => b.classList.toggle("active", b === btn));
       renderVideo();
     });
+    // Меню состояния (§22.8): «Перерыв» — уйти на перерыв, «Готов» — вернуться; текущее состояние ничего не делает
     $("breakBtn").addEventListener("click", () => {
       closeMenus();
-      toggleBreak();
+      if (!onBreak()) toggleBreak();
     });
-    $("breakReturn").addEventListener("click", () => {
+    $("readyBtn").addEventListener("click", () => {
+      closeMenus();
       if (onBreak()) toggleBreak();
+    });
+    // Карточка вне приёма (§22.9): кнопка возврата; ✕ — свернуть в полосу под шапкой, притушенность остаётся
+    $("awayAction").addEventListener("click", () => awayReturn());
+    $("awayStripAction").addEventListener("click", () => awayReturn());
+    $("awayClose").addEventListener("click", () => {
+      state.awayFolded = true;
+      renderAway();
     });
     $("signOutBtn").addEventListener("click", () => {
       closeMenus();
@@ -4947,7 +5093,10 @@
         })
         .catch((err) => toast(problemText(err), "error"));
     });
-    $("signInBtn").addEventListener("click", () => setPresence("ready", "Вы вошли в МИ"));
+    $("signInBtn").addEventListener("click", () => {
+      closeMenus();
+      setPresence("ready", "Вы начали работу");
+    });
     // Меню справки — по открытому инциденту: ссылки групп его источника (§7)
     $("helpBtn").addEventListener("click", () => renderHelpLinks());
     $("adminBtn").addEventListener("click", () => {
@@ -7002,6 +7151,11 @@
     const stamp = nowStamp();
     $("clock").textContent = stamp;
     $("clock").dateTime = stamp;
+    // Перерыв в шапке и на карточке вне приёма — сколько идёт (§22.8, §22.9)
+    if (WORKFLOW && onBreak()) {
+      renderAgentState();
+      renderAway();
+    }
     document.querySelectorAll("[data-due]").forEach((el) => {
       const left = Number(el.dataset.due) - serverNow();
       el.querySelector(".sla-t").textContent = fmtSla(left);

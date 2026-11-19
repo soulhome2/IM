@@ -46,6 +46,40 @@
       </div>
 
       <div class="topbar-actions">
+        <!-- Порядок справа (§22.8): состояние │ «Тихо», звук, колокольчик, справка, настройки │ пользователь │ часы -->
+        <!-- Состояние оператора (§12.1, §22.8) — отдельный переключатель: точка и название из машины, на перерыве — сколько
+             идёт и срок; меню — переходы состояния оператора, доступные сейчас. Пароля не спрашивает. Строит app.js -->
+        <div class="menu" id="stateMenu">
+          <button type="button" class="state-pill" id="stateBtn" aria-haspopup="menu" aria-expanded="false" data-state="ready">
+            <span class="state-dot" aria-hidden="true"></span>
+            <span class="state-name" id="stateName"></span>
+            <span class="state-time" id="stateTime" hidden></span>
+            <span class="material-symbols-outlined chevron" aria-hidden="true">expand_more</span>
+          </button>
+          <div class="menu-pop state-pop" role="menu" hidden>
+            <button type="button" class="menu-item state-item" id="readyBtn" role="menuitemradio" aria-checked="false" data-state="ready">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span id="readyBtnLabel"></span>
+              <span class="menu-hint" id="readyBtnHint"></span>
+            </button>
+            <button type="button" class="menu-item state-item" id="breakBtn" role="menuitemradio" aria-checked="false" data-state="not_ready">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span id="breakBtnLabel"></span>
+            </button>
+            <div class="menu-sep" id="stateSep"></div>
+            <button type="button" class="menu-item" id="signOutBtn" role="menuitem">
+              <span class="material-symbols-outlined" aria-hidden="true">power_settings_new</span>
+              <span>Закончить работу</span>
+            </button>
+            <button type="button" class="menu-item" id="signInBtn" role="menuitem" hidden>
+              <span class="material-symbols-outlined" aria-hidden="true">play_circle</span>
+              <span>Начать работу</span>
+            </button>
+            <p class="menu-note">Без пароля: вы остаётесь в облаке, меняется только приём инцидентов</p>
+          </div>
+        </div>
+        <span class="topbar-sep" aria-hidden="true"></span>
+
         <!-- Звук (§21.4): пока что-то звучит — «Тихо» слева от значка, значок красный и пульсирует, щелчок по нему — к самому
              важному звучащему; иначе значок открывает меню. «Тихо» слева: появляясь, она не сдвигает значок и колокольчик -->
         <span class="sound-quiet" id="soundQuiet" role="status" hidden></span>
@@ -60,24 +94,6 @@
           <em class="bell-n" id="bellCount" hidden>0</em>
         </button>
 
-        <label class="lang" for="langSelect">
-          <span class="material-symbols-outlined" aria-hidden="true">language</span>
-          <select id="langSelect" data-i18n-skip aria-label="Язык интерфейса" title="Язык интерфейса">
-            <option value="ru">Русский</option>
-            <option value="en">English</option>
-          </select>
-        </label>
-
-        <button type="button" class="icon-btn theme-btn" id="themeToggle" title="Тёмная тема" aria-label="Тёмная тема">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-              <path d="M12 1.4v2.4M12 20.2v2.4M1.4 12h2.4M20.2 12h2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M19.6 4.4l-1.7 1.7M6.1 17.9l-1.7 1.7"/>
-            </g>
-            <circle cx="12" cy="12" r="5.7" fill="none" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M12 6.3a5.7 5.7 0 0 0 0 11.4z" fill="currentColor"/>
-          </svg>
-        </button>
-
         <div class="menu" id="helpMenu">
           <button type="button" class="icon-btn" id="helpBtn" aria-haspopup="menu" aria-expanded="false" title="Справка и полезные ссылки">
             <span class="material-symbols-outlined">help</span>
@@ -88,45 +104,69 @@
           </div>
         </div>
 
+        <!-- Настройки (§20) — только с правом incident:schema:admin; видимость — app.js -->
+        <button type="button" class="icon-btn" id="adminBtn" title="Настройки администратора" aria-label="Настройки администратора" hidden>
+          <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+        </button>
+        <span class="topbar-sep" aria-hidden="true"></span>
+
+        <!-- Пользователь (§22.8): имя из сессии (вход в облако), ничего не переключает — ни пользователя, ни состояния.
+             В меню — группа в облаке, дежурные группы, язык и тема (только прототип). Строит app.js -->
         <div class="menu" id="userMenu">
           <button type="button" class="user-btn" id="userBtn" aria-haspopup="menu" aria-expanded="false">
-            <span class="operator-meta">
-              <strong>Иванов А. С.</strong>
-              <span>Оператор</span>
-            </span>
-            <span class="duty" id="dutyBadge">Готов</span>
-            <span class="material-symbols-outlined chevron">expand_more</span>
+            <span class="avatar" id="userInitials" aria-hidden="true"></span>
+            <strong class="user-name" id="userName"></strong>
+            <span class="material-symbols-outlined chevron" aria-hidden="true">expand_more</span>
           </button>
-          <div class="menu-pop wide" role="menu" hidden>
-            <button type="button" class="menu-item" id="breakBtn" role="menuitem">
-              <span class="material-symbols-outlined">coffee</span>
-              <span id="breakBtnLabel">Уйти на перерыв</span>
-            </button>
-            <button type="button" class="menu-item" id="adminBtn" role="menuitem" hidden>
-              <span class="material-symbols-outlined">tune</span>
-              <span>Настройки администратора</span>
-            </button>
-            <button type="button" class="menu-item" id="signOutBtn" role="menuitem">
-              <span class="material-symbols-outlined">logout</span>
-              <span>Выйти</span>
+          <div class="menu-pop wide user-pop" role="menu" hidden>
+            <div class="user-head">
+              <span class="avatar" id="userPopInitials" aria-hidden="true"></span>
+              <strong id="userPopName"></strong>
+            </div>
+            <div class="user-row" id="userRoleRow">
+              <span class="material-symbols-outlined" aria-hidden="true">badge</span>
+              <span>Группа в облаке</span>
+              <span class="user-val" id="userRole"></span>
+            </div>
+            <div class="user-row" id="userDutyRow">
+              <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+              <span>Группы дежурства</span>
+              <span class="user-val" id="userDuty"></span>
+            </div>
+            <div class="menu-sep"></div>
+            <label class="user-row lang" for="langSelect">
+              <span class="material-symbols-outlined" aria-hidden="true">language</span>
+              <span>Язык</span>
+              <select id="langSelect" data-i18n-skip aria-label="Язык интерфейса" title="Язык интерфейса">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <button type="button" class="menu-item user-row theme-btn" id="themeToggle" role="menuitem" title="Тёмная тема" aria-label="Тёмная тема">
+              <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                  <path d="M12 1.4v2.4M12 20.2v2.4M1.4 12h2.4M20.2 12h2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M19.6 4.4l-1.7 1.7M6.1 17.9l-1.7 1.7"/>
+                </g>
+                <circle cx="12" cy="12" r="5.7" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M12 6.3a5.7 5.7 0 0 0 0 11.4z" fill="currentColor"/>
+              </svg>
+              <span>Тема</span>
+              <span class="user-val" id="themeValue"></span>
             </button>
           </div>
         </div>
+        <span class="topbar-sep" aria-hidden="true"></span>
 
         <time class="clock" id="clock">14:32:11</time>
       </div>
     </header>
 
-    <div class="break-banner" id="breakBanner" hidden>
-      <span>Статус: перерыв. Доступен только просмотр. Переданное вам за это время ждёт в «Мне на принятие».</span>
-      <button type="button" class="btn outline small" id="breakReturn">Вернуться с перерыва</button>
+    <!-- Вне приёма инцидентов (§22.9): карточка свёрнута — узкая полоса под шапкой с той же кнопкой; притушенность
+         рабочей области остаётся. Строит app.js -->
+    <div class="away-strip" id="awayStrip" role="status" hidden>
+      <span id="awayStripText"></span>
+      <button type="button" class="btn primary small" id="awayStripAction"></button>
     </div>
-
-    <div class="break-banner" id="signedOutBanner" hidden>
-      <span>Вы вышли из МИ: доступен только просмотр, новые инциденты вам не назначаются.</span>
-      <button type="button" class="btn outline small" id="signInBtn">Войти</button>
-    </div>
-
     <main class="workspace" id="workspace" data-mode="queue" data-groups="on" data-mediapanel="on" data-view="queue">
       <div class="groups-scrim" id="groupsScrim"></div>
       <section class="panel" id="panelGroups" data-panel="groups">
@@ -178,6 +218,16 @@
       ></div>
 
       <div class="stage" id="stage">
+        <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) очередь и карточка притушены, посередине —
+             карточка с кнопкой возврата; её можно свернуть (✕) в полосу под шапкой. Строит app.js -->
+        <section class="away-card" id="awayCard" role="status" aria-labelledby="awayTitle" hidden>
+          <button type="button" class="icon-btn away-close" id="awayClose" title="Свернуть" aria-label="Свернуть">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+          <h2 id="awayTitle"></h2>
+          <p id="awayText"></p>
+          <button type="button" class="btn primary" id="awayAction"></button>
+        </section>
         <section class="panel" id="panelEvents" data-panel="events">
           <div class="panel-b events-body">
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->

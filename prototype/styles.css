@@ -298,7 +298,7 @@ a { color: var(--text); text-decoration: none; }
   background: var(--panel);
 }
 .topbar { grid-row: 1; }
-.break-banner { grid-row: 2; }
+.away-strip { grid-row: 2; }
 .workspace { grid-row: 3; }
 .statusbar { grid-row: 4; }
 
@@ -456,9 +456,7 @@ a { color: var(--text); text-decoration: none; }
   /* Часам места нет: строке поста нужен её минимум, а «Тихо» — место у значка звука (§21.4, §22.4); скрыты всегда,
      а не на время тревоги — иначе кнопки шапки прыгали бы в её начале и конце */
   .clock { display: none; }
-  /* Язык — только значок, как на телефоне: список лежит поверх значка невидимым */
-  .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
-  .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }
+  .topbar-sep:has(+ .clock) { display: none; }
 }
 .sound-bar .sound-bar-menu { display: none; }
 /* Звенит (§21.4): пока что-то звучит у оператора, значок звука красный и пульсирует, слева — «Тихо». «Меньше движения» —
@@ -485,34 +483,23 @@ a { color: var(--text); text-decoration: none; }
 .sound-levels td, .sound-levels th { padding: 4px 8px; }
 .sound-play { padding: 2px 8px; margin-left: 4px; }
 
-/* Переключатель языка: тот же вес, что у кнопки темы рядом */
-.lang {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 34px;
-  padding: 0 8px 0 6px;
-  border: 1px solid var(--stroke-2);
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-  color: var(--muted);
-  cursor: pointer;
-}
-.lang:hover { border-color: var(--accent); color: var(--text); }
-.lang .material-symbols-outlined { font-size: 19px; }
-.lang select {
+/* Язык в меню пользователя (§22.8): строка «Язык» со списком справа */
+.user-row.lang { cursor: pointer; }
+.user-row.lang select {
+  margin-left: auto;
   border: 0;
   padding: 0;
   height: auto;
   min-width: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+  text-align: right;
   cursor: pointer;
 }
-.lang select:focus { outline: none; }
-.lang:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.user-row.lang select:focus { outline: none; }
+.user-row.lang:focus-within { box-shadow: inset 0 0 0 2px var(--accent-ring); }
 
 .field-inline {
   display: flex;
@@ -624,37 +611,89 @@ select.search-input,
 }
 [data-theme="light"] .theme-icon { transform: rotate(180deg); }
 
+/* Пользователь (§22.8): кружок с инициалами и имя из сессии; меню ничего не переключает */
 .user-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px 4px 12px;
-  margin-left: 4px;
+  gap: 8px;
+  padding: 4px 6px 4px 4px;
   border: none;
-  border-left: 1px solid var(--stroke);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   text-align: left;
+  min-width: 0;
 }
 .user-btn:hover { background: var(--hover); }
 .user-btn .chevron { font-size: 18px; color: var(--faint); }
-.operator-meta { display: flex; flex-direction: column; line-height: 1.2; }
-.operator-meta strong { font-size: 13px; font-weight: 600; }
-.operator-meta span { font-size: 12px; font-weight: 500; color: var(--faint); }
-
-.duty {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 50px;
+.user-name { font-size: 13px; font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   background: var(--duty-bg);
   color: var(--duty-text);
+  font-size: 12px;
+  font-weight: 600;
 }
-.duty.off {
-  background: var(--break-bg);
-  color: var(--break-text);
+.user-pop { min-width: 300px; }
+.user-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px 10px; font-size: 14px; }
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  border-radius: var(--radius-sm);
 }
+.user-row[hidden] { display: none; }
+.user-row > .material-symbols-outlined,
+.user-row > .theme-icon { flex-shrink: 0; width: 20px; height: 20px; font-size: 20px; color: var(--muted); }
+.user-val { margin-left: auto; padding-left: 12px; color: var(--muted); text-align: right; white-space: normal; max-width: 170px; }
+.menu-item.user-row { width: 100%; padding: 8px 14px; font-size: 13px; }
+
+/* Разделитель групп справа в шапке (§22.8): состояние │ значки │ пользователь │ часы */
+.topbar-sep { width: 1px; height: 24px; background: var(--stroke); flex-shrink: 0; }
+
+/* Состояние оператора (§12.1, §22.8) — отдельная таблетка: точка и название; на перерыве — сколько идёт и срок.
+   Точка: зелёная — «Готов», синяя — «Занят», жёлтая — «Перерыв», красная — перерыв дольше срока, серая — «Вышел» */
+.state-pill {
+  --dot: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--ok-border);
+  border-radius: 999px;
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.state-pill .chevron { font-size: 18px; }
+.state-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--ok)); }
+.state-pill[data-state="busy"] { --dot: var(--accent); border-color: var(--duty-border, var(--accent)); background: var(--duty-bg); color: var(--duty-text); }
+.state-pill[data-state="not_ready"] { --dot: var(--warn); border-color: var(--break-border); background: var(--break-bg); color: var(--break-text); }
+.state-pill[data-state="late"] { --dot: var(--crit); border-color: var(--danger-border); background: var(--danger-bg); color: var(--crit-text); }
+.state-pill[data-state="offline"] { --dot: var(--faint); border-color: var(--stroke-2); background: var(--panel-2); color: var(--text); }
+.state-time[hidden] { display: none; }
+.state-time::before { content: "· "; }
+.state-pop { min-width: 260px; }
+.state-item[data-state="ready"] { --dot: var(--ok); }
+.state-item[data-state="not_ready"] { --dot: var(--warn); }
+.state-item.current { background: var(--panel-2); font-weight: 600; }
+.state-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.state-item[hidden], .state-pop .menu-item[hidden], .state-pop .menu-sep[hidden] { display: none; }
+.menu-hint { margin-left: auto; padding-left: 12px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.state-pop .menu-note { margin: 4px 0 0; padding: 4px 14px 8px; font-size: 12px; color: var(--muted); white-space: normal; max-width: 260px; }
 
 .clock {
   font-size: 13px;
@@ -664,15 +703,60 @@ select.search-input,
   color: var(--muted);
 }
 
-.break-banner {
+/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» очередь и карточка притушены — серая пелена поверх панелей,
+   щелчки и прокрутка проходят сквозь неё. На перерыве сильнее, в «Вышел» слабее. Шапка яркая; экран смены — отдельно */
+.workspace[data-away="not_ready"] .stage,
+.workspace[data-away="offline"] .stage { position: relative; }
+/* Панель групп — своё положение: на узком экране она выдвижная (position: fixed) */
+@media (min-width: 901px) {
+  .workspace[data-away] #panelGroups { position: relative; }
+}
+.workspace[data-away="not_ready"] #panelGroups::after,
+.workspace[data-away="not_ready"] .stage::after,
+.workspace[data-away="offline"] #panelGroups::after,
+.workspace[data-away="offline"] .stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  backdrop-filter: grayscale(1);
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+.workspace[data-away="offline"] #panelGroups::after,
+.workspace[data-away="offline"] .stage::after { backdrop-filter: grayscale(0.85); background: color-mix(in srgb, var(--panel) 35%, transparent); }
+/* Карточка посередине очереди или карточки инцидента — над пеленой, яркая */
+.away-card {
+  position: absolute;
+  z-index: 16;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 20px 24px;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 16px 40px var(--overlay);
+  text-align: center;
+}
+.away-card[hidden] { display: none; }
+.away-card h2 { margin: 0 24px 6px; font-size: 18px; font-weight: 600; color: var(--text); }
+.away-card p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+.away-card p[hidden] { display: none; }
+.away-close { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; }
+/* Свёрнутая карточка — узкая полоса под шапкой с той же кнопкой */
+.away-strip {
   background: var(--break-bg);
   color: var(--break-text);
-  padding: 8px 24px;
+  padding: 6px 24px;
   font-size: 13px;
   font-weight: 500;
 }
-.break-banner:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.break-banner .btn { flex-shrink: 0; }
+.away-strip[data-away="offline"] { background: var(--panel-2); color: var(--text); }
+.away-strip:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.away-strip .btn { flex-shrink: 0; }
 
 /* Ширины боковых панелей задаются переменными: значения *-user пишет
    перетаскивание сплиттеров, остальное — раскладка по умолчанию. */
@@ -2408,23 +2492,22 @@ select.search-input { padding-right: 36px; }
   .sound-bar .sound-bar-menu { display: inline-flex; }
   .topbar-actions .sound-btn { display: none; }
   .topbar-actions .sound-btn[data-ringing="on"] { display: inline-flex; }
-  /* Звенит — значок и «Тихо» в первой строке; на время звона из неё уходят знак продукта, язык и тема: в 360 px иначе
-     не помещается, а справка (телефоны служб) и меню оператора нужны и во время тревоги */
+  /* Звенит — значок и «Тихо» в первой строке; на время звона из неё уходят знак продукта и подпись состояния (точка
+     остаётся): в 360 px иначе не помещается, а справка (телефоны служб) и меню нужны и во время тревоги */
   .topbar:has(.sound-btn[data-ringing="on"]) .brand,
-  .topbar:has(.sound-btn[data-ringing="on"]) .lang,
-  .topbar:has(.sound-btn[data-ringing="on"]) .theme-btn { display: none; }
-  /* Язык — только значок: список тот же, он лежит поверх значка невидимым */
-  .lang { position: relative; justify-content: center; width: 34px; padding: 0; }
-  .lang select { position: absolute; inset: 0; width: 100%; opacity: 0; }
-  .user-btn { padding: 4px; margin-left: 0; }
-  .user-btn .chevron { display: none; }
-  .duty { white-space: nowrap; }
-  .user-btn .operator-meta { display: none; }
+  .topbar:has(.sound-btn[data-ringing="on"]) .state-pill .state-name,
+  .topbar:has(.sound-btn[data-ringing="on"]) .state-pill .state-time { display: none; }
+  .topbar-sep,
+  .state-pill .chevron,
+  .user-btn .chevron,
+  .user-btn .user-name { display: none; }
+  .state-pill { padding: 0 10px; }
+  .user-btn { padding: 2px; }
   /* Меню шапки — под шапкой на всю ширину экрана с отступами 8 px, а не от края кнопки: иначе справка уходит за левый край (BUG-59) */
   .topbar { position: relative; }
   .topbar .menu { position: static; }
   .topbar .menu-pop { left: 8px; right: 8px; min-width: 0; }
-  .break-banner { padding: 8px 12px; }
+  .away-strip { padding: 6px 12px; }
 
   .workspace,
   .workspace[data-groups="off"],
