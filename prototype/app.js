@@ -4365,6 +4365,12 @@
     $("awayStripText").textContent = title;
     $("awayStripAction").textContent = action;
   }
+  // ✕ и Esc: окно — в полосу под шапкой, пелена уходит, область серая и доступна для просмотра. Щелчок по пелене
+  // окно не сворачивает
+  function foldAway() {
+    state.awayFolded = true;
+    renderAway();
+  }
   // Кнопка карточки и полосы: с перерыва — возврат, из «Вышел» — «Начать работу»
   function awayReturn() {
     if (onBreak()) return toggleBreak();
@@ -5082,10 +5088,7 @@
     // Карточка вне приёма (§22.9): кнопка возврата; ✕ — свернуть в полосу под шапкой, притушенность остаётся
     $("awayAction").addEventListener("click", () => awayReturn());
     $("awayStripAction").addEventListener("click", () => awayReturn());
-    $("awayClose").addEventListener("click", () => {
-      state.awayFolded = true;
-      renderAway();
-    });
+    $("awayClose").addEventListener("click", () => foldAway());
     $("signOutBtn").addEventListener("click", () => {
       closeMenus();
       api
@@ -5725,6 +5728,8 @@
     if (state.dialog) return closeDialog();
     const openModal = document.querySelector(".modal:not([hidden])");
     if (openModal) return (openModal.hidden = true);
+    // Окно возврата вне приёма (§22.9) — как модальное: Esc сворачивает его в полосу
+    if (!$("awayCard").hidden) return foldAway();
     if (state.full) {
       const btn = $(state.full === "video" ? "videoFull" : "mapFull");
       toggleFull(state.full);

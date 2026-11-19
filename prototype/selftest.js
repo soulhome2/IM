@@ -4587,16 +4587,27 @@
         expect(dim($("panelEvents")) !== null && dim($("panelGroups")) !== null, "очередь или группы не притушены");
         expect(!$("workspace").contains($("stateBtn")) && dim(document.querySelector(".topbar")) === null && dim($("awayCard")) === null, "шапка или карточка возврата притушены");
         expect(dim($("panelMedia")) !== null, "видео и карта не притушены");
-        // Одна карточка по центру всей рабочей области, поверх неё; слой под карточкой щелчков не ловит
+        // Окно по центру всей рабочей области, как модальное: под ним тёмная пелена, она забирает щелчки
         const ws = $("workspace").getBoundingClientRect();
         const cr = $("awayCard").getBoundingClientRect();
         const off = (a, b) => Math.abs(a - b);
         expect(off(cr.left + cr.width / 2, ws.left + ws.width / 2) <= 2 && off(cr.top + cr.height / 2, ws.top + ws.height / 2) <= 2, `карточка не по центру рабочей области: ${Math.round(cr.left)},${Math.round(cr.top)} в ${Math.round(ws.width)}×${Math.round(ws.height)}`);
-        expect(getComputedStyle($("awayLayer")).pointerEvents === "none" && getComputedStyle($("awayCard")).pointerEvents !== "none", "слой карточки ловит щелчки");
-        const under = document.elementFromPoint(ws.left + 40, ws.top + ws.height - 40);
-        expect(under && !$("awayLayer").contains(under) && $("workspace").contains(under), `мимо карточки щелчок не доходит до интерфейса: ${under && (under.id || under.className)}`);
+        const corner = () => document.elementFromPoint(ws.left + 40, ws.top + ws.height - 40);
+        expect(corner() === $("awayLayer"), `щелчок мимо окна доходит до интерфейса: ${corner() && (corner().id || corner().className)}`);
+        const shade = () => {
+          const n = (getComputedStyle($("awayLayer")).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+          return n.length > 3 ? n[3] : n.length ? 1 : 0;
+        };
+        const breakShade = shade();
+        expect(breakShade >= 0.4, `пелена не тёмная: ${getComputedStyle($("awayLayer")).backgroundColor}`);
+        // Щелчок по пелене окно не сворачивает; Esc — сворачивает: пелены нет, щелчки — в интерфейс
+        await click($("awayLayer"));
+        expect(!$("awayCard").hidden, "щелчок по пелене свернул окно");
+        await pressKey("Escape");
+        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "Esc не свернул окно в полосу");
+        expect(corner() && !$("awayLayer").contains(corner()) && $("workspace").contains(corner()), `окно свёрнуто, а щелчок не доходит до интерфейса: ${corner() && (corner().id || corner().className)}`);
         const breakDim = dim($("panelEvents"));
-        // Читать можно: карточка инцидента открывается на просмотр, притушена тоже
+        // Окно свёрнуто — читать можно: карточка инцидента открывается на просмотр, притушена тоже
         const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
         expect(view, "в очереди на перерыве нет «Открыть»");
         await click(view);
@@ -4611,9 +4622,8 @@
           expect($("stateBtn").dataset.state === "late", `перерыв дольше срока — таблетка ${$("stateBtn").dataset.state}`);
           out.push(`срок ${reason.maxMinutes} мин: ${$("stateBtn").textContent.trim()}`);
         }
-        // ✕ — полоса под шапкой, область притушена до возврата
-        await click($("awayClose"));
-        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "✕ не свернул карточку в полосу");
+        // Свёрнутое остаётся свёрнутым в том же состоянии, область притушена до возврата
+        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "окно развернулось само в том же состоянии");
         expect($("awayStripAction").textContent === "Вернуться с перерыва", `кнопка полосы: «${$("awayStripAction").textContent}»`);
         // «Закончить работу» прямо с перерыва, карточка свёрнута — «Вышел», та же сессия облака: тот же человек,
         // запросы проходят; новое состояние — карточка снова развёрнута (свёрнутость — на одно состояние)
@@ -4630,6 +4640,7 @@
         expect($("userName").textContent === before.operator.name, "имя в шапке сменилось");
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Начать работу" && $("awayTitle").textContent === "Вы не принимаете инциденты", `карточка «Вышел»: «${$("awayCard").textContent.trim()}»`);
         expect($("awayStrip").hidden, "после «Закончить работу» осталась полоса вместо карточки");
+        expect(corner() === $("awayLayer") && shade() > 0 && shade() < breakShade, `в «Вышел» пелена не светлее перерыва или не забирает щелчки: ${shade()} при ${breakShade}`);
         const offDim = dim($("panelEvents"));
         expect(offDim !== null && offDim > breakDim, `в «Вышел» притушено не слабее перерыва: ${offDim} ≤ ${breakDim}`);
         await click($("stateBtn"));

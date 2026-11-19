@@ -169,9 +169,9 @@
     </div>
     <main class="workspace" id="workspace" data-mode="queue" data-groups="on" data-mediapanel="on" data-view="queue">
       <div class="groups-scrim" id="groupsScrim"></div>
-      <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) вся рабочая область притушена, поверх неё
-           по центру — одна карточка с кнопкой возврата. Слой щелчков не ловит: мимо карточки — в интерфейс; карточку
-           можно свернуть (✕) в полосу под шапкой. Строит app.js -->
+      <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) вся рабочая область притушена, поверх неё —
+           тёмная пелена и по центру окно с кнопкой возврата, как модальное: пелена забирает щелчки. ✕ или Esc сворачивают
+           окно в полосу под шапкой — пелены нет, область доступна для просмотра. Строит app.js -->
       <div class="away-layer" id="awayLayer">
         <section class="away-card" id="awayCard" role="status" aria-labelledby="awayTitle" hidden>
           <button type="button" class="icon-btn away-close" id="awayClose" title="Свернуть" aria-label="Свернуть">
