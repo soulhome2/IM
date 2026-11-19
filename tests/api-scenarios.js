@@ -6108,7 +6108,7 @@
     const text = res.body;
     assert.ok(typeof text === "string" && text.startsWith("﻿"), "UTF-8 с BOM");
     const lines = text.slice(1).split("\r\n");
-    assert.eq(lines.pop(), "", "конец строки — CRLF, и после последней тоже");
+    assert.same(lines.pop(), "", "конец строки — CRLF, и после последней тоже");
     return lines;
   };
 
@@ -6179,59 +6179,59 @@
   test("«За период»: закрытые в периоде, без привязанного и окна работ; реакция — до первого принятия: возврат, передача и переоткрытие её не меняют, закрытый без взятия в неё не входит; медиана, среднее, 90 % как percentile_cont; плитки, график, результаты, причины, устройства, группы, нарушения, операторы (§23.3, решение 4 плана 90)", async () => {
     const { env, start, cards } = await periodStand();
     const s = await stats(env, span(start, env.now + 864e5));
-    assert.eq([Date.parse(s.from), Date.parse(s.to), s.fromClipped, Date.parse(s.computedAt)], [start, env.now, false, env.now], "период — с начала теста до «сейчас»: конец после «сейчас» обрезан");
-    assert.eq([cards.f.state, cards.f.linkedTo], ["closed", cards.e.guid], "F привязан к E и закрыт вместе с ним");
+    assert.same([Date.parse(s.from), Date.parse(s.to), s.fromClipped, Date.parse(s.computedAt)], [start, env.now, false, env.now], "период — с начала теста до «сейчас»: конец после «сейчас» обрезан");
+    assert.same([cards.f.state, cards.f.linkedTo], ["closed", cards.e.guid], "F привязан к E и закрыт вместе с ним");
     assert.ok(cards.g.maintenanceWindowId, "G создан в окне работ");
     const counted = ["a", "b", "c", "d", "e"].map((k) => cards[k]);
-    assert.eq(s.current.incidents, 5, "посчитаны A–E: привязанный F — один раз, по основному; G в окне работ — по умолчанию нет");
+    assert.same(s.current.incidents, 5, "посчитаны A–E: привязанный F — один раз, по основному; G в окне работ — по умолчанию нет");
     const reaction = (c) => (Date.parse(c.acceptedAt) - Date.parse(c.createdAt)) / 1000;
-    assert.eq(["a", "b", "c", "e"].map((k) => reaction(cards[k])), [40, 10, 20, 30], "реакция — до первого принятия: возврат в очередь, переоткрытие и передача её не меняют");
-    assert.eq([cards.d.acceptedAt, cards.b.acceptedBy.id, cards.c.acceptedBy.id], [null, ME, ME], "D закрыт без взятия; B и C первым принял я");
-    assert.eq(s.current.reaction, { median: 25, mean: 25, p90: 37 }, "реакция 10, 20, 30, 40 с: медиана 25, среднее 25, 90 % — 37");
+    assert.same(["a", "b", "c", "e"].map((k) => reaction(cards[k])), [40, 10, 20, 30], "реакция — до первого принятия: возврат в очередь, переоткрытие и передача её не меняют");
+    assert.same([cards.d.acceptedAt, cards.b.acceptedBy.id, cards.c.acceptedBy.id], [null, ME, ME], "D закрыт без взятия; B и C первым принял я");
+    assert.same(s.current.reaction, { median: 25, mean: 25, p90: 37 }, "реакция 10, 20, 30, 40 с: медиана 25, среднее 25, 90 % — 37");
     const resolutions = counted.map((c) => (Date.parse(c.closedAt) - Date.parse(c.createdAt)) / 1000);
-    assert.eq(s.current.resolution, { median: pct(resolutions, 0.5), mean: mean(resolutions), p90: pct(resolutions, 0.9) }, `закрытие — от появления до последнего закрытия: ${resolutions.join(", ")} с`);
+    assert.same(s.current.resolution, { median: pct(resolutions, 0.5), mean: mean(resolutions), p90: pct(resolutions, 0.9) }, `закрытие — от появления до последнего закрытия: ${resolutions.join(", ")} с`);
     const breached = (c) => c.slaBreached || c.breaches.length > 0;
-    assert.eq([s.current.falseAlarms, s.current.breached], [2, counted.filter(breached).length], "ложные — A и C; с нарушениями — по карточкам");
-    assert.eq([Date.parse(s.previous.from), Date.parse(s.previous.to), s.previous.incidents], [2 * start - env.now, start, 0], "прошлый период — того же размера сразу перед текущим");
+    assert.same([s.current.falseAlarms, s.current.breached], [2, counted.filter(breached).length], "ложные — A и C; с нарушениями — по карточкам");
+    assert.same([Date.parse(s.previous.from), Date.parse(s.previous.to), s.previous.incidents], [2 * start - env.now, start, 0], "прошлый период — того же размера сразу перед текущим");
 
     const ru = (key) => RU[key];
-    assert.eq(
+    assert.same(
       s.results.map((r) => [r.resultId, r.label, r.count]),
       [["false_alarm", 2], ["mass", 1], ["drill", 1], ["impossible", 1]].map(([id, n]) => [id, ru(`workflow.catalog.close_result.${id}`), n]),
       "результаты — по убыванию числа, при равенстве — по названию"
     );
-    assert.eq(
+    assert.same(
       s.falseAlarmCauses.map((r) => [r.causeId, r.label, r.count]),
       [["animal", ru("workflow.catalog.false_alarm_cause.animal"), 1], ["weather", ru("workflow.catalog.false_alarm_cause.weather"), 1]],
       "причины ложных — по убыванию, при равенстве — по названию"
     );
-    assert.eq(
+    assert.same(
       s.dutyGroups,
       [{ groupId: "grp-leads", name: "Старшие операторы", incidents: 5, falseAlarms: 2, breached: counted.filter(breached).length, medianReactionSec: 25, medianResolutionSec: pct(resolutions, 0.5) }],
       "дежурная группа до принятия — моя первая: я принял A, B, C, E и закрыл D"
     );
-    assert.eq(
+    assert.same(
       s.devices,
       [{ source: { id: S1, name: cards.a.source.name }, groups: directGroups(S1).map((g) => ({ id: g.id, name: g.name })), incidents: 5, falseAlarms: 2, breached: counted.filter(breached).length, medianReactionSec: 25 }],
       "устройства — датчик дыма 1 с группами, в которые он входит напрямую, по названию"
     );
-    assert.eq(s.breachesByKind, BREACH_ORDER.map((kind) => ({ kind, incidents: counted.filter((c) => c.breaches.some((x) => x.kind === kind)).length })), "нарушения по видам — три строки");
-    assert.eq(s.operators.map((o) => o.id), [ME, "petrova"], "операторы фильтра — кто закрыл, по имени");
+    assert.same(s.breachesByKind, BREACH_ORDER.map((kind) => ({ kind, incidents: counted.filter((c) => c.breaches.some((x) => x.kind === kind)).length })), "нарушения по видам — три строки");
+    assert.same(s.operators.map((o) => o.id), [ME, "petrova"], "операторы фильтра — кто закрыл, по имени");
     const buckets = s.series.buckets;
-    assert.eq(s.series.granularity, "hour", "период короче двух суток — по часам");
+    assert.same(s.series.granularity, "hour", "период короче двух суток — по часам");
     assert.ok(buckets.length > 0 && Date.parse(buckets[0].from) === start && Date.parse(buckets[buckets.length - 1].to) === env.now, "столбики — от начала до конца периода");
     assert.ok(buckets.every((x, i) => i === 0 || x.from === buckets[i - 1].to), "столбики идут подряд");
     const sum = (k) => buckets.reduce((n, x) => n + x[k], 0);
-    assert.eq([sum("notFalse"), sum("falseAlarms"), sum("breached")], [3, 2, counted.filter(breached).length], "в столбиках — все посчитанные");
+    assert.same([sum("notFalse"), sum("falseAlarms"), sum("breached")], [3, 2, counted.filter(breached).length], "в столбиках — все посчитанные");
     const open = (await env.all("all")).filter((x) => ["new", "pending_acceptance", "in_progress", "on_hold"].includes(x.state));
-    assert.eq([s.open.open, s.open.overdue], [open.length, (await supervisorNow(env)).summary.overdue], "«Открыто сейчас» — открытые видимые, просрочено — как в «Сейчас»");
+    assert.same([s.open.open, s.open.overdue], [open.length, (await supervisorNow(env)).summary.overdue], "«Открыто сейчас» — открытые видимые, просрочено — как в «Сейчас»");
 
     // Фильтры — все сразу; на «Открыто сейчас» и список операторов не действуют; несуществующее значение — пусто, без ошибки
     const n = async (q) => (await stats(env, `${span(start, env.now + 864e5)}&${q}`)).current.incidents;
     const withG = await stats(env, `${span(start, env.now + 864e5)}&maintenance=include`);
-    assert.eq([withG.current.incidents, withG.devices.map((x) => x.source.id)], [6, [S1, S2]], "«Окна работ: считать» — с G");
+    assert.same([withG.current.incidents, withG.devices.map((x) => x.source.id)], [6, [S1, S2]], "«Окна работ: считать» — с G");
     const narrow = await stats(env, `${span(start, env.now + 864e5)}&operator=petrova`);
-    assert.eq([narrow.current.incidents, narrow.operators.map((o) => o.id), narrow.open], [1, [ME, "petrova"], s.open], "оператор — кто закрыл; список операторов и «Открыто сейчас» фильтр не меняет");
+    assert.same([narrow.current.incidents, narrow.operators.map((o) => o.id), narrow.open], [1, [ME, "petrova"], s.open], "оператор — кто закрыл; список операторов и «Открыто сейчас» фильтр не меняет");
     const office = directGroups(S1)[0];
     const top = window.IM_FIXTURE.sourceGroups.find((x) => JSON.stringify(x).includes(office.id));
     for (const [q, want] of [
@@ -6250,14 +6250,14 @@
       ["sourceGroup=nowhere", 0],
       ["maintenance=exclude", 5],
     ])
-      assert.eq(await n(q), want, `фильтр ${q}`);
+      assert.same(await n(q), want, `фильтр ${q}`);
 
     // Только видимые старшему (решение 3): мне — только «Торговый центр»; тот же запрос того же человека в течение
     // минуты сервер не считает заново — после минуты
     assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "мне — только «Торговый центр»");
     await env.advance(61);
     const blind = await stats(env, span(start, env.now + 864e5));
-    assert.eq([blind.current.incidents, blind.operators, blind.devices], [0, [], []], "датчики главного офиса старшему не видны — их инцидентов нет");
+    assert.same([blind.current.incidents, blind.operators, blind.devices], [0, [], []], "датчики главного офиса старшему не видны — их инцидентов нет");
   });
 
   test("«За период»: старшему видна часть инцидентов — считаются только они: устройства, операторы, ряды (§23.3, решение 3 плана 90)", async () => {
@@ -6275,16 +6275,16 @@
     await env.advance(1); // конец периода — «сейчас», не включая: закрытый в эту секунду ещё не в нём
     const q = span(start, env.now + 864e5);
     const all = await stats(env, q);
-    assert.eq(all.current.incidents, 3, "всем видно три");
+    assert.same(all.current.incidents, 3, "всем видно три");
     assert.status(await env.call("PUT", "/test/operators/me/roles", { roles: ["Оператор ТЦ"] }), 200, null, "мне — только «Торговый центр»");
     await env.advance(61);
     const part = await stats(env, q);
-    assert.eq(
+    assert.same(
       [part.current.incidents, part.devices.map((d) => [d.source.id, d.incidents]), part.operators.map((o) => o.id), part.series.buckets.reduce((n, b) => n + b.notFalse, 0)],
       [1, [[MALL, 1]], [ME], 1],
       "виден один инцидент «Торгового центра» — только он в числах, устройствах и ряде"
     );
-    assert.eq(csvRows(await statsCsv(env, q)).length - 1, 1, "CSV — тоже только видимые");
+    assert.same(csvRows(await statsCsv(env, q)).length - 1, 1, "CSV — тоже только видимые");
   });
 
   test("«За период»: пояс смены не московский, с переводом часов — границы периода, сутки по 23 и 25 ч, 47 и 49 часовых столбиков, время и имя файла CSV — в нём (§23.3, §23.4, §14.9)", async () => {
@@ -6311,9 +6311,9 @@
     const today = dayOf(at);
 
     const s = await stats(env, "");
-    assert.eq([s.timeZone, Date.parse(s.from)], [NY, midnight(shiftDate(today, -6))], "7 дней — от полуночи по Нью-Йорку, не по Москве");
-    assert.eq(s.series.buckets.slice(1).map((b) => Date.parse(b.from)), [-5, -4, -3, -2, -1, 0].map((n) => midnight(shiftDate(today, n))), "сутки — по полуночам пояса смены");
-    assert.eq(Date.parse((await stats(env, "period=today")).from), midnight(today), "«Сегодня» — с полуночи по Нью-Йорку");
+    assert.same([s.timeZone, Date.parse(s.from)], [NY, midnight(shiftDate(today, -6))], "7 дней — от полуночи по Нью-Йорку, не по Москве");
+    assert.same(s.series.buckets.slice(1).map((b) => Date.parse(b.from)), [-5, -4, -3, -2, -1, 0].map((n) => midnight(shiftDate(today, n))), "сутки — по полуночам пояса смены");
+    assert.same(Date.parse((await stats(env, "period=today")).from), midnight(today), "«Сегодня» — с полуночи по Нью-Йорку");
 
     // Дни перевода часов за последний год: сутки не по 24 ч
     const turns = [];
@@ -6322,14 +6322,14 @@
       const len = midnight(shiftDate(date, 1)) - midnight(date);
       if (len !== 24 * H && !turns.some((x) => x.len === len)) turns.push({ date, len });
     }
-    assert.eq(turns.map((x) => x.len).sort(), [23 * H, 25 * H], "за год — весенний (23 ч) и осенний (25 ч) переводы");
+    assert.same(turns.map((x) => x.len).sort(), [23 * H, 25 * H], "за год — весенний (23 ч) и осенний (25 ч) переводы");
     for (const { date, len } of turns) {
       const from = midnight(shiftDate(date, -1));
       const two = await stats(env, span(from, midnight(shiftDate(date, 1))));
       const hours = len / H + 24;
-      assert.eq([two.series.granularity, two.series.buckets.length], ["hour", hours], `двое суток с переводом ${date} — ${hours} столбиков по часам`);
+      assert.same([two.series.granularity, two.series.buckets.length], ["hour", hours], `двое суток с переводом ${date} — ${hours} столбиков по часам`);
       const week = await stats(env, span(midnight(shiftDate(date, -2)), midnight(shiftDate(date, 3))));
-      assert.eq(
+      assert.same(
         week.series.buckets.map((b) => (Date.parse(b.to) - Date.parse(b.from)) / H),
         [24, 24, len / H, 24, 24],
         `сутки ${date} — ${len / H} ч`
@@ -6348,9 +6348,9 @@
     await env.advance(1);
     const csv = await statsCsv(env, span(t0, env.now + 1000));
     const rows = csvRows(csv);
-    assert.eq(rows.length, 2, "одна строка");
-    assert.eq(rows[1].split(";")[CSV_COLS.indexOf("closed")], zIso(closedAt), "время закрытия — со смещением Нью-Йорка");
-    assert.eq(csv.headers["content-disposition"], `attachment; filename=supervisor-stats-${dayOf(t0)}_${dayOf(env.now - 1)}.csv`, "имя файла — даты по Нью-Йорку");
+    assert.same(rows.length, 2, "одна строка");
+    assert.same(rows[1].split(";")[CSV_COLS.indexOf("closed")], zIso(closedAt), "время закрытия — со смещением Нью-Йорка");
+    assert.same(csv.headers["content-disposition"], `attachment; filename=supervisor-stats-${dayOf(t0)}_${dayOf(env.now - 1)}.csv`, "имя файла — даты по Нью-Йорку");
   });
 
   test("«За период»: период — 7 дней по умолчанию, «Сегодня», «Смена», «30 дней», «Свой…» в поясе смены; обрезка по сроку хранения и «сейчас»; пустой период; по часам или по дням; прошлый период; подсчёт за минуту не повторяется; 400 и 403 (§23.3, решения 5 и 8 плана 90)", async () => {
@@ -6359,38 +6359,38 @@
     const keep = W.retention.closedIncidentsDays;
     const s = await stats(env);
     const range = (x) => [Date.parse(x.from), Date.parse(x.to)];
-    assert.eq([s.retentionDays, s.timeZone, s.fromClipped, Date.parse(s.computedAt)], [keep, "Europe/Moscow", false, at], "срок хранения, пояс смены, время подсчёта");
-    assert.eq(range(s), [mskMidnight(at, 6), at], "по умолчанию — 7 дней: сегодня и шесть дней перед ним, от полуночи по поясу смены");
-    assert.eq(range(s.previous), [2 * mskMidnight(at, 6) - at, mskMidnight(at, 6)], "прошлый период — того же размера сразу перед текущим");
-    assert.eq([s.series.granularity, s.series.buckets.length, Date.parse(s.series.buckets[1].from)], ["day", 7, mskMidnight(at, 5)], "7 дней — по суткам пояса смены");
-    assert.eq(range(await stats(env, "period=7d")), range(s), "period=7d — то же");
+    assert.same([s.retentionDays, s.timeZone, s.fromClipped, Date.parse(s.computedAt)], [keep, "Europe/Moscow", false, at], "срок хранения, пояс смены, время подсчёта");
+    assert.same(range(s), [mskMidnight(at, 6), at], "по умолчанию — 7 дней: сегодня и шесть дней перед ним, от полуночи по поясу смены");
+    assert.same(range(s.previous), [2 * mskMidnight(at, 6) - at, mskMidnight(at, 6)], "прошлый период — того же размера сразу перед текущим");
+    assert.same([s.series.granularity, s.series.buckets.length, Date.parse(s.series.buckets[1].from)], ["day", 7, mskMidnight(at, 5)], "7 дней — по суткам пояса смены");
+    assert.same(range(await stats(env, "period=7d")), range(s), "period=7d — то же");
     const today = await stats(env, "period=today");
-    assert.eq([range(today), today.series.granularity, today.series.buckets.length], [[mskMidnight(at), at], "hour", Math.ceil((at - mskMidnight(at)) / 36e5)], "«Сегодня» — от полуночи, по часам");
+    assert.same([range(today), today.series.granularity, today.series.buckets.length], [[mskMidnight(at), at], "hour", Math.ceil((at - mskMidnight(at)) / 36e5)], "«Сегодня» — от полуночи, по часам");
     const shift = await stats(env, "period=shift");
-    assert.eq(range(shift), [Date.parse((await supervisorNow(env)).shift.from), at], "«Смена» — от начала текущей смены");
-    assert.eq(range(await stats(env, "period=30d")), [mskMidnight(at, 29), at], "30 дней — сегодня и 29 дней перед ним");
+    assert.same(range(shift), [Date.parse((await supervisorNow(env)).shift.from), at], "«Смена» — от начала текущей смены");
+    assert.same(range(await stats(env, "period=30d")), [mskMidnight(at, 29), at], "30 дней — сегодня и 29 дней перед ним");
 
     // Свой период: обрезка по «сейчас» и по сроку хранения; начало раньше хранения — сравнения нет
     const clipped = await stats(env, span(at - 400 * 864e5, at + 864e5));
-    assert.eq([range(clipped), clipped.fromClipped, clipped.previous], [[at - keep * 864e5, at], true, null], "начало раньше хранения — с начала хранения, конец позже «сейчас» — «сейчас»; прошлого периода нет");
+    assert.same([range(clipped), clipped.fromClipped, clipped.previous], [[at - keep * 864e5, at], true, null], "начало раньше хранения — с начала хранения, конец позже «сейчас» — «сейчас»; прошлого периода нет");
     const empty = await stats(env, span(at - 3600e3, at - 3600e3));
-    assert.eq([empty.current.incidents, empty.current.reaction, empty.series.buckets, empty.results], [0, { median: null, mean: null, p90: null }, [], []], "from = to — пустой период");
+    assert.same([empty.current.incidents, empty.current.reaction, empty.series.buckets, empty.results], [0, { median: null, mean: null, p90: null }, [], []], "from = to — пустой период");
     const old = await stats(env, span(at - 300 * 864e5, at - 200 * 864e5));
-    assert.eq([old.current.incidents, old.fromClipped, old.series.buckets], [0, true, []], "весь период раньше хранения — пусто, без ошибки");
+    assert.same([old.current.incidents, old.fromClipped, old.series.buckets], [0, true, []], "весь период раньше хранения — пусто, без ошибки");
     // По часам — пока конец не позже того же местного времени через два дня после начала
     const x = mskMidnight(at, 5);
     const twoDays = await stats(env, span(x, x + 48 * 3600e3));
-    assert.eq([twoDays.series.granularity, twoDays.series.buckets.length], ["hour", 48], "двое суток — по часам, 48 столбиков");
+    assert.same([twoDays.series.granularity, twoDays.series.buckets.length], ["hour", 48], "двое суток — по часам, 48 столбиков");
     const longer = await stats(env, span(x, x + 48 * 3600e3 + 1000));
-    assert.eq([longer.series.granularity, longer.series.buckets.length], ["day", 3], "на секунду длиннее — по дням, последний неполный");
+    assert.same([longer.series.granularity, longer.series.buckets.length], ["day", 3], "на секунду длиннее — по дням, последний неполный");
     const half = await stats(env, span(x + 30 * 60e3, x + 3 * 3600e3));
-    assert.eq(half.series.buckets.map((b) => (Date.parse(b.to) - Date.parse(b.from)) / 60e3), [30, 60, 60], "первый столбик — до ближайшего целого часа");
+    assert.same(half.series.buckets.map((b) => (Date.parse(b.to) - Date.parse(b.from)) / 60e3), [30, 60, 60], "первый столбик — до ближайшего целого часа");
 
     // Тот же запрос в течение минуты — прежний подсчёт с прежним computedAt
     await env.advance(30);
-    assert.eq((await stats(env, "period=today")).computedAt, today.computedAt, "через 30 с — прежний подсчёт");
+    assert.same((await stats(env, "period=today")).computedAt, today.computedAt, "через 30 с — прежний подсчёт");
     await env.advance(31);
-    assert.eq(Date.parse((await stats(env, "period=today")).computedAt), env.now, "через минуту — новый");
+    assert.same(Date.parse((await stats(env, "period=today")).computedAt), env.now, "через минуту — новый");
 
     for (const [q, why] of [
       ["period=year", "неизвестный period"],
@@ -6408,7 +6408,7 @@
     assert.status(await bare.call("GET", STATS), 403, "PERMISSION_DENIED", "без supervisor:view — 403");
     assert.status(await statsCsv(bare), 403, "PERMISSION_DENIED", "выгрузка без supervisor:view — 403");
     const exports = (await bare.ok("GET", "/operator/admin/audit/actions?kind=audit_export")).items;
-    assert.eq(exports.length, 0, "отклонённая выгрузка в журнал действий не пишется");
+    assert.same(exports.length, 0, "отклонённая выгрузка в журнал действий не пишется");
   });
 
   test("«Выгрузить CSV»: инциденты построчно по времени закрытия, столбцы и порядок решения 10, «;», BOM, CRLF, время в поясе смены, защита формул и кавычки; язык выгружающего; запись в журнал действий, кроме отклонённой (§23.4, §12.4, решение 10 плана 90)", async () => {
@@ -6421,9 +6421,9 @@
     // Имя файла — даты начала и последнего дня периода в поясе смены (конец периода не входит)
     const mskDate = (ms) => new Date(ms + MSK).toISOString().slice(0, 10);
     assert.ok(/^text\/csv/.test(res.headers["content-type"] || ""), `тип — text/csv: ${res.headers["content-type"]}`);
-    assert.eq(res.headers["content-disposition"], `attachment; filename=supervisor-stats-${mskDate(start)}_${mskDate(env.now - 1)}.csv`, "имя файла в Content-Disposition");
+    assert.same(res.headers["content-disposition"], `attachment; filename=supervisor-stats-${mskDate(start)}_${mskDate(env.now - 1)}.csv`, "имя файла в Content-Disposition");
     const lines = csvRows(res);
-    assert.eq(lines[0], CSV_COLS.map((k) => RU[csvKey(`column.${k}`)]).join(";"), "названия столбцов — по-русски, в порядке решения 10");
+    assert.same(lines[0], CSV_COLS.map((k) => RU[csvKey(`column.${k}`)]).join(";"), "названия столбцов — по-русски, в порядке решения 10");
     const order = ["a", "b", "c", "d", "e", "g"];
     const t = (v) => (v ? mskIso(Date.parse(v)) : "");
     const sec = (from, to) => (to ? String(Math.floor((Date.parse(to) - Date.parse(from)) / 1000)) : "");
@@ -6450,25 +6450,25 @@
         RU[csvKey(k === "g" ? "yes" : "no")],
       ].join(";");
     });
-    assert.eq(lines.slice(1), want, "строки — A, B, C, D, E, G по времени закрытия; привязанного F нет");
+    assert.same(lines.slice(1), want, "строки — A, B, C, D, E, G по времени закрытия; привязанного F нет");
     // Реакция — четвёртая ячейка с конца: после неё закрытие, нарушения и окно работ (в них «;» нет)
     const reactionCell = (l) => l.split(";").slice(-4)[0];
-    assert.eq([reactionCell(lines[1]), lines[4].split(";")[2], reactionCell(lines[4])], ["40", "", ""], "реакция A — 40 с; у D, закрытого без взятия, «Принят» и реакция пусты");
+    assert.same([reactionCell(lines[1]), lines[4].split(";")[2], reactionCell(lines[4])], ["40", "", ""], "реакция A — 40 с; у D, закрытого без взятия, «Принят» и реакция пусты");
 
     const log = (await env.ok("GET", "/operator/admin/audit/actions?kind=audit_export")).items;
-    assert.eq(log.length, 1, "выгрузка — одна запись в журнале действий");
-    assert.eq([log[0].personId, log[0].details], [ME, { journal: "supervisor_stats", filters: { maintenance: "include" }, from: new Date(start).toISOString(), to: new Date(env.now).toISOString(), rows: 6 }], "кто, период после обрезки, фильтры и сколько строк");
+    assert.same(log.length, 1, "выгрузка — одна запись в журнале действий");
+    assert.same([log[0].personId, log[0].details], [ME, { journal: "supervisor_stats", filters: { maintenance: "include" }, from: new Date(start).toISOString(), to: new Date(env.now).toISOString(), rows: 6 }], "кто, период после обрезки, фильтры и сколько строк");
     const one = csvRows(await statsCsv(env, `${span(start, env.now + 864e5)}&operator=petrova`));
-    assert.eq([one.length, one[1].split(";")[0]], [2, cards.c.number], "фильтр оператора — только C");
+    assert.same([one.length, one[1].split(";")[0]], [2, cards.c.number], "фильтр оператора — только C");
     assert.status(await statsCsv(env, "period=year"), 400, "BAD_REQUEST", "неверный запрос");
-    assert.eq((await env.ok("GET", "/operator/admin/audit/actions?kind=audit_export")).items.length, 2, "отклонённая выгрузка записи не делает");
+    assert.same((await env.ok("GET", "/operator/admin/audit/actions?kind=audit_export")).items.length, 2, "отклонённая выгрузка записи не делает");
 
     // Язык — выгружающего (§14.9)
     assert.status(await env.call("PATCH", "/operator/session/preferences", { locale: "en" }), 200, null, "язык — английский");
     const en = csvRows(await statsCsv(env, q));
     const EN = window.IM_STRINGS.en;
-    assert.eq(en[0], CSV_COLS.map((k) => EN[csvKey(`column.${k}`)]).join(";"), "названия столбцов — по-английски");
-    assert.eq(en.slice(1).map((l) => l.split(";").pop()), order.map((k) => EN[csvKey(k === "g" ? "yes" : "no")]), "да и нет — по-английски");
+    assert.same(en[0], CSV_COLS.map((k) => EN[csvKey(`column.${k}`)]).join(";"), "названия столбцов — по-английски");
+    assert.same(en.slice(1).map((l) => l.split(";").pop()), order.map((k) => EN[csvKey(k === "g" ? "yes" : "no")]), "да и нет — по-английски");
   });
 
   test("«За период»: дежурные группы — по группе до принятия, при равенстве по названию; удалённая — своя строка без названия, «Без группы» — последней, dutyGroup=none; в CSV — «Удалённая группа»; acceptedGroup — в карточке (§23.3, §23.4, решение 16 плана 90)", async () => {
@@ -6477,31 +6477,31 @@
     incidents.forEach((x) => x.number in set && (x.acceptedGroup = set[x.number]));
     const env = await makeEnv({ fixturePatch: { incidents } });
     const s = await stats(env, "period=7d");
-    assert.eq(
+    assert.same(
       s.dutyGroups.map((g) => [g.groupId, g.name, g.incidents]),
       [["grp-response", "Группа реагирования", 1], ["grp-leads", "Старшие операторы", 1], ["grp-gone", null, 1], [null, null, 1]],
       "при равенстве — по названию, удалённая — без названия, «Без группы» — последней"
     );
-    assert.eq(s.falseAlarmCauses, [{ causeId: null, label: null, count: 1 }], "ложная INC-1826 без причины — «Без причины»");
+    assert.same(s.falseAlarmCauses, [{ causeId: null, label: null, count: 1 }], "ложная INC-1826 без причины — «Без причины»");
     const none = await stats(env, "period=7d&dutyGroup=none");
-    assert.eq([none.current.incidents, none.dutyGroups.map((g) => g.groupId)], [1, [null]], "dutyGroup=none — без группы");
-    assert.eq((await stats(env, "period=7d&dutyGroup=grp-gone")).current.incidents, 1, "фильтр по удалённой группе");
+    assert.same([none.current.incidents, none.dutyGroups.map((g) => g.groupId)], [1, [null]], "dutyGroup=none — без группы");
+    assert.same((await stats(env, "period=7d&dutyGroup=grp-gone")).current.incidents, 1, "фильтр по удалённой группе");
     const lines = csvRows(await statsCsv(env, "period=7d"));
     const byNumber = Object.fromEntries(lines.slice(1).map((l) => [l.split(";")[0], l.split(";")[7]]));
-    assert.eq(byNumber, { "INC-1829": "", "INC-1831": "Группа реагирования", "INC-1837": "Старшие операторы", "INC-1826": RU[csvKey("deleted_group")] }, "дежурная группа в CSV");
-    assert.eq(lines.slice(1).map((l) => l.split(";")[0]), ["INC-1829", "INC-1831", "INC-1837", "INC-1826"], "строки — по времени закрытия");
+    assert.same(byNumber, { "INC-1829": "", "INC-1831": "Группа реагирования", "INC-1837": "Старшие операторы", "INC-1826": RU[csvKey("deleted_group")] }, "дежурная группа в CSV");
+    assert.same(lines.slice(1).map((l) => l.split(";")[0]), ["INC-1829", "INC-1831", "INC-1837", "INC-1826"], "строки — по времени закрытия");
     const card = await env.card(await env.guidOf("INC-1837"));
-    assert.eq([card.acceptedGroup && card.acceptedGroup.id, card.acceptedGroup && card.acceptedGroup.kind], ["grp-leads", "duty_group"], "acceptedGroup — в карточке");
-    assert.eq((await env.card(await env.guidOf("INC-1829"))).acceptedGroup, null, "без группы — null");
+    assert.same([card.acceptedGroup && card.acceptedGroup.id, card.acceptedGroup && card.acceptedGroup.kind], ["grp-leads", "duty_group"], "acceptedGroup — в карточке");
+    assert.same((await env.card(await env.guidOf("INC-1829"))).acceptedGroup, null, "без группы — null");
     const gone = (await env.card(await env.guidOf("INC-1826"))).acceptedGroup;
-    assert.eq([gone && gone.id, gone && gone.kind], ["grp-gone", "duty_group"], "удалённая группа в карточке — всё равно группа");
+    assert.same([gone && gone.id, gone && gone.kind], ["grp-gone", "duty_group"], "удалённая группа в карточке — всё равно группа");
     // Две удалённые с равным числом — по groupId, в каком бы порядке они ни встретились: обе раскладки
     for (const [x, y] of [["grp-zz-gone", "grp-aa-gone"], ["grp-aa-gone", "grp-zz-gone"]]) {
       const twoGone = JSON.parse(JSON.stringify(window.IM_FIXTURE.incidents));
       const set2 = { "INC-1829": null, "INC-1831": x, "INC-1837": y, "INC-1826": null };
       twoGone.forEach((i) => i.number in set2 && (i.acceptedGroup = set2[i.number]));
       const env2 = await makeEnv({ fixturePatch: { incidents: twoGone } });
-      assert.eq(
+      assert.same(
         (await stats(env2, "period=7d")).dutyGroups.map((g) => g.groupId),
         ["grp-aa-gone", "grp-zz-gone", null],
         `удалённые с равным числом — по groupId, «Без группы» — последней (INC-1831 — ${x})`
@@ -6521,32 +6521,32 @@
       return res.body.incidents[0];
     };
     const a = await fresh(toGroup);
-    assert.eq([a.state, a.assignmentGroup && a.assignmentGroup.id, a.acceptedGroup], ["pending_acceptance", "grp-response", null], "ждёт «Группу реагирования», группы до принятия ещё нет");
+    assert.same([a.state, a.assignmentGroup && a.assignmentGroup.id, a.acceptedGroup], ["pending_acceptance", "grp-response", null], "ждёт «Группу реагирования», группы до принятия ещё нет");
     const taken = (await toGroup.act(a.guid, "takeover", { comment: "срочно" })).body.incident;
-    assert.eq([taken.acceptedBy.id, group(taken)], [ME, "grp-response"], "перехватил я — группа-адресат, а не моя");
+    assert.same([taken.acceptedBy.id, group(taken)], [ME, "grp-response"], "перехватил я — группа-адресат, а не моя");
     const b = await fresh(toGroup);
     assert.status(await toGroup.act(b.guid, "close", mass, "queue"), 200, null, "закрыть ждущий группу «Массовым сбоем»");
-    assert.eq(group(await toGroup.card(b.guid)), "grp-response", "закрытый без взятия — группа-адресат");
+    assert.same(group(await toGroup.card(b.guid)), "grp-response", "закрытый без взятия — группа-адресат");
     const c = await fresh(toGroup);
     assert.status(await as(toGroup, "sidorov", c.guid, "reject", { comment: "не наш" }), 200, null, "Сидоров отклонил за группу");
     const rejected = await toGroup.card(c.guid);
-    assert.eq(rejected.assignmentGroup, null, "отклонили — адрес очищен");
+    assert.same(rejected.assignmentGroup, null, "отклонили — адрес очищен");
     const own = (await toGroup.act(c.guid, "claim", {}, "queue")).body.incident;
-    assert.eq(group(own), "grp-response", "взял после отклонения — отклонившая группа: очистка адреса её не стирает");
+    assert.same(group(own), "grp-response", "взял после отклонения — отклонившая группа: очистка адреса её не стирает");
 
     // Не адресовали группе: первая дежурная группа принявшего или закрывшего (я — «Старшие операторы»)
     const env = await makeEnv();
     const d = await fresh(env);
-    assert.eq(group((await env.act(d.guid, "claim", {}, "queue")).body.incident), "grp-leads", "взял я — моя первая группа");
+    assert.same(group((await env.act(d.guid, "claim", {}, "queue")).body.incident), "grp-leads", "взял я — моя первая группа");
     const e = await fresh(env);
     assert.status(await env.act(e.guid, "close", mass, "queue"), 200, null, "E: «Массовым сбоем» из очереди");
-    assert.eq(group(await env.card(e.guid)), "grp-leads", "закрыл без взятия я — моя группа");
+    assert.same(group(await env.card(e.guid)), "grp-leads", "закрыл без взятия я — моя группа");
     // Ставится один раз: переоткрыли, адресовали «Группе реагирования», снова закрыли без взятия — группа прежняя
     assert.status(await env.act(e.guid, "reopen", { comment: "вернули" }), 200, null, "E: переоткрыть");
     assert.status(await env.act(e.guid, "transfer", { targetId: "grp-response", comment: "вам" }), 200, null, "E: передать «Группе реагирования»");
     assert.status(await env.act(e.guid, "close", mass, "queue"), 200, null, "E: снова «Массовым сбоем»");
     const again = await env.card(e.guid);
-    assert.eq([again.state, again.acceptedAt, group(again)], ["closed", null, "grp-leads"], "повторное закрытие без взятия группу не меняет");
+    assert.same([again.state, again.acceptedAt, group(again)], ["closed", null, "grp-leads"], "повторное закрытие без взятия группу не меняет");
     // Привязанный, закрытый вместе с основным: группа закрывшего основной, а не системы
     const f = await fresh(env);
     const g = await fresh(env);
@@ -6556,7 +6556,7 @@
     const linked = primary === f.guid ? g.guid : f.guid;
     assert.status(await env.act(primary, "close", { resultId: "impossible", comment: "тест" }), 200, null, "закрыть основной");
     const l = await env.card(linked);
-    assert.eq([l.state, l.acceptedAt, group(l)], ["closed", null, "grp-leads"], "привязанный — без первого принятия, группа закрывшего основной");
+    assert.same([l.state, l.acceptedAt, group(l)], ["closed", null, "grp-leads"], "привязанный — без первого принятия, группа закрывшего основной");
   });
 
   // Файл загрузился целиком — харнесс сверяет это со списком файлов страницы (PROC-53)
