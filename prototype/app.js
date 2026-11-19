@@ -1417,6 +1417,8 @@
       breakRestore: () => breakRestore(),
       // Опрос «Сейчас», как раз в shift.refreshSec (§23.2)
       shiftPoll: () => loadShift(),
+      // Пересчёт «За период», как по смене периода или «Обновить», — без щелчка, который закрыл бы открытый список
+      statsReload: () => loadStats(),
     };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
 

@@ -4270,6 +4270,50 @@
       }
     });
 
+    // Поиск в поле не сбрасывается, когда экран смены перерисовывается сам (опрос, пересчёт) — ошибка со стенда 2026-11-20
+    await step("Смена и статистика: набранный поиск в списке не сбрасывается при обновлении экрана — опрос «Сейчас» и пересчёт «За период» с новым списком устройств оставляют текст, фокус и отобранные варианты", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const ui = window.IM_SELFTEST_UI;
+      const get = stand.get;
+      const until = async (cond, what) => {
+        for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+        expect(cond(), what);
+      };
+      let extra = false;
+      stand.get = (path, params) =>
+        path === "/operator/reference/source-groups" && extra
+          ? get(path, params).then((tree) => tree.concat({ guid: "selftest-new", name: "Новые", children: [], devices: [{ guid: "selftest-new-cam", name: "Ящик поиска новый" }] }))
+          : get(path, params);
+      try {
+        await click($("tabShift"));
+        await until(() => $("statsTiles").querySelector("[data-stats-tile]"), "экран смены не открылся");
+        const box = $("statsSource").nextElementSibling;
+        const field = () => box.querySelector(".mselect-input");
+        const names = () => [...box.querySelectorAll(".mselect-opt input")].filter((x) => x.value).map((x) => x.nextElementSibling.textContent);
+        await click(field());
+        field().value = "ящик поиска";
+        field().dispatchEvent(new Event("input", { bubbles: true }));
+        expect(names().length === 0, `до обновления: ${names().join(", ")}`);
+        // Опрос «Сейчас» и пересчёт «За период»; дерево пришло с новым устройством — список устройств перестроен
+        extra = true;
+        await ui.shiftPoll();
+        await ui.statsReload();
+        await until(() => [...$("statsSource").options].some((o) => o.value === "selftest-new-cam"), "новое устройство не пришло");
+        await wait(200);
+        expect(box.querySelector(".mselect-menu") && field().value === "ящик поиска", `после обновления: список ${box.querySelector(".mselect-menu") ? "открыт" : "закрыт"}, текст «${field().value}»`);
+        expect(document.activeElement === field(), "после обновления фокус ушёл из поля");
+        expect(names().join() === "Ящик поиска новый", `после обновления варианты: ${names().join(", ")}`);
+        return "текст и отбор на месте";
+      } finally {
+        stand.get = get;
+        document.body.click();
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
     await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
