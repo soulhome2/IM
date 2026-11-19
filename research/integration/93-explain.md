@@ -1,0 +1,370 @@
+# План 93, задача 1: разбор медленных запросов очереди
+
+Стенд, 2026-11-20. База — `imdb`, восстановленная из `imdb-G-filled-20261119-0922.dump` (1 002 106 закрытых инцидентов, 1,06 млн событий, 2,85 ГБ), Postgres 9.6.24, сервер — сборка `im-p95` (ветка `feature/im_operator`, 4c52a39). Один оператор, запросы по очереди — без нагрузки остальных.
+
+## Коротко
+
+1. **Поиск** (по номеру и по тексту на «Все») — полный проход по 1,06 млн инцидентов и 1,1 млн событий в каждом из двух запросов (подсчёт классов и страница): 1,7–2,1 с и 1,0–2,2 с в базе, 2,7–3,7 с ответ. Гипотеза п. 1 «Почему так» подтвердилась.
+2. **«Все»** — страница уже идёт по индексу (35–115 мс), закрытые считаются по `queue_closed_counts` (15 мс). Медленна только **открытая часть подсчёта**: 55 тыс. живых инцидентов соединяются со всеми 1,1 млн событий через полное чтение `events` — 0,32–0,39 с. Гипотеза п. 2 в описанном виде **не подтвердилась**.
+3. **Тип устройства** — малый тип (датчик дыма) 0,16–0,23 с; **камеры** (85 % событий) — подсчёт **4,4–4,6 с**: план идёт от устройств ко всем их 941 тыс. событиям, а не от 55 тыс. живых инцидентов. Гипотеза п. 3 подтвердилась наполовину: медленно, но не потому, что «Все» — полный проход.
+4. **Десятки секунд на A2** — не время запросов, а **очередь к `heavyReadSlots` = 6**: тяжёлые чтения очереди идут не больше шести сразу. 48 одновременных поисков по номеру — p50 19,5 с при 1,8–2,0 с каждого запроса в базе; 48 «Все» — p50 3,0 с при 0,38 с. Поиск по 2–3 с занимает слот и держит за собой всё остальное.
+5. **«Все в фильтре»** — 54 781 открытый у test@: **674 с** (11 минут), ответ 6,9 МБ. Почти всё время — выражения машины над всем списком: основной выборки для «Закрыть» (`bulkPrimary`, два вызова — 200 + 206 с) и для «Взять как один» (`mergePrimary` + проверка слияния — 202 с), общая форма «Передать» — 39 с. `ViewPage` — 5,5–6 с, `snapshotOf` — 0,6 с, сериализация — 0,04 с. Гипотеза п. 4 **не подтвердилась**: главная причина — квадратичные выражения CEL, не построение видов и не снимки.
+6. Запрос выделения, брошенный клиентом (прокси отвечает 504 через 60 с), **сервер продолжает считать до конца** — ~10 минут на одно ядро. Повторные щелчки складываются.
+
+## Как мерили
+
+- **База.** После восстановления в наполненной базе открытых инцидентов нет. Для замера с живой очередью — лавина `burst.py 51000 300 8` (51 003 события за 300 с, все 200), затем `ANALYZE incidents, events`: **54 781 new + 60 pending_acceptance**. В конце стенд возвращён на чистую наполненную базу (без этих 55 тыс.).
+- **Операторы.** `load-op-01` (группа 2, видит 214 049 инцидентов, из них 18 890 открытых) и `test@` (группа 1, 951 292, из них 54 781 открытый). Без открытых `load-op-01` видит 195 159, `test@` — 896 511.
+- **Тексты запросов** — журнал Postgres (`ALTER DATABASE imdb SET log_min_duration_statement = 1000` на время опыта, потом `RESET`) для запросов дольше секунды и `pg_stat_statements` (сброс перед каждым шагом) для остальных. Из них — `PREPARE … ; EXPLAIN (ANALYZE, BUFFERS) EXECUTE …` с теми же параметрами: `tools/stand-load/explain_queue.py fromlog` и `… pgss` (дополнено в этой задаче). Подборка «первый / повтор».
+- **Холодный и тёплый.** Сбросить кэш ОС нельзя: нет прав root, контейнер `ac_db` общий с облаком. `shared_buffers` = 128 МБ при базе 2,85 ГБ, поэтому «read» в `BUFFERS` — это чтение из кэша ОС, не с диска. «Первый» — первый запуск запроса после лавины и `ANALYZE`, «повтор» — сразу за ним. Разница везде в пределах 10 %: запросы упираются в процессор, не в диск.
+- `work_mem` = 4 МБ, `max_parallel_workers_per_gather` = 0, `random_page_cost` = 4 — настройки облака, не меняли.
+- **Выделение** — временная разметка `log.Printf` в `selection.go` (не коммитилась, дерево сервера чистое), сборка без `-tags imtest`, запрос `POST /operator/incidents/selection` `{"mode":"all_in_filter","filter":"open"}` прямо на `127.0.0.1:5000` (через прокси — 504 через 60 с). `limits.maxBulk` = null.
+
+Сырые журналы, планы и тексты — на стенде, `~/Work/stand/load/out/p93-1/` (в git не идут).
+
+## Время ответа, один оператор
+
+`GET /operator/incidents`, первый / повтор, мс. Без открытых — наполненная база как есть; с открытыми — после лавины.
+
+| Шаг | load-op-01, без открытых | load-op-01, 55 тыс. открытых | test@, без открытых | test@, 55 тыс. открытых |
+|---|---|---|---|---|
+| «Открытые», стр. 1 | 17 / 5 | 445 / 49 | 12 | — |
+| Поиск по номеру `filter=all&search=1847` | 2 519 / 2 500 | 2 726 / 2 671 | 3 555 | 3 724 / 3 775 |
+| Поиск по тексту `filter=open&search=предмет` | 6 / 5 ¹ | 330 / 349 | — | 656 / 635 |
+| Поиск по тексту `filter=all&search=предмет` | 1 615 / 1 631 ¹ | 2 131 / 2 093 | 3 572 ¹ | 2 049 / 2 036 |
+| «Все», стр. 1 | 67 / 50 | 389 / 351 | 58 | 360 / 353 |
+| «Все», стр. 20 | 177 / 140 | 446 / 430 | 90 | 394 / 365 |
+| «Все» + `deviceTypeId=fire-detector` | 82 / 79 | 369 / 364 | 101 | 402 / 349 |
+| «Все» + `deviceTypeId=camera` | — | **4 538 / 4 586** | — | — |
+| `GET /operator/incidents/counters` | 3 / 3 | 6 / 6 | 2 | — |
+| `counters?search=1847` | — | 359 / 3 ² | — | — |
+| `counters?deviceTypeId=camera` | — | **4 410** / 4 ² | — | — |
+
+¹ без открытых искалось «стекл» (0 совпадений у load-op-01, 6 520 у test@): время то же — оно не зависит от числа найденных.
+² повтор в течение пары секунд отдаётся из памяти сервера.
+
+Подсчёт без параметров (`counters`) берётся из памяти (`VisibleClasses`) и быстрый. С поиском или типом устройства он идёт тем же запросом подсчёта классов, что и список, — но только по живым (закрытые счётчики не считает).
+
+### Одновременно
+
+`load-op-01 … load-op-N` делают один и тот же шаг разом (55 тыс. открытых):
+
+| Шаг | N | p50, мс | max, мс | один запрос в базе |
+|---|---|---|---|---|
+| Поиск по номеру | 16 | 6 780 | 7 981 | 1,8 + 1,0 с |
+| Поиск по номеру | 48 | 19 533 | 23 240 | 1,8–2,0 + 1,0–1,1 с |
+| Поиск по тексту, «Все» | 48 | 17 622 | 18 536 | 2,0–2,1 с + страница |
+| «Все», стр. 1 | 48 | 2 965 | 3 060 | 0,38 + 0,05 с |
+
+Время одного запроса в журнале Postgres при 48 одновременных почти то же, что при одном (1,8–2,0 с). Растёт ожидание перед запросом: `heavyReadSlots` = 6 (`internal/im/service/storing/heavy_reads.go`) пускает в базу не больше шести тяжёлых чтений очереди. 48 × (1,9 + 1,0) с / 6 ≈ 23 с — как max; 48 × 0,38 / 6 ≈ 3,0 с — как p50 «Все». На A2 (100 операторов, лавина Д) «Все», тип устройства, сверка страницы и очередь по событию потока стоят в той же очереди за поисками — отсюда десятки секунд и 504 там, где сам запрос — доли секунды.
+
+## Запросы по одному
+
+У всех запросов очереди общее начало — права оператора (`accessRuleCTEs`, `access_queries.go`):
+
+```sql
+WITH
+rules AS (
+  SELECT ar.guid, ar.source_guid, ar.source_type_guid, ar.source_event_type_guid, ar.source_group_guid,
+    ar.external_user_group_id
+  FROM access_rules ar
+  WHERE ar.deleted_at IS NULL AND ar.customer_guid = $4 AND ar.external_user_group_id = ANY ($1)
+),
+closure AS (
+  SELECT * FROM unnest($2::uuid[], $3::uuid[]) AS c(ancestor_guid, descendant_guid)
+),
+rule_sources AS (
+  SELECT r.guid AS rule_guid, sgm.source_guid
+  FROM rules r
+  JOIN closure c ON c.ancestor_guid = r.source_group_guid
+  JOIN source_group_memberships sgm ON sgm.group_guid = c.descendant_guid
+)
+```
+
+Параметры load-op-01: `$1 = '{2}'`, `$2`, `$3` — по 93 guid групп устройств (предки и потомки), `$4 = '019bbe9b-b1b8-7817-ade7-d283887bb551'` (заказчик). У test@ `$1 = '{1}'`. Ниже `/* accessRuleMatch */` — условие правила (`accessRuleMatch`), `/* queueSearchHit($n) */` — склейка «inc-номер inc-номер тревоги тип события», название и адрес устройства с `LIKE` (`queueSearchHit`, `queue_queries.go`). Время — `EXPLAIN ANALYZE`, первый / повтор.
+
+### 1. Поиск: подсчёт классов (`queueClassesSQL` + поиск)
+
+<details><summary>Текст</summary>
+
+```sql
+-- …rules, closure, rule_sources…
+,
+linked_found AS (
+  SELECT e.linked_to
+  FROM (
+    SELECT i.linked_to, ev.source_guid, ev.source_type_guid, ev.source_event_type_guid
+    FROM incidents i
+    JOIN events ev ON ev.guid = i.event_guid AND ev.deleted_at IS NULL
+    JOIN source_event_types t ON t.guid = ev.source_event_type_guid
+    LEFT JOIN sources src ON src.guid = ev.source_guid AND src.customer_guid = i.customer_guid AND src.deleted_at IS NULL
+    WHERE i.deleted_at IS NULL AND i.customer_guid = $4
+      AND i.linked_to IS NOT NULL AND (/* queueSearchHit($5) */)
+  ) e
+  WHERE EXISTS (SELECT 1 FROM rules ar WHERE /* accessRuleMatch */)
+)
+SELECT e.state, e.owner, e.assignment_group, sum(e.count)::bigint AS count
+FROM (
+  SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid,
+    i.state, i.owner, i.assignment_group, count(*) AS count
+  FROM incidents i
+  JOIN events ev ON ev.guid = i.event_guid AND ev.deleted_at IS NULL
+  JOIN source_event_types t ON t.guid = ev.source_event_type_guid
+  LEFT JOIN sources src ON src.guid = ev.source_guid AND src.customer_guid = i.customer_guid AND src.deleted_at IS NULL
+  WHERE i.deleted_at IS NULL AND i.customer_guid = $4
+    AND ((/* queueSearchHit($5) */) OR i.guid IN (SELECT linked_to FROM linked_found))
+  GROUP BY ev.source_guid, ev.source_type_guid, ev.source_event_type_guid, i.state, i.owner, i.assignment_group
+) e
+WHERE EXISTS (SELECT 1 FROM rules ar WHERE /* accessRuleMatch */)
+GROUP BY e.state, e.owner, e.assignment_group
+-- $5 = '%1847%' (по тексту — '%предмет%')
+```
+</details>
+
+| Запрос | Время, мс |
+|---|---|
+| load-op-01, `%1847%` | 1 897 / 1 882 |
+| test@, `%1847%` | 1 889 / 1 885 |
+| load-op-01, `%предмет%` | 2 067 / 2 069 |
+| load-op-01, `%предмет%` при `filter=open` (плюс `i.state <> ALL ('{closed}')`) | 416 / 376 |
+
+**Куда уходит время** (load-op-01, `%1847%`):
+- `Seq Scan on incidents` — 1 056 887 строк, 190 мс;
+- `Hash` над `Seq Scan on events` — 1 110 929 строк, 240 мс, **64 батча на диск** (`temp written` 12 193 блока: `work_mem` 4 МБ);
+- `Hash Join` инцидентов с событиями — к 815 мс, с типами событий — к 933 мс;
+- `Hash Left Join` с устройствами и **фильтр поиска** на каждой строке — до 1 896 мс: ожидалось 490 682 строки, осталось **317** (`Rows Removed by Filter: 1 056 570`). Половина времени — само выражение `'inc-' || lpad(…) || … LIKE`;
+- правила — после группировки, по 234 группам: доли миллисекунды. `linked_found` — по `idx_incidents_linked_to`, 0 строк, мгновенно.
+
+При `filter=open` инциденты читаются по `idx_incidents_live` (54 781 строка, 15 мс), но события — всё так же целиком: `Seq Scan on events` 1,1 млн строк в хеш на 64 батча, 231 мс из 376.
+
+**Гипотеза.** Поиск по истории — полный проход, и он платит дважды: чтение и соединение миллиона инцидентов с миллионом событий (~0,9 с) и склейку текста с `LIKE` на каждой строке (~1 с). Индекс `pg_trgm` поможет, только если запрос перестанет соединять всё со всем: сначала найти guid инцидентов (номер — на `incidents`, номер тревоги — на `events`, тип события и устройство — guid по маленьким таблицам), потом соединять только найденное. Для `filter=open` отдельная беда — соединение 55 тыс. живых со всеми событиями хешем (см. п. 4).
+
+### 2. Поиск: страница (`queueRowsSQL` + `queueRowsWhere` + поиск)
+
+<details><summary>Текст</summary>
+
+```sql
+-- …rules, closure, rule_sources…
+,
+linked_found AS ( /* как в п. 1, с $9 */ ),
+chosen AS (
+  SELECT * FROM unnest($5::text[], $6::text[], $7::text[]) AS c(state, owner, assignment_group)
+)
+SELECT i.guid
+FROM incidents i
+JOIN events ev ON ev.guid = i.event_guid AND ev.deleted_at IS NULL
+JOIN source_event_types t ON t.guid = ev.source_event_type_guid
+LEFT JOIN sources src ON src.guid = ev.source_guid AND src.customer_guid = i.customer_guid AND src.deleted_at IS NULL
+JOIN priorities p ON p.guid = i.priority_guid
+WHERE i.deleted_at IS NULL AND i.customer_guid = $4 AND i.state = ANY ($8::text[])
+  AND ((/* queueSearchHit($9) */) OR i.guid IN (SELECT linked_to FROM linked_found))
+  AND (i.state, i.owner, i.assignment_group) IN (SELECT c.state, c.owner, c.assignment_group FROM chosen c)
+  AND EXISTS (
+    SELECT 1
+    FROM rules ar, (SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid) e
+    WHERE /* accessRuleMatch */
+  )
+ORDER BY p.value DESC, ev.occurred_at DESC, i.number
+LIMIT 50 OFFSET 0
+-- $5, $6, $7 — 30 найденных классов (state, owner, assignment_group), $8 = '{closed,new,pending_acceptance}', $9 = '%1847%'
+```
+</details>
+
+| Запрос | Время, мс |
+|---|---|
+| load-op-01, `%1847%` (66 строк) | 1 087 / 1 114 |
+| test@, `%1847%` (283 строки) | 2 217 / 2 209 |
+| load-op-01, `%предмет%` (21 108 строк) — из `pg_stat_statements` | 217 |
+
+**Куда уходит время** (load-op-01): правило проверяется на **каждом из 1,11 млн событий** (`Seq Scan on events` с подпланом правил, 382 мс, осталось 225 873), хеш на 16 батчей; `Seq Scan on incidents` — 1 056 887 строк, 220 мс; `Hash Join` — 214 049 строк к 855 мс; фильтр поиска — до 1 087 мс, осталось **66**. У test@ правила пропускают почти все события (1 005 267 из 1,11 млн, 464 мс), хеш на 32 батча, фильтр поиска по 951 тыс. строк — 2,2 с.
+
+Число найденных меньше 10 000 (`queueLongList`), поэтому страница идёт обычным планом, без индекса по приоритетам. Длинный список (`предмет`, 21 тыс.) идёт по индексу приоритетов, как «Все» в п. 4 (`queueIndexedPage`), — 217 мс; дорог у него подсчёт.
+
+**Гипотеза.** Та же, что в п. 1: страница поиска повторяет полный проход подсчёта. Найти guid один раз и для подсчёта, и для страницы — уже половина времени.
+
+### 3. «Все»: подсчёт классов (`queueClassesSplitSQL`)
+
+<details><summary>Текст</summary>
+
+```sql
+-- …rules, closure, rule_sources…
+SELECT e.state, e.owner, e.assignment_group, sum(e.count)::bigint AS count
+FROM (
+  SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid,
+    i.state, i.owner, i.assignment_group, count(*) AS count
+  FROM incidents i
+  JOIN events ev ON ev.guid = i.event_guid AND ev.deleted_at IS NULL
+  WHERE i.deleted_at IS NULL AND i.customer_guid = $4 AND i.state <> 'closed'
+  GROUP BY ev.source_guid, ev.source_type_guid, ev.source_event_type_guid, i.state, i.owner, i.assignment_group
+  UNION ALL
+  SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid,
+    i.state, i.owner, i.assignment_group, sum(i.count) AS count
+  FROM (
+    SELECT q.*, 'closed'::text AS state
+    FROM (
+      SELECT customer_guid, owner, assignment_group, source_guid, source_type_guid, source_event_type_guid,
+        scenario_guid, priority_guid, count
+      FROM queue_closed_counts
+      UNION ALL
+      SELECT customer_guid, owner, assignment_group, source_guid, source_type_guid, source_event_type_guid,
+        scenario_guid, priority_guid, delta
+      FROM queue_closed_deltas
+    ) q
+  ) i
+  CROSS JOIN LATERAL (SELECT i.source_guid, i.source_type_guid, i.source_event_type_guid) ev
+  WHERE i.customer_guid = $4
+  GROUP BY ev.source_guid, ev.source_type_guid, ev.source_event_type_guid, i.state, i.owner, i.assignment_group
+  HAVING sum(i.count) <> 0
+) e
+WHERE EXISTS (SELECT 1 FROM rules ar WHERE /* accessRuleMatch */)
+GROUP BY e.state, e.owner, e.assignment_group
+```
+</details>
+
+| Запрос | Время, мс |
+|---|---|
+| load-op-01, 55 тыс. открытых | 393 / 379 |
+| load-op-01, без открытых (HTTP «Все» целиком) | 50–67 |
+
+**Куда уходит время:** открытая часть — `Index Scan using idx_incidents_live` 54 781 строка за 14 мс, но соединяются они со **всеми** событиями: `Hash` над `Seq Scan on events` (1 110 929 строк, 225 мс, **32 батча на диск**), затем сортировка 54 781 строки внешним слиянием (`external merge Disk: 3584kB`) для группировки — к 353 мс. Закрытая часть — `queue_closed_counts`, 21 090 строк, 15 мс. Правила — по 20 625 группам, 7 мс.
+
+**Гипотеза.** Страница «Все» не виновата. Подсчёт растёт с числом живых: 55 тыс. живых → хеш по всем событиям. Варианты: соединять живые с событиями по `events_pkey` (вложенным циклом), держать три колонки события (`source_guid`, `source_type_guid`, `source_event_type_guid`) в `incidents`, как уже держится `event_occurred_at`, или хранить живые классы так же, как закрытые. При ~500 живых (план 86) этот запрос — миллисекунды.
+
+### 4. «Все»: страница 1 и 20 (`queueIndexedPageSQL`)
+
+<details><summary>Текст</summary>
+
+```sql
+-- …rules, closure, rule_sources…
+,
+chosen AS (
+  SELECT * FROM unnest($5::text[], $6::text[], $7::text[]) AS c(state, owner, assignment_group)
+)
+SELECT x.guid FROM unnest('{…4 приоритета заказчика…}'::uuid[]) AS prio(guid) CROSS JOIN LATERAL (
+  SELECT i.guid, p.value AS pv, i.event_occurred_at AS at, i.number
+  FROM incidents i
+  JOIN events ev ON ev.guid = i.event_guid AND ev.deleted_at IS NULL
+  JOIN priorities p ON p.guid = i.priority_guid
+  WHERE i.deleted_at IS NULL AND i.customer_guid = $4 AND i.state = ANY ($8::text[])
+    AND (i.state, i.owner, i.assignment_group) IN (SELECT c.state, c.owner, c.assignment_group FROM chosen c)
+    AND EXISTS (
+      SELECT 1
+      FROM rules ar, (SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid) e
+      WHERE /* accessRuleMatch */
+    )
+    AND i.priority_guid = prio.guid
+  ORDER BY i.event_occurred_at DESC, i.number
+  LIMIT 50) x
+ORDER BY x.pv DESC, x.at DESC, x.number
+LIMIT 50 OFFSET 0
+-- $5, $6, $7 — 52 класса оператора, $8 = '{closed,new,pending_acceptance}'
+-- стр. 20: внутренний LIMIT 1000, внешний LIMIT 50 OFFSET 950
+```
+</details>
+
+| Запрос | Время, мс |
+|---|---|
+| load-op-01, стр. 1 | 50 / 46 |
+| load-op-01, стр. 20 | 111 / 115 |
+
+**Куда уходит время:** по каждому из четырёх приоритетов `Index Scan using idx_incidents_queue_newest` идёт по порядку и останавливается на 50 (стр. 20 — на 1 000) подходящих строках; событие каждой — по `events_pkey`. Полного прохода нет.
+
+**Гипотеза.** Чинить нечего. Страница 20 дороже страницы 1 в той мере, в какой дальше от начала индекса.
+
+### 5. «Все» + тип устройства: подсчёт классов и страница
+
+Подсчёт — тот же текст, что в п. 3, с условием в обеих частях:
+
+```sql
+AND ev.source_guid IN (
+  SELECT s.guid
+  FROM sources s
+  JOIN source_types st ON st.guid = s.type_guid AND st.deleted_at IS NULL
+  WHERE s.deleted_at IS NULL AND s.customer_guid = $4 AND st.uid = ANY ($5)
+)
+-- $5 = '{fire-detector}' или '{camera}'
+```
+
+Страница — текст п. 4 с тем же условием (`$9`).
+
+| Запрос | Время, мс |
+|---|---|
+| подсчёт, `fire-detector` (6 устройств, 30 682 события, 15 112 живых) | 221 / 226 |
+| страница, `fire-detector` | 171 / 158 |
+| подсчёт, `camera` (35 устройств, 940 816 событий, 32 113 живых) | **4 581 / 4 583** |
+| страница, `camera` — из `pg_stat_statements` | 136 |
+
+**Куда уходит время** (`camera`): открытая часть идёт **от устройств**: 35 камер → `Bitmap Heap Scan on events` по `idx_events_source` (по 26 880 событий на камеру при ожидаемых 10 892) — 940 816 событий за 1,4 с → для каждого `Index Scan using idx_incidents_event` (940 816 раз, 3,1 с), чтобы найти 32 113 живых. Закрытая часть — 15 мс. У `fire-detector` то же, но событий в 30 раз меньше.
+
+**Гипотеза.** Подзапрос `IN (…sources…)` уводит план от 55 тыс. живых (`idx_incidents_live`) к истории устройства. Чем больше у типа устройства событий за всё время, тем дольше — независимо от числа открытых. Порядок «живые → событие → устройство» (или три колонки события в `incidents`, см. п. 3) делает подсчёт пропорциональным числу живых. Страница идёт по индексу и быстрая.
+
+### 6. Счётчики и «Открытые»
+
+`GET /operator/incidents/counters` без параметров — из памяти сервера (`VisibleClasses`), 2–6 мс. С `search` или `deviceTypeId` — запрос подсчёта классов по живым (как в п. 1 и п. 5): 0,34–0,36 с с поиском, **4,4 с** с камерами.
+
+«Открытые», первый запрос — снимок живых в память: `SELECT i.guid, i.number, i.state, … FROM incidents i JOIN events ev … WHERE i.customer_guid = $1 AND i.deleted_at IS NULL AND i.state <> ALL ($2::text[])` — 54 781 строка, 376 мс (15 532 блока временных файлов). Дальше — из памяти, 49 мс.
+
+Самый дорогой запрос A2 по `pg_stat_statements` («подсчёт очереди с проверкой прав, 3,2–3,5 с») — это подсчёт п. 1 (поиск): один без нагрузки — 1,9–2,1 с, на A2 — с соседями по процессору.
+
+## Выделение «Все в фильтре»
+
+`POST /operator/incidents/selection` `{"mode":"all_in_filter","filter":"open"}`, `limits.maxBulk` = null, по одному запросу, разметка в журнал сервера.
+
+| Часть | test@, 54 781 строка, с | load-op-01, 18 890 строк, с |
+|---|---|---|
+| `filterRows`: `QueueList` (guid очереди) | 0,04–0,45 | 0,03 |
+| `filterRows`: `LoadMany` (строки из базы) | 2,5–2,7 | 1,1–1,3 |
+| `selectionActions`: `ViewPage` (виды строк) | 5,5–6,0 | 0,9–1,0 |
+| «Закрыть»: `bulkScope` → `scopePrimary` (`bulkPrimary` машины) | **200,2** | **25,8** |
+| «Закрыть»: `scopePrimary` ещё раз, в конце `selectionAction` | **206,2** | **26,0** |
+| «Закрыть»: доступность по строкам + общая форма | 0,2 + 2,1 | 0,1 + — ³ |
+| «Взять как один»: `mergeVerdict` (`mergePrimary` + `MergeCheck` машины) | **202,5** | **25,6** |
+| «Передать»: доступность по строкам | 11,0 | 0,2 |
+| «Передать»: общая форма (`sharedForm`, форма каждой строки) | **39,4** | — ³ |
+| остальные 11 действий вместе | ~2,5 | ~0,7 |
+| `selectionResult`: `snapshotOf` | 0,57–0,65 | 0,22–0,30 |
+| сериализация (`json.Marshal`) | 0,03–0,04 | 0,01–0,02 |
+| запись ответа | 0,03 | 0,01 |
+| **Всего, ответ** | **674** | **77–81** |
+| **Размер ответа** | **6,93 МБ** (`expected` 4,78 МБ, guid ~2,1 МБ, `actions` 8,5 КБ) | **2,45 МБ** (`expected` 1,71 МБ) |
+
+³ у load-op-01 ни одно действие не доступно всей выборке — общая форма не строится.
+
+Доступны test@: «Передать» и «Закрыть». `truncated` = false.
+
+**Куда уходит время.** Выражения машины `mergePrimary` и `bulkPrimary` (`Specification/Workflow_machine/workflow_schema.v1.json`, `cel.definitions`) выбирают основной так:
+
+```
+cel.bind(top, c.filter(e, c.all(k, k.priority <= e.priority)),
+  cel.bind(first, top.filter(e, top.all(k, e.occurredAt <= k.occurredAt)), …))
+```
+
+Это сравнение каждой строки с каждой — n² шагов CEL; `bulkPrimary` ещё зовёт `closeOptions` для каждой строки. 18 890 строк → 26 с, 54 781 → 200 с: строк в 2,9 раза больше, времени в 7,7 раза (2,9² = 8,4). Сервер зовёт `bulkPrimary` для «Закрыть» дважды (`bulkScope` и `scopePrimary` в конце `selectionAction`), `mergePrimary` — для «Взять как один». Общая форма «Передать» строит форму с вариантами (люди, группы) для каждой из 54 781 строки — 39 с.
+
+**Брошенный запрос.** Прокси закрывает запрос через 60 с (504). Сервер этого не замечает: два таких запроса test@ досчитались до конца через 680 и 624 с, параллельно со следующими. Отмена контекста запроса до циклов CEL не доходит.
+
+**Гипотеза.** При `maxBulk` = 1000 квадратичная часть — 1000² против 54 781² (в 3 000 раз меньше), то есть доли секунды; остальное — линейно и укладывается в секунды. При `maxBulk` = null (остаётся допустимым по RULE-117) нужны: основной выборки за один проход (минимум по ключу, не `filter` + `all`), один вызов `scopePrimary` на действие, общая форма без формы каждой строки и прекращение работы при отмене запроса. `ViewPage`, `snapshotOf` и размер ответа — вторичны: 6 + 0,6 с и 6,9 МБ.
+
+## Сверка с «Почему так»
+
+| Пункт | Итог | Что на деле |
+|---|---|---|
+| Сверка страницы и очередь по событию потока — тот же `GET /operator/incidents` | **подтвердилось**, с уточнением | Они медленны не из-за своих запросов, а потому что стоят в очереди `heavyReadSlots` (6) за поисками по 2–3 с. |
+| 1. Поиск — по каждой строке истории, подсчёт тоже по миллиону | **подтвердилось** | Полный проход дважды (подсчёт 1,9–2,1 с, страница 1,1–2,2 с). Половина — соединение миллиона инцидентов с миллионом событий хешем на диск, половина — склейка текста и `LIKE`. При `filter=open` поиск 0,33–0,65 с: живые по индексу, но события всё равно целиком. |
+| 2. «Все» — группировка всех строк, полный проход на каждой странице | **не подтвердилось** | Страница идёт по индексу (`queueIndexedPage`, 46–115 мс), закрытые считаются по `queue_closed_counts` (15 мс). Медленна открытая часть подсчёта: живые × все события хешем (0,38 с на 55 тыс. живых). Десятки секунд на A2 — ожидание слота. |
+| 3. Тип устройства — тот же полный проход, что в п. 2 | **наполовину** | Полного прохода «Все» нет. Подсчёт идёт от истории устройств: для камер 941 тыс. событий → 4,5 с; для малого типа — 0,2 с. Страница — по индексу, 0,14–0,17 с. |
+| 4. Выделение: `filterRows` без предела, `ViewPage`, `selectionActions` по строкам, `snapshotOf` → 7 МБ | **не подтвердилось** в главном | 7 МБ — да (6,93 МБ). Но время — квадратичные выражения CEL `bulkPrimary` / `mergePrimary` (608 из 674 с) и общая форма «Передать» (39 с). `ViewPage` — 6 с, `snapshotOf` — 0,6 с, сериализация — 0,04 с. |
+
+### Расхождения, меняющие задачи 2–5
+
+Решение — за контролёром плана; задачи не начаты.
+
+1. **Задача 3 («Все» и подсчёт с правами).** Переписывать страницу «Все» не нужно — она уже по индексу. Работа — открытая часть подсчёта классов (`queueClassesSplitSQL` и подсчёт с поиском при `filter=open`): соединение живых с событиями без чтения всех событий (вложенный цикл по `events_pkey`, или колонки события в `incidents`, или живые классы как закрытые). Цель задачи по времени достижима и так: под A2 «Все» медленно из-за очереди слотов, которую освобождает задача 2.
+2. **Задача 4 (тип устройства).** Не «тот же полный проход», а порядок соединения в подсчёте: от живых к устройству, а не от истории устройства к живым. Худший случай — тип с большой историей (камеры, 4,5 с), не «Все» вообще. Тест — на типе с большой историей.
+3. **Задача 5 (выделение).** Главное — не `ViewPage`/`snapshotOf`, а `mergePrimary` и `bulkPrimary` машины (квадратичные) и двойной вызов `scopePrimary`; потом общая форма «Передать» по строкам. Правка выражений — в машине IM (`workflow_schema.v1.json`, `cel.definitions`), с прототипом и проверками по `CLAUDE.md`, либо основной считает сервер за один проход с той же семантикой. `maxBulk` = 1000 (решение 2 «в») снимает квадрат и сам по себе; при null без правки выражений цель «< 10 с» недостижима (54 781² шагов CEL). Добавить: прекращать работу по отмене запроса.
+4. **Общее.** `heavyReadSlots` = 6 — усилитель: любой тяжёлый запрос под нагрузкой ждёт `N × время / 6`. Отдельной задачи в плане нет; после задач 2–4 проверить в прогоне A2, хватает ли.
+
+## Файлы
+
+- `tools/stand-load/explain_queue.py` — режимы `fromlog` (запись разбора журнала Postgres → `PREPARE` и `EXPLAIN EXECUTE` с параметрами) и `pgss` (текст из `pg_stat_statements` с константами по порядку).
+- На стенде, `~/Work/stand/load/out/p93-1/`: `steps/` — время ответа и запросы каждого шага, `explain/` — планы (первый, повтор), `sql/` — тексты с параметрами, `slow3.jsonl` — запросы дольше секунды из журнала Postgres, `par.jsonl` — одновременные, `selection-direct*.jsonl` и `selection-direct*-timing.txt` — выделение.

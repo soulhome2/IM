@@ -59,7 +59,34 @@ SELECT i.guid FROM incidents i
   AND (i.state, i.owner, i.assignment_group) IN (SELECT c.state, c.owner, c.assignment_group FROM chosen c)
   AND EXISTS (SELECT 1 FROM rules ar, (SELECT ev.source_guid, ev.source_type_guid, ev.source_event_type_guid) e WHERE {MATCH})
  ORDER BY {order}, i.number LIMIT 50 OFFSET 0"""
+# План 93: запросы сервера как есть — из журнала Postgres (log_min_duration_statement) или из pg_stat_statements.
+#   explain_queue.py fromlog <записи.jsonl> <номер>            — запись {sql, params} разбора журнала: текст с $n и DETAIL parameters
+#   explain_queue.py pgss <записи.jsonl> <номер> <параметры.json> <константы.json>
+#        — текст из pg_stat_statements (константы там — «?»): «?» по порядку заменяются константами, $n — параметрами
+# Печатает PREPARE q AS …; EXPLAIN (ANALYZE, BUFFERS) EXECUTE q(…); DEALLOCATE q; — для psql -U im imdb.
+import json, re
+def detail_params(detail):
+    """«$1 = '{2}', $2 = NULL, …» → список литералов SQL по номерам."""
+    out = {}
+    for m in re.finditer(r"\$(\d+) = ('(?:[^']|'')*'|NULL)", detail or ""):
+        out[int(m.group(1))] = m.group(2)
+    return [out[k] for k in sorted(out)]
+def prepared(sql, params):
+    return "PREPARE q AS " + sql.rstrip().rstrip(";") + ";\nEXPLAIN (ANALYZE, BUFFERS) EXECUTE q(" + ", ".join(params) + ");\nDEALLOCATE q;"
+def fill_consts(sql, consts):
+    parts = sql.split("?")
+    assert len(parts) - 1 == len(consts), ("констант в тексте", len(parts) - 1, "дано", len(consts))
+    return "".join(p + (consts[i] if i < len(consts) else "") for i, p in enumerate(parts))
 which=sys.argv[1]
+if which == "fromlog":
+    rec = [json.loads(l) for l in open(sys.argv[2])][int(sys.argv[3])]
+    print(prepared(rec["sql"], detail_params(rec["params"])))
+    sys.exit(0)
+if which == "pgss":
+    rec = [json.loads(l) for l in open(sys.argv[2])][int(sys.argv[3])]
+    params = json.load(open(sys.argv[4])); consts = json.load(open(sys.argv[5]))
+    print(prepared(fill_consts(rec["query"], consts), params))
+    sys.exit(0)
 q={"counters":counters(),"search":search_counters(),
    "page_prio_oldest":page("p.value DESC, ev.occurred_at ASC"),
    "page_reaction":page("CASE WHEN (i.timers->'reaction'->>'due')::bigint <> 0 AND (i.timers->'reaction'->>'fired')::bigint IS DISTINCT FROM (i.timers->'reaction'->>'due')::bigint THEN 0 ELSE 1 END ASC, CASE WHEN (i.timers->'reaction'->>'due')::bigint <> 0 AND (i.timers->'reaction'->>'fired')::bigint IS DISTINCT FROM (i.timers->'reaction'->>'due')::bigint THEN (i.timers->'reaction'->>'due')::bigint ELSE extract(epoch FROM ev.occurred_at) * 1000 END ASC")}[which]
