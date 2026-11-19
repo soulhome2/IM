@@ -6453,7 +6453,8 @@
     $("shiftPrintHead").textContent = [
       t("Смена и статистика"),
       d ? t("смена {from}–{to}", { from: shiftClock(d.shift.from, tz), to: shiftClock(d.shift.to, tz) }) : null,
-      s ? t("период: {span}", { span: statsSpanText(s) }) : null,
+      // Период — без «хранится N дней», как в строке рабочего места
+      s ? t("период: {span}", { span: statsSpanText(s).split(" · ")[0] }) : null,
       t("снимок {time}", { time: snap }),
     ]
       .filter(Boolean)
