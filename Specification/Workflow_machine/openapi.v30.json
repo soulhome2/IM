@@ -13908,6 +13908,7 @@
           },
           "medianReactionSec": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "description": "Медиана реакции за смену, с: по инцидентам, которые он принял первым (`acceptedBy` — он) с `acceptedAt` не раньше `shift.from`; реакция — от `createdAt` до `acceptedAt`. Привязанные не считаются, закрытые без взятия реакции не имеют. Нет таких — null",
             "nullable": true
@@ -13956,16 +13957,19 @@
         "properties": {
           "median": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "nullable": true
           },
           "mean": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "nullable": true
           },
           "p90": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "nullable": true
           }
@@ -14197,6 +14201,7 @@
           },
           "medianReactionSec": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "description": "Медиана реакции, с; значений нет — null",
             "nullable": true
@@ -14240,11 +14245,13 @@
           },
           "medianReactionSec": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "nullable": true
           },
           "medianResolutionSec": {
             "type": "number",
+            "format": "double",
             "minimum": 0,
             "nullable": true
           }
