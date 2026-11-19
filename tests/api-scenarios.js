@@ -2980,13 +2980,13 @@
     }
     assert.ok((await env.session()).usage.onHoldCount >= target, `отложено ${target} и больше`);
     const all = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open" });
-    assert.ok(all.incidentGuids.length > (W.limits.maxBulk || 10) && !all.truncated, `«Выбрать все» — все ${all.incidentGuids.length}, без обрезки`);
+    assert.ok(all.incidentGuids.length > 10 && !all.truncated, `«Выбрать все» — все ${all.incidentGuids.length}, без обрезки`);
     // «Закрыть без обработки» на выборке закрывает один сценарий — основного (§11.1, ARCH-15): больше десяти — пожаров,
     // выборка по фильтру сценария; в наборе пожаров меньше — добавить тестовые
     const FIRE = window.IM_FIXTURE.scenarios.keys.fire;
     for (let i = 0; i < 8; i++) assert.status(await env.call("POST", "/test/incidents", fireAt(S5)), 201, null, `тестовый пожар ${i + 1}`);
     const fires = await env.ok("POST", "/operator/incidents/selection", { mode: "all_in_filter", filter: "open", scenarioGuid: FIRE });
-    assert.ok(fires.incidentGuids.length > (W.limits.maxBulk || 10) && !fires.truncated, `«Выбрать все» пожаров — все ${fires.incidentGuids.length}, без обрезки`);
+    assert.ok(fires.incidentGuids.length > 10 && !fires.truncated, `«Выбрать все» пожаров — все ${fires.incidentGuids.length}, без обрезки`);
     const cause = W.reasonCatalogs.mass_fault.items[0].id;
     const bulk = await env.call("POST", "/operator/incidents/transitions/close/bulk", { incidentGuids: fires.incidentGuids, formValues: { resultId: "mass", causeId: cause, comment: "тест" }, surface: "queue" });
     assert.status(bulk, 200, null, "массовое действие на всю выборку");

@@ -4237,10 +4237,10 @@ window.IM_WORKFLOW = {
     "volumeFloor": 30
   },
   "limits": {
-    "$comment": "§10.2, §11. Привязанные инциденты объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
+    "$comment": "§10.2, §11. Привязанные инциденты объединённого инцидента в лимит активных не входят — у них нет владельца. maxOnHold проверяет только ручное «Отложить» (withinHoldLimit у hold); системные удержания system_hold_* откладывают всегда. null у maxActive, maxOnHold, maxBulk — без ограничения (§10.2, §11, RULE-69); иначе целое от 1, у maxBulk — от 2 (RULE-117). maxBulk в поставке — 1000 (план 93): на большом посту «Все в фильтре» по десяткам тысяч строк считалось минутами; null по-прежнему допустим в настройках поста. Нет поля — тоже без ограничения (JSON Merge Patch тестового стенда удаляет поле при null), но здесь поле записывается явно — проверяет check_machine.py.",
     "maxActive": null,
     "maxOnHold": 5,
-    "maxBulk": null,
+    "maxBulk": 1000,
     "reopenWindowMin": 1440,
     "reopenResolutionSec": null,
     "commentMaxLength": 2000,

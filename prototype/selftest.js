@@ -5366,6 +5366,36 @@
       }
     });
 
+    await step("Лимит выборки в поставке — 1000, «Все в фильтре» сверх лимита отмечает первые и пишет «из N» (§11.1, план 93)", async () => {
+      expect(stand, "нет служебных операций стенда в режиме самопроверки");
+      if (mode() !== "queue") await click($("backToQueue"));
+      expect(window.IM_WORKFLOW.limits.maxBulk === 1000, `limits.maxBulk в поставке: ${window.IM_WORKFLOW.limits.maxBulk}`);
+      await click($("adminBtn"));
+      await click($("adminTabs").querySelector('[data-admin-tab="operator"]'));
+      await wait(200);
+      let shown = "";
+      for (let r = $("adminTable").querySelector('[data-admin-group="limits"]').nextElementSibling; r && !r.classList.contains("admin-group"); r = r.nextElementSibling) {
+        if (r.cells[0].textContent.includes("В выборке")) shown = r.cells[1].textContent.trim();
+      }
+      await click(document.querySelector('[data-close="modalAdmin"]'));
+      expect(shown.replace(/\s/g, "") === "1000", `в настройках «В выборке»: ${shown}`);
+      // В наборе меньше 1000 открытых — обрезку показывает тот же лимит, но меньше набора
+      const max = 5;
+      await standReset({ fixture: "demo", workflowPatch: { limits: { maxActive: 1, maxBulk: max } } });
+      await wait(400);
+      try {
+        await click($("selectAllBtn"));
+        await wait(200);
+        const toast = [...$("toasts").children].map((t) => t.textContent).reverse().find((t) => /Выбрано/.test(t)) || "";
+        expect(new RegExp(`Выбрано ${max} из ${max}`).test(toast), `«Все в фильтре» при лимите ${max}: ${toast}`);
+        await click($("clearSelectionBtn"));
+        return `в поставке: ${shown}; при лимите ${max}: ${toast}`;
+      } finally {
+        await standReset({ fixture: "demo" });
+        await wait(400);
+      }
+    });
+
     await step("Другой справочник приоритетов — интерфейс перерисовывается без перезагрузки (§2.5, RULE-68)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const fx = JSON.parse(JSON.stringify(window.IM_FIXTURE));
