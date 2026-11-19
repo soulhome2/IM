@@ -6464,7 +6464,11 @@
     assert.same((await env.ok("GET", "/operator/admin/audit/actions?kind=audit_export")).items.length, 2, "отклонённая выгрузка записи не делает");
 
     // Язык — выгружающего (§14.9)
+    const ruStats = await stats(env, q);
     assert.status(await env.call("PATCH", "/operator/session/preferences", { locale: "en" }), 200, null, "язык — английский");
+    // Сменил язык в ту же минуту — подсчёт заново: названия результатов на новом языке, а не из прежнего ответа
+    const enStats = await stats(env, q);
+    assert.ok(ruStats.results.length && enStats.results[0].label !== ruStats.results[0].label, `названия результатов после смены языка: ${enStats.results.map((r) => r.label)}`);
     const en = csvRows(await statsCsv(env, q));
     const EN = window.IM_STRINGS.en;
     assert.same(en[0], CSV_COLS.map((k) => EN[csvKey(`column.${k}`)]).join(";"), "названия столбцов — по-английски");
@@ -6490,6 +6494,12 @@
     const byNumber = Object.fromEntries(lines.slice(1).map((l) => [l.split(";")[0], l.split(";")[7]]));
     assert.same(byNumber, { "INC-1829": "", "INC-1831": "Группа реагирования", "INC-1837": "Старшие операторы", "INC-1826": RU[csvKey("deleted_group")] }, "дежурная группа в CSV");
     assert.same(lines.slice(1).map((l) => l.split(";")[0]), ["INC-1829", "INC-1831", "INC-1837", "INC-1826"], "строки — по времени закрытия");
+    // Список фильтра «Дежурная группа» — все нынешние группы поста по порядку, и моя («Старшие операторы») тоже, хотя
+    // адресатом передачи она мне не бывает (§23.3)
+    const mine = window.IM_FIXTURE.people.dutyGroups;
+    assert.same(s.postDutyGroups, mine.map((g) => ({ id: g.id, name: g.name })), "postDutyGroups — нынешние группы поста по порядку");
+    assert.ok(mine.some((g) => g.id === "grp-leads" && (g.members || []).includes(ME)), "я — в «Старших операторах»");
+    assert.ok(!(await env.ok("GET", "/operator/transfer-targets")).some((x) => x.id === "grp-leads"), "в адресатах передачи моей группы нет — список не из них");
     const card = await env.card(await env.guidOf("INC-1837"));
     assert.same([card.acceptedGroup && card.acceptedGroup.id, card.acceptedGroup && card.acceptedGroup.kind], ["grp-leads", "duty_group"], "acceptedGroup — в карточке");
     assert.same((await env.card(await env.guidOf("INC-1829"))).acceptedGroup, null, "без группы — null");

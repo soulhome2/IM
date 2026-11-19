@@ -2734,6 +2734,8 @@
         dutyGroups: duty,
         breachesByKind: BREACH_KINDS.map((kind) => ({ kind, incidents: list.filter((e) => (e.breaches || []).some((b) => b.kind === kind)).length })),
         operators,
+        // Список фильтра «Дежурная группа» (§23.3): все нынешние группы поста по порядку групп, и группы самого старшего
+        postDutyGroups: GROUPS.map((g) => ({ id: g.id, name: g.name })),
       };
     }
     // Тот же запрос того же человека в течение минуты заново не считается — прежний подсчёт с прежним computedAt
@@ -2742,7 +2744,8 @@
       if (!can("supervisor:view")) return problem(403, "PERMISSION_DENIED", ["workflow.error.no_supervisor_view"]);
       const period = statsPeriod(q);
       if (!period) return badRequest();
-      const key = JSON.stringify([ME, Object.entries(q).sort()]);
+      // В ключе — и язык: названия результатов и причин приходят на языке запроса
+      const key = JSON.stringify([ME, statsLocale(), Object.entries(q).sort()]);
       const hit = statsCache.get(key);
       if (hit && period.at >= hit.at && period.at - hit.at < STATS_CACHE_MS) return { status: 200, body: JSON.parse(JSON.stringify(hit.body)) };
       const body = statsBody(statsFilter(q), period);

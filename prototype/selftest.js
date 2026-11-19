@@ -3945,6 +3945,9 @@
         const bars = () => $("statsChart").querySelector("[data-stats-granularity]");
         expect(bars().dataset.statsGranularity === "day" && bars().querySelectorAll(".stats-bar").length === 7, "7 дней — не 7 столбиков по суткам");
         const all = await get("/operator/supervisor/stats", { period: "7d" });
+        // Список «Дежурная группа» — postDutyGroups ответа и «Без группы», а не адресаты передачи: моя группа в нём есть (§23.3)
+        const dutyIds = [...$("statsDutyGroup").options].map((o) => o.value).filter(Boolean).join();
+        expect(dutyIds === all.postDutyGroups.map((g) => g.id).concat("none").join(), `список дежурных групп: ${dutyIds}`);
         expect(tile("incidents").textContent === String(all.current.incidents), `«Инцидентов»: ${tile("incidents").textContent} вместо ${all.current.incidents}`);
         await click($("statsPeriods").querySelector('[data-stats-period="today"]'));
         await until(() => bars() && bars().dataset.statsGranularity === "hour", "«Сегодня» — не по часам");

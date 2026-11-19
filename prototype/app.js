@@ -6618,14 +6618,15 @@
       });
     walk(statsState.tree || [], 0);
     return {
-      dutyGroup: (store.targets || [])
-        .filter((x) => x.kind === "duty_group")
+      // Дежурные группы — поле postDutyGroups ответа (§23.3): все нынешние группы поста по порядку, и свои тоже, — не
+      // адресаты передачи (там нет групп самого старшего); «Без группы» — последней
+      dutyGroup: (statsState.data ? statsState.data.postDutyGroups : [])
         .map((g) => [g.id, g.name, true])
         .concat([["none", t("Без группы")]]),
       sourceGroup: groups,
       source: [...devices].sort((a, b) => coll.compare(a[1], b[1])).map(([id, name]) => [id, name, true]),
-      eventType: (store.eventTypes || [])
-        .slice()
+      // Тип события — по id (uid, §19.2), не guid; сервер отдаёт строку на каждый тип устройства — повторы id схлопываются
+      eventType: [...new Map((store.eventTypes || []).map((x) => [x.id, x])).values()]
         .sort((a, b) => coll.compare(a.name, b.name))
         .map((x) => [x.id, x.name, true]),
       // Операторы — ровно поле operators последнего ответа (§23.3): кто закрывал в этом периоде

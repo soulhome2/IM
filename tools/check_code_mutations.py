@@ -462,6 +462,10 @@ MUTATIONS = [
     ("stats-deleted-accepted-group-as-operator", "server.js", "acceptedGroup: ev.acceptedGroup && !findActor(ev.acceptedGroup) ?", "acceptedGroup: false ?", "api"),
     ("stats-csv-no-bom", "server.js", 'const text = "\ufeff" + lines.map(', "const text = lines.map(", "api"),
     ("stats-csv-utc", "server.js", "zoneIso(e.closedAt, tz),", 'zoneIso(e.closedAt, "UTC"),', "api"),
+    # Список дежурных групп фильтра — как адресаты передачи, без групп самого старшего (сквозное ревью части Б, I-2)
+    ("stats-post-groups-as-targets", "server.js", "postDutyGroups: GROUPS.map((g) =>", "postDutyGroups: GROUPS.filter((g) => !membersOf(g).includes(ME)).map((g) =>", "api"),
+    # Ключ кеша без языка — после смены языка в ту же минуту прежние названия (сквозное ревью части Б, Minor 4)
+    ("stats-cache-no-locale", "server.js", "JSON.stringify([ME, statsLocale(), Object.entries(q).sort()])", "JSON.stringify([ME, Object.entries(q).sort()])", "api"),
     # Пояс смены — всегда Москва (по умолчанию): границы периода и сутки не по поясу поста (ревью Б.3, Important 3)
     ("stats-zone-moscow", "server.js", "const tz = W.shift.timeZone;\n      const custom", 'const tz = "Europe/Moscow";\n      const custom', "api"),
     # Две удалённые группы — в порядке появления, а не по groupId (ревью Б.3, Important 1)
@@ -506,6 +510,8 @@ MUTATIONS = [
     ("stats-ui-operators-accumulate", "app.js", "operator: (statsState.data ? statsState.data.operators : []).map((o) => [o.id, o.name, true]),", "operator: [...statsState.names].map(([id, name]) => [id, name, true]),", "ui"),
     # Щелчок по строке устройства, а не по названию, фильтр не ставит (§23.3)
     ("stats-ui-device-row-not-clickable", "app.js", "{ attr: (r) => ` data-stats-source=\"${escapeHtml(r.source.id)}\"` }", "{}", "ui"),
+    # Список «Дежурная группа» — из адресатов передачи, а не из postDutyGroups (сквозное ревью части Б, I-2)
+    ("stats-ui-duty-groups-from-targets", "app.js", "dutyGroup: (statsState.data ? statsState.data.postDutyGroups : [])\n", 'dutyGroup: (store.targets || []).filter((x) => x.kind === "duty_group")\n', "ui"),
     ("stats-ui-csv-name-ignored", "app.js", 'a.download = named ? named[1] : "supervisor-stats.csv";', 'a.download = "supervisor-stats.csv";', "ui"),
 ]
 # Порчи выражений машины — общий список с моделью Quint (PROC-75): место — в исходной машине, workflow.js собирается
