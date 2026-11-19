@@ -4331,6 +4331,8 @@
     const away = Boolean(def.readOnly);
     // Свёрнутость — на одно состояние: другое состояние (перерыв → «Вышел») — другая кнопка, карточка снова видна
     if (state.awayFor !== (away ? agent : "")) state.awayFolded = false;
+    // На перерыве окно не сворачивается (решение пользователя 2026-11-20): ✕ нет, пелена до «Вернуться с перерыва»
+    if (away && onBreak()) state.awayFolded = false;
     state.awayFor = away ? agent : "";
     if (away) $("workspace").dataset.away = agent;
     else delete $("workspace").dataset.away;
@@ -4366,6 +4368,7 @@
     $("awayText").textContent = text;
     $("awayText").hidden = !text;
     $("awayAction").textContent = action;
+    $("awayClose").hidden = !away || onBreak();
     $("awayStrip").hidden = !away || !state.awayFolded || shiftState.open;
     // Пока окно открыто, область под пеленой недоступна и с клавиатуры, как под модальным окном: Tab в неё не уходит
     const modal = away && !state.awayFolded && !shiftState.open;
@@ -4374,9 +4377,10 @@
     $("awayStripText").textContent = title;
     $("awayStripAction").textContent = action;
   }
-  // ✕ и Esc: окно — в полосу под шапкой, пелена уходит, область серая и доступна для просмотра. Щелчок по пелене
-  // окно не сворачивает
+  // ✕ и Esc в «Вышел»: окно — в полосу под шапкой, пелена уходит, область серая и доступна для просмотра. На перерыве
+  // окно не сворачивается — ✕ нет, Esc ничего не делает. Щелчок по пелене окно не сворачивает
   function foldAway() {
+    if (onBreak()) return;
     state.awayFolded = true;
     renderAway();
   }
@@ -5739,7 +5743,7 @@
     if (openModal) return (openModal.hidden = true);
     // Экран «Смена и статистика»: очередь и окно возврата скрыты — Esc их не трогает
     if (shiftState.open) return;
-    // Окно возврата вне приёма (§22.9) — как модальное: Esc сворачивает его в полосу
+    // Окно возврата вне приёма (§22.9) — как модальное: в «Вышел» Esc сворачивает его в полосу, на перерыве — ничего
     if (!$("awayCard").hidden) return foldAway();
     if (state.full) {
       const btn = $(state.full === "video" ? "videoFull" : "mapFull");

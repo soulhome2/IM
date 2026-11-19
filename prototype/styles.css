@@ -742,6 +742,8 @@ select.search-input,
 .away-card p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
 .away-card p[hidden] { display: none; }
 .away-close { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; }
+/* На перерыве окно не сворачивается — ✕ нет (§22.9) */
+.away-close[hidden] { display: none; }
 /* Свёрнутая карточка — узкая полоса под шапкой с той же кнопкой */
 .away-strip {
   background: var(--break-bg);

@@ -4748,21 +4748,15 @@
         const inertOn = () => Boolean($("panelEvents").closest("[inert]") && $("panelGroups").closest("[inert]"));
         const inertAny = () => Boolean($("workspace").querySelector("[inert]"));
         expect(inertOn() && !$("awayCard").closest("[inert]") && !$("stateBtn").closest("[inert]"), "под открытым окном область доступна с клавиатуры (нет inert)");
-        // Щелчок по пелене окно не сворачивает; Esc — сворачивает: пелены нет, щелчки — в интерфейс
+        // На перерыве окно не сворачивается (решение пользователя 2026-11-20): ✕ нет, Esc и щелчок по пелене ничего не
+        // делают — пелена и недоступность области держатся до «Вернуться с перерыва»; полосы нет
         await click($("awayLayer"));
         expect(!$("awayCard").hidden, "щелчок по пелене свернул окно");
+        expect(!$("awayClose").getClientRects().length, "на перерыве у окна есть ✕");
         await pressKey("Escape");
-        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "Esc не свернул окно в полосу");
-        expect(!inertAny(), "окно свёрнуто, а область осталась недоступной с клавиатуры (inert)");
-        expect(corner() && !$("awayLayer").contains(corner()) && $("workspace").contains(corner()), `окно свёрнуто, а щелчок не доходит до интерфейса: ${corner() && (corner().id || corner().className)}`);
+        expect(!$("awayCard").hidden && $("awayStrip").hidden && away() === "not_ready", "на перерыве Esc свернул окно");
+        expect(inertOn() && corner() === $("awayLayer"), "после Esc на перерыве область стала доступна");
         const breakDim = dim($("panelEvents"));
-        // Окно свёрнуто — читать можно: карточка инцидента открывается на просмотр, притушена тоже
-        const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
-        expect(view, "в очереди на перерыве нет «Открыть»");
-        await click(view);
-        expect(mode() === "work", "на перерыве карточка инцидента не открылась");
-        expect(away() === "not_ready" && dim($("panelScenario")) !== null, "карточка инцидента не притушена");
-        await click($("backToQueue"));
         // Срок прошёл — таблетка красная
         if (reason) {
           await stand.raw("POST", "/test/clock", { advanceSec: reason.maxMinutes * 60 + 5, runScheduler: false });
@@ -4771,10 +4765,8 @@
           expect($("stateBtn").dataset.state === "late", `перерыв дольше срока — таблетка ${$("stateBtn").dataset.state}`);
           out.push(`срок ${reason.maxMinutes} мин: ${$("stateBtn").textContent.trim()}`);
         }
-        // Свёрнутое остаётся свёрнутым в том же состоянии, область притушена до возврата
-        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "окно развернулось само в том же состоянии");
-        expect($("awayStripAction").textContent === "Вернуться с перерыва", `кнопка полосы: «${$("awayStripAction").textContent}»`);
-        // «Закончить работу» прямо с перерыва, карточка свёрнута — «Вышел», та же сессия облака: тот же человек,
+        expect(!$("awayCard").hidden && $("awayStrip").hidden && inertOn(), "на перерыве окно свернулось или область стала доступна");
+        // «Закончить работу» прямо с перерыва (шапка работает) — «Вышел», та же сессия облака: тот же человек,
         // запросы проходят; новое состояние — карточка снова развёрнута (свёрнутость — на одно состояние)
         const before = await stand.get("/operator/session");
         await click($("stateBtn"));
@@ -4809,8 +4801,18 @@
           expect(!$("awayCard").hidden && $("awayStrip").hidden && inertOn(), "Esc на экране смены свернул окно «Вышел» или снял недоступность области");
           out.push("экран смены не притушен");
         }
-        // Свернуть и в «Вышел»: полоса с «Начать работу», она возвращает к приёму
-        await click($("awayClose"));
+        // В «Вышел» окно сворачивается: ✕ есть; Esc — в полосу с «Начать работу», область доступна для просмотра
+        expect($("awayClose").getClientRects().length, "в «Вышел» у окна нет ✕");
+        await pressKey("Escape");
+        expect($("awayCard").hidden && !$("awayStrip").hidden && !inertAny(), "в «Вышел» Esc не свернул окно");
+        expect(corner() && !$("awayLayer").contains(corner()) && $("workspace").contains(corner()), "в «Вышел» свёрнуто, а щелчок не доходит до интерфейса");
+        // Свёрнутое «Вышел» — читать можно: карточка инцидента открывается на просмотр
+        const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
+        if (view) {
+          await click(view);
+          expect(mode() === "work", "в «Вышел» карточка инцидента не открылась");
+          await click($("backToQueue"));
+        }
         expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "offline" && $("awayStripAction").textContent === "Начать работу", `полоса «Вышел»: «${$("awayStrip").textContent.trim()}»`);
         await click($("awayStripAction"));
         await wait(200);
