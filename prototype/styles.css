@@ -2740,6 +2740,8 @@ select.search-input { padding-right: 36px; }
   text-align: left;
 }
 .shift-note:empty { display: none; }
+.shift-pager { padding: 8px 0 0; background: transparent; }
+.shift-pager[hidden] { display: none; }
 /* Блок «За период» (§23.3, план 90, часть Б): фильтры, плитки, график, списки и таблицы — как на макете плана 90 */
 .stats-card { margin-top: 16px; }
 .stats-card.stats-busy .stats-tiles,

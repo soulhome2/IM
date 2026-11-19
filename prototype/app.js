@@ -2979,6 +2979,33 @@
     return out;
   }
 
+  // Переключатель страниц (§7): «1–8 из 40», стрелки и номера страниц с пропусками. Тот же — у таблицы «Сейчас» (§23.2);
+  // attr — атрибут кнопок с номером страницы, по нему ловят щелчок
+  function pagerHtml({ page, pages, start, shown, total, attr }) {
+    const step = (to, icon, label, disabled) => `
+      <button type="button" class="pager-btn" ${attr}="${to}" title="${label}" aria-label="${label}" ${
+        disabled ? "disabled" : ""
+      }>
+        <span class="material-symbols-outlined">${icon}</span>
+      </button>`;
+    return `
+      <span class="pager-info">${te("{a}–{b} из {n}", { a: start + 1, b: start + shown, n: total })}</span>
+      <div class="pager-nav">
+        ${step(page - 1, "chevron_left", t("Предыдущая страница"), page === 1)}
+        ${pageSequence(page, pages)
+          .map((p) =>
+            p === "gap"
+              ? `<span class="pager-gap" aria-hidden="true">…</span>`
+              : `<button type="button" class="pager-btn ${p === page ? "current" : ""}" ${attr}="${p}" ${
+                  p === page ? 'aria-current="page"' : ""
+                } aria-label="${te("Страница {p}", { p })}">${p}</button>`
+          )
+          .join("")}
+        ${step(page + 1, "chevron_right", t("Следующая страница"), page === pages)}
+      </div>
+    `;
+  }
+
   function renderPager(total, pages, start, shown) {
     const pager = $("eventsPager");
     if (total <= PAGE_SIZE) {
@@ -2986,29 +3013,8 @@
       pager.innerHTML = "";
       return;
     }
-    const step = (page, icon, label, disabled) => `
-      <button type="button" class="pager-btn" data-page="${page}" title="${label}" aria-label="${label}" ${
-        disabled ? "disabled" : ""
-      }>
-        <span class="material-symbols-outlined">${icon}</span>
-      </button>`;
     pager.hidden = false;
-    pager.innerHTML = `
-      <span class="pager-info">${te("{a}–{b} из {n}", { a: start + 1, b: start + shown, n: total })}</span>
-      <div class="pager-nav">
-        ${step(state.page - 1, "chevron_left", t("Предыдущая страница"), state.page === 1)}
-        ${pageSequence(state.page, pages)
-          .map((p) =>
-            p === "gap"
-              ? `<span class="pager-gap" aria-hidden="true">…</span>`
-              : `<button type="button" class="pager-btn ${p === state.page ? "current" : ""}" data-page="${p}" ${
-                  p === state.page ? 'aria-current="page"' : ""
-                } aria-label="${te("Страница {p}", { p })}">${p}</button>`
-          )
-          .join("")}
-        ${step(state.page + 1, "chevron_right", t("Следующая страница"), state.page === pages)}
-      </div>
-    `;
+    pager.innerHTML = pagerHtml({ page: state.page, pages, start, shown, total, attr: "data-page" });
   }
 
   // Обратный отсчёт: подпись зависит от того, какой норматив идёт (§4)
@@ -6122,7 +6128,7 @@
 
   // Вкладка — только с правом supervisor:view (§23). Данные — GET /operator/supervisor/now: при открытии, по смене
   // фильтра и опросом раз в shift.refreshSec машины, пока экран открыт (§23.2). Блок «За период» — ниже (§23.3)
-  const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, shownAt: 0, loading: false, groupsKey: "", tableKey: "" };
+  const shiftState = { open: false, data: null, error: null, groups: [], group: "", sort: { key: "since", dir: -1 }, outOpen: false, page: 1, seq: 0, shownAt: 0, loading: false, groupsKey: "", tableKey: "" };
   const shiftLocale = () => (LANGS.find((l) => l.id === LANG) || LANGS[0]).locale;
   // Время на экране — в поясе смены (§23): часы и минуты, не сегодняшнее по поясу смены — с датой
   function shiftTime(value, tz, withSec) {
@@ -6184,6 +6190,8 @@
       return (col.text ? coll.compare(x, y) : x - y) * shiftState.sort.dir || byName(a, b);
     });
   }
+  // Строк порядка на странице (§23.2); «Свернуть вышедших» в их число не входит
+  const SHIFT_PAGE = 25;
   function shiftRow(r, tz) {
     const groups = r.dutyGroups.map((g) => g.name).join(", ");
     // Подпись столбца у ячейки — для телефона: там строка таблицы — карточка, а заголовки — кнопки сортировки
@@ -6233,8 +6241,8 @@
     }
     if ($("shiftGroup").value !== shiftState.group) $("shiftGroup").value = shiftState.group;
     $("shiftNote").textContent = shiftState.error || "";
-    // Таблица — только при новых данных, сортировке, раскрытии вышедших или смене языка
-    const tableKey = JSON.stringify([LANG, d && d.at, d && shiftState.group, shiftState.error, shiftState.sort, shiftState.outOpen]);
+    // Таблица — только при новых данных, сортировке, раскрытии вышедших, смене страницы или языка
+    const tableKey = JSON.stringify([LANG, d && shiftState.seq, d && shiftState.group, shiftState.error, shiftState.sort, shiftState.outOpen, shiftState.page]);
     if (shiftState.tableKey === tableKey) return tickShift();
     shiftState.tableKey = tableKey;
     if (!d) {
@@ -6242,6 +6250,8 @@
       $("shiftUpdated").textContent = shiftState.error ? "" : t("Загрузка…");
       $("shiftSummary").innerHTML = "";
       $("shiftTable").innerHTML = "";
+      $("shiftPager").hidden = true;
+      $("shiftPager").innerHTML = "";
       return;
     }
     const tz = d.shift.timeZone;
@@ -6262,25 +6272,38 @@
       const on = c.key === sort.key;
       return `<th class="${c.num ? "num" : ""}" aria-sort="${on ? (sort.dir < 0 ? "descending" : "ascending") : "none"}"><button type="button" class="shift-sort${on ? " on" : ""}" data-shift-sort="${c.key}">${te(c.head)}<span aria-hidden="true">${on ? (sort.dir < 0 ? " ↓" : " ↑") : " ↕"}</span></button></th>`;
     }).join("");
-    // Вышедшие — в конце; по умолчанию свёрнуты в одну строку: «Лебедев О. и ещё 2», закрыл за смену — сумма (§23.2)
+    // Вышедшие — в конце; по умолчанию свёрнуты в одну строку: «Лебедев О. и ещё 2», закрыл за смену — сумма (§23.2).
+    // Страницы — по одному порядку всех строк фильтра; свёрнутая «Вышли» — одна строка порядка, последняя
     const rows = shiftSorted(d.operators);
     const here = rows.filter((r) => r.state !== "offline");
     const out = rows.filter((r) => r.state === "offline");
-    let tail = "";
+    const order = here.map((r) => shiftRow(r, tz));
     if (out.length && shiftState.outOpen) {
-      tail = out.map((r) => shiftRow(r, tz)).join("") + `<tr class="shift-out"><td colspan="${SHIFT_COLS.length}"><button type="button" class="btn ghost small" data-shift-out>${te("Свернуть вышедших")}</button></td></tr>`;
+      order.push(...out.map((r) => shiftRow(r, tz)));
     } else if (out.length) {
       const who = out.length > 1 ? t("{name} и ещё {n}", { name: out[0].person.name, n: out.length - 1 }) : out[0].person.name;
       const closed = out.reduce((sum, r) => sum + r.closedThisShift, 0);
-      tail = `<tr class="shift-out" data-shift-state="offline"><td><button type="button" class="shift-out-btn" data-shift-out data-i18n-skip title="${te("Показать вышедших")}">${escapeHtml(who)}</button></td>
+      order.push(`<tr class="shift-out" data-shift-state="offline"><td><button type="button" class="shift-out-btn" data-shift-out data-i18n-skip title="${te("Показать вышедших")}">${escapeHtml(who)}</button></td>
         <td><span class="badge shift-state offline">${te("Вышли")}</span></td><td class="shift-reason"></td><td class="shift-wide">—</td><td class="shift-overdue-break"></td><td class="shift-wide">—</td>
-        <td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num" data-label="${te("Закрыл за смену")}">${closed}</td><td class="num shift-wide">—</td></tr>`;
+        <td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num shift-wide">—</td><td class="num" data-label="${te("Закрыл за смену")}">${closed}</td><td class="num shift-wide">—</td></tr>`);
     }
+    // Текущей страницы после обновления или сворачивания больше нет — последняя
+    const pages = Math.max(1, Math.ceil(order.length / SHIFT_PAGE));
+    shiftState.page = Math.min(Math.max(1, shiftState.page), pages);
+    const start = (shiftState.page - 1) * SHIFT_PAGE;
+    const slice = order.slice(start, start + SHIFT_PAGE);
+    // «Свернуть вышедших» — в конце последней страницы, сверх 25
+    if (out.length && shiftState.outOpen && shiftState.page === pages) {
+      slice.push(`<tr class="shift-out"><td colspan="${SHIFT_COLS.length}"><button type="button" class="btn ghost small" data-shift-out>${te("Свернуть вышедших")}</button></td></tr>`);
+    }
+    const pager = $("shiftPager");
+    pager.hidden = order.length <= SHIFT_PAGE;
+    pager.innerHTML = pager.hidden ? "" : pagerHtml({ page: shiftState.page, pages, start, shown: Math.min(SHIFT_PAGE, order.length - start), total: order.length, attr: "data-shift-page" });
     // Фокус был на кнопке таблицы (сортировка, вышедшие) — после перестройки по новым данным вернуть его на ту же кнопку
     const had = $("shiftTable").contains(document.activeElement) ? document.activeElement : null;
     const sortKey = had && had.dataset.shiftSort;
     const outBtn = had && had.hasAttribute("data-shift-out");
-    $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${here.map((r) => shiftRow(r, tz)).join("")}${tail}</tbody>`;
+    $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${slice.join("")}</tbody>`;
     const again = sortKey ? $("shiftTable").querySelector(`[data-shift-sort="${sortKey}"]`) : outBtn ? $("shiftTable").querySelector("[data-shift-out]") : null;
     if (again) again.focus();
   }
@@ -6297,7 +6320,7 @@
         data.operators.forEach((r) => r.dutyGroups.forEach((g) => seen.set(g.id, g)));
         shiftState.groups = [...seen.values()];
       }
-      Object.assign(shiftState, { data, error: null });
+      Object.assign(shiftState, { data, error: null, seq: shiftState.seq + 1 }); // seq — каждый ответ перестраивает таблицу, даже с тем же at
     } catch (err) {
       shiftState.error = problemText(err);
     } finally {
@@ -6338,6 +6361,7 @@
     shiftState.open = open;
     renderScreen();
     if (open) {
+      shiftState.page = 1; // при открытии экрана — первая страница (§23.2)
       renderShift();
       loadShift();
       loadStats();
@@ -6350,6 +6374,7 @@
     });
     $("shiftGroup").addEventListener("change", (e) => {
       shiftState.group = e.target.value;
+      shiftState.page = 1;
       shiftState.data = null;
       renderShift();
       loadShift();
@@ -6359,6 +6384,7 @@
       if (sortBtn) {
         const key = sortBtn.dataset.shiftSort;
         shiftState.sort = key === shiftState.sort.key ? { key, dir: -shiftState.sort.dir } : { key, dir: 1 };
+        shiftState.page = 1; // другой столбец или направление — первая страница (§23.2)
         renderShift();
         const again = $("shiftTable").querySelector(`[data-shift-sort="${key}"]`); // таблица перестроена — фокус вернуть на ту же кнопку
         if (again) again.focus();
@@ -6369,6 +6395,15 @@
         const again = $("shiftTable").querySelector("[data-shift-out]");
         if (again) again.focus();
       }
+    });
+    $("shiftPager").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-shift-page]");
+      if (!btn || btn.disabled) return;
+      shiftState.page = Number(btn.dataset.shiftPage);
+      renderShift();
+      // Таблица перестроена — фокус на номер открытой страницы
+      const again = $("shiftPager").querySelector('[aria-current="page"]');
+      if (again) again.focus();
     });
     // Нижняя навигация телефона: «Смена» — к экрану смены, разделы очереди — к очереди
     $("mobileNav").addEventListener("click", (e) => {

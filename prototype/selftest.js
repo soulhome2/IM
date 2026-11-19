@@ -3916,6 +3916,104 @@
       }
     });
 
+    // Страницы таблицы «Сейчас» (§23.2, план 90, часть Ж): операторов в наборе мало — строки добавляем в ответ «Сейчас»
+    await step("Смена и статистика, страницы «Сейчас» (§23.2, план 90, часть Ж): по 25 строк, переключатель как у очереди; свёрнутая «Вышли» — последней строкой последней страницы, «Свернуть вышедших» в 25 не входит; сортировка и её направление — на первую страницу; свернули на странице, которой больше нет, — последняя; 25 строк и меньше — переключателя нет", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const get = stand.get;
+      const until = async (cond, what) => {
+        for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+        expect(cond(), what);
+      };
+      // ready — сколько добавить на месте, offline — сколько вышедших
+      const extra = (ready, offline) => {
+        const at = Date.now();
+        const row = (id, name, state, min) => ({ person: { id, name }, state, since: new Date(at - min * 60000).toISOString(), reasonId: null, reasonLabel: null, breakOverdue: false, dutyGroups: [], inProgress: 0, onHold: 0, overdue: 0, closedThisShift: 1, medianReactionSec: null });
+        const two = (i) => String(i).padStart(2, "0");
+        const rows = [];
+        for (let i = 1; i <= ready; i++) rows.push(row(`page-r${two(i)}`, `Страничный ${two(i)}`, "ready", 300 + i));
+        for (let i = 1; i <= offline; i++) rows.push(row(`page-o${two(i)}`, `Ушедший ${two(i)}`, "offline", 400 + i));
+        stand.get = (path, params) => {
+          const res = get(path, params);
+          return path.startsWith("/operator/supervisor/now") ? res.then((v) => Object.assign({}, v, { operators: v.operators.concat(rows) })) : res;
+        };
+      };
+      const reopen = async () => {
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await click($("tabShift"));
+        await until(() => $("shiftTable").querySelector("tbody tr"), "таблица операторов не пришла");
+        await wait(200);
+      };
+      const body = () => [...$("shiftTable").querySelectorAll("tbody tr")];
+      const pager = $("shiftPager");
+      const info = () => (pager && !pager.hidden ? pager.querySelector(".pager-info").textContent : "");
+      const current = () => Number(pager.querySelector('[aria-current="page"]').textContent);
+      const goPage = async (p) => {
+        const btn = pager.querySelector(`[data-shift-page="${p}"]:not([disabled])`);
+        expect(btn, `нет кнопки страницы ${p}`);
+        await click(btn);
+      };
+      const collapsedLast = () => {
+        const rows = body();
+        return rows.length && rows[rows.length - 1].matches("tr.shift-out[data-shift-state=offline]");
+      };
+      try {
+        const base = (await get("/operator/supervisor/now")).operators;
+        const here = base.filter((r) => r.state !== "offline").length;
+        const out = base.length - here;
+        // 36 на месте, 21 вышедший: свёрнуто — 37 строк порядка, две страницы; раскрыто — 57, три
+        const addReady = 36 - here;
+        extra(addReady, 21 - out);
+        await reopen();
+        // Вышедших раскрыли в шаге выше — свернуть: кнопка «Свернуть вышедших» на последней странице
+        if (info().endsWith("из 57")) {
+          await goPage(3);
+          await click($("shiftTable").querySelector("button[data-shift-out]"));
+          await goPage(1);
+        }
+        expect(pager && !pager.hidden, "строк больше 25 — переключателя нет");
+        expect(info() === "1–25 из 37", `подпись первой страницы: «${info()}»`);
+        expect(body().length === 25 && !$("shiftTable").querySelector("tr.shift-out"), `на первой странице: строк ${body().length}, свёрнутая «Вышли» — ${$("shiftTable").querySelector("tr.shift-out") ? "есть" : "нет"}`);
+        const prev = pager.querySelector('[data-shift-page="0"]');
+        expect(prev && prev.disabled && prev.getAttribute("aria-label") === "Предыдущая страница", "на первой странице «Предыдущая страница» не выключена");
+        await click(pager.querySelector('[aria-label="Следующая страница"]'));
+        expect(current() === 2 && info() === "26–37 из 37", `вторая страница: ${info()}`);
+        expect(body().length === 12 && collapsedLast(), `свёрнутая «Вышли» не последней строкой последней страницы: строк ${body().length}`);
+        // Раскрыли «Вышли» — та же страница; «Свернуть вышедших» — в конце последней и в 25 не входит
+        await click($("shiftTable").querySelector("[data-shift-out]"));
+        expect(current() === 2 && info() === "26–50 из 57", `после раскрытия: ${info()}`);
+        expect(body().length === 25 && !$("shiftTable").querySelector("button[data-shift-out]"), "«Свернуть вышедших» не на последней странице");
+        await goPage(3);
+        const rows3 = body();
+        expect(info() === "51–57 из 57" && rows3.length === 8 && rows3[7].querySelector("button[data-shift-out]"), `третья страница: ${info()}, строк ${rows3.length}`);
+        // Свернули на третьей — её больше нет: последняя, и «Вышли» — последней строкой
+        await click(rows3[7].querySelector("button[data-shift-out]"));
+        expect(current() === 2 && info() === "26–37 из 37" && collapsedLast(), `после сворачивания: ${info()}`);
+        // Сортировка — на первую; повторный щелчок (направление) — тоже
+        await click($("shiftTable").querySelector('[data-shift-sort="name"]'));
+        expect(current() === 1 && info() === "1–25 из 37", `после сортировки: ${info()}`);
+        await goPage(2);
+        await click($("shiftTable").querySelector('[data-shift-sort="name"]'));
+        expect(current() === 1, `после смены направления — страница ${current()}`);
+        // Ровно 25 строк порядка — переключателя нет
+        await click($("shiftTable").querySelector('[data-shift-sort="since"]'));
+        await click($("shiftTable").querySelector('[data-shift-sort="since"]'));
+        stand.get = get;
+        extra(25 - here - (out ? 1 : 0), 0);
+        await reopen();
+        await until(() => pager.hidden && body().length === 25, `25 строк: переключатель ${pager.hidden ? "скрыт" : "есть"}, строк ${body().length}`);
+        stand.get = get;
+        await reopen();
+        await until(() => pager.hidden && body().length < 25, `строк меньше 25: переключатель ${pager.hidden ? "скрыт" : "есть"}, строк ${body().length}`);
+        return `добавлено ${addReady} на месте и ${21 - out} вышедших`;
+      } finally {
+        stand.get = get;
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     // Блок «За период» (§23.3, §23.4, план 90, часть Б): период, фильтры, плитки, график, таблицы, выгрузка, 503
     await step("Смена и статистика, «За период» (§23.3, §23.4, план 90): по умолчанию 7 дней по суткам и срок хранения; «Сегодня» — по часам; фильтр «Результат» — числа как у сервера; щелчок по устройству — фильтр «Устройство»; сортировка таблицы; «Выгрузить CSV» — файл с именем сервера и запись в журнале действий; 503 — текст «Подсчёт занял слишком долго…», «Обновить» остаётся", async () => {
       const stand = window.IM_SELFTEST_API;

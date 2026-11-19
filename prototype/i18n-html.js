@@ -126,6 +126,7 @@ window.IM_DICT_HTML = {
     "Справка и полезные ссылки": "Help and useful links",
     "Старший оператор охраны": "Senior security operator",
     "Страницы очереди": "Queue pages",
+    "Страницы таблицы операторов": "Operator table pages",
     "Схема эвакуации «Мега»": "Evacuation plan, Mega mall",
     "Схема эвакуации «Мега» · 1-й этаж": "Evacuation plan, Mega mall · ground floor",
     "Телефон": "Phone",
