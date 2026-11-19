@@ -1393,6 +1393,7 @@
       get postStatusLine() { return postStatusLine; },
       get lateText() { return lateText; },
       get fitHead() { return fitHead; },
+      get initials() { return initials; },
       conn,
       heartbeat: () => heartbeat(true),
       // Перечитать сессию и очередь, как после перезагрузки страницы (сброс стенда с другим набором)
@@ -4290,14 +4291,17 @@
     $("signInBtn").hidden = !out;
   }
 
-  // Инициалы для кружка: первые буквы двух первых слов имени
-  const initials = (name) =>
-    String(name || "")
+  // Инициалы для кружка: первые буквы двух первых слов имени; у имени-почты — одна буква, первая (как рабочее место)
+  const initials = (name) => {
+    const s = String(name || "");
+    if (s.includes("@")) return s[0].toUpperCase();
+    return s
       .split(/[\s.]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((w) => w[0].toUpperCase())
       .join("");
+  };
 
   // Пользователь (§22.8): имя — из сессии (вход в облако), в меню — группа в облаке и дежурные группы названиями;
   // дежурных групп нет — строки нет
@@ -4361,6 +4365,9 @@
     $("awayText").hidden = !text;
     $("awayAction").textContent = action;
     $("awayStrip").hidden = !away || !state.awayFolded || shiftState.open;
+    // Пока окно открыто, область под пеленой недоступна и с клавиатуры, как под модальным окном: Tab в неё не уходит
+    const modal = away && !state.awayFolded && !shiftState.open;
+    for (const el of $("workspace").children) if (el !== $("awayLayer")) el.inert = modal;
     $("awayStrip").dataset.away = away ? agent : "";
     $("awayStripText").textContent = title;
     $("awayStripAction").textContent = action;
@@ -5728,6 +5735,8 @@
     if (state.dialog) return closeDialog();
     const openModal = document.querySelector(".modal:not([hidden])");
     if (openModal) return (openModal.hidden = true);
+    // Экран «Смена и статистика»: очередь и окно возврата скрыты — Esc их не трогает
+    if (shiftState.open) return;
     // Окно возврата вне приёма (§22.9) — как модальное: Esc сворачивает его в полосу
     if (!$("awayCard").hidden) return foldAway();
     if (state.full) {
@@ -6539,6 +6548,7 @@
     if (open === shiftState.open) return;
     shiftState.open = open;
     renderScreen();
+    renderAway();
     if (open) {
       shiftState.page = 1; // при открытии экрана — первая страница (§23.2)
       renderShift();

@@ -4516,6 +4516,9 @@
         await wait();
         expect($("userName").textContent === "Тест Оператор", `после смены пользователя в шапке «${$("userName").textContent}»`);
         expect($("userInitials").textContent === "ТО", `инициалы «${$("userInitials").textContent}»`);
+        // Имя-почта — одна буква, первая (как рабочее место): «user@gmail.com» → «U», а не «UC»
+        const ini = window.IM_SELFTEST_UI.initials;
+        expect(ini("user@gmail.com") === "U" && ini("Иван Петров") === "ИП", `инициалы почты «${ini("user@gmail.com")}», имени «${ini("Иван Петров")}»`);
         expect(!$("userBtn").textContent.includes("cloud-admin") && !$("stateBtn").textContent.includes("cloud-admin"), "имя группы облака — в самой шапке");
         await click($("userBtn"));
         const pop = $("userMenu").querySelector(".menu-pop");
@@ -4601,11 +4604,16 @@
         };
         const breakShade = shade();
         expect(breakShade >= 0.4, `пелена не тёмная: ${getComputedStyle($("awayLayer")).backgroundColor}`);
+        // Под пеленой область недоступна и с клавиатуры (inert): Tab в неё не уходит; окно и шапка доступны
+        const inertOn = () => Boolean($("panelEvents").closest("[inert]") && $("panelGroups").closest("[inert]"));
+        const inertAny = () => Boolean($("workspace").querySelector("[inert]"));
+        expect(inertOn() && !$("awayCard").closest("[inert]") && !$("stateBtn").closest("[inert]"), "под открытым окном область доступна с клавиатуры (нет inert)");
         // Щелчок по пелене окно не сворачивает; Esc — сворачивает: пелены нет, щелчки — в интерфейс
         await click($("awayLayer"));
         expect(!$("awayCard").hidden, "щелчок по пелене свернул окно");
         await pressKey("Escape");
         expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "Esc не свернул окно в полосу");
+        expect(!inertAny(), "окно свёрнуто, а область осталась недоступной с клавиатуры (inert)");
         expect(corner() && !$("awayLayer").contains(corner()) && $("workspace").contains(corner()), `окно свёрнуто, а щелчок не доходит до интерфейса: ${corner() && (corner().id || corner().className)}`);
         const breakDim = dim($("panelEvents"));
         // Окно свёрнуто — читать можно: карточка инцидента открывается на просмотр, притушена тоже
@@ -4654,7 +4662,11 @@
           const shift = $("shiftScreen");
           expect(!shift.hidden && dim(shift) === null && getComputedStyle(shift).filter === "none", "экран смены притушен");
           expect(!$("awayCard").getClientRects().length && $("awayStrip").hidden, "карточка «Вы не принимаете инциденты» на экране смены");
+          expect(!inertAny(), "на экране смены осталась недоступность области (inert)");
+          // Esc на экране смены ничего не делает: невидимое окно возврата не сворачивается
+          await pressKey("Escape");
           await click($("screenTabs").querySelector('[data-screen="queue"]'));
+          expect(!$("awayCard").hidden && $("awayStrip").hidden && inertOn(), "Esc на экране смены свернул окно «Вышел» или снял недоступность области");
           out.push("экран смены не притушен");
         }
         // Свернуть и в «Вышел»: полоса с «Начать работу», она возвращает к приёму
@@ -4663,6 +4675,7 @@
         await click($("awayStripAction"));
         await wait(200);
         expect(away() === "" && $("awayCard").hidden && $("awayStrip").hidden, "«Начать работу» с полосы не вернула к приёму");
+        expect(!inertAny(), "после «Начать работу» область недоступна с клавиатуры (inert)");
         const back = await stand.get("/operator/session");
         expect(back.operator.guid === before.operator.guid, "после «Начать работу» другой оператор");
         return out.join("; ");

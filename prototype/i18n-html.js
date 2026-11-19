@@ -139,7 +139,6 @@ window.IM_DICT_HTML = {
     "Только критические": "Critical only",
     "Травма, потеря сознания, отравление": "Injury, loss of consciousness, poisoning",
     "Тревожная кнопка, группа быстрого реагирования": "Panic button, rapid response team",
-    "Уйти на перерыв": "Take a break",
     "Управляющий ТЦ": "Mall manager",
     "ФИО": "Name",
     "Фуд-корт": "Food court",
