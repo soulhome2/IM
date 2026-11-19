@@ -4225,6 +4225,10 @@
         const looks = [...new Set(fields.map(look))];
         expect(fields.length === 8 && looks.length === 1 && looks[0].endsWith("|true"), `полей ${fields.length}, видов ${looks.length}: ${looks.join(" ; ")}`);
         expect(![...$("shiftScreen").querySelectorAll("select")].some((x) => x.getClientRects().length), "на экране остался видимый select");
+        // Фильтр «Устройство» снять: на бумаге ниже смотрим названия в таблице устройств
+        $("statsSource").value = "";
+        $("statsSource").dispatchEvent(new Event("change"));
+        await until(() => $("statsDevices").querySelector("button[data-stats-source]"), "без фильтра в таблице устройств нет строк");
         // В. «Печать» — window.print; Ctrl+P печатает то же (правила @media print ниже)
         let printed = 0;
         window.print = () => printed++;
@@ -4253,6 +4257,10 @@
         const head = $("shiftPrintHead").textContent;
         expect(shown($("shiftPrintHead")) && /^Смена и статистика · смена \S+ · период: .+ · снимок \d\d\.\d\d\.\d{4}, \d\d:\d\d$/.test(head), `строка заголовка: «${head}»`);
         expect(shown($("statsTiles")) && shown($("statsDevices")), "в печати нет блока «За период»");
+        // Названия устройств — кнопки (щелчок — отбор), на бумаге — текст; подсказка о щелчке не печатается
+        const devName = $("statsDevices").querySelector("button[data-stats-source]");
+        expect(devName && shown(devName) && devName.textContent.trim(), "в печати не видно названий устройств");
+        expect(!shown($("statsDevices").querySelector(".stats-hint")), "в печати видна подсказка «щелчок — отбор по устройству»");
         return `устройств ${found}, строк в печати ${rows}`;
       } finally {
         if (style) style.remove();

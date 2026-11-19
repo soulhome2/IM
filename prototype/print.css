@@ -9,7 +9,10 @@ body[data-screen="shift"] #app { display: block !important; height: auto !import
 .shift-screen { overflow: visible !important; padding: 0 !important; border: 0 !important; background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .print-only { display: block !important; }
 .shift-print-head { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text); }
-.shift-screen button:not(th button),
+/* Прячутся только действия: «Обновить», «Выгрузить CSV», «Печать», кнопки периода, переключатель страниц, раскрытый
+   список, подсказка о щелчке. Названия-кнопки (устройства в таблице) остаются текстом */
+#statsRefresh, #statsCsv, #statsPrint,
+.shift-screen .stats-hint,
 .shift-screen .stats-periods,
 .shift-screen .shift-pager,
 .shift-screen .mselect-menu,
@@ -24,3 +27,4 @@ body[data-screen="shift"] #app { display: block !important; height: auto !import
 .shift-table-wrap { overflow: visible !important; }
 .shift-table, .stats-table { width: 100%; font-size: 11px; }
 .shift-table th, .stats-table th { white-space: normal; }
+.shift-screen .shift-out-btn { color: inherit; text-decoration: none; }

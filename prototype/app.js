@@ -6946,7 +6946,7 @@
       { key: "breached", head: "С нарушениями", val: (r) => r.breached, cell: (r) => String(r.breached), cls: (r) => (r.breached ? "late" : "") },
       { key: "reaction", head: "Реакция, медиана", val: (r) => r.medianReactionSec, cell: (r) => statsDuration(r.medianReactionSec) },
     ];
-    return `<div class="stats-panel-h"><h3>${te("Устройства")}</h3><span class="muted">${te("10 с наибольшим числом инцидентов · щелчок — отбор по устройству")}</span></div>${statsTable("devices", cols, d.devices, { attr: (r) => ` data-stats-source="${escapeHtml(r.source.id)}"` })}`;
+    return `<div class="stats-panel-h"><h3>${te("Устройства")}</h3><span class="muted">${te("10 с наибольшим числом инцидентов")}</span><span class="muted stats-hint">${te("щелчок — отбор по устройству")}</span></div>${statsTable("devices", cols, d.devices, { attr: (r) => ` data-stats-source="${escapeHtml(r.source.id)}"` })}`;
   }
   function statsDutyName(r) {
     if (r.groupId == null) return te("Без группы");
