@@ -103,6 +103,8 @@ systemd-run --user --collect --unit=im-stand-dist bash -c "exec node $PWD/tools/
 
 ### Шаг 7. Эмулятор агента
 
+Готовый эмулятор есть в образе сервера `im/backend` (`imbackend.img` из Bamboo, начиная с коммита сервера `cf155c4`): `/bin/agent-emulator`, запуск из образа — README эмулятора в сервере, раздел «Из образа сервера». Для стенда на машине его собирают из исходников:
+
 ```
 (cd ~/Work/incident-manager-server && go build -o ~/Work/stand/bin/agent-emulator ./tools/agent-emulator)
 tools/stand/run-agent.sh
