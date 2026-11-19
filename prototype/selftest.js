@@ -3861,6 +3861,8 @@
         await click($("tabShift"));
         await until(() => shown().length > 0, "таблица операторов не пришла");
         expect($("workspace").hidden && !$("shiftScreen").hidden, "экран смены не открылся вместо очереди");
+        const panelBtns = ["toggleGroups", "toggleMedia"].filter((id) => getComputedStyle($(id)).display !== "none");
+        expect(!panelBtns.length, `на экране смены видны кнопки панелей очереди: ${panelBtns.join(", ")}`);
         expect(/^смена \d\d:\d\d–\d\d:\d\d$/.test($("shiftSpan").textContent), `над таблицей — не смена: «${$("shiftSpan").textContent}»`);
         expect(/обновлено .* само раз в 30 с/.test($("shiftUpdated").textContent), `время обновления: «${$("shiftUpdated").textContent}»`);
         const sums = [...$("shiftSummary").querySelectorAll("[data-shift-sum]")].map((x) => x.dataset.shiftSum);

@@ -2669,6 +2669,9 @@ select.search-input { padding-right: 36px; }
 .workspace[hidden],
 .shift-screen[hidden],
 .mobile-nav button[hidden] { display: none; }
+/* Кнопки панели групп и видеомонитора — для очереди: на экране смены этих панелей нет */
+body[data-screen="shift"] #toggleGroups,
+body[data-screen="shift"] #toggleMedia { display: none; }
 .shift-screen {
   grid-row: 3;
   min-height: 0;
