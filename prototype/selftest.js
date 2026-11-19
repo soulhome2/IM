@@ -3986,6 +3986,11 @@
         const firstOut = body().find((r) => r.dataset.shiftState === "offline" && r.dataset.shiftPerson);
         expect(firstOut && document.activeElement === firstOut, `после раскрытия фокус не на первом вышедшем: ${document.activeElement.tagName} ${document.activeElement.textContent.trim().slice(0, 40)}`);
         expect(body().length === 25 && !collapseBtn(), "«Свернуть вышедших» не на последней странице");
+        // Опрос: фокус на строке оператора остаётся на той же строке
+        const outId = firstOut.dataset.shiftPerson;
+        await ui.shiftPoll();
+        await until(() => !firstOut.isConnected, "опрос не перестроил таблицу");
+        expect(document.activeElement.dataset && document.activeElement.dataset.shiftPerson === outId, `после опроса фокус не на строке ${outId}: ${document.activeElement.tagName}`);
         // Опрос: страница та же, таблица перестроена, фокус — на той же кнопке переключателя
         const nextBtn = pager.querySelector('[aria-label="Следующая страница"]');
         nextBtn.focus();

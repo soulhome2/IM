@@ -6304,12 +6304,19 @@
     const had = $("shiftTable").contains(document.activeElement) ? document.activeElement : null;
     const sortKey = had && had.dataset.shiftSort;
     const outBtn = had && had.hasAttribute("data-shift-out");
+    const person = had && had.matches("tr[data-shift-person]") ? had.dataset.shiftPerson : null;
     const pagerBtn = pager.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
     pager.hidden = order.length <= SHIFT_PAGE;
     pager.innerHTML = pager.hidden ? "" : pagerHtml({ page: shiftState.page, pages, start, shown: Math.min(SHIFT_PAGE, order.length - start), total: order.length, attr: "data-shift-page" });
     $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${slice.join("")}</tbody>`;
     const again = sortKey ? $("shiftTable").querySelector(`[data-shift-sort="${sortKey}"]`) : outBtn ? $("shiftTable").querySelector("[data-shift-out]") : null;
+    // Строка оператора в фокусе — та же строка; на странице её больше нет — номер страницы
+    const row = person ? [...$("shiftTable").querySelectorAll("tr[data-shift-person]")].find((r) => r.dataset.shiftPerson === person) : null;
     if (again) again.focus();
+    else if (row) {
+      row.tabIndex = -1;
+      row.focus();
+    } else if (person) focusShiftPager(null);
     else if (pagerBtn) focusShiftPager(pagerBtn);
   }
   // Фокус в переключателе «Сейчас» — на кнопку с той же подписью; её нет или она выключена — на номер открытой страницы
