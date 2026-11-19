@@ -4355,12 +4355,6 @@
     }
     const card = $("awayCard");
     card.hidden = !away || state.awayFolded;
-    // Карточка — ниже строки поиска и фильтров очереди: искать и выбирать фильтры можно, не сворачивая её (§22.9)
-    if (!card.hidden) {
-      const stage = $("stage").getBoundingClientRect();
-      const below = state.mode === "queue" ? ["queueHead", "eventsToolbar", "eventsTypes"].map((id) => $(id).getBoundingClientRect()).filter((r) => r.height > 0).reduce((m, r) => Math.max(m, r.bottom), 0) : 0;
-      card.style.setProperty("--away-top", below > stage.top ? `${Math.round(below - stage.top + 16)}px` : "");
-    }
     card.dataset.away = away ? agent : "";
     $("awayTitle").textContent = title;
     $("awayText").textContent = text;

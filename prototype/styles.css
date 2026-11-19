@@ -703,25 +703,32 @@ select.search-input,
   color: var(--muted);
 }
 
-/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» панель групп, очередь и карточка инцидента серые и бледные,
-   как в макете (dim.png): без цвета и полупрозрачные — в светлой и тёмной теме одинаково заметно. Читать, листать,
-   искать и щёлкать можно: это вид, а не пелена поверх. На перерыве сильнее, в «Вышел» слабее. Шапка яркая; экран смены
-   и видео с картой не притушиваются */
-.workspace[data-away="not_ready"] .stage,
-.workspace[data-away="offline"] .stage { position: relative; }
-.workspace[data-away="not_ready"] #panelGroups,
+/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» вся рабочая область — группы, очередь, карточка инцидента,
+   видео и карта — серая и бледная, как в макете (dim.png): без цвета и полупрозрачная, в светлой и тёмной теме одинаково
+   заметно. Читать, листать, искать и щёлкать можно: это вид панелей, а не пелена поверх. На перерыве сильнее, в «Вышел»
+   слабее. Шапка яркая; экран смены не притушивается */
+.workspace { position: relative; }
+.workspace[data-away="not_ready"] > .panel,
 .workspace[data-away="not_ready"] .stage > .panel { filter: grayscale(1); opacity: 0.5; }
-.workspace[data-away="offline"] #panelGroups,
+.workspace[data-away="offline"] > .panel,
 .workspace[data-away="offline"] .stage > .panel { filter: grayscale(0.8); opacity: 0.7; }
-/* Карточка посередине очереди или карточки инцидента — яркая, ниже строки поиска и фильтров: они остаются свободными
-   (top ставит app.js по низу шапки очереди) */
-.away-card {
+/* Одна карточка поверх всей рабочей области, по центру по вертикали и горизонтали. Слой щелчков не ловит — только
+   карточка; без карточки слоя нет */
+.away-layer {
   position: absolute;
-  z-index: 16;
-  top: var(--away-top, 96px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(420px, calc(100% - 32px));
+  inset: 0;
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+.away-layer:not(:has(.away-card:not([hidden]))) { display: none; }
+.away-card {
+  position: relative;
+  pointer-events: auto;
+  width: min(420px, 100%);
   box-sizing: border-box;
   padding: 20px 24px;
   border: 1px solid var(--stroke);

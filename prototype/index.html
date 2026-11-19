@@ -169,6 +169,19 @@
     </div>
     <main class="workspace" id="workspace" data-mode="queue" data-groups="on" data-mediapanel="on" data-view="queue">
       <div class="groups-scrim" id="groupsScrim"></div>
+      <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) вся рабочая область притушена, поверх неё
+           по центру — одна карточка с кнопкой возврата. Слой щелчков не ловит: мимо карточки — в интерфейс; карточку
+           можно свернуть (✕) в полосу под шапкой. Строит app.js -->
+      <div class="away-layer" id="awayLayer">
+        <section class="away-card" id="awayCard" role="status" aria-labelledby="awayTitle" hidden>
+          <button type="button" class="icon-btn away-close" id="awayClose" title="Свернуть" aria-label="Свернуть">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+          <h2 id="awayTitle"></h2>
+          <p id="awayText"></p>
+          <button type="button" class="btn primary" id="awayAction"></button>
+        </section>
+      </div>
       <section class="panel" id="panelGroups" data-panel="groups">
         <header class="panel-h">
           <h2>Группы</h2>
@@ -218,16 +231,6 @@
       ></div>
 
       <div class="stage" id="stage">
-        <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) очередь и карточка притушены, посередине —
-             карточка с кнопкой возврата; её можно свернуть (✕) в полосу под шапкой. Строит app.js -->
-        <section class="away-card" id="awayCard" role="status" aria-labelledby="awayTitle" hidden>
-          <button type="button" class="icon-btn away-close" id="awayClose" title="Свернуть" aria-label="Свернуть">
-            <span class="material-symbols-outlined" aria-hidden="true">close</span>
-          </button>
-          <h2 id="awayTitle"></h2>
-          <p id="awayText"></p>
-          <button type="button" class="btn primary" id="awayAction"></button>
-        </section>
         <section class="panel" id="panelEvents" data-panel="events">
           <div class="panel-b events-body">
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->

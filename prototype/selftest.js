@@ -4586,9 +4586,15 @@
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Вернуться с перерыва" && /^Вы на перерыве/.test($("awayTitle").textContent), `карточка перерыва: «${$("awayCard").textContent.trim()}»`);
         expect(dim($("panelEvents")) !== null && dim($("panelGroups")) !== null, "очередь или группы не притушены");
         expect(!$("workspace").contains($("stateBtn")) && dim(document.querySelector(".topbar")) === null && dim($("awayCard")) === null, "шапка или карточка возврата притушены");
-        // Карточка не закрывает поиск и фильтры очереди: она ниже них
-        const searchBottom = Math.max($("queueHead").getBoundingClientRect().bottom, $("eventsToolbar").getBoundingClientRect().bottom);
-        expect($("awayCard").getBoundingClientRect().top >= searchBottom, `карточка закрывает поиск: верх ${Math.round($("awayCard").getBoundingClientRect().top)}, низ поиска ${Math.round(searchBottom)}`);
+        expect(dim($("panelMedia")) !== null, "видео и карта не притушены");
+        // Одна карточка по центру всей рабочей области, поверх неё; слой под карточкой щелчков не ловит
+        const ws = $("workspace").getBoundingClientRect();
+        const cr = $("awayCard").getBoundingClientRect();
+        const off = (a, b) => Math.abs(a - b);
+        expect(off(cr.left + cr.width / 2, ws.left + ws.width / 2) <= 2 && off(cr.top + cr.height / 2, ws.top + ws.height / 2) <= 2, `карточка не по центру рабочей области: ${Math.round(cr.left)},${Math.round(cr.top)} в ${Math.round(ws.width)}×${Math.round(ws.height)}`);
+        expect(getComputedStyle($("awayLayer")).pointerEvents === "none" && getComputedStyle($("awayCard")).pointerEvents !== "none", "слой карточки ловит щелчки");
+        const under = document.elementFromPoint(ws.left + 40, ws.top + ws.height - 40);
+        expect(under && !$("awayLayer").contains(under) && $("workspace").contains(under), `мимо карточки щелчок не доходит до интерфейса: ${under && (under.id || under.className)}`);
         const breakDim = dim($("panelEvents"));
         // Читать можно: карточка инцидента открывается на просмотр, притушена тоже
         const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
