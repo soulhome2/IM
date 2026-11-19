@@ -22,6 +22,7 @@
 | [prototype/colleagues.js](prototype/colleagues.js) | Эмуляция коллег во встроенном сервере для живости демо: коллеги действуют через те же переходы машины, со своими правами и лимитами |
 | [prototype/styles.css](prototype/styles.css) | Оформление, светлая и тёмная темы, адаптивные раскладки |
 | [prototype/bridge.css](prototype/bridge.css) | Restyle в семью ONE PSIM: маппинг на [theme/one-psim.css](theme/one-psim.css), без правок разметки и JS. Как смотреть и что подтвердить — [prototype/README.md](prototype/README.md) |
+| [prototype/print.css](prototype/print.css) | Печать экрана «Смена и статистика» (§23): A4 альбомом, светлая, без шапки и кнопок, таблица «Сейчас» целиком |
 
 ### Что показывает прототип
 

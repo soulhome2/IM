@@ -1184,7 +1184,8 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .events-more { display: none; position: relative; }
 .events-more-n { min-width: 18px; padding: 0 5px; border-radius: 50px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-style: normal; font-weight: 600; line-height: 18px; text-align: center; }
 /* Меню списка над очередью — поверх строк, а не внутри панели */
-.mselect.tb .mselect-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent); }
+.mselect.tb .mselect-menu,
+.shift-combo .mselect-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent); }
 .events-sort { grid-column: 3; grid-row: 1; max-width: 320px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Отступ .search-input не должен прятать текст списка под стрелкой */
 select.search-input { padding-right: 36px; }
@@ -2683,7 +2684,8 @@ select.search-input { padding-right: 36px; }
   border: 2px solid var(--stroke-2);
   border-radius: var(--radius);
   background-color: var(--input-bg);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --mselect-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: var(--mselect-chevron);
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px 16px;
@@ -2702,7 +2704,7 @@ select.search-input { padding-right: 36px; }
 .mselect-input.has-value::placeholder { color: var(--input-text); }
 .mselect.open .mselect-input::placeholder { color: var(--faint); }
 [data-theme="dark"] .mselect-input {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --mselect-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 .mselect-input:focus-visible,
 .mselect.open .mselect-input { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
@@ -2777,7 +2779,19 @@ body[data-screen="shift"] #toggleMedia { display: none; }
 }
 .shift-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .shift-h h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); }
-.shift-h .shift-group { width: auto; min-width: 200px; }
+/* Списки экрана — одно поле с поиском (.mselect очереди) поверх скрытого select: одна ширина, высота, рамка и стрелка (§23.3) */
+.shift-screen select[hidden] { display: none; }
+.shift-combo { flex: 0 1 220px; width: 220px; max-width: 100%; }
+#shiftScreen .shift-combo .mselect-input {
+  background-image: var(--mselect-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  font-size: 14px;
+}
+/* Как список над очередью (.mselect.tb), но по ширине вариантов: названия устройств длинные */
+.shift-screen .shift-combo .mselect-menu { right: auto; min-width: 100%; width: max-content; max-width: min(420px, 90vw); max-height: 320px; }
+.print-only { display: none; }
 .shift-updated { margin-left: auto; font-size: 12px; }
 .shift-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .shift-chip {
@@ -2922,7 +2936,7 @@ body[data-screen="shift"] #toggleMedia { display: none; }
   .shift-h .shift-group { min-width: 0; flex: 1 1 100%; }
   .shift-updated { margin-left: 0; }
   .stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stats-filters select.search-input { max-width: none; flex: 1 1 100%; }
+  .shift-combo { flex: 1 1 100%; width: auto; }
   .stats-legend { margin-left: 0; }
   .stats-table { min-width: 0; }
   .stats-table thead tr { display: flex; flex-wrap: wrap; gap: 2px 4px; }

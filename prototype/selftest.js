@@ -4182,6 +4182,94 @@
       }
     });
 
+    // Поиск в списках, одинаковые поля и печать экрана «Смена и статистика» (§23, решение пользователя 2026-11-20)
+    await step("Смена и статистика: поиск в списках, одинаковые поля, печать (§23, решение пользователя 2026-11-20): набор сужает список «Устройство» по части названия, из многих видно 50 и «Уточните запрос — найдено N»; все списки экрана — одно поле одной высоты, рамки и стрелки; «Печать» вызывает печать, в печати нет шапки, кнопок и переключателя страниц, таблица «Сейчас» — вся, тема — светлая", async () => {
+      const stand = window.IM_SELFTEST_API;
+      const get = stand.get;
+      const print = window.print;
+      const until = async (cond, what) => {
+        for (let i = 0; i < 40 && !cond(); i++) await wait(100);
+        expect(cond(), what);
+      };
+      // 120 устройств в дереве групп — больше предела списка
+      const many = { guid: "selftest-many", name: "Много устройств", children: [], devices: Array.from({ length: 120 }, (_, i) => ({ guid: `selftest-cam-${i}`, name: `Тестовая камера ${String(i).padStart(3, "0")}` })) };
+      stand.get = (path, params) => (path === "/operator/reference/source-groups" ? get(path, params).then((tree) => tree.concat(many)) : get(path, params));
+      let style = null;
+      try {
+        await click($("tabShift"));
+        await until(() => $("statsTiles").querySelector("[data-stats-tile]") && $("shiftTable").querySelector("tbody tr"), "экран смены не открылся");
+        // А. Поиск: щелчок открывает, без набора — первые 50 и сколько всего; набор сужает
+        const box = $("statsSource").nextElementSibling;
+        const field = () => box.querySelector(".mselect-input");
+        const picks = () => [...box.querySelectorAll(".mselect-opt input")].filter((x) => x.value);
+        await click(field());
+        await until(() => box.querySelector(".mselect-menu"), "список «Устройство» не открылся");
+        const limited = box.querySelector("[data-combo-limited]");
+        const found = limited && Number((/(\d+)\s*$/.exec(limited.textContent) || [])[1]);
+        expect(picks().length === 50, `без набора вариантов ${picks().length}, а не 50`);
+        expect(found >= 120 && /^Уточните запрос — найдено \d+$/.test(limited.textContent), `строка предела: «${limited && limited.textContent}»`);
+        field().value = "ТЕСТОВАЯ КАМЕРА 11";
+        field().dispatchEvent(new Event("input", { bubbles: true }));
+        const names = picks().map((x) => x.nextElementSibling.textContent);
+        expect(names.length === 10 && names.every((x) => x.startsWith("Тестовая камера 11")), `после набора: ${names.join(", ")}`);
+        expect(!box.querySelector("[data-combo-limited]"), "строка предела осталась при 10 совпадениях");
+        picks().find((x) => x.value === "selftest-cam-117").click();
+        await until(() => $("statsSource").value === "selftest-cam-117" && !box.querySelector(".mselect-menu"), "выбор из найденного не поставил фильтр");
+        expect(field().placeholder === "Устройство: Тестовая камера 117", `закрытое поле: «${field().placeholder}»`);
+        // Б. Все списки экрана — одно поле: высота, рамка, отступ, шрифт, стрелка; видимых select нет
+        const fields = [...$("shiftScreen").querySelectorAll(".shift-combo .mselect-input")];
+        const look = (el) => {
+          const cs = getComputedStyle(el);
+          return [Math.round(el.getBoundingClientRect().height), cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor, cs.borderRadius, cs.paddingLeft, cs.fontSize, cs.fontFamily, cs.backgroundImage !== "none"].join("|");
+        };
+        const looks = [...new Set(fields.map(look))];
+        expect(fields.length === 8 && looks.length === 1 && looks[0].endsWith("|true"), `полей ${fields.length}, видов ${looks.length}: ${looks.join(" ; ")}`);
+        expect(![...$("shiftScreen").querySelectorAll("select")].some((x) => x.getClientRects().length), "на экране остался видимый select");
+        // В. «Печать» — window.print; Ctrl+P печатает то же (правила @media print ниже)
+        let printed = 0;
+        window.print = () => printed++;
+        await click($("statsPrint"));
+        expect(printed === 1 && $("statsPrint").textContent === "Печать", `«Печать»: вызовов ${printed}`);
+        // Тёмная тема на бумаге — светлая, после печати — прежняя
+        const theme = document.documentElement.getAttribute("data-theme");
+        window.dispatchEvent(new Event("beforeprint"));
+        const during = document.documentElement.getAttribute("data-theme");
+        window.dispatchEvent(new Event("afterprint"));
+        expect(during === "light" && document.documentElement.getAttribute("data-theme") === theme, `тема при печати ${during}, после — ${document.documentElement.getAttribute("data-theme")}`);
+        // Правила печати (print.css, media="print") — как при печати: подключить их ещё раз для экрана и посмотреть
+        style = document.createElement("link");
+        style.rel = "stylesheet";
+        style.href = "print.css";
+        const loaded = new Promise((ok) => style.addEventListener("load", ok));
+        document.head.appendChild(style);
+        await Promise.race([loaded, wait(3000)]);
+        expect(style.sheet, "print.css не загрузился");
+        const shown = (el) => el && el.getClientRects().length > 0;
+        expect(!shown(document.querySelector(".topbar")) && !shown(document.querySelector(".statusbar")), "в печати видна шапка или строка состояния");
+        expect(!shown($("statsPrint")) && !shown($("statsCsv")) && !shown($("shiftPager")) && !shown($("shiftTable")), "в печати видны кнопки, переключатель страниц или страница таблицы");
+        const now = await get("/operator/supervisor/now");
+        const rows = $("shiftPrintTable").querySelectorAll("tbody tr").length;
+        expect(shown($("shiftPrintTable")) && rows === now.operators.length, `в печати строк таблицы ${rows} из ${now.operators.length}`);
+        const head = $("shiftPrintHead").textContent;
+        expect(shown($("shiftPrintHead")) && /^Смена и статистика · смена \S+ · период: .+ · снимок \d\d\.\d\d\.\d{4}, \d\d:\d\d$/.test(head), `строка заголовка: «${head}»`);
+        expect(shown($("statsTiles")) && shown($("statsDevices")), "в печати нет блока «За период»");
+        return `устройств ${found}, строк в печати ${rows}`;
+      } finally {
+        if (style) style.remove();
+        window.print = print;
+        stand.get = get;
+        if ($("statsSource").value) {
+          $("statsSource").value = "";
+          $("statsSource").dispatchEvent(new Event("change"));
+          await wait(300);
+        }
+        if (!$("shiftScreen").hidden) await click($("screenTabs").querySelector('[data-screen="queue"]'));
+        await standReset({ fixture: "demo" });
+        await wait(400);
+        await setFilter("open");
+      }
+    });
+
     // Права аудита (§5, §12.4): экрана аудита в прототипе нет — проверка запросами
     await step("С одним правом audit:actions:view — журнал действий 200, журнал настроек и настройки 403; выгрузка — по audit:export (§5, §12.4)", async () => {
       expect(stand, "нет служебных операций стенда в режиме самопроверки");

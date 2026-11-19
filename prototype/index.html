@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="bridge.css" />
+  <link rel="stylesheet" href="print.css" media="print" />
 </head>
 <body>
   <div id="app" class="app">
@@ -367,6 +368,8 @@
     <!-- Экран «Смена и статистика» (§23, план 90): блок «Сейчас» — сводка, текущая смена, таблица операторов; опрос
          GET /operator/supervisor/now раз в shift.refreshSec машины, пока экран открыт. Строит app.js -->
     <main class="shift-screen" id="shiftScreen" hidden>
+      <!-- Печать (§23): строка заголовка и вся таблица «Сейчас» — только на бумаге; заполняет app.js -->
+      <p class="shift-print-head print-only" id="shiftPrintHead"></p>
       <section class="shift-card" id="shiftNow" aria-labelledby="shiftNowTitle">
         <header class="shift-h">
           <h2 id="shiftNowTitle">Сейчас</h2>
@@ -379,6 +382,7 @@
           <table class="doc-table shift-table" id="shiftTable"></table>
         </div>
         <!-- Страницы по 25 строк, переключатель — как у очереди (§23.2); строк не больше 25 — скрыт -->
+        <div class="shift-table-wrap print-only"><table class="doc-table shift-table" id="shiftPrintTable"></table></div>
         <nav class="events-pager shift-pager" id="shiftPager" aria-label="Страницы таблицы операторов" hidden></nav>
         <p class="muted shift-note" id="shiftNote"></p>
       </section>
@@ -392,6 +396,7 @@
           <span class="muted shift-updated" id="statsComputed"></span>
           <button type="button" class="btn ghost small" id="statsRefresh">Обновить</button>
           <button type="button" class="btn ghost small" id="statsCsv">Выгрузить CSV</button>
+          <button type="button" class="btn ghost small" id="statsPrint">Печать</button>
         </header>
         <div class="stats-filters">
           <div class="seg stats-periods" id="statsPeriods" role="group" aria-label="Период">

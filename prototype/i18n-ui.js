@@ -454,6 +454,10 @@ window.IM_DICT_UI = {
     // Блок «За период» (§23.3, план 90, часть Б)
     "За период": "For a period",
     "Выгрузить CSV": "Export CSV",
+    "Печать": "Print",
+    "Уточните запрос — найдено {n}": "Refine the search — {n} found",
+    "период: {span}": "period: {span}",
+    "снимок {time}": "snapshot {time}",
     "Период": "Period",
     "Сегодня": "Today",
     "7 дней": "7 days",

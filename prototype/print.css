@@ -1,0 +1,26 @@
+/* ===== Печать экрана «Смена и статистика» (§23). Отдельный файл, подключён с media="print" — правила без своего @media: самопроверка подключает его
+   ещё раз для всех сред и смотрит, что видно на бумаге: A4 альбомом, светлая, только экран — без шапки, кнопок, меню и
+   переключателя страниц; таблица «Сейчас» — вся (таблица для печати), карточки и графики не рвутся между страницами ===== */
+@page { size: A4 landscape; margin: 10mm; }
+html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+body[data-screen="shift"] > :not(#app),
+body[data-screen="shift"] #app > :not(#shiftScreen) { display: none !important; }
+body[data-screen="shift"] #app { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+.shift-screen { overflow: visible !important; padding: 0 !important; border: 0 !important; background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.print-only { display: block !important; }
+.shift-print-head { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text); }
+.shift-screen button:not(th button),
+.shift-screen .stats-periods,
+.shift-screen .shift-pager,
+.shift-screen .mselect-menu,
+#shiftNow .shift-table-wrap:not(.print-only) { display: none !important; }
+.shift-screen th button span[aria-hidden] { display: none; }
+#shiftScreen .shift-combo .mselect-input { background-image: none; border: 0; padding: 0; box-shadow: none; }
+.shift-table, .stats-table { min-width: 0 !important; }
+.shift-card, .stats-card { border: 0; padding: 0; }
+.stats-card { margin-top: 12px; }
+.stats-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.stats-tile, .stats-panel, .shift-summary, tr { break-inside: avoid; }
+.shift-table-wrap { overflow: visible !important; }
+.shift-table, .stats-table { width: 100%; font-size: 11px; }
+.shift-table th, .stats-table th { white-space: normal; }

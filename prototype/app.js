@@ -6395,6 +6395,68 @@
       td.textContent = shiftSinceText(since, td.dataset.shiftTick, d.shift.timeZone);
     });
   }
+  // Списки экрана смены (§23.3, решение пользователя 2026-11-20) — поле с поиском, как у очереди (.mselect), поверх
+  // скрытого <select>: значение, варианты и «выбранного больше нет» по-прежнему держит select, поле лишь показывает их.
+  // Набор отбирает варианты по части названия без учёта регистра; видно первые 50 совпадений и «Уточните запрос — найдено N»
+  const SHIFT_COMBO_LIMIT = 50;
+  const shiftCombo = { open: null, q: "", keys: {} };
+  function shiftComboOptions(sel) {
+    return [...sel.options].map((o) => ({ id: o.value, label: o.textContent.trim(), depth: Math.floor(o.textContent.match(/^ */)[0].length / 2) }));
+  }
+  function shiftComboMenu(sel) {
+    const q = shiftCombo.q;
+    const opts = shiftComboOptions(sel);
+    const hits = opts.filter((o) => o.id && comboHit(o.label, q));
+    const shown = opts.filter((o) => !o.id && comboHit(o.label, q)).concat(hits.slice(0, SHIFT_COMBO_LIMIT));
+    const opt = (o) =>
+      `<label class="mselect-opt"${!q && o.depth ? ` style="padding-left:${6 + o.depth * 16}px"` : ""}><input type="radio" name="combo-${sel.id}" data-combo-pick="${sel.id}" value="${escapeHtml(o.id)}" ${
+        o.id === sel.value ? "checked" : ""
+      } /><span data-i18n-skip>${escapeHtml(o.label)}</span><em></em></label>`;
+    const more = hits.length > SHIFT_COMBO_LIMIT ? `<div class="muted mselect-empty" data-combo-limited>${te("Уточните запрос — найдено {n}", { n: hits.length })}</div>` : "";
+    return `<div class="mselect-menu" role="listbox">${shown.map(opt).join("")}${comboNone(shown.length > 0)}${more}</div>`;
+  }
+  function renderShiftCombo(sel) {
+    const box = sel.nextElementSibling;
+    const open = shiftCombo.open === sel.id;
+    const key = JSON.stringify([LANG, sel.innerHTML, sel.value, open, open ? shiftCombo.q : ""]);
+    if (shiftCombo.keys[sel.id] === key) return;
+    shiftCombo.keys[sel.id] = key;
+    const name = sel.getAttribute("aria-label");
+    const text = (v) => (shiftComboOptions(sel).find((o) => o.id === v) || { label: v }).label;
+    // Выбранное — с названием фильтра («Устройство: Камера 12»), если его нет в самой подписи («Окна работ: считать»)
+    const named = (v) => (text(v).startsWith(name) ? text(v) : `${name}: ${text(v)}`);
+    const picked = sel.value ? [sel.value] : [];
+    box.classList.toggle("open", open);
+    box.innerHTML = comboField("data-shift-combo", sel.id, open, shiftCombo.q, picked, named, text("")) + (open ? shiftComboMenu(sel) : "");
+    const input = box.querySelector(".mselect-input");
+    input.setAttribute("aria-label", `${name}: ${text(sel.value)}`);
+    input.setAttribute("data-i18n-skip", "");
+    if (open) comboFocus(input);
+  }
+  function renderShiftCombos() {
+    $("shiftScreen").querySelectorAll("select[data-combo]").forEach(renderShiftCombo);
+  }
+  function closeShiftCombo() {
+    const was = shiftCombo.open;
+    Object.assign(shiftCombo, { open: null, q: "" });
+    renderShiftCombos();
+    if (was) $(was).nextElementSibling.querySelector(".mselect-input").focus();
+  }
+  // Строка заголовка бумаги (§23, «Печать»): экран, смена, период и время снимка — в поясе смены
+  function renderShiftPrintHead() {
+    const tz = statsZone();
+    const d = shiftState.data;
+    const s = statsState.data;
+    const snap = new Date(serverNow()).toLocaleString(shiftLocale(), { timeZone: tz, hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    $("shiftPrintHead").textContent = [
+      t("Смена и статистика"),
+      d ? t("смена {from}–{to}", { from: shiftClock(d.shift.from, tz), to: shiftClock(d.shift.to, tz) }) : null,
+      s ? t("период: {span}", { span: statsSpanText(s) }) : null,
+      t("снимок {time}", { time: snap }),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
   function renderShift() {
     if (!shiftState.open) return;
     const d = shiftState.data;
@@ -6407,6 +6469,8 @@
         .join("");
     }
     if ($("shiftGroup").value !== shiftState.group) $("shiftGroup").value = shiftState.group;
+    renderShiftCombos();
+    renderShiftPrintHead();
     $("shiftNote").textContent = shiftState.error || "";
     // Таблица — только при новых данных, сортировке, раскрытии вышедших, смене страницы или языка
     const tableKey = JSON.stringify([LANG, d && shiftState.seq, d && shiftState.group, shiftState.error, shiftState.sort, shiftState.outOpen, shiftState.page]);
@@ -6417,6 +6481,7 @@
       $("shiftUpdated").textContent = shiftState.error ? "" : t("Загрузка…");
       $("shiftSummary").innerHTML = "";
       $("shiftTable").innerHTML = "";
+      $("shiftPrintTable").innerHTML = "";
       $("shiftPager").hidden = true;
       $("shiftPager").innerHTML = "";
       return;
@@ -6474,6 +6539,10 @@
     pager.hidden = order.length <= SHIFT_PAGE;
     pager.innerHTML = pager.hidden ? "" : pagerHtml({ page: shiftState.page, pages, start, shown: Math.min(SHIFT_PAGE, order.length - start), total: order.length, attr: "data-shift-page" });
     $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${slice.join("")}</tbody>`;
+    // Для печати (§23): вся таблица — все строки, вышедшие раскрыты, без страниц и кнопок сортировки
+    $("shiftPrintTable").innerHTML = `<thead><tr>${SHIFT_COLS.map((c) => `<th class="${c.num ? "num" : ""}">${te(c.head)}</th>`).join("")}</tr></thead><tbody>${rows
+      .map((r) => shiftRow(r, tz).replace(/ data-shift-[a-z-]+="[^"]*"/g, ""))
+      .join("")}</tbody>`;
     const again = sortKey ? $("shiftTable").querySelector(`[data-shift-sort="${sortKey}"]`) : outBtn ? $("shiftTable").querySelector("[data-shift-out]") : null;
     // Строка оператора в фокусе — та же строка; на странице её больше нет — номер страницы
     const row = person ? [...$("shiftTable").querySelectorAll("tr[data-shift-person]")].find((r) => r.dataset.shiftPerson === person) : null;
@@ -6560,6 +6629,67 @@
     $("screenTabs").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-screen]");
       if (btn) showScreen(btn.dataset.screen);
+    });
+    // Списки экрана — поля с поиском поверх скрытых select (§23.3): щелчок — открыть, набор — отбор, вариант — выбрать
+    $("shiftScreen")
+      .querySelectorAll("select")
+      .forEach((sel) => {
+        sel.hidden = true;
+        sel.dataset.combo = "";
+        sel.insertAdjacentHTML("afterend", `<div class="mselect shift-combo" data-combo-for="${sel.id}"></div>`);
+      });
+    $("shiftScreen").addEventListener("click", (e) => {
+      const input = e.target.closest("[data-shift-combo]");
+      if (!input || shiftCombo.open === input.dataset.shiftCombo) return;
+      Object.assign(shiftCombo, { open: input.dataset.shiftCombo, q: "" });
+      renderShiftCombos();
+    });
+    $("shiftScreen").addEventListener("input", (e) => {
+      const input = e.target.closest("[data-shift-combo]");
+      if (!input) return;
+      const id = input.dataset.shiftCombo;
+      shiftCombo.q = input.value;
+      if (shiftCombo.open !== id) {
+        shiftCombo.open = id;
+        return renderShiftCombos();
+      }
+      // Открытый список — только варианты: поле с набором остаётся тем же
+      input.parentElement.querySelector(".mselect-menu").outerHTML = shiftComboMenu($(id));
+      shiftCombo.keys[id] = JSON.stringify([LANG, $(id).innerHTML, $(id).value, true, shiftCombo.q]);
+    });
+    $("shiftScreen").addEventListener("change", (e) => {
+      const pick = e.target.closest("[data-combo-pick]");
+      if (!pick) return;
+      const sel = $(pick.dataset.comboPick);
+      const changed = sel.value !== pick.value;
+      sel.value = pick.value;
+      closeShiftCombo();
+      if (changed) sel.dispatchEvent(new Event("change"));
+    });
+    $("shiftScreen").addEventListener("keydown", (e) => comboKey(e, closeShiftCombo));
+    document.addEventListener("click", (e) => {
+      if (!shiftCombo.open || !e.target.isConnected || e.target.closest(".shift-combo")) return;
+      Object.assign(shiftCombo, { open: null, q: "" });
+      renderShiftCombos();
+    });
+    // «Печать» (§23): то же, что Ctrl+P; на бумаге — светлая тема и в тёмной, строка заголовка — на момент печати
+    $("statsPrint").addEventListener("click", () => window.print());
+    window.addEventListener("beforeprint", () => {
+      if (!shiftState.open) return;
+      renderShiftPrintHead();
+      const root = document.documentElement;
+      if (root.dataset.printTheme === undefined) {
+        root.dataset.printTheme = root.getAttribute("data-theme") || "";
+        root.setAttribute("data-theme", "light");
+      }
+    });
+    window.addEventListener("afterprint", () => {
+      const root = document.documentElement;
+      const theme = root.dataset.printTheme;
+      if (theme === undefined) return;
+      delete root.dataset.printTheme;
+      if (theme) root.setAttribute("data-theme", theme);
+      else root.removeAttribute("data-theme");
     });
     $("shiftGroup").addEventListener("change", (e) => {
       shiftState.group = e.target.value;
@@ -6902,6 +7032,8 @@
     });
     statsPut("statsMaintenance", LANG, `<option value="">${te("Окна работ: не считать")}</option><option value="include">${te("Окна работ: считать")}</option>`);
     if ($("statsMaintenance").value !== (statsState.filters.maintenance || "")) $("statsMaintenance").value = statsState.filters.maintenance || "";
+    renderShiftCombos();
+    renderShiftPrintHead();
     const badDates = statsState.period === "custom" && !statsParams();
     $("statsNote").textContent = statsState.error || (badDates ? t("Выберите даты «с» и «по»: «с» не позже «по»") : statsState.loading && !d ? t("Загрузка…") : "");
     $("statsSpan").textContent = d ? statsSpanText(d) : "";
