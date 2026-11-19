@@ -4537,6 +4537,10 @@
         // Порядок справа: состояние │ звук, колокольчик, справка │ пользователь │ часы
         const pill = $("stateBtn");
         expect(rect(pill).right <= rect($("bellBtn")).left && rect($("helpBtn")).right <= rect($("userBtn")).left, "порядок шапки: состояние, значки, пользователь");
+        // Настройки (⚙) — между справкой и пользователем, только с правом incident:schema:admin (§22.8)
+        const perms = (await stand.get("/operator/session")).permissions;
+        expect($("adminBtn").hidden === !perms.includes("incident:schema:admin"), `⚙ ${$("adminBtn").hidden ? "скрыта" : "видна"} при праве ${perms.includes("incident:schema:admin")}`);
+        if (!$("adminBtn").hidden) expect(rect($("helpBtn")).right <= rect($("adminBtn")).left && rect($("adminBtn")).right <= rect($("userBtn")).left, "⚙ не между справкой и пользователем");
         expect(!$("userMenu").contains(pill), "состояние — внутри кнопки пользователя");
         expect(["ready", "busy"].includes(pill.dataset.state) && $("stateName").textContent && $("stateTime").hidden, `таблетка: ${pill.dataset.state}, «${pill.textContent.trim()}»`);
         await click(pill);
@@ -4558,16 +4562,16 @@
       const ui = window.IM_SELFTEST_UI;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const W = window.IM_WORKFLOW;
-      const veil = (el) => getComputedStyle(el, "::after");
-      const alpha = (c) => {
-        const n = (c.match(/[\d.]+/g) || []).map(Number);
-        return n.length > 3 ? n[3] : 1;
+      // Притушено — без цвета и полупрозрачно (как в макете dim.png); сила — непрозрачность
+      const dim = (el) => {
+        const cs = getComputedStyle(el);
+        return /grayscale/.test(cs.filter) && Number(cs.opacity) < 1 ? Number(cs.opacity) : null;
       };
       const out = [];
       try {
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
-        expect(away() === "" && veil($("stage")).content === "none", "в «Готов» область притушена");
+        expect(away() === "" && !$("workspace").hasAttribute("data-away") && dim($("panelEvents")) === null && dim($("panelGroups")) === null, "в «Готов» область притушена");
         // Перерыв с самым коротким сроком причины: таблетка — сколько идёт и срок
         const reasons = (await stand.get("/operator/workflow/active")).session.breakReasons.filter((r) => r.maxMinutes != null);
         const reason = reasons.sort((a, b) => a.maxMinutes - b.maxMinutes)[0];
@@ -4580,16 +4584,18 @@
         expect($("stateBtn").dataset.state === "not_ready" && !$("stateTime").hidden, `таблетка перерыва: ${$("stateBtn").dataset.state}, «${$("stateBtn").textContent.trim()}»`);
         if (reason) expect($("stateTime").textContent === `0 / ${reason.maxMinutes} мин`, `время на таблетке: «${$("stateTime").textContent}»`);
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Вернуться с перерыва" && /^Вы на перерыве/.test($("awayTitle").textContent), `карточка перерыва: «${$("awayCard").textContent.trim()}»`);
-        expect(veil($("stage")).content !== "none" && veil($("panelGroups")).content !== "none", "очередь или группы не притушены");
-        expect(veil($("stage")).pointerEvents === "none", "пелена перехватывает щелчки");
-        expect(!$("workspace").contains($("stateBtn")) && veil(document.querySelector(".topbar")).content === "none", "шапка притушена");
-        const breakAlpha = alpha(veil($("stage")).backgroundColor);
+        expect(dim($("panelEvents")) !== null && dim($("panelGroups")) !== null, "очередь или группы не притушены");
+        expect(!$("workspace").contains($("stateBtn")) && dim(document.querySelector(".topbar")) === null && dim($("awayCard")) === null, "шапка или карточка возврата притушены");
+        // Карточка не закрывает поиск и фильтры очереди: она ниже них
+        const searchBottom = Math.max($("queueHead").getBoundingClientRect().bottom, $("eventsToolbar").getBoundingClientRect().bottom);
+        expect($("awayCard").getBoundingClientRect().top >= searchBottom, `карточка закрывает поиск: верх ${Math.round($("awayCard").getBoundingClientRect().top)}, низ поиска ${Math.round(searchBottom)}`);
+        const breakDim = dim($("panelEvents"));
         // Читать можно: карточка инцидента открывается на просмотр, притушена тоже
         const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
         expect(view, "в очереди на перерыве нет «Открыть»");
         await click(view);
         expect(mode() === "work", "на перерыве карточка инцидента не открылась");
-        expect(away() === "not_ready" && veil($("stage")).content !== "none", "карточка инцидента не притушена");
+        expect(away() === "not_ready" && dim($("panelScenario")) !== null, "карточка инцидента не притушена");
         await click($("backToQueue"));
         // Срок прошёл — таблетка красная
         if (reason) {
@@ -4603,10 +4609,8 @@
         await click($("awayClose"));
         expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "not_ready", "✕ не свернул карточку в полосу");
         expect($("awayStripAction").textContent === "Вернуться с перерыва", `кнопка полосы: «${$("awayStripAction").textContent}»`);
-        await click($("awayStripAction"));
-        await wait(200);
-        expect(away() === "" && $("awayStrip").hidden && $("awayCard").hidden, "полоса не вернула с перерыва");
-        // «Закончить работу» — «Вышел», та же сессия облака: тот же человек, запросы проходят
+        // «Закончить работу» прямо с перерыва, карточка свёрнута — «Вышел», та же сессия облака: тот же человек,
+        // запросы проходят; новое состояние — карточка снова развёрнута (свёрнутость — на одно состояние)
         const before = await stand.get("/operator/session");
         await click($("stateBtn"));
         await click($("signOutBtn"));
@@ -4619,8 +4623,9 @@
         expect(after.status === 200 && after.body.operator.guid === before.operator.guid && after.body.operator.name === before.operator.name, `сессия после «Закончить работу»: ${after.status}, ${after.body.operator && after.body.operator.name}`);
         expect($("userName").textContent === before.operator.name, "имя в шапке сменилось");
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Начать работу" && $("awayTitle").textContent === "Вы не принимаете инциденты", `карточка «Вышел»: «${$("awayCard").textContent.trim()}»`);
-        const offAlpha = alpha(veil($("stage")).backgroundColor);
-        expect(offAlpha < breakAlpha, `в «Вышел» пелена не слабее перерыва: ${offAlpha} ≥ ${breakAlpha}`);
+        expect($("awayStrip").hidden, "после «Закончить работу» осталась полоса вместо карточки");
+        const offDim = dim($("panelEvents"));
+        expect(offDim !== null && offDim > breakDim, `в «Вышел» притушено не слабее перерыва: ${offDim} ≤ ${breakDim}`);
         await click($("stateBtn"));
         expect($("readyBtn").hidden && $("breakBtn").hidden && $("signOutBtn").hidden && !$("signInBtn").hidden, "в «Вышел» меню не «Начать работу»");
         await click($("stateBtn"));
@@ -4629,14 +4634,17 @@
           await click($("tabShift"));
           await wait(200);
           const shift = $("shiftScreen");
-          expect(!shift.hidden && veil(shift).content === "none" && getComputedStyle(shift).filter === "none", "экран смены притушен");
+          expect(!shift.hidden && dim(shift) === null && getComputedStyle(shift).filter === "none", "экран смены притушен");
           expect(!$("awayCard").getClientRects().length && $("awayStrip").hidden, "карточка «Вы не принимаете инциденты» на экране смены");
           await click($("screenTabs").querySelector('[data-screen="queue"]'));
           out.push("экран смены не притушен");
         }
-        await click($("awayAction"));
+        // Свернуть и в «Вышел»: полоса с «Начать работу», она возвращает к приёму
+        await click($("awayClose"));
+        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "offline" && $("awayStripAction").textContent === "Начать работу", `полоса «Вышел»: «${$("awayStrip").textContent.trim()}»`);
+        await click($("awayStripAction"));
         await wait(200);
-        expect(away() === "" && $("awayCard").hidden, "«Начать работу» не вернула к приёму");
+        expect(away() === "" && $("awayCard").hidden && $("awayStrip").hidden, "«Начать работу» с полосы не вернула к приёму");
         const back = await stand.get("/operator/session");
         expect(back.operator.guid === before.operator.guid, "после «Начать работу» другой оператор");
         return out.join("; ");

@@ -703,33 +703,22 @@ select.search-input,
   color: var(--muted);
 }
 
-/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» очередь и карточка притушены — серая пелена поверх панелей,
-   щелчки и прокрутка проходят сквозь неё. На перерыве сильнее, в «Вышел» слабее. Шапка яркая; экран смены — отдельно */
+/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» панель групп, очередь и карточка инцидента серые и бледные,
+   как в макете (dim.png): без цвета и полупрозрачные — в светлой и тёмной теме одинаково заметно. Читать, листать,
+   искать и щёлкать можно: это вид, а не пелена поверх. На перерыве сильнее, в «Вышел» слабее. Шапка яркая; экран смены
+   и видео с картой не притушиваются */
 .workspace[data-away="not_ready"] .stage,
 .workspace[data-away="offline"] .stage { position: relative; }
-/* Панель групп — своё положение: на узком экране она выдвижная (position: fixed) */
-@media (min-width: 901px) {
-  .workspace[data-away] #panelGroups { position: relative; }
-}
-.workspace[data-away="not_ready"] #panelGroups::after,
-.workspace[data-away="not_ready"] .stage::after,
-.workspace[data-away="offline"] #panelGroups::after,
-.workspace[data-away="offline"] .stage::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 15;
-  pointer-events: none;
-  backdrop-filter: grayscale(1);
-  background: color-mix(in srgb, var(--panel) 55%, transparent);
-}
-.workspace[data-away="offline"] #panelGroups::after,
-.workspace[data-away="offline"] .stage::after { backdrop-filter: grayscale(0.85); background: color-mix(in srgb, var(--panel) 35%, transparent); }
-/* Карточка посередине очереди или карточки инцидента — над пеленой, яркая */
+.workspace[data-away="not_ready"] #panelGroups,
+.workspace[data-away="not_ready"] .stage > .panel { filter: grayscale(1); opacity: 0.5; }
+.workspace[data-away="offline"] #panelGroups,
+.workspace[data-away="offline"] .stage > .panel { filter: grayscale(0.8); opacity: 0.7; }
+/* Карточка посередине очереди или карточки инцидента — яркая, ниже строки поиска и фильтров: они остаются свободными
+   (top ставит app.js по низу шапки очереди) */
 .away-card {
   position: absolute;
   z-index: 16;
-  top: 96px;
+  top: var(--away-top, 96px);
   left: 50%;
   transform: translateX(-50%);
   width: min(420px, calc(100% - 32px));

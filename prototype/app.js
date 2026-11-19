@@ -4323,8 +4323,11 @@
     const agent = store.session ? store.session.agentState : "ready";
     const def = agentDefOf(agent);
     const away = Boolean(def.readOnly);
-    if (!away) state.awayFolded = false;
-    $("workspace").dataset.away = away ? agent : "";
+    // Свёрнутость — на одно состояние: другое состояние (перерыв → «Вышел») — другая кнопка, карточка снова видна
+    if (state.awayFor !== (away ? agent : "")) state.awayFolded = false;
+    state.awayFor = away ? agent : "";
+    if (away) $("workspace").dataset.away = agent;
+    else delete $("workspace").dataset.away;
     let title = "";
     let text = "";
     let action = "";
@@ -4352,6 +4355,12 @@
     }
     const card = $("awayCard");
     card.hidden = !away || state.awayFolded;
+    // Карточка — ниже строки поиска и фильтров очереди: искать и выбирать фильтры можно, не сворачивая её (§22.9)
+    if (!card.hidden) {
+      const stage = $("stage").getBoundingClientRect();
+      const below = state.mode === "queue" ? ["queueHead", "eventsToolbar", "eventsTypes"].map((id) => $(id).getBoundingClientRect()).filter((r) => r.height > 0).reduce((m, r) => Math.max(m, r.bottom), 0) : 0;
+      card.style.setProperty("--away-top", below > stage.top ? `${Math.round(below - stage.top + 16)}px` : "");
+    }
     card.dataset.away = away ? agent : "";
     $("awayTitle").textContent = title;
     $("awayText").textContent = text;
