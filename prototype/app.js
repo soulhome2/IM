@@ -1410,6 +1410,8 @@
       // Событие потока — как от сервера (stream.reset, повтор досланного: на встроенном сервере их нет)
       serverEvent: (msg) => onServerEvent(msg),
       breakRestore: () => breakRestore(),
+      // Опрос «Сейчас», как раз в shift.refreshSec (§23.2)
+      shiftPoll: () => loadShift(),
     };
   const queueItem = (guid) => store.page.items.find((e) => e.guid === guid) || store.block.items.find((e) => e.guid === guid) || null;
 
@@ -6296,16 +6298,28 @@
     if (out.length && shiftState.outOpen && shiftState.page === pages) {
       slice.push(`<tr class="shift-out"><td colspan="${SHIFT_COLS.length}"><button type="button" class="btn ghost small" data-shift-out>${te("Свернуть вышедших")}</button></td></tr>`);
     }
+    // Фокус был на кнопке таблицы (сортировка, вышедшие) или переключателя — после перестройки по новым данным
+    // вернуть его на ту же кнопку
     const pager = $("shiftPager");
-    pager.hidden = order.length <= SHIFT_PAGE;
-    pager.innerHTML = pager.hidden ? "" : pagerHtml({ page: shiftState.page, pages, start, shown: Math.min(SHIFT_PAGE, order.length - start), total: order.length, attr: "data-shift-page" });
-    // Фокус был на кнопке таблицы (сортировка, вышедшие) — после перестройки по новым данным вернуть его на ту же кнопку
     const had = $("shiftTable").contains(document.activeElement) ? document.activeElement : null;
     const sortKey = had && had.dataset.shiftSort;
     const outBtn = had && had.hasAttribute("data-shift-out");
+    const pagerBtn = pager.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
+    pager.hidden = order.length <= SHIFT_PAGE;
+    pager.innerHTML = pager.hidden ? "" : pagerHtml({ page: shiftState.page, pages, start, shown: Math.min(SHIFT_PAGE, order.length - start), total: order.length, attr: "data-shift-page" });
     $("shiftTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${slice.join("")}</tbody>`;
     const again = sortKey ? $("shiftTable").querySelector(`[data-shift-sort="${sortKey}"]`) : outBtn ? $("shiftTable").querySelector("[data-shift-out]") : null;
     if (again) again.focus();
+    else if (pagerBtn) focusShiftPager(pagerBtn);
+  }
+  // Фокус в переключателе «Сейчас» — на кнопку с той же подписью; её нет или она выключена — на номер открытой страницы
+  function focusShiftPager(label) {
+    const pager = $("shiftPager");
+    if (pager.hidden) return false;
+    const btns = [...pager.querySelectorAll("[data-shift-page]")];
+    const btn = btns.find((b) => b.getAttribute("aria-label") === label && !b.disabled) || pager.querySelector('[aria-current="page"]');
+    if (btn) btn.focus();
+    return Boolean(btn);
   }
   async function loadShift() {
     if (shiftState.loading) return; // предыдущий запрос ещё не вернулся
@@ -6392,8 +6406,15 @@
       if (e.target.closest("[data-shift-out]")) {
         shiftState.outOpen = !shiftState.outOpen;
         renderShift();
-        const again = $("shiftTable").querySelector("[data-shift-out]");
-        if (again) again.focus();
+        // Раскрыли — фокус на первого вышедшего, если он на этой странице; иначе — на переключатель. Свернули — на «Вышли»
+        const first = shiftState.outOpen && $("shiftTable").querySelector('tr[data-shift-person][data-shift-state="offline"]');
+        if (first) {
+          first.tabIndex = -1;
+          first.focus();
+        } else if (!(shiftState.outOpen && focusShiftPager(null))) {
+          const again = $("shiftTable").querySelector("[data-shift-out]");
+          if (again) again.focus();
+        }
       }
     });
     $("shiftPager").addEventListener("click", (e) => {
@@ -6401,9 +6422,8 @@
       if (!btn || btn.disabled) return;
       shiftState.page = Number(btn.dataset.shiftPage);
       renderShift();
-      // Таблица перестроена — фокус на номер открытой страницы
-      const again = $("shiftPager").querySelector('[aria-current="page"]');
-      if (again) again.focus();
+      // Переключатель перестроен — фокус на ту же кнопку (стрелку или номер); стрелка выключилась — на номер страницы
+      focusShiftPager(btn.getAttribute("aria-label"));
     });
     // Нижняя навигация телефона: «Смена» — к экрану смены, разделы очереди — к очереди
     $("mobileNav").addEventListener("click", (e) => {
