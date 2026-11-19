@@ -317,8 +317,6 @@ window.IM_DICT_UI = {
     "{n, plural, one {# запись} few {# записи} other {# записей}}": "{n, plural, one {# entry} other {# entries}}",
     "Обработано: {n}": "Done: {n}",
     "Охрана направлена, время прибытия 2 мин": "Guards dispatched, arrival in 2 min",
-    "Панель групп скрыта на время обработки инцидента":
-      "The groups panel is hidden while an incident is being handled",
     "Передано бригадиру, акт №14-СБ": "Handed to the foreman, report #14-SB",
     "Передать": "Transfer",
     "Переоткрыть": "Reopen",

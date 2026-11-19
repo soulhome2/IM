@@ -3847,6 +3847,23 @@
       }
     });
 
+    // Кнопка панели групп — в заголовке очереди слева от названия, в шапке её нет (решение 2026-11-19)
+    await step("Кнопка панели групп — в заголовке очереди слева от «Очередь», в шапке её нет; щелчок переключает панель", async () => {
+      const btn = $("toggleGroups");
+      const head = document.querySelector("#panelEvents > .panel-h");
+      const title = head && head.querySelector("h2");
+      expect(head && head.contains(btn) && title, "кнопки панели групп нет в заголовке очереди");
+      expect(!document.querySelector(".topbar").contains(btn), "кнопка панели групп осталась в шапке");
+      expect(btn.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING, "кнопка не слева от названия «Очередь» в порядке разметки");
+      expect(btn.getBoundingClientRect().right <= title.getBoundingClientRect().left + 1, "кнопка не слева от названия «Очередь» на экране");
+      expect(!btn.disabled, "кнопка панели групп недоступна в очереди");
+      const before = $("workspace").dataset.groups;
+      await click(btn);
+      expect($("workspace").dataset.groups !== before && btn.getAttribute("aria-pressed") === String($("workspace").dataset.groups === "on"), "щелчок не переключил панель групп");
+      await click(btn);
+      expect($("workspace").dataset.groups === before, "второй щелчок не вернул панель групп");
+    });
+
     // Экран «Смена и статистика» (§23): вкладка, блок «Сейчас», сортировка и фильтр
     await step("Смена и статистика (§23, план 90): вкладка рядом с очередью по праву supervisor:view; «Сейчас» — смена, сводка, все операторы, по умолчанию по «С какого времени» сверху новые, вышедшие свёрнуты, сортировка по щелчку, фильтр по дежурной группе; без права вкладки нет", async () => {
       const fx = window.IM_FIXTURE;
@@ -3861,7 +3878,7 @@
         await click($("tabShift"));
         await until(() => shown().length > 0, "таблица операторов не пришла");
         expect($("workspace").hidden && !$("shiftScreen").hidden, "экран смены не открылся вместо очереди");
-        const panelBtns = ["toggleGroups", "toggleMedia"].filter((id) => getComputedStyle($(id)).display !== "none");
+        const panelBtns = ["toggleMedia"].filter((id) => getComputedStyle($(id)).display !== "none");
         expect(!panelBtns.length, `на экране смены видны кнопки панелей очереди: ${panelBtns.join(", ")}`);
         expect(/^смена \d\d:\d\d–\d\d:\d\d$/.test($("shiftSpan").textContent), `над таблицей — не смена: «${$("shiftSpan").textContent}»`);
         expect(/обновлено .* само раз в 30 с/.test($("shiftUpdated").textContent), `время обновления: «${$("shiftUpdated").textContent}»`);

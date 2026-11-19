@@ -29,9 +29,6 @@
       </nav>
 
       <div class="topbar-cluster">
-        <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
-          <span class="material-symbols-outlined">left_panel_close</span>
-        </button>
         <button type="button" class="icon-btn" id="toggleMedia" aria-pressed="true">
           <span class="material-symbols-outlined">right_panel_close</span>
         </button>
@@ -183,7 +180,13 @@
       <div class="stage" id="stage">
         <section class="panel" id="panelEvents" data-panel="events">
           <header class="panel-h">
-            <h2>Очередь <em id="eventsCount">0</em></h2>
+            <div class="panel-h-title">
+              <!-- Кнопка панели групп — слева от названия очереди; на карточке заголовка очереди нет, кнопки тоже -->
+              <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
+                <span class="material-symbols-outlined">left_panel_close</span>
+              </button>
+              <h2>Очередь <em id="eventsCount">0</em></h2>
+            </div>
             <div class="events-select" role="group" aria-label="Выборка инцидентов">
               <!-- Выделить: все события текущего фильтра или «По фильтру…» — окно для текущего узла дерева (§11.1, §11.2) -->
               <div class="menu" id="selectMenu">

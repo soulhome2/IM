@@ -783,6 +783,7 @@ body[data-resize="row"] * { cursor: row-resize !important; }
   background: var(--panel);
 }
 #panelGroups .panel-h { background: var(--tree-bg); }
+.panel-h-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .panel-h h2 {
   margin: 0;
   font-size: 12px;
@@ -2669,8 +2670,7 @@ select.search-input { padding-right: 36px; }
 .workspace[hidden],
 .shift-screen[hidden],
 .mobile-nav button[hidden] { display: none; }
-/* Кнопки панели групп и видеомонитора — для очереди: на экране смены этих панелей нет */
-body[data-screen="shift"] #toggleGroups,
+/* Кнопка видеомонитора — для очереди: на экране смены этой панели нет (кнопка групп — в заголовке очереди) */
 body[data-screen="shift"] #toggleMedia { display: none; }
 .shift-screen {
   grid-row: 3;

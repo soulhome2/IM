@@ -4187,11 +4187,7 @@
   }
 
   function renderTopbar() {
-    const groupsLocked = state.mode === "work" && !narrowQuery.matches;
-    const groupsBtn = $("toggleGroups");
-    syncToggle(groupsBtn, state.groupsOn, "left_panel_close", "left_panel_open", t("Скрыть панель групп"), t("Показать панель групп"));
-    groupsBtn.disabled = groupsLocked;
-    if (groupsLocked) groupsBtn.title = t("Панель групп скрыта на время обработки инцидента");
+    syncToggle($("toggleGroups"), state.groupsOn, "left_panel_close", "left_panel_open", t("Скрыть панель групп"), t("Показать панель групп"));
     [...$("mobileNav").children].forEach((b) => {
       const on = b.dataset.view === state.mobileView;
       b.classList.toggle("active", on);
