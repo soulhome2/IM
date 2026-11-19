@@ -3332,6 +3332,9 @@
     renderSelectionBar();
     const { items, total } = store.page;
     $("eventsCount").textContent = String(total);
+    // То же число — на вкладке «Очередь» в шапке; пустая очередь — без числа
+    $("tabQueueCount").textContent = String(total);
+    $("tabQueueCount").hidden = !total;
     // «Снять» — только когда что-то отмечено (§7)
     $("clearSelectionBtn").disabled = state.checked.size === 0;
     $("clearSelectionBtn").hidden = state.checked.size === 0;
@@ -6351,6 +6354,8 @@
     const allowed = can("supervisor:view");
     if (!allowed) shiftState.open = false;
     $("screenTabs").hidden = !allowed;
+    // Есть вкладки — число очереди на вкладке, своё название очереди не нужно
+    $("queueTitle").hidden = allowed;
     $("screenTabs")
       .querySelectorAll("[data-screen]")
       .forEach((b) => {

@@ -24,7 +24,7 @@
         .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
         .slice(0, 3)
         .map((el) => el.id || el.className);
-      const filters = Math.round(height("#panelEvents .panel-h") + height("#eventsToolbar"));
+      const filters = Math.round(height(".queue-head-top") + height("#eventsToolbar"));
       const more = document.getElementById("eventsMoreBtn");
       const typesHidden = height("#eventsTypes") === 0;
       more.click();
@@ -3847,15 +3847,28 @@
       }
     });
 
-    // Кнопка панели групп — в заголовке очереди слева от названия, в шапке её нет (решение 2026-11-19)
-    await step("Кнопка панели групп — в заголовке очереди слева от «Очередь», в шапке её нет; щелчок переключает панель", async () => {
+    // Кнопка панели групп — первой в строке состояний очереди, «Выделить» и «Снять» — в той же строке справа;
+    // отдельной строки «Очередь N» нет, число — на вкладке «Очередь» в шапке (решение 2026-11-19)
+    await step("Строка состояний очереди: кнопка панели групп первой, «Выделить» и «Снять» справа; число очереди — на вкладке, своего заголовка нет; щелчок по кнопке переключает панель", async () => {
+      if (mode() !== "queue") await click($("backToQueue"));
       const btn = $("toggleGroups");
-      const head = document.querySelector("#panelEvents > .panel-h");
-      const title = head && head.querySelector("h2");
-      expect(head && head.contains(btn) && title, "кнопки панели групп нет в заголовке очереди");
+      const line = document.querySelector("#queueHead > .queue-head-top");
+      const pick = line && line.querySelector(".events-select");
+      expect(line && line.firstElementChild === btn, "кнопка панели групп не первая в строке состояний очереди");
       expect(!document.querySelector(".topbar").contains(btn), "кнопка панели групп осталась в шапке");
-      expect(btn.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING, "кнопка не слева от названия «Очередь» в порядке разметки");
-      expect(btn.getBoundingClientRect().right <= title.getBoundingClientRect().left + 1, "кнопка не слева от названия «Очередь» на экране");
+      expect(!document.querySelector("#panelEvents > .panel-h"), "над фильтрами осталась строка заголовка очереди");
+      expect(pick && pick.contains($("selectMenuBtn")) && pick.contains($("clearSelectionBtn")), "«Выделить» и «Снять» не в строке состояний");
+      const states = $("stateButtons").getBoundingClientRect();
+      // Узкое окно переносит строку: «Выделить» — справа от кнопок состояний в своей строке, не перед ними
+      const at = pick.getBoundingClientRect();
+      expect(at.left >= states.right - 1 || at.top >= states.bottom - 1, "«Выделить» не справа от кнопок состояний");
+      const tabs = !$("screenTabs").hidden;
+      const count = $("tabQueueCount");
+      if (tabs) {
+        expect($("queueTitle").hidden, "при вкладках остался заголовок «Очередь N»");
+        const total = $("eventsCount").textContent;
+        expect(total === "0" ? count.hidden : !count.hidden && count.textContent === total, `на вкладке «Очередь» ${count.hidden ? "нет числа" : count.textContent}, в очереди ${total}`);
+      } else expect(!$("queueTitle").hidden, "без вкладок нет названия «Очередь N»");
       expect(!btn.disabled, "кнопка панели групп недоступна в очереди");
       const before = $("workspace").dataset.groups;
       await click(btn);

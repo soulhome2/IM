@@ -192,6 +192,16 @@ textarea,
 .seg button.active { background: var(--one-accent); color: var(--one-accent-on); }
 .seg button.active:hover { background: var(--one-primary-hover); }
 .seg button.active:active { background: var(--one-primary-pressed); }
+/* Вкладки экранов в шапке — две тихие кнопки: выбранная подсвечена, а не залита, чтобы не спорить
+   с кнопками действий; у «Очереди» — число инцидентов по фильтру */
+.screen-tabs { gap: 4px; padding: 0; background: transparent; }
+.screen-tabs button { gap: 4px; padding: 5px 10px; color: var(--tree-quiet); font-weight: 500; }
+.screen-tabs button:hover:not(.active) { background: var(--one-control-hover); color: var(--one-fg); }
+.screen-tabs button.active,
+.screen-tabs button.active:hover,
+.screen-tabs button.active:active { background: var(--one-accent-soft); color: var(--one-accent-indicator); font-weight: 600; }
+.screen-tab-count { min-width: 18px; padding: 0 6px; border-radius: 50px; background: var(--one-danger-bg); color: var(--crit-text); font-style: normal; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+.screen-tab-count[hidden] { display: none; }
 
 /* Queue cards carry buttons: half-strength hover (D-019, provisional). */
 .event:hover { background: color-mix(in srgb, var(--one-control-hover) 50%, var(--one-surface)); }

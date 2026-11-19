@@ -1016,7 +1016,14 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 /* Сценарий — во всю строку: названия длиннее типов (§19.2) */
 .events-types #scenarioFilter { grid-column: 1 / -1; }
 /* Шапка очереди (§7, план 87в): кнопки состояний и приоритетов с числами */
-.queue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px 0; min-width: 0; }
+.queue-head { display: grid; gap: 8px; padding: 10px 12px 0; min-width: 0; }
+/* Первая строка: кнопка панели групп, состояния, «Выделить» и «Снять» у правого края */
+.queue-head-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.queue-head-top .events-select { order: 3; margin-left: auto; }
+.queue-head-top .state-buttons { flex: 1; }
+.queue-title { margin: 0; flex-shrink: 0; white-space: nowrap; font: var(--one-type-heading-sm); letter-spacing: var(--one-type-heading-sm-tracking); color: var(--one-fg); }
+.queue-title em { font-style: normal; font-weight: 600; margin-left: 6px; }
+.queue-title[hidden] { display: none; }
 .state-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
 .queue-head #eventFilter { display: none; min-width: 0; width: auto; }
 .state-btn, .pri-btn {
@@ -1088,7 +1095,11 @@ body[data-resize="row"] * { cursor: row-resize !important; }
 .queue-head[data-layout="phone"] .state-buttons { order: 2; }
 .queue-head[data-layout="compact"] #eventFilter,
 .queue-head[data-layout="phone"] #eventFilter { order: 1; }
-.queue-head[data-layout="phone"] .priority-buttons { flex: 1 0 100%; flex-wrap: wrap; }
+.queue-head[data-layout="phone"] .priority-buttons { flex-wrap: wrap; }
+/* Телефон: строка состояний переносится — кнопки не уходят за край */
+.queue-head[data-layout="phone"] .queue-head-top { flex-wrap: wrap; }
+.queue-head[data-layout="phone"] .queue-head-top .state-buttons { order: 4; flex: 1 1 auto; }
+.queue-head[data-layout="phone"] .queue-head-top .events-select { order: 5; }
 /* Кнопка «Фильтры» — только на телефоне (BUG-50) */
 .events-more { display: none; position: relative; }
 .events-more-n { min-width: 18px; padding: 0 5px; border-radius: 50px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-style: normal; font-weight: 600; line-height: 18px; text-align: center; }
@@ -2381,7 +2392,6 @@ select.search-input { padding-right: 36px; }
   .clock,
   #toggleMedia { display: none; }
   .events-types { grid-template-columns: minmax(0, 1fr); }
-  #panelEvents .panel-h { padding-top: 6px; padding-bottom: 6px; }
   /* Заголовок карточки — переносом, а не обрезкой: срок и пометки видны при любом их наборе (BUG-74) */
   .work-h { padding-top: 6px; padding-bottom: 6px; }
   .work-h h2 { flex-wrap: wrap; row-gap: 4px; overflow: visible; }

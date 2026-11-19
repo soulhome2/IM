@@ -275,7 +275,7 @@ SHOTS = [
     ("state-brand", DESKTOP, False, [], None, ".brand", 8, 0),
     ("state-badge-foreign", DESKTOP, False, FOREIGN, None, "#eventsList .badge.foreign", 10, 0),
     ("state-seg", DESKTOP, False, [], None, ".seg", 8, 0),
-    ("state-select-open", DESKTOP, False, ["#selectMenuBtn"], None, "#panelEvents .panel-h", 0, 100),
+    ("state-select-open", DESKTOP, False, ["#selectMenuBtn"], None, "#queueHead", 0, 100),
     ("state-dialog-transfer", DESKTOP, False, ["#eventsList button[data-do=transfer]", ".target-combo .mselect-input"], None, ".modal-card", 12, 0),
     ("screen-selection", DESKTOP, False, TICK_THREE, None, "#panelEvents", 0, 0),
     ("screen-linked", DESKTOP, False, MERGE_FIRES, None, None, 0, 0),

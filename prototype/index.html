@@ -24,7 +24,7 @@
            без права вкладок нет. Строит видимость app.js -->
       <nav class="seg screen-tabs" id="screenTabs" role="tablist" aria-label="Разделы" hidden>
         <!-- Окно уже 1240 px — вкладки значками, подпись — в title и aria-label; телефон — кнопка «Смена» внизу -->
-        <button type="button" role="tab" data-screen="queue" class="active" aria-selected="true" title="Очередь" aria-label="Очередь"><span class="material-symbols-outlined" aria-hidden="true">list_alt</span><span class="screen-tab-text">Очередь</span></button>
+        <button type="button" role="tab" data-screen="queue" class="active" aria-selected="true" title="Очередь" aria-label="Очередь"><span class="material-symbols-outlined" aria-hidden="true">list_alt</span><span class="screen-tab-text">Очередь</span><em class="screen-tab-count" id="tabQueueCount" hidden></em></button>
         <button type="button" role="tab" data-screen="shift" aria-selected="false" id="tabShift" title="Смена и статистика" aria-label="Смена и статистика"><span class="material-symbols-outlined" aria-hidden="true">groups</span><span class="screen-tab-text">Смена и статистика</span></button>
       </nav>
 
@@ -179,47 +179,48 @@
 
       <div class="stage" id="stage">
         <section class="panel" id="panelEvents" data-panel="events">
-          <header class="panel-h">
-            <div class="panel-h-title">
-              <!-- Кнопка панели групп — слева от названия очереди; на карточке заголовка очереди нет, кнопки тоже -->
-              <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
-                <span class="material-symbols-outlined">left_panel_close</span>
-              </button>
-              <h2>Очередь <em id="eventsCount">0</em></h2>
-            </div>
-            <div class="events-select" role="group" aria-label="Выборка инцидентов">
-              <!-- Выделить: все события текущего фильтра или «По фильтру…» — окно для текущего узла дерева (§11.1, §11.2) -->
-              <div class="menu" id="selectMenu">
-                <button type="button" class="btn ghost small" id="selectMenuBtn" aria-haspopup="menu" aria-expanded="false" title="Выделить инциденты">
-                  <span class="material-symbols-outlined">select_all</span>
-                  Выделить
-                  <span class="material-symbols-outlined chevron">expand_more</span>
-                </button>
-                <div class="menu-pop" role="menu" hidden>
-                  <button type="button" class="menu-item" id="selectAllBtn" role="menuitem" title="Все инциденты текущего фильтра очереди со всех страниц">
-                    <span class="material-symbols-outlined">select_all</span>
-                    <span>Все в фильтре</span>
-                  </button>
-                  <button type="button" class="menu-item" id="selectByFilterBtn" role="menuitem" title="Окно «Выделить по фильтру» для выбранного узла дерева">
-                    <span class="material-symbols-outlined">checklist</span>
-                    <span>По фильтру…</span>
-                  </button>
-                </div>
-              </div>
-              <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение" disabled>
-                <span class="material-symbols-outlined">deselect</span>
-                Снять
-              </button>
-            </div>
-          </header>
           <div class="panel-b events-body">
             <!-- Панель выборки (§11): что можно сделать со всеми отмеченными — передать, закрыть, отклонить, объединить -->
             <div class="sel-bar" id="selBar" role="toolbar" aria-label="Действия с отмеченными" hidden></div>
-            <!-- Шапка очереди (§7, план 87в): состояния и приоритеты кнопками с числами; на узком окне состояние — списком -->
+            <!-- Шапка очереди (§7, план 87в): состояния и приоритеты кнопками с числами; на узком окне состояние — списком.
+                 Отдельной строки «Очередь N» нет: число — на вкладке «Очередь» в шапке; без вкладок (нет права
+                 supervisor:view) название с числом стоит здесь же, после кнопки панели групп. «Выделить» и «Снять» —
+                 в той же строке у правого края -->
             <div class="queue-head" id="queueHead">
-              <div class="state-buttons" id="stateButtons" role="group" aria-label="Фильтр очереди"></div>
-              <!-- Фильтры по состоянию — из машины (queueFilters); виден на узком окне, на широком — кнопки -->
-              <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
+              <div class="queue-head-top">
+                <!-- Кнопка панели групп — первой в строке состояний; на карточке очереди не видно, кнопки тоже -->
+                <button type="button" class="icon-btn" id="toggleGroups" aria-pressed="true">
+                  <span class="material-symbols-outlined">left_panel_close</span>
+                </button>
+                <h2 class="queue-title" id="queueTitle">Очередь <em id="eventsCount">0</em></h2>
+                <div class="state-buttons" id="stateButtons" role="group" aria-label="Фильтр очереди"></div>
+                <!-- Фильтры по состоянию — из машины (queueFilters); виден на узком окне, на широком — кнопки -->
+                <select id="eventFilter" class="search-input" aria-label="Фильтр очереди"></select>
+                <div class="events-select" role="group" aria-label="Выборка инцидентов">
+                  <!-- Выделить: все события текущего фильтра или «По фильтру…» — окно для текущего узла дерева (§11.1, §11.2) -->
+                  <div class="menu" id="selectMenu">
+                    <button type="button" class="btn ghost small" id="selectMenuBtn" aria-haspopup="menu" aria-expanded="false" title="Выделить инциденты">
+                      <span class="material-symbols-outlined">select_all</span>
+                      Выделить
+                      <span class="material-symbols-outlined chevron">expand_more</span>
+                    </button>
+                    <div class="menu-pop" role="menu" hidden>
+                      <button type="button" class="menu-item" id="selectAllBtn" role="menuitem" title="Все инциденты текущего фильтра очереди со всех страниц">
+                        <span class="material-symbols-outlined">select_all</span>
+                        <span>Все в фильтре</span>
+                      </button>
+                      <button type="button" class="menu-item" id="selectByFilterBtn" role="menuitem" title="Окно «Выделить по фильтру» для выбранного узла дерева">
+                        <span class="material-symbols-outlined">checklist</span>
+                        <span>По фильтру…</span>
+                      </button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn ghost small" id="clearSelectionBtn" title="Снять выделение" disabled>
+                    <span class="material-symbols-outlined">deselect</span>
+                    Снять
+                  </button>
+                </div>
+              </div>
               <div class="priority-buttons" id="priorityButtons" role="group" aria-label="Приоритеты"></div>
             </div>
             <div class="events-toolbar" id="eventsToolbar">
