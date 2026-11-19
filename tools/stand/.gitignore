@@ -1,0 +1,10 @@
+# Если STAND_DIR указывает сюда — данные стенда в git не идут.
+*.pass
+im-server.env
+im-machine-patch.json
+*.log
+*.pid
+bin/
+im-dist/
+nginx/
+backup/
