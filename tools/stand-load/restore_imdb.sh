@@ -11,6 +11,8 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   [ $i = 10 ] && { echo "imdb не удалось удалить" >&2; exit 1; }; sleep 0.3
 done
 docker exec $C psql -U postgres postgres -qc "create database imdb owner im"
+# pg_trgm (миграция 081, план 93): создаёт только суперпользователь, im — нет; до восстановления, чтобы индексы из дампа легли.
+docker exec $C psql -U postgres imdb -qc "create extension if not exists pg_trgm"
 docker exec -i $C psql -U im -q imdb < "$DUMP" >/dev/null
 docker exec $C psql -U postgres imdb -qc "create extension if not exists pg_stat_statements" -c "grant execute on function pg_stat_statements_reset() to im" -c "analyze"
 docker exec $C psql -U im imdb -Atc "select 'инцидентов: '||count(*) from incidents"
