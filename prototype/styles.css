@@ -298,7 +298,6 @@ a { color: var(--text); text-decoration: none; }
   background: var(--panel);
 }
 .topbar { grid-row: 1; }
-.away-strip { grid-row: 2; }
 .workspace { grid-row: 3; }
 .statusbar { grid-row: 4; }
 
@@ -703,17 +702,12 @@ select.search-input,
   color: var(--muted);
 }
 
-/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» вся рабочая область — группы, очередь, карточка инцидента,
-   видео и карта — серая и бледная (dim.png): без цвета и полупрозрачная. Пока открыто окно возврата, поверх области —
-   тёмная пелена, как у модального окна: она забирает щелчки, область недоступна. Окно свёрнуто в полосу — пелены нет,
-   читать, листать, искать и открывать на просмотр можно. На перерыве сильнее, в «Вышел» слабее. Шапка яркая; экран
-   смены не притушивается */
+/* Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» поверх всей рабочей области — группы, очередь, карточка
+   инцидента, видео и карта — тёмная пелена, как у модального окна: она забирает щелчки, область недоступна, пока
+   оператор не вернётся. Окно не сворачивается. На перерыве пелена сильнее, в «Вышел» слабее. Шапка яркая; экран смены
+   не притушивается */
 .workspace { position: relative; }
-.workspace[data-away="not_ready"] > .panel,
-.workspace[data-away="not_ready"] .stage > .panel { filter: grayscale(1); opacity: 0.4; }
-.workspace[data-away="offline"] > .panel,
-.workspace[data-away="offline"] .stage > .panel { filter: grayscale(1); opacity: 0.5; }
-/* Окно по центру всей рабочей области на тёмной пелене; без окна (свёрнуто или не нужно) пелены нет */
+/* Окно по центру всей рабочей области на тёмной пелене; без окна пелены нет */
 .away-layer {
   position: absolute;
   inset: 0;
@@ -738,23 +732,9 @@ select.search-input,
   text-align: center;
 }
 .away-card[hidden] { display: none; }
-.away-card h2 { margin: 0 24px 6px; font-size: 18px; font-weight: 600; color: var(--text); }
+.away-card h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; color: var(--text); }
 .away-card p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
 .away-card p[hidden] { display: none; }
-.away-close { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; }
-/* На перерыве окно не сворачивается — ✕ нет (§22.9) */
-.away-close[hidden] { display: none; }
-/* Свёрнутая карточка — узкая полоса под шапкой с той же кнопкой */
-.away-strip {
-  background: var(--break-bg);
-  color: var(--break-text);
-  padding: 6px 24px;
-  font-size: 13px;
-  font-weight: 500;
-}
-.away-strip[data-away="offline"] { background: var(--panel-2); color: var(--text); }
-.away-strip:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.away-strip .btn { flex-shrink: 0; }
 
 /* Ширины боковых панелей задаются переменными: значения *-user пишет
    перетаскивание сплиттеров, остальное — раскладка по умолчанию. */
@@ -2506,7 +2486,6 @@ select.search-input { padding-right: 36px; }
   .topbar { position: relative; }
   .topbar .menu { position: static; }
   .topbar .menu-pop { left: 8px; right: 8px; min-width: 0; }
-  .away-strip { padding: 6px 12px; }
 
   .workspace,
   .workspace[data-groups="off"],

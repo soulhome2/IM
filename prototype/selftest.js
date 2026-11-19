@@ -4634,7 +4634,7 @@
       return text;
     });
 
-    // Шапка и притушенная область (план 95) — перед шагом, который начинает со сброса стенда: свои сбросы этих шагов
+    // Шапка и окно возврата вне приёма (план 95) — перед шагом, который начинает со сброса стенда: свои сбросы этих шагов
     // не меняют данных, на которых стоят шаги выше
     await step("Шапка (§22.8, план 95): имя и группы — из сессии, состояние — отдельный переключатель, в меню пользователя нет смены пользователя и выхода", async () => {
       const stand = window.IM_SELFTEST_API;
@@ -4701,21 +4701,21 @@
       }
     });
 
-    await step("Вне приёма (§22.9): перерыв и «Вышел» — область притушена, карточка с кнопкой, свёртывание, экран смены не притушен, карточка инцидента на просмотр; сессия та же", async () => {
+    await step("Вне приёма (§22.9): перерыв и «Вышел» — модальное окно с кнопкой на тёмной пелене, не сворачивается (✕ нет, Esc и щелчок ничего не делают), область недоступна до возврата; экран смены не притушен и доступен; сессия та же", async () => {
       const stand = window.IM_SELFTEST_API;
       const ui = window.IM_SELFTEST_UI;
       expect(stand, "нет служебных операций стенда в режиме самопроверки");
       const W = window.IM_WORKFLOW;
-      // Притушено — без цвета и полупрозрачно (как в макете dim.png); сила — непрозрачность
+      // Своей серости у области нет (решение пользователя 2026-11-20): её закрывает пелена окна
       const dim = (el) => {
         const cs = getComputedStyle(el);
-        return /grayscale/.test(cs.filter) && Number(cs.opacity) < 1 ? Number(cs.opacity) : null;
+        return /grayscale/.test(cs.filter) || Number(cs.opacity) < 1 ? Number(cs.opacity) : null;
       };
       const out = [];
       try {
         if (mode() !== "queue") await click($("backToQueue"));
         await setFilter("open");
-        expect(away() === "" && !$("workspace").hasAttribute("data-away") && dim($("panelEvents")) === null && dim($("panelGroups")) === null, "в «Готов» область притушена");
+        expect(away() === "" && !$("workspace").hasAttribute("data-away") && $("awayCard").hidden, "в «Готов» есть окно возврата");
         // Перерыв с самым коротким сроком причины: таблетка — сколько идёт и срок
         const reasons = (await stand.get("/operator/workflow/active")).session.breakReasons.filter((r) => r.maxMinutes != null);
         const reason = reasons.sort((a, b) => a.maxMinutes - b.maxMinutes)[0];
@@ -4724,13 +4724,12 @@
         if (reason && field("reasonId")) await setField("reasonId", reason.id);
         await confirmDialog();
         await wait(200);
-        expect(away() === "not_ready", "на перерыве область не притушена");
+        expect(away() === "not_ready", "перерыв не начался");
         expect($("stateBtn").dataset.state === "not_ready" && !$("stateTime").hidden, `таблетка перерыва: ${$("stateBtn").dataset.state}, «${$("stateBtn").textContent.trim()}»`);
         if (reason) expect($("stateTime").textContent === `0 / ${reason.maxMinutes} мин`, `время на таблетке: «${$("stateTime").textContent}»`);
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Вернуться с перерыва" && /^Вы на перерыве/.test($("awayTitle").textContent), `карточка перерыва: «${$("awayCard").textContent.trim()}»`);
-        expect(dim($("panelEvents")) !== null && dim($("panelGroups")) !== null, "очередь или группы не притушены");
+        expect(dim($("panelEvents")) === null && dim($("panelGroups")) === null && dim($("panelMedia")) === null, "у области осталась своя серость под пеленой");
         expect(!$("workspace").contains($("stateBtn")) && dim(document.querySelector(".topbar")) === null && dim($("awayCard")) === null, "шапка или карточка возврата притушены");
-        expect(dim($("panelMedia")) !== null, "видео и карта не притушены");
         // Окно по центру всей рабочей области, как модальное: под ним тёмная пелена, она забирает щелчки
         const ws = $("workspace").getBoundingClientRect();
         const cr = $("awayCard").getBoundingClientRect();
@@ -4748,15 +4747,16 @@
         const inertOn = () => Boolean($("panelEvents").closest("[inert]") && $("panelGroups").closest("[inert]"));
         const inertAny = () => Boolean($("workspace").querySelector("[inert]"));
         expect(inertOn() && !$("awayCard").closest("[inert]") && !$("stateBtn").closest("[inert]"), "под открытым окном область доступна с клавиатуры (нет inert)");
-        // На перерыве окно не сворачивается (решение пользователя 2026-11-20): ✕ нет, Esc и щелчок по пелене ничего не
-        // делают — пелена и недоступность области держатся до «Вернуться с перерыва»; полосы нет
-        await click($("awayLayer"));
-        expect(!$("awayCard").hidden, "щелчок по пелене свернул окно");
-        expect(!$("awayClose").getClientRects().length, "на перерыве у окна есть ✕");
-        await pressKey("Escape");
-        expect(!$("awayCard").hidden && $("awayStrip").hidden && away() === "not_ready", "на перерыве Esc свернул окно");
-        expect(inertOn() && corner() === $("awayLayer"), "после Esc на перерыве область стала доступна");
-        const breakDim = dim($("panelEvents"));
+        // Окно не сворачивается (решение пользователя 2026-11-20): ✕ и полосы нет, Esc и щелчок по пелене ничего не
+        // делают — пелена и недоступность области держатся до возврата
+        const stays = async (what) => {
+          await click($("awayLayer"));
+          expect(!$("awayCard").hidden, `${what}: щелчок по пелене свернул окно`);
+          expect($("awayCard").querySelectorAll("button").length === 1 && !document.getElementById("awayClose") && !document.getElementById("awayStrip"), `${what}: у окна есть ✕ или полоса`);
+          await pressKey("Escape");
+          expect(!$("awayCard").hidden && inertOn() && corner() === $("awayLayer"), `${what}: после Esc окно свернулось или область стала доступна`);
+        };
+        await stays("перерыв");
         // Срок прошёл — таблетка красная
         if (reason) {
           await stand.raw("POST", "/test/clock", { advanceSec: reason.maxMinutes * 60 + 5, runScheduler: false });
@@ -4765,9 +4765,9 @@
           expect($("stateBtn").dataset.state === "late", `перерыв дольше срока — таблетка ${$("stateBtn").dataset.state}`);
           out.push(`срок ${reason.maxMinutes} мин: ${$("stateBtn").textContent.trim()}`);
         }
-        expect(!$("awayCard").hidden && $("awayStrip").hidden && inertOn(), "на перерыве окно свернулось или область стала доступна");
+        expect(!$("awayCard").hidden && inertOn(), "на перерыве окно ушло или область стала доступна");
         // «Закончить работу» прямо с перерыва (шапка работает) — «Вышел», та же сессия облака: тот же человек,
-        // запросы проходят; новое состояние — карточка снова развёрнута (свёрнутость — на одно состояние)
+        // запросы проходят; окно «Вышел» с «Начать работу»
         const before = await stand.get("/operator/session");
         await click($("stateBtn"));
         await click($("signOutBtn"));
@@ -4780,10 +4780,10 @@
         expect(after.status === 200 && after.body.operator.guid === before.operator.guid && after.body.operator.name === before.operator.name, `сессия после «Закончить работу»: ${after.status}, ${after.body.operator && after.body.operator.name}`);
         expect($("userName").textContent === before.operator.name, "имя в шапке сменилось");
         expect(!$("awayCard").hidden && $("awayAction").textContent === "Начать работу" && $("awayTitle").textContent === "Вы не принимаете инциденты", `карточка «Вышел»: «${$("awayCard").textContent.trim()}»`);
-        expect($("awayStrip").hidden, "после «Закончить работу» осталась полоса вместо карточки");
         expect(corner() === $("awayLayer") && shade() > 0 && shade() < breakShade, `в «Вышел» пелена не светлее перерыва или не забирает щелчки: ${shade()} при ${breakShade}`);
-        const offDim = dim($("panelEvents"));
-        expect(offDim !== null && offDim > breakDim, `в «Вышел» притушено не слабее перерыва: ${offDim} ≤ ${breakDim}`);
+        expect(inertOn() && dim($("panelEvents")) === null, "в «Вышел» область доступна или своя серость");
+        // И в «Вышел» окно не сворачивается, для всех, включая старших: обзор — на экране «Смена и статистика»
+        await stays("«Вышел»");
         await click($("stateBtn"));
         expect($("readyBtn").hidden && $("breakBtn").hidden && $("signOutBtn").hidden && !$("signInBtn").hidden, "в «Вышел» меню не «Начать работу»");
         await click($("stateBtn"));
@@ -4793,30 +4793,17 @@
           await wait(200);
           const shift = $("shiftScreen");
           expect(!shift.hidden && dim(shift) === null && getComputedStyle(shift).filter === "none", "экран смены притушен");
-          expect(!$("awayCard").getClientRects().length && $("awayStrip").hidden, "карточка «Вы не принимаете инциденты» на экране смены");
-          expect(!inertAny(), "на экране смены осталась недоступность области (inert)");
-          // Esc на экране смены ничего не делает: невидимое окно возврата не сворачивается
+          expect(!$("awayCard").getClientRects().length, "карточка «Вы не принимаете инциденты» на экране смены");
+          expect(!inertAny() && !shift.closest("[inert]"), "на экране смены осталась недоступность (inert)");
+          // Esc на экране смены ничего не делает; назад к очереди — окно на месте
           await pressKey("Escape");
           await click($("screenTabs").querySelector('[data-screen="queue"]'));
-          expect(!$("awayCard").hidden && $("awayStrip").hidden && inertOn(), "Esc на экране смены свернул окно «Вышел» или снял недоступность области");
+          expect(!$("awayCard").hidden && inertOn(), "после экрана смены окно «Вышел» ушло или область стала доступна");
           out.push("экран смены не притушен");
         }
-        // В «Вышел» окно сворачивается: ✕ есть; Esc — в полосу с «Начать работу», область доступна для просмотра
-        expect($("awayClose").getClientRects().length, "в «Вышел» у окна нет ✕");
-        await pressKey("Escape");
-        expect($("awayCard").hidden && !$("awayStrip").hidden && !inertAny(), "в «Вышел» Esc не свернул окно");
-        expect(corner() && !$("awayLayer").contains(corner()) && $("workspace").contains(corner()), "в «Вышел» свёрнуто, а щелчок не доходит до интерфейса");
-        // Свёрнутое «Вышел» — читать можно: карточка инцидента открывается на просмотр
-        const view = button($("eventsList"), "view") || button($("eventsList"), "open_card");
-        if (view) {
-          await click(view);
-          expect(mode() === "work", "в «Вышел» карточка инцидента не открылась");
-          await click($("backToQueue"));
-        }
-        expect($("awayCard").hidden && !$("awayStrip").hidden && away() === "offline" && $("awayStripAction").textContent === "Начать работу", `полоса «Вышел»: «${$("awayStrip").textContent.trim()}»`);
-        await click($("awayStripAction"));
+        await click($("awayAction"));
         await wait(200);
-        expect(away() === "" && $("awayCard").hidden && $("awayStrip").hidden, "«Начать работу» с полосы не вернула к приёму");
+        expect(away() === "" && $("awayCard").hidden, "«Начать работу» не вернула к приёму");
         expect(!inertAny(), "после «Начать работу» область недоступна с клавиатуры (inert)");
         const back = await stand.get("/operator/session");
         expect(back.operator.guid === before.operator.guid, "после «Начать работу» другой оператор");

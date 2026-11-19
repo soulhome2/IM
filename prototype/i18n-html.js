@@ -15,7 +15,6 @@ window.IM_DICT_HTML = {
     "Группы дежурства": "Duty groups",
     "Язык": "Language",
     "Тема": "Theme",
-    "Свернуть": "Collapse",
     "Готов": "Ready",
     ", средний — до": ", medium — up to",
     "09:00–18:00, будни": "09:00–18:00, weekdays",

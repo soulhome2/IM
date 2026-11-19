@@ -4323,17 +4323,13 @@
     $("userDutyRow").hidden = !duty.length;
   }
 
-  // Вне приёма инцидентов (§22.9): в состояниях только для просмотра (readOnly машины) рабочая область притушена,
-  // посередине — карточка с кнопкой возврата, свёрнутая — полоса под шапкой. Экран «Смена и статистика» не притушивается
+  // Вне приёма инцидентов (§22.9): в состояниях readOnly машины (перерыв, «Вышел») поверх рабочей области — тёмная пелена
+  // и окно с кнопкой возврата, как модальное. Окно не сворачивается (решение пользователя 2026-11-20): ✕ нет, Esc ничего
+  // не делает, пелена — до возврата; очередь вне приёма не видна. Экран «Смена и статистика» не притушивается
   function renderAway() {
     const agent = store.session ? store.session.agentState : "ready";
     const def = agentDefOf(agent);
     const away = Boolean(def.readOnly);
-    // Свёрнутость — на одно состояние: другое состояние (перерыв → «Вышел») — другая кнопка, карточка снова видна
-    if (state.awayFor !== (away ? agent : "")) state.awayFolded = false;
-    // На перерыве окно не сворачивается (решение пользователя 2026-11-20): ✕ нет, пелена до «Вернуться с перерыва»
-    if (away && onBreak()) state.awayFolded = false;
-    state.awayFor = away ? agent : "";
     if (away) $("workspace").dataset.away = agent;
     else delete $("workspace").dataset.away;
     let title = "";
@@ -4358,33 +4354,21 @@
       action = t("Вернуться с перерыва");
     } else if (away) {
       title = t("Вы не принимаете инциденты");
-      text = t("Очередь доступна только на просмотр. Новые инциденты вам не назначаются.");
+      text = t("Новые инциденты вам не назначаются.");
       action = t("Начать работу");
     }
     const card = $("awayCard");
-    card.hidden = !away || state.awayFolded;
+    card.hidden = !away;
     card.dataset.away = away ? agent : "";
     $("awayTitle").textContent = title;
     $("awayText").textContent = text;
     $("awayText").hidden = !text;
     $("awayAction").textContent = action;
-    $("awayClose").hidden = !away || onBreak();
-    $("awayStrip").hidden = !away || !state.awayFolded || shiftState.open;
     // Пока окно открыто, область под пеленой недоступна и с клавиатуры, как под модальным окном: Tab в неё не уходит
-    const modal = away && !state.awayFolded && !shiftState.open;
+    const modal = away && !shiftState.open;
     for (const el of $("workspace").children) if (el !== $("awayLayer")) el.inert = modal;
-    $("awayStrip").dataset.away = away ? agent : "";
-    $("awayStripText").textContent = title;
-    $("awayStripAction").textContent = action;
   }
-  // ✕ и Esc в «Вышел»: окно — в полосу под шапкой, пелена уходит, область серая и доступна для просмотра. На перерыве
-  // окно не сворачивается — ✕ нет, Esc ничего не делает. Щелчок по пелене окно не сворачивает
-  function foldAway() {
-    if (onBreak()) return;
-    state.awayFolded = true;
-    renderAway();
-  }
-  // Кнопка карточки и полосы: с перерыва — возврат, из «Вышел» — «Начать работу»
+  // Кнопка окна: с перерыва — возврат, из «Вышел» — «Начать работу»
   function awayReturn() {
     if (onBreak()) return toggleBreak();
     if (signedOut()) return setPresence("ready", "Вы начали работу");
@@ -5100,8 +5084,6 @@
     });
     // Карточка вне приёма (§22.9): кнопка возврата; ✕ — свернуть в полосу под шапкой, притушенность остаётся
     $("awayAction").addEventListener("click", () => awayReturn());
-    $("awayStripAction").addEventListener("click", () => awayReturn());
-    $("awayClose").addEventListener("click", () => foldAway());
     $("signOutBtn").addEventListener("click", () => {
       closeMenus();
       api
@@ -5743,8 +5725,8 @@
     if (openModal) return (openModal.hidden = true);
     // Экран «Смена и статистика»: очередь и окно возврата скрыты — Esc их не трогает
     if (shiftState.open) return;
-    // Окно возврата вне приёма (§22.9) — как модальное: в «Вышел» Esc сворачивает его в полосу, на перерыве — ничего
-    if (!$("awayCard").hidden) return foldAway();
+    // Окно возврата вне приёма (§22.9) — модальное и не сворачивается: Esc ничего не делает, область под пеленой не трогает
+    if (!$("awayCard").hidden) return;
     if (state.full) {
       const btn = $(state.full === "video" ? "videoFull" : "mapFull");
       toggleFull(state.full);

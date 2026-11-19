@@ -162,22 +162,13 @@
       </div>
     </header>
 
-    <!-- Вне приёма инцидентов (§22.9): карточка свёрнута — узкая полоса под шапкой с той же кнопкой; притушенность
-         рабочей области остаётся. Строит app.js -->
-    <div class="away-strip" id="awayStrip" role="status" hidden>
-      <span id="awayStripText"></span>
-      <button type="button" class="btn primary small" id="awayStripAction"></button>
-    </div>
     <main class="workspace" id="workspace" data-mode="queue" data-groups="on" data-mediapanel="on" data-view="queue">
       <div class="groups-scrim" id="groupsScrim"></div>
-      <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) вся рабочая область притушена, поверх неё —
-           тёмная пелена и по центру окно с кнопкой возврата, как модальное: пелена забирает щелчки. ✕ или Esc сворачивают
-           окно в полосу под шапкой — пелены нет, область доступна для просмотра. Строит app.js -->
+      <!-- Вне приёма инцидентов (§22.9): в «Перерыве» и «Вышел» (readOnly машины) поверх рабочей области — тёмная пелена и
+           по центру окно с кнопкой возврата, как модальное: пелена забирает щелчки, область недоступна. Окно не
+           сворачивается — пелена до возврата. Строит app.js -->
       <div class="away-layer" id="awayLayer">
         <section class="away-card" id="awayCard" role="status" aria-labelledby="awayTitle" hidden>
-          <button type="button" class="icon-btn away-close" id="awayClose" title="Свернуть" aria-label="Свернуть">
-            <span class="material-symbols-outlined" aria-hidden="true">close</span>
-          </button>
           <h2 id="awayTitle"></h2>
           <p id="awayText"></p>
           <button type="button" class="btn primary" id="awayAction"></button>

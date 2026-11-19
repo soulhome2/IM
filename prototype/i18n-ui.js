@@ -213,7 +213,7 @@ window.IM_DICT_UI = {
     "Переданное вам за это время ждёт в «{name}».": "Anything handed to you meanwhile waits in “{name}”.",
     "Переданное вам за это время ждёт в «{name}»: {n}.": "Anything handed to you meanwhile waits in “{name}”: {n}.",
     "Вы не принимаете инциденты": "You are not taking incidents",
-    "Очередь доступна только на просмотр. Новые инциденты вам не назначаются.": "The queue is view-only. No new incidents are assigned to you.",
+    "Новые инциденты вам не назначаются.": "No new incidents are assigned to you.",
     "{a}–{b} из {n}": "{a}–{b} of {n}",
     "{id} в работе": "{id} in progress",
     "{id} возвращён в очередь": "{id} returned to the queue",
