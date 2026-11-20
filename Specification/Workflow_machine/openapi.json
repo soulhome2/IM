@@ -2956,6 +2956,7 @@
                     "growthWeekBytes": 209715200,
                     "diskFreeBytes": 53687091200,
                     "daysLeft": 1792,
+                    "searchIndex": "ready",
                     "parts": [
                       {
                         "name": "events",
@@ -13739,6 +13740,7 @@
             "growthWeekBytes": 209715200,
             "diskFreeBytes": 53687091200,
             "daysLeft": 1792,
+            "searchIndex": "ready",
             "parts": [
               {
                 "name": "events",
