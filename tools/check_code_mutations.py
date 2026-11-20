@@ -84,7 +84,7 @@ MUTATIONS = [
     ("expected-priority-unchecked", "server.js", "if (expects.includes(\"priority\") && s.priority != null && Number(s.priority) !== ev.priority) return \"priority\";", "if (false) return \"priority\";", "api"),
     ("close-news-unchecked", "server.js", "if (expects.includes(\"news\") && s.journalSeq != null && newsSince(ev, s.journalSeq)) return \"news\";", "if (false) return \"news\";", "api"),
     ("news-counts-timers", "server.js", "NEWS.kinds.includes(entryKind(e))", "true", "api"),
-    ("step-seen-unchecked", "server.js", "if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {", "if (false) {", "api"),
+    ("step-seen-unchecked", "server.js", "if ((b.seenAnswer == null ? null : b.seenAnswer) !== ((was && was.seq) || null)) {", "if (false) {", "api"),
     ("version-not-bumped", "server.js", "const touch = (list) => list.forEach((e) => (e.version += 1));", "const touch = () => {};", "api"),
     ("device-type-filter-ignored", "server.js", "if (q.deviceTypeId && q.deviceTypeId !== \"all\") {", "if (false) {", "api"),
     ("focus-page-missing", "server.js", "      const focusPage = idx === -1 ? null : Math.floor(idx / size) + 1;\n      const found", "      const focusPage = null;\n      const found", "api"),
@@ -128,6 +128,8 @@ MUTATIONS = [
     ("view-not-advanced", "server.js", "ev.viewStepId = path[Math.min(path.lastIndexOf(body.stepId) + 1, path.length - 1)];", "ev.viewStepId = body.stepId;", "api"),
     ("step-owner-unchecked", "server.js", "if (String(b.expectedOwner) !== (ev.owner || \"\")) return changedProblem(ev, \"addressee\");", "", "api"),
     ("answer-expected-required-skipped", "server.js", "if (b.expectedOwner == null || !(\"seenAnswer\" in b)) return expectedRequired();", "", "api"),
+    # RULE-146: номер ответа не растёт — переответы на одних часах неразличимы
+    ("answer-seq-frozen", "scenario.js", "    const seq = nextSeq(r);\n", "    const seq = 1;\n", "api"),
     ("etag-missing", "server.js", "{ status: 200, body: card(ev), headers: { ETag: etag(ev), \"Cache-Control\": \"no-store\" } }", "{ status: 200, body: card(ev), headers: { \"Cache-Control\": \"no-store\" } }", "api"),
     ("targets-include-self", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = field ? field.options : targets();", "api"),
     ("targets-ignore-form", "server.js", "const list = field ? field.options : targets().filter((o) => !engine.isSelf(o.id));", "const list = targets().filter((o) => !engine.isSelf(o.id));", "api"),

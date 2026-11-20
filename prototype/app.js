@@ -1873,11 +1873,11 @@
         : { expectedState: ev.state, expectedAddressee: (ev.addressee && ev.addressee.id) || "", journalSeen: ev.journalSeq || 0 },
       ev.priority != null ? { expectedPriority: ev.priority } : {}
     );
-  // Ответ на шаг: владелец и ответ шага, каким его видел оператор (null — без ответа): ответ из другой вкладки
-  // или второе нажатие сервер не перепишет молча — 409 STEP_CHANGED
+  // Ответ на шаг: владелец и номер ответа шага (seq, RULE-146), каким его видел оператор (null — без ответа): ответ
+  // из другой вкладки или второе нажатие сервер не перепишет молча — 409 STEP_CHANGED
   const answerSeenOf = (ev, stepId) => {
     const was = ev.scenario && ev.scenario.result && (ev.scenario.result.state || {})[stepId];
-    return { expectedOwner: (ev.owner && ev.owner.id) || "", seenAnswer: (was && was.answeredAt) || null };
+    return { expectedOwner: (ev.owner && ev.owner.id) || "", seenAnswer: (was && was.seq) || null };
   };
 
   // Ответ на шаг — серверу (POST …/scenario/answer); пустой необязательный шаг — пропуск. Что дальше — решает сервер

@@ -2118,12 +2118,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:57:56Z",
-            "by": "petrova"
+            "by": "petrova",
+            "seq": 1
           },
           "verdict": {
             "value": "unclear",
             "answeredAt": "2026-10-03T11:58:58Z",
-            "by": "petrova"
+            "by": "petrova",
+            "seq": 2
           }
         },
         "history": [
@@ -2228,12 +2230,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:56:33Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 1
           },
           "verdict": {
             "value": "violation",
             "answeredAt": "2026-10-03T11:58:16Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 2
           }
         },
         "history": [
@@ -2355,17 +2359,20 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:54:05Z",
-            "by": "me"
+            "by": "me",
+            "seq": 1
           },
           "owner": {
             "value": "not_found",
             "answeredAt": "2026-10-03T11:55:20Z",
-            "by": "me"
+            "by": "me",
+            "seq": 2
           },
           "evacuate": {
             "value": "announce",
             "answeredAt": "2026-10-03T11:56:02Z",
-            "by": "me"
+            "by": "me",
+            "seq": 3
           }
         },
         "history": [
@@ -2514,7 +2521,8 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:51:44Z",
-            "by": "me"
+            "by": "me",
+            "seq": 1
           }
         },
         "history": [
@@ -2619,7 +2627,8 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:53:50Z",
-            "by": "gusev"
+            "by": "gusev",
+            "seq": 1
           }
         },
         "history": [
@@ -2714,12 +2723,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:52:00Z",
-            "by": "noc"
+            "by": "noc",
+            "seq": 1
           },
           "verdict": {
             "value": "real",
             "answeredAt": "2026-10-03T11:54:00Z",
-            "by": "noc"
+            "by": "noc",
+            "seq": 2
           }
         },
         "history": [
@@ -2971,7 +2982,8 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:30:11Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 1
           }
         },
         "history": [
@@ -3193,17 +3205,20 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T10:59:24Z",
-            "by": "me"
+            "by": "me",
+            "seq": 1
           },
           "verdict": {
             "value": "observe",
             "answeredAt": "2026-10-03T11:00:34Z",
-            "by": "me"
+            "by": "me",
+            "seq": 2
           },
           "note": {
             "value": "Очередь на регистрацию, разошлись сами",
             "answeredAt": "2026-10-03T11:01:44Z",
-            "by": "me"
+            "by": "me",
+            "seq": 3
           }
         },
         "history": [
@@ -3337,12 +3352,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T11:52:00Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 1
           },
           "verdict": {
             "value": "unclear",
             "answeredAt": "2026-10-03T11:54:00Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 2
           }
         },
         "history": [
@@ -3517,12 +3534,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T10:35:25Z",
-            "by": "me"
+            "by": "me",
+            "seq": 1
           },
           "verdict": {
             "value": "real",
             "answeredAt": "2026-10-03T10:35:49Z",
-            "by": "me"
+            "by": "me",
+            "seq": 2
           },
           "kind": {
             "value": {
@@ -3531,7 +3550,8 @@
               ]
             },
             "answeredAt": "2026-10-03T10:36:12Z",
-            "by": "me"
+            "by": "me",
+            "seq": 3
           }
         },
         "history": [
@@ -3744,7 +3764,8 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T10:54:27Z",
-            "by": "petrova"
+            "by": "petrova",
+            "seq": 1
           }
         },
         "history": [
@@ -3848,12 +3869,14 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T10:11:04Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 1
           },
           "verdict": {
             "value": "false_alarm",
             "answeredAt": "2026-10-03T10:12:03Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 2
           },
           "kind": {
             "value": {
@@ -3862,12 +3885,14 @@
               ]
             },
             "answeredAt": "2026-10-03T10:13:03Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 3
           },
           "note": {
             "value": "Плановая проверка АПС",
             "answeredAt": "2026-10-03T10:14:02Z",
-            "by": "sidorov"
+            "by": "sidorov",
+            "seq": 4
           }
         },
         "history": [
@@ -4071,17 +4096,20 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T09:54:49Z",
-            "by": "me"
+            "by": "me",
+            "seq": 1
           },
           "verdict": {
             "value": "staff",
             "answeredAt": "2026-10-03T09:55:28Z",
-            "by": "me"
+            "by": "me",
+            "seq": 2
           },
           "note": {
             "value": "Сотрудник клининга по графику",
             "answeredAt": "2026-10-03T09:56:07Z",
-            "by": "me"
+            "by": "me",
+            "seq": 3
           }
         },
         "history": [
@@ -4328,18 +4356,21 @@
               "confirmed"
             ],
             "answeredAt": "2026-10-03T10:00:07Z",
-            "by": "petrova"
+            "by": "petrova",
+            "seq": 1
           },
           "verdict": {
             "value": "staff",
             "answeredAt": "2026-10-03T10:31:45Z",
-            "by": "petrova"
+            "by": "petrova",
+            "seq": 2
           },
           "note": {
             "value": null,
             "answeredAt": "2026-10-03T11:03:22Z",
             "by": "petrova",
-            "skipped": true
+            "skipped": true,
+            "seq": 3
           }
         },
         "history": [

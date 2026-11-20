@@ -204,6 +204,28 @@
     assert.eq(taken.body.messageKey, "workflow.error.changed.taken", "текст — у кого инцидент");
   });
 
+  test("Переответ на шаг на одних часах (§14.1, RULE-146): сверяется номер ответа seq, а не время — устаревший переответ 409 STEP_CHANGED", async () => {
+    const env = await makeEnv();
+    const inc = await newFire(env);
+    assert.status(await env.act(inc.guid, "claim", {}, "queue"), 200, null, "взять");
+    const stepId = (await env.card(inc.guid)).scenario.result.currentStepId;
+    assert.status(await env.answer(inc.guid, { stepId, value: ["confirmed"] }), 200, null, "первый ответ");
+    // Две вкладки видели один и тот же ответ шага
+    const seen = await env.card(inc.guid);
+    const first = seen.scenario.result.state[stepId];
+    assert.eq(first.seq, 1, "номер первого ответа прохождения");
+    const was = IMTest.answerSeenOf(seen, stepId);
+    assert.eq(was.seenAnswer, 1, "клиент шлёт номер ответа");
+    const body = Object.assign({ stepId, value: ["confirmed"] }, was);
+    assert.status(await env.answer(inc.guid, body), 200, null, "переответ из первой вкладки");
+    const now = (await env.card(inc.guid)).scenario.result.state[stepId];
+    // Часы стенда стоят: время ответа то же, различает только номер
+    assert.eq([now.answeredAt, now.seq], [first.answeredAt, 2], "время то же, номер вырос");
+    const stale = await env.answer(inc.guid, body);
+    assert.status(stale, 409, "STEP_CHANGED", "переответ второй вкладки по устаревшему ответу");
+    assert.eq(stale.body.current.result.state[stepId].seq, 2, "в current — актуальный ответ");
+  });
+
   test("Ответ на шаг закрытого коллегой — 412, changed: state, как у перехода: закрытый — всегда состояние (§14.1, RULE-142, BUG-125)", async () => {
     const env = await makeEnv();
     const inc = await newFire(env);

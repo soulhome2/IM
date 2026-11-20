@@ -370,7 +370,7 @@ GET /operator/stream                 → подписка на изменени�
 ```
 POST /operator/incidents/{g}/transitions/claim     { expectedState: "new", expectedAddressee: "" }
 GET  /operator/incidents/{g}                       → карточка целиком: сценарий, журнал, медиа, кнопки
-POST /operator/incidents/{g}/scenario/answer       { stepId, value, expectedOwner, seenAnswer }  (на каждый шаг)
+POST /operator/incidents/{g}/scenario/answer       { stepId, value, expectedOwner, seenAnswer }  (на каждый шаг; seenAnswer — seq ответа шага или null)
    → сценарий пройден до конца: на «Итоге» кнопка «Завершить инцидент»
 POST /operator/incidents/{g}/transitions/close     { expectedState, expectedAddressee, journalSeen: 17, formValues: { resultId: "processed", comment } }
 ```
@@ -448,7 +448,7 @@ POST /operator/incidents/merge       { incidentGuids, expected, idempotencyKey }
 | `403` | `GUARD_FAILED` | не выполнено любое другое условие модели |
 | `409` | `STEP_NOT_ON_PATH` | ответ или курсор — на шаг не на пути прохождения сценария (`POST …/scenario/answer`, `PUT …/scenario/cursor`) |
 | `409` | `STEP_NOT_EDITABLE` | переответ на пройденный шаг с `revisitable: false` (`POST …/scenario/answer`) |
-| `409` | `STEP_CHANGED` | шаг ответили после того, как его увидел оператор (`seenAnswer` не совпал): другая вкладка, второе место, двойное нажатие; в теле `current` — актуальный сценарий (`POST …/scenario/answer`, RULE-142) |
+| `409` | `STEP_CHANGED` | шаг ответили после того, как его увидел оператор (`seenAnswer` — номер ответа шага `seq` — не совпал, RULE-146): другая вкладка, второе место, двойное нажатие; в теле `current` — актуальный сценарий (`POST …/scenario/answer`, RULE-142) |
 | `412` | `INCIDENT_CHANGED` | изменилось то, что видел оператор: состояние, адресат, у закрытия — новое событие, у выборки — основной (`details.changed`); в теле `current` — актуальная карточка (RULE-142) |
 | `428` | `PRECONDITION_REQUIRED` | не прислано, что видел оператор: `expectedState`, `expectedAddressee` (у закрытия — `journalSeen`), у ответа на шаг — `expectedOwner`, `seenAnswer`; инцидента нет или он не виден — сначала `404`, потом эта проверка (решение 2026-10-29) |
 | `401` | `UNAUTHENTICATED` | вход не прошёл: нет токена, он истёк или не принят (решение 2026-10-29) |

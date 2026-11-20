@@ -49,6 +49,8 @@
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const stepOf = (script, id) => script.steps.find((s) => s.id === id) || null;
   const isAnswer = (ev) => ev.action === "answer" || ev.action === "skip";
+  // Номер следующего ответа: history не укорачивается — ответов и пропусков в ней на один меньше
+  const nextSeq = (result) => result.history.filter(isAnswer).length + 1;
   const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
   const unique = (xs) => new Set(xs).size === xs.length;
 
@@ -221,7 +223,10 @@
 
     const r = clone(result);
     const value = o.skip ? null : canonical(step, raw);
-    r.state[stepId] = o.skip ? { value: null, answeredAt: at, by, skipped: true } : { value, answeredAt: at, by };
+    // Номер ответа (профиль МИ, RULE-146): растёт на каждый ответ и пропуск прохождения — по нему сервер узнаёт,
+    // что шаг ответили после показа, даже если часы дали двум ответам одно время
+    const seq = nextSeq(r);
+    r.state[stepId] = o.skip ? { value: null, answeredAt: at, by, skipped: true, seq } : { value, answeredAt: at, by, seq };
     if (step.type === "Image") {
       // Повторный ответ заменяет вложение шага: прежний id в state больше не действует
       const kept = (r.attachments || []).filter((a) => a.stepId !== stepId);
@@ -344,7 +349,8 @@
       if (!entry || entry.skipped || r.state[id] || !src || !step || src.type !== step.type) break;
       const attachments = (fromResult.attachments || []).filter((a) => a.stepId === id);
       if (checkValue(step, entry.value, attachments)) break;
-      r.state[id] = clone(entry);
+      // Перенесённый ответ — ответ этого прохождения: номер свой, а не привязанного
+      r.state[id] = Object.assign(clone(entry), { seq: nextSeq(r) });
       if (attachments.length) r.attachments = (r.attachments || []).concat(clone(attachments));
       moved.push(id);
       settled.push(id);

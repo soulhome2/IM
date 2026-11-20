@@ -68,10 +68,10 @@
   // Что видел оператор в карточке или строке очереди (§14.1, RULE-142): тело перехода — expectedState,
   // expectedAddressee ("" — ничей), journalSeen; уровень приоритета — для смены приоритета (RULE-143)
   const seenOf = (c) => ({ expectedState: c.state, expectedAddressee: (c.addressee && c.addressee.id) || "", expectedPriority: c.priority, journalSeen: c.journalSeq });
-  // Ответ на шаг: владелец и answeredAt шага, каким его видел оператор (null — без ответа)
+  // Ответ на шаг: владелец и номер ответа шага (seq, RULE-146), каким его видел оператор (null — без ответа)
   const answerSeenOf = (c, stepId) => {
     const was = c.scenario && c.scenario.result && (c.scenario.result.state || {})[stepId];
-    return { expectedOwner: (c.owner && c.owner.id) || "", seenAnswer: (was && was.answeredAt) || null };
+    return { expectedOwner: (c.owner && c.owner.id) || "", seenAnswer: (was && was.seq) || null };
   };
 
   async function makeEnv(opts) {

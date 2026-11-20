@@ -2095,15 +2095,16 @@
           const ev = find(p.incidentGuid);
           if (!ev) return problem(404, "NOT_FOUND", ["workflow.error.not_found"]);
           // Отвечает только тот, кому машина разрешает править сценарий (scenarioEdit, §10.4)
-          // Что видел оператор (§14.1, RULE-142): владельца и ответ этого шага. Не прислал — 428. Владелец другой —
-          // 412, как у перехода; шаг ответили после показа (другая вкладка, двойное нажатие) — 409 STEP_CHANGED
-          // с актуальным сценарием. Версия не сверяется: запись о нарушении или соседе ответу не мешает
+          // Что видел оператор (§14.1, RULE-142): владельца и ответ этого шага — его номер seq (RULE-146: время двух
+          // ответов может совпасть). Не прислал — 428. Владелец другой — 412, как у перехода; шаг ответили после показа
+          // (другая вкладка, двойное нажатие) — 409 STEP_CHANGED с актуальным сценарием. Версия не сверяется: запись
+          // о нарушении или соседе ответу не мешает
           const b = body || {};
           if (b.expectedOwner == null || !("seenAnswer" in b)) return expectedRequired();
           if (String(b.expectedOwner) !== (ev.owner || "")) return changedProblem(ev, "addressee");
           if (!engine.canEditScenario(ev)) return problem(403, "PERMISSION_DENIED", ["workflow.error.read_only"]);
           const was = (ev.run.state || {})[b.stepId];
-          if ((b.seenAnswer || null) !== ((was && was.answeredAt) || null)) {
+          if ((b.seenAnswer == null ? null : b.seenAnswer) !== ((was && was.seq) || null)) {
             const step = scriptOf(ev).steps.find((x) => x.id === b.stepId);
             // Кто ответил — по имени; автор без имени (ответ системы, нет в справочнике) — нейтральный текст без пустого «{who}»
             const who = was && was.by ? actorRef(was.by).name : "";
