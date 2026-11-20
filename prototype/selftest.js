@@ -2493,6 +2493,8 @@
       const blocks = [...$("adminTable").querySelectorAll("[data-status-block]")].map((r) => r.dataset.statusBlock).join();
       expect(blocks === "database,retention,server", `блоки: ${blocks}`);
       expect(/общий для сервера/i.test($("adminTable").textContent), "размер базы не помечен «общий для сервера»");
+      const idx = $("adminTable").querySelector('[data-status-row="searchIndex"]');
+      expect(idx && /Индекс поиска \(pg_trgm\)/.test(idx.textContent) && /используется/.test(idx.textContent), "нет строки «Индекс поиска (pg_trgm)» со значением «используется»");
       const refresh = $("adminNote").querySelector("[data-admin-refresh]");
       expect(refresh, "нет кнопки «Обновить»");
       await click(refresh);

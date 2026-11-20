@@ -7196,6 +7196,7 @@
     const row = (label, value, path, what) => `<tr><td>${te(label)}${what ? `<span class="what">${te(what)}</span>` : ""}</td><td>${value}${path ? mark(path) : ""}</td></tr>`;
     const head = (id, label, what) => `<tr class="admin-group" data-status-block="${id}"><th colspan="2">${te(label)}${what ? `<span class="what">${te(what)}</span>` : ""}</th></tr>`;
     const PART = { events: "События", incidents: "Инциденты", journal: "Журналы", comment_files: "Файлы комментариев", maintenance_windows: "Окна плановых работ", other: "Остальное" };
+    const SEARCH_INDEX = { ready: "используется", building: "строится", no_extension: "не используется: нет расширения pg_trgm", failed: "не используется: ошибка сборки, повтор при перезапуске", unknown: "нет данных" };
     const db = s.database;
     const r = s.retention;
     const p = r.lastPurge;
@@ -7208,6 +7209,7 @@
       row("Прирост за неделю", bytes(db.growthWeekBytes), "database"),
       row("Свободно на диске", bytes(db.diskFreeBytes), "database"),
       row("Хватит при текущем приросте", db.daysLeft == null ? te("нет данных") : te("на {n} дн.", { n: db.daysLeft }), "database"),
+      `<tr data-status-row="searchIndex"><td>${te("Индекс поиска (pg_trgm)")}</td><td>${te(SEARCH_INDEX[db.searchIndex] || SEARCH_INDEX.unknown)}${db.searchIndex === "no_extension" ? `<span class="what">${te("Суперпользователь базы выполняет CREATE EXTENSION pg_trgm, потом сервер МИ перезапускают")}</span>` : ""}${mark("database")}</td></tr>`,
       ...db.parts.map((x) => row(PART[x.name] || x.name, bytes(x.bytes), "database")),
       head("retention", "Хранение", "Очистка по сроку хранения — раз в час, только своей организации"),
       row("Последняя очистка", p ? `${when(p.at)}: ${te("инцидентов {i}, событий {e}, записей потока {s}", { i: p.incidents, e: p.events, s: p.streamEvents })}` : te("ещё не было"), "retention.lastPurge"),

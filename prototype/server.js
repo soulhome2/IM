@@ -2422,6 +2422,7 @@
             growthWeekBytes: growthWeek,
             diskFreeBytes: free,
             daysLeft: Math.floor(free / (growthWeek / 7)),
+            searchIndex: "ready",
             parts: parts.sort((a, b) => b.bytes - a.bytes).concat({ name: "other", bytes: other }),
           },
           retention: {
